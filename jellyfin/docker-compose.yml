@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: jellyfin-jellyfin-1
+    restart: always
+    network_mode: bridge
+    ports:
+      - "8096:8096"
+    volumes:
+      # Config & Cache
+      - /volume1/docker/jellyfin/config:/config
+      - /volume1/docker/jellyfin/cache:/cache
+      # Media Folders (ตั้งเป็น Read-Only ตามต้นฉบับของคุณ)
+      - /volume1/Movies:/data/movies:ro
+      - /volume1/Series:/data/series:ro
+      - /volume1/private_media/porn:/data/private:ro
+      - /volume1/Concerts:/data/concerts:ro
+    environment:
+      # NVIDIA GPU Settings (สำคัญมากสำหรับการทำ Transcoding)
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
+      # Localization
+      - TZ=Asia/Bangkok
+      - LANG=en_US.UTF-8
+      - LC_ALL=en_US.UTF-8
+      - LANGUAGE=en_US:en

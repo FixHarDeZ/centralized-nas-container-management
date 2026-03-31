@@ -11,7 +11,9 @@ This repo manages Docker containers deployed on a Synology DS925+ NAS. It is a c
 | Directory | Purpose | Port(s) |
 |---|---|---|
 | `homepage/` | Dashboard UI (gethomepage/homepage) | 3000 |
+| `jellyfin/` | Media server with NVIDIA GPU transcoding | 8096 |
 | `portainer/` | Docker management UI | 9000, 9443 |
+| `uptime-kuma/` | Service health monitor | 3001 |
 | `watchtower/` | Auto-update containers + LINE notification sidecar | — |
 
 ## Common Commands
