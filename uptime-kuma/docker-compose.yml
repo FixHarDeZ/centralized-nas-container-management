@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  uptime-kuma:
+    image: louislam/uptime-kuma:latest
+    container_name: uptime-kuma
+    restart: always
+    ports:
+      - "3001:3001"
+    volumes:
+      # อ้างอิงตาม Path ในรูปภาพของคุณ
+      - /volume1/docker/uptime-kuma:/app/data
+    environment:
+      - UPTIME_KUMA_IS_CONTAINER=1
+    # ข้อมูลอื่นๆ เช่น PATH, NODE_VERSION ปกติจะติดมากับ Image อยู่แล้ว 
+    # ไม่จำเป็นต้องใส่ซ้ำในนี้ครับ
