@@ -3,7 +3,7 @@ version: '3.8'
 services:
   jellyfin:
     image: jellyfin/jellyfin:latest
-    container_name: jellyfin-jellyfin-1
+    container_name: jellyfin
     restart: always
     network_mode: bridge
     ports:
