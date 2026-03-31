@@ -1,49 +1,47 @@
-# Homepage — Fix Home Lab (DS925+)
+# Homepage
 
-## โครงสร้าง
+Dashboard UI for the home lab, powered by [gethomepage/homepage](https://gethomepage.dev).
+
+**URL:** `http://192.168.50.200:3000`
+
+## File Structure
 
 ```
-homepage-nas/
-├── .env                   ← credentials ทั้งหมด (อย่า commit!)
+homepage/
+├── .env                  ← credentials (gitignored, copy from .env.example)
+├── .env.example          ← template
 ├── docker-compose.yml
 └── config/
-    ├── settings.yaml      ← theme, layout, quicklaunch
-    ├── widgets.yaml       ← top bar: datetime, search, weather
-    ├── services.yaml      ← service cards ทั้งหมด
-    ├── bookmarks.yaml     ← quick bookmarks
-    └── docker.yaml        ← docker socket config
+    ├── settings.yaml     ← theme, layout
+    ├── widgets.yaml      ← top bar: datetime, search, resources
+    ├── services.yaml     ← service cards
+    ├── bookmarks.yaml    ← bookmark links
+    └── docker.yaml       ← docker socket config
 ```
 
-## วิธีใช้งาน
+## Setup
 
 ```bash
+cp .env.example .env
+# Fill in real values in .env
 docker compose up -d
-# เปิด http://192.168.50.200:3000
 ```
 
-## สิ่งที่เพิ่มเติมจากเดิม
+## Secrets Injection
 
-| Feature | รายละเอียด |
+Credentials are never hardcoded in config files. They flow through two layers:
+
+1. Docker Compose reads `${VAR}` from `.env` and passes them as `HOMEPAGE_VAR_*` container env vars.
+2. `services.yaml` references them as `{{HOMEPAGE_VAR_*}}` — Homepage interpolates these at runtime.
+
+## Configuration
+
+All config files in `config/` are hot-reloaded — no container restart needed after edits.
+
+| File | Purpose |
 |---|---|
-| `.env` + `HOMEPAGE_VAR_*` | ย้าย credentials ออกจาก config ทั้งหมด |
-| Weather widget | ต้องใส่ OpenWeatherMap API key (ฟรี) |
-| NAS Status group | CPU, RAM, Storage, Network แยก card |
-| Jellyfin `enableNowPlaying` | เปิดแล้ว + เพิ่ม fields |
-| Plex `fields` | แสดง streams, movies, tv |
-| Download Station `fields` | แสดง speed + progress |
-| Watchtower card | แสดง container status |
-| Synology Drive card | เพิ่มใน Note Tools |
-| Docker widget | mount socket แบบ read-only |
-| Quick Launch | กด `/` แล้ว search ได้เลย |
-
-## Weather API Key (ฟรี)
-
-1. ไปที่ https://openweathermap.org/api
-2. สมัคร free account
-3. ใส่ key ใน `config/widgets.yaml` บรรทัด `apiKey:`
-
-## หมายเหตุ
-
-- `volume: volume_1` — ปรับให้ตรงกับชื่อ volume จริงใน DSM
-- Asus Router ใช้ `ping:` แทน widget เพราะไม่มี native support
-- `.env` ควรเพิ่มใน `.gitignore` ถ้าใช้ git
+| `settings.yaml` | Theme, layout, title |
+| `widgets.yaml` | Top bar widgets (clock, search, system resources) |
+| `services.yaml` | Service cards with API widgets |
+| `bookmarks.yaml` | Quick-access links |
+| `docker.yaml` | Docker socket connection for container status widgets |

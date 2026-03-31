@@ -1,9 +1,13 @@
-# Watchtower + LINE Notifier (Sidecar approach)
+# Watchtower + LINE Notifier
 
-## โครงสร้างไฟล์
+Automatically updates Docker containers and sends LINE push notifications for each event.
+
+## File Structure
 
 ```
-watchtower-line/
+watchtower/
+├── .env                  ← LINE credentials (gitignored, copy from .env.example)
+├── .env.example          ← template
 ├── docker-compose.yml
 └── notifier/
     ├── Dockerfile
@@ -11,40 +15,51 @@ watchtower-line/
     └── requirements.txt
 ```
 
-## วิธีใช้งาน
+## Setup
 
 ```bash
-# Build และ start
+cp .env.example .env
+# Fill in LINE_CHANNEL_ACCESS_TOKEN and LINE_USER_ID
 docker compose up -d --build
-
-# ดู notifier logs
-docker compose logs -f watchtower-notifier
 ```
 
-## Notifications ที่จะได้รับ
+## Services
 
-| Event | ข้อความที่ส่ง |
+| Service | Description |
 |---|---|
-| Notifier เริ่มต้น | 🤖 LINE Notifier พร้อมทำงานแล้ว |
-| Watchtower start | 🟢 Watchtower เริ่มทำงานแล้ว |
-| Container อัปเดต | 🔄 Container อัปเดตแล้ว + ชื่อ image |
-| ไม่มีอัปเดต | ✅ ตรวจสอบเสร็จ + สรุป |
-| Error | 🔴 Watchtower พบ Error + log excerpt |
+| `watchtower` | Polls registries every 24h and updates containers |
+| `watchtower-notifier` | Python sidecar that tails Watchtower logs and sends LINE notifications |
 
-## Flow
+## How the Notifier Works
 
 ```
-Watchtower container (logs)
-        ↓  docker logs --follow
-watchtower-notifier (Python sidecar)
-        ↓  parse & detect events
+watchtower (logs)
+      ↓  raw Docker socket HTTP
+watchtower-notifier (Python)
+      ↓  parse Watchtower 1.7.x log format
 LINE Messaging API
-        ↓
-มือถือคุณ 📱
+      ↓
+your phone
 ```
 
-## หมายเหตุ
+The sidecar connects to `/var/run/docker.sock` directly (no `docker` CLI needed), streams Watchtower's logs, and parses structured log lines to detect events.
 
-- Sidecar mount `/var/run/docker.sock` เพื่อใช้ `docker logs --follow` ติดตาม Watchtower
-- ถ้า Watchtower restart, notifier จะ reconnect อัตโนมัติใน 10 วินาที
-- ปรับ `WATCHTOWER_POLL_INTERVAL` เป็นวินาที (86400 = 24h)
+## Notification Events
+
+| Event | Trigger |
+|---|---|
+| Notifier started | Sidecar process start |
+| Watchtower started | `msg="Watchtower x.x.x"` log line |
+| Container updated | `msg="Creating /container"` log line |
+| Session summary | `msg="Session done"` log line |
+| Error | `level=error` or `level=fatal` log line |
+
+## Configuration
+
+| Variable | Description |
+|---|---|
+| `LINE_CHANNEL_ACCESS_TOKEN` | LINE Messaging API channel token |
+| `LINE_USER_ID` | LINE user ID to push notifications to |
+| `WATCHTOWER_POLL_INTERVAL` | Check interval in seconds (default: `86400` = 24h) |
+
+The notifier auto-reconnects within 10 seconds if Watchtower restarts. It is excluded from Watchtower's own update cycle via `com.centurylinklabs.watchtower.enable=false`.
