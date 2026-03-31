@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: homepage
+    restart: always
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./config:/app/config
+      - /var/run/docker.sock:/var/run/docker.sock:ro   # สำหรับ Docker widget
+      - /volume1:/volume1:ro
+    environment:
+      - TZ=Asia/Bangkok
+      - HOMEPAGE_ALLOWED_HOSTS=${HOMEPAGE_ALLOWED_HOSTS}
+      # ─── Passed to services.yaml via {{HOMEPAGE_VAR_*}} ──────────────────────
+      - HOMEPAGE_VAR_JELLYFIN_URL=${JELLYFIN_URL}
+      - HOMEPAGE_VAR_JELLYFIN_KEY=${JELLYFIN_KEY}
+      - HOMEPAGE_VAR_PLEX_URL=${PLEX_URL}
+      - HOMEPAGE_VAR_PLEX_KEY=${PLEX_KEY}
+      - HOMEPAGE_VAR_NAS_URL=${NAS_LOCAL_URL}
+      - HOMEPAGE_VAR_NAS_USERNAME=${NAS_USERNAME}
+      - HOMEPAGE_VAR_NAS_PASSWORD=${NAS_PASSWORD}
+      - HOMEPAGE_VAR_PORTAINER_URL=${PORTAINER_URL}
+      - HOMEPAGE_VAR_PORTAINER_KEY=${PORTAINER_KEY}
+      - HOMEPAGE_VAR_UPTIME_KUMA_URL=${UPTIME_KUMA_URL}
+      - HOMEPAGE_VAR_UPTIME_KUMA_SLUG=${UPTIME_KUMA_SLUG}

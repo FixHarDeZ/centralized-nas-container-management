@@ -1,0 +1,134 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Fix's NAS Dashboard — services.yaml
+# Synology DS925+ | 192.168.50.200
+# Secrets are injected via HOMEPAGE_VAR_* environment variables (see .env)
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ─── 🌐 Remote Access ─────────────────────────────────────────────────────────
+- 🌐 Remote Access:
+    - Jellyfin (DDNS):
+        icon: jellyfin.png
+        href: http://fixhardez.synology.me:8096
+        description: External Media Streaming
+        ping: http://fixhardez.synology.me:8096
+        widget:
+          type: jellyfin
+          url: "{{HOMEPAGE_VAR_JELLYFIN_URL}}"
+          key: "{{HOMEPAGE_VAR_JELLYFIN_KEY}}"
+          enableNowPlaying: false
+          enableBlocks: true
+          fields: ["movies", "series", "episodes"]
+
+    - Plex (DDNS):
+        icon: plex.png
+        href: http://fixhardez.synology.me:32400/web
+        description: External Plex Server
+        ping: http://fixhardez.synology.me:32400
+        widget:
+          type: plex
+          url: "{{HOMEPAGE_VAR_PLEX_URL}}"
+          key: "{{HOMEPAGE_VAR_PLEX_KEY}}"
+          fields: ["streams", "albums", "movies"]
+
+    - Synology DSM (Remote):
+        icon: synology-dsm.png
+        href: https://fixhardez.sg4.quickconnect.to
+        description: Remote NAS Management
+        widget:
+          type: diskstation
+          url: "{{HOMEPAGE_VAR_NAS_URL}}"
+          username: "{{HOMEPAGE_VAR_NAS_USERNAME}}"
+          password: "{{HOMEPAGE_VAR_NAS_PASSWORD}}"
+          fields: ["uptime", "volumeAvailable", "resources.cpu", "resources.mem"]
+
+# ─── 🏠 Local Network ─────────────────────────────────────────────────────────
+- 🏠 Local Network:
+    - Jellyfin (LAN):
+        icon: jellyfin.png
+        href: http://192.168.50.200:8096
+        description: High-speed Local Stream
+        widget:
+          type: jellyfin
+          url: "{{HOMEPAGE_VAR_JELLYFIN_URL}}"
+          key: "{{HOMEPAGE_VAR_JELLYFIN_KEY}}"
+          enableNowPlaying: false
+          enableBlocks: true
+          fields: ["movies", "series", "episodes"]
+
+    - Plex (LAN):
+        icon: plex.png
+        href: http://192.168.50.200:32400/web
+        description: Local Plex Server
+        widget:
+          type: plex
+          url: "{{HOMEPAGE_VAR_PLEX_URL}}"
+          key: "{{HOMEPAGE_VAR_PLEX_KEY}}"
+          fields: ["streams", "albums", "movies"]
+
+    - Synology NAS (LAN):
+        icon: synology-dsm.png
+        href: https://192.168.50.200:5001
+        description: Local NAS Management
+        widget:
+          type: diskstation
+          url: "{{HOMEPAGE_VAR_NAS_URL}}"
+          username: "{{HOMEPAGE_VAR_NAS_USERNAME}}"
+          password: "{{HOMEPAGE_VAR_NAS_PASSWORD}}"
+          fields: ["uptime", "volumeAvailable", "resources.cpu", "resources.mem"]
+
+# ─── 📥 Downloads & Monitoring ────────────────────────────────────────────────
+- 📥 Downloads & Monitoring:
+    - Download Station:
+        icon: synology-download-station.png
+        href: https://fixhardez.sg4.quickconnect.to/download/
+        description: Synology Download Station
+        widget:
+          type: downloadstation
+          url: "{{HOMEPAGE_VAR_NAS_URL}}"
+          username: "{{HOMEPAGE_VAR_NAS_USERNAME}}"
+          password: "{{HOMEPAGE_VAR_NAS_PASSWORD}}"
+
+    - Portainer:
+        icon: portainer.png
+        href: http://fixhardez.synology.me:9000
+        description: Container Manager
+        widget:
+          type: portainer
+          url: "{{HOMEPAGE_VAR_PORTAINER_URL}}"
+          env: 3
+          key: "{{HOMEPAGE_VAR_PORTAINER_KEY}}"
+
+    - Uptime Kuma:
+        icon: uptime-kuma.png
+        href: http://fixhardez.synology.me:3001/dashboard
+        description: Service Health Monitor
+        widget:
+          type: uptimekuma
+          url: "{{HOMEPAGE_VAR_UPTIME_KUMA_URL}}"
+          slug: "{{HOMEPAGE_VAR_UPTIME_KUMA_SLUG}}"
+
+    - Watchtower:
+        icon: watchtower.png
+        href: "#"
+        description: Auto Container Updates
+        widget:
+          type: docker
+          server: my-docker
+          container: watchtower
+
+# ─── 📝 Tools & Notes ─────────────────────────────────────────────────────────
+- 📝 Tools & Notes:
+    - Synology Note Station:
+        icon: synology-note-station.png
+        href: https://fixhardez.sg4.quickconnect.to/note/
+        description: Notes & To-Do Lists
+
+    - Synology Photos:
+        icon: synology-photos.png
+        href: https://fixhardez.sg4.quickconnect.to/photo/
+        description: Photo Library & Sharing
+
+    - Synology Drive:
+        icon: synology-drive.png
+        href: https://fixhardez.sg4.quickconnect.to/drive/
+        description: Cloud File Storage

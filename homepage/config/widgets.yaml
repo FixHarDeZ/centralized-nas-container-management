@@ -1,0 +1,23 @@
+---
+# ─── Top Bar Widgets ──────────────────────────────────────────────────────────
+# แสดงข้อมูล system-level ด้านบนสุดของ dashboard
+
+- resources:
+    label: System
+    cpu: true
+    memory: true
+    disk:
+      - /volume1
+    cacheInterval: 5000
+
+- datetime:
+    text_size: xl
+    format:
+      timeStyle: short
+      dateStyle: short
+      hour12: false
+
+- search:
+    provider: google
+    target: _blank
+    focus: false

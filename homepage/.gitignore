@@ -1,0 +1,3 @@
+# อย่า commit credentials!
+.env
+*.log
