@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+
+  # ─── Watchtower ────────────────────────────────────────────────────────────
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: watchtower
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - WATCHTOWER_POLL_INTERVAL=86400      # ตรวจทุก 24 ชม.
+      - WATCHTOWER_CLEANUP=true             # ลบ image เก่าหลัง update
+      - WATCHTOWER_INCLUDE_STOPPED=false    # ข้าม container ที่หยุดอยู่
+      - TZ=Asia/Bangkok
+
+  # ─── LINE Notifier Sidecar ─────────────────────────────────────────────────
+  watchtower-notifier:
+    build:
+      context: ./notifier
+      dockerfile: Dockerfile
+    container_name: watchtower-notifier
+    restart: always
+    depends_on:
+      - watchtower
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - LINE_CHANNEL_ACCESS_TOKEN=${LINE_CHANNEL_ACCESS_TOKEN}
+      - LINE_USER_ID=${LINE_USER_ID}
+      - WATCHTOWER_CONTAINER_NAME=watchtower
+      - TZ=Asia/Bangkok
+    labels:
+      # บอก Watchtower ให้ข้าม container นี้ — image เป็น local build ไม่มีบน registry
+      - "com.centurylinklabs.watchtower.enable=false"

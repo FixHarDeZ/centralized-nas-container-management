@@ -1,0 +1,31 @@
+---
+# ─── Homepage Settings ────────────────────────────────────────────────────────
+title: Fix's NAS Dashboard
+description: Synology DS925+ Home Lab
+
+# ─── Theme ────────────────────────────────────────────────────────────────────
+color: slate
+theme: dark   # ตาม OS: dark บน dark mode / light บน light mode
+
+# ─── Layout ───────────────────────────────────────────────────────────────────
+layout:
+  🌐 Remote Access:
+    style: row
+    columns: 3
+
+  🏠 Local Network:
+    style: row
+    columns: 3
+
+  📥 Downloads & Monitoring:
+    style: row
+    columns: 4
+
+  📝 Tools & Notes:
+    style: row
+    columns: 3
+
+# ─── Misc ─────────────────────────────────────────────────────────────────────
+headerStyle: clean
+language: en
+showStats: true
