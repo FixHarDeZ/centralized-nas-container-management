@@ -152,7 +152,7 @@ def handle_line(log_line: str) -> None:
     if PAT_SESSION_START.search(log_line):
         _pending_updates = {}
         _image_queue.clear()
-        _session_start_time = datetime.now(TZ)
+        _session_start_time = None
         send_line(
             f"🟢 Watchtower เริ่มทำงานแล้ว\n"
             f"📋 กำลังตรวจสอบ container updates...\n"
@@ -167,6 +167,8 @@ def handle_line(log_line: str) -> None:
         image_id   = m.group(2)   # e.g. 8d2d6aa5c260
         # เก็บ image ใน queue รอ Creating (FIFO เพราะ Watchtower สร้างตามลำดับที่ find)
         _image_queue.append(f"{image_name} ({image_id[:12]})")
+        if _session_start_time is None:
+            _session_start_time = datetime.now(TZ)
         return
 
     # ── Creating /container = update สำเร็จ ────────────────────────────────
