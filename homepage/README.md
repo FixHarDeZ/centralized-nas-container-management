@@ -2,7 +2,7 @@
 
 Dashboard UI for the home lab, powered by [gethomepage/homepage](https://gethomepage.dev).
 
-**URL:** `http://192.168.50.200:3000`
+**URL:** `http://<NAS_IP>:3000`
 
 ## File Structure
 
