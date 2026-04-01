@@ -12,9 +12,27 @@ Docker stacks for Synology DS925+ NAS, managed via Synology Container Manager or
 | `uptime-kuma/` | Service health monitor | 3001 |
 | `watchtower/` | Auto-update containers + LINE notification sidecar | — |
 
-## Setup
+## Uploading to NAS
 
-Each stack lives in its own directory. Before deploying, copy the example env file and fill in real values:
+Use `deploy.sh` to sync the project from your local machine to `/volume1/docker` on the NAS over SSH/rsync.
+
+```bash
+# 1. Copy the example config and fill in your password
+cp .deploy.env.example .deploy.env
+nano .deploy.env
+
+# 2. Install sshpass (one-time, macOS)
+brew install sshpass
+
+# 3. Run
+./deploy.sh
+```
+
+`.deploy.env` is gitignored — never commit it. Use `.deploy.env.example` as the reference template.
+
+## Stack Setup
+
+Each stack lives in its own directory. Before deploying on the NAS, copy the example env file and fill in real values:
 
 ```bash
 # Homepage
@@ -24,7 +42,7 @@ cp homepage/.env.example homepage/.env
 cp watchtower/.env.example watchtower/.env
 ```
 
-Then deploy the stack from its directory:
+Then deploy the stack from its directory on the NAS:
 
 ```bash
 cd homepage   # or portainer / watchtower

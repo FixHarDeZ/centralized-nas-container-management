@@ -16,6 +16,24 @@ This repo manages Docker containers deployed on a Synology DS925+ NAS. It is a c
 | `uptime-kuma/` | Service health monitor | 3001 |
 | `watchtower/` | Auto-update containers + LINE notification sidecar | — |
 
+## Deploying to NAS
+
+Use `deploy.sh` to upload the entire project from your local machine to `/volume1/docker` on the NAS over SSH.
+
+```bash
+# 1. Copy the example config and fill in your NAS password
+cp .deploy.env.example .deploy.env
+nano .deploy.env
+
+# 2. Install sshpass (required, one-time)
+brew install sshpass   # macOS
+
+# 3. Upload
+./deploy.sh
+```
+
+The script reads credentials from `.deploy.env` (excluded from git), checks the SSH connection first, then rsyncs the project — excluding `.git/`, `.deploy.env`, and `deploy.sh` itself.
+
 ## Common Commands
 
 All commands are run on the NAS (SSH or Container Manager), not locally.
