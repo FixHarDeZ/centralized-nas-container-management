@@ -40,6 +40,7 @@ PAT_ERROR         = re.compile(r'level=error|level=fatal|panic:', re.I)
 
 # state ระหว่าง session
 _pending_updates: dict[str, str] = {}   # container_name -> new_image
+_image_queue: list[str] = []            # FIFO queue of found images waiting for Creating
 _session_start_time: datetime | None = None
 
 
@@ -143,13 +144,14 @@ class DockerSocketSession:
 
 # ─── Log handler ───────────────────────────────────────────────────────────
 def handle_line(log_line: str) -> None:
-    global _pending_updates, _session_start_time
+    global _pending_updates, _image_queue, _session_start_time
 
     print(f"[LOG] {log_line}")
 
     # ── Watchtower version line = session start ─────────────────────────────
     if PAT_SESSION_START.search(log_line):
         _pending_updates = {}
+        _image_queue.clear()
         _session_start_time = datetime.now(TZ)
         send_line(
             f"🟢 Watchtower เริ่มทำงานแล้ว\n"
@@ -163,15 +165,15 @@ def handle_line(log_line: str) -> None:
     if m:
         image_name = m.group(1)   # e.g. ghcr.io/gethomepage/homepage:latest
         image_id   = m.group(2)   # e.g. 8d2d6aa5c260
-        # เก็บ image ชั่วคราว จะ match กับ container name ตอน Creating
-        _pending_updates["__next__"] = f"{image_name} ({image_id[:12]})"
+        # เก็บ image ใน queue รอ Creating (FIFO เพราะ Watchtower สร้างตามลำดับที่ find)
+        _image_queue.append(f"{image_name} ({image_id[:12]})")
         return
 
     # ── Creating /container = update สำเร็จ ────────────────────────────────
     m = PAT_CREATING.search(log_line)
     if m:
         container_name = m.group(1)
-        image_info = _pending_updates.pop("__next__", "unknown image")
+        image_info = _image_queue.pop(0) if _image_queue else "unknown image"
         _pending_updates[container_name] = image_info
         send_line(
             f"🔄 Container อัปเดตแล้ว!\n"
@@ -191,7 +193,7 @@ def handle_line(log_line: str) -> None:
             duration = f"\n⏱ ใช้เวลา {int(elapsed.total_seconds() // 60)} นาที"
 
         if updated_count > 0:
-            items = "\n".join(f"  • {k}: {v}" for k, v in _pending_updates.items() if k != "__next__")
+            items = "\n".join(f"  • {k}: {v}" for k, v in _pending_updates.items())
             send_line(
                 f"✅ ตรวจสอบเสร็จ — อัปเดต {updated_count} container\n"
                 f"{items}{duration}\n🕒 {now()}"
@@ -202,6 +204,7 @@ def handle_line(log_line: str) -> None:
                 f"{duration}\n🕒 {now()}"
             )
         _pending_updates = {}
+        _image_queue.clear()
         return
 
     # ── Error ──────────────────────────────────────────────────────────────
