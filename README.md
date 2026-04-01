@@ -2,6 +2,8 @@
 
 Docker stacks for Synology DS925+ NAS, managed via Synology Container Manager or Docker CLI.
 
+![Homepage Dashboard](screenshots/Homepage.png)
+
 ## Stacks
 
 | Directory | Purpose | Port(s) |

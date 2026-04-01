@@ -1,5 +1,7 @@
 # Uptime Kuma
 
+![Uptime Kuma](../screenshots/Uptime-kuma.png)
+
 Service health monitor with a clean web UI.
 
 **URL:** `http://<NAS_IP>:3001`
