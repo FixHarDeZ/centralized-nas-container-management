@@ -1,4 +1,4 @@
-# nas-container-manager
+# centralized-nas-container-management
 
 Docker stacks for Synology DS925+ NAS, managed via Synology Container Manager or Docker CLI.
 
