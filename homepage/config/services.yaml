@@ -3,7 +3,23 @@
 # Synology DS925+ | 192.168.50.200
 # Secrets are injected via HOMEPAGE_VAR_* environment variables (see .env)
 # ══════════════════════════════════════════════════════════════════════════════
+# ─── 📝 Tools & Notes ─────────────────────────────────────────────────────────
+- 📝 Tools & Notes:
+    - Synology Note Station:
+        icon: synology-note-station.png
+        href: https://fixhardez.sg4.quickconnect.to/note/
+        description: Notes & To-Do Lists
 
+    - Synology Photos:
+        icon: synology-photos.png
+        href: https://fixhardez.sg4.quickconnect.to/photo/
+        description: Photo Library & Sharing
+
+    - Synology Drive:
+        icon: synology-drive.png
+        href: https://fixhardez.sg4.quickconnect.to/drive/
+        description: Cloud File Storage
+        
 # ─── 🌐 Remote Access ─────────────────────────────────────────────────────────
 - 🌐 Remote Access:
     - Jellyfin (DDNS):
@@ -116,19 +132,4 @@
           server: my-docker
           container: watchtower
 
-# ─── 📝 Tools & Notes ─────────────────────────────────────────────────────────
-- 📝 Tools & Notes:
-    - Synology Note Station:
-        icon: synology-note-station.png
-        href: https://fixhardez.sg4.quickconnect.to/note/
-        description: Notes & To-Do Lists
 
-    - Synology Photos:
-        icon: synology-photos.png
-        href: https://fixhardez.sg4.quickconnect.to/photo/
-        description: Photo Library & Sharing
-
-    - Synology Drive:
-        icon: synology-drive.png
-        href: https://fixhardez.sg4.quickconnect.to/drive/
-        description: Cloud File Storage
