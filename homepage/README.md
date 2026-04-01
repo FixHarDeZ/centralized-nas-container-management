@@ -1,5 +1,7 @@
 # Homepage
 
+![Homepage](../screenshots/Homepage.png)
+
 Dashboard UI for the home lab, powered by [gethomepage/homepage](https://gethomepage.dev).
 
 **URL:** `http://<NAS_IP>:3000`

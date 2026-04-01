@@ -1,5 +1,7 @@
 # Portainer
 
+![Portainer](../screenshots/Portainer.png)
+
 Docker management UI (Community Edition).
 
 **URL:** `http://<NAS_IP>:9000` | `https://<NAS_IP>:9443`

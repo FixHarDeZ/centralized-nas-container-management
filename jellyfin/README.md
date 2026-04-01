@@ -1,5 +1,7 @@
 # Jellyfin
 
+![Jellyfin](../screenshots/Jellyfin.png)
+
 Media server with NVIDIA GPU hardware transcoding.
 
 **URL:** `http://<NAS_IP>:8096`

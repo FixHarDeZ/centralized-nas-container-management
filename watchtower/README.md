@@ -1,5 +1,7 @@
 # Watchtower + LINE Notifier
 
+![Watchtower](../screenshots/Watchtower.png)
+
 Automatically updates Docker containers and sends LINE push notifications for each event.
 
 ## File Structure
