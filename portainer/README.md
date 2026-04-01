@@ -2,7 +2,7 @@
 
 Docker management UI (Community Edition).
 
-**URL:** `http://192.168.50.200:9000` | `https://192.168.50.200:9443`
+**URL:** `http://<NAS_IP>:9000` | `https://<NAS_IP>:9443`
 
 ## Setup
 

@@ -2,7 +2,7 @@
 
 Media server with NVIDIA GPU hardware transcoding.
 
-**URL:** `http://192.168.50.200:8096`
+**URL:** `http://<NAS_IP>:8096`
 
 ## Setup
 

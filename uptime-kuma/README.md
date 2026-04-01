@@ -2,7 +2,7 @@
 
 Service health monitor with a clean web UI.
 
-**URL:** `http://192.168.50.200:3001`
+**URL:** `http://<NAS_IP>:3001`
 
 ## Setup
 
