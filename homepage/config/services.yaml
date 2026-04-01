@@ -1,32 +1,32 @@
 # ══════════════════════════════════════════════════════════════════════════════
 # Fix's NAS Dashboard — services.yaml
-# Synology DS925+ | 192.168.50.200
+# Synology DS925+
 # Secrets are injected via HOMEPAGE_VAR_* environment variables (see .env)
 # ══════════════════════════════════════════════════════════════════════════════
 # ─── 📝 Tools & Notes ─────────────────────────────────────────────────────────
 - 📝 Tools & Notes:
     - Synology Note Station:
         icon: synology-note-station.png
-        href: https://fixhardez.sg4.quickconnect.to/note/
+        href: "{{HOMEPAGE_VAR_QUICKCONNECT_URL}}/note/"
         description: Notes & To-Do Lists
 
     - Synology Photos:
         icon: synology-photos.png
-        href: https://fixhardez.sg4.quickconnect.to/photo/
+        href: "{{HOMEPAGE_VAR_QUICKCONNECT_URL}}/photo/"
         description: Photo Library & Sharing
 
     - Synology Drive:
         icon: synology-drive.png
-        href: https://fixhardez.sg4.quickconnect.to/drive/
+        href: "{{HOMEPAGE_VAR_QUICKCONNECT_URL}}/drive/"
         description: Cloud File Storage
         
 # ─── 🌐 Remote Access ─────────────────────────────────────────────────────────
 - 🌐 Remote Access:
     - Jellyfin (DDNS):
         icon: jellyfin.png
-        href: http://fixhardez.synology.me:8096
+        href: "{{HOMEPAGE_VAR_DDNS_BASE}}:8096"
         description: External Media Streaming
-        ping: http://fixhardez.synology.me:8096
+        ping: "{{HOMEPAGE_VAR_DDNS_BASE}}:8096"
         widget:
           type: jellyfin
           url: "{{HOMEPAGE_VAR_JELLYFIN_URL}}"
@@ -37,9 +37,9 @@
 
     - Plex (DDNS):
         icon: plex.png
-        href: http://fixhardez.synology.me:32400/web
+        href: "{{HOMEPAGE_VAR_DDNS_BASE}}:32400/web"
         description: External Plex Server
-        ping: http://fixhardez.synology.me:32400
+        ping: "{{HOMEPAGE_VAR_DDNS_BASE}}:32400"
         widget:
           type: plex
           url: "{{HOMEPAGE_VAR_PLEX_URL}}"
@@ -48,7 +48,7 @@
 
     - Synology DSM (Remote):
         icon: synology-dsm.png
-        href: https://fixhardez.sg4.quickconnect.to
+        href: "{{HOMEPAGE_VAR_QUICKCONNECT_URL}}"
         description: Remote NAS Management
         widget:
           type: diskstation
@@ -61,7 +61,7 @@
 - 🏠 Local Network:
     - Jellyfin (LAN):
         icon: jellyfin.png
-        href: http://192.168.50.200:8096
+        href: "{{HOMEPAGE_VAR_JELLYFIN_URL}}"
         description: High-speed Local Stream
         widget:
           type: jellyfin
@@ -73,7 +73,7 @@
 
     - Plex (LAN):
         icon: plex.png
-        href: http://192.168.50.200:32400/web
+        href: "{{HOMEPAGE_VAR_PLEX_URL}}/web"
         description: Local Plex Server
         widget:
           type: plex
@@ -83,7 +83,7 @@
 
     - Synology NAS (LAN):
         icon: synology-dsm.png
-        href: https://192.168.50.200:5001
+        href: "{{HOMEPAGE_VAR_NAS_URL}}"
         description: Local NAS Management
         widget:
           type: diskstation
@@ -96,7 +96,7 @@
 - 📥 Downloads & Monitoring:
     - Download Station:
         icon: synology-download-station.png
-        href: https://fixhardez.sg4.quickconnect.to/download/
+        href: "{{HOMEPAGE_VAR_QUICKCONNECT_URL}}/download/"
         description: Synology Download Station
         widget:
           type: downloadstation
@@ -106,7 +106,7 @@
 
     - Portainer:
         icon: portainer.png
-        href: http://fixhardez.synology.me:9000
+        href: "{{HOMEPAGE_VAR_DDNS_BASE}}:9000"
         description: Container Manager
         widget:
           type: portainer
@@ -116,7 +116,7 @@
 
     - Uptime Kuma:
         icon: uptime-kuma.png
-        href: http://fixhardez.synology.me:3001/dashboard
+        href: "{{HOMEPAGE_VAR_DDNS_BASE}}:3001/dashboard"
         description: Service Health Monitor
         widget:
           type: uptimekuma
