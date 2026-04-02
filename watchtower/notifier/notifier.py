@@ -35,12 +35,14 @@ PAT_SESSION_START = re.compile(r'msg="Watchtower \d+\.\d+|msg="Starting Watchtow
 PAT_FOUND_NEW     = re.compile(r'msg="Found new ([^\s"]+) image \(([a-f0-9]+)\)"', re.I)
 PAT_STOPPING      = re.compile(r'msg="Stopping /([^\s"]+)', re.I)
 PAT_CREATING      = re.compile(r'msg="Creating /([^\s"]+)"', re.I)
+PAT_REMOVING      = re.compile(r'msg="Removing image ([a-f0-9]+)"', re.I)
 PAT_SESSION_DONE  = re.compile(r'msg="Session done".*?Updated=(\d+)', re.I)
 PAT_ERROR         = re.compile(r'level=error|level=fatal|panic:', re.I)
 
 # state ระหว่าง session
-_pending_updates: dict[str, str] = {}   # container_name -> new_image
-_image_queue: list[str] = []            # FIFO queue of found images waiting for Creating
+_pending_updates: dict[str, dict] = {}      # container_name -> {"image_name": str, "new_id": str, "old_id": str|None}
+_image_queue: list[dict] = []               # FIFO queue of {"name": image_name, "id": new_id} waiting for Creating
+_containers_updated_order: list[str] = []   # FIFO ลำดับ container ที่ update แล้ว รอ Removing image
 _session_start_time: datetime | None = None
 
 
@@ -144,7 +146,7 @@ class DockerSocketSession:
 
 # ─── Log handler ───────────────────────────────────────────────────────────
 def handle_line(log_line: str) -> None:
-    global _pending_updates, _image_queue, _session_start_time
+    global _pending_updates, _image_queue, _containers_updated_order, _session_start_time
 
     print(f"[LOG] {log_line}")
 
@@ -152,6 +154,7 @@ def handle_line(log_line: str) -> None:
     if PAT_SESSION_START.search(log_line):
         _pending_updates = {}
         _image_queue.clear()
+        _containers_updated_order.clear()
         _session_start_time = None
         send_line(
             f"🟢 Watchtower เริ่มทำงานแล้ว\n"
@@ -163,10 +166,9 @@ def handle_line(log_line: str) -> None:
     # ── Found new image → เก็บไว้รอ Creating ─────────────────────────────
     m = PAT_FOUND_NEW.search(log_line)
     if m:
-        image_name = m.group(1)   # e.g. ghcr.io/gethomepage/homepage:latest
-        image_id   = m.group(2)   # e.g. 8d2d6aa5c260
-        # เก็บ image ใน queue รอ Creating (FIFO เพราะ Watchtower สร้างตามลำดับที่ find)
-        _image_queue.append(f"{image_name} ({image_id[:12]})")
+        image_name = m.group(1)        # e.g. ghcr.io/gethomepage/homepage:latest
+        new_id     = m.group(2)[:12]   # e.g. 8d2d6aa5c260
+        _image_queue.append({"name": image_name, "id": new_id})
         if _session_start_time is None:
             _session_start_time = datetime.now(TZ)
         return
@@ -175,14 +177,25 @@ def handle_line(log_line: str) -> None:
     m = PAT_CREATING.search(log_line)
     if m:
         container_name = m.group(1)
-        image_info = _image_queue.pop(0) if _image_queue else "unknown image"
-        _pending_updates[container_name] = image_info
+        img = _image_queue.pop(0) if _image_queue else {"name": "unknown image", "id": "?"}
+        _pending_updates[container_name] = {"image_name": img["name"], "new_id": img["id"], "old_id": None}
+        _containers_updated_order.append(container_name)
         send_line(
             f"🔄 Container อัปเดตแล้ว!\n"
             f"📦 {container_name}\n"
-            f"🖼 {image_info}\n"
+            f"🖼 {img['name']}\n"
+            f"  🆕 {img['id']}\n"
             f"🕒 {now()}"
         )
+        return
+
+    # ── Removing image = บันทึก old image ID ──────────────────────────────
+    m = PAT_REMOVING.search(log_line)
+    if m and _containers_updated_order:
+        old_id = m.group(1)[:12]
+        container_name = _containers_updated_order.pop(0)
+        if container_name in _pending_updates:
+            _pending_updates[container_name]["old_id"] = old_id
         return
 
     # ── Session done → summary ─────────────────────────────────────────────
@@ -195,10 +208,14 @@ def handle_line(log_line: str) -> None:
             duration = f"\n⏱ ใช้เวลา {int(elapsed.total_seconds() // 60)} นาที"
 
         if updated_count > 0:
-            items = "\n".join(f"  • {k}: {v}" for k, v in _pending_updates.items())
+            lines = []
+            for k, v in _pending_updates.items():
+                old = v.get("old_id") or "?"
+                new = v.get("new_id") or "?"
+                lines.append(f"  • {k}: {v['image_name']}\n    {old} → {new}")
             send_line(
                 f"✅ ตรวจสอบเสร็จ — อัปเดต {updated_count} container\n"
-                f"{items}{duration}\n🕒 {now()}"
+                f"{chr(10).join(lines)}{duration}\n🕒 {now()}"
             )
         else:
             send_line(
@@ -207,6 +224,8 @@ def handle_line(log_line: str) -> None:
             )
         _pending_updates = {}
         _image_queue.clear()
+        _containers_updated_order.clear()
+        _session_start_time = None   # fix: reset ทุก session ไม่งั้น session ถัดไปนับเวลาผิด
         return
 
     # ── Error ──────────────────────────────────────────────────────────────
