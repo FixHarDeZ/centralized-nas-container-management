@@ -18,7 +18,7 @@ This repo manages Docker containers deployed on a Synology DS925+ NAS. It is a c
 
 ## Deploying to NAS
 
-Use `deploy.sh` to upload the entire project from your local machine to `/volume1/docker` on the NAS over SSH.
+Use `deploy.sh` to upload the entire project from your local machine to `/volume1/docker` on the NAS over SSH, and optionally restart stacks automatically.
 
 ```bash
 # 1. Copy the example config and fill in your NAS password
@@ -28,11 +28,28 @@ nano .deploy.env
 # 2. Install sshpass (required, one-time)
 brew install sshpass   # macOS
 
-# 3. Upload
+# 3. Upload (and optionally restart stacks)
 ./deploy.sh
 ```
 
-The script reads credentials from `.deploy.env` (excluded from git), checks the SSH connection first, then rsyncs the project — excluding `.git/`, `.deploy.env`, and `deploy.sh` itself.
+The script reads credentials from `.deploy.env` (excluded from git), checks the SSH connection first, then uploads the project via `tar`+SSH — excluding `.git/`, `.deploy.env`, and `deploy.sh` itself.
+
+### Post-upload stack restart
+
+After uploading, the script prompts whether to restart stacks on the NAS:
+
+- **Restart all** — restarts every stack at once
+- **Per-stack** — prompts individually for each stack
+
+For each selected stack, the script SSH-es into the NAS and runs:
+```bash
+sudo docker compose down
+sudo docker compose up -d --build
+```
+
+`--build` ensures local images (e.g. the `watchtower-notifier` sidecar) are rebuilt. Remote images are re-used from cache unless changed.
+
+> **Note:** The NAS user must have `sudo` privileges. The script pipes the password from `.deploy.env` via `sudo -S`.
 
 ## Common Commands
 
