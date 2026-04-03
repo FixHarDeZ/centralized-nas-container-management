@@ -70,3 +70,39 @@ COPYFILE_DISABLE=1 tar -czf - \
 
 echo ""
 echo "Done. Files uploaded to ${NAS_TARGET_PATH} on NAS."
+
+# ── Restart stacks ───────────────────────────────────────────────────────────
+STACKS=(homepage jellyfin portainer uptime-kuma watchtower)
+
+echo ""
+echo "Stacks available: ${STACKS[*]}"
+read -r -p "Restart all stacks on NAS now? [y/N] " RESTART_ALL
+if [[ "${RESTART_ALL}" =~ ^[Yy]$ ]]; then
+  STACKS_TO_RESTART=("${STACKS[@]}")
+else
+  STACKS_TO_RESTART=()
+  for stack in "${STACKS[@]}"; do
+    read -r -p "  Restart ${stack}? [y/N] " RESTART_STACK
+    if [[ "${RESTART_STACK}" =~ ^[Yy]$ ]]; then
+      STACKS_TO_RESTART+=("$stack")
+    fi
+  done
+fi
+
+if [[ ${#STACKS_TO_RESTART[@]} -eq 0 ]]; then
+  echo "No stacks selected. Done."
+  exit 0
+fi
+
+echo ""
+echo "Restarting: ${STACKS_TO_RESTART[*]}"
+echo ""
+
+for stack in "${STACKS_TO_RESTART[@]}"; do
+  echo "── ${stack} ──────────────────────────────────────────"
+  $SSHPASS ssh $SSH_OPTS "${NAS_USER}@${NAS_HOST}" \
+    "bash -l -c \"echo '${NAS_PASSWORD}' | sudo -S docker compose -f '${NAS_TARGET_PATH}/${stack}/docker-compose.yml' down && echo '${NAS_PASSWORD}' | sudo -S docker compose -f '${NAS_TARGET_PATH}/${stack}/docker-compose.yml' up -d --build\""
+  echo ""
+done
+
+echo "All done."
