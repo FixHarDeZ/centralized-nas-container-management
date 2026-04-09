@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This repo manages Docker containers deployed on a Synology DS925+ NAS. It is a collection of `docker-compose.yml` stacks, not an application codebase. Each subdirectory is an independent stack deployed to the NAS via Synology Container Manager (or direct Docker CLI).
+This repo manages Docker containers deployed on a Synology DS925+ NAS. It is a collection of `docker-compose.yml` stacks, not an application codebase. Each subdirectory is an independent stack managed via Synology Container Manager (DSM 7.3.2).
 
 ## Stacks
 
@@ -64,25 +64,7 @@ After uploading files to the NAS via `deploy.sh`, register each new stack in Syn
 4. Click **Next** → review → **Build**
 
 > Stacks with a local build (e.g. `watchtower`) have their image built on first run.
-> For subsequent updates, use `deploy.sh` (which runs `docker compose down` + `up -d --build` via SSH) instead of re-registering.
-
-## Common Commands
-
-All commands are run on the NAS (SSH or Container Manager), not locally.
-
-```bash
-# Deploy / update a stack
-docker compose up -d
-
-# Rebuild sidecar image and restart
-docker compose up -d --build
-
-# View notifier logs
-docker compose logs -f watchtower-notifier
-
-# Pull latest images and restart
-docker compose pull && docker compose up -d
-```
+> For subsequent updates, use `deploy.sh` with the restart option instead of re-registering.
 
 ## Architecture
 
