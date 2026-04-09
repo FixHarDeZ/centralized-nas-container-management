@@ -32,6 +32,21 @@ brew install sshpass
 
 `.deploy.env` is gitignored — never commit it. Use `.deploy.env.example` as the reference template.
 
+## Adding a Stack to Container Manager (DSM 7.3.2)
+
+After uploading files to the NAS via `deploy.sh`, register each stack in Synology Container Manager:
+
+1. Open **DSM** → **Container Manager** → **Project** tab
+2. Click **Create**
+3. Fill in:
+   - **Project Name** — e.g. `homepage`
+   - **Path** — point to the stack directory on NAS, e.g. `/volume1/docker/homepage`
+     Container Manager will automatically detect `docker-compose.yml` in that path
+4. Click **Next** → review the compose config → click **Build**
+5. Container Manager pulls images and starts the containers
+
+> **Note:** For stacks with a local build (e.g. `watchtower`), Container Manager will build the image on first run. On subsequent updates, use `deploy.sh` with the restart option instead of re-registering the project.
+
 ## Stack Setup
 
 Each stack lives in its own directory. Before deploying on the NAS, copy the example env file and fill in real values:
