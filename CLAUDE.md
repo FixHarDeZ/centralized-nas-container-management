@@ -51,6 +51,21 @@ sudo docker compose up -d --build
 
 > **Note:** The NAS user must have `sudo` privileges. The script pipes the password from `.deploy.env` via `sudo -S`.
 
+## Adding a Stack to Container Manager (DSM 7.3.2)
+
+After uploading files to the NAS via `deploy.sh`, register each new stack in Synology Container Manager UI:
+
+1. Open **DSM** → **Container Manager** → **Project** tab
+2. Click **Create**
+3. Fill in:
+   - **Project Name** — match the directory name, e.g. `homepage`
+   - **Path** — point to the stack directory, e.g. `/volume1/docker/homepage`
+     Container Manager auto-detects `docker-compose.yml` in that path
+4. Click **Next** → review → **Build**
+
+> Stacks with a local build (e.g. `watchtower`) have their image built on first run.
+> For subsequent updates, use `deploy.sh` (which runs `docker compose down` + `up -d --build` via SSH) instead of re-registering.
+
 ## Common Commands
 
 All commands are run on the NAS (SSH or Container Manager), not locally.
