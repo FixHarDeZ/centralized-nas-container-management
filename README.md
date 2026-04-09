@@ -1,6 +1,6 @@
 # centralized-nas-container-management
 
-Docker stacks for Synology DS925+ NAS, managed via Synology Container Manager or Docker CLI.
+Docker stacks for Synology DS925+ NAS, managed via Synology Container Manager.
 
 ![Homepage Dashboard](screenshots/Homepage.png)
 
@@ -45,11 +45,11 @@ After uploading files to the NAS via `deploy.sh`, register each stack in Synolog
 4. Click **Next** → review the compose config → click **Build**
 5. Container Manager pulls images and starts the containers
 
-> **Note:** For stacks with a local build (e.g. `watchtower`), Container Manager will build the image on first run. On subsequent updates, use `deploy.sh` with the restart option instead of re-registering the project.
+> For stacks with a local build (e.g. `watchtower`), Container Manager will build the image on first run. On subsequent updates, use `deploy.sh` with the restart option instead of re-registering the project.
 
 ## Stack Setup
 
-Each stack lives in its own directory. Before deploying on the NAS, copy the example env file and fill in real values:
+Each stack lives in its own directory. Before registering in Container Manager, copy the example env file and fill in real values **on your local machine**, then upload via `deploy.sh`:
 
 ```bash
 # Homepage
@@ -57,33 +57,6 @@ cp homepage/.env.example homepage/.env
 
 # Watchtower
 cp watchtower/.env.example watchtower/.env
-```
-
-Then deploy the stack from its directory on the NAS:
-
-```bash
-cd homepage   # or portainer / watchtower
-docker compose up -d
-```
-
-For watchtower (has a local build):
-
-```bash
-cd watchtower
-docker compose up -d --build
-```
-
-## Common Commands
-
-```bash
-# View logs
-docker compose logs -f
-
-# Pull latest images and restart
-docker compose pull && docker compose up -d
-
-# Stop a stack
-docker compose down
 ```
 
 ## Architecture Notes
