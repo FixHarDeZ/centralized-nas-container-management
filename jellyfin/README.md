@@ -8,9 +8,7 @@ Media server with NVIDIA GPU hardware transcoding.
 
 ## Setup
 
-```bash
-docker compose up -d
-```
+Upload via `deploy.sh` from your local machine and register the stack in Container Manager (see root README).
 
 ## Media Paths
 

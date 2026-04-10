@@ -8,9 +8,7 @@ Docker management UI (Community Edition).
 
 ## Setup
 
-```bash
-docker compose up -d
-```
+Upload via `deploy.sh` from your local machine and register the stack in Container Manager (see root README).
 
 ## Data
 

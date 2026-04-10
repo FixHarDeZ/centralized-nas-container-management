@@ -22,8 +22,9 @@ watchtower/
 ```bash
 cp .env.example .env
 # Fill in LINE_CHANNEL_ACCESS_TOKEN and LINE_USER_ID
-docker compose up -d --build
 ```
+
+Then upload via `deploy.sh` from your local machine and register the stack in Container Manager (see root README).
 
 ## Services
 

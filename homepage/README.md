@@ -26,8 +26,9 @@ homepage/
 ```bash
 cp .env.example .env
 # Fill in real values in .env
-docker compose up -d
 ```
+
+Then upload via `deploy.sh` from your local machine and register the stack in Container Manager (see root README).
 
 ## Secrets Injection
 
