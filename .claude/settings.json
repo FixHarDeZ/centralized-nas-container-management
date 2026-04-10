@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh auth:*)",
+      "Bash(ssh -T git@github.com)",
+      "Bash(git commit -m ':*)",
+      "Bash(gh release create v1.2.2 --title 'v1.2.2 — Docs cleanup: Container Manager as primary workflow' --notes ':*)",
+      "Read(//Users/peerawat.ujaiyen/.claude/**)"
+    ],
+    "additionalDirectories": [
+      "/Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management/.claude"
+    ]
+  }
+}
