@@ -12,5 +12,6 @@ services:
       - /volume1/docker/uptime-kuma:/app/data
     environment:
       - UPTIME_KUMA_IS_CONTAINER=1
+      - TZ=Asia/Bangkok
     # ข้อมูลอื่นๆ เช่น PATH, NODE_VERSION ปกติจะติดมากับ Image อยู่แล้ว 
     # ไม่จำเป็นต้องใส่ซ้ำในนี้ครับ
