@@ -10,6 +10,7 @@ Docker stacks for Synology DS925+ NAS, managed via Synology Container Manager.
 |---|---|---|
 | `homepage/` | Dashboard UI (gethomepage/homepage) | 3000 |
 | `jellyfin/` | Media server with NVIDIA GPU transcoding | 8096 |
+| `maid-tracker/` | Household worker attendance & salary tracker | 5055 |
 | `portainer/` | Docker management UI | 9000, 9443 |
 | `uptime-kuma/` | Service health monitor | 3001 |
 | `watchtower/` | Auto-update containers + LINE notification sidecar | — |
@@ -62,5 +63,6 @@ cp watchtower/.env.example watchtower/.env
 ## Architecture Notes
 
 - **Homepage** — config is in `homepage/config/` (YAML, no rebuild needed). Secrets are injected via `HOMEPAGE_VAR_*` env vars and referenced in `services.yaml` as `{{HOMEPAGE_VAR_*}}`.
+- **Maid Tracker** — FastAPI + SQLite single-container app. Database persisted in a named volume `maid_tracker_data`. Local build; no env file required.
 - **Watchtower** — runs two services: the updater and a Python sidecar that tails Watchtower logs via raw Docker socket HTTP and pushes LINE notifications. The sidecar is excluded from auto-updates via `com.centurylinklabs.watchtower.enable=false`.
 - **Portainer** — standard CE deployment, data persisted in `portainer_data` named volume.

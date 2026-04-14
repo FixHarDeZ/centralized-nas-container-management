@@ -5,6 +5,12 @@
 # ══════════════════════════════════════════════════════════════════════════════
 # ─── 📝 Tools & Notes ─────────────────────────────────────────────────────────
 - 📝 Tools & Notes:
+    - Maid Tracker:
+        icon: mdi-broom
+        href: "{{HOMEPAGE_VAR_MAID_TRACKER_URL}}"
+        description: ระบบบันทึกการทำงานแม่บ้าน
+        ping: "{{HOMEPAGE_VAR_MAID_TRACKER_URL}}"
+
     - Synology Note Station:
         icon: synology-note-station.png
         href: "{{HOMEPAGE_VAR_QUICKCONNECT_URL}}/note/"

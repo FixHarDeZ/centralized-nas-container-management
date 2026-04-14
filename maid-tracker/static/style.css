@@ -1,0 +1,159 @@
+/* ===== Base ===== */
+body {
+  font-family: "Sarabun", "Noto Sans Thai", sans-serif;
+  background: #f5f7fa;
+}
+
+#app {
+  min-height: calc(100vh - 60px);
+}
+
+/* ===== Attendance Calendar ===== */
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+}
+
+.cal-header {
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.8rem;
+  padding: 6px 0;
+  border-radius: 6px;
+}
+
+.cal-header.sunday { color: #dc3545; }
+
+.cal-day {
+  border-radius: 10px;
+  padding: 8px 4px;
+  text-align: center;
+  cursor: pointer;
+  transition: transform 0.1s, box-shadow 0.1s;
+  min-height: 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  border: 2px solid transparent;
+  font-size: 0.82rem;
+}
+
+.cal-day:hover:not(.cal-disabled):not(.cal-future) {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 1;
+}
+
+.cal-day.cal-disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.cal-day.cal-future {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.cal-day .day-num {
+  font-weight: 700;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.cal-day .status-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 20px;
+}
+
+/* Status colors */
+.status-work     { background: #d1f0dc; border-color: #198754; color: #145a32; }
+.status-leave    { background: #fde8e8; border-color: #dc3545; color: #7b1010; }
+.status-holiday  { background: #e9ecef; border-color: #adb5bd; color: #495057; }
+.status-compensatory { background: #dbeafe; border-color: #0d6efd; color: #08306b; }
+.status-before_start { background: #f8f9fa; border-color: #dee2e6; color: #adb5bd; }
+.status-future   { background: #f8f9fa; border-color: #dee2e6; color: #ced4da; }
+
+.badge-work         { background: #198754; }
+.badge-leave        { background: #dc3545; }
+.badge-holiday      { background: #adb5bd; }
+.badge-compensatory { background: #0d6efd; }
+
+/* ===== Summary cards ===== */
+.stat-card {
+  border-radius: 14px;
+  padding: 20px;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+}
+
+.stat-card .stat-num {
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.stat-card .stat-label {
+  font-size: 0.82rem;
+  margin-top: 4px;
+  opacity: 0.85;
+}
+
+/* ===== Financial banner ===== */
+.finance-banner {
+  border-radius: 14px;
+  padding: 20px 24px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+}
+
+/* ===== Employee card ===== */
+.emp-card {
+  border-radius: 14px;
+  border: none;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+  transition: box-shadow 0.2s, transform 0.2s;
+  cursor: pointer;
+}
+
+.emp-card:hover {
+  box-shadow: 0 6px 18px rgba(0,0,0,0.13);
+  transform: translateY(-2px);
+}
+
+/* ===== Month nav ===== */
+.month-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* ===== Loading spinner ===== */
+.spinner-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 60px 0;
+}
+
+/* ===== Page breadcrumb ===== */
+.page-breadcrumb {
+  font-size: 0.85rem;
+  color: #6c757d;
+  margin-bottom: 6px;
+}
+
+.page-breadcrumb a {
+  color: #0d6efd;
+  text-decoration: none;
+}
+
+.page-breadcrumb a:hover { text-decoration: underline; }
+
+/* ===== Tab bar ===== */
+.tab-link {
+  cursor: pointer;
+}

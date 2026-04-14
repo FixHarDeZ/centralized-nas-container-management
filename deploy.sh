@@ -72,7 +72,7 @@ echo ""
 echo "Done. Files uploaded to ${NAS_TARGET_PATH} on NAS."
 
 # ── Restart stacks ───────────────────────────────────────────────────────────
-STACKS=(homepage jellyfin portainer uptime-kuma watchtower)
+STACKS=(homepage jellyfin maid-tracker portainer uptime-kuma watchtower)
 
 echo ""
 echo "Stacks available: ${STACKS[*]}"
