@@ -1,0 +1,15 @@
+services:
+  maid-tracker:
+    build: .
+    container_name: maid-tracker
+    restart: unless-stopped
+    ports:
+      - "5055:8000"
+    volumes:
+      - maid_tracker_data:/data
+    environment:
+      - TZ=Asia/Bangkok
+      - DATA_DIR=/data
+
+volumes:
+  maid_tracker_data:

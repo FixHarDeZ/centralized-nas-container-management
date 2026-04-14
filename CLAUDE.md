@@ -12,6 +12,7 @@ This repo manages Docker containers deployed on a Synology DS925+ NAS. It is a c
 |---|---|---|
 | `homepage/` | Dashboard UI (gethomepage/homepage) | 3000 |
 | `jellyfin/` | Media server with NVIDIA GPU transcoding | 8096 |
+| `maid-tracker/` | Household worker attendance & salary tracker | 5055 |
 | `portainer/` | Docker management UI | 9000, 9443 |
 | `uptime-kuma/` | Service health monitor | 3001 |
 | `watchtower/` | Auto-update containers + LINE notification sidecar | — |
@@ -80,6 +81,15 @@ After uploading files to the NAS via `deploy.sh`, register each new stack in Syn
 - It parses Watchtower 1.7.x structured log format and sends LINE Messaging API push notifications for: notifier start, session start, per-container updates, session summary, and errors.
 - The sidecar image is a local build (`python:3.12-slim` base); Watchtower is instructed to skip it via label `com.centurylinklabs.watchtower.enable=false`.
 - Poll interval: 86400s (24h). Configured via `WATCHTOWER_POLL_INTERVAL`.
+
+### Maid Tracker (`maid-tracker/`)
+- Single-container FastAPI (Python 3.12) app with SQLite database.
+- Data persisted in named volume `maid_tracker_data` mounted at `/data`.
+- Serves a fully static SPA (Bootstrap 5 + vanilla JS) via FastAPI's `StaticFiles`.
+- No `.env` file required — no secrets. `TZ=Asia/Bangkok` is set in compose.
+- Local build required (`Dockerfile` uses `python:3.12-slim`). Port 5055 → container 8000.
+- Status types: `work` (Mon–Sat default), `leave` (deducted), `holiday` (Sun default), `compensatory` (Sun worked = credit).
+- Daily rate = `monthly_salary ÷ working_days_in_month` (Mon–Sat count). First partial month is prorated.
 
 ### Portainer (`portainer/`)
 - Standard Portainer CE deployment. Data persisted in a named volume `portainer_data`.
