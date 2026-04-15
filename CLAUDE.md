@@ -89,7 +89,9 @@ After uploading files to the NAS via `deploy.sh`, register each new stack in Syn
 - No `.env` file required — no secrets. `TZ=Asia/Bangkok` is set in compose.
 - Local build required (`Dockerfile` uses `python:3.12-slim`). Port 5055 → container 8000.
 - Status types: `work` (Mon–Sat default), `leave` (deducted), `holiday` (Sun default), `compensatory` (Sun worked = credit).
+- Each leave/compensatory day can be **full day (1.0) or half day (0.5)** — stored as `half_day INTEGER` in the `attendance` table. All cumulative calculations use the fractional value.
 - Daily rate = `monthly_salary ÷ working_days_in_month` (Mon–Sat count). First partial month is prorated.
+- Salary policy: no monthly deduction — leave/comp settle at resignation. Employee detail page shows cumulative balance (days + approx. amount) before resignation is filed.
 
 ### Portainer (`portainer/`)
 - Standard Portainer CE deployment. Data persisted in a named volume `portainer_data`.

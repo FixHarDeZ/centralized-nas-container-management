@@ -95,6 +95,16 @@ const TRANSLATIONS = {
     confirmResignNotePrompt: "เหตุผลการลาออก (ไม่บังคับ):",
     confirmResignFinal: (n, d) => `ยืนยันบันทึกการลาออกของ "${n}" วันที่ ${d}?`,
     confirmCancelResign: (n) => `ยืนยันยกเลิกการลาออกของ "${n}"?`,
+    // Half-day dialog
+    confirmLeaveTitle: "บันทึกวันลา",
+    confirmCompTitle: "บันทึกวันชดเชย",
+    fullDay: "เต็มวัน",
+    halfDay: "ครึ่งวัน",
+    statusLeaveHalf: "ลา ½",
+    statusCompHalf: "ชดเชย ½",
+    // Balance preview (before resign)
+    overallBalAmount: (a) => `≈ ${a >= 0 ? "+" : ""}${fmtMoney(a)} บาท`,
+    overallBalRate: (dr) => `(อัตราวันละ ${fmtMoney(dr)} บาท)`,
   },
   en: {
     appTitle: "Household Staff Tracker",
@@ -181,6 +191,16 @@ const TRANSLATIONS = {
     confirmResignNotePrompt: "Reason for resignation (optional):",
     confirmResignFinal: (n, d) => `Confirm resignation of "${n}" on ${d}?`,
     confirmCancelResign: (n) => `Cancel resignation of "${n}"?`,
+    // Half-day dialog
+    confirmLeaveTitle: "Record Leave",
+    confirmCompTitle: "Record Compensatory",
+    fullDay: "Full Day",
+    halfDay: "Half Day",
+    statusLeaveHalf: "Leave ½",
+    statusCompHalf: "Comp. ½",
+    // Balance preview (before resign)
+    overallBalAmount: (a) => `≈ ${a >= 0 ? "+" : ""}${fmtMoney(a)} Baht`,
+    overallBalRate: (dr) => `(${fmtMoney(dr)} Baht/day)`,
   },
 };
 
@@ -199,6 +219,14 @@ function sl(status) {
     before_start: "—",
   };
   return map[status] || status;
+}
+
+// Status label with half-day suffix
+function slLabel(status, halfDay = false) {
+  if (!halfDay) return sl(status);
+  if (status === "leave") return t("statusLeaveHalf");
+  if (status === "compensatory") return t("statusCompHalf");
+  return sl(status);
 }
 
 function switchLang() {
@@ -590,11 +618,16 @@ async function viewEmployeeDetail(id) {
           <div class="fw-bold fs-5 ${balClass}">
             ${overall.overall_balance >= 0
               ? t("overallCredit", overall.overall_balance)
-              : t("overallDebt", overall.overall_balance)}
+              : t("overallDebt", Math.abs(overall.overall_balance))}
           </div>
           <div class="text-muted small">
             ${t("overallBalDetail", overall.total_compensatory_days, overall.total_leave_days, overall.overall_balance)}
           </div>
+          ${overall.overall_balance !== 0 ? `
+          <div class="fw-semibold ${balClass} mt-1">
+            ${t("overallBalAmount", overall.balance_amount)}
+            <span class="text-muted fw-normal small">${t("overallBalRate", overall.daily_rate)}</span>
+          </div>` : ""}
           <div class="text-muted small fst-italic">${t("overallNote")}</div>
         </div>
         <div class="text-end">
@@ -737,6 +770,51 @@ function shiftMonth(id, year, month, delta) {
   navigate(`/employee/${id}/attendance?y=${y}&m=${m}`);
 }
 
+// Returns "full", "half", or null (cancelled)
+function askHalfDay(dateStr, type) {
+  return new Promise(resolve => {
+    let chosen = null;
+    const el = document.createElement("div");
+    el.className = "modal fade";
+    el.setAttribute("tabindex", "-1");
+    const title   = type === "leave" ? t("confirmLeaveTitle") : t("confirmCompTitle");
+    const btnCss  = type === "leave" ? "btn-danger" : "btn-primary";
+    const outCss  = type === "leave" ? "btn-outline-danger" : "btn-outline-primary";
+    el.innerHTML = `
+      <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header border-0 pb-0">
+            <span class="fw-bold">${title}</span>
+            <span class="text-muted small ms-2">${formatDate(dateStr)}</span>
+          </div>
+          <div class="modal-body pt-2 pb-3">
+            <div class="d-grid gap-2">
+              <button class="btn btn-sm ${btnCss}" data-val="full">
+                <i class="bi bi-brightness-high-fill me-1"></i>${t("fullDay")}
+              </button>
+              <button class="btn btn-sm ${outCss}" data-val="half">
+                <i class="bi bi-circle-half me-1"></i>${t("halfDay")}
+              </button>
+              <button class="btn btn-sm btn-outline-secondary" data-val="">
+                ${t("cancel")}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(el);
+    const bsModal = new bootstrap.Modal(el);
+    el.querySelectorAll("[data-val]").forEach(btn => {
+      btn.addEventListener("click", () => {
+        chosen = btn.dataset.val || null;
+        bsModal.hide();
+      });
+    });
+    el.addEventListener("hidden.bs.modal", () => { el.remove(); resolve(chosen); }, { once: true });
+    bsModal.show();
+  });
+}
+
 async function cycleDay(empId, dateStr, currentStatus, el) {
   // Cycle logic
   let nextStatus;
@@ -747,23 +825,29 @@ async function cycleDay(empId, dateStr, currentStatus, el) {
     nextStatus = currentStatus === "work" ? "leave" : "work";
   }
 
-  // Confirmation for leave and compensatory
-  if (nextStatus === "leave" && !confirm(t("confirmLeave", formatDate(dateStr)))) return;
-  if (nextStatus === "compensatory" && !confirm(t("confirmComp", formatDate(dateStr)))) return;
+  // For leave / compensatory: ask full day or half day via modal
+  let halfDay = false;
+  if (nextStatus === "leave" || nextStatus === "compensatory") {
+    const choice = await askHalfDay(dateStr, nextStatus === "leave" ? "leave" : "comp");
+    if (!choice) return; // user cancelled
+    halfDay = choice === "half";
+  }
 
   // Optimistic UI update
   el.className = el.className
     .replace(/status-\S+/, "")
     .trimEnd() + " " + (STATUS_CSS[nextStatus] || "");
 
-  el.querySelector(".status-label").textContent = sl(nextStatus);
+  el.querySelector(".status-label").textContent = slLabel(nextStatus, halfDay);
   el.dataset.status = nextStatus;
+  el.dataset.halfDay = halfDay ? "1" : "0";
   el.setAttribute("onclick", `cycleDay(${empId},'${dateStr}','${nextStatus}',this)`);
 
   try {
     await api.post(`/api/employees/${empId}/attendance`, {
       work_date: dateStr,
       status: nextStatus,
+      half_day: halfDay,
     });
     if (window.__refreshLeaveList) await window.__refreshLeaveList();
   } catch (e) {
@@ -990,8 +1074,9 @@ async function viewLeaveLog(id) {
       const disabled = isBefore || isFuture;
       const statusCss = isFuture ? "status-future" : (STATUS_CSS[d.status] || "");
       cell.className = `cal-day ${statusCss}${disabled ? " cal-disabled" : ""}${isFuture ? " cal-future" : ""}`;
-      cell.querySelector(".status-label").textContent = isFuture ? "—" : sl(d.status);
+      cell.querySelector(".status-label").textContent = isFuture ? "—" : slLabel(d.status, d.half_day);
       cell.dataset.status = d.status;
+      cell.dataset.halfDay = d.half_day ? "1" : "0";
       if (!disabled) {
         cell.setAttribute("onclick", `cycleDay(${id},'${d.date}','${d.status}',this)`);
       } else {
@@ -1027,7 +1112,7 @@ function buildCalendarCells(id, days) {
     const isFuture  = d.is_future;
     const disabled  = isBefore || isFuture;
     const statusCss = isFuture ? "status-future" : (STATUS_CSS[d.status] || "");
-    const label     = isFuture ? "—" : sl(d.status);
+    const label     = isFuture ? "—" : slLabel(d.status, d.half_day);
     const dayNum    = d.date.split("-")[2];
     const noteHtml  = d.note
       ? `<span class="cal-note text-muted" title="${escHtml(d.note)}" style="font-size:0.65rem;white-space:nowrap;overflow:hidden;max-width:100%;text-overflow:ellipsis">${escHtml(d.note)}</span>`
@@ -1035,7 +1120,7 @@ function buildCalendarCells(id, days) {
     html += `
       <div class="cal-day ${statusCss}${disabled ? " cal-disabled" : ""}${isFuture ? " cal-future" : ""}"
            ${!disabled ? `onclick="cycleDay(${id},'${d.date}','${d.status}',this)"` : ""}
-           data-date="${d.date}" data-status="${d.status}">
+           data-date="${d.date}" data-status="${d.status}" data-half-day="${d.half_day ? 1 : 0}">
         <span class="day-num">${+dayNum}</span>
         <span class="status-label">${label}</span>
         ${noteHtml}
@@ -1064,7 +1149,10 @@ function renderLeaveList(id, days, month) {
     ? `<div class="text-center text-muted py-3 small">${t("noLeaveMonth")}</div>`
     : leaveDays.map(l => `
         <div class="d-flex align-items-center gap-3 py-2 border-bottom">
-          <div class="text-danger fw-semibold" style="min-width:120px">${formatDate(l.date)}</div>
+          <div class="text-danger fw-semibold" style="min-width:130px">
+            ${formatDate(l.date)}
+            ${l.half_day ? `<span class="badge bg-warning text-dark ms-1" style="font-size:0.6rem">½</span>` : ""}
+          </div>
           <div class="flex-grow-1 text-muted small">
             ${l.note ? escHtml(l.note) : `<span class="fst-italic">${t("noLeaveNote")}</span>`}
           </div>
