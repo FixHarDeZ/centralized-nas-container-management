@@ -7,6 +7,7 @@ import sqlite3
 import os
 from datetime import date, datetime, timedelta
 import calendar
+import line_notify
 
 app = FastAPI(title="Maid Tracker")
 
@@ -199,28 +200,46 @@ def delete_employee(emp_id: int):
 @app.post("/api/employees/{emp_id}/resign")
 def resign_employee(emp_id: int, req: ResignRequest):
     conn = get_db()
-    emp = conn.execute("SELECT id FROM employees WHERE id=?", (emp_id,)).fetchone()
+    emp = conn.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
     if not emp:
         conn.close()
         raise HTTPException(404, "Employee not found")
+    emp = dict(emp)
     conn.execute(
         "UPDATE employees SET end_date=?, resign_note=? WHERE id=?",
         (req.end_date, req.resign_note, emp_id),
     )
     conn.commit()
     conn.close()
+
+    line_notify.notify_resign(
+        emp_id=emp_id,
+        emp_name=emp["name"],
+        end_date_str=req.end_date,
+        resign_note=req.resign_note,
+        start_date=date.fromisoformat(emp["start_date"]),
+        monthly_salary=emp["monthly_salary"],
+    )
+
     return {"message": "resigned"}
 
 
 @app.delete("/api/employees/{emp_id}/resign")
 def cancel_resign(emp_id: int):
     conn = get_db()
+    # Fetch employee name before clearing resign data
+    emp = conn.execute("SELECT name FROM employees WHERE id=?", (emp_id,)).fetchone()
+    emp_name = emp["name"] if emp else None
     conn.execute(
         "UPDATE employees SET end_date=NULL, resign_note=NULL WHERE id=?",
         (emp_id,),
     )
     conn.commit()
     conn.close()
+
+    if emp_name:
+        line_notify.notify_cancel_resign(emp_name=emp_name)
+
     return {"message": "cancelled"}
 
 
@@ -333,10 +352,20 @@ def upsert_attendance(emp_id: int, att: AttendanceUpdate):
     if att.status not in ("work", "leave", "holiday", "compensatory"):
         raise HTTPException(400, "Invalid status")
     conn = get_db()
-    emp = conn.execute("SELECT id FROM employees WHERE id=?", (emp_id,)).fetchone()
+    emp = conn.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
     if not emp:
         conn.close()
         raise HTTPException(404, "Employee not found")
+    emp = dict(emp)
+
+    # Capture previous record before overwriting (needed for cancel detection)
+    prev = conn.execute(
+        "SELECT status, half_day FROM attendance WHERE employee_id=? AND work_date=?",
+        (emp_id, att.work_date),
+    ).fetchone()
+    prev_status   = prev["status"]   if prev else None
+    prev_half_day = bool(prev["half_day"]) if prev else False
+
     conn.execute(
         "INSERT INTO attendance (employee_id, work_date, status, note, half_day) VALUES (?,?,?,?,?) "
         "ON CONFLICT(employee_id, work_date) DO UPDATE SET status=excluded.status, note=excluded.note, half_day=excluded.half_day",
@@ -344,6 +373,33 @@ def upsert_attendance(emp_id: int, att: AttendanceUpdate):
     )
     conn.commit()
     conn.close()
+
+    start_date     = date.fromisoformat(emp["start_date"])
+    monthly_salary = emp["monthly_salary"]
+
+    if att.status in ("leave", "compensatory"):
+        # New leave/comp recorded
+        line_notify.notify_attendance(
+            emp_id=emp_id,
+            emp_name=emp["name"],
+            work_date=att.work_date,
+            status=att.status,
+            half_day=att.half_day,
+            start_date=start_date,
+            monthly_salary=monthly_salary,
+        )
+    elif att.status in ("work", "holiday") and prev_status in ("leave", "compensatory"):
+        # Cancelled a previously recorded leave or compensatory day
+        line_notify.notify_cancel_attendance(
+            emp_id=emp_id,
+            emp_name=emp["name"],
+            work_date=att.work_date,
+            prev_status=prev_status,
+            prev_half_day=prev_half_day,
+            start_date=start_date,
+            monthly_salary=monthly_salary,
+        )
+
     return {"message": "saved"}
 
 
@@ -449,10 +505,11 @@ def toggle_payment(emp_id: int, period: int, year: int, month: int):
     if period not in (1, 2):
         raise HTTPException(400, "Invalid period")
     conn = get_db()
-    emp = conn.execute("SELECT id FROM employees WHERE id=?", (emp_id,)).fetchone()
+    emp = conn.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
     if not emp:
         conn.close()
         raise HTTPException(404, "Employee not found")
+    emp = dict(emp)
 
     existing = conn.execute(
         "SELECT paid_at FROM salary_payments WHERE employee_id=? AND year=? AND month=? AND period=?",
@@ -474,8 +531,38 @@ def toggle_payment(emp_id: int, period: int, year: int, month: int):
         )
         paid_at = now
 
+    # Fetch paid amount from payments list to include in notification
+    wd_month = working_days_in_month(year, month)
+    dr = emp["monthly_salary"] / wd_month if wd_month else 0
+    half_salary = emp["monthly_salary"] / 2
+    start_date = date.fromisoformat(emp["start_date"])
+    _, n = calendar.monthrange(year, month)
+    if start_date.year == year and start_date.month == month:
+        billable = sum(
+            1 for day in range(start_date.day, n + 1)
+            if date(year, month, day).weekday() != 6
+        )
+        base_salary = dr * billable
+    else:
+        base_salary = emp["monthly_salary"]
+    amount = half_salary if period == 1 else round(base_salary - half_salary, 2)
+
     conn.commit()
     conn.close()
+
+    if paid_at:
+        line_notify.notify_payment(
+            emp_id=emp_id,
+            emp_name=emp["name"],
+            year=year,
+            month=month,
+            period=period,
+            amount=round(amount, 2),
+            paid_at=paid_at,
+            start_date=start_date,
+            monthly_salary=emp["monthly_salary"],
+        )
+
     return {"paid": bool(paid_at), "paid_at": paid_at}
 
 

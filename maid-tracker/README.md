@@ -55,6 +55,21 @@ Household staff attendance & salary tracking system — Single-Page Application 
 - Switch **Thai ↔ English** at any time (TH/EN button top-right)
 - Language preference saved in `localStorage`
 
+### 🔔 LINE Notifications
+Sends a LINE message via LINE Messaging API on the following events:
+
+| Event | Message includes |
+|-------|-----------------|
+| Leave recorded | Staff name · date · full/half day · current cumulative balance (days + ฿) |
+| Compensatory recorded | Staff name · date · full/half day · current cumulative balance |
+| Leave cancelled | Staff name · date · "cancelled" label · updated balance |
+| Compensatory cancelled | Staff name · date · "cancelled" label · updated balance |
+| Salary paid (period 1 or 2) | Staff name · month/period · amount · current balance |
+| Resignation recorded | Staff name · resign date · reason (if any) · resignation summary (last-month pay ± balance settlement = final amount) |
+| Resignation cancelled | Staff name · cancellation confirmation |
+
+Notifications are **opt-in** — if `LINE_CHANNEL_ACCESS_TOKEN` or `LINE_GROUP_ID` are not set in the environment, all notifications are silently skipped and the app functions normally. Messages are pushed to a LINE **group** so every member sees them with a single API call. See [LINE Group Setup](#line-group-setup) below.
+
 ---
 
 ## Salary Calculation Policy
@@ -85,12 +100,64 @@ Use `deploy.sh` from the repo root, or restart manually in Container Manager.
 
 ## Configuration
 
-No `.env` needed — no secrets required.
+No `.env` needed for basic use. Create one to enable LINE notifications.
 
 | Variable | Default | Notes |
 |----------|---------|-------|
 | `TZ` | `Asia/Bangkok` | Set in docker-compose.yml |
 | `DATA_DIR` | `/data` | SQLite DB storage path |
+| `LINE_CHANNEL_ACCESS_TOKEN` | _(empty)_ | LINE Messaging API channel token — leave blank to disable |
+| `LINE_GROUP_ID` | _(empty)_ | LINE group ID (starts with `C`) — see [LINE Group Setup](#line-group-setup) |
+
+## LINE Group Setup
+
+One-time steps to get the group ID and wire up notifications.
+
+### 1 — Allow bot to join group chats (LINE Developers Console)
+
+1. Open [LINE Developers Console](https://developers.line.biz/) → your **Messaging API Channel**
+2. Tab **Messaging API settings** → find **"Allow bot to join group chats"** → **Edit** → **Enabled**
+3. _(Recommended)_ Set **Auto-reply messages** → **Disabled** to prevent the bot from auto-replying in the group
+
+### 2 — Create group and invite the bot
+
+1. Open the LINE app → create a new group with all family members
+2. Add your LINE OA (bot) to the group as you would add a friend
+
+### 3 — Get the Group ID via webhook
+
+The Group ID (starts with `C`) is only available through a Webhook event.
+
+**Option A — use a temporary webhook inspector** (easiest):
+
+1. Go to [webhook.site](https://webhook.site/) and copy your unique URL
+2. In LINE Developers Console → **Messaging API settings** → set **Webhook URL** to that URL → **Verify**
+3. Send **any message** in the group
+4. In webhook.site, look for the `groupId` field inside `events[0].source`:
+   ```json
+   "source": {
+     "type": "group",
+     "groupId": "C1a2b3c4d5..."
+   }
+   ```
+5. Copy the `groupId` value
+
+**Option B — check container logs** (if your stack already has a webhook endpoint):
+
+Send a message in the group, then run:
+```bash
+docker logs maid-tracker 2>&1 | grep groupId
+```
+
+### 4 — Set the env var
+
+Add to your `.env` file (next to `docker-compose.yml`):
+```env
+LINE_CHANNEL_ACCESS_TOKEN=<your token>
+LINE_GROUP_ID=C1a2b3c4d5...
+```
+
+Then redeploy (`./deploy.sh` from repo root).
 
 ## Data Persistence
 
@@ -192,6 +259,21 @@ salary_payments (
 - สลับ **ไทย ↔ English** ได้ตลอดเวลา (ปุ่ม TH/EN มุมขวาบน)
 - จำการตั้งค่าภาษาใน `localStorage`
 
+### 🔔 การแจ้งเตือน LINE
+ส่งข้อความผ่าน LINE Messaging API ในกรณีดังนี้:
+
+| กรณี | ข้อมูลที่แจ้งเตือน |
+|------|-------------------|
+| บันทึกลา | ชื่อ · วันที่ · เต็ม/ครึ่งวัน · ยอดสะสมปัจจุบัน (วัน + ฿) |
+| บันทึกชดเชย | ชื่อ · วันที่ · เต็ม/ครึ่งวัน · ยอดสะสมปัจจุบัน |
+| ยกเลิกลา | ชื่อ · วันที่ · label "ยกเลิก" · ยอดสะสมที่อัปเดต |
+| ยกเลิกชดเชย | ชื่อ · วันที่ · label "ยกเลิก" · ยอดสะสมที่อัปเดต |
+| จ่ายเงินเดือน (รอบ 1 หรือ 2) | ชื่อ · เดือน/รอบ · จำนวนเงิน · ยอดสะสมปัจจุบัน |
+| บันทึกลาออก | ชื่อ · วันที่ลาออก · เหตุผล (ถ้ามี) · สรุปการลาออก (เงินเดือนเดือนสุดท้าย ± ยอดสะสม = ยอดสุทธิ) |
+| ยกเลิกลาออก | ชื่อ · ยืนยันยกเลิก |
+
+การแจ้งเตือนเป็น **opt-in** — ถ้าไม่ได้ตั้งค่า `LINE_CHANNEL_ACCESS_TOKEN` หรือ `LINE_GROUP_ID` ใน environment จะข้ามการแจ้งเตือนทั้งหมด โดยไม่กระทบการทำงานของแอป ข้อความถูกส่งเข้า **กลุ่ม LINE** ทำให้ทุกคนในกลุ่มเห็นพร้อมกันโดยใช้ API call เดียว ดูรายละเอียดที่ [ตั้งค่ากลุ่ม LINE](#ตั้งค่ากลุ่ม-line) ด้านล่าง
+
 ---
 
 ## นโยบายการคำนวณเงินเดือน
@@ -222,12 +304,64 @@ salary_payments (
 
 ## Configuration
 
-ไม่มี `.env` — ไม่มี secrets ที่ต้องตั้งค่า
+ไม่ต้องมี `.env` สำหรับการใช้งานทั่วไป สร้างไฟล์นี้เพื่อเปิดใช้การแจ้งเตือน LINE
 
 | Variable | Default | Notes |
 |----------|---------|-------|
 | `TZ` | `Asia/Bangkok` | ตั้งใน docker-compose.yml |
 | `DATA_DIR` | `/data` | ที่เก็บ SQLite DB |
+| `LINE_CHANNEL_ACCESS_TOKEN` | _(ว่าง)_ | LINE Messaging API channel token — เว้นว่างเพื่อปิดการแจ้งเตือน |
+| `LINE_GROUP_ID` | _(ว่าง)_ | Group ID กลุ่ม LINE (ขึ้นต้นด้วย `C`) — ดู [ตั้งค่ากลุ่ม LINE](#ตั้งค่ากลุ่ม-line) |
+
+## ตั้งค่ากลุ่ม LINE
+
+ทำครั้งเดียวเพื่อได้ Group ID และเปิดการแจ้งเตือน
+
+### ขั้นที่ 1 — เปิดสิทธิ์บอทเข้ากลุ่ม (LINE Developers Console)
+
+1. เปิด [LINE Developers Console](https://developers.line.biz/) → เลือก **Messaging API Channel** ที่ใช้งาน
+2. Tab **Messaging API settings** → หัวข้อ **"Allow bot to join group chats"** → **Edit** → **Enabled**
+3. _(แนะนำ)_ ตั้งค่า **Auto-reply messages** → **Disabled** เพื่อไม่ให้บอทตอบข้อความอัตโนมัติในกลุ่ม
+
+### ขั้นที่ 2 — สร้างกลุ่มและดึงบอทเข้า
+
+1. เปิดแอป LINE → สร้างกลุ่มใหม่ โดยเพิ่มสมาชิกในบ้านทุกคน
+2. เพิ่ม LINE OA (บอท) เข้ากลุ่มเหมือนเพิ่มเพื่อน
+
+### ขั้นที่ 3 — หา Group ID ผ่าน Webhook
+
+Group ID (ขึ้นต้นด้วย `C`) ดึงได้จาก Webhook event เท่านั้น
+
+**วิธี A — ใช้ Webhook inspector ชั่วคราว** (ง่ายที่สุด):
+
+1. เปิด [webhook.site](https://webhook.site/) แล้ว copy URL ที่ได้
+2. ใน LINE Developers Console → **Messaging API settings** → ตั้ง **Webhook URL** เป็น URL นั้น → **Verify**
+3. พิมพ์ข้อความอะไรก็ได้ในกลุ่ม
+4. ใน webhook.site ให้ดูที่ `events[0].source.groupId`:
+   ```json
+   "source": {
+     "type": "group",
+     "groupId": "C1a2b3c4d5..."
+   }
+   ```
+5. Copy ค่า `groupId` มาใช้
+
+**วิธี B — ตรวจสอบ container log** (ถ้ามี webhook endpoint อยู่แล้ว):
+
+พิมพ์ข้อความในกลุ่ม แล้วรัน:
+```bash
+docker logs maid-tracker 2>&1 | grep groupId
+```
+
+### ขั้นที่ 4 — ตั้งค่า env var
+
+เพิ่มใน `.env` (ไฟล์เดียวกับ `docker-compose.yml`):
+```env
+LINE_CHANNEL_ACCESS_TOKEN=<token ของคุณ>
+LINE_GROUP_ID=C1a2b3c4d5...
+```
+
+จากนั้น redeploy (`./deploy.sh` จาก root ของ repo)
 
 ## Data Persistence
 
