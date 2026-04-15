@@ -10,6 +10,10 @@ services:
     environment:
       - TZ=Asia/Bangkok
       - DATA_DIR=/data
+      # LINE Messaging API — fill in to enable notifications (leave blank to disable)
+      # LINE_GROUP_ID: group ID starting with 'C' (invite bot to group, send a message, check webhook for groupId)
+      - LINE_CHANNEL_ACCESS_TOKEN=${LINE_CHANNEL_ACCESS_TOKEN}
+      - LINE_GROUP_ID=${LINE_GROUP_ID}
 
 volumes:
   maid_tracker_data:
