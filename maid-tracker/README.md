@@ -1,8 +1,145 @@
 # Maid Tracker
 
-ระบบบันทึกการทำงานและเงินเดือนแม่บ้าน — Single-Page Application ที่รันบน Docker
+Household staff attendance & salary tracking system — Single-Page Application running on Docker.
 
 ![Maid Tracker](../screenshots/maid-tracker.png)
+
+## Stack
+
+| Component | Technology |
+|-----------|-----------|
+| Backend | FastAPI (Python 3.12) |
+| Database | SQLite (persisted in named volume) |
+| Frontend | Vanilla JS + Bootstrap 5 (SPA, hash-based routing) |
+| Port | 5055 → container 8000 |
+
+## Features
+
+### 👤 Staff Management
+- Add / edit / delete staff records (name, age, nationality, phone, LINE, Facebook)
+- Monthly salary + start date + employment duration display
+
+### 📅 Work Calendar
+- Click a day to change status — **full-day / half-day dialog** before saving leave/comp
+- Statuses: **Work**, **Leave** (full/half), **Day Off** (Sunday), **Compensatory** (full/half)
+- Half-day counts as 0.5 in all calculations — shown as "Leave ½" / "Comp ½" on calendar
+- Record a leave reason per day
+- Navigate forward/backward by month
+
+### 📋 Leave Log
+- Leave entries for the month listed below the calendar, with "½" badge for half-day leave
+- Click a leave day on the calendar → instantly revert to Work/Day Off
+- Edit leave reason for each day
+
+### 📊 Monthly Summary
+- Count Work / Leave / Day Off / Compensatory days
+- Calculate daily rate (salary ÷ Mon–Sat working days in the month)
+- Base salary (pro-rated for the first partial month)
+- Show cumulative leave/comp balance — **no monthly deduction** (see policy below)
+- Carry-over from previous month + running cumulative total
+
+### 💰 Salary Payment
+- Split into **2 periods/month**: Period 1 (15th) and Period 2 (last day of month)
+- Each period = salary ÷ 2 (no leave/comp deduction per period)
+- Mark paid / unmark with timestamp
+- Alert showing pending unpaid periods
+
+### 🚪 Resignation
+- Record resignation date + reason
+- Resignation summary: last month salary (pro-rated) ± total accumulated leave/comp balance
+- Shows net amount to pay or deduct on resignation day
+- Cancel resignation supported
+- **Balance preview before resignation** — staff detail page shows days + approximate amount (at current daily rate) without needing to file resignation first
+
+### 🌐 Language Toggle
+- Switch **Thai ↔ English** at any time (TH/EN button top-right)
+- Language preference saved in `localStorage`
+
+---
+
+## Salary Calculation Policy
+
+| Event | Monthly salary effect | Resignation effect |
+|-------|----------------------|-------------------|
+| Leave (full day) | **No deduction** | Deducted on resignation (−1 day) |
+| Leave (half day) | **No deduction** | Deducted on resignation (−0.5 day) |
+| Compensatory (full day) | **No addition** | Paid out on resignation (+1 day) |
+| Compensatory (half day) | **No addition** | Paid out on resignation (+0.5 day) |
+| Cumulative balance | Carried forward indefinitely | Settled in full |
+
+**Monthly salary formula:** `Full monthly salary` (regardless of leave taken)
+
+**Resignation formula:** `Last month salary (pro-rated) + (accumulated comp − accumulated leave) × daily rate`
+
+---
+
+## Deployment
+
+Use `deploy.sh` from the repo root, or restart manually in Container Manager.
+
+```bash
+# From repo root
+./deploy.sh
+# Choose to restart maid-tracker when prompted
+```
+
+## Configuration
+
+No `.env` needed — no secrets required.
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `TZ` | `Asia/Bangkok` | Set in docker-compose.yml |
+| `DATA_DIR` | `/data` | SQLite DB storage path |
+
+## Data Persistence
+
+SQLite database is stored in named volume `maid_tracker_data` at `/data/maid_tracker.db`.
+
+The volume is not removed on stack restart — data is safe.
+
+## DB Schema
+
+```sql
+employees (
+  id, name, age, nationality, phone, line_id, facebook,
+  start_date, monthly_salary, end_date, resign_note, created_at
+)
+
+attendance (
+  id, employee_id, work_date,
+  status CHECK(IN 'work','leave','holiday','compensatory'),
+  note,
+  half_day INTEGER DEFAULT 0  -- 1 = half day (counts as 0.5 in all calculations)
+)
+
+salary_payments (
+  id, employee_id, year, month,
+  period CHECK(IN 1, 2),
+  paid_at  -- NULL = not yet paid
+)
+```
+
+## Routes (Hash-based SPA)
+
+| Hash | View |
+|------|------|
+| `#/` | Staff list |
+| `#/employee/new` | Add new staff |
+| `#/employee/:id` | Staff profile & overview |
+| `#/employee/:id/edit` | Edit staff info |
+| `#/employee/:id/leaves?y=&m=` | Calendar + leave log |
+| `#/employee/:id/summary?y=&m=` | Monthly summary |
+| `#/employee/:id/payments?y=&m=` | Salary payments |
+| `#/employee/:id/attendance?y=&m=` | Work calendar (standalone) |
+
+---
+
+---
+
+# ระบบบันทึกการทำงานแม่บ้าน
+
+ระบบบันทึกการทำงานและเงินเดือนแม่บ้าน — Single-Page Application ที่รันบน Docker
 
 ## Stack
 
