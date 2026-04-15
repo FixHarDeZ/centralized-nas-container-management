@@ -105,6 +105,27 @@ const TRANSLATIONS = {
     // Balance preview (before resign)
     overallBalAmount: (a) => `≈ ${a >= 0 ? "+" : ""}${fmtMoney(a)} บาท`,
     overallBalRate: (dr) => `(อัตราวันละ ${fmtMoney(dr)} บาท)`,
+    // Reminders
+    remindersTitle: "การแจ้งเตือนงาน",
+    reminderAdd: "เพิ่มการแจ้งเตือน",
+    reminderEmpty: "ยังไม่มีการแจ้งเตือน กดปุ่มด้านบนเพื่อเพิ่ม",
+    reminderName: "ชื่องาน",
+    reminderMessage: "ข้อความแจ้งเตือน",
+    reminderScheduleType: "รูปแบบกำหนดการ",
+    schedTypeDigit: "ทุกวันที่ลงท้ายด้วยตัวเลข (รายเดือน)",
+    schedTypeWeekday: "ทุกวันในสัปดาห์ที่เลือก (รายสัปดาห์)",
+    reminderDigits: "เลือกตัวเลขท้ายวันที่",
+    digitHint: "เช่น เลือก 0 = ส่งทุกวันที่ 10, 20, 30",
+    reminderWeekdays: "เลือกวันในสัปดาห์",
+    reminderTime: "เวลาแจ้งเตือน",
+    reminderEnabled: "เปิดการแจ้งเตือน",
+    reminderOn: "เปิด",
+    reminderOff: "ปิด",
+    reminderTest: "ทดสอบส่ง",
+    reminderAddTitle: "เพิ่มการแจ้งเตือน",
+    reminderEditTitle: "แก้ไขการแจ้งเตือน",
+    reminderTestOk: (n) => `ส่งข้อความทดสอบ "${n}" แล้ว (ถ้าตั้งค่า LINE ไว้)`,
+    reminderDeleteConfirm: "ลบการแจ้งเตือนนี้?",
   },
   en: {
     appTitle: "Household Staff Tracker",
@@ -201,6 +222,27 @@ const TRANSLATIONS = {
     // Balance preview (before resign)
     overallBalAmount: (a) => `≈ ${a >= 0 ? "+" : ""}${fmtMoney(a)} Baht`,
     overallBalRate: (dr) => `(${fmtMoney(dr)} Baht/day)`,
+    // Reminders
+    remindersTitle: "Task Reminders",
+    reminderAdd: "Add Reminder",
+    reminderEmpty: "No reminders set up yet. Click above to add one.",
+    reminderName: "Task Name",
+    reminderMessage: "Reminder Message",
+    reminderScheduleType: "Schedule Type",
+    schedTypeDigit: "Monthly (by last digit of date)",
+    schedTypeWeekday: "Weekly (select days of week)",
+    reminderDigits: "Select day-ending digits",
+    digitHint: "e.g. digit 0 = sends on day 10, 20, 30",
+    reminderWeekdays: "Select days of week",
+    reminderTime: "Send Time",
+    reminderEnabled: "Notifications enabled",
+    reminderOn: "On",
+    reminderOff: "Off",
+    reminderTest: "Test Send",
+    reminderAddTitle: "Add Reminder",
+    reminderEditTitle: "Edit Reminder",
+    reminderTestOk: (n) => `Test message "${n}" sent (if LINE is configured)`,
+    reminderDeleteConfirm: "Delete this reminder?",
   },
 };
 
@@ -262,6 +304,12 @@ const STATUS_CSS = {
   before_start: "status-before_start",
 };
 
+// Weekday names indexed by Python weekday() value: 0=Mon … 6=Sun
+const WEEKDAY_NAMES = {
+  th: ["จันทร์","อังคาร","พุธ","พฤหัส","ศุกร์","เสาร์","อาทิตย์"],
+  en: ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"],
+};
+
 // ─── API ────────────────────────────────────────────────────
 
 const api = {
@@ -306,6 +354,7 @@ function parseRoute() {
   const parts = hash.split("/").filter(Boolean);
 
   if (parts.length === 0) return { view: "list" };
+  if (parts[0] === "reminders") return { view: "reminders" };
   if (parts[0] === "employee") {
     if (parts[1] === "new") return { view: "employee-form", id: null };
     if (parts[2] === "edit") return { view: "employee-form", id: +parts[1] };
@@ -327,6 +376,7 @@ async function render() {
   try {
     switch (route.view) {
       case "list":           await viewList(); break;
+      case "reminders":      await viewReminders(); break;
       case "employee-form":  await viewEmployeeForm(route.id); break;
       case "employee-detail":await viewEmployeeDetail(route.id); break;
       case "attendance":     await viewAttendance(route.id); break;
@@ -1345,7 +1395,315 @@ async function confirmDelete(id, name) {
   }
 }
 
+// ─── View: Reminders ────────────────────────────────────────
+
+let _remindersCache = [];
+
+function describeSchedule(r) {
+  if (r.schedule_type === "month_day_digit") {
+    const digits = r.schedule_value.split(",").map(s => s.trim()).filter(Boolean);
+    const exDays = [];
+    for (const d of digits) {
+      for (let day = 1; day <= 31; day++) {
+        if (String(day).endsWith(d)) exDays.push(day);
+      }
+    }
+    exDays.sort((a, b) => a - b);
+    if (exDays.length === 0) return r.schedule_value;
+    return currentLang === "th"
+      ? `ทุกวันที่ ${exDays.join(", ")} ของเดือน`
+      : `Monthly: day ${exDays.join(", ")}`;
+  }
+  if (r.schedule_type === "weekday") {
+    const names = WEEKDAY_NAMES[currentLang];
+    const dayList = r.schedule_value.split(",")
+      .map(s => names[parseInt(s.trim())])
+      .filter(Boolean);
+    if (dayList.length === 0) return r.schedule_value;
+    return currentLang === "th"
+      ? `ทุกวัน ${dayList.join(", ")}`
+      : `Weekly: ${dayList.join(", ")}`;
+  }
+  return r.schedule_value;
+}
+
+async function viewReminders() {
+  _remindersCache = await api.get("/api/reminders");
+  const wdNames = WEEKDAY_NAMES[currentLang];
+
+  const digitBtns = [0,1,2,3,4,5,6,7,8,9].map(d =>
+    `<input type="checkbox" class="btn-check" id="remDigit${d}" value="${d}" autocomplete="off">` +
+    `<label class="btn btn-sm btn-outline-primary rounded-pill px-2" for="remDigit${d}">${d}</label>`
+  ).join("");
+
+  const wdBtns = [0,1,2,3,4,5,6].map(d =>
+    `<input type="checkbox" class="btn-check" id="remWd${d}" value="${d}" autocomplete="off">` +
+    `<label class="btn btn-sm btn-outline-primary rounded-pill px-2" for="remWd${d}">${wdNames[d]}</label>`
+  ).join("");
+
+  const listHtml = _remindersCache.length === 0
+    ? `<div class="text-center text-muted py-5">
+         <i class="bi bi-bell-slash fs-1 d-block mb-2"></i>
+         ${t("reminderEmpty")}
+       </div>`
+    : _remindersCache.map(r => `
+        <div class="card border-0 shadow-sm" id="remCard${r.id}">
+          <div class="card-body p-3">
+            <div class="d-flex align-items-start justify-content-between gap-2">
+              <div class="flex-grow-1">
+                <div class="d-flex align-items-center gap-2 mb-1">
+                  <span class="fw-bold">${escHtml(r.name)}</span>
+                  <span class="badge ${r.enabled ? "bg-success" : "bg-secondary"}" id="remBadge${r.id}">
+                    ${r.enabled ? t("reminderOn") : t("reminderOff")}
+                  </span>
+                </div>
+                <div class="text-muted small mb-1">
+                  <i class="bi bi-calendar-event me-1"></i>${describeSchedule(r)}
+                  &nbsp;·&nbsp;<i class="bi bi-clock me-1"></i>${r.send_time}
+                </div>
+                <div class="text-secondary small fst-italic">${escHtml(r.message)}</div>
+              </div>
+              <div class="form-check form-switch mb-0 flex-shrink-0 pt-1" style="padding-left:2.5em">
+                <input class="form-check-input" type="checkbox" id="remToggle${r.id}"
+                  ${r.enabled ? "checked" : ""}
+                  onchange="toggleReminder(${r.id}, this)">
+              </div>
+            </div>
+            <div class="d-flex gap-2 mt-2">
+              <button class="btn btn-sm btn-outline-secondary" onclick="testReminder(${r.id})">
+                <i class="bi bi-send me-1"></i>${t("reminderTest")}
+              </button>
+              <button class="btn btn-sm btn-outline-primary" onclick="editReminder(${r.id})">
+                <i class="bi bi-pencil me-1"></i>${t("edit")}
+              </button>
+              <button class="btn btn-sm btn-outline-danger" onclick="deleteReminder(${r.id})">
+                <i class="bi bi-trash"></i>
+              </button>
+            </div>
+          </div>
+        </div>`
+    ).join("");
+
+  ROOT.innerHTML = `
+    <div class="page-breadcrumb mb-2">
+      <a href="#/" onclick="navigate('/')">${t("home")}</a> › ${t("remindersTitle")}
+    </div>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h4 class="fw-bold mb-0">
+        <i class="bi bi-bell-fill me-2 text-primary"></i>${t("remindersTitle")}
+      </h4>
+      <button class="btn btn-primary" onclick="_openReminderModal(null)">
+        <i class="bi bi-plus-lg me-1"></i>${t("reminderAdd")}
+      </button>
+    </div>
+
+    <div id="reminderList" class="d-flex flex-column gap-3">${listHtml}</div>
+
+    <!-- Add / Edit Modal -->
+    <div class="modal fade" id="reminderModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="remModalTitle">${t("reminderAddTitle")}</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label class="form-label fw-semibold">${t("reminderName")} <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" id="remFormName"
+                placeholder="${currentLang === "th" ? "เช่น เปลี่ยนผ้าปูที่นอน" : "e.g. Change bed sheets"}" />
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">${t("reminderMessage")} <span class="text-danger">*</span></label>
+              <textarea class="form-control" id="remFormMessage" rows="2"
+                placeholder="${currentLang === "th" ? "🛏️ วันนี้เปลี่ยนผ้าปูที่นอนด้วยนะคะ" : "🛏️ Please change the bed sheets today"}"></textarea>
+            </div>
+            <div class="mb-3">
+              <label class="form-label fw-semibold">${t("reminderScheduleType")}</label>
+              <div class="d-flex flex-column gap-1 mt-1">
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="remSchedType"
+                    id="remTypeDigit" value="month_day_digit" checked>
+                  <label class="form-check-label" for="remTypeDigit">${t("schedTypeDigit")}</label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="remSchedType"
+                    id="remTypeWeekday" value="weekday">
+                  <label class="form-check-label" for="remTypeWeekday">${t("schedTypeWeekday")}</label>
+                </div>
+              </div>
+            </div>
+            <div id="remDigitSection" class="mb-3">
+              <label class="form-label fw-semibold">${t("reminderDigits")}</label>
+              <div class="d-flex flex-wrap gap-2">${digitBtns}</div>
+              <div class="form-text mt-1">${t("digitHint")}</div>
+            </div>
+            <div id="remWdSection" class="mb-3 d-none">
+              <label class="form-label fw-semibold">${t("reminderWeekdays")}</label>
+              <div class="d-flex flex-wrap gap-2">${wdBtns}</div>
+            </div>
+            <div class="row g-3 align-items-end">
+              <div class="col-auto">
+                <label class="form-label fw-semibold">${t("reminderTime")}</label>
+                <input type="time" class="form-control" id="remFormTime" value="07:00" style="max-width:160px">
+              </div>
+              <div class="col-auto pb-2">
+                <div class="form-check form-switch">
+                  <input class="form-check-input" type="checkbox" id="remFormEnabled" checked>
+                  <label class="form-check-label" for="remFormEnabled">${t("reminderEnabled")}</label>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">${t("cancel")}</button>
+            <button type="button" class="btn btn-primary" id="remSaveBtn">
+              <i class="bi bi-check-lg me-1"></i>${t("save")}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+  // ── Schedule type toggle ──
+  const typeDigit   = document.getElementById("remTypeDigit");
+  const typeWeekday = document.getElementById("remTypeWeekday");
+  const digitSec    = document.getElementById("remDigitSection");
+  const wdSec       = document.getElementById("remWdSection");
+
+  function syncSchedSections() {
+    if (typeDigit.checked) {
+      digitSec.classList.remove("d-none");
+      wdSec.classList.add("d-none");
+    } else {
+      digitSec.classList.add("d-none");
+      wdSec.classList.remove("d-none");
+    }
+  }
+  typeDigit.addEventListener("change", syncSchedSections);
+  typeWeekday.addEventListener("change", syncSchedSections);
+
+  // ── Modal open helper (exposed as window._openReminderModal) ──
+  let _bsModal  = null;
+  let _editingId = null;
+
+  window._openReminderModal = function(r) {
+    _editingId = r ? r.id : null;
+    document.getElementById("remModalTitle").textContent = r ? t("reminderEditTitle") : t("reminderAddTitle");
+    document.getElementById("remFormName").value    = r ? r.name    : "";
+    document.getElementById("remFormMessage").value = r ? r.message : "";
+    document.getElementById("remFormTime").value    = r ? r.send_time : "07:00";
+    document.getElementById("remFormEnabled").checked = r ? !!r.enabled : true;
+
+    const stype = r ? r.schedule_type : "month_day_digit";
+    typeDigit.checked   = stype === "month_day_digit";
+    typeWeekday.checked = stype === "weekday";
+    syncSchedSections();
+
+    // Clear all selectors
+    for (let d = 0; d <= 9; d++) { const cb = document.getElementById(`remDigit${d}`); if (cb) cb.checked = false; }
+    for (let d = 0; d <= 6; d++) { const cb = document.getElementById(`remWd${d}`);    if (cb) cb.checked = false; }
+
+    // Restore saved values
+    if (r) {
+      r.schedule_value.split(",").map(s => s.trim()).forEach(v => {
+        const el = document.getElementById(stype === "month_day_digit" ? `remDigit${v}` : `remWd${v}`);
+        if (el) el.checked = true;
+      });
+    }
+
+    if (!_bsModal) _bsModal = new bootstrap.Modal(document.getElementById("reminderModal"));
+    _bsModal.show();
+  };
+
+  // ── Save ──
+  document.getElementById("remSaveBtn").addEventListener("click", async () => {
+    const name      = document.getElementById("remFormName").value.trim();
+    const message   = document.getElementById("remFormMessage").value.trim();
+    const send_time = document.getElementById("remFormTime").value;
+    const enabled   = document.getElementById("remFormEnabled").checked;
+    const schedule_type = typeDigit.checked ? "month_day_digit" : "weekday";
+
+    if (!name || !message) {
+      alert(currentLang === "th" ? "กรุณากรอกชื่อและข้อความ" : "Please fill in name and message");
+      return;
+    }
+
+    const selVals = [];
+    if (schedule_type === "month_day_digit") {
+      for (let d = 0; d <= 9; d++) { const cb = document.getElementById(`remDigit${d}`); if (cb?.checked) selVals.push(String(d)); }
+    } else {
+      for (let d = 0; d <= 6; d++) { const cb = document.getElementById(`remWd${d}`);    if (cb?.checked) selVals.push(String(d)); }
+    }
+    if (selVals.length === 0) {
+      alert(currentLang === "th" ? "กรุณาเลือกกำหนดการอย่างน้อย 1 รายการ" : "Please select at least one schedule option");
+      return;
+    }
+
+    const body = { name, message, enabled, schedule_type, schedule_value: selVals.join(","), send_time };
+    const btn  = document.getElementById("remSaveBtn");
+    btn.disabled = true;
+    try {
+      if (_editingId) await api.put(`/api/reminders/${_editingId}`, body);
+      else             await api.post("/api/reminders", body);
+      _bsModal.hide();
+      await viewReminders();
+    } catch (err) {
+      alert(t("errSave") + err.message);
+      btn.disabled = false;
+    }
+  });
+}
+
+async function toggleReminder(id, checkbox) {
+  try {
+    const res = await api.post(`/api/reminders/${id}/toggle`);
+    const badge = document.getElementById(`remBadge${id}`);
+    if (badge) {
+      badge.className = `badge ${res.enabled ? "bg-success" : "bg-secondary"}`;
+      badge.textContent = res.enabled ? t("reminderOn") : t("reminderOff");
+    }
+    // Keep cache in sync
+    const cached = _remindersCache.find(r => r.id === id);
+    if (cached) cached.enabled = res.enabled ? 1 : 0;
+  } catch (err) {
+    alert(t("errSave") + err.message);
+    checkbox.checked = !checkbox.checked;
+  }
+}
+
+async function testReminder(id) {
+  const r = _remindersCache.find(x => x.id === id);
+  try {
+    await api.post(`/api/reminders/${id}/test`);
+    alert(t("reminderTestOk", r ? r.name : String(id)));
+  } catch (err) {
+    alert(t("errGeneral") + err.message);
+  }
+}
+
+async function deleteReminder(id) {
+  if (!confirm(t("reminderDeleteConfirm"))) return;
+  try {
+    await api.del(`/api/reminders/${id}`);
+    await viewReminders();
+  } catch (err) {
+    alert(t("errDelete") + err.message);
+  }
+}
+
+function editReminder(id) {
+  const r = _remindersCache.find(x => x.id === id);
+  if (r && window._openReminderModal) window._openReminderModal(r);
+}
+
 // ─── Utility ────────────────────────────────────────────────
+
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
 
 function fmtMoney(n) {
   return Number(n).toLocaleString("th-TH", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
@@ -1370,6 +1728,10 @@ window.editLeaveNote   = editLeaveNote;
 window.togglePayment   = togglePayment;
 window.confirmResign   = confirmResign;
 window.cancelResign    = cancelResign;
+window.toggleReminder  = toggleReminder;
+window.testReminder    = testReminder;
+window.deleteReminder  = deleteReminder;
+window.editReminder    = editReminder;
 
 // ─── Boot ────────────────────────────────────────────────────
 document.title = t("appTitle");

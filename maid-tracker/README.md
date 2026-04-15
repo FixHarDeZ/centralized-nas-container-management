@@ -51,6 +51,18 @@ Household staff attendance & salary tracking system — Single-Page Application 
 - Cancel resignation supported
 - **Balance preview before resignation** — staff detail page shows days + approximate amount (at current daily rate) without needing to file resignation first
 
+### 🔔 Scheduled Task Reminders
+- Manage a list of recurring LINE reminders for household chores (bell icon in the top-right of the nav bar → `#/reminders`)
+- Two schedule types:
+  - **Monthly by last digit of date** — e.g. digit `0` fires on the 10th, 20th, 30th of every month
+  - **Weekly by day of week** — checkbox selection (Mon–Sun); e.g. Monday + Thursday
+- Each reminder has: name, LINE message text, send time (HH:MM), enabled/disabled toggle
+- **Test Send** button fires the reminder immediately without waiting for the schedule
+- Two default reminders are pre-loaded on first run:
+  - **เปลี่ยนผ้าปูที่นอน** — every day ending in 0 at 07:00
+  - **ล้างห้องน้ำ** — every Monday and Thursday at 07:00
+- Reminders are silently skipped if `LINE_CHANNEL_ACCESS_TOKEN` / `LINE_GROUP_ID` are not set
+
 ### 🌐 Language Toggle
 - Switch **Thai ↔ English** at any time (TH/EN button top-right)
 - Language preference saved in `localStorage`
@@ -185,6 +197,16 @@ salary_payments (
   period CHECK(IN 1, 2),
   paid_at  -- NULL = not yet paid
 )
+
+reminders (
+  id, name, message,
+  enabled INTEGER DEFAULT 1,
+  schedule_type CHECK(IN 'month_day_digit','weekday'),
+  schedule_value,  -- digit: "0" or "0,5" | weekday: "0,3" (0=Mon…6=Sun)
+  send_time,       -- "HH:MM"
+  last_sent_date,  -- guards against double-fire on the same day
+  created_at
+)
 ```
 
 ## Routes (Hash-based SPA)
@@ -199,6 +221,7 @@ salary_payments (
 | `#/employee/:id/summary?y=&m=` | Monthly summary |
 | `#/employee/:id/payments?y=&m=` | Salary payments |
 | `#/employee/:id/attendance?y=&m=` | Work calendar (standalone) |
+| `#/reminders` | Scheduled task reminders |
 
 ---
 
@@ -254,6 +277,18 @@ salary_payments (
 - แสดงยอดสุทธิที่ต้องจ่าย หรือต้องหักในวันลาออก
 - ยกเลิกการลาออกได้
 - **แสดงยอดค้างก่อนลาออก** — หน้าข้อมูลแม่บ้านแสดงจำนวนวัน + เงินโดยประมาณ (อัตราเดือนปัจจุบัน) ทันทีโดยไม่ต้องกดแจ้งลาออกก่อน
+
+### 🔔 การแจ้งเตือนงานประจำ
+- จัดการรายการแจ้งเตือนซ้ำสำหรับงานบ้าน (กดไอคอนกระดิ่งมุมขวาบน → `#/reminders`)
+- รูปแบบกำหนดการ 2 แบบ:
+  - **รายเดือน ตามตัวเลขท้ายวันที่** — เช่น เลข `0` ส่งทุกวันที่ 10, 20, 30
+  - **รายสัปดาห์ ตามวัน** — เลือก checkbox (จันทร์–อาทิตย์) เช่น จันทร์+พฤหัส
+- แต่ละรายการมี: ชื่องาน, ข้อความ LINE, เวลาแจ้งเตือน (HH:MM), สวิตช์เปิด/ปิด
+- ปุ่ม **ทดสอบส่ง** ส่งข้อความทันทีโดยไม่รอกำหนดการ
+- มีรายการเริ่มต้น 2 รายการเมื่อรันครั้งแรก:
+  - **เปลี่ยนผ้าปูที่นอน** — ทุกวันที่ลงท้ายด้วย 0 เวลา 07:00
+  - **ล้างห้องน้ำ** — ทุกวันจันทร์และพฤหัส เวลา 07:00
+- ข้ามการแจ้งเตือนเงียบๆ ถ้ายังไม่ได้ตั้งค่า `LINE_CHANNEL_ACCESS_TOKEN` / `LINE_GROUP_ID`
 
 ### 🌐 เปลี่ยนภาษา
 - สลับ **ไทย ↔ English** ได้ตลอดเวลา (ปุ่ม TH/EN มุมขวาบน)
@@ -389,6 +424,16 @@ salary_payments (
   period CHECK(IN 1, 2),
   paid_at  -- NULL = ยังไม่จ่าย
 )
+
+reminders (
+  id, name, message,
+  enabled INTEGER DEFAULT 1,
+  schedule_type CHECK(IN 'month_day_digit','weekday'),
+  schedule_value,  -- digit: "0" หรือ "0,5" | weekday: "0,3" (0=จันทร์…6=อาทิตย์)
+  send_time,       -- "HH:MM"
+  last_sent_date,  -- ป้องกันการส่งซ้ำในวันเดียวกัน
+  created_at
+)
 ```
 
 ## Routes (Hash-based SPA)
@@ -403,3 +448,4 @@ salary_payments (
 | `#/employee/:id/summary?y=&m=` | สรุปรายเดือน |
 | `#/employee/:id/payments?y=&m=` | จ่ายเงินเดือน |
 | `#/employee/:id/attendance?y=&m=` | ปฏิทินการทำงาน (standalone) |
+| `#/reminders` | การแจ้งเตือนงานประจำ |

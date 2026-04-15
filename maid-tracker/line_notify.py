@@ -343,6 +343,23 @@ def notify_resign(
         print(f"[LINE] notify_resign error: {e}")
 
 
+def notify_reminder(name: str, message: str) -> None:
+    """Call from the scheduler when a task reminder fires."""
+    if not TOKEN or not GROUP_ID:
+        return
+    try:
+        msg = (
+            f"🔔 แจ้งเตือนงานวันนี้ — {name}\n"
+            f"\n"
+            f"{message}\n"
+            f"\n"
+            f"🕒 {_now_str()}"
+        )
+        send_line(msg)
+    except Exception as e:
+        print(f"[LINE] notify_reminder error: {e}")
+
+
 def notify_cancel_resign(emp_name: str) -> None:
     """Call after cancelling a resignation."""
     if not TOKEN or not GROUP_ID:
