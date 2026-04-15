@@ -14,8 +14,13 @@
       <a class="navbar-brand fw-bold" id="navBrand" href="#/" onclick="navigate('/')">
         <i class="bi bi-house-heart-fill me-2"></i>ระบบบันทึกการทำงานแม่บ้าน
       </a>
-      <button id="langToggle" class="btn btn-sm btn-outline-light fw-bold"
-              style="min-width:2.4rem" onclick="switchLang()">EN</button>
+      <div class="d-flex gap-2 align-items-center">
+        <button class="btn btn-sm btn-outline-light" onclick="navigate('/reminders')" title="Task Reminders">
+          <i class="bi bi-bell-fill"></i>
+        </button>
+        <button id="langToggle" class="btn btn-sm btn-outline-light fw-bold"
+                style="min-width:2.4rem" onclick="switchLang()">EN</button>
+      </div>
     </div>
   </nav>
 

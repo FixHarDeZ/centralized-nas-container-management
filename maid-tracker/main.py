@@ -3,13 +3,25 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import Optional
+from contextlib import asynccontextmanager
 import sqlite3
 import os
 from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 import calendar
 import line_notify
+from apscheduler.schedulers.background import BackgroundScheduler
 
-app = FastAPI(title="Maid Tracker")
+_scheduler = BackgroundScheduler()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    _scheduler.add_job(_check_reminders, "interval", seconds=60, id="check_reminders")
+    _scheduler.start()
+    yield
+    _scheduler.shutdown(wait=False)
+
+app = FastAPI(title="Maid Tracker", lifespan=lifespan)
 
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
 DB_PATH = os.path.join(DATA_DIR, "maid_tracker.db")
@@ -57,6 +69,17 @@ def init_db():
             UNIQUE(employee_id, year, month, period),
             FOREIGN KEY(employee_id) REFERENCES employees(id)
         );
+        CREATE TABLE IF NOT EXISTS reminders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            message TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            schedule_type TEXT NOT NULL,
+            schedule_value TEXT NOT NULL,
+            send_time TEXT NOT NULL DEFAULT '07:00',
+            last_sent_date TEXT,
+            created_at TEXT NOT NULL
+        );
     """)
     # Migrate: add columns if they don't exist yet
     for col, definition in [("end_date", "TEXT"), ("resign_note", "TEXT")]:
@@ -73,6 +96,75 @@ def init_db():
 
 
 init_db()
+
+
+def _seed_default_reminders():
+    """Insert default reminders on first run (only if the table is empty)."""
+    conn = get_db()
+    count = conn.execute("SELECT COUNT(*) FROM reminders").fetchone()[0]
+    if count == 0:
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        conn.execute(
+            "INSERT INTO reminders (name, message, enabled, schedule_type, schedule_value, send_time, created_at) "
+            "VALUES (?,?,?,?,?,?,?)",
+            ("เปลี่ยนผ้าปูที่นอน", "🛏️ วันนี้เปลี่ยนผ้าปูที่นอนด้วยนะคะ",
+             1, "month_day_digit", "0", "07:00", now_str),
+        )
+        conn.execute(
+            "INSERT INTO reminders (name, message, enabled, schedule_type, schedule_value, send_time, created_at) "
+            "VALUES (?,?,?,?,?,?,?)",
+            ("ล้างห้องน้ำ", "🚿 วันนี้ล้างห้องน้ำด้วยนะคะ",
+             1, "weekday", "0,3", "07:00", now_str),
+        )
+        conn.commit()
+    conn.close()
+
+
+_seed_default_reminders()
+
+
+def _should_fire_today(r: dict, today: date) -> bool:
+    stype = r["schedule_type"]
+    sval  = r["schedule_value"]
+    if stype == "month_day_digit":
+        digits = [d.strip() for d in sval.split(",") if d.strip()]
+        return any(str(today.day).endswith(d) for d in digits)
+    if stype == "weekday":
+        days = [int(d.strip()) for d in sval.split(",") if d.strip()]
+        return today.weekday() in days
+    return False
+
+
+def _check_reminders():
+    """Runs every 60 s. Fires LINE reminder if time + schedule match and not already sent today."""
+    tz          = ZoneInfo(os.environ.get("TZ", "Asia/Bangkok"))
+    now         = datetime.now(tz)
+    today_str   = now.strftime("%Y-%m-%d")
+    current_hm  = now.strftime("%H:%M")
+    today       = now.date()
+
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM reminders WHERE enabled=1").fetchall()
+    conn.close()
+
+    for row in rows:
+        r = dict(row)
+        if r["send_time"] != current_hm:
+            continue
+        if r.get("last_sent_date") == today_str:
+            continue
+        if not _should_fire_today(r, today):
+            continue
+
+        line_notify.notify_reminder(r["name"], r["message"])
+
+        conn2 = get_db()
+        conn2.execute(
+            "UPDATE reminders SET last_sent_date=? WHERE id=?",
+            (today_str, r["id"]),
+        )
+        conn2.commit()
+        conn2.close()
 
 
 # ---------- Pydantic models ----------
@@ -98,6 +190,15 @@ class AttendanceUpdate(BaseModel):
 class ResignRequest(BaseModel):
     end_date: str
     resign_note: Optional[str] = None
+
+
+class ReminderCreate(BaseModel):
+    name: str
+    message: str
+    enabled: bool = True
+    schedule_type: str   # 'month_day_digit' | 'weekday'
+    schedule_value: str  # digits: "0" or "0,5" | weekdays: "0,3" (0=Mon…6=Sun)
+    send_time: str = "07:00"
 
 
 # ---------- Helpers ----------
@@ -702,6 +803,90 @@ def get_overall(emp_id: int):
         "daily_rate": round(dr, 2),
         "balance_amount": balance_amount,
     }
+
+
+# ---------- Reminder endpoints ----------
+
+@app.get("/api/reminders")
+def list_reminders():
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM reminders ORDER BY id").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+@app.post("/api/reminders", status_code=201)
+def create_reminder(rem: ReminderCreate):
+    if rem.schedule_type not in ("month_day_digit", "weekday"):
+        raise HTTPException(400, "Invalid schedule_type")
+    conn = get_db()
+    c = conn.cursor()
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    c.execute(
+        "INSERT INTO reminders (name, message, enabled, schedule_type, schedule_value, send_time, created_at) "
+        "VALUES (?,?,?,?,?,?,?)",
+        (rem.name, rem.message, int(rem.enabled),
+         rem.schedule_type, rem.schedule_value, rem.send_time, now_str),
+    )
+    new_id = c.lastrowid
+    conn.commit()
+    conn.close()
+    return {"id": new_id}
+
+
+@app.put("/api/reminders/{rem_id}")
+def update_reminder(rem_id: int, rem: ReminderCreate):
+    if rem.schedule_type not in ("month_day_digit", "weekday"):
+        raise HTTPException(400, "Invalid schedule_type")
+    conn = get_db()
+    c = conn.cursor()
+    c.execute(
+        "UPDATE reminders SET name=?, message=?, enabled=?, "
+        "schedule_type=?, schedule_value=?, send_time=? WHERE id=?",
+        (rem.name, rem.message, int(rem.enabled),
+         rem.schedule_type, rem.schedule_value, rem.send_time, rem_id),
+    )
+    if c.rowcount == 0:
+        conn.close()
+        raise HTTPException(404, "Reminder not found")
+    conn.commit()
+    conn.close()
+    return {"message": "updated"}
+
+
+@app.post("/api/reminders/{rem_id}/toggle")
+def toggle_reminder(rem_id: int):
+    conn = get_db()
+    row = conn.execute("SELECT enabled FROM reminders WHERE id=?", (rem_id,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "Reminder not found")
+    new_enabled = 1 - row["enabled"]
+    conn.execute("UPDATE reminders SET enabled=? WHERE id=?", (new_enabled, rem_id))
+    conn.commit()
+    conn.close()
+    return {"enabled": bool(new_enabled)}
+
+
+@app.delete("/api/reminders/{rem_id}")
+def delete_reminder(rem_id: int):
+    conn = get_db()
+    conn.execute("DELETE FROM reminders WHERE id=?", (rem_id,))
+    conn.commit()
+    conn.close()
+    return {"message": "deleted"}
+
+
+@app.post("/api/reminders/{rem_id}/test")
+def test_reminder(rem_id: int):
+    conn = get_db()
+    row = conn.execute("SELECT * FROM reminders WHERE id=?", (rem_id,)).fetchone()
+    conn.close()
+    if not row:
+        raise HTTPException(404, "Reminder not found")
+    r = dict(row)
+    line_notify.notify_reminder(r["name"], r["message"])
+    return {"message": "sent"}
 
 
 # ---------- Static + SPA fallback ----------
