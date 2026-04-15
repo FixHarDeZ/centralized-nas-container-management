@@ -63,6 +63,10 @@ def init_db():
             c.execute(f"ALTER TABLE employees ADD COLUMN {col} {definition}")
         except Exception:
             pass
+    try:
+        c.execute("ALTER TABLE attendance ADD COLUMN half_day INTEGER DEFAULT 0")
+    except Exception:
+        pass
     conn.commit()
     conn.close()
 
@@ -87,6 +91,7 @@ class AttendanceUpdate(BaseModel):
     work_date: str
     status: str
     note: Optional[str] = None
+    half_day: bool = False
 
 
 class ResignRequest(BaseModel):
@@ -236,22 +241,23 @@ def get_resign_summary(emp_id: int):
     year, month = end_date.year, end_date.month
 
     all_rows = conn.execute(
-        "SELECT work_date, status FROM attendance WHERE employee_id=? AND work_date <= ?",
+        "SELECT work_date, status, half_day FROM attendance WHERE employee_id=? AND work_date <= ?",
         (emp_id, emp["end_date"]),
     ).fetchall()
     conn.close()
 
-    saved = {r["work_date"]: r["status"] for r in all_rows}
+    saved = {r["work_date"]: {"status": r["status"], "half_day": bool(r["half_day"])} for r in all_rows}
 
     # Cumulative balance across ALL time (start → end_date)
-    total_comp = total_leave = 0
+    total_comp = total_leave = 0.0
     d = start_date
     while d <= end_date:
-        status = saved.get(d.isoformat(), default_status(d))
-        if status == "compensatory":
-            total_comp += 1
-        elif status == "leave":
-            total_leave += 1
+        rec = saved.get(d.isoformat(), {"status": default_status(d), "half_day": False})
+        inc = 0.5 if rec["half_day"] else 1
+        if rec["status"] == "compensatory":
+            total_comp += inc
+        elif rec["status"] == "leave":
+            total_leave += inc
         d += timedelta(days=1)
     cumulative_balance = total_comp - total_leave
 
@@ -298,7 +304,7 @@ def get_attendance(emp_id: int, year: int, month: int):
     today = date.today()
 
     rows = conn.execute(
-        "SELECT work_date, status, note FROM attendance WHERE employee_id=? AND work_date LIKE ?",
+        "SELECT work_date, status, note, half_day FROM attendance WHERE employee_id=? AND work_date LIKE ?",
         (emp_id, f"{year}-{month:02d}-%"),
     ).fetchall()
     conn.close()
@@ -311,14 +317,14 @@ def get_attendance(emp_id: int, year: int, month: int):
         d = date(year, month, day)
         ds = d.isoformat()
         if d < start_date:
-            result.append({"date": ds, "status": "before_start", "note": None, "is_future": False})
+            result.append({"date": ds, "status": "before_start", "note": None, "half_day": False, "is_future": False})
             continue
         is_future = d > today
         if ds in saved:
             r = saved[ds]
-            result.append({"date": ds, "status": r["status"], "note": r["note"], "is_future": is_future})
+            result.append({"date": ds, "status": r["status"], "note": r["note"], "half_day": bool(r["half_day"]), "is_future": is_future})
         else:
-            result.append({"date": ds, "status": default_status(d), "note": None, "is_future": is_future})
+            result.append({"date": ds, "status": default_status(d), "note": None, "half_day": False, "is_future": is_future})
     return result
 
 
@@ -332,9 +338,9 @@ def upsert_attendance(emp_id: int, att: AttendanceUpdate):
         conn.close()
         raise HTTPException(404, "Employee not found")
     conn.execute(
-        "INSERT INTO attendance (employee_id, work_date, status, note) VALUES (?,?,?,?) "
-        "ON CONFLICT(employee_id, work_date) DO UPDATE SET status=excluded.status, note=excluded.note",
-        (emp_id, att.work_date, att.status, att.note),
+        "INSERT INTO attendance (employee_id, work_date, status, note, half_day) VALUES (?,?,?,?,?) "
+        "ON CONFLICT(employee_id, work_date) DO UPDATE SET status=excluded.status, note=excluded.note, half_day=excluded.half_day",
+        (emp_id, att.work_date, att.status, att.note, int(att.half_day)),
     )
     conn.commit()
     conn.close()
@@ -487,39 +493,41 @@ def get_summary(emp_id: int, year: int, month: int):
     today = date.today()
 
     all_rows = conn.execute(
-        "SELECT work_date, status FROM attendance WHERE employee_id=? AND work_date <= ?",
+        "SELECT work_date, status, half_day FROM attendance WHERE employee_id=? AND work_date <= ?",
         (emp_id, f"{year}-{month:02d}-31"),
     ).fetchall()
     conn.close()
 
-    saved_all = {r["work_date"]: r["status"] for r in all_rows}
+    saved_all = {r["work_date"]: {"status": r["status"], "half_day": bool(r["half_day"])} for r in all_rows}
 
     # Carryover: cumulative balance from months before this one
-    carryover_balance = 0
+    carryover_balance = 0.0
     if start_date < date(year, month, 1):
-        c_comp = c_leave = 0
+        c_comp = c_leave = 0.0
         d = start_date
         cutoff = date(year, month, 1)
         while d < cutoff and d <= today:
-            status = saved_all.get(d.isoformat(), default_status(d))
-            if status == "compensatory":
-                c_comp += 1
-            elif status == "leave":
-                c_leave += 1
+            rec = saved_all.get(d.isoformat(), {"status": default_status(d), "half_day": False})
+            inc = 0.5 if rec["half_day"] else 1
+            if rec["status"] == "compensatory":
+                c_comp += inc
+            elif rec["status"] == "leave":
+                c_leave += inc
             d += timedelta(days=1)
         carryover_balance = c_comp - c_leave
 
     _, n = calendar.monthrange(year, month)
     saved = {k: v for k, v in saved_all.items() if k.startswith(f"{year}-{month:02d}-")}
-    counts = {"work": 0, "leave": 0, "holiday": 0, "compensatory": 0}
+    counts = {"work": 0.0, "leave": 0.0, "holiday": 0.0, "compensatory": 0.0}
 
     for day in range(1, n + 1):
         d = date(year, month, day)
         if d < start_date or d > today:
             continue
         ds = d.isoformat()
-        status = saved.get(ds, default_status(d))
-        counts[status] = counts.get(status, 0) + 1
+        rec = saved.get(ds, {"status": default_status(d), "half_day": False})
+        inc = 0.5 if rec["half_day"] else 1
+        counts[rec["status"]] = counts.get(rec["status"], 0) + inc
 
     wd_month = working_days_in_month(year, month)
     dr = emp["monthly_salary"] / wd_month if wd_month else 0
@@ -573,22 +581,28 @@ def get_overall(emp_id: int):
     end = date.fromisoformat(emp["end_date"]) if emp.get("end_date") else today
 
     rows = conn.execute(
-        "SELECT work_date, status FROM attendance WHERE employee_id=?", (emp_id,)
+        "SELECT work_date, status, half_day FROM attendance WHERE employee_id=?", (emp_id,)
     ).fetchall()
     conn.close()
 
-    saved = {r["work_date"]: r["status"] for r in rows}
-    counts = {"work": 0, "leave": 0, "holiday": 0, "compensatory": 0}
+    saved = {r["work_date"]: {"status": r["status"], "half_day": bool(r["half_day"])} for r in rows}
+    counts = {"work": 0.0, "leave": 0.0, "holiday": 0.0, "compensatory": 0.0}
 
     d = start_date
     while d <= end:
         ds = d.isoformat()
-        status = saved.get(ds, default_status(d))
-        counts[status] = counts.get(status, 0) + 1
+        rec = saved.get(ds, {"status": default_status(d), "half_day": False})
+        inc = 0.5 if rec["half_day"] else 1
+        counts[rec["status"]] = counts.get(rec["status"], 0) + inc
         d += timedelta(days=1)
 
     total_days = (end - start_date).days + 1
     balance = counts["compensatory"] - counts["leave"]
+
+    # Daily rate preview using current month's working days
+    wd_month = working_days_in_month(today.year, today.month)
+    dr = emp["monthly_salary"] / wd_month if wd_month else 0
+    balance_amount = round(balance * dr, 2)
 
     return {
         "start_date": emp["start_date"],
@@ -598,6 +612,8 @@ def get_overall(emp_id: int):
         "total_holiday_days": counts["holiday"],
         "total_compensatory_days": counts["compensatory"],
         "overall_balance": balance,
+        "daily_rate": round(dr, 2),
+        "balance_amount": balance_amount,
     }
 
 
