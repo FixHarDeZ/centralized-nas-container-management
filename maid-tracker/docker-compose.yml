@@ -14,6 +14,8 @@ services:
       # LINE_GROUP_ID: group ID starting with 'C' (invite bot to group, send a message, check webhook for groupId)
       - LINE_CHANNEL_ACCESS_TOKEN=${LINE_CHANNEL_ACCESS_TOKEN}
       - LINE_GROUP_ID=${LINE_GROUP_ID}
+      # LINE Webhook — required to verify requests from LINE platform (LINE Developers Console → Channel secret)
+      - LINE_CHANNEL_SECRET=${LINE_CHANNEL_SECRET}
 
 volumes:
   maid_tracker_data:

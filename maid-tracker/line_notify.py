@@ -44,6 +44,11 @@ def _fmt(amount: float) -> str:
     return f"{amount:,.0f}"
 
 
+def _fmt_days(days: float) -> str:
+    """Format day count — preserves .5 for half-day entries, drops .0 for whole days."""
+    return f"{days:,.1f}" if days % 1 else f"{days:,.0f}"
+
+
 def _default_status(d: date) -> str:
     return "holiday" if d.weekday() == 6 else "work"
 
@@ -109,13 +114,13 @@ def _balance_block(b: dict) -> str:
     amt_sign  = "+" if bal_amt >= 0 else ""
     kind      = "เครดิตสะสม" if bal >= 0 else "ยอดค้าง"
 
-    comp_str  = f"+{_fmt(b['total_comp'])}" if b["total_comp"] else "0"
-    leave_str = f"-{_fmt(b['total_leave'])}" if b["total_leave"] else "0"
+    comp_str  = f"+{_fmt_days(b['total_comp'])}" if b["total_comp"] else "0"
+    leave_str = f"-{_fmt_days(b['total_leave'])}" if b["total_leave"] else "0"
 
     return (
         f"📊 ยอดสะสมปัจจุบัน:\n"
         f"  ชดเชย: {comp_str} วัน  |  ลา: {leave_str} วัน\n"
-        f"  ⚖️  {kind}: {sign}{_fmt(bal)} วัน\n"
+        f"  ⚖️  {kind}: {sign}{_fmt_days(abs(bal))} วัน\n"
         f"  💵 ≈ {amt_sign}฿{_fmt(bal_amt)}"
         f"  (฿{_fmt(b['daily_rate'])}/วัน)"
     )

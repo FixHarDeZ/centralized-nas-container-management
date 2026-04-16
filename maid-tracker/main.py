@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -6,6 +6,10 @@ from typing import Optional
 from contextlib import asynccontextmanager
 import sqlite3
 import os
+import hmac
+import hashlib
+import base64
+import json
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 import calendar
@@ -25,6 +29,21 @@ app = FastAPI(title="Maid Tracker", lifespan=lifespan)
 
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
 DB_PATH = os.path.join(DATA_DIR, "maid_tracker.db")
+
+_LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "")
+
+# Keywords that trigger automatic attendance recording from LINE chat
+_LEAVE_KEYWORDS = [
+    "ขอลา", "ลาวันนี้", "วันนี้ขอลา", "วันนี้ลา", "ลาวันนี้นะ",
+    "ขอหยุด", "หยุดวันนี้", "วันนี้หยุด", "วันนี้ขอหยุด",
+    "ลาครึ่งวัน", "ลาครึ่ง",
+]
+_COMP_KEYWORDS  = [
+    "ทำชดเชย", "ชดเชยวันนี้", "วันนี้ชดเชย", "วันนี้ทำชดเชย",
+    "ทำงานวันหยุด", "ทำงานวันอาทิตย์", "มาทำงานวันนี้",
+    "ชดเชยครึ่งวัน", "ชดเชยครึ่ง",
+]
+_HALF_DAY_KEYWORDS = ["ครึ่งวัน", "ครึ่งวันเช้า", "ครึ่งวันบ่าย"]
 
 
 def get_db():
@@ -887,6 +906,145 @@ def test_reminder(rem_id: int):
     r = dict(row)
     line_notify.notify_reminder(r["name"], r["message"])
     return {"message": "sent"}
+
+
+# ---------- LINE Webhook ----------
+
+def _resolve_employee(text: str) -> dict | None:
+    """
+    Find the active employee to record attendance for.
+    - 1 active employee  → return that employee automatically
+    - Multiple           → try to find a name mention in text; if ambiguous send a clarification message
+    Returns None and handles the LINE message internally when it cannot resolve.
+    """
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT * FROM employees WHERE end_date IS NULL OR end_date=''",
+    ).fetchall()
+    conn.close()
+
+    active = [dict(r) for r in rows]
+
+    if not active:
+        line_notify.send_line("⚠️ ไม่พบข้อมูลพนักงานที่ active ในระบบ")
+        return None
+
+    if len(active) == 1:
+        return active[0]
+
+    # Multiple active employees — try to match by name mentioned in the message
+    matched = [e for e in active if e["name"] in text]
+    if len(matched) == 1:
+        return matched[0]
+
+    names = ", ".join(e["name"] for e in active)
+    line_notify.send_line(
+        f"⚠️ มีพนักงาน {len(active)} คน ({names})\n"
+        f"กรุณาระบุชื่อในข้อความด้วยนะคะ เช่น '[ชื่อ]ขอลาวันนี้'"
+    )
+    return None
+
+
+@app.post("/webhook/line")
+async def line_webhook(request: Request):
+    """
+    Receives LINE Messaging API webhook events.
+    Anyone in the LINE group can trigger attendance recording:
+      - Leave:        "วันนี้ขอลานะคะ", "ขอหยุดวันนี้", ...
+      - Compensatory: "วันนี้ทำชดเชย", "ทำงานวันอาทิตย์", ...
+    Add "ครึ่งวัน" in the message for a half-day entry.
+
+    Required env: LINE_CHANNEL_SECRET (for signature verification)
+    Optional:     leave blank to skip verification (dev/testing only)
+    """
+    body = await request.body()
+
+    # Verify LINE signature (HMAC-SHA256)
+    if _LINE_CHANNEL_SECRET:
+        signature = request.headers.get("X-Line-Signature", "")
+        computed = base64.b64encode(
+            hmac.new(_LINE_CHANNEL_SECRET.encode(), body, hashlib.sha256).digest()
+        ).decode()
+        if not hmac.compare_digest(computed, signature):
+            raise HTTPException(400, "Invalid LINE signature")
+
+    try:
+        data = json.loads(body)
+    except Exception:
+        raise HTTPException(400, "Invalid JSON")
+
+    tz = ZoneInfo(os.environ.get("TZ", "Asia/Bangkok"))
+    today = datetime.now(tz).date()
+    today_str = today.isoformat()
+
+    for event in data.get("events", []):
+        if event.get("type") != "message":
+            continue
+        msg = event.get("message", {})
+        if msg.get("type") != "text":
+            continue
+
+        text = msg.get("text", "").strip()
+
+        is_leave = any(kw in text for kw in _LEAVE_KEYWORDS)
+        is_comp  = any(kw in text for kw in _COMP_KEYWORDS)
+
+        if not is_leave and not is_comp:
+            continue
+
+        # Leave takes precedence if both somehow match
+        status     = "leave" if is_leave else "compensatory"
+        is_half_day = any(kw in text for kw in _HALF_DAY_KEYWORDS)
+
+        emp = _resolve_employee(text)
+        if emp is None:
+            continue
+
+        # Leave on Sunday is redundant — it's already a holiday
+        if status == "leave" and today.weekday() == 6:
+            line_notify.send_line(
+                f"📅 วันนี้วันอาทิตย์ เป็นวันหยุดอยู่แล้วนะคะ {emp['name']} 😊"
+            )
+            continue
+
+        # Check for duplicate record today with the same status
+        conn = get_db()
+        prev = conn.execute(
+            "SELECT status, half_day FROM attendance WHERE employee_id=? AND work_date=?",
+            (emp["id"], today_str),
+        ).fetchone()
+
+        if prev and prev["status"] == status:
+            conn.close()
+            STATUS_LABEL = {"leave": "ลา", "compensatory": "ชดเชย"}
+            half_label = " (ครึ่งวัน)" if bool(prev["half_day"]) else " (เต็มวัน)"
+            line_notify.send_line(
+                f"✅ บันทึกแล้วนะคะ — {emp['name']}\n"
+                f"📅 {today_str}: {STATUS_LABEL[status]}{half_label} (บันทึกไว้แล้วก่อนหน้านี้)"
+            )
+            continue
+
+        NOTE = {"leave": "แจ้งลาผ่าน LINE", "compensatory": "แจ้งชดเชยผ่าน LINE"}
+        conn.execute(
+            "INSERT INTO attendance (employee_id, work_date, status, note, half_day) VALUES (?,?,?,?,?) "
+            "ON CONFLICT(employee_id, work_date) DO UPDATE SET status=excluded.status, note=excluded.note, half_day=excluded.half_day",
+            (emp["id"], today_str, status, NOTE[status], int(is_half_day)),
+        )
+        conn.commit()
+        conn.close()
+
+        start_date = date.fromisoformat(emp["start_date"])
+        line_notify.notify_attendance(
+            emp_id=emp["id"],
+            emp_name=emp["name"],
+            work_date=today_str,
+            status=status,
+            half_day=is_half_day,
+            start_date=start_date,
+            monthly_salary=emp["monthly_salary"],
+        )
+
+    return {"status": "ok"}
 
 
 # ---------- Static + SPA fallback ----------
