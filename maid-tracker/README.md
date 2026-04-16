@@ -120,7 +120,8 @@ Notifications are **opt-in** — if `LINE_CHANNEL_ACCESS_TOKEN` or `LINE_GROUP_I
 - If **multiple active employees** → tries to find a name mention in the text; if ambiguous, sends a clarification message asking to include the name
 - If today is Sunday and status is leave → notifies and skips (Sunday is already a holiday)
 - If the same status is already recorded for today → notifies and skips (no duplicate)
-- On success → sends the same attendance notification as a manual entry (with cumulative balance)
+- Before recording → bot sends an acknowledgment first (e.g. "กำลังบันทึกลาเต็มวันในระบบให้นะคะ...") so the group knows action is in progress
+- On success → sends the full attendance notification with cumulative balance
 
 **Requirements:**
 - `LINE_CHANNEL_SECRET` env var (for signature verification)
@@ -416,7 +417,8 @@ reminders (
 - ถ้ามีพนักงาน **หลายคน** → ตรวจหาชื่อในข้อความ; ถ้าไม่ชัดเจนให้บอทส่งข้อความขอให้ระบุชื่อ
 - ถ้าวันนี้เป็นวันอาทิตย์และเป็นการขอลา → แจ้งว่าเป็นวันหยุดอยู่แล้วและข้ามไป
 - ถ้าบันทึกสถานะเดิมวันนี้ไว้แล้ว → แจ้งและข้ามไป (ไม่บันทึกซ้ำ)
-- เมื่อสำเร็จ → ส่งการแจ้งเตือนเหมือนกับการบันทึกแบบ manual (พร้อมยอดสะสม)
+- ก่อนบันทึก → บอทส่ง acknowledgment ก่อนเสมอ (เช่น "กำลังบันทึกลาเต็มวันในระบบให้นะคะ...") เพื่อให้กลุ่มรู้ว่ากำลังดำเนินการ
+- เมื่อสำเร็จ → ส่งการแจ้งเตือนพร้อมยอดสะสม
 
 **สิ่งที่ต้องมี:**
 - env var `LINE_CHANNEL_SECRET` (สำหรับตรวจสอบ signature)
