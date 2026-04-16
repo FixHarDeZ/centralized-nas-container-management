@@ -1037,6 +1037,14 @@ async def line_webhook(request: Request):
             )
             continue
 
+        # Acknowledge intent before writing — lets the group know action is in progress
+        STATUS_ACK  = {"leave": "ลา", "compensatory": "ชดเชย"}
+        half_ack    = "ครึ่งวัน" if is_half_day else "เต็มวัน"
+        line_notify.send_line(
+            f"📝 รับทราบค่ะ — {emp['name']}\n"
+            f"🔄 กำลังบันทึก{STATUS_ACK[status]}{half_ack}ในระบบให้นะคะ..."
+        )
+
         NOTE = {"leave": "แจ้งลาผ่าน LINE", "compensatory": "แจ้งชดเชยผ่าน LINE"}
         conn.execute(
             "INSERT INTO attendance (employee_id, work_date, status, note, half_day) VALUES (?,?,?,?,?) "
