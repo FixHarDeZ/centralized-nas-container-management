@@ -1,6 +1,6 @@
 # Uptime Kuma
 
-![Uptime Kuma](../screenshots/Uptime-kuma.png)
+![Uptime Kuma](../screenshots/uptime-kuma.png)
 
 Service health monitor with a clean web UI.
 
