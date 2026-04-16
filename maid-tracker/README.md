@@ -90,23 +90,29 @@ Notifications are **opt-in** — if `LINE_CHANNEL_ACCESS_TOKEN` or `LINE_GROUP_I
 
 | Keyword | Result |
 |---------|--------|
-| `ขอลา` / `วันนี้ขอลา` / `ลาวันนี้` | Full-day leave |
+| `ขอลา` / `วันนี้ขอลา` / `ลาวันนี้` / `วันนี้ลา` | Full-day leave |
 | `ขอหยุด` / `หยุดวันนี้` / `วันนี้หยุด` | Full-day leave |
-| + `ครึ่งวัน` anywhere in the message | Half-day leave |
+| `take leave` / `taking leave` / `leave today` / `on leave` | Full-day leave |
+| `day off` / `off today` / `half day leave` / `half day off` | Full-day leave |
+| + `ครึ่งวัน` / `half day` / `half-day` anywhere in the message | Half-day leave |
 
 **Compensatory keywords** (Sunday worked / extra day):
 
 | Keyword | Result |
 |---------|--------|
-| `ทำชดเชย` / `ชดเชยวันนี้` / `วันนี้ชดเชย` | Full-day compensatory |
-| `วันนี้ทำชดเชย` / `ทำงานวันหยุด` / `ทำงานวันอาทิตย์` | Full-day compensatory |
-| + `ครึ่งวัน` anywhere in the message | Half-day compensatory |
+| `ทำชดเชย` / `ชดเชยวันนี้` / `วันนี้ชดเชย` / `วันนี้ทำชดเชย` | Full-day compensatory |
+| `ทำงานวันหยุด` / `ทำงานวันอาทิตย์` | Full-day compensatory |
+| `comp day` / `compensatory` / `working on holiday` | Full-day compensatory |
+| `working today` / `work today` / `worked today` | Full-day compensatory |
+| + `ครึ่งวัน` / `half day` / `half-day` anywhere in the message | Half-day compensatory |
 
 **Example messages:**
 - `วันนี้ขอลานะคะ` → full-day leave today
 - `ขอลาครึ่งวันนะคะ` → half-day leave today
+- `taking leave today` → full-day leave today
+- `day off half day` → half-day leave today
 - `วันนี้ทำชดเชยนะครับ` → full-day compensatory today
-- `ทำชดเชยครึ่งวันค่ะ` → half-day compensatory today
+- `comp day half day` → half-day compensatory today
 
 **Behaviour:**
 - **No LINE User ID needed** — anyone in the group can type the message
@@ -380,23 +386,29 @@ reminders (
 
 | คำ | ผลลัพธ์ |
 |----|---------|
-| `ขอลา` / `วันนี้ขอลา` / `ลาวันนี้` | ลาเต็มวัน |
+| `ขอลา` / `วันนี้ขอลา` / `ลาวันนี้` / `วันนี้ลา` | ลาเต็มวัน |
 | `ขอหยุด` / `หยุดวันนี้` / `วันนี้หยุด` | ลาเต็มวัน |
-| + `ครึ่งวัน` ในข้อความ | ลาครึ่งวัน |
+| `take leave` / `taking leave` / `leave today` / `on leave` | ลาเต็มวัน |
+| `day off` / `off today` / `half day leave` / `half day off` | ลาเต็มวัน |
+| + `ครึ่งวัน` / `half day` / `half-day` ในข้อความ | ลาครึ่งวัน |
 
 **Keyword ชดเชย** (ทำงานวันหยุด):
 
 | คำ | ผลลัพธ์ |
 |----|---------|
-| `ทำชดเชย` / `ชดเชยวันนี้` / `วันนี้ชดเชย` | ชดเชยเต็มวัน |
-| `วันนี้ทำชดเชย` / `ทำงานวันหยุด` / `ทำงานวันอาทิตย์` | ชดเชยเต็มวัน |
-| + `ครึ่งวัน` ในข้อความ | ชดเชยครึ่งวัน |
+| `ทำชดเชย` / `ชดเชยวันนี้` / `วันนี้ชดเชย` / `วันนี้ทำชดเชย` | ชดเชยเต็มวัน |
+| `ทำงานวันหยุด` / `ทำงานวันอาทิตย์` | ชดเชยเต็มวัน |
+| `comp day` / `compensatory` / `working on holiday` | ชดเชยเต็มวัน |
+| `working today` / `work today` / `worked today` | ชดเชยเต็มวัน |
+| + `ครึ่งวัน` / `half day` / `half-day` ในข้อความ | ชดเชยครึ่งวัน |
 
 **ตัวอย่างข้อความ:**
 - `วันนี้ขอลานะคะ` → ลาเต็มวันวันนี้
 - `ขอลาครึ่งวันนะคะ` → ลาครึ่งวันวันนี้
+- `taking leave today` → ลาเต็มวันวันนี้
+- `day off half day` → ลาครึ่งวันวันนี้
 - `วันนี้ทำชดเชยนะครับ` → ชดเชยเต็มวันวันนี้
-- `ทำชดเชยครึ่งวันค่ะ` → ชดเชยครึ่งวันวันนี้
+- `comp day half day` → ชดเชยครึ่งวันวันนี้
 
 **พฤติกรรม:**
 - **ไม่ต้องผูก LINE User ID** — ใครพิมในกลุ่มก็ได้
