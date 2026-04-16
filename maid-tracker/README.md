@@ -82,6 +82,44 @@ Sends a LINE message via LINE Messaging API on the following events:
 
 Notifications are **opt-in** — if `LINE_CHANNEL_ACCESS_TOKEN` or `LINE_GROUP_ID` are not set in the environment, all notifications are silently skipped and the app functions normally. Messages are pushed to a LINE **group** so every member sees them with a single API call. See [LINE Group Setup](#line-group-setup) below.
 
+### 📲 LINE Webhook — Auto Attendance from Chat
+
+**Anyone** in the LINE group can trigger attendance recording by typing a keyword — the employee, the owner, or any group member.
+
+**Leave keywords** (any of the following):
+
+| Keyword | Result |
+|---------|--------|
+| `ขอลา` / `วันนี้ขอลา` / `ลาวันนี้` | Full-day leave |
+| `ขอหยุด` / `หยุดวันนี้` / `วันนี้หยุด` | Full-day leave |
+| + `ครึ่งวัน` anywhere in the message | Half-day leave |
+
+**Compensatory keywords** (Sunday worked / extra day):
+
+| Keyword | Result |
+|---------|--------|
+| `ทำชดเชย` / `ชดเชยวันนี้` / `วันนี้ชดเชย` | Full-day compensatory |
+| `วันนี้ทำชดเชย` / `ทำงานวันหยุด` / `ทำงานวันอาทิตย์` | Full-day compensatory |
+| + `ครึ่งวัน` anywhere in the message | Half-day compensatory |
+
+**Example messages:**
+- `วันนี้ขอลานะคะ` → full-day leave today
+- `ขอลาครึ่งวันนะคะ` → half-day leave today
+- `วันนี้ทำชดเชยนะครับ` → full-day compensatory today
+- `ทำชดเชยครึ่งวันค่ะ` → half-day compensatory today
+
+**Behaviour:**
+- **No LINE User ID needed** — anyone in the group can type the message
+- If only **1 active employee** → automatically records for that employee
+- If **multiple active employees** → tries to find a name mention in the text; if ambiguous, sends a clarification message asking to include the name
+- If today is Sunday and status is leave → notifies and skips (Sunday is already a holiday)
+- If the same status is already recorded for today → notifies and skips (no duplicate)
+- On success → sends the same attendance notification as a manual entry (with cumulative balance)
+
+**Requirements:**
+- `LINE_CHANNEL_SECRET` env var (for signature verification)
+- Maid-tracker must be accessible from the internet via a **public HTTPS URL** — LINE's platform requires it to deliver webhooks (see [Webhook Setup](#webhook-setup) below)
+
 ---
 
 ## Salary Calculation Policy
@@ -120,6 +158,7 @@ No `.env` needed for basic use. Create one to enable LINE notifications.
 | `DATA_DIR` | `/data` | SQLite DB storage path |
 | `LINE_CHANNEL_ACCESS_TOKEN` | _(empty)_ | LINE Messaging API channel token — leave blank to disable |
 | `LINE_GROUP_ID` | _(empty)_ | LINE group ID (starts with `C`) — see [LINE Group Setup](#line-group-setup) |
+| `LINE_CHANNEL_SECRET` | _(empty)_ | LINE channel secret for webhook signature verification — see [Webhook Setup](#webhook-setup) |
 
 ## LINE Group Setup
 
@@ -170,6 +209,45 @@ LINE_GROUP_ID=C1a2b3c4d5...
 ```
 
 Then redeploy (`./deploy.sh` from repo root).
+
+## Webhook Setup
+
+To enable auto attendance recording from LINE chat, the app must receive webhook events from LINE's platform.
+
+### 1 — Make maid-tracker accessible over HTTPS
+
+LINE only delivers webhooks to public HTTPS URLs. Options for a home NAS:
+
+| Method | Notes |
+|--------|-------|
+| **Port forwarding + reverse proxy** | Expose port 5055 externally; put nginx/Caddy in front for TLS |
+| **Cloudflare Tunnel** (`cloudflared`) | Free, no port forwarding needed; add as a separate Docker service |
+| **ngrok** | Easy for testing; free tier has a changing URL |
+
+Example Cloudflare Tunnel command (one-shot test):
+```bash
+docker run --rm cloudflare/cloudflared:latest tunnel --url http://<NAS_IP>:5055
+```
+
+### 2 — Set Webhook URL in LINE Developers Console
+
+1. Open [LINE Developers Console](https://developers.line.biz/) → your Messaging API Channel
+2. Tab **Messaging API settings** → **Webhook URL** → set to:
+   ```
+   https://<your-public-domain>/webhook/line
+   ```
+3. Click **Verify** — should return `200 OK`
+4. Enable **Use webhook** toggle
+
+### 3 — Add LINE_CHANNEL_SECRET to .env
+
+Find the **Channel secret** in LINE Developers Console → **Basic settings** tab.
+
+```env
+LINE_CHANNEL_SECRET=abc123...
+```
+
+Then redeploy.
 
 ## Data Persistence
 
@@ -294,6 +372,44 @@ reminders (
 - สลับ **ไทย ↔ English** ได้ตลอดเวลา (ปุ่ม TH/EN มุมขวาบน)
 - จำการตั้งค่าภาษาใน `localStorage`
 
+### 📲 LINE Webhook — บันทึกลา/ชดเชยอัตโนมัติจากแชท
+
+**ใครในกลุ่มก็พิมได้** — แม่บ้านพิมเอง หรือเจ้าของบ้านพิมแทน บอทจะบันทึกให้อัตโนมัติและยืนยันกลับในกลุ่ม
+
+**Keyword วันลา** (พิมพ์คำใดคำหนึ่ง):
+
+| คำ | ผลลัพธ์ |
+|----|---------|
+| `ขอลา` / `วันนี้ขอลา` / `ลาวันนี้` | ลาเต็มวัน |
+| `ขอหยุด` / `หยุดวันนี้` / `วันนี้หยุด` | ลาเต็มวัน |
+| + `ครึ่งวัน` ในข้อความ | ลาครึ่งวัน |
+
+**Keyword ชดเชย** (ทำงานวันหยุด):
+
+| คำ | ผลลัพธ์ |
+|----|---------|
+| `ทำชดเชย` / `ชดเชยวันนี้` / `วันนี้ชดเชย` | ชดเชยเต็มวัน |
+| `วันนี้ทำชดเชย` / `ทำงานวันหยุด` / `ทำงานวันอาทิตย์` | ชดเชยเต็มวัน |
+| + `ครึ่งวัน` ในข้อความ | ชดเชยครึ่งวัน |
+
+**ตัวอย่างข้อความ:**
+- `วันนี้ขอลานะคะ` → ลาเต็มวันวันนี้
+- `ขอลาครึ่งวันนะคะ` → ลาครึ่งวันวันนี้
+- `วันนี้ทำชดเชยนะครับ` → ชดเชยเต็มวันวันนี้
+- `ทำชดเชยครึ่งวันค่ะ` → ชดเชยครึ่งวันวันนี้
+
+**พฤติกรรม:**
+- **ไม่ต้องผูก LINE User ID** — ใครพิมในกลุ่มก็ได้
+- ถ้ามีพนักงาน **1 คน** → บันทึกให้อัตโนมัติ
+- ถ้ามีพนักงาน **หลายคน** → ตรวจหาชื่อในข้อความ; ถ้าไม่ชัดเจนให้บอทส่งข้อความขอให้ระบุชื่อ
+- ถ้าวันนี้เป็นวันอาทิตย์และเป็นการขอลา → แจ้งว่าเป็นวันหยุดอยู่แล้วและข้ามไป
+- ถ้าบันทึกสถานะเดิมวันนี้ไว้แล้ว → แจ้งและข้ามไป (ไม่บันทึกซ้ำ)
+- เมื่อสำเร็จ → ส่งการแจ้งเตือนเหมือนกับการบันทึกแบบ manual (พร้อมยอดสะสม)
+
+**สิ่งที่ต้องมี:**
+- env var `LINE_CHANNEL_SECRET` (สำหรับตรวจสอบ signature)
+- maid-tracker ต้องเข้าถึงได้จากอินเทอร์เน็ตผ่าน **HTTPS URL สาธารณะ** — LINE ต้องการเพื่อส่ง webhook (ดู [ตั้งค่า Webhook](#ตั้งค่า-webhook))
+
 ### 🔔 การแจ้งเตือน LINE
 ส่งข้อความผ่าน LINE Messaging API ในกรณีดังนี้:
 
@@ -347,6 +463,7 @@ reminders (
 | `DATA_DIR` | `/data` | ที่เก็บ SQLite DB |
 | `LINE_CHANNEL_ACCESS_TOKEN` | _(ว่าง)_ | LINE Messaging API channel token — เว้นว่างเพื่อปิดการแจ้งเตือน |
 | `LINE_GROUP_ID` | _(ว่าง)_ | Group ID กลุ่ม LINE (ขึ้นต้นด้วย `C`) — ดู [ตั้งค่ากลุ่ม LINE](#ตั้งค่ากลุ่ม-line) |
+| `LINE_CHANNEL_SECRET` | _(ว่าง)_ | Channel secret สำหรับตรวจสอบ webhook signature — ดู [ตั้งค่า Webhook](#ตั้งค่า-webhook) |
 
 ## ตั้งค่ากลุ่ม LINE
 
@@ -397,6 +514,45 @@ LINE_GROUP_ID=C1a2b3c4d5...
 ```
 
 จากนั้น redeploy (`./deploy.sh` จาก root ของ repo)
+
+## ตั้งค่า Webhook
+
+เพื่อให้บันทึกลา/ชดเชยอัตโนมัติจาก LINE ได้ แอปต้องรับ webhook event จาก LINE platform
+
+### ขั้นที่ 1 — เปิด maid-tracker ให้เข้าถึงได้ผ่าน HTTPS
+
+LINE ส่ง webhook ได้เฉพาะ URL สาธารณะที่เป็น HTTPS เท่านั้น ตัวเลือกสำหรับ NAS ที่บ้าน:
+
+| วิธี | หมายเหตุ |
+|-----|---------|
+| **Port forwarding + reverse proxy** | เปิด port 5055 สู่ภายนอก + ใช้ nginx/Caddy จัดการ TLS |
+| **Cloudflare Tunnel** (`cloudflared`) | ฟรี ไม่ต้อง port forward; เพิ่มเป็น Docker service แยก |
+| **ngrok** | ง่ายสำหรับทดสอบ; แผนฟรี URL จะเปลี่ยนทุกครั้ง |
+
+ตัวอย่าง Cloudflare Tunnel แบบทดสอบชั่วคราว:
+```bash
+docker run --rm cloudflare/cloudflared:latest tunnel --url http://<NAS_IP>:5055
+```
+
+### ขั้นที่ 2 — ตั้ง Webhook URL ใน LINE Developers Console
+
+1. เปิด [LINE Developers Console](https://developers.line.biz/) → Messaging API Channel
+2. Tab **Messaging API settings** → **Webhook URL** → ตั้งค่าเป็น:
+   ```
+   https://<your-public-domain>/webhook/line
+   ```
+3. กด **Verify** — ต้องได้รับ `200 OK`
+4. เปิด toggle **Use webhook**
+
+### ขั้นที่ 3 — เพิ่ม LINE_CHANNEL_SECRET ใน .env
+
+หา **Channel secret** ได้ใน LINE Developers Console → tab **Basic settings**
+
+```env
+LINE_CHANNEL_SECRET=abc123...
+```
+
+จากนั้น redeploy
 
 ## Data Persistence
 
