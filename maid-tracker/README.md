@@ -17,7 +17,7 @@ Household staff attendance & salary tracking system — Single-Page Application 
 
 ### 👤 Staff Management
 - Add / edit / delete staff records (name, age, nationality, phone, LINE, Facebook)
-- Monthly salary + start date + employment duration display
+- Monthly salary + start date + employment duration display (shows years/months/days once tenure reaches 1 year)
 
 ### 📅 Work Calendar
 - Click a day to change status — **full-day / half-day dialog** before saving leave/comp
@@ -330,7 +330,7 @@ reminders (
 
 ### 👤 จัดการข้อมูลแม่บ้าน
 - เพิ่ม / แก้ไข / ลบข้อมูล (ชื่อ, อายุ, สัญชาติ, เบอร์โทร, LINE, Facebook)
-- เงินเดือน + วันเริ่มงาน + แสดงระยะเวลาทำงาน
+- เงินเดือน + วันเริ่มงาน + แสดงระยะเวลาทำงาน (แสดงเป็นปี/เดือน/วันเมื่อทำงานครบ 1 ปีขึ้นไป)
 
 ### 📅 ปฏิทินการทำงาน
 - คลิกวันเพื่อเปลี่ยนสถานะ — มี **dialog เลือกเต็มวัน / ครึ่งวัน** ก่อนบันทึกลา/ชดเชย

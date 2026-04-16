@@ -407,8 +407,6 @@ async function viewList() {
          ${t("emptyList")}
        </div>`
     : employees.map(e => {
-        const months = Math.floor(e.total_days_employed / 30);
-        const days   = e.total_days_employed % 30;
         const resigned = !!e.end_date;
         return `
         <div class="col-12 col-sm-6 col-lg-4">
@@ -430,7 +428,7 @@ async function viewList() {
             <hr class="my-2" />
             <div class="d-flex justify-content-between small">
               <span class="text-muted">${resigned ? t("labelResigned") + " " + formatDate(e.end_date) : t("labelStarted") + " " + formatDate(e.start_date)}</span>
-              <span class="${resigned ? "text-secondary" : "text-success"} fw-semibold">${months > 0 ? months + (currentLang === "th" ? " เดือน " : "m ") : ""}${days}${currentLang === "th" ? " วัน" : "d"}</span>
+              <span class="${resigned ? "text-secondary" : "text-success"} fw-semibold">${fmtDuration(e.total_days_employed)}</span>
             </div>
             <div class="d-flex justify-content-between small mt-1">
               <span class="text-muted">${t("labelSalary")}</span>
@@ -583,9 +581,6 @@ async function viewEmployeeDetail(id) {
   const mo = today.getMonth() + 1;
   const resigned = !!emp.end_date;
 
-  const months = Math.floor(overall.total_days_employed / 30);
-  const days   = overall.total_days_employed % 30;
-
   const balClass = overall.overall_balance >= 0 ? "text-success" : "text-danger";
   const balIcon  = overall.overall_balance >= 0 ? "bi-piggy-bank-fill" : "bi-exclamation-triangle-fill";
 
@@ -636,7 +631,7 @@ async function viewEmployeeDetail(id) {
     <div class="row g-3 mb-4">
       <div class="col-6 col-md-3">
         <div class="stat-card bg-white">
-          <div class="stat-num text-primary">${months > 0 ? months + (currentLang === "th" ? "เดือน" : "m ") : ""}${days}${currentLang === "th" ? "วัน" : "d"}</div>
+          <div class="stat-num text-primary">${fmtDuration(overall.total_days_employed)}</div>
           <div class="stat-label text-muted">${t("detailDuration")}</div>
         </div>
       </div>
@@ -1707,6 +1702,21 @@ function escHtml(str) {
 
 function fmtMoney(n) {
   return Number(n).toLocaleString("th-TH", { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+}
+
+function fmtDuration(totalDays) {
+  const totalMonths = Math.floor(totalDays / 30);
+  const years  = Math.floor(totalMonths / 12);
+  const months = totalMonths % 12;
+  const days   = totalDays % 30;
+  if (currentLang === "th") {
+    return (years  > 0 ? years  + "ปี "    : "")
+         + (months > 0 ? months + "เดือน " : "")
+         + days + "วัน";
+  }
+  return (years  > 0 ? years  + "y " : "")
+       + (months > 0 ? months + "m " : "")
+       + days + "d";
 }
 
 function formatDate(isoStr) {
