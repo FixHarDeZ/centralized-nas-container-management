@@ -1016,7 +1016,16 @@ async def line_webhook(request: Request):
         # Leave on Sunday is redundant — it's already a holiday
         if status == "leave" and today.weekday() == 6:
             line_notify.send_line(
-                f"📅 วันนี้วันอาทิตย์ เป็นวันหยุดอยู่แล้วนะคะ {emp['name']} 😊"
+                f"📅 วันนี้วันอาทิตย์ เป็นวันหยุดอยู่แล้วนะคะ {emp['name']} 😊\n"
+                f"ไม่ต้องลงวันลาค่ะ วันหยุดอยู่แล้ว"
+            )
+            continue
+
+        # Compensatory only applies on Sunday (the designated day off)
+        if status == "compensatory" and today.weekday() != 6:
+            line_notify.send_line(
+                f"📅 วันนี้เป็นวันทำงานปกตินะคะ {emp['name']} 😊\n"
+                f"การบันทึกชดเชยใช้ได้เฉพาะวันอาทิตย์ที่มาทำงานเท่านั้นค่ะ"
             )
             continue
 
