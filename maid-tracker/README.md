@@ -118,7 +118,8 @@ Notifications are **opt-in** — if `LINE_CHANNEL_ACCESS_TOKEN` or `LINE_GROUP_I
 - **No LINE User ID needed** — anyone in the group can type the message
 - If only **1 active employee** → automatically records for that employee
 - If **multiple active employees** → tries to find a name mention in the text; if ambiguous, sends a clarification message asking to include the name
-- If today is Sunday and status is leave → notifies and skips (Sunday is already a holiday)
+- If today is Sunday and status is leave → notifies and skips (Sunday is already a holiday, no leave needed)
+- If today is a workday (Mon–Sat) and status is compensatory → notifies and skips (compensatory only applies on Sundays worked)
 - If the same status is already recorded for today → notifies and skips (no duplicate)
 - Before recording → bot sends an acknowledgment first (e.g. "กำลังบันทึกลาเต็มวันในระบบให้นะคะ...") so the group knows action is in progress
 - On success → sends the full attendance notification with cumulative balance
@@ -416,6 +417,7 @@ reminders (
 - ถ้ามีพนักงาน **1 คน** → บันทึกให้อัตโนมัติ
 - ถ้ามีพนักงาน **หลายคน** → ตรวจหาชื่อในข้อความ; ถ้าไม่ชัดเจนให้บอทส่งข้อความขอให้ระบุชื่อ
 - ถ้าวันนี้เป็นวันอาทิตย์และเป็นการขอลา → แจ้งว่าเป็นวันหยุดอยู่แล้วและข้ามไป
+- ถ้าวันนี้เป็นวันทำงานปกติ (จ.–ส.) และเป็นการขอชดเชย → แจ้งว่าชดเชยบันทึกได้เฉพาะวันอาทิตย์เท่านั้นและข้ามไป
 - ถ้าบันทึกสถานะเดิมวันนี้ไว้แล้ว → แจ้งและข้ามไป (ไม่บันทึกซ้ำ)
 - ก่อนบันทึก → บอทส่ง acknowledgment ก่อนเสมอ (เช่น "กำลังบันทึกลาเต็มวันในระบบให้นะคะ...") เพื่อให้กลุ่มรู้ว่ากำลังดำเนินการ
 - เมื่อสำเร็จ → ส่งการแจ้งเตือนพร้อมยอดสะสม
