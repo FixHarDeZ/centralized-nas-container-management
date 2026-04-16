@@ -1,6 +1,6 @@
 # Jellyfin
 
-![Jellyfin](../screenshots/Jellyfin.png)
+![Jellyfin](../screenshots/jellyfin.png)
 
 Media server with NVIDIA GPU hardware transcoding.
 

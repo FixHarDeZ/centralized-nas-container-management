@@ -1,6 +1,6 @@
 # Portainer
 
-![Portainer](../screenshots/Portainer.png)
+![Portainer](../screenshots/portainer.png)
 
 Docker management UI (Community Edition).
 
