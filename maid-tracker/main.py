@@ -14,7 +14,10 @@ from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 import calendar
 import line_notify
-from keywords import LEAVE_KEYWORDS, COMP_KEYWORDS, HALF_DAY_KEYWORDS, BALANCE_KEYWORDS
+from keywords import (
+    LEAVE_KEYWORDS, COMP_KEYWORDS, HALF_DAY_KEYWORDS, BALANCE_KEYWORDS,
+    PAYMENT_KEYWORDS, PAYMENT_PERIOD1_KEYWORDS, PAYMENT_PERIOD2_KEYWORDS, PAYMENT_BOTH_KEYWORDS,
+)
 from calc import (
     default_status,
     working_days_in_month,
@@ -78,10 +81,14 @@ async def basic_auth_middleware(request: Request, call_next):
 
 
 # Keywords are defined in keywords.py — edit that file to add/remove trigger phrases.
-_LEAVE_KEYWORDS    = LEAVE_KEYWORDS
-_COMP_KEYWORDS     = COMP_KEYWORDS
-_HALF_DAY_KEYWORDS = HALF_DAY_KEYWORDS
-_BALANCE_KEYWORDS  = BALANCE_KEYWORDS
+_LEAVE_KEYWORDS           = LEAVE_KEYWORDS
+_COMP_KEYWORDS            = COMP_KEYWORDS
+_HALF_DAY_KEYWORDS        = HALF_DAY_KEYWORDS
+_BALANCE_KEYWORDS         = BALANCE_KEYWORDS
+_PAYMENT_KEYWORDS         = PAYMENT_KEYWORDS
+_PAYMENT_PERIOD1_KEYWORDS = PAYMENT_PERIOD1_KEYWORDS
+_PAYMENT_PERIOD2_KEYWORDS = PAYMENT_PERIOD2_KEYWORDS
+_PAYMENT_BOTH_KEYWORDS    = PAYMENT_BOTH_KEYWORDS
 
 
 def get_db():
@@ -946,6 +953,29 @@ def test_reminder(rem_id: int):
 
 # ---------- LINE Webhook ----------
 
+def _compute_period_amount(emp: dict, year: int, month: int, period: int) -> float:
+    """Return the salary amount for the given period, respecting first-month proration."""
+    wd_month    = working_days_in_month(year, month)
+    dr          = emp["monthly_salary"] / wd_month if wd_month else 0
+    half_salary = emp["monthly_salary"] / 2
+    start_date  = date.fromisoformat(emp["start_date"])
+    _, n        = calendar.monthrange(year, month)
+
+    if start_date.year == year and start_date.month == month:
+        billable    = sum(1 for day in range(start_date.day, n + 1) if date(year, month, day).weekday() != 6)
+        base_salary = dr * billable
+    else:
+        base_salary = emp["monthly_salary"]
+
+    mid_day             = date(year, month, 15)
+    first_month_after15 = start_date.year == year and start_date.month == month and start_date > mid_day
+
+    if period == 1:
+        return round(half_salary, 2)
+    else:
+        return round(base_salary if first_month_after15 else base_salary - half_salary, 2)
+
+
 def _resolve_employee(text: str) -> dict | None:
     """
     Find the active employee to record attendance for.
@@ -1025,12 +1055,13 @@ async def line_webhook(request: Request):
         is_leave   = any(kw in text for kw in _LEAVE_KEYWORDS)
         is_comp    = any(kw in text for kw in _COMP_KEYWORDS)
         is_balance = any(kw in text for kw in _BALANCE_KEYWORDS)
+        is_payment = any(kw in text for kw in _PAYMENT_KEYWORDS)
 
-        if not is_leave and not is_comp and not is_balance:
+        if not is_leave and not is_comp and not is_balance and not is_payment:
             continue
 
         # Balance query — resolve employee and reply with current balance
-        if is_balance and not is_leave and not is_comp:
+        if is_balance and not is_leave and not is_comp and not is_payment:
             emp = _resolve_employee(text)
             if emp is None:
                 continue
@@ -1040,6 +1071,105 @@ async def line_webhook(request: Request):
                 start_date=date.fromisoformat(emp["start_date"]),
                 monthly_salary=emp["monthly_salary"],
             )
+            continue
+
+        # Salary payment recording
+        if is_payment and not is_leave and not is_comp:
+            emp = _resolve_employee(text)
+            if emp is None:
+                continue
+
+            # Determine which period(s) to mark as paid
+            has_p1  = any(kw in text for kw in _PAYMENT_PERIOD1_KEYWORDS)
+            has_p2  = any(kw in text for kw in _PAYMENT_PERIOD2_KEYWORDS)
+            has_both = any(kw in text for kw in _PAYMENT_BOTH_KEYWORDS)
+
+            import calendar as _cal
+            last_day_of_month = _cal.monthrange(today.year, today.month)[1]
+
+            if has_both:
+                target_periods = [1, 2]
+            elif has_p1 and not has_p2:
+                target_periods = [1]
+            elif has_p2 and not has_p1:
+                target_periods = [2]
+            else:
+                # Auto-detect from date — confident zones only; ask otherwise
+                # Days 13–18: around 15th  →  Period 1
+                # Days 24–last: near end of month  →  Period 2
+                # Other days: genuinely unclear
+                if 13 <= today.day <= 18:
+                    target_periods = [1]
+                elif today.day >= last_day_of_month - 6:
+                    target_periods = [2]
+                else:
+                    line_notify.send_line(
+                        f"❓ วันที่ {today.day} ระบบไม่แน่ใจว่าจ่ายรอบไหนนะคะ\n"
+                        f"กรุณาระบุเพิ่มเติมด้วยนะคะ เช่น:\n"
+                        f'• "จ่ายแล้ว กลางเดือน" → รอบ 1 (วันที่ 15)\n'
+                        f'• "จ่ายแล้ว ปลายเดือน" → รอบ 2 (สิ้นเดือน)\n'
+                        f'• "จ่ายแล้ว ทั้งเดือน" → ทั้งสองรอบ'
+                    )
+                    continue
+
+            # Acknowledge before writing
+            period_th = {1: "กลางเดือน (รอบ 1)", 2: "ปลายเดือน (รอบ 2)"}
+            if len(target_periods) == 2:
+                period_label = "ทั้งสองรอบ"
+            else:
+                period_label = period_th[target_periods[0]]
+            line_notify.send_line(
+                f"💰 กำลังบันทึกจ่ายเงินเดือน{period_label} ให้ {emp['name']} นะคะ..."
+            )
+
+            conn = get_db()
+            start_date_emp = date.fromisoformat(emp["start_date"])
+            tz_inner = ZoneInfo(os.environ.get("TZ", "Asia/Bangkok"))
+            paid_at  = datetime.now(tz_inner).strftime("%Y-%m-%d %H:%M:%S")
+
+            for period in target_periods:
+                existing = conn.execute(
+                    "SELECT paid_at FROM salary_payments "
+                    "WHERE employee_id=? AND year=? AND month=? AND period=?",
+                    (emp["id"], today.year, today.month, period),
+                ).fetchone()
+
+                if existing and existing["paid_at"]:
+                    conn.close()
+                    line_notify.send_line(
+                        f"ℹ️ {emp['name']} รอบ {period} เดือนนี้บันทึกว่าจ่ายแล้วก่อนหน้านี้นะคะ "
+                        f"(จ่ายเมื่อ {existing['paid_at']})"
+                    )
+                    continue
+
+                if existing:
+                    conn.execute(
+                        "UPDATE salary_payments SET paid_at=? "
+                        "WHERE employee_id=? AND year=? AND month=? AND period=?",
+                        (paid_at, emp["id"], today.year, today.month, period),
+                    )
+                else:
+                    conn.execute(
+                        "INSERT INTO salary_payments (employee_id, year, month, period, paid_at) "
+                        "VALUES (?,?,?,?,?)",
+                        (emp["id"], today.year, today.month, period, paid_at),
+                    )
+                conn.commit()
+
+                amount = _compute_period_amount(emp, today.year, today.month, period)
+                line_notify.notify_payment(
+                    emp_id=emp["id"],
+                    emp_name=emp["name"],
+                    year=today.year,
+                    month=today.month,
+                    period=period,
+                    amount=amount,
+                    paid_at=paid_at,
+                    start_date=start_date_emp,
+                    monthly_salary=emp["monthly_salary"],
+                )
+
+            conn.close()
             continue
 
         # Leave takes precedence if both somehow match
