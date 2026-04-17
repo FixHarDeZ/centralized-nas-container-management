@@ -8,7 +8,10 @@
       "Read(//Users/peerawat.ujaiyen/.claude/**)",
       "Read(//usr/local/bin/**)",
       "Read(//Users/peerawat.ujaiyen/.nvm/versions/**)",
-      "Bash(/opt/homebrew/bin/node --check /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management/maid-tracker/static/app.js)"
+      "Bash(/opt/homebrew/bin/node --check /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management/maid-tracker/static/app.js)",
+      "Bash(gh release create v1.7.2 --title 'v1.7.2 — Acknowledgment message before LINE webhook attendance recording' --notes ' *)",
+      "Skill(maid-release)",
+      "Skill(maid-release:*)"
     ],
     "additionalDirectories": [
       "/Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management/.claude"
