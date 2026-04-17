@@ -34,3 +34,32 @@ BALANCE_KEYWORDS = [
     # English
     "balance", "check balance", "my balance", "leave balance",
 ]
+
+PAYMENT_KEYWORDS = [
+    # Thai
+    "จ่ายแล้ว", "จ่ายเงินแล้ว", "จ่ายเงินเดือนแล้ว", "โอนแล้ว", "จ่ายค่าแรงแล้ว",
+    "จ่ายเงินให้", "โอนเงินแล้ว",
+    # English
+    "paid", "salary paid", "payment done", "transferred",
+]
+
+PAYMENT_PERIOD1_KEYWORDS = [
+    # Thai — กลางเดือน / รอบแรก
+    "กลางเดือน", "รอบแรก", "รอบ 1", "รอบหนึ่ง", "งวดแรก", "งวด 1",
+    # English
+    "mid month", "period 1", "first period", "first half",
+]
+
+PAYMENT_PERIOD2_KEYWORDS = [
+    # Thai — ปลายเดือน / รอบสอง
+    "ปลายเดือน", "รอบสอง", "รอบ 2", "สิ้นเดือน", "งวดสอง", "งวด 2",
+    # English
+    "end of month", "period 2", "second period", "second half",
+]
+
+PAYMENT_BOTH_KEYWORDS = [
+    # Thai — ทั้งสองรอบ
+    "ทั้งเดือน", "ทั้งคู่", "ทั้งสองรอบ", "ทั้งสองงวด", "ทั้งหมด", "ครบทั้งเดือน",
+    # English
+    "both", "both periods", "full month",
+]

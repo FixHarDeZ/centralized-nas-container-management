@@ -82,9 +82,9 @@ Sends a LINE message via LINE Messaging API on the following events:
 
 Notifications are **opt-in** — if `LINE_CHANNEL_ACCESS_TOKEN` or `LINE_GROUP_ID` are not set in the environment, all notifications are silently skipped and the app functions normally. Messages are pushed to a LINE **group** so every member sees them with a single API call. See [LINE Group Setup](#line-group-setup) below.
 
-### 📲 LINE Webhook — Auto Attendance from Chat
+### 📲 LINE Webhook — Auto Attendance & Salary Payment from Chat
 
-**Anyone** in the LINE group can trigger attendance recording by typing a keyword — the employee, the owner, or any group member.
+**Anyone** in the LINE group can trigger attendance recording **or mark a salary payment as paid** by typing a keyword — the employee, the owner, or any group member.
 
 **Leave keywords** (any of the following):
 
@@ -123,6 +123,33 @@ Notifications are **opt-in** — if `LINE_CHANNEL_ACCESS_TOKEN` or `LINE_GROUP_I
 - If the same status is already recorded for today → notifies and skips (no duplicate)
 - Before recording → bot sends an acknowledgment first (e.g. "กำลังบันทึกลาเต็มวันในระบบให้นะคะ...") so the group knows action is in progress
 - On success → sends the full attendance notification with cumulative balance
+
+**Salary payment keywords:**
+
+| Keyword | Result |
+|---------|--------|
+| `จ่ายแล้ว` / `จ่ายเงินแล้ว` / `โอนแล้ว` | Auto-detect period from current date |
+| + `กลางเดือน` / `รอบแรก` / `รอบ 1` | Force Period 1 (15th) |
+| + `ปลายเดือน` / `รอบสอง` / `รอบ 2` | Force Period 2 (end of month) |
+| + `ทั้งเดือน` / `ทั้งคู่` / `ทั้งสองรอบ` | Mark both periods |
+| `paid` / `salary paid` / `transferred` | Same as Thai, English variant |
+
+**Period auto-detection logic (when no period keyword specified):**
+- Days **13–18**: bot assumes Period 1 (around the 15th pay date)
+- Days **24–end of month**: bot assumes Period 2 (near the month-end pay date)
+- **Other days**: bot asks for clarification in the group chat
+
+**Payment behaviour:**
+- Bot sends an acknowledgment message first ("กำลังบันทึกจ่ายเงินเดือน...")
+- If a period is already marked as paid → bot notifies and skips (no duplicate)
+- Confirmation message with the paid amount and current balance is sent on success
+
+**Balance query keywords:**
+
+| Keyword | Result |
+|---------|--------|
+| `ยอดสะสม` / `เช็คยอด` / `ยอดลา` | Reply with current comp/leave balance |
+| `balance` / `check balance` / `my balance` | Same, English variant |
 
 **Adding / removing keywords:**
 
@@ -425,6 +452,28 @@ reminders (
 - ถ้าบันทึกสถานะเดิมวันนี้ไว้แล้ว → แจ้งและข้ามไป (ไม่บันทึกซ้ำ)
 - ก่อนบันทึก → บอทส่ง acknowledgment ก่อนเสมอ (เช่น "กำลังบันทึกลาเต็มวันในระบบให้นะคะ...") เพื่อให้กลุ่มรู้ว่ากำลังดำเนินการ
 - เมื่อสำเร็จ → ส่งการแจ้งเตือนพร้อมยอดสะสม
+
+**Keyword จ่ายเงินเดือน:**
+
+| คำ | ผลลัพธ์ |
+|----|---------|
+| `จ่ายแล้ว` / `จ่ายเงินแล้ว` / `โอนแล้ว` | ตรวจจับรอบอัตโนมัติจากวันที่ |
+| + `กลางเดือน` / `รอบแรก` / `รอบ 1` | บันทึกรอบ 1 (วันที่ 15) |
+| + `ปลายเดือน` / `รอบสอง` / `รอบ 2` / `สิ้นเดือน` | บันทึกรอบ 2 (สิ้นเดือน) |
+| + `ทั้งเดือน` / `ทั้งคู่` / `ทั้งสองรอบ` | บันทึกทั้งสองรอบ |
+| `paid` / `salary paid` / `transferred` | เหมือนด้านบน ภาษาอังกฤษ |
+
+**การตรวจจับรอบอัตโนมัติ (กรณีไม่ระบุรอบ):**
+- วันที่ **13–18**: รอบ 1 (รอบกลางเดือน)
+- วันที่ **24–สิ้นเดือน**: รอบ 2 (รอบปลายเดือน)
+- **วันอื่นๆ**: บอทถามกลับให้ระบุว่าเป็นรอบไหน
+
+**Keyword เช็คยอดสะสม:**
+
+| คำ | ผลลัพธ์ |
+|----|---------|
+| `ยอดสะสม` / `เช็คยอด` / `ยอดลา` | บอทตอบยอดสะสมปัจจุบัน |
+| `balance` / `check balance` | เหมือนด้านบน ภาษาอังกฤษ |
 
 **เพิ่ม / ลบ keyword:**
 
