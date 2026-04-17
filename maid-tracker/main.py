@@ -14,6 +14,7 @@ from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 import calendar
 import line_notify
+from keywords import LEAVE_KEYWORDS, COMP_KEYWORDS, HALF_DAY_KEYWORDS
 from apscheduler.schedulers.background import BackgroundScheduler
 
 _scheduler = BackgroundScheduler()
@@ -32,31 +33,10 @@ DB_PATH = os.path.join(DATA_DIR, "maid_tracker.db")
 
 _LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "")
 
-# Keywords that trigger automatic attendance recording from LINE chat
-_LEAVE_KEYWORDS = [
-    # Thai
-    "ขอลา", "ลาวันนี้", "วันนี้ขอลา", "วันนี้ลา", "ลาวันนี้นะ",
-    "ขอหยุด", "หยุดวันนี้", "วันนี้หยุด", "วันนี้ขอหยุด",
-    "ลาครึ่งวัน", "ลาครึ่ง",
-    # English
-    "take leave", "taking leave", "day off", "off today", "leave today",
-    "on leave", "half day leave", "half day off",
-]
-_COMP_KEYWORDS  = [
-    # Thai
-    "ทำชดเชย", "ชดเชยวันนี้", "วันนี้ชดเชย", "วันนี้ทำชดเชย",
-    "ทำงานวันหยุด", "ทำงานวันอาทิตย์", "มาทำงานวันนี้",
-    "ชดเชยครึ่งวัน", "ชดเชยครึ่ง",
-    # English
-    "comp day", "compensatory", "working on holiday", "working today",
-    "work today", "worked today",
-]
-_HALF_DAY_KEYWORDS = [
-    # Thai
-    "ครึ่งวัน", "ครึ่งวันเช้า", "ครึ่งวันบ่าย",
-    # English
-    "half day", "half-day",
-]
+# Keywords are defined in keywords.py — edit that file to add/remove trigger phrases.
+_LEAVE_KEYWORDS    = LEAVE_KEYWORDS
+_COMP_KEYWORDS     = COMP_KEYWORDS
+_HALF_DAY_KEYWORDS = HALF_DAY_KEYWORDS
 
 
 def get_db():
