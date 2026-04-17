@@ -14,7 +14,14 @@ from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 import calendar
 import line_notify
-from keywords import LEAVE_KEYWORDS, COMP_KEYWORDS, HALF_DAY_KEYWORDS
+from keywords import LEAVE_KEYWORDS, COMP_KEYWORDS, HALF_DAY_KEYWORDS, BALANCE_KEYWORDS
+from calc import (
+    default_status,
+    working_days_in_month,
+    daily_rate,
+    compute_overall_balance,
+    compute_resign_summary,
+)
 from apscheduler.schedulers.background import BackgroundScheduler
 
 _scheduler = BackgroundScheduler()
@@ -22,6 +29,7 @@ _scheduler = BackgroundScheduler()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _scheduler.add_job(_check_reminders, "interval", seconds=60, id="check_reminders")
+    _scheduler.add_job(_send_monthly_report, "interval", seconds=60, id="monthly_report")
     _scheduler.start()
     yield
     _scheduler.shutdown(wait=False)
@@ -33,10 +41,47 @@ DB_PATH = os.path.join(DATA_DIR, "maid_tracker.db")
 
 _LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "")
 
+# ---------- HTTP Basic Auth ----------
+# Set BASIC_AUTH_USER + BASIC_AUTH_PASSWORD in .env to enable.
+# If both are empty, auth is disabled (open access — safe inside LAN/VPN).
+_BASIC_USER = os.environ.get("BASIC_AUTH_USER", "").strip()
+_BASIC_PASS = os.environ.get("BASIC_AUTH_PASSWORD", "").strip()
+
+_AUTH_REALM = b"Basic realm=\"Maid Tracker\""
+_AUTH_SKIP_PATHS = {"/webhook/line"}
+
+
+@app.middleware("http")
+async def basic_auth_middleware(request: Request, call_next):
+    """Enforce HTTP Basic Auth on all routes except the LINE webhook."""
+    if not _BASIC_USER or request.url.path in _AUTH_SKIP_PATHS:
+        return await call_next(request)
+
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Basic "):
+        try:
+            decoded    = base64.b64decode(auth_header[6:]).decode()
+            user, _, pw = decoded.partition(":")
+            ok_user = hmac.compare_digest(user.encode(), _BASIC_USER.encode())
+            ok_pass = hmac.compare_digest(pw.encode(), _BASIC_PASS.encode())
+            if ok_user and ok_pass:
+                return await call_next(request)
+        except Exception:
+            pass
+
+    from fastapi.responses import Response as _Resp
+    return _Resp(
+        status_code=401,
+        content="Authentication required",
+        headers={"WWW-Authenticate": "Basic realm=\"Maid Tracker\""},
+    )
+
+
 # Keywords are defined in keywords.py — edit that file to add/remove trigger phrases.
 _LEAVE_KEYWORDS    = LEAVE_KEYWORDS
 _COMP_KEYWORDS     = COMP_KEYWORDS
 _HALF_DAY_KEYWORDS = HALF_DAY_KEYWORDS
+_BALANCE_KEYWORDS  = BALANCE_KEYWORDS
 
 
 def get_db():
@@ -179,6 +224,42 @@ def _check_reminders():
         conn2.close()
 
 
+_MONTHLY_REPORT_TIME = os.environ.get("MONTHLY_REPORT_TIME", "20:00")
+_monthly_report_last_sent: str = ""  # tracks "YYYY-MM" to send once per month
+
+
+def _send_monthly_report():
+    """Runs every 60 s. Sends a monthly summary on the last day of each month at MONTHLY_REPORT_TIME."""
+    global _monthly_report_last_sent
+
+    tz         = ZoneInfo(os.environ.get("TZ", "Asia/Bangkok"))
+    now        = datetime.now(tz)
+    current_hm = now.strftime("%H:%M")
+    today      = now.date()
+
+    if current_hm != _MONTHLY_REPORT_TIME:
+        return
+
+    import calendar as _cal
+    last_day = _cal.monthrange(today.year, today.month)[1]
+    if today.day != last_day:
+        return
+
+    month_key = today.strftime("%Y-%m")
+    if _monthly_report_last_sent == month_key:
+        return
+
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT id, name, start_date, monthly_salary FROM employees "
+        "WHERE end_date IS NULL OR end_date=''"
+    ).fetchall()
+    conn.close()
+
+    line_notify.notify_monthly_report([dict(r) for r in rows])
+    _monthly_report_last_sent = month_key
+
+
 # ---------- Pydantic models ----------
 
 class EmployeeCreate(BaseModel):
@@ -211,24 +292,6 @@ class ReminderCreate(BaseModel):
     schedule_type: str   # 'month_day_digit' | 'weekday'
     schedule_value: str  # digits: "0" or "0,5" | weekdays: "0,3" (0=Mon…6=Sun)
     send_time: str = "07:00"
-
-
-# ---------- Helpers ----------
-
-def default_status(d: date) -> str:
-    """Sunday = holiday, else work."""
-    return "holiday" if d.weekday() == 6 else "work"
-
-
-def working_days_in_month(year: int, month: int) -> int:
-    """Count Mon–Sat days in a month."""
-    _, n = calendar.monthrange(year, month)
-    return sum(1 for day in range(1, n + 1) if date(year, month, day).weekday() != 6)
-
-
-def daily_rate(monthly_salary: float, year: int, month: int) -> float:
-    wd = working_days_in_month(year, month)
-    return monthly_salary / wd if wd else 0
 
 
 # ---------- Employee endpoints ----------
@@ -369,57 +432,24 @@ def get_resign_summary(emp_id: int):
         raise HTTPException(400, "ยังไม่ได้แจ้งลาออก")
 
     start_date = date.fromisoformat(emp["start_date"])
-    end_date = date.fromisoformat(emp["end_date"])
-    year, month = end_date.year, end_date.month
-
-    all_rows = conn.execute(
-        "SELECT work_date, status, half_day FROM attendance WHERE employee_id=? AND work_date <= ?",
-        (emp_id, emp["end_date"]),
-    ).fetchall()
+    end_date   = date.fromisoformat(emp["end_date"])
     conn.close()
 
-    saved = {r["work_date"]: {"status": r["status"], "half_day": bool(r["half_day"])} for r in all_rows}
-
-    # Cumulative balance across ALL time (start → end_date)
-    total_comp = total_leave = 0.0
-    d = start_date
-    while d <= end_date:
-        rec = saved.get(d.isoformat(), {"status": default_status(d), "half_day": False})
-        inc = 0.5 if rec["half_day"] else 1
-        if rec["status"] == "compensatory":
-            total_comp += inc
-        elif rec["status"] == "leave":
-            total_leave += inc
-        d += timedelta(days=1)
-    cumulative_balance = total_comp - total_leave
-
-    # Prorated last-month salary (from 1st-of-month or start_date, whichever is later, to end_date)
-    wd_month = working_days_in_month(year, month)
-    dr = emp["monthly_salary"] / wd_month if wd_month else 0
-
-    month_start = max(date(year, month, 1), start_date)
-    billable = sum(
-        1 for i in range((end_date - month_start).days + 1)
-        if (month_start + timedelta(days=i)).weekday() != 6
-    )
-    base_salary = round(dr * billable, 2)
-
-    balance_amount = round(cumulative_balance * dr, 2)
-    final_amount = round(base_salary + balance_amount, 2)
+    s = compute_resign_summary(emp_id, start_date, end_date, emp["monthly_salary"])
 
     return {
-        "end_date": emp["end_date"],
-        "resign_note": emp.get("resign_note"),
-        "monthly_salary": emp["monthly_salary"],
-        "daily_rate": round(dr, 2),
-        "working_days_in_month": wd_month,
-        "billable_days": billable,
-        "base_salary": base_salary,
-        "total_compensatory_days": total_comp,
-        "total_leave_days": total_leave,
-        "cumulative_balance": cumulative_balance,
-        "balance_amount": balance_amount,
-        "final_amount": final_amount,
+        "end_date":               emp["end_date"],
+        "resign_note":            emp.get("resign_note"),
+        "monthly_salary":         emp["monthly_salary"],
+        "daily_rate":             s["daily_rate"],
+        "working_days_in_month":  working_days_in_month(end_date.year, end_date.month),
+        "billable_days":          round(s["base_salary"] / s["daily_rate"]) if s["daily_rate"] else 0,
+        "base_salary":            s["base_salary"],
+        "total_compensatory_days": s["total_comp"],
+        "total_leave_days":       s["total_leave"],
+        "cumulative_balance":     s["cumulative_balance"],
+        "balance_amount":         s["balance_amount"],
+        "final_amount":           s["final_amount"],
     }
 
 
@@ -580,9 +610,15 @@ def get_payments(emp_id: int, year: int, month: int):
     else:
         base_salary = emp["monthly_salary"]
 
-    # Policy: no monthly deduction — always pay full base salary
-    # Period 2 = base_salary - half_salary (always half, no leave/comp adjustment)
-    period2_amount = base_salary - half_salary
+    # Policy: no monthly deduction — always pay full base salary.
+    # If the employee started after the 15th their first month, period 1 is skipped,
+    # so period 2 should pay the entire prorated base salary (not base - half).
+    first_month_after_15 = (
+        start_date.year == year
+        and start_date.month == month
+        and start_date > mid_day
+    )
+    period2_amount = base_salary if first_month_after_15 else base_salary - half_salary
 
     result = []
 
@@ -658,7 +694,14 @@ def toggle_payment(emp_id: int, period: int, year: int, month: int):
         base_salary = dr * billable
     else:
         base_salary = emp["monthly_salary"]
-    amount = half_salary if period == 1 else round(base_salary - half_salary, 2)
+    mid_day_toggle = date(year, month, 15)
+    first_month_after_15 = (
+        start_date.year == year
+        and start_date.month == month
+        and start_date > mid_day_toggle
+    )
+    period2_amount = base_salary if first_month_after_15 else base_salary - half_salary
+    amount = half_salary if period == 1 else round(period2_amount, 2)
 
     conn.commit()
     conn.close()
@@ -979,10 +1022,24 @@ async def line_webhook(request: Request):
 
         text = msg.get("text", "").strip()
 
-        is_leave = any(kw in text for kw in _LEAVE_KEYWORDS)
-        is_comp  = any(kw in text for kw in _COMP_KEYWORDS)
+        is_leave   = any(kw in text for kw in _LEAVE_KEYWORDS)
+        is_comp    = any(kw in text for kw in _COMP_KEYWORDS)
+        is_balance = any(kw in text for kw in _BALANCE_KEYWORDS)
 
-        if not is_leave and not is_comp:
+        if not is_leave and not is_comp and not is_balance:
+            continue
+
+        # Balance query — resolve employee and reply with current balance
+        if is_balance and not is_leave and not is_comp:
+            emp = _resolve_employee(text)
+            if emp is None:
+                continue
+            line_notify.notify_balance_query(
+                emp_id=emp["id"],
+                emp_name=emp["name"],
+                start_date=date.fromisoformat(emp["start_date"]),
+                monthly_salary=emp["monthly_salary"],
+            )
             continue
 
         # Leave takes precedence if both somehow match

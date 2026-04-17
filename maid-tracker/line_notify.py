@@ -13,19 +13,15 @@ Uses /v2/bot/message/push with the group ID so a single API call reaches all gro
 """
 
 import os
-import sqlite3
-import calendar
 import requests
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
+from calc import compute_overall_balance as _compute_overall_balance, compute_resign_summary as _compute_resign_summary
 
 LINE_API_URL = "https://api.line.me/v2/bot/message/push"
 TOKEN    = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
 GROUP_ID = os.environ.get("LINE_GROUP_ID", "").strip()
 TZ       = ZoneInfo(os.environ.get("TZ", "Asia/Bangkok"))
-
-DATA_DIR = os.environ.get("DATA_DIR", "/data")
-DB_PATH  = os.path.join(DATA_DIR, "maid_tracker.db")
 
 THAI_MONTHS = [
     "", "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
@@ -47,63 +43,6 @@ def _fmt(amount: float) -> str:
 def _fmt_days(days: float) -> str:
     """Format day count — preserves .5 for half-day entries, drops .0 for whole days."""
     return f"{days:,.1f}" if days % 1 else f"{days:,.0f}"
-
-
-def _default_status(d: date) -> str:
-    return "holiday" if d.weekday() == 6 else "work"
-
-
-def _working_days_in_month(year: int, month: int) -> int:
-    _, n = calendar.monthrange(year, month)
-    return sum(1 for day in range(1, n + 1) if date(year, month, day).weekday() != 6)
-
-
-# ─── Balance computation ──────────────────────────────────────────────────────
-
-def _compute_overall_balance(emp_id: int, start_date: date, monthly_salary: float) -> dict:
-    """
-    Iterate start_date → today and compute cumulative comp/leave balance.
-    Uses its own DB connection (called after the triggering request is committed).
-    Daily rate is based on the current month's working days.
-    """
-    today = date.today()
-
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    rows = conn.execute(
-        "SELECT work_date, status, half_day FROM attendance WHERE employee_id=?",
-        (emp_id,),
-    ).fetchall()
-    conn.close()
-
-    saved = {
-        r["work_date"]: {"status": r["status"], "half_day": bool(r["half_day"])}
-        for r in rows
-    }
-
-    total_comp = total_leave = 0.0
-    d = start_date
-    while d <= today:
-        rec = saved.get(d.isoformat(), {"status": _default_status(d), "half_day": False})
-        inc = 0.5 if rec["half_day"] else 1.0
-        if rec["status"] == "compensatory":
-            total_comp += inc
-        elif rec["status"] == "leave":
-            total_leave += inc
-        d += timedelta(days=1)
-
-    balance = total_comp - total_leave
-    wd = _working_days_in_month(today.year, today.month)
-    dr = monthly_salary / wd if wd else 0.0
-    balance_amount = round(balance * dr, 2)
-
-    return {
-        "total_comp":     total_comp,
-        "total_leave":    total_leave,
-        "balance":        balance,
-        "daily_rate":     round(dr, 2),
-        "balance_amount": balance_amount,
-    }
 
 
 def _balance_block(b: dict) -> str:
@@ -250,63 +189,6 @@ def notify_cancel_attendance(
         print(f"[LINE] notify_cancel_attendance error: {e}")
 
 
-def _compute_resign_summary(
-    emp_id: int,
-    start_date: date,
-    end_date: date,
-    monthly_salary: float,
-) -> dict:
-    """Compute resign summary: prorated last-month salary + cumulative balance settlement."""
-    year, month = end_date.year, end_date.month
-
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    rows = conn.execute(
-        "SELECT work_date, status, half_day FROM attendance WHERE employee_id=? AND work_date <= ?",
-        (emp_id, end_date.isoformat()),
-    ).fetchall()
-    conn.close()
-
-    saved = {
-        r["work_date"]: {"status": r["status"], "half_day": bool(r["half_day"])}
-        for r in rows
-    }
-
-    total_comp = total_leave = 0.0
-    d = start_date
-    while d <= end_date:
-        rec = saved.get(d.isoformat(), {"status": _default_status(d), "half_day": False})
-        inc = 0.5 if rec["half_day"] else 1.0
-        if rec["status"] == "compensatory":
-            total_comp += inc
-        elif rec["status"] == "leave":
-            total_leave += inc
-        d += timedelta(days=1)
-
-    cumulative_balance = total_comp - total_leave
-    wd_month = _working_days_in_month(year, month)
-    dr = monthly_salary / wd_month if wd_month else 0.0
-
-    month_start = max(date(year, month, 1), start_date)
-    billable = sum(
-        1 for i in range((end_date - month_start).days + 1)
-        if (month_start + timedelta(days=i)).weekday() != 6
-    )
-    base_salary    = round(dr * billable, 2)
-    balance_amount = round(cumulative_balance * dr, 2)
-    final_amount   = round(base_salary + balance_amount, 2)
-
-    return {
-        "total_comp":         total_comp,
-        "total_leave":        total_leave,
-        "cumulative_balance": cumulative_balance,
-        "daily_rate":         round(dr, 2),
-        "base_salary":        base_salary,
-        "balance_amount":     balance_amount,
-        "final_amount":       final_amount,
-    }
-
-
 def notify_resign(
     emp_id: int,
     emp_name: str,
@@ -363,6 +245,68 @@ def notify_reminder(name: str, message: str) -> None:
         send_line(msg)
     except Exception as e:
         print(f"[LINE] notify_reminder error: {e}")
+
+
+def notify_balance_query(
+    emp_id: int,
+    emp_name: str,
+    start_date: date,
+    monthly_salary: float,
+) -> None:
+    """Call when a group member asks for the current balance via LINE chat."""
+    if not TOKEN or not GROUP_ID:
+        return
+    try:
+        b   = _compute_overall_balance(emp_id, start_date, monthly_salary)
+        msg = (
+            f"📊 ยอดสะสม — {emp_name}\n"
+            f"\n"
+            f"{_balance_block(b)}\n"
+            f"\n"
+            f"🕒 {_now_str()}"
+        )
+        send_line(msg)
+    except Exception as e:
+        print(f"[LINE] notify_balance_query error: {e}")
+
+
+def notify_monthly_report(employees: list[dict]) -> None:
+    """
+    Send end-of-month summary for all active employees.
+    Called by the scheduler on the last day of each month at 20:00.
+    `employees` is a list of dicts with keys: id, name, start_date, monthly_salary.
+    """
+    if not TOKEN or not GROUP_ID:
+        return
+    if not employees:
+        return
+
+    today  = date.today()
+    month_name = THAI_MONTHS[today.month]
+    year_be    = today.year + 543
+
+    lines = [f"📅 สรุปประจำเดือน {month_name} {year_be}\n"]
+
+    for emp in employees:
+        try:
+            start = date.fromisoformat(emp["start_date"])
+            b     = _compute_overall_balance(emp["id"], start, emp["monthly_salary"])
+            bal   = b["balance"]
+            sign  = "+" if bal >= 0 else ""
+            kind  = "เครดิต" if bal >= 0 else "ค้างลา"
+            lines.append(
+                f"👤 {emp['name']}\n"
+                f"  ชดเชย +{_fmt_days(b['total_comp'])} วัน  |  ลา -{_fmt_days(b['total_leave'])} วัน\n"
+                f"  ⚖️ {kind}: {sign}{_fmt_days(abs(bal))} วัน  ≈ {sign}฿{_fmt(abs(b['balance_amount']))}"
+            )
+        except Exception as e:
+            print(f"[LINE] monthly report error for emp {emp.get('id')}: {e}")
+
+    msg = "\n\n".join(lines) + f"\n\n🕒 {_now_str()}"
+    try:
+        send_line(msg)
+    except Exception as e:
+        print(f"[LINE] notify_monthly_report error: {e}")
 
 
 def notify_cancel_resign(emp_name: str) -> None:
