@@ -27,3 +27,10 @@ HALF_DAY_KEYWORDS = [
     # English
     "half day", "half-day",
 ]
+
+BALANCE_KEYWORDS = [
+    # Thai
+    "ยอดสะสม", "ยอดคงเหลือ", "ยอดลา", "เช็คยอด", "ดูยอด", "ยอดชดเชย",
+    # English
+    "balance", "check balance", "my balance", "leave balance",
+]
