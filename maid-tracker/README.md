@@ -124,6 +124,10 @@ Notifications are **opt-in** — if `LINE_CHANNEL_ACCESS_TOKEN` or `LINE_GROUP_I
 - Before recording → bot sends an acknowledgment first (e.g. "กำลังบันทึกลาเต็มวันในระบบให้นะคะ...") so the group knows action is in progress
 - On success → sends the full attendance notification with cumulative balance
 
+**Adding / removing keywords:**
+
+All trigger phrases live in [`keywords.py`](keywords.py) — edit that file and redeploy. No changes to `main.py` needed.
+
 **Requirements:**
 - `LINE_CHANNEL_SECRET` env var (for signature verification)
 - Maid-tracker must be accessible from the internet via a **public HTTPS URL** — LINE's platform requires it to deliver webhooks (see [Webhook Setup](#webhook-setup) below)
@@ -421,6 +425,10 @@ reminders (
 - ถ้าบันทึกสถานะเดิมวันนี้ไว้แล้ว → แจ้งและข้ามไป (ไม่บันทึกซ้ำ)
 - ก่อนบันทึก → บอทส่ง acknowledgment ก่อนเสมอ (เช่น "กำลังบันทึกลาเต็มวันในระบบให้นะคะ...") เพื่อให้กลุ่มรู้ว่ากำลังดำเนินการ
 - เมื่อสำเร็จ → ส่งการแจ้งเตือนพร้อมยอดสะสม
+
+**เพิ่ม / ลบ keyword:**
+
+Keyword ทั้งหมดอยู่ใน [`keywords.py`](keywords.py) — แก้ไขไฟล์นั้นแล้ว redeploy ได้เลย ไม่ต้องแตะ `main.py`
 
 **สิ่งที่ต้องมี:**
 - env var `LINE_CHANNEL_SECRET` (สำหรับตรวจสอบ signature)
