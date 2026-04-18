@@ -24,6 +24,7 @@ from calc import (
     daily_rate,
     compute_overall_balance,
     compute_resign_summary,
+    compute_leave_deduction,
 )
 from apscheduler.schedulers.background import BackgroundScheduler
 
@@ -155,6 +156,14 @@ def init_db():
         c.execute("ALTER TABLE attendance ADD COLUMN half_day INTEGER DEFAULT 0")
     except Exception:
         pass
+    try:
+        c.execute("ALTER TABLE employees ADD COLUMN max_leave_carry REAL")
+    except Exception:
+        pass
+    try:
+        c.execute("ALTER TABLE salary_payments ADD COLUMN leave_deduction_days REAL DEFAULT 0")
+    except Exception:
+        pass
     conn.commit()
     conn.close()
 
@@ -278,6 +287,7 @@ class EmployeeCreate(BaseModel):
     facebook: Optional[str] = None
     start_date: str
     monthly_salary: float
+    max_leave_carry: Optional[float] = None  # max leave-debt days allowed per month; None = unlimited
 
 
 class AttendanceUpdate(BaseModel):
@@ -324,10 +334,10 @@ def create_employee(emp: EmployeeCreate):
     conn = get_db()
     c = conn.cursor()
     c.execute(
-        "INSERT INTO employees (name,age,nationality,phone,line_id,facebook,start_date,monthly_salary) "
-        "VALUES (?,?,?,?,?,?,?,?)",
+        "INSERT INTO employees (name,age,nationality,phone,line_id,facebook,start_date,monthly_salary,max_leave_carry) "
+        "VALUES (?,?,?,?,?,?,?,?,?)",
         (emp.name, emp.age, emp.nationality, emp.phone, emp.line_id, emp.facebook,
-         emp.start_date, emp.monthly_salary),
+         emp.start_date, emp.monthly_salary, emp.max_leave_carry),
     )
     new_id = c.lastrowid
     conn.commit()
@@ -355,9 +365,9 @@ def update_employee(emp_id: int, emp: EmployeeCreate):
     conn = get_db()
     c = conn.cursor()
     c.execute(
-        "UPDATE employees SET name=?,age=?,nationality=?,phone=?,line_id=?,facebook=?,start_date=?,monthly_salary=? WHERE id=?",
+        "UPDATE employees SET name=?,age=?,nationality=?,phone=?,line_id=?,facebook=?,start_date=?,monthly_salary=?,max_leave_carry=? WHERE id=?",
         (emp.name, emp.age, emp.nationality, emp.phone, emp.line_id, emp.facebook,
-         emp.start_date, emp.monthly_salary, emp_id),
+         emp.start_date, emp.monthly_salary, emp.max_leave_carry, emp_id),
     )
     if c.rowcount == 0:
         conn.close()
@@ -627,6 +637,15 @@ def get_payments(emp_id: int, year: int, month: int):
     )
     period2_amount = base_salary if first_month_after_15 else base_salary - half_salary
 
+    # Leave deduction for period 2 (applied when max_leave_carry is configured)
+    max_carry = emp.get("max_leave_carry")
+    p2_deduction_days   = 0.0
+    p2_deduction_amount = 0.0
+    if max_carry is not None and max_carry >= 0:
+        ded = compute_leave_deduction(emp_id, year, month, max_carry, emp["monthly_salary"], start_date)
+        p2_deduction_days   = ded["deduction_days"]
+        p2_deduction_amount = ded["deduction_amount"]
+
     result = []
 
     # Period 1 (15th) — skip if employee started after 15th or resigned before 15th
@@ -635,6 +654,8 @@ def get_payments(emp_id: int, year: int, month: int):
             "period": 1,
             "due_date": mid_day.isoformat(),
             "amount": round(half_salary, 2),
+            "leave_deduction_days": 0.0,
+            "deduction_amount": 0.0,
             "paid": bool(paid_map.get(1)),
             "paid_at": paid_map.get(1),
         })
@@ -648,7 +669,9 @@ def get_payments(emp_id: int, year: int, month: int):
         result.append({
             "period": 2,
             "due_date": period2_due.isoformat(),
-            "amount": round(period2_amount, 2),
+            "amount": round(period2_amount - p2_deduction_amount, 2),
+            "leave_deduction_days": round(p2_deduction_days, 2),
+            "deduction_amount": round(p2_deduction_amount, 2),
             "paid": bool(paid_map.get(2)),
             "paid_at": paid_map.get(2),
         })
@@ -672,26 +695,38 @@ def toggle_payment(emp_id: int, period: int, year: int, month: int):
         (emp_id, year, month, period),
     ).fetchone()
 
+    # Compute deduction (period 2 only, when max_leave_carry is configured)
+    start_date = date.fromisoformat(emp["start_date"])
+    toggle_deduction_days   = 0.0
+    toggle_deduction_amount = 0.0
+    max_carry = emp.get("max_leave_carry")
+    if period == 2 and max_carry is not None and max_carry >= 0:
+        ded = compute_leave_deduction(emp_id, year, month, max_carry, emp["monthly_salary"], start_date)
+        toggle_deduction_days   = ded["deduction_days"]
+        toggle_deduction_amount = ded["deduction_amount"]
+
     if existing and existing["paid_at"]:
         conn.execute(
-            "UPDATE salary_payments SET paid_at=NULL WHERE employee_id=? AND year=? AND month=? AND period=?",
+            "UPDATE salary_payments SET paid_at=NULL, leave_deduction_days=0 "
+            "WHERE employee_id=? AND year=? AND month=? AND period=?",
             (emp_id, year, month, period),
         )
         paid_at = None
     else:
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
         conn.execute(
-            "INSERT INTO salary_payments (employee_id, year, month, period, paid_at) VALUES (?,?,?,?,?) "
-            "ON CONFLICT(employee_id, year, month, period) DO UPDATE SET paid_at=excluded.paid_at",
-            (emp_id, year, month, period, now),
+            "INSERT INTO salary_payments (employee_id, year, month, period, paid_at, leave_deduction_days) "
+            "VALUES (?,?,?,?,?,?) "
+            "ON CONFLICT(employee_id, year, month, period) DO UPDATE SET "
+            "paid_at=excluded.paid_at, leave_deduction_days=excluded.leave_deduction_days",
+            (emp_id, year, month, period, now, round(toggle_deduction_days, 2)),
         )
         paid_at = now
 
-    # Fetch paid amount from payments list to include in notification
+    # Compute gross amount for notification
     wd_month = working_days_in_month(year, month)
     dr = emp["monthly_salary"] / wd_month if wd_month else 0
     half_salary = emp["monthly_salary"] / 2
-    start_date = date.fromisoformat(emp["start_date"])
     _, n = calendar.monthrange(year, month)
     if start_date.year == year and start_date.month == month:
         billable = sum(
@@ -707,8 +742,8 @@ def toggle_payment(emp_id: int, period: int, year: int, month: int):
         and start_date.month == month
         and start_date > mid_day_toggle
     )
-    period2_amount = base_salary if first_month_after_15 else base_salary - half_salary
-    amount = half_salary if period == 1 else round(period2_amount, 2)
+    period2_gross = base_salary if first_month_after_15 else base_salary - half_salary
+    amount = half_salary if period == 1 else round(period2_gross - toggle_deduction_amount, 2)
 
     conn.commit()
     conn.close()
@@ -724,6 +759,8 @@ def toggle_payment(emp_id: int, period: int, year: int, month: int):
             paid_at=paid_at,
             start_date=start_date,
             monthly_salary=emp["monthly_salary"],
+            deduction_days=toggle_deduction_days,
+            deduction_amount=toggle_deduction_amount,
         )
 
     return {"paid": bool(paid_at), "paid_at": paid_at}
@@ -793,15 +830,25 @@ def get_summary(emp_id: int, year: int, month: int):
         base_salary = emp["monthly_salary"]
 
     balance = counts["compensatory"] - counts["leave"]
-    # Policy: no monthly deduction/credit — leave & comp accumulate and are settled at resignation
-    actual_pay = base_salary
     cumulative_balance = carryover_balance + balance
+
+    # Leave deduction for period 2 this month (when max_leave_carry is configured)
+    max_carry = emp.get("max_leave_carry")
+    deduction_days   = 0.0
+    deduction_amount = 0.0
+    if max_carry is not None and max_carry >= 0:
+        ded = compute_leave_deduction(emp_id, year, month, max_carry, emp["monthly_salary"], start_date)
+        deduction_days   = ded["deduction_days"]
+        deduction_amount = ded["deduction_amount"]
+
+    actual_pay = base_salary - deduction_amount
 
     return {
         "year": year,
         "month": month,
         "employee_name": emp["name"],
         "monthly_salary": emp["monthly_salary"],
+        "max_leave_carry": max_carry,
         "daily_rate": round(dr, 2),
         "working_days_in_month": wd_month,
         "base_salary": round(base_salary, 2),
@@ -812,7 +859,9 @@ def get_summary(emp_id: int, year: int, month: int):
         "balance": balance,
         "carryover_balance": carryover_balance,
         "cumulative_balance": cumulative_balance,
-        "money_owed": 0,
+        "leave_deduction_days": round(deduction_days, 2),
+        "deduction_amount": round(deduction_amount, 2),
+        "money_owed": round(deduction_amount, 2),
         "money_credit": 0,
         "actual_pay": round(actual_pay, 2),
     }
@@ -953,8 +1002,11 @@ def test_reminder(rem_id: int):
 
 # ---------- LINE Webhook ----------
 
-def _compute_period_amount(emp: dict, year: int, month: int, period: int) -> float:
-    """Return the salary amount for the given period, respecting first-month proration."""
+def _compute_period_amount(emp: dict, year: int, month: int, period: int) -> tuple[float, float, float]:
+    """
+    Return (net_amount, deduction_days, deduction_amount) for the given period.
+    Respects first-month proration and max_leave_carry deduction for period 2.
+    """
     wd_month    = working_days_in_month(year, month)
     dr          = emp["monthly_salary"] / wd_month if wd_month else 0
     half_salary = emp["monthly_salary"] / 2
@@ -971,9 +1023,16 @@ def _compute_period_amount(emp: dict, year: int, month: int, period: int) -> flo
     first_month_after15 = start_date.year == year and start_date.month == month and start_date > mid_day
 
     if period == 1:
-        return round(half_salary, 2)
-    else:
-        return round(base_salary if first_month_after15 else base_salary - half_salary, 2)
+        return round(half_salary, 2), 0.0, 0.0
+
+    gross = base_salary if first_month_after15 else base_salary - half_salary
+    deduction_days, deduction_amount = 0.0, 0.0
+    max_carry = emp.get("max_leave_carry")
+    if max_carry is not None and max_carry >= 0:
+        ded = compute_leave_deduction(emp["id"], year, month, max_carry, emp["monthly_salary"], start_date)
+        deduction_days   = ded["deduction_days"]
+        deduction_amount = ded["deduction_amount"]
+    return round(gross - deduction_amount, 2), deduction_days, deduction_amount
 
 
 def _resolve_employee(text: str) -> dict | None:
@@ -1156,7 +1215,14 @@ async def line_webhook(request: Request):
                     )
                 conn.commit()
 
-                amount = _compute_period_amount(emp, today.year, today.month, period)
+                amount, ded_days, ded_amount = _compute_period_amount(emp, today.year, today.month, period)
+                # Save deduction info alongside the payment record
+                conn.execute(
+                    "UPDATE salary_payments SET leave_deduction_days=? "
+                    "WHERE employee_id=? AND year=? AND month=? AND period=?",
+                    (round(ded_days, 2), emp["id"], today.year, today.month, period),
+                )
+                conn.commit()
                 line_notify.notify_payment(
                     emp_id=emp["id"],
                     emp_name=emp["name"],
@@ -1167,6 +1233,8 @@ async def line_webhook(request: Request):
                     paid_at=paid_at,
                     start_date=start_date_emp,
                     monthly_salary=emp["monthly_salary"],
+                    deduction_days=ded_days,
+                    deduction_amount=ded_amount,
                 )
 
             conn.close()

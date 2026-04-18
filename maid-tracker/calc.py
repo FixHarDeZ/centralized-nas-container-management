@@ -75,6 +75,92 @@ def compute_overall_balance(emp_id: int, start_date: date, monthly_salary: float
     }
 
 
+def compute_leave_deduction(
+    emp_id: int,
+    year: int,
+    month: int,
+    max_leave_carry: float,
+    monthly_salary: float,
+    start_date: date,
+) -> dict:
+    """
+    Compute the leave deduction for period 2 of (year, month).
+
+    Walks month-by-month from start_date through (year, month), tracking the
+    effective comp/leave balance.  At the end of every PRIOR month the balance
+    is capped at -max_leave_carry (the excess days were settled via a salary
+    deduction that month).  The deduction returned is what should be applied to
+    the current (year, month) period-2 payment.
+
+    Returns:
+        deduction_days:   days to deduct from this month's period 2 (0 if none)
+        deduction_amount: deduction_days × daily_rate for this month
+        effective_balance: balance after this month's cap is applied
+    """
+    import calendar as _cal
+
+    _, last = _cal.monthrange(year, month)
+    end_of_target = date(year, month, last)
+
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT work_date, status, half_day FROM attendance "
+        "WHERE employee_id=? AND work_date <= ?",
+        (emp_id, end_of_target.isoformat()),
+    ).fetchall()
+    conn.close()
+
+    saved = {
+        r["work_date"]: {"status": r["status"], "half_day": bool(r["half_day"])}
+        for r in rows
+    }
+
+    effective_balance = 0.0
+    cur_y, cur_m = start_date.year, start_date.month
+
+    while (cur_y, cur_m) <= (year, month):
+        _, n = _cal.monthrange(cur_y, cur_m)
+        m_end = date(cur_y, cur_m, n)
+        d = max(date(cur_y, cur_m, 1), start_date)
+
+        while d <= m_end:
+            rec = saved.get(d.isoformat(), {"status": default_status(d), "half_day": False})
+            inc = 0.5 if rec["half_day"] else 1.0
+            if rec["status"] == "compensatory":
+                effective_balance += inc
+            elif rec["status"] == "leave":
+                effective_balance -= inc
+            d += timedelta(days=1)
+
+        # At the end of each PRIOR month apply the cap —
+        # excess was settled via salary deduction, so it doesn't carry forward.
+        if (cur_y, cur_m) < (year, month):
+            if effective_balance < -max_leave_carry:
+                effective_balance = -max_leave_carry
+
+        # Advance to next month
+        cur_m += 1
+        if cur_m > 12:
+            cur_m = 1
+            cur_y += 1
+
+    # Deduction for the target month
+    deduction_days = 0.0
+    if effective_balance < -max_leave_carry:
+        deduction_days = abs(effective_balance) - max_leave_carry
+        effective_balance = -max_leave_carry  # balance after settlement
+
+    dr = daily_rate(monthly_salary, year, month)
+    deduction_amount = round(deduction_days * dr, 2)
+
+    return {
+        "deduction_days":    round(deduction_days, 2),
+        "deduction_amount":  deduction_amount,
+        "effective_balance": round(effective_balance, 2),
+    }
+
+
 def compute_resign_summary(emp_id: int, start_date: date, end_date: date, monthly_salary: float) -> dict:
     """
     Compute resignation settlement:
