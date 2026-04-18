@@ -35,6 +35,8 @@ const TRANSLATIONS = {
     fieldName: "ชื่อ", fieldAge: "อายุ", fieldNationality: "สัญชาติ",
     fieldPhone: "เบอร์โทร", fieldLineId: "LINE ID", fieldFacebook: "Facebook (ไม่บังคับ)",
     fieldStartDate: "วันเริ่มงาน", fieldSalary: "เงินเดือน (บาท)",
+    fieldMaxLeaveCarry: "วันลาค้างสูงสุด (ไม่บังคับ)",
+    fieldMaxLeaveCarryHint: "จำนวนวันลาที่ค้างสะสมได้โดยไม่ถูกหักเงิน เช่น ใส่ 3 = ค้างได้ไม่เกิน 3 วัน ถ้าเกินจะหักจากรอบ 2 ของเดือนนั้น",
     nationalityOptions: ["ไทย","เมียนมา","กัมพูชา","ลาว","เวียดนาม","อื่นๆ"],
     salaryPreview: (dr) => `อัตราค่าจ้างรายวัน ≈ <strong>${dr} บาท/วัน</strong> (คิดจาก 26 วันทำงาน/เดือน)`,
     btnSaveEdit: "บันทึกการแก้ไข", btnAddNew: "เพิ่มแม่บ้าน",
@@ -67,11 +69,16 @@ const TRANSLATIONS = {
     rowBaseSalary: "ฐานเงินเดือนเดือนนี้",
     rowLeaveAccum: (n) => `วันลา ${n} วัน → สะสมรอชำระวันลาออก`,
     rowCompAccum: (n) => `วันชดเชย ${n} วัน → สะสมรอชำระวันลาออก`,
+    rowLeaveDeduct: (n) => `หักวันลาเกินสะสม ${n} วัน (รอบ 2)`,
     rowActualPay: "ยอดที่ควรจ่ายเดือนนี้",
     carryoverLabel: "ยอดยกมาจากเดือนก่อน:",
     cumulativeLabel: "ยอดสะสมรวมเดือนนี้:",
     cumulativeCredit: "(เครดิตสะสม)", cumulativeDebt: (n) => `(ยังค้างชดเชย ${n} วัน)`,
     summaryPolicyNote: "วันลาและชดเชยสะสมตลอด ไม่มีการหักเงินเดือนรายเดือน · จะชำระยอดรวมในวันลาออก",
+    summaryPolicyNoteCapped: (n) => `วันลาเกินสะสม ${n} วัน/เดือน จะถูกหักจากรอบ 2 ของเดือนนั้น · ส่วนที่เหลือชำระเมื่อลาออก`,
+    p2DeductLabel: (days) => `หักวันลาเกินสะสม ${days} วัน`,
+    p2GrossLabel: "เงินเดือนครึ่งหลัง (ก่อนหัก)",
+    p2NetLabel: "ยอดหลังหัก",
     // Leave log
     leaveCalTitle: "ปฏิทินการทำงาน", calHint2: "คลิกที่วันเพื่อเปลี่ยนสถานะ · อาทิตย์: <strong>หยุด ↔ ชดเชย</strong> · วันทำงาน: <strong>ทำงาน ↔ ลา</strong>",
     leaveSectionTitle: (m) => `วันลาเดือน${m}`, noLeaveMonth: "ไม่มีวันลาในเดือนนี้",
@@ -79,13 +86,13 @@ const TRANSLATIONS = {
     // Payments
     paymentTitle: "จ่ายเงินเดือน", period1Label: "รอบแรก — วันที่ 15",
     period2Label: "รอบสอง — สิ้นเดือน", dueDateLabel: "ครบกำหนด",
-    period2Note: "เงินเดือนครึ่งหลัง (ไม่มีการหักลา/ชดเชยรายเดือน)",
+    period2Note: "เงินเดือนครึ่งหลัง",
     paidAtLabel: "จ่ายแล้ว —", badgePaid: "จ่ายแล้ว", badgePending: "รอจ่าย",
     btnMarkPaid: "บันทึกจ่ายแล้ว", btnUnmarkPaid: "ยกเลิก",
     alertAllPaid: "จ่ายครบทั้งเดือนแล้ว",
     alertPending: (n, a) => `ยังค้างจ่าย ${n} รอบ — รวม ${fmtMoney(a)} บาท`,
     noPaymentMonth: "ไม่มีรายการจ่ายในเดือนนี้",
-    paymentNote: "รอบแรกจ่ายครึ่งเดือน · รอบสองจ่ายครึ่งที่เหลือ · ไม่มีหักลา/ชดเชยรายเดือน",
+    paymentNote: "รอบแรกจ่ายครึ่งเดือน · รอบสองจ่ายครึ่งที่เหลือ (หักวันลาเกินสะสมถ้ามีการตั้งค่าไว้)",
     // Confirmations
     confirmLeave: (d) => `บันทึก "ลา" วันที่ ${d}?`,
     confirmComp: (d) => `บันทึก "ชดเชย" (ทำวันอาทิตย์) วันที่ ${d}?`,
@@ -152,6 +159,8 @@ const TRANSLATIONS = {
     fieldName: "Full Name", fieldAge: "Age", fieldNationality: "Nationality",
     fieldPhone: "Phone", fieldLineId: "LINE ID", fieldFacebook: "Facebook (optional)",
     fieldStartDate: "Start Date", fieldSalary: "Monthly Salary (Baht)",
+    fieldMaxLeaveCarry: "Max Leave Carry (optional)",
+    fieldMaxLeaveCarryHint: "Max leave-debt days allowed per month without salary deduction. E.g. 3 = up to 3 days owed before deduction kicks in for Period 2.",
     nationalityOptions: ["Thai","Myanmar","Cambodian","Lao","Vietnamese","Other"],
     salaryPreview: (dr) => `Daily rate ≈ <strong>${dr} Baht/day</strong> (based on 26 working days/month)`,
     btnSaveEdit: "Save Changes", btnAddNew: "Add Staff",
@@ -184,11 +193,16 @@ const TRANSLATIONS = {
     rowBaseSalary: "Base Salary This Month",
     rowLeaveAccum: (n) => `Leave ${n} days → tracked, settled on resignation`,
     rowCompAccum: (n) => `Comp. ${n} days → tracked, settled on resignation`,
+    rowLeaveDeduct: (n) => `Leave cap exceeded by ${n} days — deducted (Period 2)`,
     rowActualPay: "Amount to Pay This Month",
     carryoverLabel: "Carried from prior months:",
     cumulativeLabel: "Cumulative balance this month:",
     cumulativeCredit: "(credit balance)", cumulativeDebt: (n) => `(${n} days still owed)`,
     summaryPolicyNote: "Leave & comp. days accumulate — no monthly deduction · Full settlement on resignation",
+    summaryPolicyNoteCapped: (n) => `Leave debt exceeding ${n} day(s)/month is deducted from Period 2 · Remainder settled on resignation`,
+    p2DeductLabel: (days) => `Leave cap exceeded by ${days} day(s) — deducted`,
+    p2GrossLabel: "Second-half salary (before deduction)",
+    p2NetLabel: "Net after deduction",
     // Leave log
     leaveCalTitle: "Work Calendar", calHint2: "Click a day to change status · Sunday: <strong>Day Off ↔ Comp.</strong> · Weekday: <strong>Work ↔ Leave</strong>",
     leaveSectionTitle: (m) => `Leave Days — ${m}`, noLeaveMonth: "No leave days this month",
@@ -196,13 +210,13 @@ const TRANSLATIONS = {
     // Payments
     paymentTitle: "Pay Salary", period1Label: "Period 1 — 15th",
     period2Label: "Period 2 — End of Month", dueDateLabel: "Due",
-    period2Note: "Second half salary (no monthly leave/comp deduction)",
+    period2Note: "Second half salary",
     paidAtLabel: "Paid —", badgePaid: "Paid", badgePending: "Pending",
     btnMarkPaid: "Mark as Paid", btnUnmarkPaid: "Undo",
     alertAllPaid: "All payments for this month are complete",
     alertPending: (n, a) => `${n} payment(s) pending — Total ${fmtMoney(a)} Baht`,
     noPaymentMonth: "No payments for this month",
-    paymentNote: "Period 1 = half salary · Period 2 = remaining half · No leave/comp deduction",
+    paymentNote: "Period 1 = half salary · Period 2 = remaining half (leave cap deducted if configured)",
     // Confirmations
     confirmLeave: (d) => `Mark as "Leave" on ${d}?`,
     confirmComp: (d) => `Mark as "Compensatory" (worked Sunday) on ${d}?`,
@@ -509,6 +523,12 @@ async function viewEmployeeForm(id) {
               <input type="number" class="form-control" name="monthly_salary" required min="1" step="1"
                      value="${emp?.monthly_salary || ""}" placeholder="13000" />
             </div>
+            <div class="col-12">
+              <label class="form-label fw-semibold">${t("fieldMaxLeaveCarry")}</label>
+              <input type="number" class="form-control" name="max_leave_carry" min="0" step="0.5"
+                     value="${emp?.max_leave_carry ?? ""}" placeholder="${currentLang === "th" ? "เช่น 3" : "e.g. 3"}" />
+              <div class="form-text text-muted">${t("fieldMaxLeaveCarryHint")}</div>
+            </div>
           </div>
           <div id="salaryPreview" class="alert alert-info mt-3 small d-none"></div>
           <div class="d-flex gap-2 mt-4">
@@ -541,14 +561,15 @@ async function viewEmployeeForm(id) {
     e.preventDefault();
     const fd = new FormData(e.target);
     const body = {
-      name:           fd.get("name"),
-      age:            fd.get("age") ? +fd.get("age") : null,
-      nationality:    fd.get("nationality"),
-      phone:          fd.get("phone") || null,
-      line_id:        fd.get("line_id") || null,
-      facebook:       fd.get("facebook") || null,
-      start_date:     fd.get("start_date"),
-      monthly_salary: +fd.get("monthly_salary"),
+      name:             fd.get("name"),
+      age:              fd.get("age") ? +fd.get("age") : null,
+      nationality:      fd.get("nationality"),
+      phone:            fd.get("phone") || null,
+      line_id:          fd.get("line_id") || null,
+      facebook:         fd.get("facebook") || null,
+      start_date:       fd.get("start_date"),
+      monthly_salary:   +fd.get("monthly_salary"),
+      max_leave_carry:  fd.get("max_leave_carry") !== "" ? +fd.get("max_leave_carry") : null,
     };
     const btn = e.target.querySelector("[type=submit]");
     btn.disabled = true;
@@ -1002,6 +1023,11 @@ async function viewSummary(id) {
               <td class="ps-4 text-info-emphasis">${t("rowCompAccum", s.compensatory_days)}</td>
               <td class="text-end pe-4 text-muted">—</td>
             </tr>` : ""}
+            ${s.leave_deduction_days > 0 ? `
+            <tr class="table-danger">
+              <td class="ps-4 text-danger-emphasis">${t("rowLeaveDeduct", s.leave_deduction_days)}</td>
+              <td class="text-end pe-4 text-danger fw-semibold">-${fmtMoney(s.deduction_amount)} ${t("baht")}</td>
+            </tr>` : ""}
             <tr class="table-light fw-bold fs-5">
               <td class="ps-4">${t("rowActualPay")}</td>
               <td class="text-end pe-4 text-primary">${fmtMoney(s.actual_pay)} ${t("baht")}</td>
@@ -1035,9 +1061,9 @@ async function viewSummary(id) {
       </div>
     </div>` : ""}
 
-    <div class="alert alert-info d-flex align-items-start gap-2 small mb-0">
+    <div class="alert ${s.max_leave_carry != null ? "alert-warning" : "alert-info"} d-flex align-items-start gap-2 small mb-0">
       <i class="bi bi-info-circle-fill flex-shrink-0 mt-1"></i>
-      <span>${t("summaryPolicyNote")}</span>
+      <span>${s.max_leave_carry != null ? t("summaryPolicyNoteCapped", s.max_leave_carry) : t("summaryPolicyNote")}</span>
     </div>`;
 }
 
@@ -1259,10 +1285,28 @@ async function viewPayments(id) {
 
   function periodCard(p) {
     const isPaid    = p.paid;
-    const isDeduct  = p.amount < 0;
-    const amountAbs = Math.abs(p.amount);
     const label     = p.period === 1 ? t("period1Label") : t("period2Label");
-    const note      = p.period === 2 ? `<div class="text-muted small mt-1">${t("period2Note")}</div>` : "";
+    const hasDeduct = p.period === 2 && p.leave_deduction_days > 0;
+    const grossAmt  = hasDeduct ? p.amount + p.deduction_amount : p.amount;
+
+    const deductBreakdown = hasDeduct ? `
+      <div class="mt-2 p-2 rounded bg-danger bg-opacity-10 border border-danger border-opacity-25 small">
+        <div class="d-flex justify-content-between">
+          <span class="text-muted">${t("p2GrossLabel")}</span>
+          <span>${fmtMoney(grossAmt)} ${t("baht")}</span>
+        </div>
+        <div class="d-flex justify-content-between text-danger">
+          <span>${t("p2DeductLabel", p.leave_deduction_days)}</span>
+          <span>-${fmtMoney(p.deduction_amount)} ${t("baht")}</span>
+        </div>
+        <div class="d-flex justify-content-between fw-bold border-top mt-1 pt-1">
+          <span>${t("p2NetLabel")}</span>
+          <span>${fmtMoney(p.amount)} ${t("baht")}</span>
+        </div>
+      </div>` : `<div class="text-muted small mt-1">${t("period2Note")}</div>`;
+
+    const noteSection = p.period === 2 ? deductBreakdown : "";
+
     return `
       <div class="card border-0 shadow-sm mb-3">
         <div class="card-body">
@@ -1270,10 +1314,8 @@ async function viewPayments(id) {
             <div class="flex-grow-1">
               <div class="fw-bold">${label}</div>
               <div class="text-muted small mb-2">${t("dueDateLabel")} ${formatDate(p.due_date)}</div>
-              <div class="${isDeduct ? "text-danger" : "text-dark"} fw-bold fs-5">
-                ${isDeduct ? (currentLang === "th" ? `หัก ${fmtMoney(amountAbs)} บาท` : `Deduct ${fmtMoney(amountAbs)} Baht`) : `${fmtMoney(amountAbs)} ${t("baht")}`}
-              </div>
-              ${note}
+              <div class="text-dark fw-bold fs-5">${fmtMoney(p.amount)} ${t("baht")}</div>
+              ${noteSection}
               ${isPaid ? `<div class="text-success small mt-1"><i class="bi bi-check-circle-fill me-1"></i>${t("paidAtLabel")} ${escHtml(p.paid_at || "")}</div>` : ""}
             </div>
             <div class="text-end flex-shrink-0">

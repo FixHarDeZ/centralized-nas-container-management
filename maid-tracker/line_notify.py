@@ -130,6 +130,8 @@ def notify_payment(
     paid_at: str,
     start_date: date,
     monthly_salary: float,
+    deduction_days: float = 0.0,
+    deduction_amount: float = 0.0,
 ) -> None:
     """Call after marking a salary payment period as paid."""
     if not TOKEN or not GROUP_ID:
@@ -138,11 +140,18 @@ def notify_payment(
     month_name   = THAI_MONTHS[month]
     period_label = f"รอบที่ {period} ({'วันที่ 15' if period == 1 else 'สิ้นเดือน'})"
 
+    deduction_line = ""
+    if deduction_days > 0:
+        deduction_line = (
+            f"✂️ หักวันลาเกินสะสม {_fmt_days(deduction_days)} วัน: -฿{_fmt(deduction_amount)}\n"
+        )
+
     try:
         b   = _compute_overall_balance(emp_id, start_date, monthly_salary)
         msg = (
             f"💰 จ่ายเงินเดือนแล้ว — {emp_name}\n"
             f"📅 {month_name} {year}  {period_label}\n"
+            f"{deduction_line}"
             f"💵 ฿{_fmt(amount)}\n"
             f"\n"
             f"{_balance_block(b)}\n"

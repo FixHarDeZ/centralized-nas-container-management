@@ -35,14 +35,23 @@ Household staff attendance & salary tracking system — Single-Page Application 
 - Count Work / Leave / Day Off / Compensatory days
 - Calculate daily rate (salary ÷ Mon–Sat working days in the month)
 - Base salary (pro-rated for the first partial month)
-- Show cumulative leave/comp balance — **no monthly deduction** (see policy below)
-- Carry-over from previous month + running cumulative total
+- Show cumulative leave/comp balance + carry-over from previous month
+- **Leave cap deduction row** appears when max leave carry is configured and exceeded
 
 ### 💰 Salary Payment
 - Split into **2 periods/month**: Period 1 (15th) and Period 2 (last day of month)
-- Each period = salary ÷ 2 (no leave/comp deduction per period)
+- Period 1 = salary ÷ 2; Period 2 = remaining half (± leave cap deduction if configured)
+- **Period 2 shows a deduction breakdown** when leave exceeds the max carry limit
 - Mark paid / unmark with timestamp
 - Alert showing pending unpaid periods
+
+### 🚦 Max Leave Carry Cap *(optional per employee)*
+- Set a **max leave carry** (days) on each employee — leave the field blank for unlimited accumulation (default behaviour)
+- At the end of each month (Period 2), the system checks the employee's cumulative leave debt after accounting for all previous months' caps
+- If leave debt exceeds the cap, the **excess × daily rate is deducted from Period 2**
+- The carry-forward balance is reset to `-max_leave_carry` (excess days are considered settled)
+- Example: `max_leave_carry = 3`, balance = −5 days → deduct 2 days × daily rate from Period 2; carry-forward = −3 days
+- LINE payment notification includes the deduction when applicable
 
 ### 🚪 Resignation
 - Record resignation date + reason
@@ -165,15 +174,20 @@ All trigger phrases live in [`keywords.py`](keywords.py) — edit that file and 
 
 | Event | Monthly salary effect | Resignation effect |
 |-------|----------------------|-------------------|
-| Leave (full day) | **No deduction** | Deducted on resignation (−1 day) |
-| Leave (half day) | **No deduction** | Deducted on resignation (−0.5 day) |
+| Leave (full day) | **No deduction** (unless max leave carry exceeded) | Deducted on resignation (−1 day) |
+| Leave (half day) | **No deduction** (unless max leave carry exceeded) | Deducted on resignation (−0.5 day) |
 | Compensatory (full day) | **No addition** | Paid out on resignation (+1 day) |
 | Compensatory (half day) | **No addition** | Paid out on resignation (+0.5 day) |
-| Cumulative balance | Carried forward indefinitely | Settled in full |
+| Cumulative balance | Carried forward (capped at −max_leave_carry if configured) | Settled in full |
 
-**Monthly salary formula:** `Full monthly salary` (regardless of leave taken)
+**Monthly salary formula (no cap):** `Full monthly salary` (regardless of leave taken)
+
+**Monthly salary formula (with cap):** `Full monthly salary − excess leave days × daily rate` (Period 2 only)
+- Excess = days by which leave debt exceeds `max_leave_carry`
+- Excess is deducted from Period 2; carry-forward is reset to `−max_leave_carry`
 
 **Resignation formula:** `Last month salary (pro-rated) + (accumulated comp − accumulated leave) × daily rate`
+- The resignation settlement uses the raw cumulative balance — previous monthly deductions were already collected in salary
 
 ---
 
