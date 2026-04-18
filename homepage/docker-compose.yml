@@ -42,14 +42,15 @@ services:
     environment:
       - BASIC_AUTH_USER=${BASIC_AUTH_USER}
       - BASIC_AUTH_PASS=${BASIC_AUTH_PASS}
-    # Generate .htpasswd from env vars at startup using openssl (built into nginx:alpine)
-    # then hand off to nginx. Using $$ to escape compose variable interpolation.
+    # Generate .htpasswd from env vars at startup.
+    # Uses apache2-utils (htpasswd) installed via apk; adds ~2 s on first start.
+    # $$ escapes compose variable interpolation — the container shell sees a single $.
     command:
       - /bin/sh
       - -c
       - |
-        HASH=$$(openssl passwd -apr1 "$$BASIC_AUTH_PASS")
-        printf '%s:%s\n' "$$BASIC_AUTH_USER" "$$HASH" > /etc/nginx/.htpasswd
+        apk add --no-cache apache2-utils >/dev/null 2>&1
+        htpasswd -bc /etc/nginx/.htpasswd "$$BASIC_AUTH_USER" "$$BASIC_AUTH_PASS"
         exec nginx -g 'daemon off;'
     depends_on:
       - homepage
