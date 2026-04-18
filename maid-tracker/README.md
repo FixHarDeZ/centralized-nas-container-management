@@ -2,7 +2,7 @@
 
 Household staff attendance & salary tracking system — Single-Page Application running on Docker.
 
-![Maid Tracker](../screenshots/maid-tracker.png)
+![Maid Tracker](../screenshots/Maid-tracker.png)
 
 ## Stack
 
