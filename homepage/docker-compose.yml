@@ -5,8 +5,9 @@ services:
     image: ghcr.io/gethomepage/homepage:latest
     container_name: homepage
     restart: always
-    ports:
-      - "3000:3000"
+    # No host port — access only through the nginx auth proxy below
+    expose:
+      - "3000"
     volumes:
       - ./config:/app/config
       - /var/run/docker.sock:/var/run/docker.sock:ro   # สำหรับ Docker widget
@@ -29,3 +30,26 @@ services:
       - HOMEPAGE_VAR_QUICKCONNECT_URL=${QUICKCONNECT_URL}
       - HOMEPAGE_VAR_DDNS_BASE=${EXTERNAL_BASE}
       - HOMEPAGE_VAR_MAID_TRACKER_URL=${MAID_TRACKER_URL}
+
+  nginx:
+    image: nginx:alpine
+    container_name: homepage-nginx
+    restart: always
+    ports:
+      - "3000:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    environment:
+      - BASIC_AUTH_USER=${BASIC_AUTH_USER}
+      - BASIC_AUTH_PASS=${BASIC_AUTH_PASS}
+    # Generate .htpasswd from env vars at startup using openssl (built into nginx:alpine)
+    # then hand off to nginx. Using $$ to escape compose variable interpolation.
+    command:
+      - /bin/sh
+      - -c
+      - |
+        HASH=$$(openssl passwd -apr1 "$$BASIC_AUTH_PASS")
+        printf '%s:%s\n' "$$BASIC_AUTH_USER" "$$HASH" > /etc/nginx/.htpasswd
+        exec nginx -g 'daemon off;'
+    depends_on:
+      - homepage
