@@ -4,7 +4,7 @@
 
 Dashboard UI for the home lab, powered by [gethomepage/homepage](https://gethomepage.dev).
 
-**URL:** `http://<NAS_IP>:3000`  ← protected by HTTP Basic Auth
+**URL:** `https://<NAS_IP>:3000`  ← HTTPS + HTTP Basic Auth
 
 ## File Structure
 
@@ -32,15 +32,16 @@ cp .env.example .env
 
 Then upload via `deploy.sh` from your local machine and register the stack in Container Manager (see root README).
 
-## HTTP Basic Auth
+## HTTPS + HTTP Basic Auth
 
-Access to the homepage is protected by an Nginx reverse proxy with HTTP Basic Auth.
+Access to the homepage is protected by Nginx with TLS and HTTP Basic Auth.
 
 | Item | Detail |
 |------|--------|
 | Credentials | Set `BASIC_AUTH_USER` and `BASIC_AUTH_PASS` in `.env` |
-| Hash generation | `openssl passwd -apr1` runs automatically on container startup — no manual hashing needed |
-| Port layout | Nginx listens on host port **3000**; homepage is internal-only (not exposed directly) |
+| Hash generation | `htpasswd` runs automatically on container startup — no manual hashing needed |
+| Port layout | Nginx listens on **443 SSL**, exposed on host port **3000**; homepage is internal-only |
+| TLS certificate | Synology default cert mounted from `/usr/syno/etc/certificate/system/default/` (read-only) |
 
 To change the password: update `.env` and restart the stack (`docker compose down && docker compose up -d`).
 
