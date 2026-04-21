@@ -30,9 +30,9 @@
 - 🌐 Remote Access:
     - Jellyfin (DDNS):
         icon: jellyfin.png
-        href: "{{HOMEPAGE_VAR_DDNS_BASE}}:8096"
+        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:8097"
         description: External Media Streaming
-        ping: "{{HOMEPAGE_VAR_DDNS_BASE}}:8096"
+        ping: "{{HOMEPAGE_VAR_DDNS_BASE_HTTP}}:8096"
         widget:
           type: jellyfin
           url: "{{HOMEPAGE_VAR_JELLYFIN_URL}}"
@@ -43,9 +43,9 @@
 
     - Plex (DDNS):
         icon: plex.png
-        href: "{{HOMEPAGE_VAR_DDNS_BASE}}:32400/web"
+        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:32400/web"
         description: External Plex Server
-        ping: "{{HOMEPAGE_VAR_DDNS_BASE}}:32400"
+        ping: "{{HOMEPAGE_VAR_DDNS_BASE_HTTP}}:32400"
         widget:
           type: plex
           url: "{{HOMEPAGE_VAR_PLEX_URL}}"
@@ -112,7 +112,7 @@
 
     - Portainer:
         icon: portainer.png
-        href: "{{HOMEPAGE_VAR_DDNS_BASE}}:9000"
+        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:9444"
         description: Container Manager
         widget:
           type: portainer
@@ -122,7 +122,7 @@
 
     - Uptime Kuma:
         icon: uptime-kuma.png
-        href: "{{HOMEPAGE_VAR_DDNS_BASE}}:3001/dashboard"
+        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:3002/dashboard"
         description: Service Health Monitor
         widget:
           type: uptimekuma
