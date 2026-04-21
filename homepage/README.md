@@ -41,7 +41,7 @@ Access to the homepage is protected by Nginx with TLS and HTTP Basic Auth.
 | Credentials | Set `BASIC_AUTH_USER` and `BASIC_AUTH_PASS` in `.env` |
 | Hash generation | `htpasswd` runs automatically on container startup — no manual hashing needed |
 | Port layout | Nginx listens on **443 SSL**, exposed on host port **3000**; homepage is internal-only |
-| TLS certificate | Synology default cert mounted from `/usr/syno/etc/certificate/system/default/` (read-only) |
+| TLS certificate | Synology default cert mounted from `/usr/syno/etc/certificate/system/default/` — uses `RSA-cert.pem` / `RSA-privkey.pem` |
 
 To change the password: update `.env` and restart the stack (`docker compose down && docker compose up -d`).
 
