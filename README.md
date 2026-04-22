@@ -77,14 +77,3 @@ After uploading files to the NAS via `deploy.sh`, register each stack in Synolog
 - **Watchtower** — runs two services: the updater and a Python sidecar that tails Watchtower logs via raw Docker socket HTTP and pushes LINE notifications. The sidecar is excluded from auto-updates via `com.centurylinklabs.watchtower.enable=false`.
 - **Portainer** — standard CE deployment on port 9000. HTTPS is handled upstream by Synology Reverse Proxy. Data persisted in `portainer_data` named volume.
 
-## SSL Certificate Auto-Renewal
-
-Synology auto-renews its Let's Encrypt certificate every 90 days. The Homepage Nginx container reads the cert at startup, so a monthly reload is needed to pick up renewed certs:
-
-**DSM → Control Panel → Task Scheduler → Create → Scheduled Task → User-defined script**
-
-| Setting | Value |
-|---|---|
-| Schedule | Monthly, day 1, 03:00 |
-| User | root |
-| Command | `docker exec homepage-nginx nginx -s reload` |
