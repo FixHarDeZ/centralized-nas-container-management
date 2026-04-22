@@ -46,10 +46,10 @@ DB_PATH = os.path.join(DATA_DIR, "maid_tracker.db")
 _LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "")
 
 # ---------- HTTP Basic Auth ----------
-# Set NGINX_BASIC_AUTH_USER + BASIC_AUTH_PASSWORD in .env to enable.
+# Set NGINX_BASIC_AUTH_USER + NGINX_BASIC_AUTH_PASS in .env to enable.
 # If both are empty, auth is disabled (open access — safe inside LAN/VPN).
 _BASIC_USER = os.environ.get("NGINX_BASIC_AUTH_USER", "").strip()
-_BASIC_PASS = os.environ.get("BASIC_AUTH_PASSWORD", "").strip()
+_BASIC_PASS = os.environ.get("NGINX_BASIC_AUTH_PASS", "").strip()
 
 _AUTH_REALM = b"Basic realm=\"Maid Tracker\""
 _AUTH_SKIP_PATHS = {"/webhook/line"}
