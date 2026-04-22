@@ -4,7 +4,8 @@
 
 Dashboard UI for the home lab, powered by [gethomepage/homepage](https://gethomepage.dev).
 
-**URL:** `https://<NAS_IP>:3000`  ← HTTPS + HTTP Basic Auth
+**Local URL:** `https://<NAS_IP>:3000` (HTTPS + HTTP Basic Auth via Nginx)
+**External URL:** `https://fixhardez.synology.me` (port 443, via Synology Reverse Proxy → Nginx → Homepage)
 
 ## File Structure
 
@@ -45,12 +46,42 @@ Access to the homepage is protected by Nginx with TLS and HTTP Basic Auth.
 
 To change the password: update `.env` and restart the stack (`docker compose down && docker compose up -d`).
 
+### Host Validation
+
+`HOMEPAGE_ALLOWED_HOSTS` must include every hostname:port combination that clients use to reach the container. The current value covers:
+
+| Entry | When used |
+|---|---|
+| `fixhardez.synology.me` | Browser on HTTPS default port (no port suffix in Host header) |
+| `fixhardez.synology.me:443` | Clients that include the explicit port |
+| `fixhardez.synology.me:3000` | Direct LAN HTTPS access |
+| `192.168.50.200:3000` | Local IP access |
+
+### SSL Certificate Auto-Renewal
+
+The Nginx container reads the cert at startup and caches it in memory. When Synology renews the cert (every 90 days), Nginx must be reloaded to pick it up. Set up a **Synology Task Scheduler** monthly task:
+
+```bash
+# DSM → Control Panel → Task Scheduler → Scheduled Task → User-defined script
+# Schedule: Monthly, day 1, 03:00 | User: root
+docker exec homepage-nginx nginx -s reload
+```
+
 ## Secrets Injection
 
 Credentials are never hardcoded in config files. They flow through two layers:
 
 1. Docker Compose reads `${VAR}` from `.env` and passes them as `HOMEPAGE_VAR_*` container env vars.
 2. `services.yaml` references them as `{{HOMEPAGE_VAR_*}}` — Homepage interpolates these at runtime.
+
+### Key `.env` Variables
+
+| Variable | Purpose |
+|---|---|
+| `NAS_LOCAL_URL` | DSM API base URL — use **HTTP port 5000** (`http://192.168.50.200:5000`), not HTTPS, to avoid SSL cert mismatch on IP address |
+| `HTTP_EXTERNAL_BASE` | External base for services that don't support HTTPS (e.g. ping checks) |
+| `HTTPS_EXTERNAL_BASE` | External base for clickable service links (HTTPS via Synology Reverse Proxy) |
+| `HOMEPAGE_ALLOWED_HOSTS` | Comma-separated list of allowed hostnames — must include bare `fixhardez.synology.me` (no port) for standard HTTPS access |
 
 ## Configuration
 

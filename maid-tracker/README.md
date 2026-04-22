@@ -269,18 +269,17 @@ To enable auto attendance recording from LINE chat, the app must receive webhook
 
 ### 1 — Make maid-tracker accessible over HTTPS
 
-LINE only delivers webhooks to public HTTPS URLs. Options for a home NAS:
+LINE only delivers webhooks to public HTTPS URLs.
+
+**Current setup:** Synology Reverse Proxy handles HTTPS termination at `https://fixhardez.synology.me:5056` → `http://localhost:5055`. No extra containers or tunnels needed. Router forwards external port **5056 → NAS port 5056**.
+
+Other options if you don't use Synology Reverse Proxy:
 
 | Method | Notes |
 |--------|-------|
-| **Port forwarding + reverse proxy** | Expose port 5055 externally; put nginx/Caddy in front for TLS |
+| **Port forwarding + nginx/Caddy** | Expose port 5055 externally; handle TLS in a separate proxy |
 | **Cloudflare Tunnel** (`cloudflared`) | Free, no port forwarding needed; add as a separate Docker service |
 | **ngrok** | Easy for testing; free tier has a changing URL |
-
-Example Cloudflare Tunnel command (one-shot test):
-```bash
-docker run --rm cloudflare/cloudflared:latest tunnel --url http://<NAS_IP>:5055
-```
 
 ### 2 — Set Webhook URL in LINE Developers Console
 
@@ -608,25 +607,24 @@ LINE_GROUP_ID=C1a2b3c4d5...
 
 ### ขั้นที่ 1 — เปิด maid-tracker ให้เข้าถึงได้ผ่าน HTTPS
 
-LINE ส่ง webhook ได้เฉพาะ URL สาธารณะที่เป็น HTTPS เท่านั้น ตัวเลือกสำหรับ NAS ที่บ้าน:
+LINE ส่ง webhook ได้เฉพาะ URL สาธารณะที่เป็น HTTPS เท่านั้น
+
+**Setup ปัจจุบัน:** ใช้ Synology Reverse Proxy จัดการ HTTPS ที่ `https://fixhardez.synology.me:5056` → `http://localhost:5055` ไม่ต้องมี container หรือ tunnel เพิ่มเติม Router forward port ภายนอก **5056 → NAS port 5056**
+
+ตัวเลือกอื่น หากไม่ใช้ Synology Reverse Proxy:
 
 | วิธี | หมายเหตุ |
 |-----|---------|
-| **Port forwarding + reverse proxy** | เปิด port 5055 สู่ภายนอก + ใช้ nginx/Caddy จัดการ TLS |
+| **Port forwarding + nginx/Caddy** | เปิด port 5055 สู่ภายนอก + ใช้ proxy จัดการ TLS |
 | **Cloudflare Tunnel** (`cloudflared`) | ฟรี ไม่ต้อง port forward; เพิ่มเป็น Docker service แยก |
 | **ngrok** | ง่ายสำหรับทดสอบ; แผนฟรี URL จะเปลี่ยนทุกครั้ง |
-
-ตัวอย่าง Cloudflare Tunnel แบบทดสอบชั่วคราว:
-```bash
-docker run --rm cloudflare/cloudflared:latest tunnel --url http://<NAS_IP>:5055
-```
 
 ### ขั้นที่ 2 — ตั้ง Webhook URL ใน LINE Developers Console
 
 1. เปิด [LINE Developers Console](https://developers.line.biz/) → Messaging API Channel
 2. Tab **Messaging API settings** → **Webhook URL** → ตั้งค่าเป็น:
    ```
-   https://<your-public-domain>/webhook/line
+   https://fixhardez.synology.me:5056/webhook/line
    ```
 3. กด **Verify** — ต้องได้รับ `200 OK`
 4. เปิด toggle **Use webhook**

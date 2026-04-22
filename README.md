@@ -6,14 +6,14 @@ Docker stacks for Synology DS925+ NAS, managed via Synology Container Manager.
 
 ## Stacks
 
-| Directory | Purpose | Port(s) |
-|---|---|---|
-| `homepage/` | Dashboard UI (gethomepage/homepage) | 3000 |
-| `jellyfin/` | Media server with NVIDIA GPU transcoding | 8096 |
-| `maid-tracker/` | Household worker attendance & salary tracker | 5055 |
-| `portainer/` | Docker management UI | 9000, 9443 |
-| `uptime-kuma/` | Service health monitor | 3001 |
-| `watchtower/` | Auto-update containers + LINE notification sidecar | — |
+| Directory | Purpose | Local Port | External (Synology Reverse Proxy) |
+|---|---|---|---|
+| `homepage/` | Dashboard UI (gethomepage/homepage) | 3000 (nginx) | `https://…:443` |
+| `jellyfin/` | Media server with NVIDIA GPU transcoding | 8096 | `https://…:8097` |
+| `maid-tracker/` | Household worker attendance & salary tracker | 5055 | `https://…:5056` |
+| `portainer/` | Docker management UI | 9000 | `https://…:9444` |
+| `uptime-kuma/` | Service health monitor | 3001 | `https://…:3002` |
+| `watchtower/` | Auto-update containers + LINE notification sidecar | — | — |
 
 ## Uploading to NAS
 
@@ -62,7 +62,21 @@ cp watchtower/.env.example watchtower/.env
 
 ## Architecture Notes
 
-- **Homepage** — config is in `homepage/config/` (YAML, no rebuild needed). Secrets are injected via `HOMEPAGE_VAR_*` env vars and referenced in `services.yaml` as `{{HOMEPAGE_VAR_*}}`.
+- **Homepage** — sits behind an Nginx reverse proxy that handles HTTPS (port 3000 on host → 443 inside container) and HTTP Basic Auth. TLS uses the Synology system certificate mounted from `/usr/syno/etc/certificate/system/default/`. Config files in `homepage/config/` are hot-reloaded. Secrets are injected via `HOMEPAGE_VAR_*` env vars and referenced in `services.yaml` as `{{HOMEPAGE_VAR_*}}`.
+- **External HTTPS** — all stacks except homepage use **Synology Reverse Proxy** (DSM → Control Panel → Login Portal → Advanced) for HTTPS termination. Synology handles the SSL cert and auto-renewal; containers run plain HTTP internally.
+- **DSM / Download Station widgets** — Homepage connects to the Synology API over HTTP on port 5000 (`NAS_LOCAL_URL=http://192.168.50.200:5000`) to avoid SSL certificate mismatch when using an IP address.
 - **Maid Tracker** — FastAPI + SQLite single-container app. Database persisted in a named volume `maid_tracker_data`. Local build; no env file required.
 - **Watchtower** — runs two services: the updater and a Python sidecar that tails Watchtower logs via raw Docker socket HTTP and pushes LINE notifications. The sidecar is excluded from auto-updates via `com.centurylinklabs.watchtower.enable=false`.
-- **Portainer** — standard CE deployment, data persisted in `portainer_data` named volume.
+- **Portainer** — standard CE deployment on port 9000. HTTPS is handled upstream by Synology Reverse Proxy. Data persisted in `portainer_data` named volume.
+
+## SSL Certificate Auto-Renewal
+
+Synology auto-renews its Let's Encrypt certificate every 90 days. The Homepage Nginx container reads the cert at startup, so a monthly reload is needed to pick up renewed certs:
+
+**DSM → Control Panel → Task Scheduler → Create → Scheduled Task → User-defined script**
+
+| Setting | Value |
+|---|---|
+| Schedule | Monthly, day 1, 03:00 |
+| User | root |
+| Command | `docker exec homepage-nginx nginx -s reload` |
