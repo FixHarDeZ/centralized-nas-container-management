@@ -20,7 +20,7 @@ Docker stacks for Synology DS925+ NAS, managed via Synology Container Manager.
 **All stacks share a single `.env` at the project root** — edit once, then deploy.
 
 ```bash
-# ครั้งแรก: copy template แล้วใส่ค่าจริง
+# First time: copy the template and fill in real values
 cp .env.example .env
 nano .env
 ```
