@@ -11,7 +11,9 @@
       "Bash(/opt/homebrew/bin/node --check /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management/maid-tracker/static/app.js)",
       "Bash(gh release create v1.7.2 --title 'v1.7.2 — Acknowledgment message before LINE webhook attendance recording' --notes ' *)",
       "Skill(maid-release)",
-      "Skill(maid-release:*)"
+      "Skill(maid-release:*)",
+      "Bash(git commit -m ' *)",
+      "Bash(gh release create v1.12.0 --title 'v1.12.0 — Synology Reverse Proxy for external HTTPS' --notes ' *)"
     ],
     "additionalDirectories": [
       "/Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management/.claude"
