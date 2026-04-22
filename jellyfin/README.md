@@ -4,7 +4,10 @@
 
 Media server with NVIDIA GPU hardware transcoding.
 
-**URL:** `http://<NAS_IP>:8096`
+**Local URL:** `http://<NAS_IP>:8096`
+**External URL:** `https://fixhardez.synology.me:8097` (via Synology Reverse Proxy)
+
+> Router must forward external port **8097 → NAS port 8097** (not 8096) so the connection reaches Synology Reverse Proxy for HTTPS termination before being forwarded to `http://localhost:8096`.
 
 ## Setup
 
