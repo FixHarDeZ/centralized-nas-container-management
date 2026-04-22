@@ -27,7 +27,8 @@
       "Bash(git -C /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management add .gitignore README.md homepage/README.md jellyfin/README.md maid-tracker/README.md portainer/README.md uptime-kuma/README.md .claude/settings.json)",
       "Bash(git -C /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management commit -m ' *)",
       "Bash(git -C /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management push)",
-      "Bash(gh release create v2.0.0 --title 'v2.0.0 — SSH key auth, env consolidation, and security hardening' --notes ' *)"
+      "Bash(gh release create v2.0.0 --title 'v2.0.0 — SSH key auth, env consolidation, and security hardening' --notes ' *)",
+      "Bash(gh release create v2.0.1 --title 'v2.0.1 — Port documentation and English translations' --notes ' *)"
     ],
     "additionalDirectories": [
       "/Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management/.claude"
