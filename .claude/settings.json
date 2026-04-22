@@ -13,7 +13,12 @@
       "Skill(maid-release)",
       "Skill(maid-release:*)",
       "Bash(git commit -m ' *)",
-      "Bash(gh release create v1.12.0 --title 'v1.12.0 — Synology Reverse Proxy for external HTTPS' --notes ' *)"
+      "Bash(gh release create v1.12.0 --title 'v1.12.0 — Synology Reverse Proxy for external HTTPS' --notes ' *)",
+      "Bash(git -C /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management/.claude/worktrees/quirky-goldstine add maid-tracker/)",
+      "Bash(git -C /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management/.claude/worktrees/quirky-goldstine commit -m ' *)",
+      "Bash(git -C /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management/.claude/worktrees/quirky-goldstine status)",
+      "Bash(git worktree *)",
+      "Bash(git branch *)"
     ],
     "additionalDirectories": [
       "/Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management/.claude"
