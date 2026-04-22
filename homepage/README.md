@@ -11,8 +11,6 @@ Dashboard UI for the home lab, powered by [gethomepage/homepage](https://gethome
 
 ```
 homepage/
-├── .env                  ← credentials (gitignored, copy from .env.example)
-├── .env.example          ← template
 ├── docker-compose.yml
 ├── nginx/
 │   └── nginx.conf        ← Nginx reverse proxy + Basic Auth config
@@ -26,12 +24,15 @@ homepage/
 
 ## Setup
 
+ตั้งค่า environment variables ที่ **root `.env`** (ไฟล์เดียวสำหรับทุก stack):
+
 ```bash
+# จาก root ของโปรเจกต์
 cp .env.example .env
-# Fill in real values — including BASIC_AUTH_USER and BASIC_AUTH_PASS
+# แก้ไขค่าในส่วน Homepage และ LINE ใน .env
 ```
 
-Then upload via `deploy.sh` from your local machine and register the stack in Container Manager (see root README).
+จากนั้น upload ขึ้น NAS ด้วย `deploy.sh` จาก root ของโปรเจกต์
 
 ## HTTPS + HTTP Basic Auth
 
@@ -39,12 +40,12 @@ Access to the homepage is protected by Nginx with TLS and HTTP Basic Auth.
 
 | Item | Detail |
 |------|--------|
-| Credentials | Set `BASIC_AUTH_USER` and `BASIC_AUTH_PASS` in `.env` |
+| Credentials | Set `NGINX_BASIC_AUTH_USER` and `NGINX_BASIC_AUTH_PASS` in root `.env` |
 | Hash generation | `htpasswd` runs automatically on container startup — no manual hashing needed |
 | Port layout | Nginx listens on **443 SSL**, exposed on host port **3000**; homepage is internal-only |
 | TLS certificate | Synology default cert mounted from `/usr/syno/etc/certificate/system/default/` — uses `RSA-cert.pem` / `RSA-privkey.pem` |
 
-To change the password: update `.env` and restart the stack (`docker compose down && docker compose up -d`).
+To change the password: update root `.env` and restart the stack (`docker compose down && docker compose up -d`).
 
 ### Host Validation
 
@@ -71,16 +72,16 @@ docker exec homepage-nginx nginx -s reload
 
 Credentials are never hardcoded in config files. They flow through two layers:
 
-1. Docker Compose reads `${VAR}` from `.env` and passes them as `HOMEPAGE_VAR_*` container env vars.
+1. Docker Compose reads variables from root `.env` via `env_file: ../.env` and injects `HOMEPAGE_VAR_*` container env vars directly.
 2. `services.yaml` references them as `{{HOMEPAGE_VAR_*}}` — Homepage interpolates these at runtime.
 
-### Key `.env` Variables
+### Key `.env` Variables (ใน root `.env`)
 
 | Variable | Purpose |
 |---|---|
-| `NAS_LOCAL_URL` | DSM API base URL — use **HTTP port 5000** (`http://192.168.50.200:5000`), not HTTPS, to avoid SSL cert mismatch on IP address |
-| `HTTP_EXTERNAL_BASE` | External base for services that don't support HTTPS (e.g. ping checks) |
-| `HTTPS_EXTERNAL_BASE` | External base for clickable service links (HTTPS via Synology Reverse Proxy) |
+| `HOMEPAGE_VAR_NAS_URL` | DSM API base URL — use **HTTP port 5000** (`http://192.168.x.x:5000`), not HTTPS, to avoid SSL cert mismatch on IP address |
+| `HOMEPAGE_VAR_DDNS_BASE_HTTP` | External base for services that don't support HTTPS (e.g. ping checks) |
+| `HOMEPAGE_VAR_DDNS_BASE_HTTPS` | External base for clickable service links (HTTPS via Synology Reverse Proxy) |
 | `HOMEPAGE_ALLOWED_HOSTS` | Comma-separated list of allowed hostnames — must include bare `<NAS_HOST>` (no port) for standard HTTPS access |
 
 ## Configuration
