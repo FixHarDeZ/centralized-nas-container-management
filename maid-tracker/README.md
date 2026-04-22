@@ -4,6 +4,9 @@ Household staff attendance & salary tracking system — Single-Page Application 
 
 ![Maid Tracker](../screenshots/Maid-tracker.png)
 
+**Local URL:** `http://<NAS_IP>:5055`
+**External URL:** `https://<NAS_HOST>:5056` (via Synology Reverse Proxy)
+
 ## Stack
 
 | Component | Technology |
@@ -11,7 +14,18 @@ Household staff attendance & salary tracking system — Single-Page Application 
 | Backend | FastAPI (Python 3.12) |
 | Database | SQLite (persisted in named volume) |
 | Frontend | Vanilla JS + Bootstrap 5 (SPA, hash-based routing) |
-| Port | 5055 → container 8000 |
+| Host port | `5055` → container `8000` |
+
+## Ports & Reverse Proxy
+
+| Layer | Detail |
+|---|---|
+| Container | HTTP on port `8000` |
+| Host port | `5055` (plain HTTP, LAN only) |
+| Synology Reverse Proxy | `https://…:5056` → `http://localhost:5055` |
+| Router port forward | External `5056` → NAS `5056` |
+
+TLS is terminated by Synology Reverse Proxy — the container itself runs plain HTTP. The public HTTPS URL is also required for LINE webhook delivery (see [Webhook Setup](#webhook-setup)).
 
 ## Features
 

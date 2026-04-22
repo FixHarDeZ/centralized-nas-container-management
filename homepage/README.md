@@ -24,15 +24,15 @@ homepage/
 
 ## Setup
 
-ตั้งค่า environment variables ที่ **root `.env`** (ไฟล์เดียวสำหรับทุก stack):
+All environment variables are configured in the **root `.env`** (shared by all stacks):
 
 ```bash
-# จาก root ของโปรเจกต์
+# From the project root
 cp .env.example .env
-# แก้ไขค่าในส่วน Homepage และ LINE ใน .env
+# Fill in the Homepage and LINE sections in .env
 ```
 
-จากนั้น upload ขึ้น NAS ด้วย `deploy.sh` จาก root ของโปรเจกต์
+Then upload to the NAS with `deploy.sh` from the project root.
 
 ## HTTPS + HTTP Basic Auth
 
@@ -75,7 +75,7 @@ Credentials are never hardcoded in config files. They flow through two layers:
 1. Docker Compose reads variables from root `.env` via `env_file: ../.env` and injects `HOMEPAGE_VAR_*` container env vars directly.
 2. `services.yaml` references them as `{{HOMEPAGE_VAR_*}}` — Homepage interpolates these at runtime.
 
-### Key `.env` Variables (ใน root `.env`)
+### Key `.env` Variables (in root `.env`)
 
 | Variable | Purpose |
 |---|---|

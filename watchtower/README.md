@@ -15,17 +15,21 @@ watchtower/
     └── requirements.txt
 ```
 
+## Ports
+
+Watchtower has no web UI and exposes no ports. It runs entirely in the background.
+
 ## Setup
 
-ตั้งค่า `LINE_CHANNEL_ACCESS_TOKEN` และ `LINE_USER_ID` ที่ **root `.env`** (ไฟล์เดียวสำหรับทุก stack):
+Set `LINE_CHANNEL_ACCESS_TOKEN` and `LINE_USER_ID` in the **root `.env`** (shared by all stacks):
 
 ```bash
-# จาก root ของโปรเจกต์
+# From the project root
 cp .env.example .env
-# แก้ไขค่าในส่วน LINE ใน .env
+# Fill in the LINE section in .env
 ```
 
-จากนั้น upload ขึ้น NAS ด้วย `deploy.sh` จาก root ของโปรเจกต์
+Then upload to the NAS with `deploy.sh` from the project root.
 
 ## Services
 
@@ -58,12 +62,12 @@ The sidecar connects to `/var/run/docker.sock` directly (no `docker` CLI needed)
 | Session summary | `msg="Session done"` log line |
 | Error | `level=error` or `level=fatal` log line |
 
-## Configuration (ใน root `.env`)
+## Configuration (in root `.env`)
 
 | Variable | Description |
 |---|---|
 | `LINE_CHANNEL_ACCESS_TOKEN` | LINE Messaging API channel token |
 | `LINE_USER_ID` | LINE user ID to push notifications to |
-| `WATCHTOWER_POLL_INTERVAL` | Check interval in seconds (default: `86400` = 24h — ตั้งใน docker-compose.yml) |
+| `WATCHTOWER_POLL_INTERVAL` | Check interval in seconds (default: `86400` = 24h, set in docker-compose.yml) |
 
 The notifier auto-reconnects within 10 seconds if Watchtower restarts. It is excluded from Watchtower's own update cycle via `com.centurylinklabs.watchtower.enable=false`.
