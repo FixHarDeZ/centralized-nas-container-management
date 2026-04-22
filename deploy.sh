@@ -64,7 +64,7 @@ COPYFILE_DISABLE=1 tar -czf - \
 
 # ── Upload root .env to NAS ───────────────────────────────────────────────────
 echo "Uploading .env ..."
-scp $SSH_OPTS "${ENV_FILE}" "${NAS_USER}@${NAS_HOST}:${NAS_TARGET_PATH}/.env"
+ssh $SSH_OPTS "${NAS_USER}@${NAS_HOST}" "cat > '${NAS_TARGET_PATH}/.env'" < "${ENV_FILE}"
 
 echo ""
 echo "Done. Files uploaded to ${NAS_TARGET_PATH} on NAS."
@@ -106,7 +106,7 @@ echo ""
 for stack in "${STACKS_TO_RESTART[@]}"; do
   echo "── ${stack} ──────────────────────────────────────────"
   ssh $SSH_OPTS "${NAS_USER}@${NAS_HOST}" \
-    "bash -l -c \"echo '${NAS_SUDO_PASSWORD}' | sudo -S docker compose -f '${NAS_TARGET_PATH}/${stack}/docker-compose.yml' down && echo '${NAS_SUDO_PASSWORD}' | sudo -S docker compose -f '${NAS_TARGET_PATH}/${stack}/docker-compose.yml' up -d --build\""
+    "bash -l -c \"echo '${NAS_SUDO_PASSWORD}' | sudo -S docker compose --env-file '${NAS_TARGET_PATH}/.env' -f '${NAS_TARGET_PATH}/${stack}/docker-compose.yml' down && echo '${NAS_SUDO_PASSWORD}' | sudo -S docker compose --env-file '${NAS_TARGET_PATH}/.env' -f '${NAS_TARGET_PATH}/${stack}/docker-compose.yml' up -d --build\""
   echo ""
 done
 
