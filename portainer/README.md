@@ -5,7 +5,7 @@
 Docker management UI (Community Edition).
 
 **Local URL:** `http://<NAS_IP>:9000`
-**External URL:** `https://fixhardez.synology.me:9444` (via Synology Reverse Proxy)
+**External URL:** `https://<NAS_HOST>:9444` (via Synology Reverse Proxy)
 
 ## Setup
 
@@ -17,7 +17,7 @@ HTTPS is handled by **Synology Reverse Proxy** (DSM → Control Panel → Login 
 
 | Source | Destination |
 |---|---|
-| `https://fixhardez.synology.me:9444` | `http://localhost:9000` |
+| `https://<NAS_HOST>:9444` | `http://localhost:9000` |
 
 Portainer itself runs plain HTTP on port 9000. No custom cert configuration needed inside the container.
 

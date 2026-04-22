@@ -5,7 +5,7 @@
 Service health monitor with a clean web UI.
 
 **Local URL:** `http://<NAS_IP>:3001`
-**External URL:** `https://fixhardez.synology.me:3002` (via Synology Reverse Proxy)
+**External URL:** `https://<NAS_HOST>:3002` (via Synology Reverse Proxy)
 
 ## Setup
 
