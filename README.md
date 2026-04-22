@@ -17,7 +17,7 @@ Docker stacks for Synology DS925+ NAS, managed via Synology Container Manager.
 
 ## Environment Variables
 
-**ทุก stack ใช้ `.env` ไฟล์เดียวที่ root ของโปรเจกต์** — แก้ไขที่นี่ที่เดียวแล้ว deploy ได้เลย
+**All stacks share a single `.env` at the project root** — edit once, then deploy.
 
 ```bash
 # ครั้งแรก: copy template แล้วใส่ค่าจริง
@@ -25,11 +25,11 @@ cp .env.example .env
 nano .env
 ```
 
-`.env` ถูก gitignore — ห้าม commit ขึ้น git ใช้ `.env.example` เป็น reference template
+`.env` is gitignored — never commit it. Use `.env.example` as the reference template.
 
 ## Uploading to NAS
 
-Use `deploy.sh` to sync the project from your local machine to `/volume1/docker` on the NAS over SSH (key-based auth). สคริปต์จะ upload ไฟล์ทั้งหมดพร้อม copy `.env` ขึ้น NAS ด้วยอัตโนมัติ
+Use `deploy.sh` to sync the project from your local machine to `/volume1/docker` on the NAS over SSH (key-based auth). The script uploads all files and copies `.env` to the NAS automatically.
 
 **Prerequisites (one-time setup)**
 
@@ -43,7 +43,7 @@ Use `deploy.sh` to sync the project from your local machine to `/volume1/docker`
 **Deploy**
 
 ```bash
-# 1. Copy the example config and fill in your details (ครั้งแรกเท่านั้น)
+# 1. Copy the example config and fill in your details (first time only)
 cp .env.example .env
 nano .env
 
