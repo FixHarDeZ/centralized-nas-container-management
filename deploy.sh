@@ -7,7 +7,7 @@ ENV_FILE="${SCRIPT_DIR}/.deploy.env"
 # ── Load config ──────────────────────────────────────────────────────────────
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "ERROR: Config file not found: $ENV_FILE"
-  echo "Copy .deploy.env.example to .deploy.env and fill in your credentials."
+  echo "Copy .deploy.env.example to .deploy.env and fill in your NAS details."
   exit 1
 fi
 
@@ -16,30 +16,24 @@ source "$ENV_FILE"
 
 NAS_USER="${NAS_USER:?NAS_USER is not set in $ENV_FILE}"
 NAS_HOST="${NAS_HOST:?NAS_HOST is not set in $ENV_FILE}"
-NAS_PORT="${NAS_PORT:-22}"
-NAS_PASSWORD="${NAS_PASSWORD:?NAS_PASSWORD is not set in $ENV_FILE}"
+NAS_PORT="${NAS_PORT:-2222}"
 NAS_TARGET_PATH="${NAS_TARGET_PATH:-/volume1/docker}"
+NAS_SSH_KEY="${NAS_SSH_KEY:-${HOME}/.ssh/id_ed25519}"
+NAS_SUDO_PASSWORD="${NAS_SUDO_PASSWORD:-}"
 
 # ── Dependency check ─────────────────────────────────────────────────────────
-if ! command -v sshpass &>/dev/null; then
-  echo "ERROR: 'sshpass' is required but not installed."
-  echo "  macOS:  brew install sshpass"
-  echo "  Debian: apt-get install sshpass"
-  exit 1
-fi
-
 if ! command -v rsync &>/dev/null; then
   echo "ERROR: 'rsync' is required but not installed."
   exit 1
 fi
 
-SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10 -p ${NAS_PORT}"
-SSHPASS="sshpass -p ${NAS_PASSWORD}"
+SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10 -p ${NAS_PORT} -i ${NAS_SSH_KEY}"
 
 # ── Connection check ─────────────────────────────────────────────────────────
 echo "Checking connection to ${NAS_USER}@${NAS_HOST}:${NAS_PORT} ..."
-if ! $SSHPASS ssh $SSH_OPTS "${NAS_USER}@${NAS_HOST}" "echo OK" &>/dev/null; then
-  echo "ERROR: Cannot connect to NAS. Check host, port, username, and password."
+if ! ssh $SSH_OPTS "${NAS_USER}@${NAS_HOST}" "echo OK" &>/dev/null; then
+  echo "ERROR: Cannot connect to NAS. Check host, port, and SSH key."
+  echo "  SSH key: ${NAS_SSH_KEY}"
   exit 1
 fi
 echo "Connection OK."
@@ -65,13 +59,20 @@ COPYFILE_DISABLE=1 tar -czf - \
   --exclude='./.deploy.env' \
   --exclude='./deploy.sh' \
   -C "${SCRIPT_DIR}" . \
-  | $SSHPASS ssh $SSH_OPTS "${NAS_USER}@${NAS_HOST}" \
+  | ssh $SSH_OPTS "${NAS_USER}@${NAS_HOST}" \
     "mkdir -p '${NAS_TARGET_PATH}' && tar -xzf - -C '${NAS_TARGET_PATH}' --no-same-permissions --no-same-owner 2>/dev/null; exit 0"
 
 echo ""
 echo "Done. Files uploaded to ${NAS_TARGET_PATH} on NAS."
 
 # ── Restart stacks ───────────────────────────────────────────────────────────
+if [[ -z "${NAS_SUDO_PASSWORD}" ]]; then
+  echo ""
+  echo "NAS_SUDO_PASSWORD not set in .deploy.env — skipping stack restart."
+  echo "To enable auto-restart, add NAS_SUDO_PASSWORD=your_password to .deploy.env."
+  exit 0
+fi
+
 STACKS=(homepage jellyfin maid-tracker portainer uptime-kuma watchtower)
 
 echo ""
@@ -100,8 +101,8 @@ echo ""
 
 for stack in "${STACKS_TO_RESTART[@]}"; do
   echo "── ${stack} ──────────────────────────────────────────"
-  $SSHPASS ssh $SSH_OPTS "${NAS_USER}@${NAS_HOST}" \
-    "bash -l -c \"echo '${NAS_PASSWORD}' | sudo -S docker compose -f '${NAS_TARGET_PATH}/${stack}/docker-compose.yml' down && echo '${NAS_PASSWORD}' | sudo -S docker compose -f '${NAS_TARGET_PATH}/${stack}/docker-compose.yml' up -d --build\""
+  ssh $SSH_OPTS "${NAS_USER}@${NAS_HOST}" \
+    "bash -l -c \"echo '${NAS_SUDO_PASSWORD}' | sudo -S docker compose -f '${NAS_TARGET_PATH}/${stack}/docker-compose.yml' down && echo '${NAS_SUDO_PASSWORD}' | sudo -S docker compose -f '${NAS_TARGET_PATH}/${stack}/docker-compose.yml' up -d --build\""
   echo ""
 done
 
