@@ -70,7 +70,7 @@ After uploading files to the NAS via `deploy.sh`, register each stack in Synolog
 
 ## Architecture Notes
 
-- **Homepage** — sits behind an Nginx reverse proxy that handles HTTPS (port 3000 on host → 443 inside container) and HTTP Basic Auth. TLS uses the Synology system certificate mounted from `/usr/syno/etc/certificate/system/default/`. Config files in `homepage/config/` are hot-reloaded. Secrets are injected via `HOMEPAGE_VAR_*` env vars from root `.env` and referenced in `services.yaml` as `{{HOMEPAGE_VAR_*}}`.
+- **Homepage** — sits behind an Nginx reverse proxy that handles HTTPS (port 3000 on host → 443 inside container) and HTTP Basic Auth (credentials: `NGINX_BASIC_AUTH_USER` / `NGINX_BASIC_AUTH_PASS`). TLS uses the Synology system certificate mounted from `/usr/syno/etc/certificate/system/default/`. Config files in `homepage/config/` are hot-reloaded. Secrets are injected via `HOMEPAGE_VAR_*` env vars from root `.env` and referenced in `services.yaml` as `{{HOMEPAGE_VAR_*}}`. DSM/Download Station widgets reuse `NAS_USER` and `NAS_SUDO_PASSWORD` directly.
 - **External HTTPS** — all stacks except homepage use **Synology Reverse Proxy** (DSM → Control Panel → Login Portal → Advanced) for HTTPS termination. Synology handles the SSL cert and auto-renewal; containers run plain HTTP internally.
 - **DSM / Download Station widgets** — Homepage connects to the Synology API over HTTP (`HOMEPAGE_VAR_NAS_URL=http://192.168.x.x:5000`) to avoid SSL certificate mismatch when using an IP address.
 - **Maid Tracker** — FastAPI + SQLite single-container app. Database persisted in a named volume `maid_tracker_data`. Local build.

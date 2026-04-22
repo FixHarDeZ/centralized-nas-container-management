@@ -32,7 +32,7 @@ services:
       - -c
       - |
         apk add --no-cache apache2-utils >/dev/null 2>&1
-        htpasswd -bc /etc/nginx/.htpasswd "$$BASIC_AUTH_USER" "$$BASIC_AUTH_PASS"
+        htpasswd -bc /etc/nginx/.htpasswd "$$NGINX_BASIC_AUTH_USER" "$$NGINX_BASIC_AUTH_PASS"
         exec nginx -g 'daemon off;'
     depends_on:
       - homepage

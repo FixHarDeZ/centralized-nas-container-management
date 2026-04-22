@@ -40,7 +40,7 @@ Access to the homepage is protected by Nginx with TLS and HTTP Basic Auth.
 
 | Item | Detail |
 |------|--------|
-| Credentials | Set `BASIC_AUTH_USER` and `BASIC_AUTH_PASS` in root `.env` |
+| Credentials | Set `NGINX_BASIC_AUTH_USER` and `NGINX_BASIC_AUTH_PASS` in root `.env` |
 | Hash generation | `htpasswd` runs automatically on container startup — no manual hashing needed |
 | Port layout | Nginx listens on **443 SSL**, exposed on host port **3000**; homepage is internal-only |
 | TLS certificate | Synology default cert mounted from `/usr/syno/etc/certificate/system/default/` — uses `RSA-cert.pem` / `RSA-privkey.pem` |
