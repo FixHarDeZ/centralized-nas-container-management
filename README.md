@@ -17,21 +17,31 @@ Docker stacks for Synology DS925+ NAS, managed via Synology Container Manager.
 
 ## Uploading to NAS
 
-Use `deploy.sh` to sync the project from your local machine to `/volume1/docker` on the NAS over SSH/rsync.
+Use `deploy.sh` to sync the project from your local machine to `/volume1/docker` on the NAS over SSH (key-based auth).
+
+**Prerequisites (one-time setup)**
+
+1. Generate an SSH key and copy it to the NAS:
+   ```bash
+   ssh-keygen -t ed25519 -C "nas-key"
+   ssh-copy-id -i ~/.ssh/id_ed25519.pub -p 2222 fixhardez@fixhardez.synology.me
+   ```
+2. In DSM → Control Panel → Terminal & SNMP, set SSH port to **2222** and disable password auth in `/etc/ssh/sshd_config` (`PasswordAuthentication no`).
+
+**Deploy**
 
 ```bash
-# 1. Copy the example config and fill in your password
+# 1. Copy the example config and fill in your details
 cp .deploy.env.example .deploy.env
 nano .deploy.env
 
-# 2. Install sshpass (one-time, macOS)
-brew install sshpass
-
-# 3. Run
+# 2. Run
 ./deploy.sh
 ```
 
 `.deploy.env` is gitignored — never commit it. Use `.deploy.env.example` as the reference template.
+
+> `NAS_SUDO_PASSWORD` in `.deploy.env` is only used to run `sudo docker compose` during stack restarts. SSH itself uses key auth exclusively.
 
 ## Adding a Stack to Container Manager (DSM 7.3.2)
 
