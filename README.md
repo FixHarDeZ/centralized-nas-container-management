@@ -24,7 +24,7 @@ Use `deploy.sh` to sync the project from your local machine to `/volume1/docker`
 1. Generate an SSH key and copy it to the NAS:
    ```bash
    ssh-keygen -t ed25519 -C "nas-key"
-   ssh-copy-id -i ~/.ssh/id_ed25519.pub -p 2222 fixhardez@fixhardez.synology.me
+   ssh-copy-id -i ~/.ssh/id_ed25519.pub -p 2222 <NAS_USER>@<NAS_HOST>
    ```
 2. In DSM → Control Panel → Terminal & SNMP, set SSH port to **2222** and disable password auth in `/etc/ssh/sshd_config` (`PasswordAuthentication no`).
 

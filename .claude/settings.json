@@ -18,7 +18,14 @@
       "Bash(git -C /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management/.claude/worktrees/quirky-goldstine commit -m ' *)",
       "Bash(git -C /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management/.claude/worktrees/quirky-goldstine status)",
       "Bash(git worktree *)",
-      "Bash(git branch *)"
+      "Bash(git branch *)",
+      "Bash(xargs sed *)",
+      "Bash(git -C /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management rm --cached CLAUDE.md)",
+      "Bash(git -C /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management status)",
+      "Bash(git -C /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management diff --staged)",
+      "Bash(git -C /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management log --oneline -5)",
+      "Bash(git -C /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management add .gitignore README.md homepage/README.md jellyfin/README.md maid-tracker/README.md portainer/README.md uptime-kuma/README.md .claude/settings.json)",
+      "Bash(git -C /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management commit -m ' *)"
     ],
     "additionalDirectories": [
       "/Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management/.claude"
