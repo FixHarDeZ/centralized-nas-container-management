@@ -26,9 +26,8 @@ services:
       - watchtower
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+    env_file: ../.env
     environment:
-      - LINE_CHANNEL_ACCESS_TOKEN=${LINE_CHANNEL_ACCESS_TOKEN}
-      - LINE_USER_ID=${LINE_USER_ID}
       - WATCHTOWER_CONTAINER_NAME=watchtower
       - TZ=Asia/Bangkok
     labels:
