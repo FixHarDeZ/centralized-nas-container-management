@@ -8,8 +8,6 @@ Automatically updates Docker containers and sends LINE push notifications for ea
 
 ```
 watchtower/
-├── .env                  ← LINE credentials (gitignored, copy from .env.example)
-├── .env.example          ← template
 ├── docker-compose.yml
 └── notifier/
     ├── Dockerfile
@@ -19,12 +17,15 @@ watchtower/
 
 ## Setup
 
+ตั้งค่า `LINE_CHANNEL_ACCESS_TOKEN` และ `LINE_USER_ID` ที่ **root `.env`** (ไฟล์เดียวสำหรับทุก stack):
+
 ```bash
+# จาก root ของโปรเจกต์
 cp .env.example .env
-# Fill in LINE_CHANNEL_ACCESS_TOKEN and LINE_USER_ID
+# แก้ไขค่าในส่วน LINE ใน .env
 ```
 
-Then upload via `deploy.sh` from your local machine and register the stack in Container Manager (see root README).
+จากนั้น upload ขึ้น NAS ด้วย `deploy.sh` จาก root ของโปรเจกต์
 
 ## Services
 
@@ -57,12 +58,12 @@ The sidecar connects to `/var/run/docker.sock` directly (no `docker` CLI needed)
 | Session summary | `msg="Session done"` log line |
 | Error | `level=error` or `level=fatal` log line |
 
-## Configuration
+## Configuration (ใน root `.env`)
 
 | Variable | Description |
 |---|---|
 | `LINE_CHANNEL_ACCESS_TOKEN` | LINE Messaging API channel token |
 | `LINE_USER_ID` | LINE user ID to push notifications to |
-| `WATCHTOWER_POLL_INTERVAL` | Check interval in seconds (default: `86400` = 24h) |
+| `WATCHTOWER_POLL_INTERVAL` | Check interval in seconds (default: `86400` = 24h — ตั้งใน docker-compose.yml) |
 
 The notifier auto-reconnects within 10 seconds if Watchtower restarts. It is excluded from Watchtower's own update cycle via `com.centurylinklabs.watchtower.enable=false`.

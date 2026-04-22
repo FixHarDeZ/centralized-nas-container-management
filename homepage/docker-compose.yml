@@ -12,25 +12,9 @@ services:
       - ./config:/app/config
       - /var/run/docker.sock:/var/run/docker.sock:ro   # สำหรับ Docker widget
       - /volume1:/volume1:ro
+    env_file: ../.env
     environment:
       - TZ=Asia/Bangkok
-      - HOMEPAGE_ALLOWED_HOSTS=${HOMEPAGE_ALLOWED_HOSTS}
-      # ─── Passed to services.yaml via {{HOMEPAGE_VAR_*}} ──────────────────────
-      - HOMEPAGE_VAR_JELLYFIN_URL=${JELLYFIN_URL}
-      - HOMEPAGE_VAR_JELLYFIN_KEY=${JELLYFIN_KEY}
-      - HOMEPAGE_VAR_PLEX_URL=${PLEX_URL}
-      - HOMEPAGE_VAR_PLEX_KEY=${PLEX_KEY}
-      - HOMEPAGE_VAR_NAS_URL=${NAS_LOCAL_URL}
-      - HOMEPAGE_VAR_NAS_USERNAME=${NAS_USERNAME}
-      - HOMEPAGE_VAR_NAS_PASSWORD=${NAS_PASSWORD}
-      - HOMEPAGE_VAR_PORTAINER_URL=${PORTAINER_URL}
-      - HOMEPAGE_VAR_PORTAINER_KEY=${PORTAINER_KEY}
-      - HOMEPAGE_VAR_UPTIME_KUMA_URL=${UPTIME_KUMA_URL}
-      - HOMEPAGE_VAR_UPTIME_KUMA_SLUG=${UPTIME_KUMA_SLUG}
-      - HOMEPAGE_VAR_QUICKCONNECT_URL=${QUICKCONNECT_URL}
-      - HOMEPAGE_VAR_DDNS_BASE_HTTPS=${HTTPS_EXTERNAL_BASE}
-      - HOMEPAGE_VAR_DDNS_BASE_HTTP=${HTTP_EXTERNAL_BASE}
-      - HOMEPAGE_VAR_MAID_TRACKER_URL=${MAID_TRACKER_URL}
 
   nginx:
     image: nginx:alpine
@@ -40,9 +24,9 @@ services:
       - "3000:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    env_file: ../.env
     environment:
-      - BASIC_AUTH_USER=${BASIC_AUTH_USER}
-      - BASIC_AUTH_PASS=${BASIC_AUTH_PASS}
+      - TZ=Asia/Bangkok
     command:
       - /bin/sh
       - -c
