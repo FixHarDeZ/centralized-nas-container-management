@@ -17,4 +17,4 @@ All monitor configs, history, and settings are persisted at `/volume1/docker/upt
 
 ## Homepage Integration
 
-The Homepage dashboard connects to Uptime Kuma via the `uptimekuma` widget using a status page slug. Set `UPTIME_KUMA_SLUG` in `homepage/.env` to match the slug of your public status page.
+The Homepage dashboard connects to Uptime Kuma via the `uptimekuma` widget using a status page slug. Set `HOMEPAGE_VAR_UPTIME_KUMA_SLUG` in root `.env` to match the slug of your public status page.

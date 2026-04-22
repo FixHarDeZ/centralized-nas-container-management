@@ -2,16 +2,16 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ENV_FILE="${SCRIPT_DIR}/.deploy.env"
+ENV_FILE="${SCRIPT_DIR}/.env"
 
 # ── Load config ──────────────────────────────────────────────────────────────
 if [[ ! -f "$ENV_FILE" ]]; then
   echo "ERROR: Config file not found: $ENV_FILE"
-  echo "Copy .deploy.env.example to .deploy.env and fill in your NAS details."
+  echo "Copy .env.example to .env and fill in your NAS details."
   exit 1
 fi
 
-# shellcheck source=.deploy.env
+# shellcheck source=.env
 source "$ENV_FILE"
 
 NAS_USER="${NAS_USER:?NAS_USER is not set in $ENV_FILE}"
@@ -56,11 +56,15 @@ echo ""
 
 COPYFILE_DISABLE=1 tar -czf - \
   --exclude='./.git' \
-  --exclude='./.deploy.env' \
+  --exclude='./.env' \
   --exclude='./deploy.sh' \
   -C "${SCRIPT_DIR}" . \
   | ssh $SSH_OPTS "${NAS_USER}@${NAS_HOST}" \
     "mkdir -p '${NAS_TARGET_PATH}' && tar -xzf - -C '${NAS_TARGET_PATH}' --no-same-permissions --no-same-owner 2>/dev/null; exit 0"
+
+# ── Upload root .env to NAS ───────────────────────────────────────────────────
+echo "Uploading .env ..."
+scp $SSH_OPTS "${ENV_FILE}" "${NAS_USER}@${NAS_HOST}:${NAS_TARGET_PATH}/.env"
 
 echo ""
 echo "Done. Files uploaded to ${NAS_TARGET_PATH} on NAS."
@@ -68,8 +72,8 @@ echo "Done. Files uploaded to ${NAS_TARGET_PATH} on NAS."
 # ── Restart stacks ───────────────────────────────────────────────────────────
 if [[ -z "${NAS_SUDO_PASSWORD}" ]]; then
   echo ""
-  echo "NAS_SUDO_PASSWORD not set in .deploy.env — skipping stack restart."
-  echo "To enable auto-restart, add NAS_SUDO_PASSWORD=your_password to .deploy.env."
+  echo "NAS_SUDO_PASSWORD not set in .env — skipping stack restart."
+  echo "To enable auto-restart, add NAS_SUDO_PASSWORD=your_password to .env."
   exit 0
 fi
 

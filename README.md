@@ -15,9 +15,21 @@ Docker stacks for Synology DS925+ NAS, managed via Synology Container Manager.
 | `uptime-kuma/` | Service health monitor | 3001 | `https://…:3002` |
 | `watchtower/` | Auto-update containers + LINE notification sidecar | — | — |
 
+## Environment Variables
+
+**ทุก stack ใช้ `.env` ไฟล์เดียวที่ root ของโปรเจกต์** — แก้ไขที่นี่ที่เดียวแล้ว deploy ได้เลย
+
+```bash
+# ครั้งแรก: copy template แล้วใส่ค่าจริง
+cp .env.example .env
+nano .env
+```
+
+`.env` ถูก gitignore — ห้าม commit ขึ้น git ใช้ `.env.example` เป็น reference template
+
 ## Uploading to NAS
 
-Use `deploy.sh` to sync the project from your local machine to `/volume1/docker` on the NAS over SSH (key-based auth).
+Use `deploy.sh` to sync the project from your local machine to `/volume1/docker` on the NAS over SSH (key-based auth). สคริปต์จะ upload ไฟล์ทั้งหมดพร้อม copy `.env` ขึ้น NAS ด้วยอัตโนมัติ
 
 **Prerequisites (one-time setup)**
 
@@ -31,17 +43,15 @@ Use `deploy.sh` to sync the project from your local machine to `/volume1/docker`
 **Deploy**
 
 ```bash
-# 1. Copy the example config and fill in your details
-cp .deploy.env.example .deploy.env
-nano .deploy.env
+# 1. Copy the example config and fill in your details (ครั้งแรกเท่านั้น)
+cp .env.example .env
+nano .env
 
 # 2. Run
 ./deploy.sh
 ```
 
-`.deploy.env` is gitignored — never commit it. Use `.deploy.env.example` as the reference template.
-
-> `NAS_SUDO_PASSWORD` in `.deploy.env` is only used to run `sudo docker compose` during stack restarts. SSH itself uses key auth exclusively.
+> `NAS_SUDO_PASSWORD` in `.env` is only used to run `sudo docker compose` during stack restarts. SSH itself uses key auth exclusively.
 
 ## Adding a Stack to Container Manager (DSM 7.3.2)
 
@@ -56,26 +66,14 @@ After uploading files to the NAS via `deploy.sh`, register each stack in Synolog
 4. Click **Next** → review the compose config → click **Build**
 5. Container Manager pulls images and starts the containers
 
-> For stacks with a local build (e.g. `watchtower`), Container Manager will build the image on first run. On subsequent updates, use `deploy.sh` with the restart option instead of re-registering the project.
-
-## Stack Setup
-
-Each stack lives in its own directory. Before registering in Container Manager, copy the example env file and fill in real values **on your local machine**, then upload via `deploy.sh`:
-
-```bash
-# Homepage
-cp homepage/.env.example homepage/.env
-
-# Watchtower
-cp watchtower/.env.example watchtower/.env
-```
+> For stacks with a local build (e.g. `watchtower`, `maid-tracker`), Container Manager will build the image on first run. On subsequent updates, use `deploy.sh` with the restart option instead of re-registering the project.
 
 ## Architecture Notes
 
-- **Homepage** — sits behind an Nginx reverse proxy that handles HTTPS (port 3000 on host → 443 inside container) and HTTP Basic Auth. TLS uses the Synology system certificate mounted from `/usr/syno/etc/certificate/system/default/`. Config files in `homepage/config/` are hot-reloaded. Secrets are injected via `HOMEPAGE_VAR_*` env vars and referenced in `services.yaml` as `{{HOMEPAGE_VAR_*}}`.
+- **Homepage** — sits behind an Nginx reverse proxy that handles HTTPS (port 3000 on host → 443 inside container) and HTTP Basic Auth. TLS uses the Synology system certificate mounted from `/usr/syno/etc/certificate/system/default/`. Config files in `homepage/config/` are hot-reloaded. Secrets are injected via `HOMEPAGE_VAR_*` env vars from root `.env` and referenced in `services.yaml` as `{{HOMEPAGE_VAR_*}}`.
 - **External HTTPS** — all stacks except homepage use **Synology Reverse Proxy** (DSM → Control Panel → Login Portal → Advanced) for HTTPS termination. Synology handles the SSL cert and auto-renewal; containers run plain HTTP internally.
-- **DSM / Download Station widgets** — Homepage connects to the Synology API over HTTP on port 5000 (`NAS_LOCAL_URL=http://192.168.50.200:5000`) to avoid SSL certificate mismatch when using an IP address.
-- **Maid Tracker** — FastAPI + SQLite single-container app. Database persisted in a named volume `maid_tracker_data`. Local build; no env file required.
+- **DSM / Download Station widgets** — Homepage connects to the Synology API over HTTP (`HOMEPAGE_VAR_NAS_URL=http://192.168.x.x:5000`) to avoid SSL certificate mismatch when using an IP address.
+- **Maid Tracker** — FastAPI + SQLite single-container app. Database persisted in a named volume `maid_tracker_data`. Local build.
 - **Watchtower** — runs two services: the updater and a Python sidecar that tails Watchtower logs via raw Docker socket HTTP and pushes LINE notifications. The sidecar is excluded from auto-updates via `com.centurylinklabs.watchtower.enable=false`.
 - **Portainer** — standard CE deployment on port 9000. HTTPS is handled upstream by Synology Reverse Proxy. Data persisted in `portainer_data` named volume.
 

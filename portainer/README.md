@@ -27,4 +27,4 @@ Container data is persisted in a named Docker volume `portainer_data`.
 
 ## Homepage Integration
 
-The Homepage dashboard connects to Portainer via the `portainer` widget. Set `PORTAINER_KEY` in `homepage/.env` to an API key generated from **Account Settings → Access Tokens** in the Portainer UI.
+The Homepage dashboard connects to Portainer via the `portainer` widget. Set `HOMEPAGE_VAR_PORTAINER_KEY` in root `.env` to an API key generated from **Account Settings → Access Tokens** in the Portainer UI.
