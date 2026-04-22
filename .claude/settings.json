@@ -25,7 +25,8 @@
       "Bash(git -C /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management diff --staged)",
       "Bash(git -C /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management log --oneline -5)",
       "Bash(git -C /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management add .gitignore README.md homepage/README.md jellyfin/README.md maid-tracker/README.md portainer/README.md uptime-kuma/README.md .claude/settings.json)",
-      "Bash(git -C /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management commit -m ' *)"
+      "Bash(git -C /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management commit -m ' *)",
+      "Bash(git -C /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management push)"
     ],
     "additionalDirectories": [
       "/Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management/.claude"
