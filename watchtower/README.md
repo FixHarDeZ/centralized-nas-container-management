@@ -21,7 +21,7 @@ Watchtower has no web UI and exposes no ports. It runs entirely in the backgroun
 
 ## Setup
 
-Set `LINE_CHANNEL_ACCESS_TOKEN` and `LINE_USER_ID` in the **root `.env`** (shared by all stacks):
+Set `WATCHTOWER_LINE_CHANNEL_ACCESS_TOKEN` and `WATCHTOWER_LINE_USER_ID` in the **root `.env`** (shared by all stacks):
 
 ```bash
 # From the project root
@@ -66,8 +66,8 @@ The sidecar connects to `/var/run/docker.sock` directly (no `docker` CLI needed)
 
 | Variable | Description |
 |---|---|
-| `LINE_CHANNEL_ACCESS_TOKEN` | LINE Messaging API channel token |
-| `LINE_USER_ID` | LINE user ID to push notifications to |
+| `WATCHTOWER_LINE_CHANNEL_ACCESS_TOKEN` | LINE Messaging API channel token |
+| `WATCHTOWER_LINE_USER_ID` | LINE user ID to push notifications to |
 | `WATCHTOWER_POLL_INTERVAL` | Check interval in seconds (default: `86400` = 24h, set in docker-compose.yml) |
 
 The notifier auto-reconnects within 10 seconds if Watchtower restarts. It is excluded from Watchtower's own update cycle via `com.centurylinklabs.watchtower.enable=false`.

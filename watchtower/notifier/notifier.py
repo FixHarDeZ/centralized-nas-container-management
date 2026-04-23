@@ -15,8 +15,8 @@ from zoneinfo import ZoneInfo
 
 # ─── Config ────────────────────────────────────────────────────────────────
 LINE_API_URL         = "https://api.line.me/v2/bot/message/push"
-CHANNEL_ACCESS_TOKEN = os.environ["LINE_CHANNEL_ACCESS_TOKEN"]
-LINE_USER_ID         = os.environ["LINE_USER_ID"]
+CHANNEL_ACCESS_TOKEN = os.environ["WATCHTOWER_LINE_CHANNEL_ACCESS_TOKEN"]
+LINE_USER_ID         = os.environ["WATCHTOWER_LINE_USER_ID"]
 WATCHTOWER_CONTAINER = os.environ.get("WATCHTOWER_CONTAINER_NAME", "watchtower")
 DOCKER_SOCKET        = os.environ.get("DOCKER_SOCKET", "/var/run/docker.sock")
 TZ                   = ZoneInfo(os.environ.get("TZ", "Asia/Bangkok"))

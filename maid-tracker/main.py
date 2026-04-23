@@ -43,7 +43,7 @@ app = FastAPI(title="Maid Tracker", lifespan=lifespan)
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
 DB_PATH = os.path.join(DATA_DIR, "maid_tracker.db")
 
-_LINE_CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "")
+_MAID_LINE_CHANNEL_SECRET = os.environ.get("MAID_LINE_CHANNEL_SECRET", "")
 
 # ---------- HTTP Basic Auth ----------
 # Set NGINX_BASIC_AUTH_USER + NGINX_BASIC_AUTH_PASS in .env to enable.
@@ -1079,16 +1079,16 @@ async def line_webhook(request: Request):
       - Compensatory: "วันนี้ทำชดเชย", "ทำงานวันอาทิตย์", ...
     Add "ครึ่งวัน" in the message for a half-day entry.
 
-    Required env: LINE_CHANNEL_SECRET (for signature verification)
+    Required env: MAID_LINE_CHANNEL_SECRET (for signature verification)
     Optional:     leave blank to skip verification (dev/testing only)
     """
     body = await request.body()
 
     # Verify LINE signature (HMAC-SHA256)
-    if _LINE_CHANNEL_SECRET:
+    if _MAID_LINE_CHANNEL_SECRET:
         signature = request.headers.get("X-Line-Signature", "")
         computed = base64.b64encode(
-            hmac.new(_LINE_CHANNEL_SECRET.encode(), body, hashlib.sha256).digest()
+            hmac.new(_MAID_LINE_CHANNEL_SECRET.encode(), body, hashlib.sha256).digest()
         ).decode()
         if not hmac.compare_digest(computed, signature):
             raise HTTPException(400, "Invalid LINE signature")

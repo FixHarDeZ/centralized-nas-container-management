@@ -5,8 +5,8 @@ Sends notifications via LINE Messaging API when:
   - Salary payment is marked as paid
 
 Requires env vars:
-  LINE_CHANNEL_ACCESS_TOKEN
-  LINE_GROUP_ID   LINE group ID (starts with 'C') — everyone in the group receives each message
+  MAID_LINE_CHANNEL_ACCESS_TOKEN
+  MAID_LINE_GROUP_ID   LINE group ID (starts with 'C') — everyone in the group receives each message
 
 If either env var is missing, all notify calls are silently skipped.
 Uses /v2/bot/message/push with the group ID so a single API call reaches all group members.
@@ -19,8 +19,8 @@ from zoneinfo import ZoneInfo
 from calc import compute_overall_balance as _compute_overall_balance, compute_resign_summary as _compute_resign_summary
 
 LINE_API_URL = "https://api.line.me/v2/bot/message/push"
-TOKEN    = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "")
-GROUP_ID = os.environ.get("LINE_GROUP_ID", "").strip()
+TOKEN    = os.environ.get("MAID_LINE_CHANNEL_ACCESS_TOKEN", "")
+GROUP_ID = os.environ.get("MAID_LINE_GROUP_ID", "").strip()
 TZ       = ZoneInfo(os.environ.get("TZ", "Asia/Bangkok"))
 
 THAI_MONTHS = [
