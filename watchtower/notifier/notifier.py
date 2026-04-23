@@ -240,7 +240,8 @@ def main() -> None:
     send_line(
         f"🤖 LINE Notifier พร้อมทำงานแล้ว\n"
         f"👁 กำลังติดตาม: {WATCHTOWER_CONTAINER}\n"
-        f"🕒 {now()}"
+        f"🕒 {now()}\n\n"
+        f"✅ [Startup check] LINE notification ทำงานปกติ"
     )
 
     docker = DockerSocketSession(DOCKER_SOCKET)
