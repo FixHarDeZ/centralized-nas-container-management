@@ -15,7 +15,7 @@ Scan the repository for hardcoded secrets. Look for:
    - API keys and tokens: `_TOKEN`, `_KEY`, `_SECRET`, `_API_KEY`
    - Passwords: `PASSWORD`, `_PASS`
    - Usernames with actual values (not `${VAR}` references): `USERNAME=`, `USER=`
-   - LINE tokens: `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_USER_ID`
+   - LINE tokens: `WATCHTOWER_LINE_CHANNEL_ACCESS_TOKEN`, `MAID_LINE_CHANNEL_ACCESS_TOKEN`, `WATCHTOWER_LINE_USER_ID`
    - Plex/Jellyfin tokens
 
 2. **Distinguish safe vs unsafe**:
