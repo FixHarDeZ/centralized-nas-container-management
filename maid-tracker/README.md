@@ -1,5 +1,7 @@
 # Maid Tracker
 
+**EN** | [ไทย](#ภาษาไทย)
+
 Household staff attendance & salary tracking system — Single-Page Application running on Docker.
 
 ![Maid Tracker](../screenshots/Maid-tracker.png)
@@ -375,9 +377,9 @@ reminders (
 
 ---
 
----
+## ภาษาไทย
 
-# ระบบบันทึกการทำงานแม่บ้าน
+[EN](#maid-tracker)
 
 ระบบบันทึกการทำงานและเงินเดือนแม่บ้าน — Single-Page Application ที่รันบน Docker
 
