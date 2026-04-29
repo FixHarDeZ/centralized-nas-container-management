@@ -77,7 +77,7 @@ if [[ -z "${NAS_SUDO_PASSWORD}" ]]; then
   exit 0
 fi
 
-STACKS=(homepage jellyfin maid-tracker portainer uptime-kuma watchtower)
+STACKS=(homepage jellyfin maid-tracker portainer uptime-kuma watchtower line-secretary)
 
 echo ""
 echo "Stacks available: ${STACKS[*]}"

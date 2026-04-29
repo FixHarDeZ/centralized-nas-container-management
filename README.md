@@ -14,6 +14,7 @@ Docker stacks for Synology DS925+ NAS, managed via Synology Container Manager.
 | `portainer/` | Docker management UI | `9000` | `https://…:9444` |
 | `uptime-kuma/` | Service health monitor | `3001` | `https://…:3002` |
 | `watchtower/` | Auto-update containers + LINE notification sidecar | — | — |
+| `line-secretary/` | AI personal assistant LINE bot backed by Notion | `5057` | `https://…:5058` |
 
 ### Reverse Proxy Summary
 
@@ -26,6 +27,7 @@ All stacks except `watchtower` are exposed externally via **Synology Reverse Pro
 | maid-tracker | `https://…:5056` | `http://localhost:5055` |
 | portainer | `https://…:9444` | `http://localhost:9000` |
 | uptime-kuma | `https://…:3002` | `http://localhost:3001` |
+| line-secretary | `https://…:5058` | `http://localhost:5057` |
 
 > Your router must forward each **external port → NAS** so traffic reaches Synology Reverse Proxy. Homepage is the only exception — it has its own Nginx inside the container that handles TLS, so Synology RP simply forwards `:443` to port `3000` unencrypted and lets Nginx take over from there.
 
