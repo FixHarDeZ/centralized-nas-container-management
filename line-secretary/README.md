@@ -99,8 +99,8 @@ Send these in LINE chat to inspect raw data (owner only):
 
 ```
 You:  ขอเลขบัตรเครดิต UOB
-Bot:  บัตร UOB Preferred Platinum: 4033-7520-0775-2917
-      บัตร UOB World: 4386-7950-5524-0262
+Bot:  บัตร UOB Preferred Platinum: xxxx-xxxx-xxxx-2917
+      บัตร UOB World: xxxx-xxxx-xxxx-0262
       (จาก page Credit cards)
 
 You:  github api token ฉันคืออะไร
@@ -200,8 +200,8 @@ NOTION_TOKEN=ntn_...
 
 ```
 คุณ:  ขอเลขบัตรเครดิต UOB
-Bot:  บัตร UOB Preferred Platinum: 4033-7520-0775-2917
-      บัตร UOB World: 4386-7950-5524-0262
+Bot:  บัตร UOB Preferred Platinum: xxxx-xxxx-xxxx-2917
+      บัตร UOB World: xxxx-xxxx-xxxx-0262
       (จาก page Credit cards)
 
 คุณ:  github api token ฉันคืออะไร
