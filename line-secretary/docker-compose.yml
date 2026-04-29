@@ -1,0 +1,10 @@
+services:
+  line-secretary:
+    build: .
+    container_name: line-secretary
+    restart: unless-stopped
+    ports:
+      - "5057:8000"
+    env_file: ../.env
+    environment:
+      - TZ=Asia/Bangkok
