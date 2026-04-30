@@ -10,7 +10,7 @@ A personal AI secretary LINE bot that searches and records information in your N
 
 - Ask anything in natural language (Thai or English) — the bot searches your Notion and answers
 - Reads pages, simple tables, toggle sections, and embedded databases automatically
-- Always runs both Notion search and header-based fallback scan in parallel — finds content even when nested inside toggle blocks that Notion's search doesn't index
+- Always runs both Notion search and header-based fallback scan in parallel — finds content even in toggle blocks and table cells that Notion's search doesn't index (e.g. searching "aeon" finds the Aeon card row inside a Credit cards table)
 - Proposes a confirmation before writing any new record to Notion
 - Whitelist-based access — only your LINE user ID can use the bot
 
@@ -143,7 +143,7 @@ Line Secretary คือ LINE bot เลขาส่วนตัว AI ที่
 
 - ถามเป็นภาษาไทยหรืออังกฤษก็ได้ bot จะค้นหาใน Notion แล้วตอบ
 - อ่าน page ธรรมดา, ตาราง (simple table), toggle section, และ database อัตโนมัติ
-- รัน Notion search และ fallback scan พร้อมกันเสมอ — เจอข้อมูลแม้ซ่อนใน toggle ที่ Notion ไม่ index
+- รัน Notion search และ fallback scan พร้อมกันเสมอ — เจอข้อมูลแม้ซ่อนใน toggle หรือ table cell ที่ Notion ไม่ index (เช่น ค้น "aeon" แล้วเจอบัตร Aeon ใน table Credit cards)
 - มี confirmation step ก่อนจะ write ข้อมูลใหม่ลง Notion ทุกครั้ง
 - จำกัดการใช้งานด้วย LINE user ID whitelist
 
