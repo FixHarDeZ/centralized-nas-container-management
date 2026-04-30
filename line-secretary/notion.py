@@ -1,3 +1,4 @@
+import asyncio
 import httpx
 
 NOTION_API = "https://api.notion.com/v1"
@@ -189,20 +190,50 @@ async def query_database(token: str, database_id: str) -> list[dict]:
 
 
 async def get_page_headers(token: str, page_id: str) -> str:
-    """Read only top-level block text (no recursion) — fast shallow scan for keyword matching."""
+    """Read top-level block text + first 6 rows of any tables.
+    This allows keyword matching against table cell content (e.g. card types, names).
+    """
     async with httpx.AsyncClient() as client:
         r = await client.get(
             f"{NOTION_API}/blocks/{page_id}/children",
             headers=_headers(token),
             timeout=15,
         )
+    blocks = r.json().get("results", [])
     lines = []
-    for block in r.json().get("results", []):
+    table_ids = []
+
+    for block in blocks:
         btype = block.get("type", "")
-        content = block.get(btype, {})
-        text = "".join(rt.get("plain_text", "") for rt in content.get("rich_text", []))
-        if text:
-            lines.append(text)
+        if btype == "table":
+            table_ids.append(block["id"])
+        else:
+            content = block.get(btype, {})
+            text = "".join(rt.get("plain_text", "") for rt in content.get("rich_text", []))
+            if text:
+                lines.append(text)
+
+    async def _table_preview(table_id: str) -> str:
+        async with httpx.AsyncClient() as c:
+            resp = await c.get(
+                f"{NOTION_API}/blocks/{table_id}/children",
+                headers=_headers(token),
+                params={"page_size": "6"},
+                timeout=15,
+            )
+        cells = []
+        for row in resp.json().get("results", []):
+            if row.get("type") == "table_row":
+                for cell in row["table_row"]["cells"]:
+                    t = "".join(rt.get("plain_text", "") for rt in cell)
+                    if t:
+                        cells.append(t)
+        return " ".join(cells)
+
+    if table_ids:
+        previews = await asyncio.gather(*[_table_preview(tid) for tid in table_ids])
+        lines.extend(p for p in previews if p)
+
     return "\n".join(lines)
 
 
