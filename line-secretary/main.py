@@ -16,8 +16,8 @@ app = FastAPI(title="Line Secretary")
 # { user_id: {"database_id": str, "properties": dict} }
 pending: dict[str, dict] = {}
 
-CONFIRM_WORDS = {"ใช่", "yes", "ตกลง", "ok", "ยืนยัน", "confirm", "ใช"}
-CANCEL_WORDS = {"ไม่", "no", "ยกเลิก", "cancel", "ไม่ใช่", "ไม่ครับ"}
+CONFIRM_WORDS = {"ใช่", "yes", "y", "ตกลง", "ok", "ยืนยัน", "confirm", "ใช"}
+CANCEL_WORDS = {"ไม่", "no", "n", "ยกเลิก", "cancel", "ไม่ใช่", "ไม่ครับ"}
 
 
 @app.get("/health")
@@ -102,7 +102,7 @@ async def handle_message(event: dict) -> None:
         lower = text.lower()
         if lower in CONFIRM_WORDS:
             action = pending.pop(user_id)
-            reply = await agent.execute_create_row(action["database_id"], action["properties"])
+            reply = await agent.execute_write(action)
             await line_client.push(user_id, reply, token)
             return
         if lower in CANCEL_WORDS:
