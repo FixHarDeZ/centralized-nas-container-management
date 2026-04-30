@@ -30,7 +30,9 @@
       "Bash(gh release create v2.0.0 --title 'v2.0.0 — SSH key auth, env consolidation, and security hardening' --notes ' *)",
       "Bash(gh release create v2.0.1 --title 'v2.0.1 — Port documentation and English translations' --notes ' *)",
       "Skill(release)",
-      "Skill(release:*)"
+      "Skill(release:*)",
+      "Bash(gh release create v2.2.1 --title 'v2.2.1 — Table cell content in fallback keyword matching' --notes ' *)",
+      "Bash(gh release create v2.3.1 --title 'v2.3.1 — Find tables nested inside toggle blocks' --notes ' *)"
     ],
     "additionalDirectories": [
       "/Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management/.claude"
