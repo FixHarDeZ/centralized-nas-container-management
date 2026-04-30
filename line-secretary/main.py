@@ -1,16 +1,26 @@
 import json
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 
 import agent
 import line_client
+from cache import cache as _cache
 from config import settings
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Line Secretary")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    _cache.init(settings.NOTION_TOKEN)
+    _cache.start()
+    yield
+
+
+app = FastAPI(title="Line Secretary", lifespan=lifespan)
 
 # In-memory pending confirmations keyed by LINE user_id
 # { user_id: {"database_id": str, "properties": dict} }
