@@ -190,8 +190,12 @@ async def query_database(token: str, database_id: str) -> list[dict]:
 
 
 async def get_page_headers(token: str, page_id: str) -> str:
-    """Read top-level block text + first 6 rows of any tables.
-    This allows keyword matching against table cell content (e.g. card types, names).
+    """Read block text + table rows, including tables nested one level inside toggle/container blocks.
+
+    Two-pass for containers with children:
+      Pass 1: list top-level children — collect text, top-level table IDs, container IDs.
+      Pass 2: list each container's children — collect any nested table IDs (parallel).
+    Then fetch first 6 rows of all discovered tables in parallel.
     """
     async with httpx.AsyncClient() as client:
         r = await client.get(
@@ -200,18 +204,32 @@ async def get_page_headers(token: str, page_id: str) -> str:
             timeout=15,
         )
     blocks = r.json().get("results", [])
-    lines = []
-    table_ids = []
+    lines: list[str] = []
+    table_ids: list[str] = []
+    container_ids: list[str] = []  # any block with children that may hide nested tables
 
     for block in blocks:
         btype = block.get("type", "")
         if btype == "table":
             table_ids.append(block["id"])
+        elif btype in ("child_database", "child_page"):
+            pass
         else:
             content = block.get(btype, {})
             text = "".join(rt.get("plain_text", "") for rt in content.get("rich_text", []))
             if text:
                 lines.append(text)
+            if block.get("has_children"):
+                container_ids.append(block["id"])
+
+    async def _find_nested_tables(container_id: str) -> list[str]:
+        async with httpx.AsyncClient() as c:
+            resp = await c.get(
+                f"{NOTION_API}/blocks/{container_id}/children",
+                headers=_headers(token),
+                timeout=15,
+            )
+        return [b["id"] for b in resp.json().get("results", []) if b.get("type") == "table"]
 
     async def _table_preview(table_id: str) -> str:
         async with httpx.AsyncClient() as c:
@@ -229,6 +247,12 @@ async def get_page_headers(token: str, page_id: str) -> str:
                     if t:
                         cells.append(t)
         return " ".join(cells)
+
+    # Discover nested tables inside containers in parallel
+    if container_ids:
+        nested = await asyncio.gather(*[_find_nested_tables(cid) for cid in container_ids])
+        for nested_table_ids in nested:
+            table_ids.extend(nested_table_ids)
 
     if table_ids:
         previews = await asyncio.gather(*[_table_preview(tid) for tid in table_ids])
