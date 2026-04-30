@@ -4,7 +4,7 @@
 
 A personal AI secretary LINE bot that searches and records information in your Notion workspace. Runs as a Docker container on Synology NAS.
 
-![Line Secretary screenshot](../screenshots/line-secretary.png)
+![Line Secretary screenshot](screenshots/line-secretary.png)
 
 ---
 
@@ -147,7 +147,7 @@ Bot:  บันทึกเรียบร้อยแล้วครับ
 
 Line Secretary คือ LINE bot เลขาส่วนตัว AI ที่ค้นหาและบันทึกข้อมูลใน Notion ของคุณ รันเป็น Docker container บน Synology NAS
 
-![Line Secretary screenshot](../screenshots/line-secretary.png)
+![Line Secretary screenshot](screenshots/line-secretary.png)
 
 ---
 
