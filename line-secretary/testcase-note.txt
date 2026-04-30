@@ -1,0 +1,27 @@
+#DON'T PASSED
+
+
+#PASSED
+ข้อมูลจ่ายค่าน้ำ
+ข้อมูลจ่ายค่าไฟ
+ค่าน้ำ
+ค่าไฟ
+ขอข้อมูล psn thai account
+ขอข้อมูลที่ใช้ยื่นภาษี
+ยื่นภาษียังไง
+ขอข้อมูลค่าไฟ
+topup detail wuthering waves
+ขอ template เติมเกม wuthering waves
+ขอเลขบัตร aeon
+ขอเลขบัตร uob
+ขอข้อมูลบัตร uob
+ขอเลขบัตรเครดิต Aeon
+ขอเลขบัตรเคตดิต uob
+get information topup wuthering waves
+ขอ uid เกมเกนชินอิมแพค
+ขอข้อมูล kibana ของ scb-paymen-domain-cloud
+แล้วมี user และ pass ของ kibana ไหม
+ขอ user , pass ของ meb
+ขอข้อมูล Twitter
+what is my nas ip
+How to troubleshoot Mesh node has been lost
