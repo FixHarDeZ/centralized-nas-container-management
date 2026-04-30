@@ -10,7 +10,9 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
-MAX_CONTEXT_CHARS = 12000
+MAX_CONTEXT_CHARS = 20000
+SMALL_MODEL = "llama-3.1-8b-instant"   # 500K TPD — used for cheap helper tasks
+MAIN_MODEL = "llama-3.3-70b-versatile"  # 100K TPD — used only for final answer
 
 SYSTEM_PROMPT = """You are a personal AI secretary. Answer the user's question using the Notion data provided below.
 
@@ -76,7 +78,7 @@ async def _search_variants(client: AsyncGroq, message: str) -> list[str]:
     else:
         # Pure Thai — extract the core search term (keep in Thai, strip request words)
         r = await client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=SMALL_MODEL,
             messages=[{"role": "user", "content": (
                 "Extract only the key topic words from this message for Notion search. "
                 "Keep the original language (Thai). Strip request words like ขอ/หน่อย/ทั้งหมด/ข้อมูล. "
@@ -99,13 +101,13 @@ async def run(user_message: str) -> dict:
 
     search_queries = await _search_variants(client, user_message)
     logger.info(f"Search queries: {search_queries}")
-    notion_data = await _deep_search(settings.NOTION_TOKEN, search_queries)
+    notion_data = await _deep_search(client, settings.NOTION_TOKEN, search_queries)
     context = json.dumps(notion_data, ensure_ascii=False)
     if len(context) > MAX_CONTEXT_CHARS:
         context = context[:MAX_CONTEXT_CHARS] + "..."
 
     response = await client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
+        model=MAIN_MODEL,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": f"{user_message}\n\n[Notion data]\n{context}"},
@@ -176,7 +178,44 @@ async def _process_item(token: str, item: dict) -> tuple[list, list]:
     return item_pages, item_dbs
 
 
-async def _deep_search(token: str, queries: list[str] | str) -> dict:
+FALLBACK_EXCERPT = 600  # chars per page in fallback scan
+
+
+async def _fallback_scan(token: str) -> dict:
+    """Read ALL accessible pages with short excerpts — used when search returns nothing.
+    Each page is truncated to FALLBACK_EXCERPT chars so 20 pages ≈ 12K chars total.
+    """
+    all_pages = await notion.list_all_pages(token)
+    if not all_pages:
+        return {"pages": [], "databases": []}
+
+    async def _read_short(item: dict) -> tuple[list, list]:
+        item_pages: list[dict] = []
+        item_dbs: list[dict] = []
+        rows = await notion.query_database(token, item["id"])
+        if rows:
+            item_dbs.append({"id": item["id"], "title": item["title"], "rows": rows})
+        else:
+            content = await notion.get_page_content(token, item["id"])
+            if content:
+                item_pages.append({
+                    "id": item["id"],
+                    "title": item["title"],
+                    "content": content[:FALLBACK_EXCERPT],
+                })
+        return item_pages, item_dbs
+
+    processed = await asyncio.gather(*[_read_short(p) for p in all_pages])
+    pages: list[dict] = []
+    databases: list[dict] = []
+    for p, d in processed:
+        pages.extend(p)
+        databases.extend(d)
+    logger.info(f"Fallback scan read {len(pages)} pages, {len(databases)} databases")
+    return {"pages": pages, "databases": databases}
+
+
+async def _deep_search(client: AsyncGroq, token: str, queries: list[str] | str) -> dict:
     """Search Notion with multiple queries (parallel) → auto-read pages → auto-query embedded databases."""
     if isinstance(queries, str):
         queries = [queries]
@@ -193,8 +232,8 @@ async def _deep_search(token: str, queries: list[str] | str) -> dict:
                 candidates.append(item)
 
     if not candidates:
-        logger.info("Search returned nothing — falling back to all-pages scan")
-        candidates = await notion.list_all_pages(token)
+        logger.info("Search returned nothing — running fallback scan of all pages")
+        return await _fallback_scan(token)
 
     # All page reads in parallel
     processed = await asyncio.gather(*[_process_item(token, item) for item in candidates])
