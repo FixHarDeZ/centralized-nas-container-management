@@ -3,7 +3,7 @@ import json
 import logging
 import re
 
-from groq import AsyncGroq
+from openai import AsyncOpenAI
 
 import notion
 from config import settings
@@ -11,8 +11,26 @@ from config import settings
 logger = logging.getLogger(__name__)
 
 MAX_CONTEXT_CHARS = 20000
-SMALL_MODEL = "llama-3.1-8b-instant"   # 500K TPD — used for cheap helper tasks
-MAIN_MODEL = "llama-3.3-70b-versatile"  # 100K TPD — used only for final answer
+
+# Model names differ per provider
+if settings.AI_PROVIDER == "openrouter":
+    MAIN_MODEL = "meta-llama/llama-3.3-70b-instruct"
+    SMALL_MODEL = "meta-llama/llama-3.1-8b-instruct"
+else:  # groq
+    MAIN_MODEL = "llama-3.3-70b-versatile"
+    SMALL_MODEL = "llama-3.1-8b-instant"
+
+
+def _make_client() -> AsyncOpenAI:
+    if settings.AI_PROVIDER == "openrouter":
+        return AsyncOpenAI(
+            base_url="https://openrouter.ai/api/v1",
+            api_key=settings.OPENROUTER_API_KEY,
+        )
+    return AsyncOpenAI(
+        base_url="https://api.groq.com/openai/v1",
+        api_key=settings.GROQ_API_KEY,
+    )
 
 SYSTEM_PROMPT = """You are a personal AI secretary. Answer the user's question using the Notion data provided below.
 
@@ -58,7 +76,7 @@ def _parse_propose(text: str) -> dict | None:
     return None
 
 
-async def _search_variants(client: AsyncGroq, message: str) -> list[str]:
+async def _search_variants(client: AsyncOpenAI, message: str) -> list[str]:
     """Build search query variants.
 
     If the message contains English/numbers → fast path (no LLM):
@@ -76,28 +94,34 @@ async def _search_variants(client: AsyncGroq, message: str) -> list[str]:
         if joined != " ".join(english_words):
             variants.append(joined)
     else:
-        # Pure Thai — extract the core search term (keep in Thai, strip request words)
+        # Pure Thai — extract key term AND English translation (covers Notion pages with bilingual headings)
         r = await client.chat.completions.create(
             model=SMALL_MODEL,
             messages=[{"role": "user", "content": (
-                "Extract only the key topic words from this message for Notion search. "
-                "Keep the original language (Thai). Strip request words like ขอ/หน่อย/ทั้งหมด/ข้อมูล. "
-                "Output ONLY the topic words, nothing else.\n"
+                "For this Thai message, output TWO things separated by | :\n"
+                "1. Key topic words in Thai (strip ขอ/หน่อย/ทั้งหมด/ข้อมูล)\n"
+                "2. English translation of the topic\n"
+                "Output ONLY: <thai> | <english>\n"
                 f"{message}"
             )}],
-            max_tokens=20,
+            max_tokens=30,
             temperature=0,
         )
-        extracted = (r.choices[0].message.content or "").strip()
-        if extracted and extracted != message:
-            variants.append(extracted)
+        raw = (r.choices[0].message.content or "").strip()
+        if "|" in raw:
+            thai_part, eng_part = raw.split("|", 1)
+            for term in [thai_part.strip(), eng_part.strip()]:
+                if term and term != message:
+                    variants.append(term)
+        elif raw and raw != message:
+            variants.append(raw)
 
     variants.append(message)
     return list(dict.fromkeys(variants))
 
 
 async def run(user_message: str) -> dict:
-    client = AsyncGroq(api_key=settings.GROQ_API_KEY)
+    client = _make_client()
 
     search_queries = await _search_variants(client, user_message)
     logger.info(f"Search queries: {search_queries}")
@@ -178,73 +202,91 @@ async def _process_item(token: str, item: dict) -> tuple[list, list]:
     return item_pages, item_dbs
 
 
-FALLBACK_EXCERPT = 600  # chars per page in fallback scan
+async def _fallback_scan(token: str, keywords: list[str]) -> dict:
+    """Two-phase fallback when Notion search returns nothing.
 
-
-async def _fallback_scan(token: str) -> dict:
-    """Read ALL accessible pages with short excerpts — used when search returns nothing.
-    Each page is truncated to FALLBACK_EXCERPT chars so 20 pages ≈ 12K chars total.
+    Phase 1: Read top-level headers of ALL pages (no recursion, fast).
+    Phase 2: Match keywords against headers → full deep read of matching pages only.
+    Fallback: if no keyword match, full read of top 5 pages.
     """
     all_pages = await notion.list_all_pages(token)
     if not all_pages:
         return {"pages": [], "databases": []}
 
-    async def _read_short(item: dict) -> tuple[list, list]:
-        item_pages: list[dict] = []
-        item_dbs: list[dict] = []
-        rows = await notion.query_database(token, item["id"])
-        if rows:
-            item_dbs.append({"id": item["id"], "title": item["title"], "rows": rows})
-        else:
-            content = await notion.get_page_content(token, item["id"])
-            if content:
-                item_pages.append({
-                    "id": item["id"],
-                    "title": item["title"],
-                    "content": content[:FALLBACK_EXCERPT],
-                })
-        return item_pages, item_dbs
+    # Phase 1: shallow header read for all pages in parallel
+    headers = await asyncio.gather(*[notion.get_page_headers(token, p["id"]) for p in all_pages])
 
-    processed = await asyncio.gather(*[_read_short(p) for p in all_pages])
+    # Build keyword set (space-split words) from all search query variants
+    kw_set = {w.lower() for kw in keywords for w in re.split(r"[\s,|]+", kw) if len(w) > 2}
+
+    # Also build 4-char Thai sliding windows — catches cases where LLM extracts
+    # a synonym (e.g. "ไฟฟ้า") instead of the exact query term (e.g. "ค่าไฟ")
+    thai_re = re.compile(r"[฀-๿]+")
+    win4: set[str] = set()
+    for kw in keywords:
+        thai = "".join(thai_re.findall(kw))
+        win4.update(thai[i:i + 4] for i in range(len(thai) - 3))
+
+    logger.info(f"Fallback kw_set: {kw_set} | win4 sample: {list(win4)[:5]}")
+
+    def _header_matches(header: str) -> bool:
+        h = header.lower()
+        return any(kw in h for kw in kw_set) or any(w in h for w in win4)
+
+    # Phase 2: full deep read only for pages whose headers match
+    candidates = [page for page, header in zip(all_pages, headers) if _header_matches(header)]
+    if not candidates:
+        candidates = all_pages[:5]  # no match → read top 5 recent pages
+    logger.info(f"Fallback candidates: {[p['title'] for p in candidates]}")
+
+    processed = await asyncio.gather(*[_process_item(token, p) for p in candidates])
     pages: list[dict] = []
     databases: list[dict] = []
     for p, d in processed:
         pages.extend(p)
         databases.extend(d)
-    logger.info(f"Fallback scan read {len(pages)} pages, {len(databases)} databases")
     return {"pages": pages, "databases": databases}
 
 
-async def _deep_search(client: AsyncGroq, token: str, queries: list[str] | str) -> dict:
-    """Search Notion with multiple queries (parallel) → auto-read pages → auto-query embedded databases."""
+async def _deep_search(client: AsyncOpenAI, token: str, queries: list[str] | str) -> dict:
+    """Always run Notion search AND two-phase fallback in parallel, then merge results.
+    This ensures nested toggle content (not indexed by Notion) is always found via fallback.
+    """
     if isinstance(queries, str):
         queries = [queries]
 
-    # All searches in parallel
-    search_batches = await asyncio.gather(*[notion.search(token, q) for q in queries])
+    # Run search AND fallback simultaneously — no conditional
+    search_batches, fallback_data = await asyncio.gather(
+        asyncio.gather(*[notion.search(token, q) for q in queries]),
+        _fallback_scan(token, list(queries)),
+    )
 
+    # Process unique pages from Notion search
     seen_ids: set[str] = set()
-    candidates: list[dict] = []
+    search_items: list[dict] = []
     for items in search_batches:
         for item in items:
             if item["id"] not in seen_ids:
                 seen_ids.add(item["id"])
-                candidates.append(item)
+                search_items.append(item)
 
-    if not candidates:
-        logger.info("Search returned nothing — running fallback scan of all pages")
-        return await _fallback_scan(token)
+    if search_items:
+        processed = await asyncio.gather(*[_process_item(token, item) for item in search_items])
+        search_pages: list[dict] = []
+        search_dbs: list[dict] = []
+        for p, d in processed:
+            search_pages.extend(p)
+            search_dbs.extend(d)
+    else:
+        search_pages, search_dbs = [], []
 
-    # All page reads in parallel
-    processed = await asyncio.gather(*[_process_item(token, item) for item in candidates])
+    # Merge: add fallback pages/dbs not already covered by search
+    search_page_ids = {p["id"] for p in search_pages}
+    search_db_ids = {d["id"] for d in search_dbs}
+    merged_pages = search_pages + [p for p in fallback_data["pages"] if p["id"] not in search_page_ids]
+    merged_dbs = search_dbs + [d for d in fallback_data["databases"] if d["id"] not in search_db_ids]
 
-    pages: list[dict] = []
-    databases: list[dict] = []
-    for item_pages, item_dbs in processed:
-        pages.extend(item_pages)
-        databases.extend(item_dbs)
-
-    return {"pages": pages, "databases": databases}
+    return {"pages": merged_pages, "databases": merged_dbs}
 
 
 async def execute_write(pending: dict) -> str:

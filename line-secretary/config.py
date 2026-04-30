@@ -5,8 +5,12 @@ class Settings(BaseSettings):
     LINE_SECRETARY_CHANNEL_SECRET: str
     LINE_SECRETARY_CHANNEL_ACCESS_TOKEN: str
     LINE_SECRETARY_ALLOWED_USER_IDS: str  # comma-separated LINE user IDs
-    GROQ_API_KEY: str
     NOTION_TOKEN: str
+
+    # AI provider: "groq" or "openrouter"
+    AI_PROVIDER: str = "groq"
+    GROQ_API_KEY: str = ""
+    OPENROUTER_API_KEY: str = ""
 
     model_config = SettingsConfigDict(extra="ignore")
 
