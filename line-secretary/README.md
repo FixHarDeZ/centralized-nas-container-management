@@ -10,6 +10,7 @@ A personal AI secretary LINE bot that searches and records information in your N
 
 - Ask anything in natural language (Thai or English) — the bot searches your Notion and answers
 - Reads pages, simple tables, toggle sections, and embedded databases automatically
+- Always runs both Notion search and header-based fallback scan in parallel — finds content even when nested inside toggle blocks that Notion's search doesn't index
 - Proposes a confirmation before writing any new record to Notion
 - Whitelist-based access — only your LINE user ID can use the bot
 
@@ -18,18 +19,18 @@ A personal AI secretary LINE bot that searches and records information in your N
 ```
 You (LINE) → Webhook → FastAPI app
                            ↓
-                  Notion search (multi-query)
+               Notion search + fallback header scan (parallel)
                            ↓
-                  Auto-read pages & tables
+               Auto-read pages, tables, toggles (recursive)
                            ↓
-                  Groq LLM (llama-3.3-70b)
+               LLM (Groq or OpenRouter) generates Thai/English answer
                            ↓
-                  Answer → LINE push
+               Answer → LINE push
 ```
 
-1. Every message triggers a Notion search with multiple keyword variants
+1. Every message triggers both a Notion keyword search and a shallow header scan of all pages — results are merged
 2. Pages, toggle blocks, and simple tables are read recursively (up to 2 levels deep)
-3. The Groq LLM receives the Notion data as context and generates a Thai/English answer
+3. The LLM receives the Notion data as context and generates a Thai/English answer
 4. Write requests go through a confirmation step before touching Notion
 
 ## Stack
@@ -37,7 +38,7 @@ You (LINE) → Webhook → FastAPI app
 | Component | Detail |
 |---|---|
 | Runtime | Python 3.12 · FastAPI · Uvicorn |
-| AI | Groq `llama-3.3-70b-versatile` (free tier) |
+| AI | Groq `llama-3.3-70b-versatile` **or** OpenRouter (configurable) |
 | Knowledge base | Notion API (Internal Integration Token) |
 | Messaging | LINE Messaging API |
 | Host port | `5057` → container `8000` |
@@ -45,15 +46,24 @@ You (LINE) → Webhook → FastAPI app
 
 ## Setup
 
-### 1. Groq API Key (free)
+### 1. AI Provider
 
-Sign up at [console.groq.com](https://console.groq.com) and create an API key.
+Choose one (or configure both and switch via `AI_PROVIDER`):
+
+**Groq (free)**
+- Sign up at [console.groq.com](https://console.groq.com) and create an API key
+- Free tier: 100K tokens/day for the 70b model, 500K tokens/day for the 8b model
+
+**OpenRouter (pay-per-use)**
+- Get a key at [openrouter.ai](https://openrouter.ai) — supports Claude, GPT, Llama, and more
+- Useful when Groq free tier runs out
 
 ### 2. Notion Integration Token
 
 1. Go to [notion.so/my-integrations](https://www.notion.so/my-integrations) → **New integration**
 2. Copy the **Internal Integration Token**
-3. In Notion, open each page/database you want the bot to access → **Share** → invite the integration
+3. In Notion, open the root page you want the bot to access → **Share** → invite the integration
+   > Sharing a parent page (e.g. Personal Home) gives access to all its subpages at once
 
 ### 3. LINE Official Account
 
@@ -70,7 +80,12 @@ Add to the root `.env`:
 LINE_SECRETARY_CHANNEL_SECRET=...
 LINE_SECRETARY_CHANNEL_ACCESS_TOKEN=...
 LINE_SECRETARY_ALLOWED_USER_IDS=Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# AI provider: "groq" or "openrouter"
+AI_PROVIDER=groq
 GROQ_API_KEY=gsk_...
+OPENROUTER_API_KEY=sk-or-v1-...   # only needed if AI_PROVIDER=openrouter
+
 NOTION_TOKEN=ntn_...
 ```
 
@@ -108,7 +123,7 @@ Bot:  GitHub token: ghp_xxxxxxxxxxxx
       (จาก page API Token)
 
 You:  จด github token ใหม่ให้หน่อย github ghp_newtoken123
-Bot:  จะบันทึก GitHub token ghp_newtoken123 ใน database 'API Token' ใช่ไหมครับ?
+Bot:  จะบันทึก GitHub token ghp_newtoken123 ใน 'API Token' ใช่ไหมครับ?
       ตอบ 'ใช่' เพื่อยืนยัน
 You:  ใช่
 Bot:  บันทึกเรียบร้อยแล้วครับ
@@ -118,6 +133,8 @@ Bot:  บันทึกเรียบร้อยแล้วครับ
 
 ## ภาษาไทย
 
+[EN](#line-secretary)
+
 Line Secretary คือ LINE bot เลขาส่วนตัว AI ที่ค้นหาและบันทึกข้อมูลใน Notion ของคุณ รันเป็น Docker container บน Synology NAS
 
 ---
@@ -126,6 +143,7 @@ Line Secretary คือ LINE bot เลขาส่วนตัว AI ที่
 
 - ถามเป็นภาษาไทยหรืออังกฤษก็ได้ bot จะค้นหาใน Notion แล้วตอบ
 - อ่าน page ธรรมดา, ตาราง (simple table), toggle section, และ database อัตโนมัติ
+- รัน Notion search และ fallback scan พร้อมกันเสมอ — เจอข้อมูลแม้ซ่อนใน toggle ที่ Notion ไม่ index
 - มี confirmation step ก่อนจะ write ข้อมูลใหม่ลง Notion ทุกครั้ง
 - จำกัดการใช้งานด้วย LINE user ID whitelist
 
@@ -134,26 +152,34 @@ Line Secretary คือ LINE bot เลขาส่วนตัว AI ที่
 ```
 คุณ (LINE) → Webhook → FastAPI
                            ↓
-              ค้นหา Notion หลาย keyword variants
+              Notion search + fallback header scan (พร้อมกัน)
                            ↓
               อ่าน page, table, toggle แบบ recursive
                            ↓
-              Groq LLM วิเคราะห์ข้อมูล + ตอบ
+              LLM (Groq หรือ OpenRouter) วิเคราะห์ข้อมูล + ตอบ
                            ↓
               ส่งคำตอบกลับ LINE
 ```
 
 ## การตั้งค่า
 
-### 1. Groq API Key (ฟรี)
+### 1. AI Provider
 
-สมัครที่ [console.groq.com](https://console.groq.com) แล้ว create API key
+เลือกอย่างน้อยหนึ่งตัว (หรือตั้งไว้ทั้งสองแล้วสลับด้วย `AI_PROVIDER`):
+
+**Groq (ฟรี)**
+- สมัครที่ [console.groq.com](https://console.groq.com) แล้ว create API key
+- Free tier: 100K tokens/วัน (70b model), 500K tokens/วัน (8b model)
+
+**OpenRouter (จ่ายตาม token ที่ใช้)**
+- รับ key ที่ [openrouter.ai](https://openrouter.ai) — รองรับ Claude, GPT, Llama และอื่นๆ
+- ใช้เมื่อ Groq free tier หมด
 
 ### 2. Notion Integration Token
 
 1. ไปที่ [notion.so/my-integrations](https://www.notion.so/my-integrations) → **New integration**
 2. Copy **Internal Integration Token**
-3. ใน Notion เปิดแต่ละ page/database ที่อยากให้ bot เข้าถึง → **Share** → invite integration นั้น
+3. ใน Notion เปิด root page ที่อยากให้ bot เข้าถึง → **Share** → invite integration นั้น
    > ถ้า share ที่ root page (เช่น Personal Home) จะได้ access ทุก subpage ทีเดียว
 
 ### 3. LINE Official Account
@@ -171,7 +197,12 @@ Line Secretary คือ LINE bot เลขาส่วนตัว AI ที่
 LINE_SECRETARY_CHANNEL_SECRET=...
 LINE_SECRETARY_CHANNEL_ACCESS_TOKEN=...
 LINE_SECRETARY_ALLOWED_USER_IDS=Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# AI provider: "groq" หรือ "openrouter"
+AI_PROVIDER=groq
 GROQ_API_KEY=gsk_...
+OPENROUTER_API_KEY=sk-or-v1-...   # ต้องการเฉพาะเมื่อ AI_PROVIDER=openrouter
+
 NOTION_TOKEN=ntn_...
 ```
 
@@ -209,7 +240,7 @@ Bot:  GitHub token: ghp_xxxxxxxxxxxx
       (จาก page API Token)
 
 คุณ:  จด github token ใหม่ให้หน่อย ghp_newtoken123
-Bot:  จะบันทึก GitHub token ghp_newtoken123 ใน database 'API Token' ใช่ไหมครับ?
+Bot:  จะบันทึก GitHub token ghp_newtoken123 ใน 'API Token' ใช่ไหมครับ?
       ตอบ 'ใช่' เพื่อยืนยัน
 คุณ:  ใช่
 Bot:  บันทึกเรียบร้อยแล้วครับ
