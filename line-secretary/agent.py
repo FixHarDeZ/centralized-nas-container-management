@@ -6,6 +6,7 @@ import re
 from openai import AsyncOpenAI
 
 import notion
+from cache import cache as _cache
 from config import settings
 
 logger = logging.getLogger(__name__)
@@ -126,9 +127,8 @@ async def run(user_message: str) -> dict:
     search_queries = await _search_variants(client, user_message)
     logger.info(f"Search queries: {search_queries}")
     notion_data = await _deep_search(client, settings.NOTION_TOKEN, search_queries)
-    context = json.dumps(notion_data, ensure_ascii=False)
-    if len(context) > MAX_CONTEXT_CHARS:
-        context = context[:MAX_CONTEXT_CHARS] + "..."
+    ranked = _rank_context(notion_data, search_queries, MAX_CONTEXT_CHARS)
+    context = json.dumps(ranked, ensure_ascii=False)
 
     response = await client.chat.completions.create(
         model=MAIN_MODEL,
@@ -203,18 +203,17 @@ async def _process_item(token: str, item: dict) -> tuple[list, list]:
 
 
 async def _fallback_scan(token: str, keywords: list[str]) -> dict:
-    """Two-phase fallback when Notion search returns nothing.
+    """Two-phase fallback — served from in-memory cache when warm.
 
-    Phase 1: Read top-level headers of ALL pages (no recursion, fast).
-    Phase 2: Match keywords against headers → full deep read of matching pages only.
-    Fallback: if no keyword match, full read of top 5 pages.
+    Phase 1: headers from cache (0 Notion API calls on cache-hit).
+    Phase 2: Match keywords → full deep read of matched pages only.
     """
-    all_pages = await notion.list_all_pages(token)
+    all_pages = await _cache.get_pages()
     if not all_pages:
         return {"pages": [], "databases": []}
 
-    # Phase 1: shallow header read for all pages in parallel
-    headers = await asyncio.gather(*[notion.get_page_headers(token, p["id"]) for p in all_pages])
+    # Phase 1: headers from cache (parallel fetch only on cold start)
+    headers = await asyncio.gather(*[_cache.get_header(p["id"]) for p in all_pages])
 
     # Build keyword set (space-split words) from all search query variants
     kw_set = {w.lower() for kw in keywords for w in re.split(r"[\s,|]+", kw) if len(w) > 2}
@@ -246,6 +245,45 @@ async def _fallback_scan(token: str, keywords: list[str]) -> dict:
         pages.extend(p)
         databases.extend(d)
     return {"pages": pages, "databases": databases}
+
+
+def _rank_context(notion_data: dict, queries: list[str], max_chars: int) -> dict:
+    """Score each page/db by keyword hits, pack highest-scoring items first.
+
+    Uses continue (not break) so a single oversized item doesn't block smaller
+    high-relevance items from being included.
+    """
+    kw_set = {w.lower() for q in queries for w in re.split(r"[\s,|]+", q) if len(w) > 1}
+
+    def _count(text: str) -> int:
+        if not kw_set:
+            return 0
+        t = text.lower()
+        return sum(t.count(kw) for kw in kw_set)
+
+    scored: list[tuple[int, str, dict]] = []
+    for p in notion_data.get("pages", []):
+        s = _count(p.get("title", "") + " " + p.get("content", ""))
+        scored.append((s, "page", p))
+    for d in notion_data.get("databases", []):
+        rows_text = " ".join(
+            " ".join(str(v) for v in row.get("properties", {}).values() if v is not None)
+            for row in d.get("rows", [])
+        )
+        s = _count(d.get("title", "") + " " + rows_text)
+        scored.append((s, "database", d))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+
+    result: dict = {"pages": [], "databases": []}
+    used = 0
+    for _, kind, item in scored:
+        chunk = json.dumps(item, ensure_ascii=False)
+        if used + len(chunk) > max_chars:
+            continue  # skip oversized item, keep trying smaller ones
+        result["pages" if kind == "page" else "databases"].append(item)
+        used += len(chunk)
+    return result
 
 
 async def _deep_search(client: AsyncOpenAI, token: str, queries: list[str] | str) -> dict:
