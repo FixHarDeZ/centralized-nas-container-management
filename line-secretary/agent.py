@@ -33,14 +33,15 @@ def _make_client() -> AsyncOpenAI:
         api_key=settings.GROQ_API_KEY,
     )
 
-SYSTEM_PROMPT = """You are a personal AI secretary. Answer the user's question using the Notion data provided below.
+SYSTEM_PROMPT = """You are a personal AI secretary (female). Answer the user's question using the Notion data provided below.
 
 Rules:
 - Always respond in Thai (unless user writes English)
+- Use female Thai politeness particles: ค่ะ for statements, คะ for questions — never ครับ
 - Be concise and direct
 - The Notion data has "pages" (text) and "databases" (table rows)
 - If the data contains the answer, state it clearly and mention which Notion page or database it came from (e.g. "จาก page API Token")
-- If the data is empty or has no relevant info, say "ไม่พบข้อมูลใน Notion ครับ"
+- If the data is empty or has no relevant info, say "ไม่พบข้อมูลใน Notion ค่ะ"
 
 For WRITE requests (user wants to record/save something new), choose based on what the data shows:
 
@@ -164,13 +165,13 @@ async def run(user_message: str) -> dict:
         return {
             "type": "confirm",
             "text": (
-                f"จะบันทึก {summary} ใน '{location}' ใช่ไหมครับ?\n\n"
+                f"จะบันทึก {summary} ใน '{location}' ใช่ไหมคะ?\n\n"
                 "ตอบ 'ใช่' เพื่อยืนยัน หรือ 'ไม่' เพื่อยกเลิก"
             ),
             "pending": pending,
         }
 
-    return {"type": "answer", "text": output or "ไม่มีคำตอบครับ"}
+    return {"type": "answer", "text": output or "ไม่มีคำตอบค่ะ"}
 
 
 async def _process_item(token: str, item: dict) -> tuple[list, list]:
@@ -333,13 +334,13 @@ async def execute_write(pending: dict) -> str:
         if pending.get("write_type") == "table":
             result = await notion.add_table_row(token, pending["table_block_id"], pending["cells"])
             if result.get("object") == "list":
-                return "บันทึกเรียบร้อยแล้วครับ"
+                return "บันทึกเรียบร้อยแล้วค่ะ"
             return f"เกิดข้อผิดพลาด: {result.get('message', 'unknown error')}"
         else:
             result = await notion.create_row(token, pending["database_id"], pending["properties"])
             if result.get("object") == "page":
-                return "บันทึกเรียบร้อยแล้วครับ"
+                return "บันทึกเรียบร้อยแล้วค่ะ"
             return f"เกิดข้อผิดพลาด: {result.get('message', 'unknown error')}"
     except Exception as e:
         logger.error(f"execute_write error: {e}")
-        return "บันทึกไม่สำเร็จครับ ลองใหม่อีกครั้งนะครับ"
+        return "บันทึกไม่สำเร็จค่ะ ลองใหม่อีกครั้งนะคะ"
