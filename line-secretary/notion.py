@@ -1,7 +1,7 @@
 import httpx
 
 NOTION_API = "https://api.notion.com/v1"
-MAX_CONTENT_CHARS = 3000
+MAX_CONTENT_CHARS = 6000
 
 
 def _headers(token: str) -> dict:
@@ -186,6 +186,24 @@ async def query_database(token: str, database_id: str) -> list[dict]:
                 row["properties"][name] = _prop_value(prop)
             rows.append(row)
         return rows
+
+
+async def get_page_headers(token: str, page_id: str) -> str:
+    """Read only top-level block text (no recursion) — fast shallow scan for keyword matching."""
+    async with httpx.AsyncClient() as client:
+        r = await client.get(
+            f"{NOTION_API}/blocks/{page_id}/children",
+            headers=_headers(token),
+            timeout=15,
+        )
+    lines = []
+    for block in r.json().get("results", []):
+        btype = block.get("type", "")
+        content = block.get(btype, {})
+        text = "".join(rt.get("plain_text", "") for rt in content.get("rich_text", []))
+        if text:
+            lines.append(text)
+    return "\n".join(lines)
 
 
 async def list_all_pages(token: str, limit: int = 20) -> list[dict]:
