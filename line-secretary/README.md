@@ -11,6 +11,8 @@ A personal AI secretary LINE bot that searches and records information in your N
 - Ask anything in natural language (Thai or English) — the bot searches your Notion and answers
 - Reads pages, simple tables, toggle sections, and embedded databases automatically
 - Always runs both Notion search and header-based fallback scan in parallel — finds content even in toggle blocks and table cells that Notion's search doesn't index (e.g. searching "aeon" finds the Aeon card row inside a Credit cards table)
+- Page headers cached in memory at startup and refreshed every 10 minutes — ~90% fewer Notion API calls per message once warm
+- Relevance-ranked context — most keyword-matching pages are packed into the LLM prompt first, so the right data is always included even when total results exceed the context limit
 - Proposes a confirmation before writing any new record to Notion
 - Whitelist-based access — only your LINE user ID can use the bot
 
@@ -19,19 +21,25 @@ A personal AI secretary LINE bot that searches and records information in your N
 ```
 You (LINE) → Webhook → FastAPI app
                            ↓
-               Notion search + fallback header scan (parallel)
+               In-memory page cache (warm after startup, refreshed every 10 min)
+                           ↓
+               Notion search + fallback header scan (parallel, mostly from cache)
                            ↓
                Auto-read pages, tables, toggles (recursive)
+                           ↓
+               Relevance ranking → highest-scoring pages sent to LLM first
                            ↓
                LLM (Groq or OpenRouter) generates Thai/English answer
                            ↓
                Answer → LINE push
 ```
 
-1. Every message triggers both a Notion keyword search and a shallow header scan of all pages — results are merged
-2. Pages, toggle blocks, and simple tables are read recursively (up to 2 levels deep)
-3. The LLM receives the Notion data as context and generates a Thai/English answer
-4. Write requests go through a confirmation step before touching Notion
+1. On startup the app reads all page headers into memory — subsequent requests use the cache (0 Notion API calls for the header phase)
+2. Every message triggers both a Notion keyword search and a header-based fallback scan — results are merged
+3. Pages, toggle blocks, and simple tables are read recursively (up to 2 levels deep)
+4. Retrieved pages and databases are scored by keyword relevance and packed into the LLM context in order — most relevant first
+5. The LLM receives the ranked Notion data and generates a Thai/English answer
+6. Write requests go through a confirmation step before touching Notion
 
 ## Stack
 
@@ -144,6 +152,8 @@ Line Secretary คือ LINE bot เลขาส่วนตัว AI ที่
 - ถามเป็นภาษาไทยหรืออังกฤษก็ได้ bot จะค้นหาใน Notion แล้วตอบ
 - อ่าน page ธรรมดา, ตาราง (simple table), toggle section, และ database อัตโนมัติ
 - รัน Notion search และ fallback scan พร้อมกันเสมอ — เจอข้อมูลแม้ซ่อนใน toggle หรือ table cell ที่ Notion ไม่ index (เช่น ค้น "aeon" แล้วเจอบัตร Aeon ใน table Credit cards)
+- เก็บ header ของทุก page ไว้ใน memory ตั้งแต่ตอน start และ refresh ทุก 10 นาที — ลด Notion API call ต่อ message ลงประมาณ 90% หลัง warm up
+- จัดลำดับ context ตาม relevance — page ที่มี keyword ตรงกับคำถามมากสุดจะถูกส่งให้ LLM ก่อนเสมอ แม้ข้อมูลรวมจะเกิน context limit
 - มี confirmation step ก่อนจะ write ข้อมูลใหม่ลง Notion ทุกครั้ง
 - จำกัดการใช้งานด้วย LINE user ID whitelist
 
@@ -152,9 +162,13 @@ Line Secretary คือ LINE bot เลขาส่วนตัว AI ที่
 ```
 คุณ (LINE) → Webhook → FastAPI
                            ↓
-              Notion search + fallback header scan (พร้อมกัน)
+              In-memory page cache (warm ตั้งแต่ startup, refresh ทุก 10 นาที)
+                           ↓
+              Notion search + fallback header scan (พร้อมกัน, ส่วนใหญ่มาจาก cache)
                            ↓
               อ่าน page, table, toggle แบบ recursive
+                           ↓
+              Relevance ranking → ส่ง page ที่เกี่ยวข้องสุดให้ LLM ก่อน
                            ↓
               LLM (Groq หรือ OpenRouter) วิเคราะห์ข้อมูล + ตอบ
                            ↓
