@@ -27,7 +27,7 @@ app = FastAPI(title="Line Secretary", lifespan=lifespan)
 pending: dict[str, dict] = {}
 
 CONFIRM_WORDS = {"ใช่", "yes", "y", "ตกลง", "ok", "ยืนยัน", "confirm", "ใช"}
-CANCEL_WORDS = {"ไม่", "no", "n", "ยกเลิก", "cancel", "ไม่ใช่", "ไม่ครับ"}
+CANCEL_WORDS = {"ไม่", "no", "n", "ยกเลิก", "cancel", "ไม่ใช่", "ไม่ครับ", "ไม่ค่ะ"}
 
 
 @app.get("/health")
@@ -118,7 +118,7 @@ async def handle_message(event: dict) -> None:
             return
         if lower in CANCEL_WORDS:
             pending.pop(user_id)
-            await line_client.push(user_id, "ยกเลิกแล้วครับ", token)
+            await line_client.push(user_id, "ยกเลิกแล้วค่ะ", token)
             return
         # Not a confirmation word — treat as new query
         pending.pop(user_id)
