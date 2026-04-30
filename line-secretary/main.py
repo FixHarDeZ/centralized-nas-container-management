@@ -65,8 +65,10 @@ async def handle_message(event: dict) -> None:
     # /debug2 <query> → full deep search (pages + embedded databases)
     if text.startswith("/debug2 "):
         query = text[8:].strip()
+        from groq import AsyncGroq
         try:
-            result = await agent._deep_search(settings.NOTION_TOKEN, query)
+            client_dbg = AsyncGroq(api_key=settings.GROQ_API_KEY)
+            result = await agent._deep_search(client_dbg, settings.NOTION_TOKEN, [query])
             reply = f"[DEBUG2] deep_search('{query}'):\n{json.dumps(result, ensure_ascii=False, indent=2)}"
         except Exception as e:
             reply = f"[DEBUG2] Error: {e}"
