@@ -7,8 +7,8 @@ class Settings(BaseSettings):
     LINE_SECRETARY_ALLOWED_USER_IDS: str  # comma-separated LINE user IDs
     NOTION_TOKEN: str
 
-    # AI provider: "groq" or "openrouter"
-    AI_PROVIDER: str = "groq"
+    # AI provider: "auto" (Groq primary + OpenRouter fallback), "groq", or "openrouter"
+    AI_PROVIDER: str = "auto"
     GROQ_API_KEY: str = ""
     OPENROUTER_API_KEY: str = ""
 

@@ -6,6 +6,7 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 
 import agent
 import line_client
+import provider as _provider
 from cache import cache as _cache
 from config import settings
 
@@ -76,8 +77,7 @@ async def handle_message(event: dict) -> None:
     if text.startswith("/debug2 "):
         query = text[8:].strip()
         try:
-            client_dbg = agent._make_client()
-            result = await agent._deep_search(client_dbg, settings.NOTION_TOKEN, [query])
+            result = await agent._deep_search(settings.NOTION_TOKEN, [query])
             reply = f"[DEBUG2] deep_search('{query}'):\n{json.dumps(result, ensure_ascii=False, indent=2)}"
         except Exception as e:
             reply = f"[DEBUG2] Error: {e}"
@@ -106,6 +106,11 @@ async def handle_message(event: dict) -> None:
         except Exception as e:
             reply = f"[DEBUG4] Error: {e}"
         await line_client.push(user_id, reply[:4000], token)
+        return
+
+    # /provider → show active provider and failover status
+    if text == "/provider":
+        await line_client.push(user_id, _provider.status_text(settings), token)
         return
 
     # Handle pending confirmation

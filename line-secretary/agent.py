@@ -3,35 +3,16 @@ import json
 import logging
 import re
 
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, RateLimitError
 
 import notion
+import provider as _provider
 from cache import cache as _cache
 from config import settings
 
 logger = logging.getLogger(__name__)
 
 MAX_CONTEXT_CHARS = 20000
-
-# Model names differ per provider
-if settings.AI_PROVIDER == "openrouter":
-    MAIN_MODEL = "meta-llama/llama-3.3-70b-instruct"
-    SMALL_MODEL = "meta-llama/llama-3.1-8b-instruct"
-else:  # groq
-    MAIN_MODEL = "llama-3.3-70b-versatile"
-    SMALL_MODEL = "llama-3.1-8b-instant"
-
-
-def _make_client() -> AsyncOpenAI:
-    if settings.AI_PROVIDER == "openrouter":
-        return AsyncOpenAI(
-            base_url="https://openrouter.ai/api/v1",
-            api_key=settings.OPENROUTER_API_KEY,
-        )
-    return AsyncOpenAI(
-        base_url="https://api.groq.com/openai/v1",
-        api_key=settings.GROQ_API_KEY,
-    )
 
 SYSTEM_PROMPT = """You are a personal AI secretary (female). Answer the user's question using the Notion data provided below.
 
@@ -79,7 +60,7 @@ def _parse_propose(text: str) -> dict | None:
     return None
 
 
-async def _search_variants(client: AsyncOpenAI, message: str) -> list[str]:
+async def _search_variants(client: AsyncOpenAI, small_model: str, message: str) -> list[str]:
     """Build search query variants.
 
     If the message contains English/numbers → fast path (no LLM):
@@ -97,19 +78,25 @@ async def _search_variants(client: AsyncOpenAI, message: str) -> list[str]:
         if joined != " ".join(english_words):
             variants.append(joined)
     else:
-        # Pure Thai — extract key term AND English translation (covers Notion pages with bilingual headings)
-        r = await client.chat.completions.create(
-            model=SMALL_MODEL,
-            messages=[{"role": "user", "content": (
-                "For this Thai message, output TWO things separated by | :\n"
-                "1. Key topic words in Thai (strip ขอ/หน่อย/ทั้งหมด/ข้อมูล)\n"
-                "2. English translation of the topic\n"
-                "Output ONLY: <thai> | <english>\n"
-                f"{message}"
-            )}],
-            max_tokens=30,
-            temperature=0,
-        )
+        # Pure Thai — extract key term AND English translation
+        translate_msgs = [{"role": "user", "content": (
+            "For this Thai message, output TWO things separated by | :\n"
+            "1. Key topic words in Thai (strip ขอ/หน่อย/ทั้งหมด/ข้อมูล)\n"
+            "2. English translation of the topic\n"
+            "Output ONLY: <thai> | <english>\n"
+            f"{message}"
+        )}]
+        try:
+            r = await client.chat.completions.create(
+                model=small_model, messages=translate_msgs, max_tokens=30, temperature=0,
+            )
+        except RateLimitError as e:
+            if not settings.OPENROUTER_API_KEY:
+                raise
+            client, _, small_model = _provider.on_groq_rate_limit(e, settings)
+            r = await client.chat.completions.create(
+                model=small_model, messages=translate_msgs, max_tokens=30, temperature=0,
+            )
         raw = (r.choices[0].message.content or "").strip()
         if "|" in raw:
             thai_part, eng_part = raw.split("|", 1)
@@ -124,23 +111,29 @@ async def _search_variants(client: AsyncOpenAI, message: str) -> list[str]:
 
 
 async def run(user_message: str) -> dict:
-    client = _make_client()
+    client, main_model, small_model = _provider.get_client(settings)
 
-    search_queries = await _search_variants(client, user_message)
+    search_queries = await _search_variants(client, small_model, user_message)
     logger.info(f"Search queries: {search_queries}")
-    notion_data = await _deep_search(client, settings.NOTION_TOKEN, search_queries)
+    notion_data = await _deep_search(settings.NOTION_TOKEN, search_queries)
     ranked = _rank_context(notion_data, search_queries, MAX_CONTEXT_CHARS)
     context = json.dumps(ranked, ensure_ascii=False)
 
-    response = await client.chat.completions.create(
-        model=MAIN_MODEL,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": f"{user_message}\n\n[Notion data]\n{context}"},
-        ],
-        max_tokens=1024,
-        temperature=0.3,
-    )
+    msgs = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": f"{user_message}\n\n[Notion data]\n{context}"},
+    ]
+    try:
+        response = await client.chat.completions.create(
+            model=main_model, messages=msgs, max_tokens=1024, temperature=0.3,
+        )
+    except RateLimitError as e:
+        if not settings.OPENROUTER_API_KEY:
+            raise
+        client, main_model, _ = _provider.on_groq_rate_limit(e, settings)
+        response = await client.chat.completions.create(
+            model=main_model, messages=msgs, max_tokens=1024, temperature=0.3,
+        )
     output = (response.choices[0].message.content or "").strip()
     proposal = _parse_propose(output)
 
@@ -296,7 +289,7 @@ def _rank_context(notion_data: dict, queries: list[str], max_chars: int) -> dict
     return result
 
 
-async def _deep_search(client: AsyncOpenAI, token: str, queries: list[str] | str) -> dict:
+async def _deep_search(token: str, queries: list[str] | str) -> dict:
     """Always run Notion search AND two-phase fallback in parallel, then merge results.
     This ensures nested toggle content (not indexed by Notion) is always found via fallback.
     """
