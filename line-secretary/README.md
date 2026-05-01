@@ -12,7 +12,7 @@ A personal AI secretary LINE bot that searches and records information in your N
 
 - Ask anything in natural language (Thai or English) — the bot searches your Notion and answers
 - Reads pages, simple tables, toggle sections, and embedded databases automatically
-- Always runs both Notion search and header-based fallback scan in parallel — finds content even in toggle blocks and table cells that Notion's search doesn't index (e.g. searching "aeon" finds the Aeon card row inside a Credit cards table)
+- Always runs both Notion search and header-based fallback scan in parallel — finds content even in toggle blocks that Notion's search doesn't index; both plain text paragraphs and table cells inside toggles are included in the keyword index (e.g. searching "mesh node" finds troubleshoot steps inside a toggle, searching "aeon" finds the row inside a Credit cards table)
 - Page headers cached in memory at startup and refreshed every 10 minutes — ~90% fewer Notion API calls per message once warm
 - Relevance-ranked context — most keyword-matching pages are packed into the LLM prompt first, so the right data is always included even when total results exceed the context limit
 - Automatic Groq→OpenRouter failover — when both keys are set (`AI_PROVIDER=auto`), Groq is used first (free); on rate-limit it switches to OpenRouter automatically and switches back once Groq resets
@@ -162,7 +162,7 @@ Line Secretary คือ LINE bot เลขาส่วนตัว AI ที่
 
 - ถามเป็นภาษาไทยหรืออังกฤษก็ได้ bot จะค้นหาใน Notion แล้วตอบ
 - อ่าน page ธรรมดา, ตาราง (simple table), toggle section, และ database อัตโนมัติ
-- รัน Notion search และ fallback scan พร้อมกันเสมอ — เจอข้อมูลแม้ซ่อนใน toggle หรือ table cell ที่ Notion ไม่ index (เช่น ค้น "aeon" แล้วเจอบัตร Aeon ใน table Credit cards)
+- รัน Notion search และ fallback scan พร้อมกันเสมอ — เจอข้อมูลแม้ซ่อนใน toggle ที่ Notion ไม่ index ทั้ง text paragraph และ table cell ข้างใน toggle ถูก index ไว้ใน keyword index (เช่น ค้น "mesh node" แล้วเจอขั้นตอนแก้ปัญหาใน toggle, ค้น "aeon" แล้วเจอบัตร Aeon ใน table Credit cards)
 - เก็บ header ของทุก page ไว้ใน memory ตั้งแต่ตอน start และ refresh ทุก 10 นาที — ลด Notion API call ต่อ message ลงประมาณ 90% หลัง warm up
 - จัดลำดับ context ตาม relevance — page ที่มี keyword ตรงกับคำถามมากสุดจะถูกส่งให้ LLM ก่อนเสมอ แม้ข้อมูลรวมจะเกิน context limit
 - Groq→OpenRouter auto-failover — ถ้าตั้งทั้งสอง key ไว้ (`AI_PROVIDER=auto`) จะใช้ Groq (ฟรี) เป็นหลัก พอ rate limit หมดจะสลับไป OpenRouter อัตโนมัติ และกลับมาใช้ Groq เองเมื่อ reset
