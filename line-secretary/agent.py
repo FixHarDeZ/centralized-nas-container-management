@@ -41,6 +41,7 @@ Rules:
 - Be concise and direct
 - The Notion data has "pages" (text) and "databases" (table rows)
 - If the data contains the answer, state it clearly and mention which Notion page or database it came from (e.g. "จาก page API Token")
+- Match user queries to data flexibly — "kmotor" matches "K-Motor Help me", "twitter" matches "Twitter (X)", "aia" matches "AIA", etc. Use judgment for abbreviated or partial names
 - If the data is empty or has no relevant info, say "ไม่พบข้อมูลใน Notion ค่ะ"
 
 For WRITE requests (user wants to record/save something new), choose based on what the data shows:
@@ -219,6 +220,9 @@ async def _fallback_scan(token: str, keywords: list[str]) -> dict:
     # Build keyword set (space-split words) from all search query variants
     kw_set = {w.lower() for kw in keywords for w in re.split(r"[\s,|]+", kw) if len(w) > 2}
 
+    # Hyphen-stripped variants — "kmotor" matches "k-motor", "kmotor" matches "k motor"
+    kw_compact = {re.sub(r"[-_\s]", "", kw) for kw in kw_set if kw.isascii()}
+
     # Also build 4-char Thai sliding windows — catches cases where LLM extracts
     # a synonym (e.g. "ไฟฟ้า") instead of the exact query term (e.g. "ค่าไฟ")
     thai_re = re.compile(r"[฀-๿]+")
@@ -231,7 +235,12 @@ async def _fallback_scan(token: str, keywords: list[str]) -> dict:
 
     def _header_matches(header: str) -> bool:
         h = header.lower()
-        return any(kw in h for kw in kw_set) or any(w in h for w in win4)
+        h_compact = re.sub(r"[-_\s]", "", h)
+        return (
+            any(kw in h for kw in kw_set) or
+            any(kw in h_compact for kw in kw_compact) or
+            any(w in h for w in win4)
+        )
 
     # Phase 2: full deep read only for pages whose headers match
     candidates = [page for page, header in zip(all_pages, headers) if _header_matches(header)]
