@@ -222,14 +222,25 @@ async def get_page_headers(token: str, page_id: str) -> str:
             if block.get("has_children"):
                 container_ids.append(block["id"])
 
-    async def _find_nested_tables(container_id: str) -> list[str]:
+    async def _read_container(container_id: str) -> tuple[list[str], list[str]]:
+        """Return (nested_table_ids, text_lines) from one level inside a container block."""
         async with httpx.AsyncClient() as c:
             resp = await c.get(
                 f"{NOTION_API}/blocks/{container_id}/children",
                 headers=_headers(token),
                 timeout=15,
             )
-        return [b["id"] for b in resp.json().get("results", []) if b.get("type") == "table"]
+        nested_tables: list[str] = []
+        nested_texts: list[str] = []
+        for b in resp.json().get("results", []):
+            btype = b.get("type", "")
+            if btype == "table":
+                nested_tables.append(b["id"])
+            elif btype not in ("child_database", "child_page"):
+                text = "".join(rt.get("plain_text", "") for rt in b.get(btype, {}).get("rich_text", []))
+                if text:
+                    nested_texts.append(text)
+        return nested_tables, nested_texts
 
     async def _table_preview(table_id: str) -> str:
         async with httpx.AsyncClient() as c:
@@ -248,11 +259,12 @@ async def get_page_headers(token: str, page_id: str) -> str:
                         cells.append(t)
         return " ".join(cells)
 
-    # Discover nested tables inside containers in parallel
+    # Read children of containers in parallel — collect nested tables AND plain text
     if container_ids:
-        nested = await asyncio.gather(*[_find_nested_tables(cid) for cid in container_ids])
-        for nested_table_ids in nested:
+        results = await asyncio.gather(*[_read_container(cid) for cid in container_ids])
+        for nested_table_ids, nested_texts in results:
             table_ids.extend(nested_table_ids)
+            lines.extend(nested_texts)
 
     if table_ids:
         previews = await asyncio.gather(*[_table_preview(tid) for tid in table_ids])
