@@ -15,6 +15,7 @@ A personal AI secretary LINE bot that searches and records information in your N
 - Always runs both Notion search and header-based fallback scan in parallel — finds content even in toggle blocks and table cells that Notion's search doesn't index (e.g. searching "aeon" finds the Aeon card row inside a Credit cards table)
 - Page headers cached in memory at startup and refreshed every 10 minutes — ~90% fewer Notion API calls per message once warm
 - Relevance-ranked context — most keyword-matching pages are packed into the LLM prompt first, so the right data is always included even when total results exceed the context limit
+- Automatic Groq→OpenRouter failover — when both keys are set (`AI_PROVIDER=auto`), Groq is used first (free); on rate-limit it switches to OpenRouter automatically and switches back once Groq resets
 - Proposes a confirmation before writing any new record to Notion
 - Whitelist-based access — only your LINE user ID can use the bot
 
@@ -48,7 +49,7 @@ You (LINE) → Webhook → FastAPI app
 | Component | Detail |
 |---|---|
 | Runtime | Python 3.12 · FastAPI · Uvicorn |
-| AI | Groq `llama-3.3-70b-versatile` **or** OpenRouter (configurable) |
+| AI | Groq `llama-3.3-70b-versatile` (primary, free) → OpenRouter fallback (auto mode) |
 | Knowledge base | Notion API (Internal Integration Token) |
 | Messaging | LINE Messaging API |
 | Host port | `5057` → container `8000` |
@@ -58,15 +59,17 @@ You (LINE) → Webhook → FastAPI app
 
 ### 1. AI Provider
 
-Choose one (or configure both and switch via `AI_PROVIDER`):
+**Recommended: set both keys and use `AI_PROVIDER=auto`**
 
-**Groq (free)**
+In auto mode the bot uses Groq (free) as the primary provider. When Groq's daily limit is hit, it switches to OpenRouter automatically and switches back once Groq resets — no restart needed.
+
+**Groq (free, primary)**
 - Sign up at [console.groq.com](https://console.groq.com) and create an API key
 - Free tier: 100K tokens/day for the 70b model, 500K tokens/day for the 8b model
 
-**OpenRouter (pay-per-use)**
+**OpenRouter (pay-per-use, fallback)**
 - Get a key at [openrouter.ai](https://openrouter.ai) — supports Claude, GPT, Llama, and more
-- Useful when Groq free tier runs out
+- Used automatically when Groq is rate-limited (in auto mode)
 
 ### 2. Notion Integration Token
 
@@ -91,10 +94,13 @@ LINE_SECRETARY_CHANNEL_SECRET=...
 LINE_SECRETARY_CHANNEL_ACCESS_TOKEN=...
 LINE_SECRETARY_ALLOWED_USER_IDS=Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
-# AI provider: "groq" or "openrouter"
-AI_PROVIDER=groq
+# AI provider:
+#   "auto"        — Groq primary (free), auto-switches to OpenRouter on rate-limit, auto-switches back
+#   "groq"        — Groq only
+#   "openrouter"  — OpenRouter only
+AI_PROVIDER=auto
 GROQ_API_KEY=gsk_...
-OPENROUTER_API_KEY=sk-or-v1-...   # only needed if AI_PROVIDER=openrouter
+OPENROUTER_API_KEY=sk-or-v1-...
 
 NOTION_TOKEN=ntn_...
 ```
@@ -119,6 +125,7 @@ Send these in LINE chat to inspect raw data (owner only):
 | `/debug2 <query>` | Full deep search — pages + embedded databases |
 | `/debug3 <page_id>` | Raw block children of a Notion page |
 | `/debug4 <db_id>` | Raw database query response |
+| `/provider` | Active AI provider and time remaining until Groq resumes (if rate-limited) |
 
 ## Example usage
 
@@ -133,10 +140,10 @@ Bot:  GitHub token: ghp_xxxxxxxxxxxx
       (จาก page API Token)
 
 You:  จด github token ใหม่ให้หน่อย github ghp_newtoken123
-Bot:  จะบันทึก GitHub token ghp_newtoken123 ใน 'API Token' ใช่ไหมครับ?
+Bot:  จะบันทึก GitHub token ghp_newtoken123 ใน 'API Token' ใช่ไหมคะ?
       ตอบ 'ใช่' เพื่อยืนยัน
 You:  ใช่
-Bot:  บันทึกเรียบร้อยแล้วครับ
+Bot:  บันทึกเรียบร้อยแล้วค่ะ
 ```
 
 ---
@@ -158,6 +165,7 @@ Line Secretary คือ LINE bot เลขาส่วนตัว AI ที่
 - รัน Notion search และ fallback scan พร้อมกันเสมอ — เจอข้อมูลแม้ซ่อนใน toggle หรือ table cell ที่ Notion ไม่ index (เช่น ค้น "aeon" แล้วเจอบัตร Aeon ใน table Credit cards)
 - เก็บ header ของทุก page ไว้ใน memory ตั้งแต่ตอน start และ refresh ทุก 10 นาที — ลด Notion API call ต่อ message ลงประมาณ 90% หลัง warm up
 - จัดลำดับ context ตาม relevance — page ที่มี keyword ตรงกับคำถามมากสุดจะถูกส่งให้ LLM ก่อนเสมอ แม้ข้อมูลรวมจะเกิน context limit
+- Groq→OpenRouter auto-failover — ถ้าตั้งทั้งสอง key ไว้ (`AI_PROVIDER=auto`) จะใช้ Groq (ฟรี) เป็นหลัก พอ rate limit หมดจะสลับไป OpenRouter อัตโนมัติ และกลับมาใช้ Groq เองเมื่อ reset
 - มี confirmation step ก่อนจะ write ข้อมูลใหม่ลง Notion ทุกครั้ง
 - จำกัดการใช้งานด้วย LINE user ID whitelist
 
@@ -183,15 +191,17 @@ Line Secretary คือ LINE bot เลขาส่วนตัว AI ที่
 
 ### 1. AI Provider
 
-เลือกอย่างน้อยหนึ่งตัว (หรือตั้งไว้ทั้งสองแล้วสลับด้วย `AI_PROVIDER`):
+**แนะนำ: ตั้งทั้งสอง key แล้วใช้ `AI_PROVIDER=auto`**
 
-**Groq (ฟรี)**
+ใน auto mode bot จะใช้ Groq (ฟรี) เป็นหลัก พอ Groq หมด daily limit จะสลับไป OpenRouter อัตโนมัติ และกลับมาใช้ Groq เองเมื่อ reset — ไม่ต้อง restart
+
+**Groq (ฟรี, primary)**
 - สมัครที่ [console.groq.com](https://console.groq.com) แล้ว create API key
 - Free tier: 100K tokens/วัน (70b model), 500K tokens/วัน (8b model)
 
-**OpenRouter (จ่ายตาม token ที่ใช้)**
+**OpenRouter (จ่ายตาม token ที่ใช้, fallback)**
 - รับ key ที่ [openrouter.ai](https://openrouter.ai) — รองรับ Claude, GPT, Llama และอื่นๆ
-- ใช้เมื่อ Groq free tier หมด
+- ใช้อัตโนมัติเมื่อ Groq rate-limited (ใน auto mode)
 
 ### 2. Notion Integration Token
 
@@ -216,10 +226,13 @@ LINE_SECRETARY_CHANNEL_SECRET=...
 LINE_SECRETARY_CHANNEL_ACCESS_TOKEN=...
 LINE_SECRETARY_ALLOWED_USER_IDS=Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
-# AI provider: "groq" หรือ "openrouter"
-AI_PROVIDER=groq
+# AI provider:
+#   "auto"       — Groq หลัก (ฟรี), สลับ OpenRouter อัตโนมัติเมื่อ rate limit, กลับมาเองเมื่อ reset
+#   "groq"       — Groq อย่างเดียว
+#   "openrouter" — OpenRouter อย่างเดียว
+AI_PROVIDER=auto
 GROQ_API_KEY=gsk_...
-OPENROUTER_API_KEY=sk-or-v1-...   # ต้องการเฉพาะเมื่อ AI_PROVIDER=openrouter
+OPENROUTER_API_KEY=sk-or-v1-...
 
 NOTION_TOKEN=ntn_...
 ```
@@ -244,6 +257,7 @@ NOTION_TOKEN=ntn_...
 | `/debug2 <query>` | แสดง deep search ทั้ง pages และ databases |
 | `/debug3 <page_id>` | แสดง raw blocks ของ page นั้น |
 | `/debug4 <db_id>` | แสดง raw database query response |
+| `/provider` | แสดง provider ที่ใช้อยู่ และเวลาที่ Groq จะ resume (ถ้า rate-limited) |
 
 ## ตัวอย่างการใช้งาน
 
@@ -258,8 +272,8 @@ Bot:  GitHub token: ghp_xxxxxxxxxxxx
       (จาก page API Token)
 
 คุณ:  จด github token ใหม่ให้หน่อย ghp_newtoken123
-Bot:  จะบันทึก GitHub token ghp_newtoken123 ใน 'API Token' ใช่ไหมครับ?
+Bot:  จะบันทึก GitHub token ghp_newtoken123 ใน 'API Token' ใช่ไหมคะ?
       ตอบ 'ใช่' เพื่อยืนยัน
 คุณ:  ใช่
-Bot:  บันทึกเรียบร้อยแล้วครับ
+Bot:  บันทึกเรียบร้อยแล้วค่ะ
 ```
