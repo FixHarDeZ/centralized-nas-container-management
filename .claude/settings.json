@@ -33,7 +33,8 @@
       "Skill(release:*)",
       "Bash(gh release create v2.2.1 --title 'v2.2.1 — Table cell content in fallback keyword matching' --notes ' *)",
       "Bash(gh release create v2.3.1 --title 'v2.3.1 — Find tables nested inside toggle blocks' --notes ' *)",
-      "Bash(gh release create v2.5.0 --title 'v2.5.0 — Groq→OpenRouter auto-failover' --notes ' *)"
+      "Bash(gh release create v2.5.0 --title 'v2.5.0 — Groq→OpenRouter auto-failover' --notes ' *)",
+      "WebFetch(domain:gist.github.com)"
     ],
     "additionalDirectories": [
       "/Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management/.claude"
