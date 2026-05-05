@@ -46,6 +46,11 @@ For all other requests, write your Thai answer directly (no JSON)."""
 
 PROPOSE_TOOLS = {"propose_create", "propose_add_table_row"}
 
+_GENERAL_PROMPT = """You are a helpful AI assistant (female). Answer the user's question using your general knowledge.
+- Always respond in Thai (unless user writes English)
+- Use female Thai politeness particles: ค่ะ for statements, คะ for questions — never ครับ
+- Be concise and direct"""
+
 
 def _parse_propose(text: str) -> dict | None:
     text = text.strip()
@@ -165,6 +170,35 @@ async def run(user_message: str) -> dict:
             "pending": pending,
         }
 
+    # Offer general knowledge when Notion has no relevant data
+    if output.startswith("ไม่พบ"):
+        return {
+            "type": "ask_general",
+            "text": f"{output}\n\nต้องการให้ตอบจากความรู้ทั่วไปได้ไหมคะ?",
+            "question": user_message,
+        }
+
+    return {"type": "answer", "text": output or "ไม่มีคำตอบค่ะ"}
+
+
+async def run_general(user_message: str) -> dict:
+    client, main_model, _ = _provider.get_client(settings)
+    msgs = [
+        {"role": "system", "content": _GENERAL_PROMPT},
+        {"role": "user", "content": user_message},
+    ]
+    try:
+        response = await client.chat.completions.create(
+            model=main_model, messages=msgs, max_tokens=1024, temperature=0.5,
+        )
+    except RateLimitError as e:
+        if not settings.OPENROUTER_API_KEY:
+            raise
+        client, main_model, _ = _provider.on_groq_rate_limit(e, settings)
+        response = await client.chat.completions.create(
+            model=main_model, messages=msgs, max_tokens=1024, temperature=0.5,
+        )
+    output = (response.choices[0].message.content or "").strip()
     return {"type": "answer", "text": output or "ไม่มีคำตอบค่ะ"}
 
 
