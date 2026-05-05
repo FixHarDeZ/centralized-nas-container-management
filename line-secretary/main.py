@@ -23,9 +23,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Line Secretary", lifespan=lifespan)
 
-# In-memory pending confirmations keyed by LINE user_id
-# { user_id: {"database_id": str, "properties": dict} }
+# In-memory pending write confirmations  { user_id: write_payload }
 pending: dict[str, dict] = {}
+# In-memory pending general-knowledge confirmations  { user_id: original_question }
+pending_general: dict[str, str] = {}
 
 CONFIRM_WORDS = {"ใช่", "yes", "y", "ตกลง", "ok", "ยืนยัน", "confirm", "ใช"}
 CANCEL_WORDS = {"ไม่", "no", "n", "ยกเลิก", "cancel", "ไม่ใช่", "ไม่ครับ", "ไม่ค่ะ"}
@@ -113,7 +114,27 @@ async def handle_message(event: dict) -> None:
         await line_client.push(user_id, _provider.status_text(settings), token)
         return
 
-    # Handle pending confirmation
+    # Handle pending general-knowledge confirmation
+    if user_id in pending_general:
+        lower = text.lower()
+        if lower in CONFIRM_WORDS:
+            question = pending_general.pop(user_id)
+            try:
+                result = await agent.run_general(question)
+            except Exception as e:
+                logger.error(f"run_general error: {e}", exc_info=True)
+                await line_client.push(user_id, "เกิดข้อผิดพลาดค่ะ ลองใหม่อีกครั้งนะคะ", token)
+                return
+            await line_client.push(user_id, result["text"], token)
+            return
+        if lower in CANCEL_WORDS:
+            pending_general.pop(user_id)
+            await line_client.push(user_id, "ได้ค่ะ ถ้าต้องการข้อมูลอื่นถามได้เลยนะคะ", token)
+            return
+        # Not a confirm/cancel word — clear and treat as new query
+        pending_general.pop(user_id)
+
+    # Handle pending write confirmation
     if user_id in pending:
         lower = text.lower()
         if lower in CONFIRM_WORDS:
@@ -137,5 +158,7 @@ async def handle_message(event: dict) -> None:
 
     if result["type"] == "confirm":
         pending[user_id] = result["pending"]
+    elif result["type"] == "ask_general":
+        pending_general[user_id] = result["question"]
 
     await line_client.push(user_id, result["text"], token)
