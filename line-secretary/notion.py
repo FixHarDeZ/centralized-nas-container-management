@@ -273,7 +273,7 @@ async def get_page_headers(token: str, page_id: str) -> str:
     return "\n".join(lines)
 
 
-async def list_all_pages(token: str, limit: int = 20) -> list[dict]:
+async def list_all_pages(token: str, limit: int = 50) -> list[dict]:
     """Return all accessible pages (used as fallback when search returns nothing)."""
     async with httpx.AsyncClient() as client:
         r = await client.post(
