@@ -115,7 +115,7 @@ async def _search_variants(client: AsyncOpenAI, small_model: str, message: str) 
     return list(dict.fromkeys(variants))
 
 
-async def run(user_message: str) -> dict:
+async def run(user_message: str, history: list[dict] | None = None) -> dict:
     client, main_model, small_model = _provider.get_client(settings)
 
     search_queries = await _search_variants(client, small_model, user_message)
@@ -126,6 +126,7 @@ async def run(user_message: str) -> dict:
 
     msgs = [
         {"role": "system", "content": SYSTEM_PROMPT},
+        *(history or []),
         {"role": "user", "content": f"{user_message}\n\n[Notion data]\n{context}"},
     ]
     try:
@@ -181,10 +182,11 @@ async def run(user_message: str) -> dict:
     return {"type": "answer", "text": output or "ไม่มีคำตอบค่ะ"}
 
 
-async def run_general(user_message: str) -> dict:
+async def run_general(user_message: str, history: list[dict] | None = None) -> dict:
     client, main_model, _ = _provider.get_client(settings)
     msgs = [
         {"role": "system", "content": _GENERAL_PROMPT},
+        *(history or []),
         {"role": "user", "content": user_message},
     ]
     try:

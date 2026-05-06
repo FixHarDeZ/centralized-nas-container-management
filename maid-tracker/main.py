@@ -1,10 +1,13 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 from contextlib import asynccontextmanager
+import csv
+import io
 import sqlite3
+from urllib.parse import quote
 import os
 import hmac
 import hashlib
@@ -17,6 +20,7 @@ import line_notify
 from keywords import (
     LEAVE_KEYWORDS, COMP_KEYWORDS, HALF_DAY_KEYWORDS, BALANCE_KEYWORDS,
     PAYMENT_KEYWORDS, PAYMENT_PERIOD1_KEYWORDS, PAYMENT_PERIOD2_KEYWORDS, PAYMENT_BOTH_KEYWORDS,
+    YESTERDAY_KEYWORDS,
 )
 from calc import (
     default_status,
@@ -27,13 +31,23 @@ from calc import (
     compute_leave_deduction,
 )
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 
-_scheduler = BackgroundScheduler()
+_scheduler = BackgroundScheduler(timezone=os.environ.get("TZ", "Asia/Bangkok"))
+
+_MONTHLY_REPORT_TIME = os.environ.get("MONTHLY_REPORT_TIME", "20:00")
+_report_h, _report_m = _MONTHLY_REPORT_TIME.split(":")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    _scheduler.add_job(_check_reminders, "interval", seconds=60, id="check_reminders")
-    _scheduler.add_job(_send_monthly_report, "interval", seconds=60, id="monthly_report")
+    # Fire every minute so each reminder's send_time can be matched exactly
+    _scheduler.add_job(_check_reminders, CronTrigger(minute="*"), id="check_reminders")
+    # Fire once — at the configured time on the last calendar day of each month
+    _scheduler.add_job(
+        _send_monthly_report,
+        CronTrigger(day="last", hour=int(_report_h), minute=int(_report_m)),
+        id="monthly_report",
+    )
     _scheduler.start()
     yield
     _scheduler.shutdown(wait=False)
@@ -90,6 +104,14 @@ _PAYMENT_KEYWORDS         = PAYMENT_KEYWORDS
 _PAYMENT_PERIOD1_KEYWORDS = PAYMENT_PERIOD1_KEYWORDS
 _PAYMENT_PERIOD2_KEYWORDS = PAYMENT_PERIOD2_KEYWORDS
 _PAYMENT_BOTH_KEYWORDS    = PAYMENT_BOTH_KEYWORDS
+_YESTERDAY_KEYWORDS       = YESTERDAY_KEYWORDS
+
+
+def _parse_target_date(text: str, today: date) -> date:
+    """Return the attendance date the message refers to. Default: today."""
+    if any(kw in text for kw in _YESTERDAY_KEYWORDS):
+        return today - timedelta(days=1)
+    return today
 
 
 def get_db():
@@ -209,7 +231,7 @@ def _should_fire_today(r: dict, today: date) -> bool:
 
 
 def _check_reminders():
-    """Runs every 60 s. Fires LINE reminder if time + schedule match and not already sent today."""
+    """Triggered every minute by CronTrigger. Fires LINE reminder if send_time + schedule match and not already sent today."""
     tz          = ZoneInfo(os.environ.get("TZ", "Asia/Bangkok"))
     now         = datetime.now(tz)
     today_str   = now.strftime("%Y-%m-%d")
@@ -240,28 +262,15 @@ def _check_reminders():
         conn2.close()
 
 
-_MONTHLY_REPORT_TIME = os.environ.get("MONTHLY_REPORT_TIME", "20:00")
-_monthly_report_last_sent: str = ""  # tracks "YYYY-MM" to send once per month
+_monthly_report_last_sent: str = ""  # guard against double-fire within the same minute
 
 
 def _send_monthly_report():
-    """Runs every 60 s. Sends a monthly summary on the last day of each month at MONTHLY_REPORT_TIME."""
+    """Triggered by CronTrigger on the last day of each month at MONTHLY_REPORT_TIME."""
     global _monthly_report_last_sent
 
-    tz         = ZoneInfo(os.environ.get("TZ", "Asia/Bangkok"))
-    now        = datetime.now(tz)
-    current_hm = now.strftime("%H:%M")
-    today      = now.date()
-
-    if current_hm != _MONTHLY_REPORT_TIME:
-        return
-
-    import calendar as _cal
-    last_day = _cal.monthrange(today.year, today.month)[1]
-    if today.day != last_day:
-        return
-
-    month_key = today.strftime("%Y-%m")
+    tz        = ZoneInfo(os.environ.get("TZ", "Asia/Bangkok"))
+    month_key = datetime.now(tz).strftime("%Y-%m")
     if _monthly_report_last_sent == month_key:
         return
 
@@ -1248,27 +1257,32 @@ async def line_webhook(request: Request):
         if emp is None:
             continue
 
+        target_date = _parse_target_date(text, today)
+        target_date_str = target_date.isoformat()
+        is_yesterday = target_date < today
+        date_label = f"วันที่ {target_date_str}" if is_yesterday else "วันนี้"
+
         # Leave on Sunday is redundant — it's already a holiday
-        if status == "leave" and today.weekday() == 6:
+        if status == "leave" and target_date.weekday() == 6:
             line_notify.send_line(
-                f"📅 วันนี้วันอาทิตย์ เป็นวันหยุดอยู่แล้วนะคะ {emp['name']} 😊\n"
+                f"📅 {date_label}วันอาทิตย์ เป็นวันหยุดอยู่แล้วนะคะ {emp['name']} 😊\n"
                 f"ไม่ต้องลงวันลาค่ะ วันหยุดอยู่แล้ว"
             )
             continue
 
         # Compensatory only applies on Sunday (the designated day off)
-        if status == "compensatory" and today.weekday() != 6:
+        if status == "compensatory" and target_date.weekday() != 6:
             line_notify.send_line(
-                f"📅 วันนี้เป็นวันทำงานปกตินะคะ {emp['name']} 😊\n"
+                f"📅 {date_label}เป็นวันทำงานปกตินะคะ {emp['name']} 😊\n"
                 f"การบันทึกชดเชยใช้ได้เฉพาะวันอาทิตย์ที่มาทำงานเท่านั้นค่ะ"
             )
             continue
 
-        # Check for duplicate record today with the same status
+        # Check for duplicate record on target date with the same status
         conn = get_db()
         prev = conn.execute(
             "SELECT status, half_day FROM attendance WHERE employee_id=? AND work_date=?",
-            (emp["id"], today_str),
+            (emp["id"], target_date_str),
         ).fetchone()
 
         if prev and prev["status"] == status:
@@ -1277,23 +1291,24 @@ async def line_webhook(request: Request):
             half_label = " (ครึ่งวัน)" if bool(prev["half_day"]) else " (เต็มวัน)"
             line_notify.send_line(
                 f"✅ บันทึกแล้วนะคะ — {emp['name']}\n"
-                f"📅 {today_str}: {STATUS_LABEL[status]}{half_label} (บันทึกไว้แล้วก่อนหน้านี้)"
+                f"📅 {target_date_str}: {STATUS_LABEL[status]}{half_label} (บันทึกไว้แล้วก่อนหน้านี้)"
             )
             continue
 
         # Acknowledge intent before writing — lets the group know action is in progress
         STATUS_ACK  = {"leave": "ลา", "compensatory": "ชดเชย"}
         half_ack    = "ครึ่งวัน" if is_half_day else "เต็มวัน"
+        date_ack    = f" (วันที่ {target_date_str})" if is_yesterday else ""
         line_notify.send_line(
             f"📝 รับทราบค่ะ — {emp['name']}\n"
-            f"🔄 กำลังบันทึก{STATUS_ACK[status]}{half_ack}ในระบบให้นะคะ..."
+            f"🔄 กำลังบันทึก{STATUS_ACK[status]}{half_ack}{date_ack}ในระบบให้นะคะ..."
         )
 
         NOTE = {"leave": "แจ้งลาผ่าน LINE", "compensatory": "แจ้งชดเชยผ่าน LINE"}
         conn.execute(
             "INSERT INTO attendance (employee_id, work_date, status, note, half_day) VALUES (?,?,?,?,?) "
             "ON CONFLICT(employee_id, work_date) DO UPDATE SET status=excluded.status, note=excluded.note, half_day=excluded.half_day",
-            (emp["id"], today_str, status, NOTE[status], int(is_half_day)),
+            (emp["id"], target_date_str, status, NOTE[status], int(is_half_day)),
         )
         conn.commit()
         conn.close()
@@ -1302,7 +1317,7 @@ async def line_webhook(request: Request):
         line_notify.notify_attendance(
             emp_id=emp["id"],
             emp_name=emp["name"],
-            work_date=today_str,
+            work_date=target_date_str,
             status=status,
             half_day=is_half_day,
             start_date=start_date,
@@ -1310,6 +1325,56 @@ async def line_webhook(request: Request):
         )
 
     return {"status": "ok"}
+
+
+# ---------- Export ----------
+
+@app.get("/api/employees/{emp_id}/export/attendance")
+def export_attendance(emp_id: int):
+    conn = get_db()
+    emp = conn.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
+    if not emp:
+        conn.close()
+        raise HTTPException(404, "Employee not found")
+    emp = dict(emp)
+    start_date = date.fromisoformat(emp["start_date"])
+    end_date = date.fromisoformat(emp["end_date"]) if emp.get("end_date") else date.today()
+
+    att_rows = conn.execute(
+        "SELECT work_date, status, half_day, note FROM attendance WHERE employee_id=? ORDER BY work_date",
+        (emp_id,),
+    ).fetchall()
+    conn.close()
+
+    saved = {r["work_date"]: dict(r) for r in att_rows}
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["date", "status", "half_day", "note"])
+
+    d = start_date
+    while d <= end_date:
+        ds = d.isoformat()
+        rec = saved.get(ds)
+        if rec:
+            status = rec["status"]
+            half_day = "true" if rec["half_day"] else "false"
+            note = rec["note"] or ""
+        else:
+            status = default_status(d)
+            half_day = "false"
+            note = ""
+        writer.writerow([ds, status, half_day, note])
+        d += timedelta(days=1)
+
+    output.seek(0)
+    filename = f"attendance_{emp['name']}_{date.today().isoformat()}.csv"
+    encoded = quote(filename, safe="")
+    return StreamingResponse(
+        iter([output.getvalue().encode("utf-8-sig")]),
+        media_type="text/csv; charset=utf-8-sig",
+        headers={"Content-Disposition": f"attachment; filename=\"attendance.csv\"; filename*=UTF-8''{encoded}"},
+    )
 
 
 # ---------- Static + SPA fallback ----------

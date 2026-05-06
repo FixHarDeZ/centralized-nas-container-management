@@ -112,6 +112,8 @@ const TRANSLATIONS = {
     // Balance preview (before resign)
     overallBalAmount: (a) => `≈ ${a >= 0 ? "+" : ""}${fmtMoney(a)} บาท`,
     overallBalRate: (dr) => `(อัตราวันละ ${fmtMoney(dr)} บาท)`,
+    // Export
+    btnExportCsv: "Export CSV",
     // Reminders
     remindersTitle: "การแจ้งเตือนงาน",
     reminderAdd: "เพิ่มการแจ้งเตือน",
@@ -236,6 +238,8 @@ const TRANSLATIONS = {
     // Balance preview (before resign)
     overallBalAmount: (a) => `≈ ${a >= 0 ? "+" : ""}${fmtMoney(a)} Baht`,
     overallBalRate: (dr) => `(${fmtMoney(dr)} Baht/day)`,
+    // Export
+    btnExportCsv: "Export CSV",
     // Reminders
     remindersTitle: "Task Reminders",
     reminderAdd: "Add Reminder",
@@ -640,6 +644,9 @@ async function viewEmployeeDetail(id) {
               : `<button class="btn btn-sm btn-outline-warning" onclick="confirmResign(${id}, '${emp.name}')">
                    <i class="bi bi-door-open me-1"></i>${t("btnResign")}
                  </button>`}
+            <a class="btn btn-sm btn-outline-success" href="/api/employees/${id}/export/attendance" download>
+              <i class="bi bi-download me-1"></i>${t("btnExportCsv")}
+            </a>
             <button class="btn btn-sm btn-outline-danger" onclick="confirmDelete(${id}, '${emp.name}')">
               <i class="bi bi-trash"></i>
             </button>

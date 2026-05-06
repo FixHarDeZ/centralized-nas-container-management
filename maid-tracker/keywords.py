@@ -63,3 +63,10 @@ PAYMENT_BOTH_KEYWORDS = [
     # English
     "both", "both periods", "full month",
 ]
+
+YESTERDAY_KEYWORDS = [
+    # Thai
+    "เมื่อวาน", "วานนี้", "เมื่อวานนี้",
+    # English
+    "yesterday",
+]
