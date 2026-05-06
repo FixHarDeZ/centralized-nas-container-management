@@ -1,6 +1,6 @@
 # Homepage
 
-![Homepage](../screenshots/Homepage.png)
+![Homepage](../screenshots/homepage.png)
 
 Dashboard UI for the home lab, powered by [gethomepage/homepage](https://gethomepage.dev).
 
