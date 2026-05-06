@@ -41,6 +41,12 @@ Notion property format (for case B):
   Date:   {"Date": {"date": {"start": "YYYY-MM-DD"}}}
   Number: {"Num": {"number": 42}}
 
+For MULTIPLE rows at once — wrap all proposals in a JSON array (mix of A and B is allowed):
+[
+  {"tool": "propose_create", "database_id": "...", "database_name": "...", "properties": {...}, "summary": "Thai description"},
+  {"tool": "propose_add_table_row", "table_block_id": "...", "table_name": "...", "cells": [...], "summary": "Thai description"}
+]
+
 For all other requests, write your Thai answer directly (no JSON)."""
 
 
@@ -52,14 +58,25 @@ _GENERAL_PROMPT = """You are a helpful AI assistant (female). Answer the user's 
 - Be concise and direct"""
 
 
-def _parse_propose(text: str) -> dict | None:
+def _parse_propose(text: str) -> list[dict] | None:
+    """Parse one or more write proposals from LLM output.
+
+    Accepts:
+      - A single JSON object: {"tool": "propose_create", ...}
+      - A JSON array:         [{"tool": "propose_create", ...}, ...]
+
+    Always returns a list on success, None if no valid proposal found.
+    """
     text = text.strip()
-    if not text.startswith("{"):
+    if not text.startswith("{") and not text.startswith("["):
         return None
     try:
         obj, _ = json.JSONDecoder().raw_decode(text)
         if isinstance(obj, dict) and obj.get("tool") in PROPOSE_TOOLS:
-            return obj
+            return [obj]
+        if isinstance(obj, list):
+            valid = [item for item in obj if isinstance(item, dict) and item.get("tool") in PROPOSE_TOOLS]
+            return valid if valid else None
     except (json.JSONDecodeError, ValueError):
         pass
     return None
@@ -141,34 +158,50 @@ async def run(user_message: str, history: list[dict] | None = None) -> dict:
             model=main_model, messages=msgs, max_tokens=1024, temperature=0.3,
         )
     output = (response.choices[0].message.content or "").strip()
-    proposal = _parse_propose(output)
+    proposals = _parse_propose(output)
 
-    if proposal:
-        tool = proposal.get("tool", "")
-        summary = proposal.get("summary", "?")
+    if proposals:
+        pending_list: list[dict] = []
+        summary_lines: list[str] = []
 
-        if tool == "propose_add_table_row":
-            location = proposal.get("table_name", "?")
-            pending = {
-                "write_type": "table",
-                "table_block_id": proposal.get("table_block_id"),
-                "cells": proposal.get("cells", []),
-            }
+        for proposal in proposals:
+            tool = proposal.get("tool", "")
+            summary = proposal.get("summary", "?")
+
+            if tool == "propose_add_table_row":
+                location = proposal.get("table_name", "?")
+                pending_list.append({
+                    "write_type": "table",
+                    "table_block_id": proposal.get("table_block_id"),
+                    "cells": proposal.get("cells", []),
+                })
+            else:
+                location = proposal.get("database_name", "?")
+                pending_list.append({
+                    "write_type": "database",
+                    "database_id": proposal.get("database_id"),
+                    "properties": proposal.get("properties", {}),
+                })
+            summary_lines.append(f"• {summary} → '{location}'")
+
+        if len(pending_list) == 1:
+            p0 = proposals[0]
+            loc0 = p0.get("table_name") or p0.get("database_name") or "?"
+            confirm_text = (
+                f"จะบันทึก {p0.get('summary', '?')} ใน '{loc0}' ใช่ไหมคะ?\n\n"
+                "ตอบ 'ใช่' เพื่อยืนยัน หรือ 'ไม่' เพื่อยกเลิก"
+            )
         else:
-            location = proposal.get("database_name", "?")
-            pending = {
-                "write_type": "database",
-                "database_id": proposal.get("database_id"),
-                "properties": proposal.get("properties", {}),
-            }
+            items = "\n".join(summary_lines)
+            confirm_text = (
+                f"จะบันทึก {len(pending_list)} รายการ:\n{items}\n\n"
+                "ตอบ 'ใช่' เพื่อยืนยันทั้งหมด หรือ 'ไม่' เพื่อยกเลิก"
+            )
 
         return {
             "type": "confirm",
-            "text": (
-                f"จะบันทึก {summary} ใน '{location}' ใช่ไหมคะ?\n\n"
-                "ตอบ 'ใช่' เพื่อยืนยัน หรือ 'ไม่' เพื่อยกเลิก"
-            ),
-            "pending": pending,
+            "text": confirm_text,
+            "pending": pending_list,
         }
 
     # Offer general knowledge when Notion has no relevant data
@@ -366,19 +399,32 @@ async def _deep_search(token: str, queries: list[str] | str) -> dict:
     return {"pages": merged_pages, "databases": merged_dbs}
 
 
-async def execute_write(pending: dict) -> str:
-    token = settings.NOTION_TOKEN
+async def _write_one(token: str, item: dict) -> bool:
+    """Execute a single write. Returns True on success."""
     try:
-        if pending.get("write_type") == "table":
-            result = await notion.add_table_row(token, pending["table_block_id"], pending["cells"])
-            if result.get("object") == "list":
-                return "บันทึกเรียบร้อยแล้วค่ะ"
-            return f"เกิดข้อผิดพลาด: {result.get('message', 'unknown error')}"
+        if item.get("write_type") == "table":
+            result = await notion.add_table_row(token, item["table_block_id"], item["cells"])
+            return result.get("object") == "list"
         else:
-            result = await notion.create_row(token, pending["database_id"], pending["properties"])
-            if result.get("object") == "page":
-                return "บันทึกเรียบร้อยแล้วค่ะ"
-            return f"เกิดข้อผิดพลาด: {result.get('message', 'unknown error')}"
+            result = await notion.create_row(token, item["database_id"], item["properties"])
+            return result.get("object") == "page"
     except Exception as e:
-        logger.error(f"execute_write error: {e}")
-        return "บันทึกไม่สำเร็จค่ะ ลองใหม่อีกครั้งนะคะ"
+        logger.error(f"_write_one error: {e}")
+        return False
+
+
+async def execute_write(pending: list[dict]) -> str:
+    """Execute all pending writes in parallel. pending is always a list."""
+    token = settings.NOTION_TOKEN
+    results = await asyncio.gather(*[_write_one(token, item) for item in pending])
+
+    succeeded = sum(results)
+    total = len(results)
+
+    if total == 1:
+        return "บันทึกเรียบร้อยแล้วค่ะ" if results[0] else "บันทึกไม่สำเร็จค่ะ ลองใหม่อีกครั้งนะคะ"
+    if succeeded == total:
+        return f"บันทึกเรียบร้อยทั้ง {total} รายการค่ะ"
+    if succeeded == 0:
+        return "บันทึกไม่สำเร็จทุกรายการค่ะ ลองใหม่อีกครั้งนะคะ"
+    return f"บันทึกสำเร็จ {succeeded}/{total} รายการค่ะ (บางรายการมีข้อผิดพลาด)"
