@@ -4,7 +4,7 @@
 
 Household staff attendance & salary tracking system — Single-Page Application running on Docker.
 
-![Maid Tracker](../screenshots/Maid-tracker.png)
+![Maid Tracker](../screenshots/maid-tracker.png)
 
 **Local URL:** `http://<NAS_IP>:5055`
 **External URL:** `https://<NAS_HOST>:5056` (via Synology Reverse Proxy)
