@@ -7,6 +7,7 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 import agent
 import line_client
 import provider as _provider
+import store
 from cache import cache as _cache
 from config import settings
 
@@ -16,17 +17,13 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    store.init(settings.DATA_DIR)
     _cache.init(settings.NOTION_TOKEN)
     _cache.start()
     yield
 
 
 app = FastAPI(title="Line Secretary", lifespan=lifespan)
-
-# In-memory pending write confirmations  { user_id: write_payload }
-pending: dict[str, dict] = {}
-# In-memory pending general-knowledge confirmations  { user_id: original_question }
-pending_general: dict[str, str] = {}
 
 CONFIRM_WORDS = {"ใช่", "yes", "y", "ตกลง", "ok", "ยืนยัน", "confirm", "ใช"}
 CANCEL_WORDS = {"ไม่", "no", "n", "ยกเลิก", "cancel", "ไม่ใช่", "ไม่ครับ", "ไม่ค่ะ"}
@@ -115,50 +112,55 @@ async def handle_message(event: dict) -> None:
         return
 
     # Handle pending general-knowledge confirmation
-    if user_id in pending_general:
+    if store.has_pending_general(user_id):
         lower = text.lower()
         if lower in CONFIRM_WORDS:
-            question = pending_general.pop(user_id)
+            question = store.pop_pending_general(user_id)
             try:
-                result = await agent.run_general(question)
+                result = await agent.run_general(question, store.get_history(user_id))
             except Exception as e:
                 logger.error(f"run_general error: {e}", exc_info=True)
                 await line_client.push(user_id, "เกิดข้อผิดพลาดค่ะ ลองใหม่อีกครั้งนะคะ", token)
                 return
-            await line_client.push(user_id, result["text"], token)
+            reply = result["text"]
+            store.add_history(user_id, question, reply)
+            await line_client.push(user_id, reply, token)
             return
         if lower in CANCEL_WORDS:
-            pending_general.pop(user_id)
+            store.pop_pending_general(user_id)
             await line_client.push(user_id, "ได้ค่ะ ถ้าต้องการข้อมูลอื่นถามได้เลยนะคะ", token)
             return
         # Not a confirm/cancel word — clear and treat as new query
-        pending_general.pop(user_id)
+        store.pop_pending_general(user_id)
 
     # Handle pending write confirmation
-    if user_id in pending:
+    if store.has_pending(user_id):
         lower = text.lower()
         if lower in CONFIRM_WORDS:
-            action = pending.pop(user_id)
+            action = store.pop_pending(user_id)
             reply = await agent.execute_write(action)
             await line_client.push(user_id, reply, token)
             return
         if lower in CANCEL_WORDS:
-            pending.pop(user_id)
+            store.pop_pending(user_id)
             await line_client.push(user_id, "ยกเลิกแล้วค่ะ", token)
             return
         # Not a confirmation word — treat as new query
-        pending.pop(user_id)
+        store.pop_pending(user_id)
 
     try:
-        result = await agent.run(text)
+        result = await agent.run(text, store.get_history(user_id))
     except Exception as e:
         logger.error(f"Agent error for user {user_id}: {e}", exc_info=True)
-        await line_client.push(user_id, f"[DEBUG] Error: {type(e).__name__}: {e}", token)
+        await line_client.push(user_id, "เกิดข้อผิดพลาดขึ้นค่ะ ลองใหม่อีกครั้งนะคะ", token)
         return
 
     if result["type"] == "confirm":
-        pending[user_id] = result["pending"]
+        store.set_pending(user_id, result["pending"])
     elif result["type"] == "ask_general":
-        pending_general[user_id] = result["question"]
+        store.set_pending_general(user_id, result["question"])
 
-    await line_client.push(user_id, result["text"], token)
+    reply = result["text"]
+    if result["type"] == "answer":
+        store.add_history(user_id, text, reply)
+    await line_client.push(user_id, reply, token)

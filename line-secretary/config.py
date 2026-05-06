@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = ""
     OPENROUTER_API_KEY: str = ""
 
+    DATA_DIR: str = "/data"
+
     model_config = SettingsConfigDict(extra="ignore")
 
     @property
