@@ -145,14 +145,33 @@ async def _read_table(token: str, table_block_id: str, has_header: bool) -> str:
 
 
 async def update_table_row(token: str, row_block_id: str, cells: list[str]) -> dict:
-    """Replace all cells in an existing table_row block."""
+    """Replace all cells in an existing table_row block.
+
+    Fetches the current row first so the cells list can be padded to the
+    correct table width — prevents Notion's 'cells must match table width' error
+    when the LLM sends a partial cell list.
+    """
     async with httpx.AsyncClient() as client:
+        # Fetch current row to get actual column count
+        current = await client.get(
+            f"{NOTION_API}/blocks/{row_block_id}",
+            headers=_headers(token),
+            timeout=15,
+        )
+        current_data = current.json()
+        current_cells = current_data.get("table_row", {}).get("cells", [])
+        table_width = len(current_cells)
+
+        # Pad or truncate to match table width
+        padded = list(cells) + [""] * max(0, table_width - len(cells))
+        padded = padded[:table_width]
+
         r = await client.patch(
             f"{NOTION_API}/blocks/{row_block_id}",
             headers=_headers(token),
             json={
                 "table_row": {
-                    "cells": [[{"type": "text", "text": {"content": c}}] for c in cells]
+                    "cells": [[{"type": "text", "text": {"content": c}}] for c in padded]
                 }
             },
             timeout=15,
@@ -173,8 +192,24 @@ async def update_row(token: str, page_id: str, properties: dict) -> dict:
 
 
 async def add_table_row(token: str, table_block_id: str, cells: list[str]) -> dict:
-    """Append a new row to a Notion simple table block."""
+    """Append a new row to a Notion simple table block.
+
+    Fetches the table's column count first and pads/truncates the cells list
+    to match — prevents Notion's 'cells must match table width' error when the
+    LLM sends fewer cells than the table has columns.
+    """
     async with httpx.AsyncClient() as client:
+        # Fetch table block to get table_width
+        table_block = await client.get(
+            f"{NOTION_API}/blocks/{table_block_id}",
+            headers=_headers(token),
+            timeout=15,
+        )
+        table_width = table_block.json().get("table", {}).get("table_width", len(cells))
+
+        padded = list(cells) + [""] * max(0, table_width - len(cells))
+        padded = padded[:table_width]
+
         r = await client.patch(
             f"{NOTION_API}/blocks/{table_block_id}/children",
             headers=_headers(token),
@@ -183,7 +218,7 @@ async def add_table_row(token: str, table_block_id: str, cells: list[str]) -> di
                     "object": "block",
                     "type": "table_row",
                     "table_row": {
-                        "cells": [[{"type": "text", "text": {"content": c}}] for c in cells]
+                        "cells": [[{"type": "text", "text": {"content": c}}] for c in padded]
                     },
                 }]
             },
@@ -350,6 +385,29 @@ async def create_row(token: str, database_id: str, properties: dict) -> dict:
             f"{NOTION_API}/pages",
             headers=_headers(token),
             json={"parent": {"database_id": database_id}, "properties": properties},
+            timeout=15,
+        )
+        return r.json()
+
+
+async def delete_table_row(token: str, row_block_id: str) -> dict:
+    """Permanently delete a table_row block."""
+    async with httpx.AsyncClient() as client:
+        r = await client.delete(
+            f"{NOTION_API}/blocks/{row_block_id}",
+            headers=_headers(token),
+            timeout=15,
+        )
+        return r.json()
+
+
+async def archive_row(token: str, page_id: str) -> dict:
+    """Archive (soft-delete / move to trash) a Notion database page."""
+    async with httpx.AsyncClient() as client:
+        r = await client.patch(
+            f"{NOTION_API}/pages/{page_id}",
+            headers=_headers(token),
+            json={"archived": True},
             timeout=15,
         )
         return r.json()
