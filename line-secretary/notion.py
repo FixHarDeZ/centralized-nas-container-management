@@ -103,7 +103,11 @@ async def get_page_content(token: str, page_id: str, _depth: int = 0) -> str:
 
 
 async def _read_table(token: str, table_block_id: str, has_header: bool) -> str:
-    """Read a Notion simple table block and return rows as text with TABLE_BLOCK_ID header."""
+    """Read a Notion simple table block.
+
+    Each data row is prefixed with [ROW_ID: <block_id>] so the LLM can
+    reference it when proposing an update.
+    """
     async with httpx.AsyncClient() as client:
         r = await client.get(
             f"{NOTION_API}/blocks/{table_block_id}/children",
@@ -126,15 +130,46 @@ async def _read_table(token: str, table_block_id: str, has_header: bool) -> str:
         if has_header and i == 0:
             header = cells
         else:
+            row_prefix = f"[ROW_ID: {row['id']}] "
             if header:
-                lines.append(", ".join(f"{header[j]}: {cells[j]}" for j in range(min(len(header), len(cells)))))
+                lines.append(row_prefix + ", ".join(
+                    f"{header[j]}: {cells[j]}" for j in range(min(len(header), len(cells)))
+                ))
             else:
-                lines.append(" | ".join(cells))
+                lines.append(row_prefix + " | ".join(cells))
 
     prefix = f"[TABLE_BLOCK_ID: {table_block_id}]"
     if header:
         prefix += f" [COLUMNS: {' | '.join(header)}]"
     return prefix + "\n" + "\n".join(lines)
+
+
+async def update_table_row(token: str, row_block_id: str, cells: list[str]) -> dict:
+    """Replace all cells in an existing table_row block."""
+    async with httpx.AsyncClient() as client:
+        r = await client.patch(
+            f"{NOTION_API}/blocks/{row_block_id}",
+            headers=_headers(token),
+            json={
+                "table_row": {
+                    "cells": [[{"type": "text", "text": {"content": c}}] for c in cells]
+                }
+            },
+            timeout=15,
+        )
+        return r.json()
+
+
+async def update_row(token: str, page_id: str, properties: dict) -> dict:
+    """Update properties of an existing Notion database page (row)."""
+    async with httpx.AsyncClient() as client:
+        r = await client.patch(
+            f"{NOTION_API}/pages/{page_id}",
+            headers=_headers(token),
+            json={"properties": properties},
+            timeout=15,
+        )
+        return r.json()
 
 
 async def add_table_row(token: str, table_block_id: str, cells: list[str]) -> dict:
