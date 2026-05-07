@@ -41,6 +41,13 @@ Notion property format (for case B):
   Date:   {"Date": {"date": {"start": "YYYY-MM-DD"}}}
   Number: {"Num": {"number": 42}}
 
+C) To UPDATE an existing row in a simple table — use the [ROW_ID: xxx] shown next to each row:
+{"tool": "propose_update_table_row", "row_block_id": "xxx", "table_name": "page name", "cells": ["full_col1", "full_col2", ...], "summary": "Thai description"}
+cells must contain ALL columns of the row (unchanged columns keep their original value).
+
+D) To UPDATE an existing database row — use the page id shown in the row data:
+{"tool": "propose_update_row", "page_id": "...", "database_name": "...", "properties": {...}, "summary": "Thai description"}
+
 For MULTIPLE rows at once — output a JSON array with one object per row. CRITICAL rules:
 - One line of user input = ONE row. Never merge multiple lines into one row.
 - Example: user writes "test 12sdafsdfdgs\ntest02 adfsdfafasf" → TWO rows, not one.
@@ -52,7 +59,7 @@ For MULTIPLE rows at once — output a JSON array with one object per row. CRITI
 For all other requests, write your Thai answer directly (no JSON)."""
 
 
-PROPOSE_TOOLS = {"propose_create", "propose_add_table_row"}
+PROPOSE_TOOLS = {"propose_create", "propose_add_table_row", "propose_update_table_row", "propose_update_row"}
 
 _GENERAL_PROMPT = """You are a helpful AI assistant (female). Answer the user's question using your general knowledge.
 - Always respond in Thai (unless user writes English)
@@ -151,6 +158,26 @@ async def _search_variants(client: AsyncOpenAI, small_model: str, message: str) 
     return list(dict.fromkeys(variants))
 
 
+def _extract_prop_preview(props: dict) -> list[str]:
+    """Extract human-readable values from a Notion properties dict for confirm preview."""
+    vals: list[str] = []
+    for v in props.values():
+        if not isinstance(v, dict):
+            continue
+        for content in v.values():
+            if isinstance(content, list):
+                for item in content:
+                    if isinstance(item, dict):
+                        text = item.get("text", {}).get("content", "")
+                        if text:
+                            vals.append(text)
+            elif isinstance(content, dict):
+                text = str(content.get("name") or content.get("start") or "")
+                if text:
+                    vals.append(text)
+    return vals
+
+
 async def run(user_message: str, history: list[dict] | None = None) -> dict:
     client, main_model, small_model = _provider.get_client(settings)
 
@@ -185,38 +212,48 @@ async def run(user_message: str, history: list[dict] | None = None) -> dict:
 
         for proposal in proposals:
             tool = proposal.get("tool", "")
+            cells = proposal.get("cells", [])
+            props = proposal.get("properties", {})
 
             if tool == "propose_add_table_row":
                 location = proposal.get("table_name", "?")
-                cells = proposal.get("cells", [])
                 pending_list.append({
                     "write_type": "table",
                     "table_block_id": proposal.get("table_block_id"),
                     "cells": cells,
                 })
-                # Show non-empty cells so user can verify content before confirming
                 cell_preview = " | ".join(c for c in cells if c)
-                preview_lines.append(f"• [{cell_preview}]")
-            else:
+                preview_lines.append(f"• [เพิ่ม] [{cell_preview}]")
+
+            elif tool == "propose_update_table_row":
+                location = proposal.get("table_name", "?")
+                pending_list.append({
+                    "write_type": "table_update",
+                    "row_block_id": proposal.get("row_block_id"),
+                    "cells": cells,
+                })
+                cell_preview = " | ".join(c for c in cells if c)
+                preview_lines.append(f"• [แก้ไข] [{cell_preview}]")
+
+            elif tool == "propose_update_row":
                 location = proposal.get("database_name", "?")
-                props = proposal.get("properties", {})
+                pending_list.append({
+                    "write_type": "database_update",
+                    "page_id": proposal.get("page_id"),
+                    "properties": props,
+                })
+                prop_vals = _extract_prop_preview(props)
+                preview_lines.append(f"• [แก้ไข] {' | '.join(prop_vals)}")
+
+            else:  # propose_create
+                location = proposal.get("database_name", "?")
                 pending_list.append({
                     "write_type": "database",
                     "database_id": proposal.get("database_id"),
                     "properties": props,
                 })
-                # Extract title/text values for preview
-                prop_vals = []
-                for v in props.values():
-                    if isinstance(v, dict):
-                        for content_list in v.values():
-                            if isinstance(content_list, list):
-                                for item in content_list:
-                                    if isinstance(item, dict):
-                                        prop_vals.append(item.get("text", {}).get("content", ""))
-                            elif isinstance(content_list, dict):
-                                prop_vals.append(str(content_list.get("name", content_list.get("start", ""))))
-                preview_lines.append(f"• {' | '.join(v for v in prop_vals if v)}")
+                prop_vals = _extract_prop_preview(props)
+                preview_lines.append(f"• [เพิ่ม] {' | '.join(prop_vals)}")
 
         loc_name = (proposals[0].get("table_name") or proposals[0].get("database_name") or "?")
         preview = "\n".join(preview_lines)
@@ -430,20 +467,30 @@ async def _deep_search(token: str, queries: list[str] | str) -> dict:
 async def _write_one(token: str, item: dict) -> str | None:
     """Execute a single write. Returns None on success, error string on failure."""
     try:
-        if item.get("write_type") == "table":
+        write_type = item.get("write_type", "")
+
+        if write_type == "table":
             result = await notion.add_table_row(token, item["table_block_id"], item["cells"])
-            if result.get("object") == "list":
-                return None
-            err = result.get("message") or result.get("code") or str(result)
-            logger.error(f"add_table_row failed: {result}")
-            return err
-        else:
+            ok = result.get("object") == "list"
+
+        elif write_type == "table_update":
+            result = await notion.update_table_row(token, item["row_block_id"], item["cells"])
+            ok = result.get("object") == "block"
+
+        elif write_type == "database_update":
+            result = await notion.update_row(token, item["page_id"], item["properties"])
+            ok = result.get("object") == "page"
+
+        else:  # "database" — insert new row
             result = await notion.create_row(token, item["database_id"], item["properties"])
-            if result.get("object") == "page":
-                return None
-            err = result.get("message") or result.get("code") or str(result)
-            logger.error(f"create_row failed: {result}")
-            return err
+            ok = result.get("object") == "page"
+
+        if ok:
+            return None
+        err = result.get("message") or result.get("code") or str(result)
+        logger.error(f"_write_one failed ({write_type}): {result}")
+        return err
+
     except Exception as e:
         logger.error(f"_write_one exception: {e}")
         return str(e)
