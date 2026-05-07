@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from contextlib import asynccontextmanager
@@ -111,6 +112,14 @@ async def handle_message(event: dict) -> None:
         await line_client.push(user_id, _provider.status_text(settings), token)
         return
 
+    # /clear → wipe history + pending for this user (useful when bot gets stuck)
+    if text == "/clear":
+        store.pop_pending(user_id)
+        store.pop_pending_general(user_id)
+        store.clear_history(user_id)
+        await line_client.push(user_id, "ล้างประวัติการสนทนาแล้วค่ะ 🗑️", token)
+        return
+
     # Handle pending general-knowledge confirmation
     if store.has_pending_general(user_id):
         lower = text.lower()
@@ -151,9 +160,14 @@ async def handle_message(event: dict) -> None:
     try:
         result = await agent.run(text, store.get_history(user_id))
     except Exception as e:
-        logger.error(f"Agent error for user {user_id}: {e}", exc_info=True)
-        await line_client.push(user_id, "เกิดข้อผิดพลาดขึ้นค่ะ ลองใหม่อีกครั้งนะคะ", token)
-        return
+        logger.warning(f"Agent first attempt failed for {user_id}: {type(e).__name__}: {e} — retrying in 3s")
+        await asyncio.sleep(3)
+        try:
+            result = await agent.run(text, store.get_history(user_id))
+        except Exception as e2:
+            logger.error(f"Agent retry also failed for {user_id}: {e2}", exc_info=True)
+            await line_client.push(user_id, "เกิดข้อผิดพลาดขึ้นค่ะ ลองใหม่อีกครั้งนะคะ", token)
+            return
 
     if result["type"] == "confirm":
         store.set_pending(user_id, result["pending"])
@@ -162,5 +176,8 @@ async def handle_message(event: dict) -> None:
 
     reply = result["text"]
     if result["type"] == "answer":
-        store.add_history(user_id, text, reply)
+        # Safety: don't store replies that contain raw JSON proposals —
+        # those are bad LLM outputs that would poison future context.
+        if not agent._parse_propose(reply):
+            store.add_history(user_id, text, reply)
     await line_client.push(user_id, reply, token)

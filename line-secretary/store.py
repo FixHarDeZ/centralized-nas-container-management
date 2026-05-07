@@ -115,3 +115,9 @@ def add_history(user_id: str, user_text: str, bot_text: str) -> None:
     if len(hist) > MAX_HISTORY * 2:
         _state["history"][user_id] = hist[-(MAX_HISTORY * 2):]
     _save()
+
+
+def clear_history(user_id: str) -> None:
+    if user_id in _state["history"]:
+        del _state["history"][user_id]
+        _save()
