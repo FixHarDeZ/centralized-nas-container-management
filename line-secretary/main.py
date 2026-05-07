@@ -112,6 +112,26 @@ async def handle_message(event: dict) -> None:
         await line_client.push(user_id, _provider.status_text(settings), token)
         return
 
+    # /help → show available commands and usage tips
+    if text == "/help":
+        await line_client.push(user_id, (
+            "📖 คำสั่งที่ใช้ได้:\n"
+            "/help — แสดงคำสั่งทั้งหมดนี้\n"
+            "/clear — ล้างประวัติสนทนา + pending (ใช้เมื่อบอทติด)\n"
+            "/provider — ดู AI provider ที่ใช้งานอยู่\n"
+            "/debug <query> — ค้นหา Notion ดิบๆ\n"
+            "/debug2 <query> — deep search (รวม embedded tables)\n"
+            "/debug3 <page_id> — ดู raw blocks ของ page\n"
+            "/debug4 <db_id> — ดู raw rows ของ database\n\n"
+            "💬 วิธีใช้งาน:\n"
+            "• ถามข้อมูล: \"ขอ user pass Jira\", \"API token ของ groq คืออะไร\"\n"
+            "• เพิ่มข้อมูล: \"เพิ่ม api token...\", \"บันทึก...\"\n"
+            "• แก้ไขข้อมูล: \"แก้ ... ให้เป็น ...\"\n"
+            "• ลบข้อมูล: \"ลบ ... ออก\"\n\n"
+            "⚠️ ทุก write (เพิ่ม/แก้/ลบ) ต้องยืนยันด้วย 'ใช่' ก่อนเสมอค่ะ"
+        ), token)
+        return
+
     # /clear → wipe history + pending for this user (useful when bot gets stuck)
     if text == "/clear":
         store.pop_pending(user_id)

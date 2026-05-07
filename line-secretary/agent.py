@@ -48,6 +48,13 @@ cells must contain ALL columns of the row (unchanged columns keep their original
 D) To UPDATE an existing database row — use the page id shown in the row data:
 {"tool": "propose_update_row", "page_id": "...", "database_name": "...", "properties": {...}, "summary": "Thai description"}
 
+E) To DELETE / REMOVE a row in a simple table (triggered by words like ลบ, เอาออก, ลบออก, ลบทิ้ง, remove, delete) — use the [ROW_ID: xxx] shown next to each row:
+{"tool": "propose_delete_table_row", "row_block_id": "xxx", "table_name": "page name", "summary": "Thai description of what will be deleted"}
+IMPORTANT: Use DELETE (not update) when the user wants to remove the entire row, not change its content.
+
+F) To DELETE (archive) a database row — same trigger words as E:
+{"tool": "propose_delete_row", "page_id": "...", "database_name": "...", "summary": "Thai description of what will be deleted"}
+
 For MULTIPLE rows at once — output a JSON array with one object per row. CRITICAL rules:
 - One line of user input = ONE row. Never merge multiple lines into one row.
 - Example: user writes "test 12sdafsdfdgs\ntest02 adfsdfafasf" → TWO rows, not one.
@@ -59,7 +66,11 @@ For MULTIPLE rows at once — output a JSON array with one object per row. CRITI
 For all other requests, write your Thai answer directly (no JSON)."""
 
 
-PROPOSE_TOOLS = {"propose_create", "propose_add_table_row", "propose_update_table_row", "propose_update_row"}
+PROPOSE_TOOLS = {
+    "propose_create", "propose_add_table_row",
+    "propose_update_table_row", "propose_update_row",
+    "propose_delete_table_row", "propose_delete_row",
+}
 
 _GENERAL_PROMPT = """You are a helpful AI assistant (female). Answer the user's question using your general knowledge.
 - Always respond in Thai (unless user writes English)
@@ -194,14 +205,14 @@ async def run(user_message: str, history: list[dict] | None = None) -> dict:
     ]
     try:
         response = await client.chat.completions.create(
-            model=main_model, messages=msgs, max_tokens=1024, temperature=0.3,
+            model=main_model, messages=msgs, max_tokens=2048, temperature=0.3,
         )
     except RateLimitError as e:
         if not settings.OPENROUTER_API_KEY:
             raise
         client, main_model, _ = _provider.on_groq_rate_limit(e, settings)
         response = await client.chat.completions.create(
-            model=main_model, messages=msgs, max_tokens=1024, temperature=0.3,
+            model=main_model, messages=msgs, max_tokens=2048, temperature=0.3,
         )
     output = (response.choices[0].message.content or "").strip()
     proposals = _parse_propose(output)
@@ -245,6 +256,22 @@ async def run(user_message: str, history: list[dict] | None = None) -> dict:
                 prop_vals = _extract_prop_preview(props)
                 preview_lines.append(f"• [แก้ไข] {' | '.join(prop_vals)}")
 
+            elif tool == "propose_delete_table_row":
+                location = proposal.get("table_name", "?")
+                pending_list.append({
+                    "write_type": "table_delete",
+                    "row_block_id": proposal.get("row_block_id"),
+                })
+                preview_lines.append(f"• [🗑️ ลบ] {proposal.get('summary', '?')}")
+
+            elif tool == "propose_delete_row":
+                location = proposal.get("database_name", "?")
+                pending_list.append({
+                    "write_type": "database_delete",
+                    "page_id": proposal.get("page_id"),
+                })
+                preview_lines.append(f"• [🗑️ ลบ] {proposal.get('summary', '?')}")
+
             else:  # propose_create
                 location = proposal.get("database_name", "?")
                 pending_list.append({
@@ -258,8 +285,20 @@ async def run(user_message: str, history: list[dict] | None = None) -> dict:
         loc_name = (proposals[0].get("table_name") or proposals[0].get("database_name") or "?")
         preview = "\n".join(preview_lines)
         n = len(pending_list)
+
+        _delete_types = {"table_delete", "database_delete"}
+        all_delete = all(p.get("write_type") in _delete_types for p in pending_list)
+        has_delete = any(p.get("write_type") in _delete_types for p in pending_list)
+
+        if all_delete:
+            action_verb = f"⚠️ จะลบ {n} รายการ ออกจาก '{loc_name}' (ไม่สามารถกู้คืนได้)"
+        elif has_delete:
+            action_verb = f"จะดำเนินการ {n} รายการ ใน '{loc_name}'"
+        else:
+            action_verb = f"จะบันทึก {n} รายการ ลงใน '{loc_name}'"
+
         confirm_text = (
-            f"จะบันทึก {n} {'รายการ' if n > 1 else 'รายการ'} ลงใน '{loc_name}':\n{preview}\n\n"
+            f"{action_verb}:\n{preview}\n\n"
             "ตอบ 'ใช่' เพื่อยืนยัน หรือ 'ไม่' เพื่อยกเลิก"
         )
 
@@ -276,6 +315,12 @@ async def run(user_message: str, history: list[dict] | None = None) -> dict:
             "text": f"{output}\n\nต้องการให้ตอบจากความรู้ทั่วไปได้ไหมคะ?",
             "question": user_message,
         }
+
+    # If output looks like a JSON proposal but failed to parse (e.g. truncated
+    # by token limit), don't leak raw JSON to the user — ask them to retry.
+    if output.lstrip().startswith(("{", "[")):
+        logger.warning(f"Malformed proposal output (truncated?): {output[:120]}")
+        return {"type": "answer", "text": "ขอโทษค่ะ ข้อความยาวเกินไปทำให้ประมวลผลไม่สำเร็จ ลองพิมพ์ใหม่อีกครั้งนะคะ"}
 
     return {"type": "answer", "text": output or "ไม่มีคำตอบค่ะ"}
 
@@ -480,6 +525,14 @@ async def _write_one(token: str, item: dict) -> str | None:
         elif write_type == "database_update":
             result = await notion.update_row(token, item["page_id"], item["properties"])
             ok = result.get("object") == "page"
+
+        elif write_type == "table_delete":
+            result = await notion.delete_table_row(token, item["row_block_id"])
+            ok = result.get("object") == "block"
+
+        elif write_type == "database_delete":
+            result = await notion.archive_row(token, item["page_id"])
+            ok = result.get("object") == "page" and result.get("archived") is True
 
         else:  # "database" — insert new row
             result = await notion.create_row(token, item["database_id"], item["properties"])
