@@ -1,0 +1,405 @@
+"""
+TorrentWatch — bearbit.org scraper
+
+Login flow: POST /login.php → session cookie maintained in _client.
+If a fetch redirects to login page, re-login is attempted automatically.
+
+HTML selectors are in the SELECTOR_* block below — edit these if the site
+changes layout without touching other code. Use GET /api/debug/html?source_id=<id>
+to inspect the raw HTML from a running container.
+"""
+
+import asyncio
+import re
+from datetime import datetime
+from urllib.parse import urljoin, urlparse
+from zoneinfo import ZoneInfo
+
+import httpx
+from bs4 import BeautifulSoup
+
+import config
+
+_TZ = ZoneInfo(config.TZ)
+
+# ─── Category name mapping (bearbit.org cat IDs) ─────────────────────────────
+_CAT_NAMES: dict[str, str] = {
+    "901": "H Anime",   "902": "H Game",
+    "903": "JP เซ็น",   "904": "JP ไม่เซ็น",
+    "905": "ฝรั่ง",     "906": "เอเชียเซ็น",
+    "907": "เอเชีย",    "908": "Gay",
+    "910": "คลิป",      "911": "รูป",
+    "912": "นิตยสาร",
+}
+
+def _category_name(cat_id: str) -> str:
+    return _CAT_NAMES.get(cat_id, cat_id)
+
+# ─── Selectors — based on actual bearbit.org HTML (verified 2026-05-08) ───────
+LOGIN_URL        = f"{config.SITE_BASE_URL}/login.php"
+LOGIN_FIELD_USER = "username"
+LOGIN_FIELD_PASS = "password"
+
+# Each torrent row has data-category-id; header rows and other <tr>s do not
+ROW_SELECTOR = "tr[data-category-id]"
+
+# Column indices (0-based) in each matching <tr>
+COL_COVER   = 1   # <td class="poster-column"> → <img src="...">
+COL_TITLE   = 2   # <td width="900"> → <a href="details.php?id=X&hashinfo=Y"><b>title
+COL_FILES   = 5   # ไฟล์ — plain number
+COL_DATE    = 7   # <nobr>DD-MM-YYYY<BR>HH:MM:SS</nobr>
+COL_SIZE    = 8   # ขนาด — "2.63 GB" / "380.60 MB"
+COL_SEEDS   = 10  # ปล่อย — <span class="green|red">N</span> or plain number
+COL_LEECHES = 11  # ดูด — plain number (may be inside <b><a>N</a></b>)
+
+# Download URL constructed from site_id (id= param in details.php URL)
+# Adjust if the server returns 403/redirect — may need dl.php or downloadlink.php
+DOWNLOAD_URL_TPL = f"{config.SITE_BASE_URL}/download.php?id={{site_id}}"
+
+LOGIN_URL_MARKERS = ["login.php", "/login", "signin", "register.php"]
+# ─────────────────────────────────────────────────────────────────────────────
+
+_client: httpx.AsyncClient | None = None
+_login_ok: bool = False
+
+
+async def init():
+    global _client, _login_ok
+    _client = httpx.AsyncClient(
+        follow_redirects=True,
+        timeout=30,
+        headers={"User-Agent": "Mozilla/5.0 (compatible; TorrentWatch/1.0)"},
+    )
+    _login_ok = await _login()
+    print(f"[scraper] init — login {'OK' if _login_ok else 'FAILED'}")
+
+
+async def close():
+    global _client
+    if _client:
+        await _client.aclose()
+        _client = None
+
+
+async def _login() -> bool:
+    if not config.SITE_USERNAME or not config.SITE_PASSWORD:
+        print("[scraper] WARNING: credentials not set — skipping login")
+        return False
+    try:
+        # Fetch login page first to get any hidden fields / csrf token
+        resp = await _client.get(LOGIN_URL)
+        soup = BeautifulSoup(resp.text, "html.parser")
+        form = soup.find("form")
+        payload = {}
+        if form:
+            for inp in form.find_all("input", {"type": ["hidden", "text", "password"]}):
+                name = inp.get("name", "")
+                if name:
+                    payload[name] = inp.get("value", "")
+
+        payload[LOGIN_FIELD_USER] = config.SITE_USERNAME
+        payload[LOGIN_FIELD_PASS] = config.SITE_PASSWORD
+
+        action = form["action"] if form and form.get("action") else LOGIN_URL
+        if not action.startswith("http"):
+            action = urljoin(config.SITE_BASE_URL, action)
+
+        print(f"[scraper] login POST → {action} (fields: {list(payload.keys())})")
+        resp = await _client.post(action, data=payload)
+        print(f"[scraper] login response → {resp.url} (status {resp.status_code})")
+        if _is_login_page(resp.text, str(resp.url)):
+            print("[scraper] login failed — still on login page after POST")
+            return False
+        print("[scraper] login OK")
+        return True
+    except Exception as e:
+        print(f"[scraper] login error: {e}")
+        return False
+
+
+def _is_login_page(html: str, url: str) -> bool:
+    url_lower = url.lower()
+    # URL is the most reliable signal — every page after login has login.php in nav links
+    if any(m in url_lower for m in LOGIN_URL_MARKERS):
+        return True
+    # Fallback: actual <input type="password"> field present means this IS the login form
+    return bool(re.search(r'<input[^>]+type=["\']password["\']', html, re.I))
+
+
+async def _fetch(url: str) -> str | None:
+    global _login_ok
+    try:
+        resp = await _client.get(url)
+        if _is_login_page(resp.text, str(resp.url)):
+            print("[scraper] session expired — re-logging in")
+            _login_ok = await _login()
+            if not _login_ok:
+                return None
+            resp = await _client.get(url)
+        return resp.text
+    except Exception as e:
+        print(f"[scraper] fetch error {url}: {e}")
+        return None
+
+
+async def fetch_raw_html(url: str) -> str | None:
+    """For /api/debug/html — returns the raw page HTML."""
+    return await _fetch(url)
+
+
+async def fetch_login_page_html() -> str | None:
+    """For /api/debug/login-page — returns raw login page HTML to inspect form fields."""
+    try:
+        resp = await _client.get(LOGIN_URL)
+        return resp.text
+    except Exception as e:
+        print(f"[scraper] fetch login page error: {e}")
+        return None
+
+
+async def resolve_download_url(detail_url: str) -> str | None:
+    """Visit the detail page and find the actual .torrent download link."""
+    html = await _fetch(detail_url)
+    if not html:
+        return None
+    soup = BeautifulSoup(html, "html.parser")
+    # Look for links containing torrent-download keywords
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+        if re.search(r"(downloadlink|getfile|dl\.php|\.torrent)", href, re.I):
+            url = href if href.startswith("http") else urljoin(config.SITE_BASE_URL, href)
+            print(f"[scraper] resolved download URL: {url}")
+            return url
+    # Fallback: any href with "download" and an id param
+    for a in soup.find_all("a", href=re.compile(r"download.*id=\d+", re.I)):
+        href = a["href"]
+        url = href if href.startswith("http") else urljoin(config.SITE_BASE_URL, href)
+        print(f"[scraper] resolved (fallback) download URL: {url}")
+        return url
+    print(f"[scraper] could not resolve download URL from {detail_url}")
+    return None
+
+
+async def fetch_torrent_bytes(torrent_url: str, detail_url: str = "") -> bytes | None:
+    """Download .torrent file bytes. If torrent_url fails, resolve from detail_url."""
+    if not torrent_url.startswith("http"):
+        torrent_url = urljoin(config.SITE_BASE_URL, torrent_url)
+    try:
+        resp = await _client.get(torrent_url)
+        ct = resp.headers.get("content-type", "")
+        print(f"[scraper] download {torrent_url} → {resp.status_code} {ct}")
+        if resp.status_code == 200 and (
+            "torrent" in ct or "octet-stream" in ct or
+            resp.content[:13].startswith((b"d8:announce", b"d13:announce"))
+        ):
+            return resp.content
+
+        # torrent_url failed — resolve from detail page
+        if detail_url:
+            print(f"[scraper] stored URL failed, resolving from detail page…")
+            real_url = await resolve_download_url(detail_url)
+            if real_url and real_url != torrent_url:
+                resp2 = await _client.get(real_url)
+                ct2 = resp2.headers.get("content-type", "")
+                print(f"[scraper] resolved download → {resp2.status_code} {ct2}")
+                if resp2.status_code == 200:
+                    return resp2.content
+        return None
+    except Exception as e:
+        print(f"[scraper] torrent download error: {e}")
+        return None
+
+
+async def probe_download_url(torrent_url: str) -> dict:
+    """For /api/debug/download-test — returns diagnostic info without downloading."""
+    if not torrent_url.startswith("http"):
+        torrent_url = urljoin(config.SITE_BASE_URL, torrent_url)
+    try:
+        resp = await _client.get(torrent_url)
+        ct = resp.headers.get("content-type", "")
+        preview = resp.content[:200]
+        is_torrent = (
+            "torrent" in ct or "octet-stream" in ct or
+            preview.startswith(b"d8:announce") or preview.startswith(b"d13:announce")
+        )
+        return {
+            "url_tried":    torrent_url,
+            "final_url":    str(resp.url),
+            "status":       resp.status_code,
+            "content_type": ct,
+            "size":         len(resp.content),
+            "is_torrent":   is_torrent,
+            "preview_text": preview.decode("utf-8", errors="replace")[:200],
+        }
+    except Exception as e:
+        return {"error": str(e), "url_tried": torrent_url}
+
+
+async def scrape_source(url: str, seed_min: int, leech_min: int, keywords: list[str]) -> list[dict]:
+    """Scrape one listing URL. Returns list of torrent dicts ready for upsert."""
+    html = await _fetch(url)
+    if not html:
+        return []
+
+    today = datetime.now(_TZ).strftime("%Y-%m-%d")
+    return _parse_listing(html, url, today, seed_min, leech_min, keywords)
+
+
+def _parse_listing(html: str, base_url: str, today: str, seed_min: int, leech_min: int, keywords: list[str]) -> list[dict]:
+    soup = BeautifulSoup(html, "html.parser")
+    results = []
+
+    rows = soup.select(ROW_SELECTOR)
+    print(f"[scraper] found {len(rows)} candidate rows from {base_url}")
+
+    for row in rows:
+        try:
+            entry = _parse_row(row, base_url, today)
+        except Exception as e:
+            print(f"[scraper] row parse error: {e}")
+            continue
+
+        if not entry:
+            continue
+
+        # Date filter — only today
+        if entry["date_posted"] != today:
+            continue
+
+        # Seeds must not be 0
+        if entry["seeds"] == 0:
+            continue
+
+        kw_match = _matches_keywords(entry["title"], keywords)
+        meets_threshold = entry["seeds"] >= seed_min and entry["leeches"] >= leech_min
+
+        if not kw_match and not meets_threshold:
+            continue
+
+        entry["keyword_match"] = kw_match
+        results.append(entry)
+
+    print(f"[scraper] {len(results)} torrents pass filter from {base_url}")
+    return results
+
+
+def _parse_row(row, base_url: str, today: str) -> dict | None:
+    # Skip sticky/pinned entries — old featured items, not today's new uploads
+    if row.find("img", src=re.compile(r"stickyt\.gif|heart\.gif", re.I)):
+        return None
+
+    # Extract category
+    cat_id = row.get("data-category-id", "")
+    category = _category_name(cat_id)
+
+    tds = row.find_all("td", recursive=False)
+    if len(tds) < 12:
+        return None
+
+    # ── Title & detail URL (col 2: td width=900) ────────────────────────────
+    title_td = tds[COL_TITLE]
+    title_a = title_td.find("a", href=re.compile(r"details\.php"))
+    if not title_a:
+        return None
+
+    b_tag = title_a.find("b")
+    title = (b_tag or title_a).get_text(strip=True)
+    if not title or len(title) < 3:
+        return None
+
+    detail_url = urljoin(base_url, title_a["href"])
+
+    # ── Site ID + hashinfo from details.php URL ──────────────────────────────
+    m = re.search(r"[?&]id=(\d+)", title_a["href"])
+    if not m:
+        return None
+    site_id = m.group(1)
+    m_hash = re.search(r"[?&]hashinfo=(\d+)", title_a["href"])
+    hashinfo = m_hash.group(1) if m_hash else ""
+
+    # ── Torrent download URL — try download.php with both id and hashinfo ────
+    torrent_url = (
+        f"{config.SITE_BASE_URL}/download.php?id={site_id}&hashinfo={hashinfo}"
+        if hashinfo else
+        f"{config.SITE_BASE_URL}/download.php?id={site_id}"
+    )
+
+    # ── Cover image — poster imgs always have absolute URLs (http/https);
+    # category icons use relative paths ("pic/categories/...") — skip those.
+    cover_url = None
+    for img in row.find_all("img"):
+        src = img.get("src", "")
+        if src.startswith("http") and "categories" not in src and "no_poster" not in src:
+            cover_url = src
+            break
+
+    # ── Date + Time — row has exactly one <nobr>DD-MM-YYYY<BR>HH:MM:SS</nobr> ─
+    date_posted = today
+    posted_at = ""
+    try:
+        nobr = row.find("nobr")
+        if nobr:
+            raw = nobr.get_text(separator=" ", strip=True)  # "DD-MM-YYYY HH:MM:SS"
+            parts_dt = raw.split()
+            date_raw = parts_dt[0]   # "DD-MM-YYYY"
+            time_raw = parts_dt[1] if len(parts_dt) > 1 else ""
+            d_parts = date_raw.split("-")
+            if len(d_parts) == 3 and d_parts[2].startswith("20"):
+                date_posted = f"{d_parts[2]}-{d_parts[1].zfill(2)}-{d_parts[0].zfill(2)}"
+                posted_at = f"{date_posted} {time_raw}".strip()
+    except Exception:
+        pass
+
+    # ── File count (col 5) ───────────────────────────────────────────────────
+    try:
+        file_count = _parse_int(tds[COL_FILES].get_text(strip=True))
+    except Exception:
+        file_count = 0
+
+    # ── File size (col 8) ────────────────────────────────────────────────────
+    try:
+        file_size = tds[COL_SIZE].get_text(strip=True)  # "2.63 GB" / "380.60 MB"
+    except Exception:
+        file_size = ""
+
+    # ── Seeds (col 10) ───────────────────────────────────────────────────────
+    try:
+        seeds = _parse_int(tds[COL_SEEDS].get_text(strip=True))
+    except Exception:
+        span = row.select_one("span.green, span.red")
+        seeds = _parse_int(span.get_text()) if span else 0
+
+    # ── Leeches (col 11) ─────────────────────────────────────────────────────
+    try:
+        leeches = _parse_int(tds[COL_LEECHES].get_text(strip=True))
+    except Exception:
+        leeches = 0
+
+    return {
+        "site_id":     site_id,
+        "title":       title,
+        "detail_url":  detail_url,
+        "torrent_url": torrent_url,
+        "cover_url":   cover_url,
+        "seeds":       seeds,
+        "leeches":     leeches,
+        "date_posted": date_posted,
+        "posted_at":   posted_at,
+        "category":    category,
+        "file_count":  file_count,
+        "file_size":   file_size,
+    }
+
+
+def _parse_int(s: str) -> int:
+    s = re.sub(r"[^\d]", "", s.strip())
+    return int(s) if s else 0
+
+
+def _matches_keywords(title: str, keywords: list[str]) -> bool:
+    title_lower = title.lower()
+    return any(kw in title_lower for kw in keywords)
+
+
+def is_ready() -> bool:
+    return _client is not None and _login_ok
