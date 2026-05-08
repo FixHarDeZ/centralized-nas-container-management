@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+  <meta name="theme-color" content="#0d0d1a">
+  <title>TorrentWatch</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="tw-header">
+      <div class="tw-header-inner">
+        <span class="tw-logo"><i class="bi bi-broadcast"></i> TorrentWatch</span>
+        <div class="tw-header-actions">
+          <span id="status-badge" class="tw-status-badge" title="Last scrape"></span>
+          <button class="tw-icon-btn" id="btn-scrape-now" title="Scrape now">
+            <i class="bi bi-arrow-clockwise"></i>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Tab bar -->
+    <nav class="tw-tabs">
+      <button class="tw-tab active" data-tab="today"><i class="bi bi-calendar-day"></i> วันนี้</button>
+      <button class="tw-tab" data-tab="history"><i class="bi bi-clock-history"></i> ประวัติ</button>
+      <button class="tw-tab" data-tab="keywords"><i class="bi bi-tags"></i> Keyword</button>
+      <button class="tw-tab" data-tab="settings"><i class="bi bi-gear"></i> ตั้งค่า</button>
+    </nav>
+
+    <!-- ── Today ── -->
+    <section class="tw-panel active" id="panel-today">
+      <div class="tw-source-bar" id="source-chips-today"></div>
+      <div class="tw-toolbar">
+        <div class="tw-sort-group">
+          <button class="tw-sort-btn active" data-sort="seeds"><i class="bi bi-arrow-up-circle-fill tw-seed-icon"></i> Seed</button>
+          <button class="tw-sort-btn" data-sort="leeches"><i class="bi bi-arrow-down-circle-fill tw-leech-icon"></i> Leech</button>
+          <button class="tw-sort-btn" data-sort="date"><i class="bi bi-clock"></i> ล่าสุด</button>
+        </div>
+        <div class="tw-filter-group">
+          <button class="tw-filter-btn active" data-filter="all">ทั้งหมด</button>
+          <button class="tw-filter-btn" data-filter="keyword"><i class="bi bi-star-fill"></i> Keyword</button>
+        </div>
+      </div>
+      <div class="tw-last-updated" id="last-updated-today"></div>
+      <div class="tw-list" id="list-today"></div>
+    </section>
+
+    <!-- ── History ── -->
+    <section class="tw-panel" id="panel-history">
+      <div class="tw-source-bar" id="source-chips-history"></div>
+      <div class="tw-toolbar">
+        <select class="tw-date-select" id="history-date-select">
+          <option value="">เลือกวันที่...</option>
+        </select>
+        <div class="tw-sort-group">
+          <button class="tw-sort-btn active" data-sort="seeds"><i class="bi bi-arrow-up-circle-fill tw-seed-icon"></i> Seed</button>
+          <button class="tw-sort-btn" data-sort="leeches"><i class="bi bi-arrow-down-circle-fill tw-leech-icon"></i> Leech</button>
+          <button class="tw-sort-btn" data-sort="date"><i class="bi bi-clock"></i> ล่าสุด</button>
+        </div>
+      </div>
+      <div class="tw-list" id="list-history"></div>
+    </section>
+
+    <!-- ── Keywords ── -->
+    <section class="tw-panel" id="panel-keywords">
+      <div class="tw-source-bar" id="source-chips-keywords"></div>
+      <div class="tw-keyword-form">
+        <input class="tw-input" id="kw-input" type="text" placeholder="เพิ่ม keyword..." autocomplete="off">
+        <button class="tw-btn-primary" id="btn-add-kw"><i class="bi bi-plus-lg"></i></button>
+      </div>
+      <div id="kw-list" class="tw-kw-list"></div>
+    </section>
+
+    <!-- ── Settings ── -->
+    <section class="tw-panel" id="panel-settings">
+      <div class="tw-settings-card">
+        <h2 class="tw-section-title"><i class="bi bi-link-45deg"></i> Sources</h2>
+        <div id="sources-list" class="tw-sources-list"></div>
+        <div class="tw-source-add-row">
+          <input class="tw-input" id="source-url-input" type="url" placeholder="https://bearbit.org/view...php">
+          <button class="tw-btn-primary" id="btn-add-source"><i class="bi bi-plus-lg"></i></button>
+        </div>
+      </div>
+
+      <div class="tw-settings-card">
+        <h2 class="tw-section-title"><i class="bi bi-sliders"></i> Threshold</h2>
+        <div class="tw-field-row">
+          <label>Seed min</label>
+          <input class="tw-input-sm" id="cfg-seed-min" type="number" min="0">
+        </div>
+        <div class="tw-field-row">
+          <label>Leech min</label>
+          <input class="tw-input-sm" id="cfg-leech-min" type="number" min="0">
+        </div>
+      </div>
+
+      <div class="tw-settings-card">
+        <h2 class="tw-section-title"><i class="bi bi-folder2-open"></i> NAS Path</h2>
+        <input class="tw-input" id="cfg-nas-path" type="text" placeholder="/downloads">
+      </div>
+
+      <div class="tw-settings-card">
+        <h2 class="tw-section-title"><i class="bi bi-clock-history"></i> Auto Scrape</h2>
+        <div class="tw-field-row">
+          <label>ทุกกี่นาที</label>
+          <div class="tw-radio-group">
+            <label class="tw-radio-label"><input type="radio" name="scrape_interval" id="cfg-interval-30" value="30"> 30 นาที</label>
+            <label class="tw-radio-label"><input type="radio" name="scrape_interval" id="cfg-interval-60" value="60"> 1 ชั่วโมง</label>
+          </div>
+        </div>
+        <div class="tw-field-row">
+          <label>ช่วงเวลา</label>
+          <div class="tw-radio-group">
+            <label class="tw-radio-label"><input type="radio" name="scrape_time" id="cfg-time-night" value="0"> 19:00–01:00</label>
+            <label class="tw-radio-label"><input type="radio" name="scrape_time" id="cfg-time-allday" value="1"> ทั้งวัน</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="tw-settings-card">
+        <h2 class="tw-section-title"><i class="bi bi-chat-dots"></i> LINE</h2>
+        <div class="tw-toggle-row">
+          <label>เปิด notification</label>
+          <input type="checkbox" id="cfg-line-enabled" class="tw-toggle">
+        </div>
+        <div class="tw-toggle-row">
+          <label>สรุปแต่ละรอบ</label>
+          <input type="checkbox" id="cfg-line-summary" class="tw-toggle">
+        </div>
+        <div class="tw-toggle-row">
+          <label>เฉพาะ keyword match</label>
+          <input type="checkbox" id="cfg-line-kw-only" class="tw-toggle">
+        </div>
+      </div>
+
+      <div class="tw-settings-card">
+        <h2 class="tw-section-title"><i class="bi bi-trash3"></i> ล้างข้อมูล</h2>
+        <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px">ลบ torrent ทั้งหมดของ source แล้ว scrape ใหม่</p>
+        <div id="clear-source-btns" class="tw-sources-list"></div>
+      </div>
+
+      <button class="tw-btn-primary tw-save-btn" id="btn-save-settings">
+        <i class="bi bi-check-lg"></i> บันทึก
+      </button>
+    </section>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

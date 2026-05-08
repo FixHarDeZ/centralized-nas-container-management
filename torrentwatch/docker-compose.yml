@@ -1,0 +1,19 @@
+services:
+  torrentwatch:
+    build: .
+    container_name: torrentwatch
+    restart: unless-stopped
+    ports:
+      - "5059:8000"
+    env_file: ../.env
+    environment:
+      - TZ=Asia/Bangkok
+      - DATA_DIR=/data
+    volumes:
+      - torrentwatch_data:/data
+      # Uncomment and set NAS_TORRENT_PATH in .env to enable "→ NAS" download feature.
+      # The path must already exist on the NAS host before starting the container.
+      # - ${NAS_TORRENT_PATH}:/downloads
+
+volumes:
+  torrentwatch_data:
