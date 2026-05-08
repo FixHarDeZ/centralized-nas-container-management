@@ -96,11 +96,22 @@
           <label>Leech min</label>
           <input class="tw-input-sm" id="cfg-leech-min" type="number" min="0">
         </div>
+        <div class="tw-field-row" style="margin-top:8px">
+          <label>เงื่อนไข</label>
+          <div class="tw-radio-group">
+            <label class="tw-radio-label"><input type="radio" name="filter_mode" id="cfg-mode-and" value="and"> AND (ทั้งคู่)</label>
+            <label class="tw-radio-label"><input type="radio" name="filter_mode" id="cfg-mode-or" value="or"> OR (อย่างใดอย่างหนึ่ง)</label>
+          </div>
+        </div>
       </div>
 
       <div class="tw-settings-card">
-        <h2 class="tw-section-title"><i class="bi bi-folder2-open"></i> NAS Path</h2>
-        <input class="tw-input" id="cfg-nas-path" type="text" placeholder="/downloads">
+        <h2 class="tw-section-title"><i class="bi bi-folder2-open"></i> โฟลเดอร์ปลายทาง NAS</h2>
+        <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px">
+          โฟลเดอร์ย่อยภายใน watch folder ที่ mount ไว้<br>
+          ว่าง = บันทึกที่ root ของ watch folder
+        </p>
+        <input class="tw-input" id="cfg-nas-path" type="text" placeholder="ว่าง = root  หรือ  Movies, Series, ...">
       </div>
 
       <div class="tw-settings-card">
@@ -121,21 +132,6 @@
         </div>
       </div>
 
-      <div class="tw-settings-card">
-        <h2 class="tw-section-title"><i class="bi bi-chat-dots"></i> LINE</h2>
-        <div class="tw-toggle-row">
-          <label>เปิด notification</label>
-          <input type="checkbox" id="cfg-line-enabled" class="tw-toggle">
-        </div>
-        <div class="tw-toggle-row">
-          <label>สรุปแต่ละรอบ</label>
-          <input type="checkbox" id="cfg-line-summary" class="tw-toggle">
-        </div>
-        <div class="tw-toggle-row">
-          <label>เฉพาะ keyword match</label>
-          <input type="checkbox" id="cfg-line-kw-only" class="tw-toggle">
-        </div>
-      </div>
 
       <div class="tw-settings-card">
         <h2 class="tw-section-title"><i class="bi bi-trash3"></i> ล้างข้อมูล</h2>

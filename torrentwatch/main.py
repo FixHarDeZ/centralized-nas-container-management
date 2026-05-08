@@ -12,7 +12,6 @@ import config
 import db
 import scraper
 import scheduler
-import line_notify
 
 _STATIC_DIR = Path(__file__).parent / "static"
 
@@ -109,12 +108,28 @@ def api_history_dates(source_id: int):
 # ─── Download ─────────────────────────────────────────────────────────────────
 
 def _content_disposition(title: str) -> str:
-    """Build Content-Disposition header supporting Thai filenames via RFC 5987."""
+    """Build Content-Disposition with RFC 5987 UTF-8 encoding for Thai filenames.
+
+    filename*= comes FIRST (RFC 6266 §4.3) so browsers with proper RFC 5987 support
+    (Chrome, Safari, Firefox, Edge) display the Thai title correctly.
+    """
+    import re
     from urllib.parse import quote
-    name = title[:100].strip() + ".torrent"
-    encoded = quote(name, encoding="utf-8", safe="")
-    # filename= fallback (ASCII-only, for old clients); filename*= for modern browsers
-    return f"attachment; filename=\"torrent.torrent\"; filename*=UTF-8''{encoded}"
+
+    clean = title.strip()[:100]
+    utf8_encoded = quote(clean + ".torrent", encoding="utf-8", safe="")
+    ascii_only   = re.sub(r'[^\x20-\x7E]+', ' ', clean).strip()[:60]
+    fallback     = (ascii_only or "torrent") + ".torrent"
+
+    # filename*= FIRST — browsers that support RFC 5987 use this and show Thai
+    return f"attachment; filename*=UTF-8''{utf8_encoded}; filename=\"{fallback}\""
+
+
+def _torrent_filename(title: str) -> str:
+    """Filesystem-safe ASCII filename for writing to NAS disk."""
+    import re
+    safe = re.sub(r'[^\x00-\x7F]', '_', title).strip("_ ")[:80]
+    return (safe or "torrent") + ".torrent"
 
 
 @app.get("/api/download/local/{torrent_id}")
@@ -141,15 +156,24 @@ async def api_download_nas(torrent_id: int):
     if not t:
         raise HTTPException(404, "Torrent not found")
 
-    nas_dir = Path(config.NAS_DOWNLOADS_DIR)
-    if not nas_dir.exists():
-        raise HTTPException(503, f"NAS download path {config.NAS_DOWNLOADS_DIR} not mounted or accessible")
+    # Read nas_path from settings — must be within the /downloads mount
+    settings  = db.get_settings()
+    nas_path  = settings.get("nas_path", config.NAS_DOWNLOADS_DIR).strip() or config.NAS_DOWNLOADS_DIR
+    # Ensure the path stays inside the container mount point
+    mount     = config.NAS_DOWNLOADS_DIR   # "/downloads"
+    if not nas_path.startswith(mount):
+        nas_path = mount + "/" + nas_path.lstrip("/")
+    nas_dir = Path(nas_path)
+
+    if not Path(mount).exists():
+        raise HTTPException(503, f"NAS volume (/downloads) not mounted — uncomment the volume line in docker-compose.yml")
+    nas_dir.mkdir(parents=True, exist_ok=True)
 
     data = await scraper.fetch_torrent_bytes(t["torrent_url"], t.get("detail_url", ""))
     if not data:
         raise HTTPException(502, "Failed to fetch torrent file from site")
 
-    filename = _safe_filename(t["title"])
+    filename = _torrent_filename(t["title"])
     dest = nas_dir / filename
     dest.write_bytes(data)
     db.mark_downloaded_nas(torrent_id)
@@ -190,7 +214,6 @@ def api_get_settings():
 @app.put("/api/settings", status_code=204)
 def api_update_settings(body: dict):
     db.update_settings(body)
-    # Rebuild scrape schedule if interval/time-range changed
     if "scrape_interval" in body or "scrape_all_day" in body:
         scheduler.reload_scrape_job()
 

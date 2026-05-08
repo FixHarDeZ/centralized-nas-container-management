@@ -9,7 +9,6 @@ from apscheduler.triggers.cron import CronTrigger
 import asyncio
 import db
 import scraper
-import line_notify
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import config
@@ -17,18 +16,21 @@ import config
 _TZ = ZoneInfo(config.TZ)
 _scheduler = BackgroundScheduler(timezone=config.TZ)
 
-_last_scrape: str = ""
-_next_scrape: str = ""
+_last_scrape:   str = ""
+_next_scrape:   str = ""
 _scrape_status: str = "idle"
+_scrape_progress: dict = {}   # {"source": url, "page": N, "found": N}
 
 
 def _run_async(coro):
     try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            asyncio.run_coroutine_threadsafe(coro, loop).result(timeout=120)
-        else:
-            loop.run_until_complete(coro)
+        # BackgroundScheduler runs in a thread without an event loop — use asyncio.run()
+        loop = asyncio.get_running_loop()
+        # If somehow called from within a running loop, schedule as future
+        asyncio.run_coroutine_threadsafe(coro, loop).result(timeout=120)
+    except RuntimeError:
+        # No running event loop in this thread (normal case for BackgroundScheduler)
+        asyncio.run(coro)
     except Exception as e:
         print(f"[scheduler] async run error: {e}")
 
@@ -41,51 +43,46 @@ async def _do_scrape():
     _last_scrape = now.strftime("%Y-%m-%d %H:%M")
     today = now.strftime("%Y-%m-%d")
 
-    settings = db.get_settings()
-    seed_min  = int(settings.get("seed_min", 10))
-    leech_min = int(settings.get("leech_min", 10))
-    line_enabled    = settings.get("line_notify_enabled", "1") == "1"
-    line_kw_only    = settings.get("line_notify_keyword_only", "0") == "1"
-    line_summary    = settings.get("line_notify_summary", "1") == "1"
+    global _scrape_progress
+    settings    = db.get_settings()
+    seed_min    = int(settings.get("seed_min", 5))
+    leech_min   = int(settings.get("leech_min", 10))
+    filter_mode = settings.get("filter_mode", "and")
 
-    sources = db.get_enabled_sources()
-    round_results = []
+    sources     = db.get_enabled_sources()
+    total_found = 0
 
     for source in sources:
         source_id  = source["id"]
         source_url = source["url"]
         keywords   = db.get_keywords_for_source(source_id)
+        from urllib.parse import urlparse
+        source_label = urlparse(source_url).path.split("/")[-1] or source_url
+
+        _scrape_progress = {"source": source_label, "page": 0, "found": 0}
 
         try:
-            entries = await scraper.scrape_source(source_url, seed_min, leech_min, keywords)
+            entries = await scraper.scrape_source(
+                source_url, seed_min, leech_min, keywords, filter_mode,
+                on_page=lambda pg, n: _update_progress(source_label, pg, total_found + n),
+            )
         except Exception as e:
             print(f"[scheduler] scrape error {source_url}: {e}")
             entries = []
 
-        new_keyword_matches = []
-        total_new = 0
-
         for entry in entries:
-            is_new, _ = db.upsert_torrent(source_id, entry["site_id"], entry)
-            if is_new:
-                total_new += 1
-                if entry.get("keyword_match"):
-                    new_keyword_matches.append(entry)
+            db.upsert_torrent(source_id, entry["site_id"], entry)
 
-        round_results.append({
-            "source_url":    source_url,
-            "total_count":   len(entries),
-            "keyword_count": len(new_keyword_matches),
-        })
+        total_found += len(entries)
 
-        if line_enabled and new_keyword_matches:
-            await line_notify.notify_keyword_matches(source_url, new_keyword_matches)
+    _scrape_status   = "idle"
+    _scrape_progress = {}
+    print(f"[scheduler] scrape done — {total_found} entries across {len(sources)} sources")
 
-    if line_enabled and line_summary and not line_kw_only:
-        await line_notify.notify_round_summary(round_results)
 
-    _scrape_status = "idle"
-    print(f"[scheduler] scrape done — {sum(r['total_count'] for r in round_results)} entries across {len(sources)} sources")
+def _update_progress(source_label: str, page: int, found: int):
+    global _scrape_progress
+    _scrape_progress = {"source": source_label, "page": page, "found": found}
 
 
 def _scrape_job():
@@ -152,10 +149,11 @@ def _update_next():
 def status() -> dict:
     _update_next()
     return {
-        "last_scrape":  _last_scrape,
-        "next_scrape":  _next_scrape,
-        "scrape_status": _scrape_status,
-        "scraper_ready": scraper.is_ready(),
+        "last_scrape":    _last_scrape,
+        "next_scrape":    _next_scrape,
+        "scrape_status":  _scrape_status,
+        "scraper_ready":  scraper.is_ready(),
+        "scrape_progress": _scrape_progress,
     }
 
 

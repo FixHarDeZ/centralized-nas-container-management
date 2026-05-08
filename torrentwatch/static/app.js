@@ -183,7 +183,7 @@ function cardHTML(t, readOnly) {
   <div class="tw-card${t.downloaded_local || t.downloaded_nas ? " downloaded" : ""}${t.keyword_match ? " keyword-match" : ""}" data-id="${t.id}">
     ${thumb}
     <div class="tw-card-body">
-      <div class="tw-card-title">${escHtml(t.title)}</div>
+      <a class="tw-card-title tw-title-link" href="${escHtml(t.detail_url)}" target="_blank" rel="noopener noreferrer">${escHtml(t.title)}</a>
       <div class="tw-card-meta">
         ${catBadge}
         <span class="tw-card-time">${_fmtTime(t.posted_at)}</span>
@@ -212,7 +212,7 @@ function attachCardActions(list) {
         const blob = await resp.blob();
         const url  = URL.createObjectURL(blob);
         const a    = document.createElement("a");
-        a.href = url; a.download = title.replace(/[^\w\-. ]/g, "_").slice(0, 80) + ".torrent";
+        a.href = url; a.download = title.slice(0, 100) + ".torrent";
         a.click(); URL.revokeObjectURL(url);
         btn.classList.add("done-local");
         btn.closest(".tw-card").classList.add("downloaded");
@@ -323,12 +323,13 @@ async function loadSettings() {
   state.settings = settings;
   state.sources = sources;
 
-  document.getElementById("cfg-seed-min").value  = settings.seed_min  ?? 1;
-  document.getElementById("cfg-leech-min").value = settings.leech_min ?? 0;
+  document.getElementById("cfg-seed-min").value  = settings.seed_min  ?? 5;
+  document.getElementById("cfg-leech-min").value = settings.leech_min ?? 10;
   document.getElementById("cfg-nas-path").value  = settings.nas_path  ?? "/downloads";
-  document.getElementById("cfg-line-enabled").checked  = settings.line_notify_enabled  === "1";
-  document.getElementById("cfg-line-summary").checked   = settings.line_notify_summary   === "1";
-  document.getElementById("cfg-line-kw-only").checked  = settings.line_notify_keyword_only === "1";
+
+  const mode = settings.filter_mode ?? "and";
+  const modeEl = document.getElementById("cfg-mode-" + mode);
+  if (modeEl) modeEl.checked = true;
 
   // Scrape schedule
   const interval = settings.scrape_interval ?? "30";
@@ -419,12 +420,10 @@ document.getElementById("btn-add-source").addEventListener("click", async () => 
 
 document.getElementById("btn-save-settings").addEventListener("click", async () => {
   const payload = {
-    seed_min:                 document.getElementById("cfg-seed-min").value,
-    leech_min:                document.getElementById("cfg-leech-min").value,
-    nas_path:                 document.getElementById("cfg-nas-path").value.trim(),
-    line_notify_enabled:      document.getElementById("cfg-line-enabled").checked  ? "1" : "0",
-    line_notify_summary:      document.getElementById("cfg-line-summary").checked   ? "1" : "0",
-    line_notify_keyword_only: document.getElementById("cfg-line-kw-only").checked  ? "1" : "0",
+    seed_min:        document.getElementById("cfg-seed-min").value,
+    leech_min:       document.getElementById("cfg-leech-min").value,
+    nas_path:        document.getElementById("cfg-nas-path").value.trim(),
+    filter_mode:     document.querySelector('input[name="filter_mode"]:checked')?.value ?? "and",
     scrape_interval: document.querySelector('input[name="scrape_interval"]:checked')?.value ?? "30",
     scrape_all_day:  document.querySelector('input[name="scrape_time"]:checked')?.value ?? "0",
   };
@@ -452,12 +451,50 @@ document.getElementById("btn-scrape-now").addEventListener("click", async () => 
   }
 });
 
-// ─── Status badge ─────────────────────────────────────────────────────────────
+// ─── Status badge + scrape progress ──────────────────────────────────────────
+let _wasRunning = false;
+let _statusPollTimer = null;
+
 async function updateStatusBadge() {
   const status = await api("GET", "/status").catch(() => ({}));
   const el = document.getElementById("status-badge");
   if (!el) return;
-  if (status.last_scrape) el.textContent = status.last_scrape;
+
+  const running = status.scrape_status === "running";
+  const prog    = status.scrape_progress || {};
+  const btn     = document.getElementById("btn-scrape-now");
+
+  if (running) {
+    // Show live progress
+    let label = "กำลัง scrape...";
+    if (prog.source) {
+      label = `⟳ ${prog.source} หน้า ${(prog.page ?? 0) + 1} (${prog.found ?? 0} รายการ)`;
+    }
+    el.textContent = label;
+    el.style.color = "var(--accent)";
+    if (btn) btn.classList.add("spinning");
+    // Poll fast while running
+    schedulePoll(1500);
+    _wasRunning = true;
+  } else {
+    if (_wasRunning) {
+      // Just finished — refresh the list
+      _wasRunning = false;
+      loadToday();
+    }
+    el.textContent = status.last_scrape ? `อัปเดต: ${status.last_scrape}` : "";
+    el.style.color = "";
+    if (btn) btn.classList.remove("spinning");
+    // Back to slow polling
+    schedulePoll(60000);
+  }
+}
+
+function schedulePoll(ms) {
+  if (_statusPollTimer) clearTimeout(_statusPollTimer);
+  _statusPollTimer = setTimeout(() => {
+    updateStatusBadge();
+  }, ms);
 }
 
 // ─── Utility ──────────────────────────────────────────────────────────────────
@@ -477,7 +514,5 @@ function _fmtTime(posted_at) {
 (async function init() {
   await loadSources();
   loadToday();
-  updateStatusBadge();
-  // Refresh status badge every 2 min
-  setInterval(updateStatusBadge, 120_000);
+  updateStatusBadge();   // kicks off adaptive polling
 })();
