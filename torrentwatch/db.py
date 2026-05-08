@@ -7,8 +7,8 @@ import config
 _TZ = ZoneInfo(config.TZ)
 
 _DEFAULT_SETTINGS = {
-    "seed_min":                "5",
-    "leech_min":               "10",
+    "seed_min":                "1",
+    "leech_min":               "5",
     "nas_path":                config.NAS_DOWNLOADS_DIR,
     "line_notify_enabled":     "0",
     "line_notify_keyword_only":"0",
