@@ -235,22 +235,61 @@ async def probe_download_url(torrent_url: str) -> dict:
         return {"error": str(e), "url_tried": torrent_url}
 
 
-async def scrape_source(url: str, seed_min: int, leech_min: int, keywords: list[str]) -> list[dict]:
-    """Scrape one listing URL. Returns list of torrent dicts ready for upsert."""
-    html = await _fetch(url)
-    if not html:
-        return []
+def _page_url(base_url: str, page: int) -> str:
+    """Build paginated URL: page=0 → base URL, page=N → append ?page=N (preserving existing params)."""
+    if page == 0:
+        return base_url
+    from urllib.parse import urlparse, urlencode, parse_qs, urlunparse
+    p = urlparse(base_url)
+    params = {k: v[0] for k, v in parse_qs(p.query).items()}
+    params["page"] = str(page)
+    return urlunparse(p._replace(query=urlencode(params)))
 
-    today = datetime.now(_TZ).strftime("%Y-%m-%d")
-    return _parse_listing(html, url, today, seed_min, leech_min, keywords)
+
+async def scrape_source(
+    url: str,
+    seed_min: int,
+    leech_min: int,
+    keywords: list[str],
+    filter_mode: str = "and",
+    on_page=None,   # optional callback(page_num, items_so_far)
+) -> list[dict]:
+    """Scrape all pages until today's items are exhausted (items are sorted newest-first)."""
+    today     = datetime.now(_TZ).strftime("%Y-%m-%d")
+    all_items = []
+    max_pages = 20   # safety cap
+
+    for page in range(max_pages):
+        page_url = _page_url(url, page)
+        html     = await _fetch(page_url)
+        if not html:
+            print(f"[scraper] page {page}: fetch failed, stopping")
+            break
+
+        items, found_older = _parse_listing(html, page_url, today, seed_min, leech_min, keywords, filter_mode)
+        all_items.extend(items)
+        print(f"[scraper] page {page}: {len(items)} pass filter, found_older={found_older}")
+
+        if on_page:
+            try:
+                on_page(page, len(all_items))
+            except Exception:
+                pass
+
+        if found_older or not items:
+            break
+
+    print(f"[scraper] total {len(all_items)} items across {page + 1} page(s) from {url}")
+    return all_items
 
 
-def _parse_listing(html: str, base_url: str, today: str, seed_min: int, leech_min: int, keywords: list[str]) -> list[dict]:
+def _parse_listing(html: str, base_url: str, today: str, seed_min: int, leech_min: int, keywords: list[str], filter_mode: str = "and") -> tuple[list[dict], bool]:
+    """Returns (matching_entries, found_any_older_than_today)."""
     soup = BeautifulSoup(html, "html.parser")
-    results = []
+    results    = []
+    found_older = False
 
     rows = soup.select(ROW_SELECTOR)
-    print(f"[scraper] found {len(rows)} candidate rows from {base_url}")
 
     for row in rows:
         try:
@@ -262,16 +301,19 @@ def _parse_listing(html: str, base_url: str, today: str, seed_min: int, leech_mi
         if not entry:
             continue
 
-        # Date filter — only today
         if entry["date_posted"] != today:
+            found_older = True   # crossed into yesterday — signal to stop paging
             continue
 
-        # Seeds must not be 0
         if entry["seeds"] == 0:
             continue
 
         kw_match = _matches_keywords(entry["title"], keywords)
-        meets_threshold = entry["seeds"] >= seed_min and entry["leeches"] >= leech_min
+
+        if filter_mode == "or":
+            meets_threshold = entry["seeds"] >= seed_min or entry["leeches"] >= leech_min
+        else:
+            meets_threshold = entry["seeds"] >= seed_min and entry["leeches"] >= leech_min
 
         if not kw_match and not meets_threshold:
             continue
@@ -279,8 +321,7 @@ def _parse_listing(html: str, base_url: str, today: str, seed_min: int, leech_mi
         entry["keyword_match"] = kw_match
         results.append(entry)
 
-    print(f"[scraper] {len(results)} torrents pass filter from {base_url}")
-    return results
+    return results, found_older
 
 
 def _parse_row(row, base_url: str, today: str) -> dict | None:

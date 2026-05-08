@@ -7,14 +7,12 @@ import config
 _TZ = ZoneInfo(config.TZ)
 
 _DEFAULT_SETTINGS = {
-    "seed_min":                "1",
-    "leech_min":               "5",
-    "nas_path":                config.NAS_DOWNLOADS_DIR,
-    "line_notify_enabled":     "0",
-    "line_notify_keyword_only":"0",
-    "line_notify_summary":     "1",
-    "scrape_interval":         "30",   # minutes: "30" or "60"
-    "scrape_all_day":          "0",    # "0" = 19:00-01:00 only, "1" = all day
+    "seed_min":        "5",
+    "leech_min":       "10",
+    "filter_mode":     "and",   # "and" or "or"
+    "nas_path":        "",   # empty = save to root of /downloads mount
+    "scrape_interval": "30",    # minutes: "30" or "60"
+    "scrape_all_day":  "0",     # "0" = 19:00-01:00 only, "1" = all day
 }
 
 
@@ -87,10 +85,11 @@ def init_db():
         for key, val in _DEFAULT_SETTINGS.items():
             c.execute("INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)", (key, val))
 
-        # Apply new defaults (force-update to match current _DEFAULT_SETTINGS)
-        c.execute("INSERT OR REPLACE INTO settings(key,value) VALUES ('seed_min','5')")
-        c.execute("INSERT OR REPLACE INTO settings(key,value) VALUES ('leech_min','10')")
-        c.execute("INSERT OR REPLACE INTO settings(key,value) VALUES ('line_notify_enabled','0')")
+        # Ensure filter_mode exists (new setting)
+        c.execute("INSERT OR IGNORE INTO settings(key,value) VALUES ('filter_mode','and')")
+        # Remove LINE settings if present
+        for k in ("line_notify_enabled", "line_notify_keyword_only", "line_notify_summary"):
+            c.execute("DELETE FROM settings WHERE key=?", (k,))
 
         # Migrate: add new columns if missing (existing installs)
         for col_sql in [
