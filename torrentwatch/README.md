@@ -4,6 +4,8 @@
 
 A daily torrent monitor that scrapes [bearbit.org](https://bearbit.org) on a schedule, paginates through all of today's uploads, filters by seed/leech thresholds and keywords, and surfaces them via a mobile-friendly dark-themed web UI. Runs as a Docker container on Synology NAS.
 
+![TorrentWatch screenshot](../screenshots/torrentwatch.png)
+
 ---
 
 ## Features
@@ -143,6 +145,8 @@ If bearbit changes its HTML layout, update the `SELECTOR_*` and `COL_*` constant
 [EN](#torrentwatch)
 
 TorrentWatch เป็น app สำหรับ monitor torrent ใหม่จาก bearbit.org อัตโนมัติ ไล่ scrape ทีละหน้าจน list ของวันนี้หมด filter ตาม seed/leech และ keyword แล้วแสดงผ่าน web UI บนมือถือ — รันเป็น Docker container บน Synology NAS
+
+![TorrentWatch screenshot](../screenshots/torrentwatch.png)
 
 ---
 
