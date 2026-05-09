@@ -280,7 +280,8 @@ async def scrape_source(
     leech_min: int,
     keywords: list[str],
     filter_mode: str = "and",
-    on_page=None,   # optional callback(page_num, items_so_far)
+    on_page=None,            # optional callback(page_num, items_so_far)
+    skip_sticky: bool = True,
 ) -> list[dict]:
     """Scrape all pages until today's items are exhausted (items are sorted newest-first)."""
     today     = datetime.now(_TZ).strftime("%Y-%m-%d")
@@ -294,7 +295,7 @@ async def scrape_source(
             print(f"[scraper] page {page}: fetch failed, stopping")
             break
 
-        items, found_older = _parse_listing(html, page_url, today, seed_min, leech_min, keywords, filter_mode)
+        items, found_older = _parse_listing(html, page_url, today, seed_min, leech_min, keywords, filter_mode, skip_sticky)
         all_items.extend(items)
         print(f"[scraper] page {page}: {len(items)} pass filter, found_older={found_older}")
 
@@ -311,7 +312,7 @@ async def scrape_source(
     return all_items
 
 
-def _parse_listing(html: str, base_url: str, today: str, seed_min: int, leech_min: int, keywords: list[str], filter_mode: str = "and") -> tuple[list[dict], bool]:
+def _parse_listing(html: str, base_url: str, today: str, seed_min: int, leech_min: int, keywords: list[str], filter_mode: str = "and", skip_sticky: bool = True) -> tuple[list[dict], bool]:
     """Returns (matching_entries, found_any_older_than_today)."""
     soup = BeautifulSoup(html, "html.parser")
     results    = []
@@ -321,7 +322,7 @@ def _parse_listing(html: str, base_url: str, today: str, seed_min: int, leech_mi
 
     for row in rows:
         try:
-            entry = _parse_row(row, base_url, today)
+            entry = _parse_row(row, base_url, today, skip_sticky)
         except Exception as e:
             print(f"[scraper] row parse error: {e}")
             continue
@@ -329,9 +330,11 @@ def _parse_listing(html: str, base_url: str, today: str, seed_min: int, leech_mi
         if not entry:
             continue
 
-        if entry["date_posted"] != today:
-            found_older = True   # crossed into yesterday — signal to stop paging
-            continue
+        # Stickies have old dates — include them regardless of date when skip_sticky=False
+        if not entry.get("is_sticky"):
+            if entry["date_posted"] != today:
+                found_older = True   # crossed into yesterday — signal to stop paging
+                continue
 
         if entry["seeds"] == 0:
             continue
@@ -352,9 +355,9 @@ def _parse_listing(html: str, base_url: str, today: str, seed_min: int, leech_mi
     return results, found_older
 
 
-def _parse_row(row, base_url: str, today: str) -> dict | None:
-    # Skip sticky/pinned entries — old featured items, not today's new uploads
-    if row.find("img", src=re.compile(r"stickyt\.gif|heart\.gif", re.I)):
+def _parse_row(row, base_url: str, today: str, skip_sticky: bool = True) -> dict | None:
+    is_sticky = bool(row.find("img", src=re.compile(r"stickyt\.gif|heart\.gif", re.I)))
+    if skip_sticky and is_sticky:
         return None
 
     # Extract category
@@ -452,11 +455,14 @@ def _parse_row(row, base_url: str, today: str) -> dict | None:
         "cover_url":   cover_url,
         "seeds":       seeds,
         "leeches":     leeches,
-        "date_posted": date_posted,
+        # Sticky rows carry their original upload date which may be old.
+        # Store today so they show up in the Today tab.
+        "date_posted": today if is_sticky else date_posted,
         "posted_at":   posted_at,
         "category":    category,
         "file_count":  file_count,
         "file_size":   file_size,
+        "is_sticky":   is_sticky,
     }
 
 

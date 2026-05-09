@@ -43,6 +43,7 @@
         <div class="tw-filter-group">
           <button class="tw-filter-btn active" data-filter="all">ทั้งหมด</button>
           <button class="tw-filter-btn" data-filter="keyword"><i class="bi bi-star-fill"></i> Keyword</button>
+          <button class="tw-filter-btn" id="btn-toggle-sticky" title="แสดง/ซ่อน Sticky"><i class="bi bi-pin-fill"></i> Sticky</button>
         </div>
       </div>
       <div class="tw-last-updated" id="last-updated-today"></div>
@@ -106,29 +107,19 @@
       </div>
 
       <div class="tw-settings-card">
-        <h2 class="tw-section-title"><i class="bi bi-folder2-open"></i> โฟลเดอร์ปลายทาง NAS</h2>
-        <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px">
-          โฟลเดอร์ย่อยภายใน watch folder ที่ mount ไว้<br>
-          ว่าง = บันทึกที่ root ของ watch folder
-        </p>
-        <input class="tw-input" id="cfg-nas-path" type="text" placeholder="ว่าง = root  หรือ  Movies, Series, ...">
-      </div>
-
-      <div class="tw-settings-card">
         <h2 class="tw-section-title"><i class="bi bi-clock-history"></i> Auto Scrape</h2>
-        <div class="tw-field-row">
-          <label>ทุกกี่นาที</label>
-          <div class="tw-radio-group">
-            <label class="tw-radio-label"><input type="radio" name="scrape_interval" id="cfg-interval-30" value="30"> 30 นาที</label>
-            <label class="tw-radio-label"><input type="radio" name="scrape_interval" id="cfg-interval-60" value="60"> 1 ชั่วโมง</label>
-          </div>
+        <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px">ตารางเวลาคงที่ (Asia/Bangkok)</p>
+        <div class="tw-schedule-info">
+          <div class="tw-schedule-row"><span class="tw-schedule-time">19:00 – 01:00</span><span class="tw-schedule-freq">ทุก 30 นาที</span></div>
+          <div class="tw-schedule-row tw-schedule-pause"><span class="tw-schedule-time">01:00 – 06:00</span><span class="tw-schedule-freq">หยุด</span></div>
+          <div class="tw-schedule-row"><span class="tw-schedule-time">06:00 – 19:00</span><span class="tw-schedule-freq">ทุก 1 ชั่วโมง</span></div>
         </div>
-        <div class="tw-field-row">
-          <label>ช่วงเวลา</label>
-          <div class="tw-radio-group">
-            <label class="tw-radio-label"><input type="radio" name="scrape_time" id="cfg-time-night" value="0"> 19:00–01:00</label>
-            <label class="tw-radio-label"><input type="radio" name="scrape_time" id="cfg-time-allday" value="1"> ทั้งวัน</label>
-          </div>
+        <div class="tw-field-row" style="margin-top:12px">
+          <label>รวม sticky/pinned</label>
+          <label class="tw-toggle-row" style="margin:0">
+            <input type="checkbox" class="tw-toggle" id="cfg-scrape-sticky">
+            <span style="font-size:12px;color:var(--text-muted)">รวมรายการ sticky ในผลลัพธ์</span>
+          </label>
         </div>
       </div>
 

@@ -7,6 +7,7 @@ const state = {
   activeSource: { today: null, history: null, keywords: null },
   sort: { today: "seeds", history: "seeds" },
   filter: "all",
+  showSticky: true,
   historyDate: "",
   settings: {},
 };
@@ -107,7 +108,9 @@ async function loadToday() {
   const sid = state.activeSource.today;
   if (!sid) return;
   const data = await api("GET", `/torrents?source_id=${sid}&sort=${state.sort.today}&filter=${state.filter}`).catch(() => ({ torrents: [] }));
-  renderTorrentList("list-today", data.torrents || [], false);
+  let torrents = data.torrents || [];
+  if (!state.showSticky) torrents = torrents.filter(t => !t.is_sticky);
+  renderTorrentList("list-today", torrents, false);
 
   // Update "last updated" from status
   const status = await api("GET", "/status").catch(() => ({}));
@@ -162,10 +165,11 @@ function renderTorrentList(listId, torrents, readOnly) {
 }
 
 function cardHTML(t, readOnly) {
-  const dlLocal  = t.downloaded_local ? `<span class="tw-badge tw-badge-dl-local"><i class="bi bi-check-lg"></i> Local</span>` : "";
-  const dlNas    = t.downloaded_nas   ? `<span class="tw-badge tw-badge-dl-nas"><i class="bi bi-check-lg"></i> NAS</span>` : "";
-  const kwBadge  = t.keyword_match    ? `<span class="tw-badge tw-badge-kw"><i class="bi bi-star-fill"></i> KW</span>` : "";
-  const catBadge = t.category         ? `<span class="tw-badge tw-badge-cat">${escHtml(t.category)}</span>` : "";
+  const dlLocal    = t.downloaded_local ? `<span class="tw-badge tw-badge-dl-local"><i class="bi bi-check-lg"></i> Local</span>` : "";
+  const dlNas      = t.downloaded_nas   ? `<span class="tw-badge tw-badge-dl-nas"><i class="bi bi-check-lg"></i> NAS</span>` : "";
+  const kwBadge    = t.keyword_match    ? `<span class="tw-badge tw-badge-kw"><i class="bi bi-star-fill"></i> KW</span>` : "";
+  const catBadge   = t.category         ? `<span class="tw-badge tw-badge-cat">${escHtml(t.category)}</span>` : "";
+  const stickyBadge = t.is_sticky       ? `<span class="tw-badge tw-badge-sticky"><i class="bi bi-pin-fill"></i> Sticky</span>` : "";
   const thumb = t.cover_url
     ? `<img class="tw-card-thumb" src="${escHtml(t.cover_url)}" alt="" loading="lazy" onerror="this.outerHTML='<div class=\'tw-card-thumb-placeholder\'><i class=\'bi bi-film\'></i></div>'">`
     : `<div class="tw-card-thumb-placeholder"><i class="bi bi-film"></i></div>`;
@@ -193,7 +197,7 @@ function cardHTML(t, readOnly) {
         <span class="tw-badge tw-badge-leech"><i class="bi bi-arrow-down-circle-fill"></i>${t.leeches}</span>
         ${t.file_size ? `<span class="tw-badge tw-badge-info"><i class="bi bi-hdd"></i>${escHtml(t.file_size)}</span>` : ""}
         ${t.file_count > 1 ? `<span class="tw-badge tw-badge-info"><i class="bi bi-files"></i>${t.file_count}</span>` : ""}
-        ${kwBadge}${dlLocal}${dlNas}
+        ${stickyBadge}${kwBadge}${dlLocal}${dlNas}
       </div>
       ${actions}
     </div>
@@ -262,13 +266,19 @@ document.querySelectorAll("#panel-history .tw-sort-btn").forEach(btn => {
   });
 });
 
-document.querySelectorAll(".tw-filter-btn").forEach(btn => {
+document.querySelectorAll(".tw-filter-btn[data-filter]").forEach(btn => {
   btn.addEventListener("click", () => {
-    document.querySelectorAll(".tw-filter-btn").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".tw-filter-btn[data-filter]").forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
     state.filter = btn.dataset.filter;
     loadToday();
   });
+});
+
+document.getElementById("btn-toggle-sticky").addEventListener("click", () => {
+  state.showSticky = !state.showSticky;
+  document.getElementById("btn-toggle-sticky").classList.toggle("active", state.showSticky);
+  loadToday();
 });
 
 // ─── Keywords ─────────────────────────────────────────────────────────────────
@@ -325,17 +335,12 @@ async function loadSettings() {
 
   document.getElementById("cfg-seed-min").value  = settings.seed_min  ?? 5;
   document.getElementById("cfg-leech-min").value = settings.leech_min ?? 10;
-  document.getElementById("cfg-nas-path").value  = settings.nas_path  ?? "/downloads";
 
   const mode = settings.filter_mode ?? "and";
   const modeEl = document.getElementById("cfg-mode-" + mode);
   if (modeEl) modeEl.checked = true;
 
-  // Scrape schedule
-  const interval = settings.scrape_interval ?? "30";
-  const allDay   = settings.scrape_all_day  ?? "0";
-  document.getElementById("cfg-interval-" + interval).checked = true;
-  document.getElementById(allDay === "1" ? "cfg-time-allday" : "cfg-time-night").checked = true;
+  document.getElementById("cfg-scrape-sticky").checked = settings.scrape_sticky === "1";
 
   // Clear buttons per source
   const clearDiv = document.getElementById("clear-source-btns");
@@ -420,12 +425,10 @@ document.getElementById("btn-add-source").addEventListener("click", async () => 
 
 document.getElementById("btn-save-settings").addEventListener("click", async () => {
   const payload = {
-    seed_min:        document.getElementById("cfg-seed-min").value,
-    leech_min:       document.getElementById("cfg-leech-min").value,
-    nas_path:        document.getElementById("cfg-nas-path").value.trim(),
-    filter_mode:     document.querySelector('input[name="filter_mode"]:checked')?.value ?? "and",
-    scrape_interval: document.querySelector('input[name="scrape_interval"]:checked')?.value ?? "30",
-    scrape_all_day:  document.querySelector('input[name="scrape_time"]:checked')?.value ?? "0",
+    seed_min:      document.getElementById("cfg-seed-min").value,
+    leech_min:     document.getElementById("cfg-leech-min").value,
+    filter_mode:   document.querySelector('input[name="filter_mode"]:checked')?.value ?? "and",
+    scrape_sticky: document.getElementById("cfg-scrape-sticky").checked ? "1" : "0",
   };
   try {
     await api("PUT", "/settings", payload);
@@ -512,6 +515,7 @@ function _fmtTime(posted_at) {
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 (async function init() {
+  document.getElementById("btn-toggle-sticky").classList.toggle("active", state.showSticky);
   await loadSources();
   loadToday();
   updateStatusBadge();   // kicks off adaptive polling

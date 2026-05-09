@@ -7,12 +7,10 @@ import config
 _TZ = ZoneInfo(config.TZ)
 
 _DEFAULT_SETTINGS = {
-    "seed_min":        "10",
-    "leech_min":       "10",
-    "filter_mode":     "or",   # "and" or "or"
-    "nas_path":        "",   # empty = save to root of /downloads mount
-    "scrape_interval": "30",    # minutes: "30" or "60"
-    "scrape_all_day":  "0",     # "0" = 19:00-01:00 only, "1" = all day
+    "seed_min":      "10",
+    "leech_min":     "10",
+    "filter_mode":   "or",   # "and" or "or"
+    "scrape_sticky": "0",    # "0" = skip sticky/pinned, "1" = include them
 }
 
 
@@ -87,8 +85,9 @@ def init_db():
 
         # Ensure filter_mode exists (new setting)
         c.execute("INSERT OR IGNORE INTO settings(key,value) VALUES ('filter_mode','and')")
-        # Remove LINE settings if present
-        for k in ("line_notify_enabled", "line_notify_keyword_only", "line_notify_summary"):
+        # Remove obsolete settings
+        for k in ("line_notify_enabled", "line_notify_keyword_only", "line_notify_summary",
+                  "nas_path", "scrape_interval", "scrape_all_day"):
             c.execute("DELETE FROM settings WHERE key=?", (k,))
 
         # Migrate: add new columns if missing (existing installs)
@@ -97,6 +96,7 @@ def init_db():
             "ALTER TABLE torrents ADD COLUMN category    TEXT DEFAULT ''",
             "ALTER TABLE torrents ADD COLUMN file_count  INTEGER DEFAULT 0",
             "ALTER TABLE torrents ADD COLUMN file_size   TEXT DEFAULT ''",
+            "ALTER TABLE torrents ADD COLUMN is_sticky   INTEGER DEFAULT 0",
         ]:
             try:
                 c.execute(col_sql)
@@ -170,12 +170,13 @@ def upsert_torrent(source_id: int, site_id: str, data: dict) -> tuple[bool, int]
                 """INSERT INTO torrents
                    (source_id, site_id, title, detail_url, torrent_url, cover_url,
                     seeds, leeches, date_posted, posted_at, category,
-                    file_count, file_size, first_seen_at, last_updated_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    file_count, file_size, is_sticky, first_seen_at, last_updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (source_id, site_id, data["title"], data["detail_url"], data["torrent_url"],
                  data.get("cover_url"), data["seeds"], data["leeches"],
                  data["date_posted"], data.get("posted_at", ""), data.get("category", ""),
-                 data.get("file_count", 0), data.get("file_size", ""), now, now)
+                 data.get("file_count", 0), data.get("file_size", ""),
+                 1 if data.get("is_sticky") else 0, now, now)
             )
             return True, c.execute("SELECT last_insert_rowid()").fetchone()[0]
 
