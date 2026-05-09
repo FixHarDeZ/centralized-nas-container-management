@@ -107,8 +107,19 @@ function renderSourceChips() {
 async function loadToday() {
   const sid = state.activeSource.today;
   if (!sid) return;
-  const data = await api("GET", `/torrents?source_id=${sid}&sort=${state.sort.today}&filter=${state.filter}`).catch(() => ({ torrents: [] }));
-  let torrents = data.torrents || [];
+  // Always fetch all so we can compute counts for every bucket
+  const data = await api("GET", `/torrents?source_id=${sid}&sort=${state.sort.today}&filter=all`).catch(() => ({ torrents: [] }));
+  const all = data.torrents || [];
+
+  // Compute counts
+  const countAll    = all.length;
+  const countKw     = all.filter(t => t.keyword_match).length;
+  const countSticky = all.filter(t => t.is_sticky).length;
+  _updateFilterCounts(countAll, countKw, countSticky);
+
+  // Apply active filters client-side
+  let torrents = all;
+  if (state.filter === "keyword") torrents = torrents.filter(t => t.keyword_match);
   if (!state.showSticky) torrents = torrents.filter(t => !t.is_sticky);
   renderTorrentList("list-today", torrents, false);
 
@@ -117,6 +128,16 @@ async function loadToday() {
   const el = document.getElementById("last-updated-today");
   if (el && status.last_scrape) el.textContent = `อัปเดตล่าสุด: ${status.last_scrape}`;
   if (el && !status.last_scrape) el.textContent = "";
+}
+
+function _updateFilterCounts(total, kw, sticky) {
+  const btnAll    = document.querySelector('.tw-filter-btn[data-filter="all"]');
+  const btnKw     = document.querySelector('.tw-filter-btn[data-filter="keyword"]');
+  const btnSticky = document.getElementById("btn-toggle-sticky");
+  const badge = n => n > 0 ? ` <span class="tw-count">${n}</span>` : "";
+  if (btnAll)    btnAll.innerHTML    = `ทั้งหมด${badge(total)}`;
+  if (btnKw)     btnKw.innerHTML     = `<i class="bi bi-star-fill"></i> Keyword${badge(kw)}`;
+  if (btnSticky) btnSticky.innerHTML = `<i class="bi bi-pin-fill"></i> Sticky${badge(sticky)}`;
 }
 
 // ─── History ──────────────────────────────────────────────────────────────────
