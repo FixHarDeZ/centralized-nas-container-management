@@ -183,7 +183,7 @@ function cardHTML(t, readOnly) {
   <div class="tw-card${t.downloaded_local || t.downloaded_nas ? " downloaded" : ""}${t.keyword_match ? " keyword-match" : ""}" data-id="${t.id}">
     ${thumb}
     <div class="tw-card-body">
-      <a class="tw-card-title tw-title-link" href="${escHtml(t.detail_url)}" target="_blank" rel="noopener noreferrer">${escHtml(t.title)}</a>
+      <a class="tw-card-title tw-title-link" href="/api/detail/${t.id}" target="_blank" rel="noopener">${escHtml(t.title)}</a>
       <div class="tw-card-meta">
         ${catBadge}
         <span class="tw-card-time">${_fmtTime(t.posted_at)}</span>

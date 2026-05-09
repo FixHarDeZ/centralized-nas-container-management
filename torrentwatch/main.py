@@ -180,6 +180,30 @@ async def api_download_nas(torrent_id: int):
     return {"filename": filename, "path": str(dest)}
 
 
+# ─── Proxy detail page (bypass bearbit anti-hotlink check) ────────────────────
+
+@app.get("/api/detail/{torrent_id}")
+async def api_proxy_detail(torrent_id: int):
+    """Proxy the torrent detail page through our backend so bearbit's Referer check passes."""
+    t = db.get_torrent(torrent_id)
+    if not t:
+        raise HTTPException(404, "Torrent not found")
+
+    html_bytes = await scraper.fetch_detail_html(t["detail_url"])
+    if html_bytes is None:
+        raise HTTPException(502, "Failed to fetch detail page")
+
+    # Inject <base href> so relative resources (images, CSS, links) resolve to bearbit
+    base_tag = f'<base href="{config.SITE_BASE_URL}/">'.encode("ascii")
+    if b"<head>" in html_bytes:
+        html_bytes = html_bytes.replace(b"<head>", b"<head>" + base_tag, 1)
+    else:
+        html_bytes = base_tag + html_bytes
+
+    # bearbit serves as TIS-620 — preserve charset
+    return Response(content=html_bytes, media_type="text/html; charset=tis-620")
+
+
 # ─── Keywords ─────────────────────────────────────────────────────────────────
 
 class KeywordIn(BaseModel):
