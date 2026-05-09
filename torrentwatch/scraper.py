@@ -128,14 +128,15 @@ def _is_login_page(html: str, url: str) -> bool:
 
 async def _fetch(url: str) -> str | None:
     global _login_ok
+    headers = {"Referer": f"{config.SITE_BASE_URL}/"}
     try:
-        resp = await _client.get(url)
+        resp = await _client.get(url, headers=headers)
         if _is_login_page(resp.text, str(resp.url)):
             print("[scraper] session expired — re-logging in")
             _login_ok = await _login()
             if not _login_ok:
                 return None
-            resp = await _client.get(url)
+            resp = await _client.get(url, headers=headers)
         return resp.text
     except Exception as e:
         print(f"[scraper] fetch error {url}: {e}")
@@ -154,6 +155,22 @@ async def fetch_login_page_html() -> str | None:
         return resp.text
     except Exception as e:
         print(f"[scraper] fetch login page error: {e}")
+        return None
+
+
+async def fetch_detail_html(detail_url: str) -> bytes | None:
+    """Fetch a torrent's detail page bytes (TIS-620 encoded) with proper Referer.
+    Used by the proxy endpoint to bypass bearbit's anti-hotlink check.
+    """
+    headers = {"Referer": f"{config.SITE_BASE_URL}/viewbrsb.php"}
+    try:
+        resp = await _client.get(detail_url, headers=headers)
+        if resp.status_code != 200:
+            print(f"[scraper] detail fetch {detail_url} → {resp.status_code}")
+            return None
+        return resp.content
+    except Exception as e:
+        print(f"[scraper] fetch detail error: {e}")
         return None
 
 
@@ -181,11 +198,19 @@ async def resolve_download_url(detail_url: str) -> str | None:
 
 
 async def fetch_torrent_bytes(torrent_url: str, detail_url: str = "") -> bytes | None:
-    """Download .torrent file bytes. If torrent_url fails, resolve from detail_url."""
+    """Download .torrent file bytes. If torrent_url fails, resolve from detail_url.
+
+    Bearbit blocks downloads with non-bearbit Referer — we always set it to the detail
+    page (or base URL) so the request looks like it came from within the site.
+    """
     if not torrent_url.startswith("http"):
         torrent_url = urljoin(config.SITE_BASE_URL, torrent_url)
+
+    referer = detail_url if detail_url else f"{config.SITE_BASE_URL}/"
+    headers = {"Referer": referer}
+
     try:
-        resp = await _client.get(torrent_url)
+        resp = await _client.get(torrent_url, headers=headers)
         ct = resp.headers.get("content-type", "")
         print(f"[scraper] download {torrent_url} → {resp.status_code} {ct}")
         if resp.status_code == 200 and (
@@ -194,15 +219,18 @@ async def fetch_torrent_bytes(torrent_url: str, detail_url: str = "") -> bytes |
         ):
             return resp.content
 
-        # torrent_url failed — resolve from detail page
+        # torrent_url failed — resolve from detail page (browser flow: visit detail → click download)
         if detail_url:
             print(f"[scraper] stored URL failed, resolving from detail page…")
             real_url = await resolve_download_url(detail_url)
             if real_url and real_url != torrent_url:
-                resp2 = await _client.get(real_url)
+                resp2 = await _client.get(real_url, headers={"Referer": detail_url})
                 ct2 = resp2.headers.get("content-type", "")
                 print(f"[scraper] resolved download → {resp2.status_code} {ct2}")
-                if resp2.status_code == 200:
+                if resp2.status_code == 200 and (
+                    "torrent" in ct2 or "octet-stream" in ct2 or
+                    resp2.content[:13].startswith((b"d8:announce", b"d13:announce"))
+                ):
                     return resp2.content
         return None
     except Exception as e:

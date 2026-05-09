@@ -7,9 +7,9 @@ import config
 _TZ = ZoneInfo(config.TZ)
 
 _DEFAULT_SETTINGS = {
-    "seed_min":        "5",
+    "seed_min":        "10",
     "leech_min":       "10",
-    "filter_mode":     "and",   # "and" or "or"
+    "filter_mode":     "or",   # "and" or "or"
     "nas_path":        "",   # empty = save to root of /downloads mount
     "scrape_interval": "30",    # minutes: "30" or "60"
     "scrape_all_day":  "0",     # "0" = 19:00-01:00 only, "1" = all day

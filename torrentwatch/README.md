@@ -2,23 +2,27 @@
 
 **EN** | [ไทย](#ภาษาไทย)
 
-A daily torrent monitor that scrapes [bearbit.org](https://bearbit.org) on a schedule, filters today's uploads by seed/leech thresholds and keywords, and surfaces them via a mobile-friendly dark-themed web UI. Runs as a Docker container on Synology NAS.
+A daily torrent monitor that scrapes [bearbit.org](https://bearbit.org) on a schedule, paginates through all of today's uploads, filters by seed/leech thresholds and keywords, and surfaces them via a mobile-friendly dark-themed web UI. Runs as a Docker container on Synology NAS.
 
 ---
 
 ## Features
 
-- Scrapes multiple listing URLs independently — each source has its own keyword list
-- Filters to **today's uploads only** — no backlog noise
-- Seed / leech threshold filtering (configurable; seed ≠ 0 always enforced)
-- Per-source keyword watchlist — keyword-matched torrents appear even if below threshold
-- Cover image, file size, file count, and upload time displayed per card
-- Sort by seed count, leech count, or upload time
-- Download torrent to browser **or** save directly to a NAS watch folder
-- LINE push notifications on keyword matches and per-round summaries (toggleable)
-- History tab — browse any past date's results (read-only, frozen data)
-- Auto scrape schedule: every 30 min or 1 hour, during 19:00–01:00 or all day
-- Weekly cleanup — deletes records older than 7 days every Sunday at 03:00
+- **Multi-source** — add multiple listing URLs (e.g. `viewbrsb.php`, `viewno18sbx.php`); each has its own keyword list
+- **Multi-page scraping** — paginates `?page=0,1,2,...` until it hits an item from a previous day, so all of today's uploads are captured
+- **Today-only filter** — sticky/pinned entries are auto-skipped, only fresh uploads appear
+- **Seed/leech threshold** with **AND/OR** mode toggle (configurable; seed ≠ 0 always enforced)
+- **Per-source keywords** — keyword-matched torrents bypass the threshold
+- **Cover image, file size, file count, upload time** displayed per card
+- **Sort by** seed count, leech count, or upload time
+- **Clickable title** — opens the bearbit detail page through a backend proxy that bypasses bearbit's anti-hotlink Referer check
+- **Two download modes**:
+  - **Browser** — proxies the `.torrent` to your browser (preserves Thai filename via RFC 5987)
+  - **NAS** — saves directly to a configurable subdirectory inside the mounted watch folder
+- **History tab** — browse any past date (read-only, frozen data)
+- **Auto schedule** — every 30 min or 1 hour, during 19:00–01:00 or all day
+- **Live progress** — header badge shows source/page/count in real-time during scrape; auto-refreshes the list when done
+- **Weekly cleanup** — deletes records older than 7 days every Sunday at 03:00
 
 ## Stack
 
@@ -26,7 +30,7 @@ A daily torrent monitor that scrapes [bearbit.org](https://bearbit.org) on a sch
 |---|---|
 | Runtime | Python 3.12 · FastAPI · Uvicorn |
 | Database | SQLite (WAL mode) — persisted in named volume `torrentwatch_data` |
-| Scraper | httpx + BeautifulSoup4 · session-based login |
+| Scraper | httpx async session + BeautifulSoup4 · login + Referer handling |
 | Scheduler | APScheduler `BackgroundScheduler` |
 | Host port | `5059` → container `8000` |
 | Reverse proxy | Synology RP `https://…:5062` → `http://localhost:5059` |
@@ -48,23 +52,21 @@ TORRENTWATCH_SITE_PASSWORD=your_bearbit_password
 # Comma-separated initial listing URLs (seeds the DB on first start; edit via Settings UI after)
 TORRENTWATCH_DEFAULT_URLS=https://bearbit.org/viewbrsb.php
 
-# LINE push notifications (optional — can leave empty to disable)
-TORRENTWATCH_LINE_ACCESS_TOKEN=your_line_channel_access_token
-TORRENTWATCH_LINE_USER_ID=your_line_user_id
-
-# Host path to Synology watch folder (uncomment the volume line in docker-compose.yml to enable)
+# Host path to Synology watch folder (mounted to /downloads inside container)
 NAS_TORRENT_PATH=/var/services/homes/<NAS_USER>/Torrents_Watch
 ```
 
-### 3. NAS Download (optional)
+### 3. NAS Watch Folder
 
-To enable the "→ NAS" download button, uncomment this line in `docker-compose.yml`:
+The "→ NAS" download button writes `.torrent` files inside the mounted watch folder. The mount is configured in `docker-compose.yml`:
 
 ```yaml
-# - ${NAS_TORRENT_PATH}:/downloads
+volumes:
+  - torrentwatch_data:/data
+  - ${NAS_TORRENT_PATH}:/downloads
 ```
 
-The path must already exist on the NAS host before starting the container.
+The host path `NAS_TORRENT_PATH` must already exist on the NAS before starting the container. The "NAS path" setting in the UI controls a **subdirectory** within `/downloads` (e.g. set to `Movies` to save into `Torrents_Watch/Movies/`).
 
 ### 4. Deploy
 
@@ -88,37 +90,51 @@ DSM → Control Panel → Login Portal → Advanced → Reverse Proxy → Create
 
 Router must forward external port `5062 → NAS`.
 
-> Port 5060 and 5061 are blocked by browsers (SIP protocol) — use 5062 or higher.
+> Ports 5060 and 5061 are blocked by browsers (SIP protocol) — use 5062 or higher.
 
-## Settings
-
-All settings are configurable from the web UI (Settings tab):
+## Settings (Web UI)
 
 | Setting | Default | Description |
 |---|---|---|
-| Seed min | `5` | Minimum seeds to include a torrent |
-| Leech min | `10` | Minimum leeches to include |
-| NAS path | `/downloads` | Volume mount path for NAS downloads |
+| Seed min | `5` | Minimum seeds for a torrent to pass |
+| Leech min | `10` | Minimum leeches for a torrent to pass |
+| Filter mode | `AND` | `AND` = both must meet · `OR` = either is enough |
+| NAS path | empty | Subdirectory inside `/downloads` (empty = root of watch folder) |
 | Scrape interval | `30 min` | How often to scrape (30 or 60 min) |
-| Scrape time | `19:00–01:00` | Window to run scrapes (or all day) |
-| LINE notify | Off | Push notifications via LINE |
-| LINE summary | On | Send per-round summary |
-| LINE keyword only | Off | Only notify on keyword matches |
+| Scrape window | `19:00–01:00` | Active hours, or `all day` |
 
-## Debug Endpoints
+## API Reference
 
-| Endpoint | Description |
+| Method · Path | Purpose |
 |---|---|
-| `GET /api/debug/html?source_id=<id>` | Raw scraped HTML — use to tune CSS selectors |
-| `GET /api/debug/login-page` | Raw login page HTML — inspect form field names |
-| `POST /api/debug/relogin` | Force re-login and report result |
-| `GET /api/debug/download-test/<id>` | Probe download URL without saving |
-| `DELETE /api/debug/clear-all/<source_id>` | Delete all torrent data for a source |
-| `DELETE /api/debug/clear-today/<source_id>` | Delete today's data only |
+| `GET /api/torrents?source_id=…&sort=seeds\|leeches\|date&filter=all\|keyword` | Today's torrents for a source |
+| `GET /api/history/dates?source_id=…` | Available history dates |
+| `GET /api/history?source_id=…&date=YYYY-MM-DD` | Read-only past day |
+| `GET /api/detail/{torrent_id}` | **Proxied** detail page (bypasses bearbit anti-hotlink) |
+| `GET /api/download/local/{id}` | Stream `.torrent` to browser (RFC 5987 Thai filename) |
+| `POST /api/download/nas/{id}` | Save `.torrent` into the NAS watch folder |
+| `GET /api/sources` · `POST` · `DELETE` · `PATCH` | Source CRUD |
+| `GET /api/keywords?source_id=…` · `POST` · `DELETE` | Per-source keyword CRUD |
+| `GET /api/settings` · `PUT` | Read/update settings (rebuilds scrape job on interval/time change) |
+| `POST /api/scrape` | Manual scrape trigger |
+| `GET /api/status` | Scraper + scheduler state, including live `scrape_progress` |
+| `GET /api/debug/html?source_id=…` | Raw scraped HTML — for selector tuning |
+| `GET /api/debug/login-page` | Raw bearbit login page |
+| `POST /api/debug/relogin` | Force re-login |
+| `GET /api/debug/download-test/{id}` | Probe download URL without saving |
+| `DELETE /api/debug/clear-all/{source_id}` | Wipe all torrent data for a source |
+| `DELETE /api/debug/clear-today/{source_id}` | Wipe today's data only |
+
+## Anti-hotlink Bypass
+
+Bearbit blocks any request whose `Referer` header isn't a bearbit URL — both for `.torrent` downloads and detail pages. TorrentWatch handles this transparently:
+
+- **Scraper** sends `Referer: https://bearbit.org/...` on every backend request
+- **Title click** opens `/api/detail/{id}` — the backend fetches the bearbit detail page with a proper Referer, then serves the HTML through our domain (with `<base href="https://bearbit.org/">` injected so images/CSS still resolve)
 
 ## Scraper Selectors
 
-If bearbit.org changes its HTML layout, update the `SELECTOR_*` constants at the top of `scraper.py` without touching any other code. The debug HTML endpoint helps identify the new structure.
+If bearbit changes its HTML layout, update the `SELECTOR_*` and `COL_*` constants at the top of `scraper.py` — no other code changes needed. The `/api/debug/html` endpoint dumps the raw HTML for inspection.
 
 ---
 
@@ -126,27 +142,29 @@ If bearbit.org changes its HTML layout, update the `SELECTOR_*` constants at the
 
 [EN](#torrentwatch)
 
-TorrentWatch เป็น app สำหรับ monitor torrent ใหม่จาก bearbit.org อัตโนมัติ filter เฉพาะไฟล์ที่ลงในวันนั้น และแสดงผ่าน web UI บนมือถือ รันเป็น Docker container บน Synology NAS
+TorrentWatch เป็น app สำหรับ monitor torrent ใหม่จาก bearbit.org อัตโนมัติ ไล่ scrape ทีละหน้าจน list ของวันนี้หมด filter ตาม seed/leech และ keyword แล้วแสดงผ่าน web UI บนมือถือ — รันเป็น Docker container บน Synology NAS
 
 ---
 
 ## คุณสมบัติ
 
-- รองรับหลาย source URL — แต่ละ source มี keyword list ของตัวเอง
-- แสดงเฉพาะ **torrent ที่ลงในวันนั้น** — ไม่มีข้อมูลย้อนหลังปน
-- กรองตาม seed / leech ขั้นต่ำ (ตั้งค่าได้ seed ≠ 0 บังคับเสมอ)
-- Keyword watchlist ต่อ source — ถ้า title ตรงกับ keyword จะแสดงแม้ seed/leech ต่ำกว่า threshold
-- แสดงรูปปก, ขนาดไฟล์, จำนวนไฟล์, และเวลาที่ upload
-- เรียงตาม seed, leech, หรือเวลา upload
-- ดาวน์โหลด .torrent ผ่าน browser **หรือ** ส่งตรงไปยัง watch folder ใน NAS
-- LINE notification เมื่อเจอ keyword match และสรุปยอดแต่ละรอบ (เปิด/ปิดได้)
-- แท็บ History — ดูผลย้อนหลังรายวัน (read-only)
-- ตั้งเวลา scrape: ทุก 30 นาที หรือทุก 1 ชั่วโมง ช่วง 19:00–01:00 หรือทั้งวัน
-- ล้างข้อมูลอัตโนมัติทุก Sunday 03:00 ลบ record อายุเกิน 7 วัน
+- รองรับหลาย source URL (`viewbrsb.php`, `viewno18sbx.php`, ฯลฯ) แต่ละ source มี keyword list ของตัวเอง
+- **Multi-page scraping** — ไล่ `?page=0,1,2,...` จนกว่าจะเจอ torrent ที่ไม่ใช่วันนี้แล้วหยุด
+- **Today only** — ตัด sticky/pinned ทิ้งอัตโนมัติ
+- เงื่อนไข seed/leech แบบ **AND** (ทั้งคู่) หรือ **OR** (อย่างใดอย่างหนึ่ง)
+- Keyword ต่อ source — ถ้า title match จะข้าม threshold ได้
+- การ์ดแสดง: รูปปก, ขนาด, จำนวนไฟล์, เวลา upload
+- เรียงตาม seed / leech / เวลา upload
+- กดชื่อ → เปิดหน้า detail ผ่าน backend proxy (bypass anti-hotlink ของ bearbit)
+- ดาวน์โหลด: **Browser** (proxy ผ่าน backend, ชื่อไทยใช้ RFC 5987) หรือ **NAS** (เขียนตรงเข้า watch folder)
+- History tab — ดูย้อนหลังได้
+- Auto scrape: 30 นาที / 1 ชั่วโมง · ช่วง 19:00–01:00 หรือทั้งวัน
+- Header badge แสดง progress live: source / page / จำนวน items ระหว่าง scrape
+- ลบข้อมูลเก่าอัตโนมัติทุก Sunday 03:00 (เกิน 7 วัน)
 
 ## การตั้งค่า
 
-### 1. สมัครสมาชิก bearbit.org
+### 1. Account bearbit.org
 
 ต้องมี account บน bearbit.org credential เก็บใน `.env` ที่ root — ไม่ commit
 
@@ -158,8 +176,6 @@ TorrentWatch เป็น app สำหรับ monitor torrent ใหม่จ
 TORRENTWATCH_SITE_USERNAME=your_bearbit_username
 TORRENTWATCH_SITE_PASSWORD=your_bearbit_password
 TORRENTWATCH_DEFAULT_URLS=https://bearbit.org/viewbrsb.php
-TORRENTWATCH_LINE_ACCESS_TOKEN=...   # ถ้าต้องการ LINE noti
-TORRENTWATCH_LINE_USER_ID=...
 NAS_TORRENT_PATH=/var/services/homes/<NAS_USER>/Torrents_Watch
 ```
 
