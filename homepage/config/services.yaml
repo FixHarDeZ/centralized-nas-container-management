@@ -100,6 +100,26 @@
 
 # ─── 📥 Downloads & Monitoring ────────────────────────────────────────────────
 - 📥 Downloads & Monitoring:
+    - TorrentWatch:
+        icon: mdi-rss
+        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:5062"
+        description: Torrent Monitor (bearbit.org)
+        ping: "{{HOMEPAGE_VAR_TORRENTWATCH_URL}}"
+        widget:
+          type: customapi
+          url: "{{HOMEPAGE_VAR_TORRENTWATCH_URL}}/api/status"
+          refreshInterval: 60000
+          mappings:
+            - field: scrape_status
+              label: Status
+              format: text
+            - field: last_scrape
+              label: Scraped
+              format: text
+            - field: next_scrape
+              label: Next
+              format: text
+              
     - Download Station:
         icon: synology-download-station.png
         href: "{{HOMEPAGE_VAR_QUICKCONNECT_URL}}/download/"

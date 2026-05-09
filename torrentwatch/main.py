@@ -35,9 +35,12 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="TorrentWatch", lifespan=lifespan)
 
 
+_AUTH_BYPASS_PATHS = {"/api/status"}
+
+
 @app.middleware("http")
 async def basic_auth_middleware(request: Request, call_next):
-    if not _AUTH_ENABLED:
+    if not _AUTH_ENABLED or request.url.path in _AUTH_BYPASS_PATHS:
         return await call_next(request)
     auth = request.headers.get("Authorization", "")
     if auth.startswith("Basic "):
