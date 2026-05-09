@@ -66,6 +66,9 @@ class SourceIn(BaseModel):
 class SourceToggle(BaseModel):
     enabled: bool
 
+class SourceRename(BaseModel):
+    label: str
+
 @app.get("/api/sources")
 def api_get_sources():
     return db.get_sources()
@@ -87,6 +90,10 @@ def api_remove_source(source_id: int):
 @app.patch("/api/sources/{source_id}", status_code=204)
 def api_toggle_source(source_id: int, body: SourceToggle):
     db.toggle_source(source_id, body.enabled)
+
+@app.patch("/api/sources/{source_id}/label", status_code=204)
+def api_rename_source(source_id: int, body: SourceRename):
+    db.rename_source(source_id, body.label)
 
 
 # ─── Torrents ─────────────────────────────────────────────────────────────────

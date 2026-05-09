@@ -36,6 +36,7 @@ def init_db():
             CREATE TABLE IF NOT EXISTS sources (
                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
                 url        TEXT UNIQUE NOT NULL,
+                label      TEXT DEFAULT '',
                 enabled    INTEGER DEFAULT 1,
                 created_at TEXT NOT NULL
             );
@@ -92,6 +93,7 @@ def init_db():
 
         # Migrate: add new columns if missing (existing installs)
         for col_sql in [
+            "ALTER TABLE sources ADD COLUMN label TEXT DEFAULT ''",
             "ALTER TABLE torrents ADD COLUMN posted_at   TEXT DEFAULT ''",
             "ALTER TABLE torrents ADD COLUMN category    TEXT DEFAULT ''",
             "ALTER TABLE torrents ADD COLUMN file_count  INTEGER DEFAULT 0",
@@ -141,6 +143,11 @@ def remove_source(source_id: int):
 def toggle_source(source_id: int, enabled: bool):
     with _conn() as c:
         c.execute("UPDATE sources SET enabled = ? WHERE id = ?", (1 if enabled else 0, source_id))
+
+
+def rename_source(source_id: int, label: str):
+    with _conn() as c:
+        c.execute("UPDATE sources SET label = ? WHERE id = ?", (label.strip(), source_id))
 
 
 def get_enabled_sources() -> list[dict]:
