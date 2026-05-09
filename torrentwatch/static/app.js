@@ -67,6 +67,10 @@ function shortUrl(url) {
   } catch { return url.slice(-20); }
 }
 
+function sourceLabel(src) {
+  return (src.label && src.label.trim()) ? src.label.trim() : shortUrl(src.url);
+}
+
 async function loadSources() {
   state.sources = await api("GET", "/sources").catch(() => []);
   renderSourceChips();
@@ -81,7 +85,7 @@ function renderSourceChips() {
       if (!src.enabled && tab !== "settings") return;
       const chip = document.createElement("button");
       chip.className = "tw-source-chip" + (state.activeSource[tab] === src.id ? " active" : "");
-      chip.textContent = shortUrl(src.url);
+      chip.textContent = sourceLabel(src);
       chip.title = src.url;
       chip.addEventListener("click", () => {
         state.activeSource[tab] = src.id;
@@ -396,11 +400,15 @@ function renderSourcesList(sources) {
     return;
   }
   list.innerHTML = sources.map(s => `
-    <div class="tw-source-item">
+    <div class="tw-source-item" data-src-id="${s.id}">
       <label class="tw-toggle-row" style="flex:1;gap:8px;margin:0">
         <input type="checkbox" class="tw-toggle src-toggle" data-src-id="${s.id}" ${s.enabled ? "checked" : ""}>
       </label>
-      <span class="tw-source-url" title="${escHtml(s.url)}">${escHtml(s.url)}</span>
+      <div class="tw-source-label-wrap">
+        <span class="tw-source-display-label">${escHtml(sourceLabel(s))}</span>
+        <span class="tw-source-url-hint" title="${escHtml(s.url)}">${escHtml(s.url)}</span>
+      </div>
+      <button class="tw-btn-icon src-rename" data-src-id="${s.id}" data-label="${escHtml(s.label || "")}" title="เปลี่ยนชื่อ"><i class="bi bi-pencil"></i></button>
       <button class="tw-btn-icon src-reset" data-src-id="${s.id}" title="ล้างข้อมูลทั้งหมดของ source นี้"><i class="bi bi-arrow-counterclockwise"></i></button>
       <button class="tw-btn-danger src-del" data-src-id="${s.id}"><i class="bi bi-trash3"></i></button>
     </div>`).join("");
@@ -411,6 +419,39 @@ function renderSourcesList(sources) {
       await loadSources();
     });
   });
+  list.querySelectorAll(".src-rename").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const row = btn.closest(".tw-source-item");
+      const sid = btn.dataset.srcId;
+      const currentLabel = btn.dataset.label;
+      const displayEl = row.querySelector(".tw-source-display-label");
+
+      // Build inline editor
+      const wrap = row.querySelector(".tw-source-label-wrap");
+      wrap.innerHTML = `
+        <input class="tw-input-sm src-rename-input" type="text" value="${escHtml(currentLabel)}" placeholder="ชื่อที่แสดง (ว่าง = ใช้ชื่อ URL)" style="flex:1;min-width:0">
+        <button class="tw-btn-icon src-rename-ok" title="บันทึก"><i class="bi bi-check-lg"></i></button>
+        <button class="tw-btn-icon src-rename-cancel" title="ยกเลิก"><i class="bi bi-x-lg"></i></button>`;
+      const input = wrap.querySelector(".src-rename-input");
+      input.focus();
+      input.select();
+
+      const save = async () => {
+        const label = input.value.trim();
+        await api("PATCH", `/sources/${sid}/label`, { label }).catch(() => {});
+        await loadSources();
+        loadSettings();
+        toast("เปลี่ยนชื่อแล้ว", "success");
+      };
+      wrap.querySelector(".src-rename-ok").addEventListener("click", save);
+      wrap.querySelector(".src-rename-cancel").addEventListener("click", () => { loadSettings(); });
+      input.addEventListener("keydown", e => {
+        if (e.key === "Enter") save();
+        if (e.key === "Escape") loadSettings();
+      });
+    });
+  });
+
   list.querySelectorAll(".src-reset").forEach(btn => {
     btn.addEventListener("click", async () => {
       if (!confirm("ล้างข้อมูล torrent ทั้งหมดของ source นี้?\n(ข้อมูลจะถูก scrape ใหม่ครั้งต่อไป)")) return;
