@@ -1,9 +1,11 @@
 import asyncio
+import base64
 import os
+import secrets
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -14,6 +16,8 @@ import scraper
 import scheduler
 
 _STATIC_DIR = Path(__file__).parent / "static"
+
+_AUTH_ENABLED = bool(config.BASIC_AUTH_USER and config.BASIC_AUTH_PASS)
 
 
 @asynccontextmanager
@@ -29,6 +33,26 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="TorrentWatch", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def basic_auth_middleware(request: Request, call_next):
+    if not _AUTH_ENABLED:
+        return await call_next(request)
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Basic "):
+        try:
+            decoded = base64.b64decode(auth[6:]).decode("utf-8")
+            user, _, password = decoded.partition(":")
+            if (secrets.compare_digest(user, config.BASIC_AUTH_USER) and
+                    secrets.compare_digest(password, config.BASIC_AUTH_PASS)):
+                return await call_next(request)
+        except Exception:
+            pass
+    return Response(
+        status_code=401,
+        headers={"WWW-Authenticate": 'Basic realm="TorrentWatch"'},
+    )
 
 
 # ─── Sources ─────────────────────────────────────────────────────────────────
@@ -156,17 +180,9 @@ async def api_download_nas(torrent_id: int):
     if not t:
         raise HTTPException(404, "Torrent not found")
 
-    # Read nas_path from settings — must be within the /downloads mount
-    settings  = db.get_settings()
-    nas_path  = settings.get("nas_path", config.NAS_DOWNLOADS_DIR).strip() or config.NAS_DOWNLOADS_DIR
-    # Ensure the path stays inside the container mount point
-    mount     = config.NAS_DOWNLOADS_DIR   # "/downloads"
-    if not nas_path.startswith(mount):
-        nas_path = mount + "/" + nas_path.lstrip("/")
-    nas_dir = Path(nas_path)
-
-    if not Path(mount).exists():
-        raise HTTPException(503, f"NAS volume (/downloads) not mounted — uncomment the volume line in docker-compose.yml")
+    nas_dir = Path(config.NAS_DOWNLOADS_DIR)
+    if not nas_dir.exists():
+        raise HTTPException(503, "NAS volume (/downloads) not mounted — uncomment the volume line in docker-compose.yml")
     nas_dir.mkdir(parents=True, exist_ok=True)
 
     data = await scraper.fetch_torrent_bytes(t["torrent_url"], t.get("detail_url", ""))
@@ -238,8 +254,6 @@ def api_get_settings():
 @app.put("/api/settings", status_code=204)
 def api_update_settings(body: dict):
     db.update_settings(body)
-    if "scrape_interval" in body or "scrape_all_day" in body:
-        scheduler.reload_scrape_job()
 
 
 # ─── Scrape / Status ─────────────────────────────────────────────────────────

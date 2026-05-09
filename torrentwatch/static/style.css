@@ -191,6 +191,8 @@ html, body {
 .tw-seed-icon  { color: var(--seed); }
 .tw-leech-icon { color: var(--leech); }
 
+#btn-toggle-sticky.active { border-color: #fb923c; color: #fb923c; background: #1c1007; }
+
 /* ─── Date select ────────────────────────────────────────────────────────── */
 .tw-date-select {
   background: var(--bg-elevated);
@@ -325,9 +327,10 @@ html, body {
 }
 .tw-badge-seed   { background: #14532d; color: var(--seed); }
 .tw-badge-leech  { background: #450a0a; color: var(--leech); }
-.tw-badge-kw     { background: #3b0764; color: var(--kw-badge); }
+.tw-badge-kw       { background: #3b0764; color: var(--kw-badge); }
 .tw-badge-dl-local { background: #1e3a5f; color: var(--dl-local); }
 .tw-badge-dl-nas   { background: #431407; color: var(--dl-nas); }
+.tw-badge-sticky   { background: #292524; color: #fb923c; border: 1px solid #78350f; }
 
 .tw-card-actions {
   display: flex;
@@ -499,6 +502,24 @@ html, body {
   margin: 14px 14px 80px;
   width: calc(100% - 28px);
 }
+
+.tw-schedule-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--bg-elevated);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.tw-schedule-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+}
+.tw-schedule-time { color: var(--text); font-family: monospace; }
+.tw-schedule-freq { color: var(--accent); font-weight: 500; }
+.tw-schedule-pause .tw-schedule-freq { color: var(--text-muted); }
 
 /* ─── Inputs & buttons ───────────────────────────────────────────────────── */
 .tw-input {

@@ -1,6 +1,11 @@
 """
 APScheduler jobs for TorrentWatch.
-Scrapes all enabled sources every 30 min from 19:00–00:30 Asia/Bangkok.
+
+Fixed auto-scrape schedule (Asia/Bangkok):
+  19:00–01:00  every 30 minutes  (minute 0,30; hour 19-23,0)
+  01:00–06:00  paused
+  06:00–19:00  every 60 minutes  (minute 0; hour 6-18)
+
 Weekly cleanup runs Sunday 03:00.
 """
 
@@ -26,10 +31,8 @@ def _run_async(coro):
     try:
         # BackgroundScheduler runs in a thread without an event loop — use asyncio.run()
         loop = asyncio.get_running_loop()
-        # If somehow called from within a running loop, schedule as future
         asyncio.run_coroutine_threadsafe(coro, loop).result(timeout=120)
     except RuntimeError:
-        # No running event loop in this thread (normal case for BackgroundScheduler)
         asyncio.run(coro)
     except Exception as e:
         print(f"[scheduler] async run error: {e}")
@@ -44,10 +47,11 @@ async def _do_scrape():
     today = now.strftime("%Y-%m-%d")
 
     global _scrape_progress
-    settings    = db.get_settings()
-    seed_min    = int(settings.get("seed_min", 5))
-    leech_min   = int(settings.get("leech_min", 10))
-    filter_mode = settings.get("filter_mode", "and")
+    settings     = db.get_settings()
+    seed_min     = int(settings.get("seed_min", 5))
+    leech_min    = int(settings.get("leech_min", 10))
+    filter_mode  = settings.get("filter_mode", "and")
+    skip_sticky  = settings.get("scrape_sticky", "0") != "1"
 
     sources     = db.get_enabled_sources()
     total_found = 0
@@ -65,6 +69,7 @@ async def _do_scrape():
             entries = await scraper.scrape_source(
                 source_url, seed_min, leech_min, keywords, filter_mode,
                 on_page=lambda pg, n: _update_progress(source_label, pg, total_found + n),
+                skip_sticky=skip_sticky,
             )
         except Exception as e:
             print(f"[scheduler] scrape error {source_url}: {e}")
@@ -94,24 +99,23 @@ def _cleanup_job():
     print(f"[scheduler] weekly cleanup — deleted {deleted} old records")
 
 
-def _build_scrape_trigger(interval: int, all_day: bool) -> CronTrigger:
-    minute = "0,30" if interval == 30 else "0"
-    if all_day:
-        return CronTrigger(minute=minute, timezone=config.TZ)
-    else:
-        return CronTrigger(hour="19,20,21,22,23,0,1", minute=minute, timezone=config.TZ)
-
-
 def reload_scrape_job():
-    """Rebuild scrape job from current DB settings — call after settings change."""
-    settings = db.get_settings()
-    interval  = int(settings.get("scrape_interval", "30"))
-    all_day   = settings.get("scrape_all_day", "0") == "1"
-    trigger   = _build_scrape_trigger(interval, all_day)
-    _scheduler.add_job(_scrape_job, trigger, id="scrape", replace_existing=True)
-    label = f"ทุก {interval} นาที {'ทั้งวัน' if all_day else '19:00-01:00'}"
-    print(f"[scheduler] scrape job reloaded — {label}")
-    # Only update next_run_time if scheduler is already running
+    """Set up the two fixed-schedule scrape jobs. Call after settings change if needed."""
+    # Night window: 19:00–00:30  (every 30 min)
+    _scheduler.add_job(
+        _scrape_job,
+        CronTrigger(hour="19,20,21,22,23,0", minute="0,30", timezone=config.TZ),
+        id="scrape_night",
+        replace_existing=True,
+    )
+    # Day window: 06:00–18:00  (every 60 min)
+    _scheduler.add_job(
+        _scrape_job,
+        CronTrigger(hour="6,7,8,9,10,11,12,13,14,15,16,17,18", minute="0", timezone=config.TZ),
+        id="scrape_day",
+        replace_existing=True,
+    )
+    print("[scheduler] scrape jobs set — night (19:00-01:00 / 30min), day (06:00-19:00 / 60min)")
     if _scheduler.running:
         _update_next()
 
@@ -125,7 +129,7 @@ def start():
         replace_existing=True,
     )
     _scheduler.start()
-    _update_next()   # scheduler is now running — safe to read next_run_time
+    _update_next()
     print("[scheduler] started")
 
 
@@ -136,12 +140,16 @@ def stop():
 def _update_next():
     global _next_scrape
     try:
-        job = _scheduler.get_job("scrape")
-        if not job:
-            return
-        nrt = getattr(job, "next_run_time", None)
-        if nrt:
-            _next_scrape = nrt.strftime("%Y-%m-%d %H:%M")
+        earliest = None
+        for job_id in ("scrape_night", "scrape_day"):
+            job = _scheduler.get_job(job_id)
+            if not job:
+                continue
+            nrt = getattr(job, "next_run_time", None)
+            if nrt and (earliest is None or nrt < earliest):
+                earliest = nrt
+        if earliest:
+            _next_scrape = earliest.strftime("%Y-%m-%d %H:%M")
     except Exception:
         pass
 
@@ -149,10 +157,10 @@ def _update_next():
 def status() -> dict:
     _update_next()
     return {
-        "last_scrape":    _last_scrape,
-        "next_scrape":    _next_scrape,
-        "scrape_status":  _scrape_status,
-        "scraper_ready":  scraper.is_ready(),
+        "last_scrape":     _last_scrape,
+        "next_scrape":     _next_scrape,
+        "scrape_status":   _scrape_status,
+        "scraper_ready":   scraper.is_ready(),
         "scrape_progress": _scrape_progress,
     }
 
