@@ -161,13 +161,28 @@ async def fetch_login_page_html() -> str | None:
 async def fetch_detail_html(detail_url: str) -> bytes | None:
     """Fetch a torrent's detail page bytes (TIS-620 encoded) with proper Referer.
     Used by the proxy endpoint to bypass bearbit's anti-hotlink check.
+    Handles session expiry: if redirected to login page, re-logs in and retries once.
     """
+    global _login_ok
     headers = {"Referer": f"{config.SITE_BASE_URL}/viewbrsb.php"}
     try:
         resp = await _client.get(detail_url, headers=headers)
+
+        # Session expired — bearbit redirected us to the login page
+        if _is_login_page("", str(resp.url)):
+            print("[scraper] detail: session expired — re-logging in")
+            _login_ok = await _login()
+            if not _login_ok:
+                print("[scraper] detail: re-login failed")
+                return None
+            resp = await _client.get(detail_url, headers=headers)
+
         if resp.status_code != 200:
-            print(f"[scraper] detail fetch {detail_url} → {resp.status_code}")
-            return None
+            print(f"[scraper] detail fetch {detail_url} → HTTP {resp.status_code}")
+            # Return the page content anyway so the user sees bearbit's own message
+            # (e.g. "VIP required", "deleted") rather than a generic 502 error
+            return resp.content or None
+
         return resp.content
     except Exception as e:
         print(f"[scraper] fetch detail error: {e}")
