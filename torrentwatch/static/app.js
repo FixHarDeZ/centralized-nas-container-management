@@ -575,6 +575,15 @@ function _fmtTime(posted_at) {
   return `${m[3]}/${m[2]} ${m[4]}`;
 }
 
+// ─── Go-to-top button ────────────────────────────────────────────────────────
+(function () {
+  const btn = document.getElementById("btn-go-top");
+  window.addEventListener("scroll", () => {
+    btn.classList.toggle("visible", window.scrollY > 300);
+  }, { passive: true });
+  btn.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+})();
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 (async function init() {
   document.getElementById("btn-toggle-sticky").classList.toggle("active", state.showSticky);
