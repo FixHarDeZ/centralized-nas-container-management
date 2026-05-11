@@ -10,20 +10,22 @@ A daily torrent monitor that scrapes [bearbit.org](https://bearbit.org) on a sch
 
 ## Features
 
-- **Multi-source** — add multiple listing URLs (e.g. `viewbrsb.php`, `viewno18sbx.php`); each has its own keyword list
+- **Multi-source** — add multiple listing URLs (e.g. `viewbrsb.php`, `viewno18sbx.php`); each has its own keyword list and custom display label
 - **Multi-page scraping** — paginates `?page=0,1,2,...` until it hits an item from a previous day, so all of today's uploads are captured
-- **Today-only filter** — sticky/pinned entries are auto-skipped, only fresh uploads appear
+- **Sticky/pinned support** — optional toggle to include bearbit pinned entries; sticky state syncs with bearbit each scrape (unpinned entries auto-removed from Today view)
 - **Seed/leech threshold** with **AND/OR** mode toggle (configurable; seed ≠ 0 always enforced)
 - **Per-source keywords** — keyword-matched torrents bypass the threshold
-- **Cover image, file size, file count, upload time** displayed per card
+- **Cover image, file size, file count, upload time** displayed per card; sticky entries show a 📌 badge
 - **Sort by** seed count, leech count, or upload time
+- **Filter buttons with live counts** — ทั้งหมด / Keyword / Sticky with per-bucket counts
 - **Clickable title** — opens the bearbit detail page through a backend proxy that bypasses bearbit's anti-hotlink Referer check
 - **Two download modes**:
   - **Browser** — proxies the `.torrent` to your browser (preserves Thai filename via RFC 5987)
-  - **NAS** — saves directly to a configurable subdirectory inside the mounted watch folder
+  - **NAS** — saves directly to `/downloads` (Synology watch folder mount)
 - **History tab** — browse any past date (read-only, frozen data)
-- **Auto schedule** — every 30 min or 1 hour, during 19:00–01:00 or all day
+- **Fixed auto-scrape schedule** (Asia/Bangkok): 19:00–01:00 every 30 min · 01:00–06:00 paused · 06:00–19:00 every 60 min
 - **Live progress** — header badge shows source/page/count in real-time during scrape; auto-refreshes the list when done
+- **HTTP Basic Auth** — web UI protected via `NGINX_BASIC_AUTH_USER` / `NGINX_BASIC_AUTH_PASS`
 - **Weekly cleanup** — deletes records older than 7 days every Sunday at 03:00
 
 ## Stack
@@ -56,11 +58,15 @@ TORRENTWATCH_DEFAULT_URLS=https://bearbit.org/viewbrsb.php
 
 # Host path to Synology watch folder (mounted to /downloads inside container)
 NAS_TORRENT_PATH=/var/services/homes/<NAS_USER>/Torrents_Watch
+
+# HTTP Basic Auth — shared with homepage (leave empty to disable auth)
+NGINX_BASIC_AUTH_USER=your_username
+NGINX_BASIC_AUTH_PASS=your_password
 ```
 
 ### 3. NAS Watch Folder
 
-The "→ NAS" download button writes `.torrent` files inside the mounted watch folder. The mount is configured in `docker-compose.yml`:
+The "→ NAS" download button writes `.torrent` files directly to the root of the mounted watch folder (`/downloads`). The mount is configured in `docker-compose.yml`:
 
 ```yaml
 volumes:
@@ -68,7 +74,7 @@ volumes:
   - ${NAS_TORRENT_PATH}:/downloads
 ```
 
-The host path `NAS_TORRENT_PATH` must already exist on the NAS before starting the container. The "NAS path" setting in the UI controls a **subdirectory** within `/downloads` (e.g. set to `Movies` to save into `Torrents_Watch/Movies/`).
+The host path `NAS_TORRENT_PATH` must already exist on the NAS before starting the container.
 
 ### 4. Deploy
 
@@ -98,12 +104,18 @@ Router must forward external port `5062 → NAS`.
 
 | Setting | Default | Description |
 |---|---|---|
-| Seed min | `5` | Minimum seeds for a torrent to pass |
+| Seed min | `10` | Minimum seeds for a torrent to pass |
 | Leech min | `10` | Minimum leeches for a torrent to pass |
-| Filter mode | `AND` | `AND` = both must meet · `OR` = either is enough |
-| NAS path | empty | Subdirectory inside `/downloads` (empty = root of watch folder) |
-| Scrape interval | `30 min` | How often to scrape (30 or 60 min) |
-| Scrape window | `19:00–01:00` | Active hours, or `all day` |
+| Filter mode | `OR` | `AND` = both must meet · `OR` = either is enough |
+| รวม sticky/pinned | off | Include bearbit pinned entries; syncs removals automatically |
+
+**Auto-scrape schedule** is fixed (not configurable):
+
+| Time window | Interval |
+|---|---|
+| 19:00 – 01:00 | Every 30 minutes |
+| 01:00 – 06:00 | Paused |
+| 06:00 – 19:00 | Every 60 minutes |
 
 ## API Reference
 
@@ -152,18 +164,20 @@ TorrentWatch เป็น app สำหรับ monitor torrent ใหม่จ
 
 ## คุณสมบัติ
 
-- รองรับหลาย source URL (`viewbrsb.php`, `viewno18sbx.php`, ฯลฯ) แต่ละ source มี keyword list ของตัวเอง
+- รองรับหลาย source URL (`viewbrsb.php`, `viewno18sbx.php`, ฯลฯ) แต่ละ source มี keyword list และชื่อที่กำหนดเองได้
 - **Multi-page scraping** — ไล่ `?page=0,1,2,...` จนกว่าจะเจอ torrent ที่ไม่ใช่วันนี้แล้วหยุด
-- **Today only** — ตัด sticky/pinned ทิ้งอัตโนมัติ
+- **Sticky/pinned** — เปิด toggle เพื่อรวมรายการ pinned ของ bearbit; sync อัตโนมัติ (ถ้า bearbit เอาออก ก็หายจาก Today view ด้วย)
 - เงื่อนไข seed/leech แบบ **AND** (ทั้งคู่) หรือ **OR** (อย่างใดอย่างหนึ่ง)
 - Keyword ต่อ source — ถ้า title match จะข้าม threshold ได้
-- การ์ดแสดง: รูปปก, ขนาด, จำนวนไฟล์, เวลา upload
+- การ์ดแสดง: รูปปก, ขนาด, จำนวนไฟล์, เวลา upload, badge 📌 สำหรับ sticky
+- ปุ่ม filter แสดงจำนวน torrent แต่ละ bucket (ทั้งหมด / Keyword / Sticky)
 - เรียงตาม seed / leech / เวลา upload
 - กดชื่อ → เปิดหน้า detail ผ่าน backend proxy (bypass anti-hotlink ของ bearbit)
-- ดาวน์โหลด: **Browser** (proxy ผ่าน backend, ชื่อไทยใช้ RFC 5987) หรือ **NAS** (เขียนตรงเข้า watch folder)
+- ดาวน์โหลด: **Browser** (proxy ผ่าน backend, ชื่อไทยใช้ RFC 5987) หรือ **NAS** (เขียนตรงเข้า `/downloads`)
 - History tab — ดูย้อนหลังได้
-- Auto scrape: 30 นาที / 1 ชั่วโมง · ช่วง 19:00–01:00 หรือทั้งวัน
+- Auto scrape ตารางเวลาคงที่: 19:00–01:00 ทุก 30 นาที · 01:00–06:00 หยุด · 06:00–19:00 ทุก 1 ชม.
 - Header badge แสดง progress live: source / page / จำนวน items ระหว่าง scrape
+- HTTP Basic Auth — ป้องกัน UI ด้วย `NGINX_BASIC_AUTH_USER` / `NGINX_BASIC_AUTH_PASS`
 - ลบข้อมูลเก่าอัตโนมัติทุก Sunday 03:00 (เกิน 7 วัน)
 
 ## การตั้งค่า
@@ -181,6 +195,10 @@ TORRENTWATCH_SITE_USERNAME=your_bearbit_username
 TORRENTWATCH_SITE_PASSWORD=your_bearbit_password
 TORRENTWATCH_DEFAULT_URLS=https://bearbit.org/viewbrsb.php
 NAS_TORRENT_PATH=/var/services/homes/<NAS_USER>/Torrents_Watch
+
+# HTTP Basic Auth — ใช้ร่วมกับ homepage (ว่างเปล่า = ไม่มี auth)
+NGINX_BASIC_AUTH_USER=your_username
+NGINX_BASIC_AUTH_PASS=your_password
 ```
 
 ### 3. Deploy
