@@ -283,11 +283,16 @@ async def scrape_source(
     filter_mode: str = "and",
     on_page=None,            # optional callback(page_num, items_so_far)
     skip_sticky: bool = True,
-) -> list[dict]:
-    """Scrape all pages until today's items are exhausted (items are sorted newest-first)."""
-    today     = datetime.now(_TZ).strftime("%Y-%m-%d")
-    all_items = []
-    max_pages = 20   # safety cap
+) -> tuple[list[dict], set[str]]:
+    """Scrape all pages until today's items are exhausted.
+    Returns (filtered_entries, all_sticky_site_ids_seen_on_site).
+    seen_sticky_site_ids contains every sticky site_id found on bearbit this run
+    (before any seed/threshold filter) so the caller can sync sticky state in the DB.
+    """
+    today              = datetime.now(_TZ).strftime("%Y-%m-%d")
+    all_items          = []
+    seen_sticky_ids: set[str] = set()
+    max_pages          = 20   # safety cap
 
     for page in range(max_pages):
         page_url = _page_url(url, page)
@@ -296,8 +301,11 @@ async def scrape_source(
             print(f"[scraper] page {page}: fetch failed, stopping")
             break
 
-        items, found_older = _parse_listing(html, page_url, today, seed_min, leech_min, keywords, filter_mode, skip_sticky)
+        items, found_older, page_sticky_ids = _parse_listing(
+            html, page_url, today, seed_min, leech_min, keywords, filter_mode, skip_sticky
+        )
         all_items.extend(items)
+        seen_sticky_ids.update(page_sticky_ids)
         print(f"[scraper] page {page}: {len(items)} pass filter, found_older={found_older}")
 
         if on_page:
@@ -310,14 +318,17 @@ async def scrape_source(
             break
 
     print(f"[scraper] total {len(all_items)} items across {page + 1} page(s) from {url}")
-    return all_items
+    return all_items, seen_sticky_ids
 
 
-def _parse_listing(html: str, base_url: str, today: str, seed_min: int, leech_min: int, keywords: list[str], filter_mode: str = "and", skip_sticky: bool = True) -> tuple[list[dict], bool]:
-    """Returns (matching_entries, found_any_older_than_today)."""
+def _parse_listing(html: str, base_url: str, today: str, seed_min: int, leech_min: int, keywords: list[str], filter_mode: str = "and", skip_sticky: bool = True) -> tuple[list[dict], bool, set[str]]:
+    """Returns (matching_entries, found_any_older_than_today, seen_sticky_site_ids).
+    seen_sticky_site_ids tracks every sticky site_id present on bearbit before filtering.
+    """
     soup = BeautifulSoup(html, "html.parser")
-    results    = []
-    found_older = False
+    results          = []
+    found_older      = False
+    seen_sticky_ids: set[str] = set()
 
     rows = soup.select(ROW_SELECTOR)
 
@@ -331,8 +342,12 @@ def _parse_listing(html: str, base_url: str, today: str, seed_min: int, leech_mi
         if not entry:
             continue
 
-        # Stickies have old dates — include them regardless of date when skip_sticky=False
-        if not entry.get("is_sticky"):
+        # Stickies have old dates — bypass the date filter when skip_sticky=False.
+        # Track ALL stickies seen on bearbit (before seeds/threshold) so the scheduler
+        # can sync which ones are still pinned vs removed.
+        if entry.get("is_sticky"):
+            seen_sticky_ids.add(entry["site_id"])
+        else:
             if entry["date_posted"] != today:
                 found_older = True   # crossed into yesterday — signal to stop paging
                 continue
@@ -353,7 +368,7 @@ def _parse_listing(html: str, base_url: str, today: str, seed_min: int, leech_mi
         entry["keyword_match"] = kw_match
         results.append(entry)
 
-    return results, found_older
+    return results, found_older, seen_sticky_ids
 
 
 def _parse_row(row, base_url: str, today: str, skip_sticky: bool = True) -> dict | None:

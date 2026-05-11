@@ -577,11 +577,25 @@ function _fmtTime(posted_at) {
 
 // ─── Go-to-top button ────────────────────────────────────────────────────────
 (function () {
-  const btn = document.getElementById("btn-go-top");
-  window.addEventListener("scroll", () => {
-    btn.classList.toggle("visible", window.scrollY > 300);
-  }, { passive: true });
-  btn.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+  const btn   = document.getElementById("btn-go-top");
+  const getY  = () => Math.max(
+    window.scrollY || 0,
+    document.documentElement.scrollTop || 0,
+    document.body.scrollTop || 0
+  );
+  const check = () => btn.classList.toggle("visible", getY() > 200);
+
+  // Scroll events don't bubble — listen on every possible container
+  window.addEventListener("scroll",               check, { passive: true });
+  document.addEventListener("scroll",             check, { passive: true });
+  document.documentElement.addEventListener("scroll", check, { passive: true });
+  document.body.addEventListener("scroll",        check, { passive: true });
+
+  btn.addEventListener("click", () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  });
 })();
 
 // ─── Init ─────────────────────────────────────────────────────────────────────

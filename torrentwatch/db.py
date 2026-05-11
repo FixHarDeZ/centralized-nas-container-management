@@ -150,6 +150,32 @@ def rename_source(source_id: int, label: str):
         c.execute("UPDATE sources SET label = ? WHERE id = ?", (label.strip(), source_id))
 
 
+def sync_stickies(source_id: int, seen_site_ids: set[str], today: str):
+    """Keep sticky entries in sync with what bearbit currently shows as pinned.
+    - Still pinned (site_id in seen_site_ids) → refresh date_posted to today so they
+      stay visible in the Today tab even across midnight.
+    - No longer pinned (site_id absent) → clear is_sticky flag and backdate so the
+      entry leaves the Today tab on the next page load.
+    """
+    if not seen_site_ids:
+        return
+    yesterday = (datetime.now(_TZ) - timedelta(days=1)).strftime("%Y-%m-%d")
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT id, site_id FROM torrents WHERE source_id=? AND is_sticky=1",
+            (source_id,)
+        ).fetchall()
+        for row in rows:
+            if row["site_id"] in seen_site_ids:
+                c.execute("UPDATE torrents SET date_posted=? WHERE id=?", (today, row["id"]))
+            else:
+                # Bearbit un-pinned this entry — remove sticky badge and push out of Today
+                c.execute(
+                    "UPDATE torrents SET is_sticky=0, date_posted=? WHERE id=?",
+                    (yesterday, row["id"])
+                )
+
+
 def get_enabled_sources() -> list[dict]:
     with _conn() as c:
         return [dict(r) for r in c.execute("SELECT * FROM sources WHERE enabled = 1 ORDER BY id").fetchall()]
