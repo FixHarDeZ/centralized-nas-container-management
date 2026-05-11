@@ -66,17 +66,21 @@ async def _do_scrape():
         _scrape_progress = {"source": source_label, "page": 0, "found": 0}
 
         try:
-            entries = await scraper.scrape_source(
+            entries, seen_sticky_ids = await scraper.scrape_source(
                 source_url, seed_min, leech_min, keywords, filter_mode,
                 on_page=lambda pg, n: _update_progress(source_label, pg, total_found + n),
                 skip_sticky=skip_sticky,
             )
         except Exception as e:
             print(f"[scheduler] scrape error {source_url}: {e}")
-            entries = []
+            entries, seen_sticky_ids = [], set()
 
         for entry in entries:
             db.upsert_torrent(source_id, entry["site_id"], entry)
+
+        # Sync sticky state: refresh date for still-pinned entries, clear flag for removed ones
+        if not skip_sticky:
+            db.sync_stickies(source_id, seen_sticky_ids, today)
 
         total_found += len(entries)
 
