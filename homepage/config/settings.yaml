@@ -9,6 +9,10 @@ theme: dark   # ตาม OS: dark บน dark mode / light บน light mode
 
 # ─── Layout ───────────────────────────────────────────────────────────────────
 layout:
+  📥 Downloads & Monitoring:
+    style: row
+    columns: 4
+    
   📝 Tools & Notes:
     style: row
     columns: 3
@@ -20,10 +24,6 @@ layout:
   🏠 Local Network:
     style: row
     columns: 3
-
-  📥 Downloads & Monitoring:
-    style: row
-    columns: 4
 
 # ─── Misc ─────────────────────────────────────────────────────────────────────
 headerStyle: clean
