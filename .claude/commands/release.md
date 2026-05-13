@@ -14,7 +14,7 @@ description: Commit staged changes, bump version tag, push to GitHub, and create
 
 1. **Determine next version**: Read the latest tag above (e.g. `v1.2.3`). Ask the user whether to bump `patch`, `minor`, or `major` — then compute the new version (e.g. `v1.2.4`, `v1.3.0`, `v2.0.0`). If the user already specified the bump type as an argument (e.g. `/release minor`), skip asking and use that.
 
-2. **Commit**: Stage all modified tracked files and create a commit. Write a concise commit message that reflects the actual changes. Follow the Conventional Commits format (`feat:`, `fix:`, `docs:`, etc.). Always append:
+2. **Commit**: Stage all modified tracked files **and** any `.notes/` directories (e.g. `torrentwatch/.notes/`, `maid-tracker/.notes/`, `line-secretary/.notes/`) using `git add`. Then create a commit. Write a concise commit message that reflects the actual changes. Follow the Conventional Commits format (`feat:`, `fix:`, `docs:`, etc.). Always append:
    ```
    Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
    ```
