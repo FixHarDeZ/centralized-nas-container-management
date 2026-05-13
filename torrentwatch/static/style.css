@@ -219,6 +219,16 @@ html, body {
   min-width: 0;
 }
 
+/* ─── Search row ─────────────────────────────────────────────────────────── */
+.tw-search-row {
+  padding: 0 14px 8px;
+  display: flex;
+}
+.tw-search-input {
+  padding: 7px 12px;
+  font-size: 13px;
+}
+
 /* ─── Last-updated ───────────────────────────────────────────────────────── */
 .tw-last-updated {
   font-size: 11px;
@@ -606,6 +616,26 @@ html, body {
 }
 .tw-btn-primary:hover { opacity: .85; }
 .tw-btn-primary:active { opacity: .7; }
+
+.tw-btn-secondary {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+}
+.tw-btn-secondary:hover { background: var(--surface-hover); border-color: var(--accent); }
+.tw-btn-secondary:active { opacity: .8; }
+.tw-btn-secondary:disabled { opacity: .5; cursor: not-allowed; }
 
 .tw-btn-danger {
   background: #7f1d1d;

@@ -12,7 +12,10 @@ Weekly cleanup runs Sunday 03:00.
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 import asyncio
+import re
+from pathlib import Path
 import db
+import line_notify
 import scraper
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -21,10 +24,15 @@ import config
 _TZ = ZoneInfo(config.TZ)
 _scheduler = BackgroundScheduler(timezone=config.TZ)
 
-_last_scrape:   str = ""
-_next_scrape:   str = ""
-_scrape_status: str = "idle"
-_scrape_progress: dict = {}   # {"source": url, "page": N, "found": N}
+_last_scrape:     str  = ""
+_next_scrape:     str  = ""
+_scrape_status:   str  = "idle"
+_scrape_progress: dict = {}   # {"source": label, "page": N, "found": N}
+
+
+def _nas_filename(title: str) -> str:
+    safe = re.sub(r'[^\x00-\x7F]', '_', title).strip("_ ")[:80]
+    return (safe or "torrent") + ".torrent"
 
 
 def _run_async(coro):
@@ -39,59 +47,101 @@ def _run_async(coro):
 
 
 async def _do_scrape():
-    global _last_scrape, _scrape_status
+    global _last_scrape, _scrape_status, _scrape_progress
 
     _scrape_status = "running"
     now = datetime.now(_TZ)
     _last_scrape = now.strftime("%Y-%m-%d %H:%M")
     today = now.strftime("%Y-%m-%d")
 
-    global _scrape_progress
     settings     = db.get_settings()
     seed_min     = int(settings.get("seed_min", 5))
     leech_min    = int(settings.get("leech_min", 10))
     filter_mode  = settings.get("filter_mode", "and")
-    skip_sticky  = settings.get("scrape_sticky", "0") != "1"
+    scrape_sticky_val = settings.get("scrape_sticky", "0")
+    skip_sticky  = scrape_sticky_val != "1"
+    line_notify_enabled = settings.get("line_notify_keyword_enabled", "0") == "1"
+    auto_dl      = settings.get("auto_download_nas", "0") == "1"
+    nas_dir      = Path(config.NAS_DOWNLOADS_DIR)
+    print(f"[scheduler] scrape_sticky={scrape_sticky_val!r} → skip_sticky={skip_sticky}")
 
     sources     = db.get_enabled_sources()
     total_found = 0
 
-    for source in sources:
-        source_id  = source["id"]
-        source_url = source["url"]
-        keywords   = db.get_keywords_for_source(source_id)
-        from urllib.parse import urlparse
-        source_label = urlparse(source_url).path.split("/")[-1] or source_url
+    try:
+        for i, source in enumerate(sources):
+            source_id    = source["id"]
+            source_url   = source["url"]
+            keywords     = db.get_keywords_for_source(source_id)
+            from urllib.parse import urlparse
+            source_display = (source.get("label") or "").strip() or urlparse(source_url).path.split("/")[-1] or source_url
+            source_total = len(sources)
+            source_idx   = i + 1
 
-        _scrape_progress = {"source": source_label, "page": 0, "found": 0}
+            _scrape_progress = {"source": source_display, "source_idx": source_idx, "source_total": source_total, "page": 0, "found": 0}
 
-        try:
-            entries, seen_sticky_ids = await scraper.scrape_source(
-                source_url, seed_min, leech_min, keywords, filter_mode,
-                on_page=lambda pg, n: _update_progress(source_label, pg, total_found + n),
-                skip_sticky=skip_sticky,
-            )
-        except Exception as e:
-            print(f"[scheduler] scrape error {source_url}: {e}")
-            entries, seen_sticky_ids = [], set()
+            try:
+                entries, seen_sticky_ids = await scraper.scrape_source(
+                    source_url, seed_min, leech_min, keywords, filter_mode,
+                    on_page=lambda pg, n, _lbl=source_display, _idx=source_idx, _tot=source_total: _update_progress(_lbl, _idx, _tot, pg, total_found + n),
+                    skip_sticky=skip_sticky,
+                )
+            except Exception as e:
+                print(f"[scheduler] scrape error {source_url}: {e}")
+                entries, seen_sticky_ids = [], set()
 
-        for entry in entries:
-            db.upsert_torrent(source_id, entry["site_id"], entry)
+            new_keyword_matches: list[dict] = []
+            for entry in entries:
+                try:
+                    is_new, torrent_id = db.upsert_torrent(source_id, entry["site_id"], entry)
+                    if is_new and entry.get("keyword_match"):
+                        new_keyword_matches.append({**entry, "id": torrent_id})
+                except Exception as e:
+                    print(f"[scheduler] upsert error {source_url} site_id={entry.get('site_id')}: {e}")
 
-        # Sync sticky state: refresh date for still-pinned entries, clear flag for removed ones
-        if not skip_sticky:
-            db.sync_stickies(source_id, seen_sticky_ids, today)
+            try:
+                if not skip_sticky:
+                    print(f"[scheduler] calling sync_stickies — seen_sticky_ids={seen_sticky_ids}")
+                    db.sync_stickies(source_id, seen_sticky_ids, today)
+            except Exception as e:
+                print(f"[scheduler] sync_stickies error {source_url}: {e}")
 
-        total_found += len(entries)
+            total_found += len(entries)
 
-    _scrape_status   = "idle"
-    _scrape_progress = {}
-    print(f"[scheduler] scrape done — {total_found} entries across {len(sources)} sources")
+            # Push LINE notification for newly-found keyword-matched torrents only
+            try:
+                if line_notify_enabled and new_keyword_matches:
+                    await line_notify.notify_keyword_matches(source_url, new_keyword_matches)
+            except Exception as e:
+                print(f"[scheduler] LINE notify error {source_url}: {e}")
+
+            # Auto-download new keyword matches directly to NAS watch folder
+            if auto_dl and new_keyword_matches:
+                if nas_dir.exists():
+                    for match in new_keyword_matches:
+                        try:
+                            data = await scraper.fetch_torrent_bytes(
+                                match["torrent_url"], match.get("detail_url", "")
+                            )
+                            if data:
+                                dest = nas_dir / _nas_filename(match["title"])
+                                dest.write_bytes(data)
+                                db.mark_downloaded_nas(match["id"])
+                                print(f"[scheduler] auto-dl: {match['title'][:50]}")
+                        except Exception as e:
+                            print(f"[scheduler] auto-dl error {match['title'][:30]}: {e}")
+                else:
+                    print("[scheduler] auto-dl: /downloads not mounted, skipping")
+
+    finally:
+        _scrape_status   = "idle"
+        _scrape_progress = {}
+        print(f"[scheduler] scrape done — {total_found} entries across {len(sources)} sources")
 
 
-def _update_progress(source_label: str, page: int, found: int):
+def _update_progress(source_label: str, source_idx: int, source_total: int, page: int, found: int):
     global _scrape_progress
-    _scrape_progress = {"source": source_label, "page": page, "found": found}
+    _scrape_progress = {"source": source_label, "source_idx": source_idx, "source_total": source_total, "page": page, "found": found}
 
 
 def _scrape_job():
@@ -99,8 +149,10 @@ def _scrape_job():
 
 
 def _cleanup_job():
-    deleted = db.cleanup_old_records(days=7)
-    print(f"[scheduler] weekly cleanup — deleted {deleted} old records")
+    settings = db.get_settings()
+    days = int(settings.get("retention_days", 7))
+    deleted = db.cleanup_old_records(days=days)
+    print(f"[scheduler] weekly cleanup — deleted {deleted} old records (>{days} days)")
 
 
 def reload_scrape_job():
@@ -166,6 +218,7 @@ def status() -> dict:
         "scrape_status":   _scrape_status,
         "scraper_ready":   scraper.is_ready(),
         "scrape_progress": _scrape_progress,
+        "line_configured": bool(config.LINE_ACCESS_TOKEN and config.LINE_USER_ID),
     }
 
 

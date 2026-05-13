@@ -7,10 +7,13 @@ import config
 _TZ = ZoneInfo(config.TZ)
 
 _DEFAULT_SETTINGS = {
-    "seed_min":      "10",
-    "leech_min":     "10",
-    "filter_mode":   "or",   # "and" or "or"
-    "scrape_sticky": "0",    # "0" = skip sticky/pinned, "1" = include them
+    "seed_min":                    "10",
+    "leech_min":                   "10",
+    "filter_mode":                 "or",   # "and" or "or"
+    "scrape_sticky":               "1",    # "0" = skip sticky/pinned, "1" = include them
+    "line_notify_keyword_enabled": "0",    # "0" = off, "1" = push LINE on keyword match
+    "auto_download_nas":           "0",    # "0" = off, "1" = auto-save keyword matches to /downloads
+    "retention_days":              "7",    # days to keep torrent records before weekly cleanup
 }
 
 
@@ -84,6 +87,9 @@ def init_db():
         for key, val in _DEFAULT_SETTINGS.items():
             c.execute("INSERT OR IGNORE INTO settings(key, value) VALUES (?, ?)", (key, val))
 
+        # Migration: force scrape_sticky=1 for all existing installs (was "0" before 2026-05-12)
+        c.execute("UPDATE settings SET value='1' WHERE key='scrape_sticky' AND value='0'")
+
         # Ensure filter_mode exists (new setting)
         c.execute("INSERT OR IGNORE INTO settings(key,value) VALUES ('filter_mode','and')")
         # Remove obsolete settings
@@ -156,24 +162,45 @@ def sync_stickies(source_id: int, seen_site_ids: set[str], today: str):
       stay visible in the Today tab even across midnight.
     - No longer pinned (site_id absent) → clear is_sticky flag and backdate so the
       entry leaves the Today tab on the next page load.
+    - Newly pinned (site_id in seen_site_ids but is_sticky=0 in DB) → promote to sticky
+      and set date_posted=today (safety net for upsert_torrent edge cases).
     """
     if not seen_site_ids:
+        print("[db] sync_stickies: seen_site_ids is empty — nothing to sync")
         return
-    yesterday = (datetime.now(_TZ) - timedelta(days=1)).strftime("%Y-%m-%d")
+    print(f"[db] sync_stickies: seen_site_ids={seen_site_ids}")
     with _conn() as c:
+        # Promote: entries that bearbit now shows as pinned but DB still has is_sticky=0
+        placeholders = ",".join("?" * len(seen_site_ids))
+        c.execute(
+            f"UPDATE torrents SET is_sticky=1, date_posted=? "
+            f"WHERE source_id=? AND is_sticky=0 AND site_id IN ({placeholders})",
+            (today, source_id, *seen_site_ids)
+        )
+        if c.rowcount > 0:
+            print(f"[db] sync_stickies: PROMOTED {c.rowcount} entries to sticky")
+
+        # Refresh still-pinned / demote un-pinned
         rows = c.execute(
             "SELECT id, site_id FROM torrents WHERE source_id=? AND is_sticky=1",
             (source_id,)
         ).fetchall()
+        promoted = demoted = 0
         for row in rows:
             if row["site_id"] in seen_site_ids:
                 c.execute("UPDATE torrents SET date_posted=? WHERE id=?", (today, row["id"]))
+                promoted += 1
             else:
-                # Bearbit un-pinned this entry — remove sticky badge and push out of Today
+                # Bearbit un-pinned this entry — remove sticky badge but keep date_posted
+                # so a 1-time detection miss doesn't immediately drop it from Today.
+                # If truly un-pinned, the entry will age out naturally on the next day.
+                print(f"[db] sync_stickies: DEMOTING site_id={row['site_id']} — not in seen_site_ids (keeping date_posted)")
                 c.execute(
-                    "UPDATE torrents SET is_sticky=0, date_posted=? WHERE id=?",
-                    (yesterday, row["id"])
+                    "UPDATE torrents SET is_sticky=0 WHERE id=?",
+                    (row["id"],)
                 )
+                demoted += 1
+        print(f"[db] sync_stickies: refreshed={promoted} demoted={demoted}")
 
 
 def get_enabled_sources() -> list[dict]:
@@ -194,8 +221,11 @@ def upsert_torrent(source_id: int, site_id: str, data: dict) -> tuple[bool, int]
 
         if existing:
             c.execute(
-                "UPDATE torrents SET seeds=?, leeches=?, last_updated_at=? WHERE id=?",
-                (data["seeds"], data["leeches"], now, existing["id"])
+                """UPDATE torrents
+                   SET seeds=?, leeches=?, date_posted=?, is_sticky=?, last_updated_at=?
+                   WHERE id=?""",
+                (data["seeds"], data["leeches"], data["date_posted"],
+                 1 if data.get("is_sticky") else 0, now, existing["id"])
             )
             return False, existing["id"]
         else:

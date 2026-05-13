@@ -29,6 +29,7 @@ from calc import (
     compute_overall_balance,
     compute_resign_summary,
     compute_leave_deduction,
+    compute_monthly_leave_balance,
 )
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -186,6 +187,15 @@ def init_db():
         c.execute("ALTER TABLE salary_payments ADD COLUMN leave_deduction_days REAL DEFAULT 0")
     except Exception:
         pass
+    # Holiday mode migration
+    try:
+        c.execute("ALTER TABLE employees ADD COLUMN holiday_mode TEXT DEFAULT 'sunday'")
+    except Exception:
+        pass
+    try:
+        c.execute("ALTER TABLE employees ADD COLUMN monthly_leave_days REAL DEFAULT 0")
+    except Exception:
+        pass
     conn.commit()
     conn.close()
 
@@ -296,7 +306,9 @@ class EmployeeCreate(BaseModel):
     facebook: Optional[str] = None
     start_date: str
     monthly_salary: float
-    max_leave_carry: Optional[float] = None  # max leave-debt days allowed per month; None = unlimited
+    max_leave_carry: Optional[float] = None  # max leave-debt days (sunday) / max accumulated days (monthly)
+    holiday_mode: str = "sunday"             # 'sunday' | 'monthly'
+    monthly_leave_days: float = 0.0          # leave days credited per month (monthly mode only)
 
 
 class AttendanceUpdate(BaseModel):
@@ -343,10 +355,12 @@ def create_employee(emp: EmployeeCreate):
     conn = get_db()
     c = conn.cursor()
     c.execute(
-        "INSERT INTO employees (name,age,nationality,phone,line_id,facebook,start_date,monthly_salary,max_leave_carry) "
-        "VALUES (?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO employees (name,age,nationality,phone,line_id,facebook,start_date,monthly_salary,"
+        "max_leave_carry,holiday_mode,monthly_leave_days) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
         (emp.name, emp.age, emp.nationality, emp.phone, emp.line_id, emp.facebook,
-         emp.start_date, emp.monthly_salary, emp.max_leave_carry),
+         emp.start_date, emp.monthly_salary, emp.max_leave_carry,
+         emp.holiday_mode, emp.monthly_leave_days),
     )
     new_id = c.lastrowid
     conn.commit()
@@ -374,9 +388,11 @@ def update_employee(emp_id: int, emp: EmployeeCreate):
     conn = get_db()
     c = conn.cursor()
     c.execute(
-        "UPDATE employees SET name=?,age=?,nationality=?,phone=?,line_id=?,facebook=?,start_date=?,monthly_salary=?,max_leave_carry=? WHERE id=?",
+        "UPDATE employees SET name=?,age=?,nationality=?,phone=?,line_id=?,facebook=?,start_date=?,monthly_salary=?,"
+        "max_leave_carry=?,holiday_mode=?,monthly_leave_days=? WHERE id=?",
         (emp.name, emp.age, emp.nationality, emp.phone, emp.line_id, emp.facebook,
-         emp.start_date, emp.monthly_salary, emp.max_leave_carry, emp_id),
+         emp.start_date, emp.monthly_salary, emp.max_leave_carry,
+         emp.holiday_mode, emp.monthly_leave_days, emp_id),
     )
     if c.rowcount == 0:
         conn.close()
@@ -461,7 +477,12 @@ def get_resign_summary(emp_id: int):
     end_date   = date.fromisoformat(emp["end_date"])
     conn.close()
 
-    s = compute_resign_summary(emp_id, start_date, end_date, emp["monthly_salary"])
+    s = compute_resign_summary(
+        emp_id, start_date, end_date, emp["monthly_salary"],
+        holiday_mode=emp.get("holiday_mode", "sunday"),
+        monthly_leave_days=emp.get("monthly_leave_days") or 0.0,
+        max_leave_carry=emp.get("max_leave_carry"),
+    )
 
     return {
         "end_date":               emp["end_date"],
@@ -488,8 +509,9 @@ def get_attendance(emp_id: int, year: int, month: int):
     if not emp:
         conn.close()
         raise HTTPException(404, "Employee not found")
-    start_date = date.fromisoformat(emp["start_date"])
-    today = date.today()
+    start_date   = date.fromisoformat(emp["start_date"])
+    holiday_mode = emp.get("holiday_mode") or "sunday"
+    today        = date.today()
 
     rows = conn.execute(
         "SELECT work_date, status, note, half_day FROM attendance WHERE employee_id=? AND work_date LIKE ?",
@@ -512,7 +534,7 @@ def get_attendance(emp_id: int, year: int, month: int):
             r = saved[ds]
             result.append({"date": ds, "status": r["status"], "note": r["note"], "half_day": bool(r["half_day"]), "is_future": is_future})
         else:
-            result.append({"date": ds, "status": default_status(d), "note": None, "half_day": False, "is_future": is_future})
+            result.append({"date": ds, "status": default_status(d, holiday_mode), "note": None, "half_day": False, "is_future": is_future})
     return result
 
 
@@ -521,6 +543,15 @@ def upsert_attendance(emp_id: int, att: AttendanceUpdate):
     if att.status not in ("work", "leave", "holiday", "compensatory"):
         raise HTTPException(400, "Invalid status")
     conn = get_db()
+    emp = conn.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
+    if not emp:
+        conn.close()
+        raise HTTPException(404, "Employee not found")
+    holiday_mode = (emp["holiday_mode"] or "sunday")
+    # Monthly mode: reject compensatory / holiday — those concepts don't apply
+    if holiday_mode == "monthly" and att.status in ("compensatory", "holiday"):
+        conn.close()
+        raise HTTPException(400, "Compensatory/holiday status not applicable in monthly-leave mode")
     emp = conn.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
     if not emp:
         conn.close()
@@ -570,6 +601,27 @@ def upsert_attendance(emp_id: int, att: AttendanceUpdate):
         )
 
     return {"message": "saved"}
+
+
+@app.get("/api/employees/{emp_id}/leave-balance")
+def get_leave_balance(emp_id: int):
+    """Monthly-mode: return current accumulated leave balance."""
+    conn = get_db()
+    emp = conn.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
+    if not emp:
+        conn.close()
+        raise HTTPException(404, "Employee not found")
+    emp = dict(emp)
+    conn.close()
+    if (emp.get("holiday_mode") or "sunday") != "monthly":
+        raise HTTPException(400, "leave-balance only applies to monthly holiday mode")
+    start_date = date.fromisoformat(emp["start_date"])
+    lb = compute_monthly_leave_balance(
+        emp_id, start_date,
+        emp.get("monthly_leave_days") or 0.0,
+        emp.get("max_leave_carry"),
+    )
+    return lb
 
 
 @app.get("/api/employees/{emp_id}/leaves")
@@ -785,8 +837,9 @@ def get_summary(emp_id: int, year: int, month: int):
         conn.close()
         raise HTTPException(404, "Employee not found")
     emp = dict(emp)
-    start_date = date.fromisoformat(emp["start_date"])
-    today = date.today()
+    start_date   = date.fromisoformat(emp["start_date"])
+    holiday_mode = emp.get("holiday_mode") or "sunday"
+    today        = date.today()
 
     all_rows = conn.execute(
         "SELECT work_date, status, half_day FROM attendance WHERE employee_id=? AND work_date <= ?",
@@ -795,22 +848,6 @@ def get_summary(emp_id: int, year: int, month: int):
     conn.close()
 
     saved_all = {r["work_date"]: {"status": r["status"], "half_day": bool(r["half_day"])} for r in all_rows}
-
-    # Carryover: cumulative balance from months before this one
-    carryover_balance = 0.0
-    if start_date < date(year, month, 1):
-        c_comp = c_leave = 0.0
-        d = start_date
-        cutoff = date(year, month, 1)
-        while d < cutoff and d <= today:
-            rec = saved_all.get(d.isoformat(), {"status": default_status(d), "half_day": False})
-            inc = 0.5 if rec["half_day"] else 1
-            if rec["status"] == "compensatory":
-                c_comp += inc
-            elif rec["status"] == "leave":
-                c_leave += inc
-            d += timedelta(days=1)
-        carryover_balance = c_comp - c_leave
 
     _, n = calendar.monthrange(year, month)
     saved = {k: v for k, v in saved_all.items() if k.startswith(f"{year}-{month:02d}-")}
@@ -821,7 +858,7 @@ def get_summary(emp_id: int, year: int, month: int):
         if d < start_date or d > today:
             continue
         ds = d.isoformat()
-        rec = saved.get(ds, {"status": default_status(d), "half_day": False})
+        rec = saved.get(ds, {"status": default_status(d, holiday_mode), "half_day": False})
         inc = 0.5 if rec["half_day"] else 1
         counts[rec["status"]] = counts.get(rec["status"], 0) + inc
 
@@ -838,11 +875,79 @@ def get_summary(emp_id: int, year: int, month: int):
     else:
         base_salary = emp["monthly_salary"]
 
+    max_carry = emp.get("max_leave_carry")
+
+    # ── Monthly mode ──────────────────────────────────────────
+    if holiday_mode == "monthly":
+        monthly_leave_days = emp.get("monthly_leave_days") or 0.0
+        # Balance up through end of this month (or today, whichever earlier)
+        up_to_date = min(date(year, month, n), today)
+        lb = compute_monthly_leave_balance(
+            emp_id, start_date, monthly_leave_days, max_leave_carry=max_carry, up_to=up_to_date
+        )
+        # Balance at start of this month (for carryover display)
+        prev_end = date(year, month, 1) - timedelta(days=1)
+        if prev_end >= start_date:
+            lb_prev = compute_monthly_leave_balance(
+                emp_id, start_date, monthly_leave_days, max_leave_carry=max_carry, up_to=prev_end
+            )
+            carryover_balance = lb_prev["balance"]
+        else:
+            carryover_balance = 0.0
+
+        accrued_this_month = lb["total_accrued"] - (lb_prev["total_accrued"] if prev_end >= start_date else 0.0)
+        leave_balance = lb["balance"]
+        deduction_days = abs(leave_balance) if leave_balance < 0 else 0.0
+        deduction_amount = round(deduction_days * dr, 2)
+        actual_pay = base_salary - deduction_amount
+
+        return {
+            "year": year, "month": month,
+            "employee_name": emp["name"],
+            "holiday_mode": "monthly",
+            "monthly_leave_days": monthly_leave_days,
+            "monthly_salary": emp["monthly_salary"],
+            "max_leave_carry": max_carry,
+            "daily_rate": round(dr, 2),
+            "working_days_in_month": wd_month,
+            "base_salary": round(base_salary, 2),
+            "work_days": counts["work"],
+            "leave_days": counts["leave"],
+            "holiday_days": 0,
+            "compensatory_days": 0,
+            "accrued_this_month": round(accrued_this_month, 2),
+            "carryover_balance": round(carryover_balance, 2),
+            "leave_balance": round(leave_balance, 2),
+            "can_accrue_more": lb["can_accrue_more"],
+            "balance": round(leave_balance, 2),
+            "cumulative_balance": round(leave_balance, 2),
+            "leave_deduction_days": round(deduction_days, 2),
+            "deduction_amount": round(deduction_amount, 2),
+            "money_owed": round(deduction_amount, 2),
+            "money_credit": 0,
+            "actual_pay": round(actual_pay, 2),
+        }
+
+    # ── Sunday mode ───────────────────────────────────────────
+    # Carryover: cumulative balance from months before this one
+    carryover_balance = 0.0
+    if start_date < date(year, month, 1):
+        c_comp = c_leave = 0.0
+        d = start_date
+        cutoff = date(year, month, 1)
+        while d < cutoff and d <= today:
+            rec = saved_all.get(d.isoformat(), {"status": default_status(d, "sunday"), "half_day": False})
+            inc = 0.5 if rec["half_day"] else 1
+            if rec["status"] == "compensatory":
+                c_comp += inc
+            elif rec["status"] == "leave":
+                c_leave += inc
+            d += timedelta(days=1)
+        carryover_balance = c_comp - c_leave
+
     balance = counts["compensatory"] - counts["leave"]
     cumulative_balance = carryover_balance + balance
 
-    # Leave deduction for period 2 this month (when max_leave_carry is configured)
-    max_carry = emp.get("max_leave_carry")
     deduction_days   = 0.0
     deduction_amount = 0.0
     if max_carry is not None and max_carry >= 0:
@@ -853,9 +958,9 @@ def get_summary(emp_id: int, year: int, month: int):
     actual_pay = base_salary - deduction_amount
 
     return {
-        "year": year,
-        "month": month,
+        "year": year, "month": month,
         "employee_name": emp["name"],
+        "holiday_mode": "sunday",
         "monthly_salary": emp["monthly_salary"],
         "max_leave_carry": max_carry,
         "daily_rate": round(dr, 2),
@@ -893,27 +998,54 @@ def get_overall(emp_id: int):
     ).fetchall()
     conn.close()
 
+    holiday_mode = emp.get("holiday_mode") or "sunday"
     saved = {r["work_date"]: {"status": r["status"], "half_day": bool(r["half_day"])} for r in rows}
     counts = {"work": 0.0, "leave": 0.0, "holiday": 0.0, "compensatory": 0.0}
 
     d = start_date
     while d <= end:
         ds = d.isoformat()
-        rec = saved.get(ds, {"status": default_status(d), "half_day": False})
+        rec = saved.get(ds, {"status": default_status(d, holiday_mode), "half_day": False})
         inc = 0.5 if rec["half_day"] else 1
         counts[rec["status"]] = counts.get(rec["status"], 0) + inc
         d += timedelta(days=1)
 
     total_days = (end - start_date).days + 1
-    balance = counts["compensatory"] - counts["leave"]
 
     # Daily rate preview using current month's working days
     wd_month = working_days_in_month(today.year, today.month)
     dr = emp["monthly_salary"] / wd_month if wd_month else 0
+
+    if holiday_mode == "monthly":
+        lb = compute_monthly_leave_balance(
+            emp_id, start_date,
+            emp.get("monthly_leave_days") or 0.0,
+            emp.get("max_leave_carry"),
+            up_to=end,
+        )
+        return {
+            "start_date": emp["start_date"],
+            "holiday_mode": "monthly",
+            "monthly_leave_days": emp.get("monthly_leave_days") or 0.0,
+            "total_days_employed": total_days,
+            "total_work_days": counts["work"],
+            "total_leave_days": lb["total_used"],
+            "total_holiday_days": 0,
+            "total_compensatory_days": 0,
+            "overall_balance": lb["balance"],
+            "leave_balance": lb["balance"],
+            "total_accrued": lb["total_accrued"],
+            "can_accrue_more": lb["can_accrue_more"],
+            "daily_rate": round(dr, 2),
+            "balance_amount": round(lb["balance"] * dr, 2),
+        }
+
+    balance = counts["compensatory"] - counts["leave"]
     balance_amount = round(balance * dr, 2)
 
     return {
         "start_date": emp["start_date"],
+        "holiday_mode": "sunday",
         "total_days_employed": total_days,
         "total_work_days": counts["work"],
         "total_leave_days": counts["leave"],
@@ -1262,21 +1394,33 @@ async def line_webhook(request: Request):
         is_yesterday = target_date < today
         date_label = f"วันที่ {target_date_str}" if is_yesterday else "วันนี้"
 
-        # Leave on Sunday is redundant — it's already a holiday
-        if status == "leave" and target_date.weekday() == 6:
-            line_notify.send_line(
-                f"📅 {date_label}วันอาทิตย์ เป็นวันหยุดอยู่แล้วนะคะ {emp['name']} 😊\n"
-                f"ไม่ต้องลงวันลาค่ะ วันหยุดอยู่แล้ว"
-            )
-            continue
+        emp_holiday_mode = emp.get("holiday_mode") or "sunday"
 
-        # Compensatory only applies on Sunday (the designated day off)
-        if status == "compensatory" and target_date.weekday() != 6:
-            line_notify.send_line(
-                f"📅 {date_label}เป็นวันทำงานปกตินะคะ {emp['name']} 😊\n"
-                f"การบันทึกชดเชยใช้ได้เฉพาะวันอาทิตย์ที่มาทำงานเท่านั้นค่ะ"
-            )
-            continue
+        if emp_holiday_mode == "monthly":
+            # Monthly mode: compensatory concept does not exist
+            if status == "compensatory":
+                line_notify.send_line(
+                    f"ℹ️ {emp['name']} ใช้รูปแบบ 'เดือนละ {emp.get('monthly_leave_days', 0)} วัน' นะคะ\n"
+                    f"ไม่มีวันชดเชยในโหมดนี้ค่ะ"
+                )
+                continue
+            # Leave on any day is fine in monthly mode — fall through to record it
+        else:
+            # Leave on Sunday is redundant — it's already a holiday
+            if status == "leave" and target_date.weekday() == 6:
+                line_notify.send_line(
+                    f"📅 {date_label}วันอาทิตย์ เป็นวันหยุดอยู่แล้วนะคะ {emp['name']} 😊\n"
+                    f"ไม่ต้องลงวันลาค่ะ วันหยุดอยู่แล้ว"
+                )
+                continue
+
+            # Compensatory only applies on Sunday (the designated day off)
+            if status == "compensatory" and target_date.weekday() != 6:
+                line_notify.send_line(
+                    f"📅 {date_label}เป็นวันทำงานปกตินะคะ {emp['name']} 😊\n"
+                    f"การบันทึกชดเชยใช้ได้เฉพาะวันอาทิตย์ที่มาทำงานเท่านั้นค่ะ"
+                )
+                continue
 
         # Check for duplicate record on target date with the same status
         conn = get_db()
@@ -1337,8 +1481,9 @@ def export_attendance(emp_id: int):
         conn.close()
         raise HTTPException(404, "Employee not found")
     emp = dict(emp)
-    start_date = date.fromisoformat(emp["start_date"])
-    end_date = date.fromisoformat(emp["end_date"]) if emp.get("end_date") else date.today()
+    start_date   = date.fromisoformat(emp["start_date"])
+    holiday_mode = emp.get("holiday_mode") or "sunday"
+    end_date     = date.fromisoformat(emp["end_date"]) if emp.get("end_date") else date.today()
 
     att_rows = conn.execute(
         "SELECT work_date, status, half_day, note FROM attendance WHERE employee_id=? ORDER BY work_date",
@@ -1361,7 +1506,7 @@ def export_attendance(emp_id: int):
             half_day = "true" if rec["half_day"] else "false"
             note = rec["note"] or ""
         else:
-            status = default_status(d)
+            status = default_status(d, holiday_mode)
             half_day = "false"
             note = ""
         writer.writerow([ds, status, half_day, note])

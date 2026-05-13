@@ -59,3 +59,21 @@ async def notify_round_summary(results: list[dict]):
         kw_part = f", keyword {r['keyword_count']} รายการ" if r["keyword_count"] else ""
         lines.append(f"• {label}: {r['total_count']} รายการ{kw_part}")
     await _push("\n".join(lines))
+
+
+async def send_test_message() -> dict:
+    """Send a test push and return {"ok": bool, "error": str}. Checks response directly."""
+    if not config.LINE_ACCESS_TOKEN or not config.LINE_USER_ID:
+        return {"ok": False, "error": "ยังไม่ได้ตั้งค่า TORRENTWATCH_LINE_ACCESS_TOKEN / TORRENTWATCH_LINE_USER_ID ใน .env"}
+    try:
+        async with httpx.AsyncClient(timeout=10) as c:
+            resp = await c.post(
+                _URL,
+                headers=_headers(),
+                json={"to": config.LINE_USER_ID, "messages": [{"type": "text", "text": f"🧪 TorrentWatch — ทดสอบการแจ้งเตือน LINE\nหากเห็นข้อความนี้ แสดงว่าตั้งค่าถูกต้องแล้ว ✓\n🕒 {_now()}"}]},
+            )
+        if resp.status_code == 200:
+            return {"ok": True}
+        return {"ok": False, "error": f"LINE API {resp.status_code}: {resp.text[:120]}"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
