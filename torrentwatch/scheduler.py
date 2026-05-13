@@ -156,7 +156,7 @@ def _cleanup_job():
 
 
 def reload_scrape_job():
-    """Set up the two fixed-schedule scrape jobs. Call after settings change if needed."""
+    """Set up the fixed-schedule scrape jobs. Call after settings change if needed."""
     # Night window: 19:00–00:30  (every 30 min)
     _scheduler.add_job(
         _scrape_job,
@@ -171,7 +171,14 @@ def reload_scrape_job():
         id="scrape_day",
         replace_existing=True,
     )
-    print("[scheduler] scrape jobs set — night (19:00-01:00 / 30min), day (06:00-19:00 / 60min)")
+    # End-of-day sweep: catch last-minute uploads before midnight rollover
+    _scheduler.add_job(
+        _scrape_job,
+        CronTrigger(hour=23, minute=58, timezone=config.TZ),
+        id="scrape_eod",
+        replace_existing=True,
+    )
+    print("[scheduler] scrape jobs set — night (19:00-01:00 / 30min), day (06:00-19:00 / 60min), end-of-day (23:58)")
     if _scheduler.running:
         _update_next()
 
@@ -197,7 +204,7 @@ def _update_next():
     global _next_scrape
     try:
         earliest = None
-        for job_id in ("scrape_night", "scrape_day"):
+        for job_id in ("scrape_night", "scrape_day", "scrape_eod"):
             job = _scheduler.get_job(job_id)
             if not job:
                 continue
