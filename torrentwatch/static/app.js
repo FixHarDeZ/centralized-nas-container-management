@@ -10,6 +10,8 @@ const state = {
   showSticky: true,
   historyDate: "",
   settings: {},
+  search: "",
+  activeCategory: "",
 };
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
@@ -89,6 +91,12 @@ function renderSourceChips() {
       chip.title = src.url;
       chip.addEventListener("click", () => {
         state.activeSource[tab] = src.id;
+        if (tab === "today") {
+          state.activeCategory = "";
+          state.search = "";
+          const searchEl = document.getElementById("search-input");
+          if (searchEl) searchEl.value = "";
+        }
         renderSourceChips();
         if (tab === "today") loadToday();
         if (tab === "history") loadHistoryDates();
@@ -121,10 +129,17 @@ async function loadToday() {
   const countSticky = all.filter(t => t.is_sticky).length;
   _updateFilterCounts(countAll, countKw, countSticky);
 
-  // Apply active filters client-side
+  // Apply active filters client-side (category filter applied last so chip counts reflect pre-category state)
   let torrents = all;
   if (state.filter === "keyword") torrents = torrents.filter(t => t.keyword_match);
   if (!state.showSticky) torrents = torrents.filter(t => !t.is_sticky);
+  if (state.search) {
+    const q = state.search.toLowerCase();
+    torrents = torrents.filter(t => t.title.toLowerCase().includes(q));
+  }
+
+  renderCategoryChips(torrents);
+  if (state.activeCategory) torrents = torrents.filter(t => t.category === state.activeCategory);
   renderTorrentList("list-today", torrents, false);
 
   // Update "last updated" from status
@@ -143,6 +158,33 @@ function _updateFilterCounts(total, kw, sticky) {
   if (btnKw)     btnKw.innerHTML     = `<i class="bi bi-star-fill"></i> Keyword${badge(kw)}`;
   if (btnSticky) btnSticky.innerHTML = `<i class="bi bi-pin-fill"></i> Sticky${badge(sticky)}`;
 }
+
+// ─── Category filter ──────────────────────────────────────────────────────────
+function renderCategoryChips(torrents) {
+  const bar = document.getElementById("cat-bar-today");
+  if (!bar) return;
+  const catCounts = {};
+  torrents.forEach(t => { if (t.category) catCounts[t.category] = (catCounts[t.category] || 0) + 1; });
+  const cats = Object.keys(catCounts).sort();
+  if (!cats.length) { bar.style.display = "none"; return; }
+  bar.style.display = "flex";
+  bar.innerHTML = [
+    `<button class="tw-source-chip${!state.activeCategory ? " active" : ""}" data-cat="">ทั้งหมด <span class="tw-count">${torrents.length}</span></button>`,
+    ...cats.map(c => `<button class="tw-source-chip${state.activeCategory === c ? " active" : ""}" data-cat="${escHtml(c)}">${escHtml(c)} <span class="tw-count">${catCounts[c]}</span></button>`),
+  ].join("");
+  bar.querySelectorAll("[data-cat]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      state.activeCategory = btn.dataset.cat;
+      loadToday();
+    });
+  });
+}
+
+// ─── Search filter ────────────────────────────────────────────────────────────
+document.getElementById("search-input").addEventListener("input", e => {
+  state.search = e.target.value.trim();
+  loadToday();
+});
 
 // ─── History ──────────────────────────────────────────────────────────────────
 async function loadHistoryDates() {
@@ -351,9 +393,10 @@ document.getElementById("kw-input").addEventListener("keydown", e => {
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
 async function loadSettings() {
-  const [settings, sources] = await Promise.all([
+  const [settings, sources, status] = await Promise.all([
     api("GET", "/settings").catch(() => ({})),
     api("GET", "/sources").catch(() => []),
+    api("GET", "/status").catch(() => ({})),
   ]);
   state.settings = settings;
   state.sources = sources;
@@ -366,6 +409,20 @@ async function loadSettings() {
   if (modeEl) modeEl.checked = true;
 
   document.getElementById("cfg-scrape-sticky").checked = settings.scrape_sticky === "1";
+  document.getElementById("cfg-auto-dl").checked = settings.auto_download_nas === "1";
+  document.getElementById("cfg-retention").value = settings.retention_days ?? 7;
+  document.getElementById("cfg-line-notify").checked = settings.line_notify_keyword_enabled === "1";
+
+  const hint = document.getElementById("line-status-hint");
+  if (hint) {
+    if (status.line_configured) {
+      hint.textContent = "✓ LINE token ตั้งค่าแล้ว — พร้อมส่งแจ้งเตือน";
+      hint.style.color = "var(--seed)";
+    } else {
+      hint.textContent = "⚠ ยังไม่ได้ตั้งค่า TORRENTWATCH_LINE_ACCESS_TOKEN / TORRENTWATCH_LINE_USER_ID ใน .env";
+      hint.style.color = "#f59e0b";
+    }
+  }
 
   // Clear buttons per source
   const clearDiv = document.getElementById("clear-source-btns");
@@ -487,16 +544,35 @@ document.getElementById("btn-add-source").addEventListener("click", async () => 
 
 document.getElementById("btn-save-settings").addEventListener("click", async () => {
   const payload = {
-    seed_min:      document.getElementById("cfg-seed-min").value,
-    leech_min:     document.getElementById("cfg-leech-min").value,
-    filter_mode:   document.querySelector('input[name="filter_mode"]:checked')?.value ?? "and",
-    scrape_sticky: document.getElementById("cfg-scrape-sticky").checked ? "1" : "0",
+    seed_min:                    document.getElementById("cfg-seed-min").value,
+    leech_min:                   document.getElementById("cfg-leech-min").value,
+    filter_mode:                 document.querySelector('input[name="filter_mode"]:checked')?.value ?? "and",
+    scrape_sticky:               document.getElementById("cfg-scrape-sticky").checked ? "1" : "0",
+    line_notify_keyword_enabled: document.getElementById("cfg-line-notify").checked ? "1" : "0",
+    auto_download_nas:           document.getElementById("cfg-auto-dl").checked ? "1" : "0",
+    retention_days:              document.getElementById("cfg-retention").value,
   };
   try {
     await api("PUT", "/settings", payload);
     toast("บันทึกแล้ว", "success");
   } catch (e) {
     toast("บันทึกไม่สำเร็จ: " + e.message, "error");
+  }
+});
+
+// ─── LINE test ────────────────────────────────────────────────────────────────
+document.getElementById("btn-line-test").addEventListener("click", async () => {
+  const btn = document.getElementById("btn-line-test");
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split"></i> กำลังส่ง...';
+  try {
+    const r = await api("POST", "/line/test");
+    toast(r?.message || "ส่งทดสอบแล้ว — ตรวจสอบ LINE", "success");
+  } catch (e) {
+    toast("ส่งไม่สำเร็จ: " + e.message, "error");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-send"></i> ทดสอบส่ง LINE';
   }
 });
 
@@ -507,12 +583,11 @@ document.getElementById("btn-scrape-now").addEventListener("click", async () => 
   try {
     const r = await api("POST", "/scrape");
     toast(r?.status === "already_running" ? "กำลัง scrape อยู่แล้ว" : "เริ่ม scrape แล้ว", "success");
-    // Reload today after a brief delay
-    setTimeout(loadToday, 3000);
+    // Immediately switch to fast polling so the status badge updates right away
+    updateStatusBadge();
   } catch (e) {
     toast("Scrape error: " + e.message, "error");
-  } finally {
-    setTimeout(() => btn.classList.remove("spinning"), 1500);
+    btn.classList.remove("spinning");
   }
 });
 
@@ -533,7 +608,8 @@ async function updateStatusBadge() {
     // Show live progress
     let label = "กำลัง scrape...";
     if (prog.source) {
-      label = `⟳ ${prog.source} หน้า ${(prog.page ?? 0) + 1} (${prog.found ?? 0} รายการ)`;
+      const srcPart = prog.source_total > 1 ? `${prog.source} (${prog.source_idx}/${prog.source_total})` : prog.source;
+      label = `⟳ ${srcPart} — หน้า ${(prog.page ?? 0) + 1} พบ ${prog.found ?? 0} รายการ`;
     }
     el.textContent = label;
     el.style.color = "var(--accent)";

@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 import config
 import db
+import line_notify
 import scraper
 import scheduler
 
@@ -322,6 +323,18 @@ async def api_debug_relogin():
     ok = await scraper._login()
     scraper._login_ok = ok
     return {"login_ok": ok, "scraper_ready": scraper.is_ready()}
+
+
+# ─── LINE Test ─────────────────────────────────────────────────────────────────
+
+@app.post("/api/line/test")
+async def api_line_test():
+    """Send a test LINE message to verify the configuration."""
+    result = await line_notify.send_test_message()
+    if result["ok"]:
+        return {"status": "ok", "message": "Test message sent"}
+    else:
+        raise HTTPException(400, result.get("error", "LINE send failed"))
 
 
 @app.delete("/api/debug/clear-today/{source_id}", status_code=204)

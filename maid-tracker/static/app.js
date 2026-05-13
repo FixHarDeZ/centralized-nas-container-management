@@ -37,6 +37,28 @@ const TRANSLATIONS = {
     fieldStartDate: "วันเริ่มงาน", fieldSalary: "เงินเดือน (บาท)",
     fieldMaxLeaveCarry: "วันลาค้างสูงสุด (ไม่บังคับ)",
     fieldMaxLeaveCarryHint: "จำนวนวันลาที่ค้างสะสมได้โดยไม่ถูกหักเงิน เช่น ใส่ 3 = ค้างได้ไม่เกิน 3 วัน ถ้าเกินจะหักจากรอบ 2 ของเดือนนั้น",
+    // Holiday mode
+    fieldHolidayMode: "รูปแบบวันหยุด",
+    holidayModeSunday: "หยุดทุกวันอาทิตย์",
+    holidayModeMonthly: "หยุดได้เดือนละ X วัน",
+    fieldMonthlyLeaveDays: "จำนวนวันหยุดต่อเดือน",
+    fieldMonthlyLeaveDaysHint: "วันหยุดที่แม่บ้านได้รับต่อเดือน เช่น 2 = ได้หยุด 2 วันต่อเดือน",
+    fieldMaxLeaveCarryMonthly: "สะสมวันหยุดสูงสุด (ไม่บังคับ)",
+    fieldMaxLeaveCarryMonthlyHint: "จำนวนวันหยุดสูงสุดที่สะสมได้ ถ้าสะสมถึง max แล้วจะไม่ได้รับวันหยุดเพิ่มจนกว่าจะใช้วันหยุดออกไป",
+    // Leave balance (monthly mode)
+    leaveBalanceTitle: "วันหยุดคงเหลือ",
+    leaveBalanceCurrent: "คงเหลือ",
+    leaveBalanceAccrued: "ได้รับเดือนนี้",
+    leaveBalanceUsed: "ใช้ไปเดือนนี้",
+    leaveBalanceCarryover: "ยกมาจากเดือนก่อน",
+    leaveBalanceAtMax: "สะสมเต็ม — ใช้วันหยุดก่อนถึงจะสะสมได้เพิ่ม",
+    leaveBalanceDebt: "ใช้เกินโควต้า",
+    calHintMonthly: "คลิกที่วันเพื่อสลับ <strong>ทำงาน ↔ ลา</strong>",
+    labelHolidayDaysMonthly: "วันหยุดที่ใช้",
+    rowAccruedThisMonth: (n) => `วันหยุดที่ได้รับเดือนนี้: +${n} วัน`,
+    rowLeaveBalanceCarry: (n) => `ยอดยกมา: ${n >= 0 ? "+" : ""}${n} วัน`,
+    rowLeaveBalance: "คงเหลือ",
+    summaryPolicyNoteMonthly: (n, max) => `แม่บ้านได้วันหยุด ${n} วัน/เดือน · สะสมสูงสุด ${max !== null ? max + " วัน" : "ไม่จำกัด"} · ส่วนเกินชำระวันลาออก`,
     nationalityOptions: ["ไทย","เมียนมา","กัมพูชา","ลาว","เวียดนาม","อื่นๆ"],
     salaryPreview: (dr) => `อัตราค่าจ้างรายวัน ≈ <strong>${dr} บาท/วัน</strong> (คิดจาก 26 วันทำงาน/เดือน)`,
     btnSaveEdit: "บันทึกการแก้ไข", btnAddNew: "เพิ่มแม่บ้าน",
@@ -163,6 +185,28 @@ const TRANSLATIONS = {
     fieldStartDate: "Start Date", fieldSalary: "Monthly Salary (Baht)",
     fieldMaxLeaveCarry: "Max Leave Carry (optional)",
     fieldMaxLeaveCarryHint: "Max leave-debt days allowed per month without salary deduction. E.g. 3 = up to 3 days owed before deduction kicks in for Period 2.",
+    // Holiday mode
+    fieldHolidayMode: "Holiday Schedule",
+    holidayModeSunday: "Sundays off",
+    holidayModeMonthly: "X days off per month",
+    fieldMonthlyLeaveDays: "Leave days per month",
+    fieldMonthlyLeaveDaysHint: "Days off credited per month, e.g. 2 = 2 days per month",
+    fieldMaxLeaveCarryMonthly: "Max accumulated leave (optional)",
+    fieldMaxLeaveCarryMonthlyHint: "Maximum leave balance that can accumulate. Once reached, no more days credited until some are used.",
+    // Leave balance (monthly mode)
+    leaveBalanceTitle: "Leave Balance",
+    leaveBalanceCurrent: "Available",
+    leaveBalanceAccrued: "Credited this month",
+    leaveBalanceUsed: "Used this month",
+    leaveBalanceCarryover: "Carried from prior month",
+    leaveBalanceAtMax: "Balance at cap — use leave days before more can accumulate",
+    leaveBalanceDebt: "Excess leave (debt)",
+    calHintMonthly: "Click a day to toggle <strong>Work ↔ Leave</strong>",
+    labelHolidayDaysMonthly: "Leave days used",
+    rowAccruedThisMonth: (n) => `Leave days credited this month: +${n} day(s)`,
+    rowLeaveBalanceCarry: (n) => `Carried from prior month: ${n >= 0 ? "+" : ""}${n} day(s)`,
+    rowLeaveBalance: "Leave balance",
+    summaryPolicyNoteMonthly: (n, max) => `Staff gets ${n} leave day(s)/month · Max accumulated: ${max !== null ? max + " day(s)" : "unlimited"} · Excess settled on resignation`,
     nationalityOptions: ["Thai","Myanmar","Cambodian","Lao","Vietnamese","Other"],
     salaryPreview: (dr) => `Daily rate ≈ <strong>${dr} Baht/day</strong> (based on 26 working days/month)`,
     btnSaveEdit: "Save Changes", btnAddNew: "Add Staff",
@@ -527,11 +571,39 @@ async function viewEmployeeForm(id) {
               <input type="number" class="form-control" name="monthly_salary" required min="1" step="1"
                      value="${emp?.monthly_salary || ""}" placeholder="13000" />
             </div>
+            <!-- Holiday mode -->
             <div class="col-12">
-              <label class="form-label fw-semibold">${t("fieldMaxLeaveCarry")}</label>
+              <label class="form-label fw-semibold">${t("fieldHolidayMode")}</label>
+              <div class="d-flex gap-3 flex-wrap mt-1">
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="holiday_mode" id="hm_sunday"
+                         value="sunday" ${(emp?.holiday_mode || "sunday") === "sunday" ? "checked" : ""} />
+                  <label class="form-check-label" for="hm_sunday">
+                    <i class="bi bi-sun me-1 text-warning"></i>${t("holidayModeSunday")}
+                  </label>
+                </div>
+                <div class="form-check">
+                  <input class="form-check-input" type="radio" name="holiday_mode" id="hm_monthly"
+                         value="monthly" ${emp?.holiday_mode === "monthly" ? "checked" : ""} />
+                  <label class="form-check-label" for="hm_monthly">
+                    <i class="bi bi-calendar2-check me-1 text-success"></i>${t("holidayModeMonthly")}
+                  </label>
+                </div>
+              </div>
+            </div>
+            <!-- Monthly leave days (shown only for monthly mode) -->
+            <div class="col-12" id="monthlyLeaveSection" style="display:none">
+              <label class="form-label fw-semibold">${t("fieldMonthlyLeaveDays")} <span class="text-danger">*</span></label>
+              <input type="number" class="form-control" name="monthly_leave_days" min="0.5" max="31" step="0.5"
+                     value="${emp?.monthly_leave_days || ""}" placeholder="2" />
+              <div class="form-text text-muted">${t("fieldMonthlyLeaveDaysHint")}</div>
+            </div>
+            <!-- max_leave_carry — label changes based on mode -->
+            <div class="col-12" id="maxLeaveCarrySection">
+              <label class="form-label fw-semibold" id="maxLeaveCarryLabel">${t("fieldMaxLeaveCarry")}</label>
               <input type="number" class="form-control" name="max_leave_carry" min="0" step="0.5"
                      value="${emp?.max_leave_carry ?? ""}" placeholder="${currentLang === "th" ? "เช่น 3" : "e.g. 3"}" />
-              <div class="form-text text-muted">${t("fieldMaxLeaveCarryHint")}</div>
+              <div class="form-text text-muted" id="maxLeaveCarryHint">${t("fieldMaxLeaveCarryHint")}</div>
             </div>
           </div>
           <div id="salaryPreview" class="alert alert-info mt-3 small d-none"></div>
@@ -544,6 +616,25 @@ async function viewEmployeeForm(id) {
         </form>
       </div>
     </div>`;
+
+  // Holiday mode toggle
+  const monthlySection   = document.getElementById("monthlyLeaveSection");
+  const maxCarrySection  = document.getElementById("maxLeaveCarrySection");
+  const maxCarryLabel    = document.getElementById("maxLeaveCarryLabel");
+  const maxCarryHint     = document.getElementById("maxLeaveCarryHint");
+  function updateHolidayMode() {
+    const mode = document.querySelector("[name='holiday_mode']:checked")?.value || "sunday";
+    monthlySection.style.display = mode === "monthly" ? "" : "none";
+    if (mode === "monthly") {
+      maxCarryLabel.textContent = t("fieldMaxLeaveCarryMonthly");
+      maxCarryHint.textContent  = t("fieldMaxLeaveCarryMonthlyHint");
+    } else {
+      maxCarryLabel.textContent = t("fieldMaxLeaveCarry");
+      maxCarryHint.textContent  = t("fieldMaxLeaveCarryHint");
+    }
+  }
+  document.querySelectorAll("[name='holiday_mode']").forEach(r => r.addEventListener("change", updateHolidayMode));
+  updateHolidayMode();
 
   // Live salary preview
   const salInput = document.querySelector("[name='monthly_salary']");
@@ -564,16 +655,19 @@ async function viewEmployeeForm(id) {
   document.getElementById("empForm").addEventListener("submit", async e => {
     e.preventDefault();
     const fd = new FormData(e.target);
+    const mode = fd.get("holiday_mode") || "sunday";
     const body = {
-      name:             fd.get("name"),
-      age:              fd.get("age") ? +fd.get("age") : null,
-      nationality:      fd.get("nationality"),
-      phone:            fd.get("phone") || null,
-      line_id:          fd.get("line_id") || null,
-      facebook:         fd.get("facebook") || null,
-      start_date:       fd.get("start_date"),
-      monthly_salary:   +fd.get("monthly_salary"),
-      max_leave_carry:  fd.get("max_leave_carry") !== "" ? +fd.get("max_leave_carry") : null,
+      name:               fd.get("name"),
+      age:                fd.get("age") ? +fd.get("age") : null,
+      nationality:        fd.get("nationality"),
+      phone:              fd.get("phone") || null,
+      line_id:            fd.get("line_id") || null,
+      facebook:           fd.get("facebook") || null,
+      start_date:         fd.get("start_date"),
+      monthly_salary:     +fd.get("monthly_salary"),
+      max_leave_carry:    fd.get("max_leave_carry") !== "" ? +fd.get("max_leave_carry") : null,
+      holiday_mode:       mode,
+      monthly_leave_days: mode === "monthly" ? +(fd.get("monthly_leave_days") || 0) : 0,
     };
     const btn = e.target.querySelector("[type=submit]");
     btn.disabled = true;
@@ -675,12 +769,19 @@ async function viewEmployeeDetail(id) {
           <div class="stat-label text-muted">${t("detailLeaveDays")}</div>
         </div>
       </div>
+      ${overall.holiday_mode === "monthly" ? `
+      <div class="col-6 col-md-3">
+        <div class="stat-card bg-white">
+          <div class="stat-num ${overall.leave_balance >= 0 ? "text-success" : "text-danger"}">${overall.leave_balance >= 0 ? "+" : ""}${overall.leave_balance}</div>
+          <div class="stat-label text-muted">${t("leaveBalanceCurrent")}</div>
+        </div>
+      </div>` : `
       <div class="col-6 col-md-3">
         <div class="stat-card bg-white">
           <div class="stat-num text-info">${overall.total_compensatory_days}</div>
           <div class="stat-label text-muted">${t("detailCompDays")}</div>
         </div>
-      </div>
+      </div>`}
     </div>
 
     <!-- Overall balance -->
@@ -888,14 +989,22 @@ function askHalfDay(dateStr, type) {
   });
 }
 
-async function cycleDay(empId, dateStr, currentStatus, el) {
+async function cycleDay(empId, dateStr, currentStatus, el, holidayMode) {
+  const mode = holidayMode || "sunday";
   // Cycle logic
   let nextStatus;
   const dow = new Date(dateStr).getDay(); // 0=Sun
-  if (dow === 0) {
-    nextStatus = currentStatus === "holiday" ? "compensatory" : "holiday";
-  } else {
+
+  if (mode === "monthly") {
+    // Monthly mode: every day is simply work ↔ leave
     nextStatus = currentStatus === "work" ? "leave" : "work";
+  } else {
+    // Sunday mode
+    if (dow === 0) {
+      nextStatus = currentStatus === "holiday" ? "compensatory" : "holiday";
+    } else {
+      nextStatus = currentStatus === "work" ? "leave" : "work";
+    }
   }
 
   // For leave / compensatory: ask full day or half day via modal
@@ -914,7 +1023,7 @@ async function cycleDay(empId, dateStr, currentStatus, el) {
   el.querySelector(".status-label").textContent = slLabel(nextStatus, halfDay);
   el.dataset.status = nextStatus;
   el.dataset.halfDay = halfDay ? "1" : "0";
-  el.setAttribute("onclick", `cycleDay(${empId},'${dateStr}','${nextStatus}',this)`);
+  el.setAttribute("onclick", `cycleDay(${empId},'${dateStr}','${nextStatus}',this,'${mode}')`);
 
   try {
     await api.post(`/api/employees/${empId}/attendance`, {
@@ -983,6 +1092,19 @@ async function viewSummary(id) {
           <div class="stat-label text-muted">${t("labelLeaveDays")}</div>
         </div>
       </div>
+      ${s.holiday_mode === "monthly" ? `
+      <div class="col-6 col-md-3">
+        <div class="stat-card bg-white">
+          <div class="stat-num text-warning">${s.accrued_this_month ?? 0}</div>
+          <div class="stat-label text-muted">${t("leaveBalanceAccrued")}</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="stat-card bg-white">
+          <div class="stat-num ${s.leave_balance >= 0 ? "text-success" : "text-danger"}">${s.leave_balance >= 0 ? "+" : ""}${s.leave_balance}</div>
+          <div class="stat-label text-muted">${t("leaveBalanceCurrent")}</div>
+        </div>
+      </div>` : `
       <div class="col-6 col-md-3">
         <div class="stat-card bg-white">
           <div class="stat-num text-secondary">${s.holiday_days}</div>
@@ -994,7 +1116,7 @@ async function viewSummary(id) {
           <div class="stat-num text-primary">${s.compensatory_days}</div>
           <div class="stat-label text-muted">${t("labelCompDays")}</div>
         </div>
-      </div>
+      </div>`}
     </div>
 
     <!-- Financial breakdown -->
@@ -1020,6 +1142,27 @@ async function viewSummary(id) {
               <td class="ps-4">${t("rowBaseSalary")}</td>
               <td class="text-end pe-4">${fmtMoney(s.base_salary)} ${t("baht")}</td>
             </tr>
+            ${s.holiday_mode === "monthly" ? `
+            <tr class="table-success">
+              <td class="ps-4 text-success-emphasis">${t("rowAccruedThisMonth", s.accrued_this_month ?? 0)}</td>
+              <td class="text-end pe-4 text-muted">—</td>
+            </tr>
+            ${(s.carryover_balance !== undefined && s.carryover_balance !== 0) ? `
+            <tr class="table-light">
+              <td class="ps-4">${t("rowLeaveBalanceCarry", s.carryover_balance)}</td>
+              <td class="text-end pe-4 text-muted">—</td>
+            </tr>` : ""}
+            ${s.leave_days > 0 ? `
+            <tr class="table-warning">
+              <td class="ps-4 text-warning-emphasis">${t("rowLeaveAccum", s.leave_days)}</td>
+              <td class="text-end pe-4 text-muted">—</td>
+            </tr>` : ""}
+            ${(s.leave_balance !== undefined && s.leave_balance < 0) ? `
+            <tr class="table-danger">
+              <td class="ps-4 text-danger-emphasis">${t("leaveBalanceDebt")}: ${s.leave_balance} ${currentLang === "th" ? "วัน" : "day(s)"}</td>
+              <td class="text-end pe-4 text-danger fw-bold">−${fmtMoney(s.deduction_amount)} ${t("baht")}</td>
+            </tr>` : ""}
+            ` : `
             ${s.leave_days > 0 ? `
             <tr class="table-warning">
               <td class="ps-4 text-warning-emphasis">${t("rowLeaveAccum", s.leave_days)}</td>
@@ -1035,6 +1178,7 @@ async function viewSummary(id) {
               <td class="ps-4 text-danger-emphasis">${t("rowLeaveDeduct", s.leave_deduction_days)}</td>
               <td class="text-end pe-4 text-danger fw-semibold">-${fmtMoney(s.deduction_amount)} ${t("baht")}</td>
             </tr>` : ""}
+            `}
             <tr class="table-light fw-bold fs-5">
               <td class="ps-4">${t("rowActualPay")}</td>
               <td class="text-end pe-4 text-primary">${fmtMoney(s.actual_pay)} ${t("baht")}</td>
@@ -1068,9 +1212,13 @@ async function viewSummary(id) {
       </div>
     </div>` : ""}
 
-    <div class="alert ${s.max_leave_carry != null ? "alert-warning" : "alert-info"} d-flex align-items-start gap-2 small mb-0">
+    <div class="alert ${s.holiday_mode === "monthly" ? "alert-success" : s.max_leave_carry != null ? "alert-warning" : "alert-info"} d-flex align-items-start gap-2 small mb-0">
       <i class="bi bi-info-circle-fill flex-shrink-0 mt-1"></i>
-      <span>${s.max_leave_carry != null ? t("summaryPolicyNoteCapped", s.max_leave_carry) : t("summaryPolicyNote")}</span>
+      <span>${
+        s.holiday_mode === "monthly"
+          ? t("summaryPolicyNoteMonthly", s.monthly_leave_days, s.max_leave_carry)
+          : s.max_leave_carry != null ? t("summaryPolicyNoteCapped", s.max_leave_carry) : t("summaryPolicyNote")
+      }</span>
     </div>`;
 }
 
@@ -1095,8 +1243,41 @@ async function viewLeaveLog(id) {
     api.get(`/api/employees/${id}/attendance?year=${year}&month=${month}`),
   ]);
 
-  const cells = buildCalendarCells(id, days);
-  const legend = buildLegend();
+  const holidayMode = emp.holiday_mode || "sunday";
+  const cells = buildCalendarCells(id, days, holidayMode);
+  const legend = buildLegend(holidayMode);
+
+  // Monthly mode: fetch leave balance to display above calendar
+  let leaveBalanceHtml = "";
+  if (holidayMode === "monthly") {
+    try {
+      const lb = await api.get(`/api/employees/${id}/leave-balance`);
+      const balClass = lb.balance >= 0 ? "text-success" : "text-danger";
+      const balIcon  = lb.balance >= 0 ? "bi-calendar2-check text-success" : "bi-exclamation-triangle-fill text-danger";
+      const atMaxBadge = !lb.can_accrue_more
+        ? `<span class="badge bg-warning text-dark ms-2" style="font-size:0.72rem">${t("leaveBalanceAtMax")}</span>`
+        : "";
+      leaveBalanceHtml = `
+        <div class="card border-0 shadow-sm mb-3">
+          <div class="card-body py-3 px-4">
+            <div class="d-flex align-items-center gap-3 flex-wrap">
+              <i class="bi ${balIcon} fs-3"></i>
+              <div class="flex-grow-1">
+                <div class="fw-bold fs-5 ${balClass}">
+                  ${t("leaveBalanceCurrent")}: ${lb.balance >= 0 ? "+" : ""}${lb.balance} ${currentLang === "th" ? "วัน" : "day(s)"}
+                  ${atMaxBadge}
+                </div>
+                <div class="text-muted small">
+                  ${t("leaveBalanceAccrued")}: +${lb.total_accrued} ·
+                  ${t("leaveBalanceUsed")}: -${lb.total_used}
+                  ${lb.max_leave_carry !== null ? ` · Max: ${lb.max_leave_carry}` : ""}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>`;
+    } catch (_) { /* leave balance unavailable */ }
+  }
 
   ROOT.innerHTML = `
     <div class="page-breadcrumb mb-2">
@@ -1123,8 +1304,10 @@ async function viewLeaveLog(id) {
       </div>
     </div>
 
+    ${leaveBalanceHtml}
+
     <div class="calendar-grid mb-1">
-      ${t("daysShort").map((d, i) => `<div class="cal-header ${i === 0 ? "sunday" : ""}">${d}</div>`).join("")}
+      ${t("daysShort").map((d, i) => `<div class="cal-header ${i === 0 && holidayMode !== "monthly" ? "sunday" : ""}">${d}</div>`).join("")}
     </div>
     <div class="calendar-grid mb-3" id="calGrid">${cells}</div>
 
@@ -1133,7 +1316,7 @@ async function viewLeaveLog(id) {
     </div>
     <div class="text-muted small mb-4">
       <i class="bi bi-info-circle me-1"></i>
-      ${t("calHint2")}
+      ${holidayMode === "monthly" ? t("calHintMonthly") : t("calHint2")}
     </div>
 
     <div id="leaveListSection"></div>`;
@@ -1156,7 +1339,7 @@ async function viewLeaveLog(id) {
       cell.dataset.status = d.status;
       cell.dataset.halfDay = d.half_day ? "1" : "0";
       if (!disabled) {
-        cell.setAttribute("onclick", `cycleDay(${id},'${d.date}','${d.status}',this)`);
+        cell.setAttribute("onclick", `cycleDay(${id},'${d.date}','${d.status}',this,'${holidayMode}')`);
       } else {
         cell.removeAttribute("onclick");
       }
@@ -1179,7 +1362,8 @@ async function viewLeaveLog(id) {
   };
 }
 
-function buildCalendarCells(id, days) {
+function buildCalendarCells(id, days, holidayMode) {
+  const mode = holidayMode || "sunday";
   const firstDate = days[0]?.date;
   if (!firstDate) return "";
   const firstDow = new Date(firstDate).getDay();
@@ -1197,7 +1381,7 @@ function buildCalendarCells(id, days) {
       : "";
     html += `
       <div class="cal-day ${statusCss}${disabled ? " cal-disabled" : ""}${isFuture ? " cal-future" : ""}"
-           ${!disabled ? `onclick="cycleDay(${id},'${d.date}','${d.status}',this)"` : ""}
+           ${!disabled ? `onclick="cycleDay(${id},'${d.date}','${d.status}',this,'${mode}')"` : ""}
            data-date="${d.date}" data-status="${d.status}" data-half-day="${d.half_day ? 1 : 0}">
         <span class="day-num">${+dayNum}</span>
         <span class="status-label">${label}</span>
@@ -1207,7 +1391,16 @@ function buildCalendarCells(id, days) {
   return html;
 }
 
-function buildLegend() {
+function buildLegend(holidayMode) {
+  const mode = holidayMode || "sunday";
+  if (mode === "monthly") {
+    return [
+      { css: "status-work",  key: "statusWork",  suffix: "" },
+      { css: "status-leave", key: "statusLeave", suffix: "" },
+    ].map(l =>
+      `<span class="cal-day ${l.css} px-2 py-1" style="min-height:0;border-radius:8px;cursor:default;font-size:0.75rem">${t(l.key)}${l.suffix}</span>`
+    ).join("");
+  }
   return [
     { css: "status-work",         key: "statusWork",         suffix: "" },
     { css: "status-leave",        key: "statusLeave",        suffix: "" },
@@ -1742,12 +1935,6 @@ function editReminder(id) {
 }
 
 // ─── Utility ────────────────────────────────────────────────
-
-function escHtml(str) {
-  return String(str)
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
 
 function fmtMoney(n) {
   return Number(n).toLocaleString("th-TH", { minimumFractionDigits: 0, maximumFractionDigits: 2 });

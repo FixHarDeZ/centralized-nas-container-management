@@ -161,7 +161,10 @@ async def fetch_login_page_html() -> str | None:
 async def fetch_detail_html(detail_url: str) -> bytes | None:
     """Fetch a torrent's detail page bytes (TIS-620 encoded) with proper Referer.
     Used by the proxy endpoint to bypass bearbit's anti-hotlink check.
+    Re-login is attempted only on exception (stale connection / session drop after
+    long idle), never proactively, to avoid triggering bearbit rate limiting.
     """
+    global _login_ok
     headers = {"Referer": f"{config.SITE_BASE_URL}/viewbrsb.php"}
     try:
         resp = await _client.get(detail_url, headers=headers)
@@ -171,8 +174,20 @@ async def fetch_detail_html(detail_url: str) -> bytes | None:
         # (e.g. session-expired login form, VIP warning, deleted notice)
         return resp.content or None
     except Exception as e:
-        print(f"[scraper] fetch detail error: {type(e).__name__}: {e}")
-        return None
+        # Connection failed (stale pool / session drop after idle) — re-login once and retry
+        print(f"[scraper] detail error: {type(e).__name__}: {e} — re-logging in and retrying")
+        try:
+            _login_ok = await _login()
+            if not _login_ok:
+                print("[scraper] detail: re-login failed")
+                return None
+            resp = await _client.get(detail_url, headers=headers)
+            if resp.status_code != 200:
+                print(f"[scraper] detail retry → HTTP {resp.status_code}")
+            return resp.content or None
+        except Exception as e2:
+            print(f"[scraper] detail retry failed: {type(e2).__name__}: {e2}")
+            return None
 
 
 async def resolve_download_url(detail_url: str) -> str | None:
@@ -329,6 +344,7 @@ def _parse_listing(html: str, base_url: str, today: str, seed_min: int, leech_mi
     results          = []
     found_older      = False
     seen_sticky_ids: set[str] = set()
+    sticky_count     = 0
 
     rows = soup.select(ROW_SELECTOR)
 
@@ -342,15 +358,23 @@ def _parse_listing(html: str, base_url: str, today: str, seed_min: int, leech_mi
         if not entry:
             continue
 
+        is_sticky = entry.get("is_sticky")
+
         # Stickies have old dates — bypass the date filter when skip_sticky=False.
         # Track ALL stickies seen on bearbit (before seeds/threshold) so the scheduler
         # can sync which ones are still pinned vs removed.
-        if entry.get("is_sticky"):
+        if is_sticky:
+            sticky_count += 1
             seen_sticky_ids.add(entry["site_id"])
-        else:
-            if entry["date_posted"] != today:
-                found_older = True   # crossed into yesterday — signal to stop paging
-                continue
+            # Stickies are site-pinned for prominence — bypass seed/leech thresholds.
+            # They still go through keyword matching for highlighting in the UI.
+            entry["keyword_match"] = _matches_keywords(entry["title"], keywords)
+            results.append(entry)
+            continue
+
+        if entry["date_posted"] != today:
+            found_older = True   # crossed into yesterday — signal to stop paging
+            continue
 
         if entry["seeds"] == 0:
             continue
@@ -368,12 +392,14 @@ def _parse_listing(html: str, base_url: str, today: str, seed_min: int, leech_mi
         entry["keyword_match"] = kw_match
         results.append(entry)
 
+    print(f"[scraper] _parse_listing: {sticky_count} sticky, {len(results) - sticky_count} regular → total {len(results)} results")
     return results, found_older, seen_sticky_ids
 
 
 def _parse_row(row, base_url: str, today: str, skip_sticky: bool = True) -> dict | None:
-    is_sticky = bool(row.find("img", src=re.compile(r"stickyt\.gif|heart\.gif", re.I)))
+    is_sticky = bool(row.find("img", src=re.compile(r"sticky\.gif|heart\.gif|pinned\.gif", re.I)))
     if skip_sticky and is_sticky:
+        print(f"[scraper] _parse_row: skip_sticky=True — dropping sticky row")
         return None
 
     # Extract category
@@ -382,17 +408,30 @@ def _parse_row(row, base_url: str, today: str, skip_sticky: bool = True) -> dict
 
     tds = row.find_all("td", recursive=False)
     if len(tds) < 12:
+        if is_sticky:
+            print(f"[scraper] _parse_row: STICKY row has only {len(tds)} <td>s (need 12) — dropping")
         return None
 
     # ── Title & detail URL (col 2: td width=900) ────────────────────────────
     title_td = tds[COL_TITLE]
     title_a = title_td.find("a", href=re.compile(r"details\.php"))
     if not title_a:
+        # Fallback: some listing pages use a different PHP filename (e.g. viewno18sbx.php).
+        # Find any anchor that has ?id=NNNN AND wraps a <b> tag (bearbit always bolds the title).
+        for _a in title_td.find_all("a", href=True):
+            if _a.find("b") and re.search(r"\?id=\d+", _a["href"]):
+                title_a = _a
+                break
+    if not title_a:
+        if is_sticky:
+            print(f"[scraper] _parse_row: STICKY row has no title link — dropping")
         return None
 
     b_tag = title_a.find("b")
     title = (b_tag or title_a).get_text(strip=True)
     if not title or len(title) < 3:
+        if is_sticky:
+            print(f"[scraper] _parse_row: STICKY row has empty/short title — dropping")
         return None
 
     detail_url = urljoin(base_url, title_a["href"])
@@ -400,6 +439,8 @@ def _parse_row(row, base_url: str, today: str, skip_sticky: bool = True) -> dict
     # ── Site ID + hashinfo from details.php URL ──────────────────────────────
     m = re.search(r"[?&]id=(\d+)", title_a["href"])
     if not m:
+        if is_sticky:
+            print(f"[scraper] _parse_row: STICKY row has no id= in href — dropping")
         return None
     site_id = m.group(1)
     m_hash = re.search(r"[?&]hashinfo=(\d+)", title_a["href"])
@@ -462,6 +503,9 @@ def _parse_row(row, base_url: str, today: str, skip_sticky: bool = True) -> dict
         leeches = _parse_int(tds[COL_LEECHES].get_text(strip=True))
     except Exception:
         leeches = 0
+
+    if is_sticky:
+        print(f"[scraper] _parse_row: STICKY parsed OK — site_id={site_id} title={title[:60]}")
 
     return {
         "site_id":     site_id,

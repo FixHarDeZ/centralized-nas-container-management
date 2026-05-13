@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0d0d1a">
   <title>TorrentWatch</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/style.css?v=20260514">
 </head>
 <body>
   <div id="app">
@@ -46,6 +46,10 @@
           <button class="tw-filter-btn" id="btn-toggle-sticky" title="แสดง/ซ่อน Sticky"><i class="bi bi-pin-fill"></i> Sticky</button>
         </div>
       </div>
+      <div class="tw-search-row">
+        <input class="tw-input tw-search-input" id="search-input" type="search" placeholder="ค้นหาชื่อ..." autocomplete="off">
+      </div>
+      <div class="tw-source-bar tw-cat-bar" id="cat-bar-today" style="display:none;padding-top:0;padding-bottom:6px"></div>
       <div class="tw-last-updated" id="last-updated-today"></div>
       <div class="tw-list" id="list-today"></div>
     </section>
@@ -121,8 +125,36 @@
             <span style="font-size:12px;color:var(--text-muted)">รวมรายการ sticky ในผลลัพธ์</span>
           </label>
         </div>
+        <div class="tw-field-row" style="margin-top:8px">
+          <label>Auto-download to NAS</label>
+          <label class="tw-toggle-row" style="margin:0">
+            <input type="checkbox" class="tw-toggle" id="cfg-auto-dl">
+            <span style="font-size:12px;color:var(--text-muted)">บันทึก keyword match ไป NAS อัตโนมัติ</span>
+          </label>
+        </div>
+        <div class="tw-field-row">
+          <label>เก็บประวัติ (วัน)</label>
+          <input class="tw-input-sm" id="cfg-retention" type="number" min="1" max="90">
+        </div>
       </div>
 
+      <div class="tw-settings-card">
+        <h2 class="tw-section-title"><i class="bi bi-line"></i> LINE Notification</h2>
+        <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px">ส่งแจ้งเตือนเมื่อพบ keyword match ใหม่</p>
+        <div class="tw-field-row">
+          <label>เปิดใช้งาน</label>
+          <label class="tw-toggle-row" style="margin:0">
+            <input type="checkbox" class="tw-toggle" id="cfg-line-notify">
+            <span style="font-size:12px;color:var(--text-muted)">ส่ง LINE เมื่อพบ keyword match</span>
+          </label>
+        </div>
+        <p id="line-status-hint" style="font-size:11px;margin-top:4px;margin-bottom:8px"></p>
+        <div class="tw-field-row" style="margin-top:4px">
+          <button class="tw-btn-secondary" id="btn-line-test" style="width:100%">
+            <i class="bi bi-send"></i> ทดสอบส่ง LINE
+          </button>
+        </div>
+      </div>
 
       <div class="tw-settings-card">
         <h2 class="tw-section-title"><i class="bi bi-trash3"></i> ล้างข้อมูล</h2>
@@ -140,6 +172,6 @@
     <i class="bi bi-arrow-up"></i>
   </button>
 
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=20260514"></script>
 </body>
 </html>
