@@ -237,8 +237,9 @@ function cardHTML(t, readOnly) {
   const kwBadge    = t.keyword_match    ? `<span class="tw-badge tw-badge-kw"><i class="bi bi-star-fill"></i> KW</span>` : "";
   const catBadge   = t.category         ? `<span class="tw-badge tw-badge-cat">${escHtml(t.category)}</span>` : "";
   const stickyBadge = t.is_sticky       ? `<span class="tw-badge tw-badge-sticky"><i class="bi bi-pin-fill"></i> Sticky</span>` : "";
+  const completedBadge = t.completed > 0 ? `<span class="tw-badge tw-badge-completed"><i class="bi bi-check2-circle"></i>${t.completed}</span>` : "";
   const thumb = t.cover_url
-    ? `<img class="tw-card-thumb" src="${escHtml(t.cover_url)}" alt="" loading="lazy" onerror="this.outerHTML='<div class=\'tw-card-thumb-placeholder\'><i class=\'bi bi-film\'></i></div>'">`
+    ? `<img class="tw-card-thumb" src="${escHtml(t.cover_url)}" alt="" loading="lazy" data-lightbox="${escHtml(t.cover_url)}" onerror="this.outerHTML='<div class=\'tw-card-thumb-placeholder\'><i class=\'bi bi-film\'></i></div>'">`
     : `<div class="tw-card-thumb-placeholder"><i class="bi bi-film"></i></div>`;
   const actions = readOnly ? "" : `
     <div class="tw-card-actions">
@@ -262,6 +263,7 @@ function cardHTML(t, readOnly) {
       <div class="tw-card-badges">
         <span class="tw-badge tw-badge-seed"><i class="bi bi-arrow-up-circle-fill"></i>${t.seeds}</span>
         <span class="tw-badge tw-badge-leech"><i class="bi bi-arrow-down-circle-fill"></i>${t.leeches}</span>
+        ${completedBadge}
         ${t.file_size ? `<span class="tw-badge tw-badge-info"><i class="bi bi-hdd"></i>${escHtml(t.file_size)}</span>` : ""}
         ${t.file_count > 1 ? `<span class="tw-badge tw-badge-info"><i class="bi bi-files"></i>${t.file_count}</span>` : ""}
         ${stickyBadge}${kwBadge}${dlLocal}${dlNas}
@@ -401,8 +403,9 @@ async function loadSettings() {
   state.settings = settings;
   state.sources = sources;
 
-  document.getElementById("cfg-seed-min").value  = settings.seed_min  ?? 5;
-  document.getElementById("cfg-leech-min").value = settings.leech_min ?? 10;
+  document.getElementById("cfg-seed-min").value       = settings.seed_min      ?? 5;
+  document.getElementById("cfg-leech-min").value      = settings.leech_min     ?? 10;
+  document.getElementById("cfg-completed-min").value  = settings.completed_min ?? 20;
 
   const mode = settings.filter_mode ?? "and";
   const modeEl = document.getElementById("cfg-mode-" + mode);
@@ -546,6 +549,7 @@ document.getElementById("btn-save-settings").addEventListener("click", async () 
   const payload = {
     seed_min:                    document.getElementById("cfg-seed-min").value,
     leech_min:                   document.getElementById("cfg-leech-min").value,
+    completed_min:               document.getElementById("cfg-completed-min").value,
     filter_mode:                 document.querySelector('input[name="filter_mode"]:checked')?.value ?? "and",
     scrape_sticky:               document.getElementById("cfg-scrape-sticky").checked ? "1" : "0",
     line_notify_keyword_enabled: document.getElementById("cfg-line-notify").checked ? "1" : "0",
@@ -672,6 +676,33 @@ function _fmtTime(posted_at) {
     document.documentElement.scrollTop = 0;
     document.body.scrollTop = 0;
   });
+})();
+
+// ─── Lightbox ─────────────────────────────────────────────────────────────────
+(function () {
+  const lb    = document.getElementById("lightbox");
+  const lbImg = document.getElementById("lightbox-img");
+  const lbClose = document.getElementById("lightbox-close");
+
+  function openLightbox(src) {
+    lbImg.src = src;
+    lb.classList.add("open");
+    document.body.style.overflow = "hidden";
+  }
+  function closeLightbox() {
+    lb.classList.remove("open");
+    document.body.style.overflow = "";
+    lbImg.src = "";
+  }
+
+  // Delegate click on any [data-lightbox] image in the list
+  document.addEventListener("click", e => {
+    const img = e.target.closest("[data-lightbox]");
+    if (img) { e.stopPropagation(); openLightbox(img.dataset.lightbox); return; }
+    if (e.target === lb || e.target === lbImg) closeLightbox();
+  });
+  lbClose.addEventListener("click", closeLightbox);
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closeLightbox(); });
 })();
 
 // ─── Init ─────────────────────────────────────────────────────────────────────

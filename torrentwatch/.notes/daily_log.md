@@ -3,6 +3,31 @@
 ---
 
 ### Session Log Entry
+**Timestamp:** 2026-05-15
+**Title:** Feature — Image Lightbox + Completed Downloads Sort
+
+**Feature 1: Image display (bearbit style)**
+- `style.css`: Changed `.tw-card-thumb` from `object-fit: cover` → `object-fit: contain` + `background: #000` — จะเห็นภาพทั้งหมดไม่ถูกครอป
+- `style.css`: เพิ่ม lightbox overlay CSS (`.tw-lightbox`, `.tw-lightbox-img`, `.tw-lightbox-close`)
+- `index.html`: เพิ่ม `<div id="lightbox">` overlay + close button
+- `app.js`: เพิ่ม lightbox JS — click รูป (`[data-lightbox]`) → เปิด fullscreen; click overlay/close/Escape → ปิด
+- `app.js`: เพิ่ม `data-lightbox` attribute บน `<img class="tw-card-thumb">` เพื่อ trigger lightbox
+
+**Feature 2: Completed downloads (คนที่โหลดจบ) + sort**
+- `scraper.py`: เพิ่ม `COL_COMPLETED = 9` — parse column 9 ของ bearbit (น่าจะเป็น completed/snatches count)
+- `scraper.py`: parse และ return `completed` ใน dict ของ `_parse_row`
+- `db.py`: เพิ่ม column `completed INTEGER DEFAULT 0` ใน CREATE TABLE + migration `ALTER TABLE`
+- `db.py`: อัปเดต `upsert_torrent` — UPDATE และ INSERT รวม `completed`
+- `db.py`: เพิ่ม `"completed": "completed DESC"` ใน `_sort_order()`
+- `index.html`: เพิ่มปุ่ม sort "โหลดจบ" (data-sort="completed") ทั้ง Today และ History toolbar
+- `app.js`: เพิ่ม `completedBadge` ใน `cardHTML()` — แสดงเมื่อ `completed > 0`
+- `style.css`: เพิ่ม `.tw-badge-completed` (สีฟ้า #38bdf8) และ `.tw-completed-icon`
+
+**หมายเหตุ**: COL_COMPLETED = 9 เป็น best guess จาก column ordering ของ bearbit — ถ้า scrape แล้วค่าเป็น 0 ทั้งหมด ให้เปลี่ยน column index ใน scraper.py
+
+---
+
+### Session Log Entry
 **Timestamp:** 2026-05-12 11:19
 **Title:** Sticky/Pinned Bug — Root Cause Analysis
 **Details:**

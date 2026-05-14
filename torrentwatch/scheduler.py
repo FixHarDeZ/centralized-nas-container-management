@@ -54,10 +54,11 @@ async def _do_scrape():
     _last_scrape = now.strftime("%Y-%m-%d %H:%M")
     today = now.strftime("%Y-%m-%d")
 
-    settings     = db.get_settings()
-    seed_min     = int(settings.get("seed_min", 5))
-    leech_min    = int(settings.get("leech_min", 10))
-    filter_mode  = settings.get("filter_mode", "and")
+    settings      = db.get_settings()
+    seed_min      = int(settings.get("seed_min", 5))
+    leech_min     = int(settings.get("leech_min", 10))
+    completed_min = int(settings.get("completed_min", 20))
+    filter_mode   = settings.get("filter_mode", "and")
     scrape_sticky_val = settings.get("scrape_sticky", "0")
     skip_sticky  = scrape_sticky_val != "1"
     line_notify_enabled = settings.get("line_notify_keyword_enabled", "0") == "1"
@@ -90,6 +91,7 @@ async def _do_scrape():
                     source_url, seed_min, leech_min, keywords, filter_mode,
                     on_page=lambda pg, n, _lbl=source_display, _idx=source_idx, _tot=source_total: _update_progress(_lbl, _idx, _tot, pg, total_found + n),
                     skip_sticky=skip_sticky,
+                    completed_min=completed_min,
                 )
             except Exception as e:
                 print(f"[scheduler] scrape error {source_url}: {e}")
