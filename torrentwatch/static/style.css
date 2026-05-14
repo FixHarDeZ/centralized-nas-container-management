@@ -188,8 +188,9 @@ html, body {
   background: var(--accent-dim);
 }
 
-.tw-seed-icon  { color: var(--seed); }
-.tw-leech-icon { color: var(--leech); }
+.tw-seed-icon      { color: var(--seed); }
+.tw-leech-icon     { color: var(--leech); }
+.tw-completed-icon { color: #38bdf8; }
 
 #btn-toggle-sticky.active { border-color: #fb923c; color: #fb923c; background: #1c1007; }
 
@@ -259,8 +260,9 @@ html, body {
   width: 88px;
   height: 124px;
   border-radius: 8px;
-  object-fit: cover;
-  background: var(--bg-elevated);
+  object-fit: contain;
+  background: #000;
+  cursor: zoom-in;
 }
 .tw-card-thumb-placeholder {
   flex-shrink: 0;
@@ -348,12 +350,13 @@ html, body {
   gap: 3px;
   white-space: nowrap;
 }
-.tw-badge-seed   { background: #14532d; color: var(--seed); }
-.tw-badge-leech  { background: #450a0a; color: var(--leech); }
-.tw-badge-kw       { background: #3b0764; color: var(--kw-badge); }
-.tw-badge-dl-local { background: #1e3a5f; color: var(--dl-local); }
-.tw-badge-dl-nas   { background: #431407; color: var(--dl-nas); }
-.tw-badge-sticky   { background: #292524; color: #fb923c; border: 1px solid #78350f; }
+.tw-badge-seed      { background: #14532d; color: var(--seed); }
+.tw-badge-leech     { background: #450a0a; color: var(--leech); }
+.tw-badge-completed { background: #0c2a3d; color: #38bdf8; }
+.tw-badge-kw        { background: #3b0764; color: var(--kw-badge); }
+.tw-badge-dl-local  { background: #1e3a5f; color: var(--dl-local); }
+.tw-badge-dl-nas    { background: #431407; color: var(--dl-nas); }
+.tw-badge-sticky    { background: #292524; color: #fb923c; border: 1px solid #78350f; }
 
 .tw-card-actions {
   display: flex;
@@ -715,3 +718,47 @@ html, body {
   transform: translateY(0);
   pointer-events: auto;
 }
+
+/* ─── Lightbox ───────────────────────────────────────────────────────────── */
+.tw-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: rgba(0, 0, 0, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s;
+}
+.tw-lightbox.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+.tw-lightbox-img {
+  max-width: 92vw;
+  max-height: 88vh;
+  object-fit: contain;
+  border-radius: 6px;
+  box-shadow: 0 8px 40px rgba(0,0,0,.8);
+  display: block;
+}
+.tw-lightbox-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: rgba(255,255,255,.12);
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  color: #fff;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background .15s;
+}
+.tw-lightbox-close:hover { background: rgba(255,255,255,.25); }

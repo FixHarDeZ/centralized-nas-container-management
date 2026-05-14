@@ -46,11 +46,12 @@ ROW_SELECTOR = "tr[data-category-id]"
 # Column indices (0-based) in each matching <tr>
 COL_COVER   = 1   # <td class="poster-column"> → <img src="...">
 COL_TITLE   = 2   # <td width="900"> → <a href="details.php?id=X&hashinfo=Y"><b>title
-COL_FILES   = 5   # ไฟล์ — plain number
-COL_DATE    = 7   # <nobr>DD-MM-YYYY<BR>HH:MM:SS</nobr>
-COL_SIZE    = 8   # ขนาด — "2.63 GB" / "380.60 MB"
-COL_SEEDS   = 10  # ปล่อย — <span class="green|red">N</span> or plain number
-COL_LEECHES = 11  # ดูด — plain number (may be inside <b><a>N</a></b>)
+COL_FILES     = 5   # ไฟล์ — plain number
+COL_DATE      = 7   # <nobr>DD-MM-YYYY<BR>HH:MM:SS</nobr>
+COL_SIZE      = 8   # ขนาด — "2.63 GB" / "380.60 MB"
+COL_COMPLETED = 9   # ดาวน์โหลดเสร็จ — completed/snatched count
+COL_SEEDS     = 10  # ปล่อย — <span class="green|red">N</span> or plain number
+COL_LEECHES   = 11  # ดูด — plain number (may be inside <b><a>N</a></b>)
 
 # Download URL constructed from site_id (id= param in details.php URL)
 # Adjust if the server returns 403/redirect — may need dl.php or downloadlink.php
@@ -318,6 +319,7 @@ async def scrape_source(
     filter_mode: str = "and",
     on_page=None,            # optional callback(page_num, items_so_far)
     skip_sticky: bool = True,
+    completed_min: int = 0,
 ) -> tuple[list[dict], set[str]]:
     """Scrape all pages until today's items are exhausted.
     Returns (filtered_entries, all_sticky_site_ids_seen_on_site).
@@ -337,7 +339,7 @@ async def scrape_source(
             break
 
         items, found_older, page_sticky_ids = _parse_listing(
-            html, page_url, today, seed_min, leech_min, keywords, filter_mode, skip_sticky
+            html, page_url, today, seed_min, leech_min, keywords, filter_mode, skip_sticky, completed_min
         )
         all_items.extend(items)
         seen_sticky_ids.update(page_sticky_ids)
@@ -356,7 +358,7 @@ async def scrape_source(
     return all_items, seen_sticky_ids
 
 
-def _parse_listing(html: str, base_url: str, today: str, seed_min: int, leech_min: int, keywords: list[str], filter_mode: str = "and", skip_sticky: bool = True) -> tuple[list[dict], bool, set[str]]:
+def _parse_listing(html: str, base_url: str, today: str, seed_min: int, leech_min: int, keywords: list[str], filter_mode: str = "and", skip_sticky: bool = True, completed_min: int = 0) -> tuple[list[dict], bool, set[str]]:
     """Returns (matching_entries, found_any_older_than_today, seen_sticky_site_ids).
     seen_sticky_site_ids tracks every sticky site_id present on bearbit before filtering.
     """
@@ -402,9 +404,17 @@ def _parse_listing(html: str, base_url: str, today: str, seed_min: int, leech_mi
         kw_match = _matches_keywords(entry["title"], keywords)
 
         if filter_mode == "or":
-            meets_threshold = entry["seeds"] >= seed_min or entry["leeches"] >= leech_min
+            meets_threshold = (
+                entry["seeds"] >= seed_min
+                or entry["leeches"] >= leech_min
+                or (completed_min > 0 and entry.get("completed", 0) >= completed_min)
+            )
         else:
-            meets_threshold = entry["seeds"] >= seed_min and entry["leeches"] >= leech_min
+            meets_threshold = (
+                entry["seeds"] >= seed_min
+                and entry["leeches"] >= leech_min
+                and (completed_min == 0 or entry.get("completed", 0) >= completed_min)
+            )
 
         if not kw_match and not meets_threshold:
             continue
@@ -511,6 +521,12 @@ def _parse_row(row, base_url: str, today: str, skip_sticky: bool = True) -> dict
     except Exception:
         file_size = ""
 
+    # ── Completed downloads (col 9) ──────────────────────────────────────────
+    try:
+        completed = _parse_int(tds[COL_COMPLETED].get_text(strip=True))
+    except Exception:
+        completed = 0
+
     # ── Seeds (col 10) ───────────────────────────────────────────────────────
     try:
         seeds = _parse_int(tds[COL_SEEDS].get_text(strip=True))
@@ -542,6 +558,7 @@ def _parse_row(row, base_url: str, today: str, skip_sticky: bool = True) -> dict
         "category":    category,
         "file_count":  file_count,
         "file_size":   file_size,
+        "completed":   completed,
         "is_sticky":   is_sticky,
     }
 

@@ -9,6 +9,7 @@ _TZ = ZoneInfo(config.TZ)
 _DEFAULT_SETTINGS = {
     "seed_min":                    "10",
     "leech_min":                   "10",
+    "completed_min":               "20",
     "filter_mode":                 "or",   # "and" or "or"
     "scrape_sticky":               "1",    # "0" = skip sticky/pinned, "1" = include them
     "line_notify_keyword_enabled": "0",    # "0" = off, "1" = push LINE on keyword match
@@ -59,6 +60,7 @@ def init_db():
                 category         TEXT DEFAULT '',
                 file_count       INTEGER DEFAULT 0,
                 file_size        TEXT DEFAULT '',
+                completed        INTEGER DEFAULT 0,
                 first_seen_at    TEXT NOT NULL,
                 last_updated_at  TEXT NOT NULL,
                 downloaded_local INTEGER DEFAULT 0,
@@ -104,6 +106,7 @@ def init_db():
             "ALTER TABLE torrents ADD COLUMN category    TEXT DEFAULT ''",
             "ALTER TABLE torrents ADD COLUMN file_count  INTEGER DEFAULT 0",
             "ALTER TABLE torrents ADD COLUMN file_size   TEXT DEFAULT ''",
+            "ALTER TABLE torrents ADD COLUMN completed   INTEGER DEFAULT 0",
             "ALTER TABLE torrents ADD COLUMN is_sticky   INTEGER DEFAULT 0",
         ]:
             try:
@@ -222,10 +225,10 @@ def upsert_torrent(source_id: int, site_id: str, data: dict) -> tuple[bool, int]
         if existing:
             c.execute(
                 """UPDATE torrents
-                   SET seeds=?, leeches=?, date_posted=?, is_sticky=?, last_updated_at=?
+                   SET seeds=?, leeches=?, completed=?, date_posted=?, is_sticky=?, last_updated_at=?
                    WHERE id=?""",
-                (data["seeds"], data["leeches"], data["date_posted"],
-                 1 if data.get("is_sticky") else 0, now, existing["id"])
+                (data["seeds"], data["leeches"], data.get("completed", 0),
+                 data["date_posted"], 1 if data.get("is_sticky") else 0, now, existing["id"])
             )
             return False, existing["id"]
         else:
@@ -233,19 +236,19 @@ def upsert_torrent(source_id: int, site_id: str, data: dict) -> tuple[bool, int]
                 """INSERT INTO torrents
                    (source_id, site_id, title, detail_url, torrent_url, cover_url,
                     seeds, leeches, date_posted, posted_at, category,
-                    file_count, file_size, is_sticky, first_seen_at, last_updated_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    file_count, file_size, completed, is_sticky, first_seen_at, last_updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (source_id, site_id, data["title"], data["detail_url"], data["torrent_url"],
                  data.get("cover_url"), data["seeds"], data["leeches"],
                  data["date_posted"], data.get("posted_at", ""), data.get("category", ""),
                  data.get("file_count", 0), data.get("file_size", ""),
-                 1 if data.get("is_sticky") else 0, now, now)
+                 data.get("completed", 0), 1 if data.get("is_sticky") else 0, now, now)
             )
             return True, c.execute("SELECT last_insert_rowid()").fetchone()[0]
 
 
 def _sort_order(sort: str) -> str:
-    return {"leeches": "leeches DESC", "date": "posted_at DESC"}.get(sort, "seeds DESC")
+    return {"leeches": "leeches DESC", "date": "posted_at DESC", "completed": "completed DESC"}.get(sort, "seeds DESC")
 
 
 def get_today_torrents(source_id: int, today: str, sort: str = "seeds") -> list[dict]:
