@@ -1,6 +1,6 @@
 # TorrentWatch — Project Index (Memory Blueprint)
 
-> อัปเดตล่าสุด: 2026-05-12  
+> อัปเดตล่าสุด: 2026-05-15  
 > ใช้ไฟล์นี้เป็น cold-start memory ก่อนเริ่มงานทุกครั้ง
 
 ---
@@ -87,7 +87,7 @@ id, url (UNIQUE), label, enabled, created_at
 ```sql
 id, source_id (FK), site_id, title, detail_url, torrent_url,
 cover_url, seeds, leeches, date_posted, posted_at, category,
-file_count, file_size, is_sticky, first_seen_at, last_updated_at,
+file_count, file_size, completed, is_sticky, first_seen_at, last_updated_at,
 downloaded_local, downloaded_nas
 UNIQUE(source_id, site_id)
 ```
@@ -106,8 +106,12 @@ key (PK), value
 Default settings:
 - `seed_min = "10"` — seed threshold
 - `leech_min = "10"` — leech threshold
+- `completed_min = "20"` — completed/snatches threshold (0 = ปิดใช้ใน AND mode)
 - `filter_mode = "or"` — "and" | "or"
 - `scrape_sticky = "1"` — รวม sticky หรือไม่ (default เปลี่ยนเป็น "1" เมื่อ 2026-05-12)
+- `retention_days = "7"` — จำนวนวันเก็บ record ก่อน cleanup
+- `line_notify_keyword_enabled = "0"` — push LINE เมื่อพบ keyword match
+- `auto_download_nas = "0"` — auto-save keyword match ไป /downloads
 
 Index: `idx_torrents_source_date ON torrents(source_id, date_posted)`
 
@@ -123,23 +127,25 @@ Index: `idx_torrents_source_date ON torrents(source_id, date_posted)`
 
 ### Listing Selectors (scraper.py top constants)
 ```python
-ROW_SELECTOR = "tr[data-category-id]"
-COL_COVER   = 1    # <img src="..."> (absolute URL, ไม่ใช่ categories icon)
-COL_TITLE   = 2    # <a href="details.php?id=X&hashinfo=Y"><b>title</b></a>
-COL_FILES   = 5    # file count
-COL_DATE    = 7    # <nobr>DD-MM-YYYY<BR>HH:MM:SS</nobr>
-COL_SIZE    = 8    # "2.63 GB" / "380.60 MB"
-COL_SEEDS   = 10   # <span class="green|red">N</span>
-COL_LEECHES = 11
+ROW_SELECTOR  = "tr[data-category-id]"
+COL_COVER     = 1    # <img src="..."> (absolute URL, ไม่ใช่ categories icon)
+COL_TITLE     = 2    # <a href="details.php?id=X&hashinfo=Y"><b>title</b></a>
+COL_FILES     = 5    # file count
+COL_DATE      = 7    # <nobr>DD-MM-YYYY<BR>HH:MM:SS</nobr>
+COL_SIZE      = 8    # "2.63 GB" / "380.60 MB"
+COL_COMPLETED = 9    # completed/snatches count (best guess — verify via /api/debug/html)
+COL_SEEDS     = 10   # <span class="green|red">N</span>
+COL_LEECHES   = 11
 ```
 Download URL: `SITE_BASE_URL/download.php?id={site_id}&hashinfo={hashinfo}`
 
 ### Filter Logic
 - `seeds == 0` → ทิ้งเสมอ
 - Sticky entries → **bypass threshold** (เพิ่มเข้า result โดยตรง)
-- Non-sticky: ต้อง keyword match **OR** (seed≥min AND/OR leech≥min ตาม filter_mode)
-- `filter_mode=and` → ต้องผ่านทั้ง seed_min และ leech_min
-- `filter_mode=or` → ผ่านอย่างใดอย่างหนึ่ง
+- Non-sticky: ต้อง keyword match **OR** ผ่าน threshold ตาม filter_mode
+- `filter_mode=or` → seeds≥min **หรือ** leeches≥min **หรือ** completed≥min
+- `filter_mode=and` → seeds≥min **และ** leeches≥min **และ** completed≥min
+  - ⚠️ `completed_min=0` = ปิดเงื่อนไข completed ใน AND mode (ไม่ require)
 
 ### Multi-page Scraping
 - ไล่ `?page=0,1,2,...` สูงสุด 20 หน้า (safety cap)
@@ -210,11 +216,13 @@ state = {
   tab: "today" | "history" | "keywords" | "settings",
   sources: [],
   activeSource: { today, history, keywords },  // source_id per tab
-  sort: { today, history },                    // "seeds" | "leeches" | "date"
+  sort: { today, history },                    // "seeds" | "leeches" | "completed" | "date"
   filter: "all" | "keyword",
   showSticky: true,
   historyDate: "",
   settings: {},
+  search: "",         // text search on title (Today tab only)
+  activeCategory: "", // category chip filter (Today tab only)
 }
 ```
 
@@ -231,22 +239,32 @@ Bearbit block request ที่ Referer ไม่ใช่ bearbit URL:
 
 ---
 
-## Known Gaps (ณ 2026-05-13)
+## Known Gaps (ณ 2026-05-15)
 
 | Gap | รายละเอียด | ไฟล์ที่เกี่ยวข้อง |
 |---|---|---|
-| ✅ LINE notification — **FIXED** | `line_notify.py` เขียนครบแล้ว (`notify_keyword_matches`, `notify_round_summary`) — wired เข้า config.py + scheduler.py แล้ว (2026-05-13) | config.py, scheduler.py |
-| ไม่มี category filter ใน UI | column `category` มีใน DB ทุก row แต่ไม่มีปุ่ม filter ใน frontend | app.js, index.html |
-| ไม่มี text search | ไม่มี search input กรอง title ใน list | app.js |
-| Retention 7 วัน hardcoded | `cleanup_old_records(days=7)` ใน scheduler.py ไม่ expose เป็น setting | scheduler.py, db.py |
-| Cover image โหลดตรงจาก bearbit CDN | ถ้า session expire หรือ URL เปลี่ยน รูปแตกพร้อมกันหมด | scraper.py |
+| ✅ LINE notification — **FIXED** | wired เข้า config.py + scheduler.py แล้ว (2026-05-13) | config.py, scheduler.py |
+| ✅ Category filter — **FIXED** | chip bar แสดงใต้ toolbar (Today tab) | app.js, index.html |
+| ✅ Text search — **FIXED** | search input กรอง title (Today tab) | app.js, index.html |
+| ✅ Retention configurable — **FIXED** | `retention_days` setting ใน UI | db.py, index.html |
+| COL_COMPLETED ยังไม่ verify | column 9 ของ bearbit สันนิษฐานว่าเป็น completed — ใช้ `/api/debug/html` ตรวจ | scraper.py |
+| Cover image โหลดตรงจาก bearbit CDN | ถ้า session expire รูปแตกพร้อมกัน | scraper.py |
 
 ---
 
-## Recent Fixes (2026-05-12)
+## Recent Changes
+
+### 2026-05-15
+
+1. **Image lightbox** — `.tw-card-thumb` เปลี่ยนเป็น `object-fit: contain` (เห็นภาพทั้งหมด) + click รูป → fullscreen overlay
+2. **Completed column** — `COL_COMPLETED = 9` parse จาก bearbit, เก็บใน DB column `completed`
+3. **Sort by completed** — ปุ่ม "โหลดจบ" ใน Today/History toolbar
+4. **`completed_min` threshold** — setting ใหม่ default 20, ทำงานกับ AND/OR filter_mode
+
+### 2026-05-12
 
 1. **`scrape_sticky` default** เปลี่ยนจาก `"0"` → `"1"` + migration สำหรับ existing DB
 2. **Sticky bypass threshold** — sticky entries ข้าม seed_min/leech_min ทั้งหมด
-3. **`upsert_torrent` UPDATE** — เพิ่ม `is_sticky` + `date_posted` ใน UPDATE clause (เดิมอัปเดตแค่ seeds/leeches)
+3. **`upsert_torrent` UPDATE** — เพิ่ม `is_sticky` + `date_posted` ใน UPDATE clause
 4. **Sticky regex typo** — แก้ `stickyt\.gif` → `sticky\.gif` + เพิ่ม `pinned\.gif`
-5. **sync_stickies demotion** — เปลี่ยนจาก backdate ทันที → แค่ clear `is_sticky=0` (tolerant ต่อ 1-time miss)
+5. **sync_stickies demotion** — clear `is_sticky=0` แทนการ backdate
