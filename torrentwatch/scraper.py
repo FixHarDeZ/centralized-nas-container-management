@@ -139,8 +139,28 @@ async def _fetch(url: str) -> str | None:
             resp = await _client.get(url, headers=headers)
         return resp.text
     except Exception as e:
-        print(f"[scraper] fetch error {url}: {e}")
-        return None
+        # Connection may be stale after long idle (e.g. overnight pause) — re-login and retry once
+        print(f"[scraper] fetch error {url}: {e} — re-logging in and retrying")
+        try:
+            _login_ok = await _login()
+            if not _login_ok:
+                return None
+            resp = await _client.get(url, headers=headers)
+            if _is_login_page(resp.text, str(resp.url)):
+                print("[scraper] still on login page after retry — giving up")
+                return None
+            return resp.text
+        except Exception as e2:
+            print(f"[scraper] fetch retry failed {url}: {e2}")
+            return None
+
+
+async def relogin() -> bool:
+    """Re-establish login session. Call at the start of each scrape cycle to prevent
+    stale connections after long idle periods (e.g. overnight pause)."""
+    global _login_ok
+    _login_ok = await _login()
+    return _login_ok
 
 
 async def fetch_raw_html(url: str) -> str | None:

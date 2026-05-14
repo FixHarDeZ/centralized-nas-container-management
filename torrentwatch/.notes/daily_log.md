@@ -153,6 +153,26 @@ Fix (`scraper.py`):
 
 ---
 
+---
+
+### Session Log Entry
+**Timestamp:** 2026-05-14
+**Title:** Fix first-scrape-of-day returning 0 items — stale connection after overnight idle
+
+Root cause: `_fetch` จะ return `None` ทันทีเมื่อ connection exception เกิดขึ้น โดยไม่มี retry ทำให้ scrape รอบแรกหลัง pause 01:00-06:00 (5 ชั่วโมง idle) fail เงียบๆ 0 items ทั้งที่ bearbit มี torrent ใหม่ผ่าน filter เพียบ
+
+Fix (`scraper.py`):
+
+- `_fetch`: เมื่อเกิด transport exception → re-login แล้ว retry request 1 ครั้ง แทนที่จะ return `None` ทันที
+- เพิ่ม `relogin()` function (`global _login_ok = await _login()`) สำหรับ scheduler เรียก
+
+Fix (`scheduler.py`):
+
+- `_do_scrape()`: เรียก `await scraper.relogin()` ทุกครั้งก่อนเริ่ม loop sources เพื่อ establish fresh session ก่อน scrape แต่ละรอบ
+- ถ้า relogin fail → return ภายใน try block (finally ยัง reset `_scrape_status = "idle"` เสมอ)
+
+---
+
 ### Pending / Next Steps
 
 - [ ] Cover image โหลดตรงจาก bearbit CDN — ถ้า session expire รูปแตกพร้อมกัน
