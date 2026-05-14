@@ -69,6 +69,11 @@ async def _do_scrape():
     total_found = 0
 
     try:
+        # Re-login each cycle to recover from stale connections after long idle periods
+        if not await scraper.relogin():
+            print("[scheduler] relogin failed — scrape aborted")
+            return
+
         for i, source in enumerate(sources):
             source_id    = source["id"]
             source_url   = source["url"]
