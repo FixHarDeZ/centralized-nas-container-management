@@ -4,6 +4,17 @@
 
 ### Session Log Entry
 **Timestamp:** 2026-05-15
+**Title:** Clean Code — Import hygiene, deduplication, private API elimination
+
+- **`db.py`**: เพิ่ม `torrent_filename()` (shared utility), `clear_source_today()`, `clear_source_all()` (public API แทน `_conn()` ตรงๆ); เพิ่ม `import re` ที่ top
+- **`main.py`**: ย้าย `re`, `quote`, `datetime`, `ZoneInfo` ขึ้น top; ลบ lazy imports ใน function body; ลบ `_torrent_filename` → `db.torrent_filename()`; `api_clear_*` ใช้ `db.clear_source_*`; `filter` param + `# noqa: A002`
+- **`scraper.py`**: เพิ่ม `urlencode, parse_qs, urlunparse` ใน top import; ลบ lazy import ใน `_page_url`; fix COL alignment; extract `_is_torrent_content()` helper ลด duplicated logic 2 จุด
+- **`scheduler.py`**: จัด import order (stdlib → third-party → local); ย้าย `urlparse` ออกจาก loop body; ลบ `import re` ที่ไม่ใช้; ลบ `_nas_filename` → `db.torrent_filename()`
+
+---
+
+### Session Log Entry
+**Timestamp:** 2026-05-15
 **Title:** Feature — Image Lightbox + Completed Downloads Sort
 
 **Feature 1: Image display (bearbit style)**

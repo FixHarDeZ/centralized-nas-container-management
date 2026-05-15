@@ -9,17 +9,19 @@ Fixed auto-scrape schedule (Asia/Bangkok):
 Weekly cleanup runs Sunday 03:00.
 """
 
+import asyncio
+from datetime import datetime
+from pathlib import Path
+from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
+
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-import asyncio
-import re
-from pathlib import Path
+
+import config
 import db
 import line_notify
 import scraper
-from datetime import datetime
-from zoneinfo import ZoneInfo
-import config
 
 _TZ = ZoneInfo(config.TZ)
 _scheduler = BackgroundScheduler(timezone=config.TZ)
@@ -29,10 +31,6 @@ _next_scrape:     str  = ""
 _scrape_status:   str  = "idle"
 _scrape_progress: dict = {}   # {"source": label, "page": N, "found": N}
 
-
-def _nas_filename(title: str) -> str:
-    safe = re.sub(r'[^\x00-\x7F]', '_', title).strip("_ ")[:80]
-    return (safe or "torrent") + ".torrent"
 
 
 def _run_async(coro):
@@ -79,7 +77,6 @@ async def _do_scrape():
             source_id    = source["id"]
             source_url   = source["url"]
             keywords     = db.get_keywords_for_source(source_id)
-            from urllib.parse import urlparse
             source_display = (source.get("label") or "").strip() or urlparse(source_url).path.split("/")[-1] or source_url
             source_total = len(sources)
             source_idx   = i + 1
@@ -131,7 +128,7 @@ async def _do_scrape():
                                 match["torrent_url"], match.get("detail_url", "")
                             )
                             if data:
-                                dest = nas_dir / _nas_filename(match["title"])
+                                dest = nas_dir / db.torrent_filename(match["title"])
                                 dest.write_bytes(data)
                                 db.mark_downloaded_nas(match["id"])
                                 print(f"[scheduler] auto-dl: {match['title'][:50]}")

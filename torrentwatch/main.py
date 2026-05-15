@@ -1,12 +1,16 @@
 import asyncio
 import base64
 import os
+import re
 import secrets
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
+from urllib.parse import quote
+from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
-from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -99,9 +103,6 @@ def api_rename_source(source_id: int, body: SourceRename):
 
 # ─── Torrents ─────────────────────────────────────────────────────────────────
 
-from datetime import datetime
-from zoneinfo import ZoneInfo
-
 _TZ = ZoneInfo(config.TZ)
 
 
@@ -117,7 +118,7 @@ def _with_keyword_flag(torrents: list[dict], keywords: list[str]) -> list[dict]:
 
 
 @app.get("/api/torrents")
-def api_get_torrents(source_id: int, sort: str = "seeds", filter: str = "all"):
+def api_get_torrents(source_id: int, sort: str = "seeds", filter: str = "all"):  # noqa: A002
     today = _today()
     rows = db.get_today_torrents(source_id, today, sort)
     keywords = db.get_keywords_for_source(source_id)
@@ -148,9 +149,6 @@ def _content_disposition(title: str) -> str:
     filename*= comes FIRST (RFC 6266 §4.3) so browsers with proper RFC 5987 support
     (Chrome, Safari, Firefox, Edge) display the Thai title correctly.
     """
-    import re
-    from urllib.parse import quote
-
     clean = title.strip()[:100]
     utf8_encoded = quote(clean + ".torrent", encoding="utf-8", safe="")
     ascii_only   = re.sub(r'[^\x20-\x7E]+', ' ', clean).strip()[:60]
@@ -160,11 +158,6 @@ def _content_disposition(title: str) -> str:
     return f"attachment; filename*=UTF-8''{utf8_encoded}; filename=\"{fallback}\""
 
 
-def _torrent_filename(title: str) -> str:
-    """Filesystem-safe ASCII filename for writing to NAS disk."""
-    import re
-    safe = re.sub(r'[^\x00-\x7F]', '_', title).strip("_ ")[:80]
-    return (safe or "torrent") + ".torrent"
 
 
 @app.get("/api/download/local/{torrent_id}")
@@ -200,7 +193,7 @@ async def api_download_nas(torrent_id: int):
     if not data:
         raise HTTPException(502, "Failed to fetch torrent file from site")
 
-    filename = _torrent_filename(t["title"])
+    filename = db.torrent_filename(t["title"])
     dest = nas_dir / filename
     dest.write_bytes(data)
     db.mark_downloaded_nas(torrent_id)
@@ -339,17 +332,12 @@ async def api_line_test():
 
 @app.delete("/api/debug/clear-today/{source_id}", status_code=204)
 def api_clear_today(source_id: int):
-    """Delete torrent rows for today in a source."""
-    today = datetime.now(_TZ).strftime("%Y-%m-%d")
-    with db._conn() as c:
-        c.execute("DELETE FROM torrents WHERE source_id=? AND date_posted=?", (source_id, today))
+    db.clear_source_today(source_id, _today())
 
 
 @app.delete("/api/debug/clear-all/{source_id}", status_code=204)
 def api_clear_all(source_id: int):
-    """Delete ALL torrent rows for a source — full reset."""
-    with db._conn() as c:
-        c.execute("DELETE FROM torrents WHERE source_id=?", (source_id,))
+    db.clear_source_all(source_id)
 
 
 # ─── SPA static files ─────────────────────────────────────────────────────────

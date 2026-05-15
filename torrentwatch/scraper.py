@@ -12,7 +12,7 @@ to inspect the raw HTML from a running container.
 import asyncio
 import re
 from datetime import datetime
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlencode, parse_qs, urlunparse
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -44,8 +44,8 @@ LOGIN_FIELD_PASS = "password"
 ROW_SELECTOR = "tr[data-category-id]"
 
 # Column indices (0-based) in each matching <tr>
-COL_COVER   = 1   # <td class="poster-column"> → <img src="...">
-COL_TITLE   = 2   # <td width="900"> → <a href="details.php?id=X&hashinfo=Y"><b>title
+COL_COVER     = 1   # <td class="poster-column"> → <img src="...">
+COL_TITLE     = 2   # <td width="900"> → <a href="details.php?id=X&hashinfo=Y"><b>title
 COL_FILES     = 5   # ไฟล์ — plain number
 COL_DATE      = 7   # <nobr>DD-MM-YYYY<BR>HH:MM:SS</nobr>
 COL_SIZE      = 8   # ขนาด — "2.63 GB" / "380.60 MB"
@@ -250,10 +250,7 @@ async def fetch_torrent_bytes(torrent_url: str, detail_url: str = "") -> bytes |
         resp = await _client.get(torrent_url, headers=headers)
         ct = resp.headers.get("content-type", "")
         print(f"[scraper] download {torrent_url} → {resp.status_code} {ct}")
-        if resp.status_code == 200 and (
-            "torrent" in ct or "octet-stream" in ct or
-            resp.content[:13].startswith((b"d8:announce", b"d13:announce"))
-        ):
+        if resp.status_code == 200 and _is_torrent_content(ct, resp.content):
             return resp.content
 
         # torrent_url failed — resolve from detail page (browser flow: visit detail → click download)
@@ -264,10 +261,7 @@ async def fetch_torrent_bytes(torrent_url: str, detail_url: str = "") -> bytes |
                 resp2 = await _client.get(real_url, headers={"Referer": detail_url})
                 ct2 = resp2.headers.get("content-type", "")
                 print(f"[scraper] resolved download → {resp2.status_code} {ct2}")
-                if resp2.status_code == 200 and (
-                    "torrent" in ct2 or "octet-stream" in ct2 or
-                    resp2.content[:13].startswith((b"d8:announce", b"d13:announce"))
-                ):
+                if resp2.status_code == 200 and _is_torrent_content(ct2, resp2.content):
                     return resp2.content
         return None
     except Exception as e:
@@ -283,10 +277,7 @@ async def probe_download_url(torrent_url: str) -> dict:
         resp = await _client.get(torrent_url)
         ct = resp.headers.get("content-type", "")
         preview = resp.content[:200]
-        is_torrent = (
-            "torrent" in ct or "octet-stream" in ct or
-            preview.startswith(b"d8:announce") or preview.startswith(b"d13:announce")
-        )
+        is_torrent = _is_torrent_content(ct, preview)
         return {
             "url_tried":    torrent_url,
             "final_url":    str(resp.url),
@@ -300,11 +291,18 @@ async def probe_download_url(torrent_url: str) -> dict:
         return {"error": str(e), "url_tried": torrent_url}
 
 
+def _is_torrent_content(content_type: str, preview: bytes) -> bool:
+    return (
+        "torrent" in content_type
+        or "octet-stream" in content_type
+        or preview[:13].startswith((b"d8:announce", b"d13:announce"))
+    )
+
+
 def _page_url(base_url: str, page: int) -> str:
     """Build paginated URL: page=0 → base URL, page=N → append ?page=N (preserving existing params)."""
     if page == 0:
         return base_url
-    from urllib.parse import urlparse, urlencode, parse_qs, urlunparse
     p = urlparse(base_url)
     params = {k: v[0] for k, v in parse_qs(p.query).items()}
     params["page"] = str(page)
