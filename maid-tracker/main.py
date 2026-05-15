@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel
 from typing import Optional
 from contextlib import asynccontextmanager
@@ -25,7 +25,6 @@ from keywords import (
 from calc import (
     default_status,
     working_days_in_month,
-    daily_rate,
     compute_overall_balance,
     compute_resign_summary,
     compute_leave_deduction,
@@ -35,6 +34,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 _scheduler = BackgroundScheduler(timezone=os.environ.get("TZ", "Asia/Bangkok"))
+_TZ = ZoneInfo(os.environ.get("TZ", "Asia/Bangkok"))
 
 _MONTHLY_REPORT_TIME = os.environ.get("MONTHLY_REPORT_TIME", "20:00")
 _report_h, _report_m = _MONTHLY_REPORT_TIME.split(":")
@@ -66,20 +66,18 @@ _MAID_LINE_CHANNEL_SECRET = os.environ.get("MAID_LINE_CHANNEL_SECRET", "")
 _BASIC_USER = os.environ.get("NGINX_BASIC_AUTH_USER", "").strip()
 _BASIC_PASS = os.environ.get("NGINX_BASIC_AUTH_PASS", "").strip()
 
-_AUTH_REALM = b"Basic realm=\"Maid Tracker\""
 _AUTH_SKIP_PATHS = {"/webhook/line"}
 
 
 @app.middleware("http")
 async def basic_auth_middleware(request: Request, call_next):
-    """Enforce HTTP Basic Auth on all routes except the LINE webhook."""
     if not _BASIC_USER or request.url.path in _AUTH_SKIP_PATHS:
         return await call_next(request)
 
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Basic "):
         try:
-            decoded    = base64.b64decode(auth_header[6:]).decode()
+            decoded = base64.b64decode(auth_header[6:]).decode()
             user, _, pw = decoded.partition(":")
             ok_user = hmac.compare_digest(user.encode(), _BASIC_USER.encode())
             ok_pass = hmac.compare_digest(pw.encode(), _BASIC_PASS.encode())
@@ -88,29 +86,16 @@ async def basic_auth_middleware(request: Request, call_next):
         except Exception:
             pass
 
-    from fastapi.responses import Response as _Resp
-    return _Resp(
+    return Response(
         status_code=401,
         content="Authentication required",
         headers={"WWW-Authenticate": "Basic realm=\"Maid Tracker\""},
     )
 
 
-# Keywords are defined in keywords.py — edit that file to add/remove trigger phrases.
-_LEAVE_KEYWORDS           = LEAVE_KEYWORDS
-_COMP_KEYWORDS            = COMP_KEYWORDS
-_HALF_DAY_KEYWORDS        = HALF_DAY_KEYWORDS
-_BALANCE_KEYWORDS         = BALANCE_KEYWORDS
-_PAYMENT_KEYWORDS         = PAYMENT_KEYWORDS
-_PAYMENT_PERIOD1_KEYWORDS = PAYMENT_PERIOD1_KEYWORDS
-_PAYMENT_PERIOD2_KEYWORDS = PAYMENT_PERIOD2_KEYWORDS
-_PAYMENT_BOTH_KEYWORDS    = PAYMENT_BOTH_KEYWORDS
-_YESTERDAY_KEYWORDS       = YESTERDAY_KEYWORDS
-
-
 def _parse_target_date(text: str, today: date) -> date:
     """Return the attendance date the message refers to. Default: today."""
-    if any(kw in text for kw in _YESTERDAY_KEYWORDS):
+    if any(kw in text for kw in YESTERDAY_KEYWORDS):
         return today - timedelta(days=1)
     return today
 
@@ -241,12 +226,11 @@ def _should_fire_today(r: dict, today: date) -> bool:
 
 
 def _check_reminders():
-    """Triggered every minute by CronTrigger. Fires LINE reminder if send_time + schedule match and not already sent today."""
-    tz          = ZoneInfo(os.environ.get("TZ", "Asia/Bangkok"))
-    now         = datetime.now(tz)
-    today_str   = now.strftime("%Y-%m-%d")
-    current_hm  = now.strftime("%H:%M")
-    today       = now.date()
+    tz = _TZ
+    now = datetime.now(tz)
+    today_str = now.strftime("%Y-%m-%d")
+    current_hm = now.strftime("%H:%M")
+    today = now.date()
 
     conn = get_db()
     rows = conn.execute("SELECT * FROM reminders WHERE enabled=1").fetchall()
@@ -263,13 +247,13 @@ def _check_reminders():
 
         line_notify.notify_reminder(r["name"], r["message"])
 
-        conn2 = get_db()
-        conn2.execute(
+        conn = get_db()
+        conn.execute(
             "UPDATE reminders SET last_sent_date=? WHERE id=?",
             (today_str, r["id"]),
         )
-        conn2.commit()
-        conn2.close()
+        conn.commit()
+        conn.close()
 
 
 _monthly_report_last_sent: str = ""  # guard against double-fire within the same minute
@@ -279,7 +263,7 @@ def _send_monthly_report():
     """Triggered by CronTrigger on the last day of each month at MONTHLY_REPORT_TIME."""
     global _monthly_report_last_sent
 
-    tz        = ZoneInfo(os.environ.get("TZ", "Asia/Bangkok"))
+    tz = _TZ
     month_key = datetime.now(tz).strftime("%Y-%m")
     if _monthly_report_last_sent == month_key:
         return
@@ -547,16 +531,12 @@ def upsert_attendance(emp_id: int, att: AttendanceUpdate):
     if not emp:
         conn.close()
         raise HTTPException(404, "Employee not found")
+    emp = dict(emp)
     holiday_mode = (emp["holiday_mode"] or "sunday")
     # Monthly mode: reject compensatory / holiday — those concepts don't apply
     if holiday_mode == "monthly" and att.status in ("compensatory", "holiday"):
         conn.close()
         raise HTTPException(400, "Compensatory/holiday status not applicable in monthly-leave mode")
-    emp = conn.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
-    if not emp:
-        conn.close()
-        raise HTTPException(404, "Employee not found")
-    emp = dict(emp)
 
     # Capture previous record before overwriting (needed for cancel detection)
     prev = conn.execute(
@@ -756,15 +736,7 @@ def toggle_payment(emp_id: int, period: int, year: int, month: int):
         (emp_id, year, month, period),
     ).fetchone()
 
-    # Compute deduction (period 2 only, when max_leave_carry is configured)
-    start_date = date.fromisoformat(emp["start_date"])
-    toggle_deduction_days   = 0.0
-    toggle_deduction_amount = 0.0
-    max_carry = emp.get("max_leave_carry")
-    if period == 2 and max_carry is not None and max_carry >= 0:
-        ded = compute_leave_deduction(emp_id, year, month, max_carry, emp["monthly_salary"], start_date)
-        toggle_deduction_days   = ded["deduction_days"]
-        toggle_deduction_amount = ded["deduction_amount"]
+    amount, toggle_deduction_days, toggle_deduction_amount = _compute_period_amount(emp, year, month, period)
 
     if existing and existing["paid_at"]:
         conn.execute(
@@ -783,28 +755,6 @@ def toggle_payment(emp_id: int, period: int, year: int, month: int):
             (emp_id, year, month, period, now, round(toggle_deduction_days, 2)),
         )
         paid_at = now
-
-    # Compute gross amount for notification
-    wd_month = working_days_in_month(year, month)
-    dr = emp["monthly_salary"] / wd_month if wd_month else 0
-    half_salary = emp["monthly_salary"] / 2
-    _, n = calendar.monthrange(year, month)
-    if start_date.year == year and start_date.month == month:
-        billable = sum(
-            1 for day in range(start_date.day, n + 1)
-            if date(year, month, day).weekday() != 6
-        )
-        base_salary = dr * billable
-    else:
-        base_salary = emp["monthly_salary"]
-    mid_day_toggle = date(year, month, 15)
-    first_month_after_15 = (
-        start_date.year == year
-        and start_date.month == month
-        and start_date > mid_day_toggle
-    )
-    period2_gross = base_salary if first_month_after_15 else base_salary - half_salary
-    amount = half_salary if period == 1 else round(period2_gross - toggle_deduction_amount, 2)
 
     conn.commit()
     conn.close()
@@ -1239,7 +1189,7 @@ async def line_webhook(request: Request):
     except Exception:
         raise HTTPException(400, "Invalid JSON")
 
-    tz = ZoneInfo(os.environ.get("TZ", "Asia/Bangkok"))
+    tz = _TZ
     today = datetime.now(tz).date()
     today_str = today.isoformat()
 
@@ -1252,10 +1202,10 @@ async def line_webhook(request: Request):
 
         text = msg.get("text", "").strip()
 
-        is_leave   = any(kw in text for kw in _LEAVE_KEYWORDS)
-        is_comp    = any(kw in text for kw in _COMP_KEYWORDS)
-        is_balance = any(kw in text for kw in _BALANCE_KEYWORDS)
-        is_payment = any(kw in text for kw in _PAYMENT_KEYWORDS)
+        is_leave   = any(kw in text for kw in LEAVE_KEYWORDS)
+        is_comp    = any(kw in text for kw in COMP_KEYWORDS)
+        is_balance = any(kw in text for kw in BALANCE_KEYWORDS)
+        is_payment = any(kw in text for kw in PAYMENT_KEYWORDS)
 
         if not is_leave and not is_comp and not is_balance and not is_payment:
             continue
@@ -1280,12 +1230,11 @@ async def line_webhook(request: Request):
                 continue
 
             # Determine which period(s) to mark as paid
-            has_p1  = any(kw in text for kw in _PAYMENT_PERIOD1_KEYWORDS)
-            has_p2  = any(kw in text for kw in _PAYMENT_PERIOD2_KEYWORDS)
-            has_both = any(kw in text for kw in _PAYMENT_BOTH_KEYWORDS)
+            has_p1  = any(kw in text for kw in PAYMENT_PERIOD1_KEYWORDS)
+            has_p2  = any(kw in text for kw in PAYMENT_PERIOD2_KEYWORDS)
+            has_both = any(kw in text for kw in PAYMENT_BOTH_KEYWORDS)
 
-            import calendar as _cal
-            last_day_of_month = _cal.monthrange(today.year, today.month)[1]
+            last_day_of_month = calendar.monthrange(today.year, today.month)[1]
 
             if has_both:
                 target_periods = [1, 2]
@@ -1324,8 +1273,7 @@ async def line_webhook(request: Request):
 
             conn = get_db()
             start_date_emp = date.fromisoformat(emp["start_date"])
-            tz_inner = ZoneInfo(os.environ.get("TZ", "Asia/Bangkok"))
-            paid_at  = datetime.now(tz_inner).strftime("%Y-%m-%d %H:%M:%S")
+            paid_at = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
 
             for period in target_periods:
                 existing = conn.execute(
@@ -1383,7 +1331,7 @@ async def line_webhook(request: Request):
 
         # Leave takes precedence if both somehow match
         status     = "leave" if is_leave else "compensatory"
-        is_half_day = any(kw in text for kw in _HALF_DAY_KEYWORDS)
+        is_half_day = any(kw in text for kw in HALF_DAY_KEYWORDS)
 
         emp = _resolve_employee(text)
         if emp is None:
