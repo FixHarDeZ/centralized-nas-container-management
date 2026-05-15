@@ -101,6 +101,14 @@ def api_rename_source(source_id: int, body: SourceRename):
     db.rename_source(source_id, body.label)
 
 
+# ─── Categories ──────────────────────────────────────────────────────────────
+
+@app.get("/api/categories")
+def api_get_categories():
+    """Return the current cat_id → name mapping (pre-seeded + live-extracted)."""
+    return scraper.get_cat_cache()
+
+
 # ─── Torrents ─────────────────────────────────────────────────────────────────
 
 _TZ = ZoneInfo(config.TZ)

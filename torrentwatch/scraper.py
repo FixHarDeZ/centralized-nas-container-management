@@ -22,18 +22,32 @@ import config
 
 _TZ = ZoneInfo(config.TZ)
 
-# ─── Category name mapping (bearbit.org cat IDs) ─────────────────────────────
-_CAT_NAMES: dict[str, str] = {
-    "901": "H Anime",   "902": "H Game",
-    "903": "JP เซ็น",   "904": "JP ไม่เซ็น",
-    "905": "ฝรั่ง",     "906": "เอเชียเซ็น",
-    "907": "เอเชีย",    "908": "Gay",
-    "910": "คลิป",      "911": "รูป",
+# ─── Dynamic category name cache ─────────────────────────────────────────────
+# Pre-seeded with known bearbit.org category names. Values are overwritten by
+# live HTML extraction during each scrape, so new/renamed categories are
+# picked up automatically without any code change.
+_cat_cache: dict[str, str] = {
+    "901": "H Anime",     "902": "H Game",
+    "903": "JP เซ็น",    "904": "JP ไม่เซ็น",
+    "905": "ฝรั่ง",      "906": "เอเชียเซ็น",
+    "907": "เอเชีย",     "908": "Gay",
+    "910": "คลิป",       "911": "รูป",
     "912": "นิตยสาร",
 }
 
-def _category_name(cat_id: str) -> str:
-    return _CAT_NAMES.get(cat_id, cat_id)
+
+def get_cat_cache() -> dict[str, str]:
+    return dict(_cat_cache)
+
+
+def _extract_category(row, cat_id: str) -> str:
+    for img in row.find_all("img"):
+        if "categories" in img.get("src", ""):
+            name = img.get("alt", "").strip() or img.get("title", "").strip()
+            if name:
+                _cat_cache[cat_id] = name
+                return name
+    return _cat_cache.get(cat_id, cat_id)
 
 # ─── Selectors — based on actual bearbit.org HTML (verified 2026-05-08) ───────
 LOGIN_URL        = f"{config.SITE_BASE_URL}/login.php"
@@ -432,7 +446,7 @@ def _parse_row(row, base_url: str, today: str, skip_sticky: bool = True) -> dict
 
     # Extract category
     cat_id = row.get("data-category-id", "")
-    category = _category_name(cat_id)
+    category = _extract_category(row, cat_id)
 
     tds = row.find_all("td", recursive=False)
     if len(tds) < 12:

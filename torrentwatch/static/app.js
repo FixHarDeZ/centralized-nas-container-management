@@ -12,6 +12,7 @@ const state = {
   settings: {},
   search: "",
   activeCategory: "",
+  catNames: {},   // cat_id → display name from /api/categories
 };
 
 // ─── API helpers ──────────────────────────────────────────────────────────────
@@ -160,17 +161,23 @@ function _updateFilterCounts(total, kw, sticky) {
 }
 
 // ─── Category filter ──────────────────────────────────────────────────────────
+function catLabel(cat) {
+  return state.catNames[cat] || cat;
+}
+
 function renderCategoryChips(torrents) {
   const bar = document.getElementById("cat-bar-today");
   if (!bar) return;
   const catCounts = {};
   torrents.forEach(t => { if (t.category) catCounts[t.category] = (catCounts[t.category] || 0) + 1; });
-  const cats = Object.keys(catCounts).sort();
-  if (!cats.length) { bar.style.display = "none"; return; }
+  const catKeys = Object.keys(catCounts);
+  if (!catKeys.length) { bar.style.display = "none"; return; }
+  const labelOf = Object.fromEntries(catKeys.map(c => [c, catLabel(c)]));
+  const cats = catKeys.sort((a, b) => labelOf[a].localeCompare(labelOf[b], "th"));
   bar.style.display = "flex";
   bar.innerHTML = [
     `<button class="tw-source-chip${!state.activeCategory ? " active" : ""}" data-cat="">ทั้งหมด <span class="tw-count">${torrents.length}</span></button>`,
-    ...cats.map(c => `<button class="tw-source-chip${state.activeCategory === c ? " active" : ""}" data-cat="${escHtml(c)}">${escHtml(c)} <span class="tw-count">${catCounts[c]}</span></button>`),
+    ...cats.map(c => `<button class="tw-source-chip${state.activeCategory === c ? " active" : ""}" data-cat="${escHtml(c)}">${escHtml(labelOf[c])} <span class="tw-count">${catCounts[c]}</span></button>`),
   ].join("");
   bar.querySelectorAll("[data-cat]").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -235,7 +242,7 @@ function cardHTML(t, readOnly) {
   const dlLocal    = t.downloaded_local ? `<span class="tw-badge tw-badge-dl-local"><i class="bi bi-check-lg"></i> Local</span>` : "";
   const dlNas      = t.downloaded_nas   ? `<span class="tw-badge tw-badge-dl-nas"><i class="bi bi-check-lg"></i> NAS</span>` : "";
   const kwBadge    = t.keyword_match    ? `<span class="tw-badge tw-badge-kw"><i class="bi bi-star-fill"></i> KW</span>` : "";
-  const catBadge   = t.category         ? `<span class="tw-badge tw-badge-cat">${escHtml(t.category)}</span>` : "";
+  const catBadge   = t.category         ? `<span class="tw-badge tw-badge-cat">${escHtml(catLabel(t.category))}</span>` : "";
   const stickyBadge = t.is_sticky       ? `<span class="tw-badge tw-badge-sticky"><i class="bi bi-pin-fill"></i> Sticky</span>` : "";
   const completedBadge = t.completed > 0 ? `<span class="tw-badge tw-badge-completed"><i class="bi bi-check2-circle"></i>${t.completed}</span>` : "";
   const thumb = t.cover_url
@@ -708,6 +715,7 @@ function _fmtTime(posted_at) {
 // ─── Init ─────────────────────────────────────────────────────────────────────
 (async function init() {
   document.getElementById("btn-toggle-sticky").classList.toggle("active", state.showSticky);
+  state.catNames = await api("GET", "/categories").catch(() => ({}));
   await loadSources();
   loadToday();
   updateStatusBadge();   // kicks off adaptive polling
