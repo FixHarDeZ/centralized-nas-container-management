@@ -41,3 +41,32 @@
 - `notion.py`: ลบ blank line เกินระหว่าง `_prop_value` และ `search`
 
 **ไม่มีการเปลี่ยน logic หรือ behavior** — cleanup เท่านั้น
+
+---
+
+### torrentwatch — dynamic category names (v2.17.0)
+
+#### scraper.py
+
+- เปลี่ยน static `_CAT_NAMES` + `_category_name()` → mutable `_cat_cache` (pre-seeded ด้วยชื่อ Thai ที่รู้จัก) + `_extract_category()` ที่อ่าน `alt`/`title` จาก category-icon img ขณะ scrape
+- `get_cat_cache()` expose cache ให้ API ใช้ได้
+
+#### db.py
+
+- `upsert_torrent` UPDATE เพิ่ม `category=?` — record เก่าที่มี raw IDs (`903`) จะ migrate เป็นชื่อ Thai ทันทีที่ scrape รอบถัดไป
+
+#### main.py
+
+- เพิ่ม `GET /api/categories` endpoint คืน `cat_id → name` mapping
+
+#### static/app.js
+
+- fetch `/api/categories` ตอน init → `state.catNames`
+- `catLabel(cat)` helper: lookup ชื่อจาก catNames, fallback เป็น raw value
+- `renderCategoryChips`: pre-compute `labelOf` map ครั้งเดียว (แทน call `catLabel` ซ้ำ O(N log N) ใน sort)
+- category chips และ card badges แสดงชื่อ Thai แล้ว
+
+#### อื่นๆ
+
+- `.gitignore`: เพิ่ม `__pycache__/` และ `*.pyc`
+- release: v2.17.0

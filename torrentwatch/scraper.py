@@ -40,6 +40,51 @@ def get_cat_cache() -> dict[str, str]:
     return dict(_cat_cache)
 
 
+def _seed_categories_from_page(soup: BeautifulSoup) -> None:
+    """Scan page navigation for cat=N links/options and seed _cat_cache with their labels.
+    Called once per page before row parsing so any category ID is resolved by name.
+
+    Bearbit uses <a class="catlink" href="...?cat=N">Name</a> as the main category link,
+    followed by a dropdown div containing <a href="...?cat=N">[All]</a> sub-links.
+    We prioritize class="catlink" anchors first, then fall back to other cat= links
+    (skipping placeholder labels like "[All]").
+    """
+    def _try_add(cat_id: str, a) -> bool:
+        if cat_id in _cat_cache:
+            return False
+        name = a.get_text(strip=True)
+        if not name:
+            img = a.find("img")
+            if img:
+                name = img.get("alt", "").strip() or img.get("title", "").strip()
+        # Skip placeholder labels like "[All]", "[ทั้งหมด]"
+        if not name or name.startswith("[") or len(name) > 60:
+            return False
+        _cat_cache[cat_id] = name
+        return True
+
+    # Pass 1: class="catlink" anchors — these are the real category name links on bearbit
+    for a in soup.find_all("a", class_="catlink", href=True):
+        m = re.search(r"[?&]cat=(\d+)", a["href"])
+        if m:
+            _try_add(m.group(1), a)
+
+    # Pass 2: any remaining cat= links not yet in cache
+    for a in soup.find_all("a", href=True):
+        m = re.search(r"[?&]cat=(\d+)", a["href"])
+        if m:
+            _try_add(m.group(1), a)
+
+    # Pass 3: <select><option value="N">Label</option></select>
+    for opt in soup.find_all("option"):
+        val = opt.get("value", "").strip()
+        if not val.isdigit() or val in _cat_cache:
+            continue
+        name = opt.get_text(strip=True)
+        if name and not name.startswith("[") and len(name) < 60:
+            _cat_cache[val] = name
+
+
 def _extract_category(row, cat_id: str) -> str:
     for img in row.find_all("img"):
         if "categories" in img.get("src", ""):
@@ -375,6 +420,7 @@ def _parse_listing(html: str, base_url: str, today: str, seed_min: int, leech_mi
     seen_sticky_site_ids tracks every sticky site_id present on bearbit before filtering.
     """
     soup = BeautifulSoup(html, "html.parser")
+    _seed_categories_from_page(soup)
     results          = []
     found_older      = False
     seen_sticky_ids: set[str] = set()
