@@ -44,3 +44,4 @@ LINE Messaging API bot backed by Notion. Receives webhooks, uses LLM (Groq/OpenR
 ## Recent Changes
 - **2026-05-15**: code cleanup — removed dead `location` variable in `agent.py`, hoisted `notion` import to top-level in `main.py`, fixed extra blank line in `notion.py`
 - **2026-05-15**: maid-tracker code cleanup — removed dead vars (`_AUTH_REALM`, 9 keyword aliases, unused `daily_rate` import), eliminated 3× inline `ZoneInfo()` with module-level `_TZ`, removed duplicate employee DB fetch in `upsert_attendance`, refactored `toggle_payment` to use `_compute_period_amount`, fixed local imports (`Response`, `calendar`) in middleware/webhook/calc
+- **2026-05-15**: torrentwatch v2.17.0 — dynamic category names: `_cat_cache` (pre-seeded, overwritten by live HTML alt/title), `GET /api/categories` endpoint, `upsert_torrent` UPDATE now refreshes `category` field, frontend uses `catLabel()` helper for chips + badges
