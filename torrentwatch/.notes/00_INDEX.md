@@ -254,7 +254,7 @@ Bearbit block request ที่ Referer ไม่ใช่ bearbit URL:
 
 ## Recent Changes
 
-### 2026-05-15
+### 2026-05-15 (clean code)
 
 1. **Image lightbox** — `.tw-card-thumb` เปลี่ยนเป็น `object-fit: contain` (เห็นภาพทั้งหมด) + click รูป → fullscreen overlay
 2. **Completed column** — `COL_COMPLETED = 9` parse จาก bearbit, เก็บใน DB column `completed`

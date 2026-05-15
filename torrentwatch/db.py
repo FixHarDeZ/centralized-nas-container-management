@@ -1,7 +1,9 @@
+import re
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+
 import config
 
 _TZ = ZoneInfo(config.TZ)
@@ -341,6 +343,26 @@ def update_settings(data: dict):
         for key, val in data.items():
             if key in _DEFAULT_SETTINGS:
                 c.execute("INSERT OR REPLACE INTO settings(key, value) VALUES (?, ?)", (key, str(val)))
+
+
+# ─── Utilities ────────────────────────────────────────────────────────────────
+
+def torrent_filename(title: str) -> str:
+    """Filesystem-safe ASCII filename for a torrent (strips non-ASCII, max 80 chars)."""
+    safe = re.sub(r'[^\x00-\x7F]', '_', title).strip("_ ")[:80]
+    return (safe or "torrent") + ".torrent"
+
+
+# ─── Debug / Admin ────────────────────────────────────────────────────────────
+
+def clear_source_today(source_id: int, today: str):
+    with _conn() as c:
+        c.execute("DELETE FROM torrents WHERE source_id=? AND date_posted=?", (source_id, today))
+
+
+def clear_source_all(source_id: int):
+    with _conn() as c:
+        c.execute("DELETE FROM torrents WHERE source_id=?", (source_id,))
 
 
 # ─── Cleanup ──────────────────────────────────────────────────────────────────
