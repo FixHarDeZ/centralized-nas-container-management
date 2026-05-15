@@ -227,10 +227,11 @@ def upsert_torrent(source_id: int, site_id: str, data: dict) -> tuple[bool, int]
         if existing:
             c.execute(
                 """UPDATE torrents
-                   SET seeds=?, leeches=?, completed=?, date_posted=?, is_sticky=?, last_updated_at=?
+                   SET seeds=?, leeches=?, completed=?, date_posted=?, category=?, is_sticky=?, last_updated_at=?
                    WHERE id=?""",
                 (data["seeds"], data["leeches"], data.get("completed", 0),
-                 data["date_posted"], 1 if data.get("is_sticky") else 0, now, existing["id"])
+                 data["date_posted"], data.get("category", ""),
+                 1 if data.get("is_sticky") else 0, now, existing["id"])
             )
             return False, existing["id"]
         else:
