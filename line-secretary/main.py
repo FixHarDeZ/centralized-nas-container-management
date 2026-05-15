@@ -7,6 +7,7 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 
 import agent
 import line_client
+import notion as notion_mod
 import provider as _provider
 import store
 from cache import cache as _cache
@@ -63,7 +64,6 @@ async def handle_message(event: dict) -> None:
     # /debug <query> → raw Notion search
     if text.startswith("/debug "):
         query = text[7:].strip()
-        import notion as notion_mod
         try:
             results = await notion_mod.search(settings.NOTION_TOKEN, query)
             reply = f"[DEBUG] search('{query}'):\n{json.dumps(results, ensure_ascii=False, indent=2)}"
@@ -86,7 +86,6 @@ async def handle_message(event: dict) -> None:
     # /debug3 <page_id> → raw blocks of a page
     if text.startswith("/debug3 "):
         page_id = text[8:].strip()
-        import notion as notion_mod
         try:
             result = await notion_mod.get_raw_blocks(settings.NOTION_TOKEN, page_id)
             reply = f"[DEBUG3] blocks({page_id[:8]}...):\n{json.dumps(result, ensure_ascii=False, indent=2)}"
@@ -98,7 +97,6 @@ async def handle_message(event: dict) -> None:
     # /debug4 <db_id> → raw database query
     if text.startswith("/debug4 "):
         db_id = text[8:].strip()
-        import notion as notion_mod
         try:
             result = await notion_mod.query_database_raw(settings.NOTION_TOKEN, db_id)
             reply = f"[DEBUG4] query_db_raw({db_id[:8]}...):\n{json.dumps(result, ensure_ascii=False, indent=2)}"

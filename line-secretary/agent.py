@@ -227,7 +227,6 @@ async def run(user_message: str, history: list[dict] | None = None) -> dict:
             props = proposal.get("properties", {})
 
             if tool == "propose_add_table_row":
-                location = proposal.get("table_name", "?")
                 pending_list.append({
                     "write_type": "table",
                     "table_block_id": proposal.get("table_block_id"),
@@ -237,7 +236,6 @@ async def run(user_message: str, history: list[dict] | None = None) -> dict:
                 preview_lines.append(f"• [เพิ่ม] [{cell_preview}]")
 
             elif tool == "propose_update_table_row":
-                location = proposal.get("table_name", "?")
                 pending_list.append({
                     "write_type": "table_update",
                     "row_block_id": proposal.get("row_block_id"),
@@ -247,7 +245,6 @@ async def run(user_message: str, history: list[dict] | None = None) -> dict:
                 preview_lines.append(f"• [แก้ไข] [{cell_preview}]")
 
             elif tool == "propose_update_row":
-                location = proposal.get("database_name", "?")
                 pending_list.append({
                     "write_type": "database_update",
                     "page_id": proposal.get("page_id"),
@@ -257,7 +254,6 @@ async def run(user_message: str, history: list[dict] | None = None) -> dict:
                 preview_lines.append(f"• [แก้ไข] {' | '.join(prop_vals)}")
 
             elif tool == "propose_delete_table_row":
-                location = proposal.get("table_name", "?")
                 pending_list.append({
                     "write_type": "table_delete",
                     "row_block_id": proposal.get("row_block_id"),
@@ -265,7 +261,6 @@ async def run(user_message: str, history: list[dict] | None = None) -> dict:
                 preview_lines.append(f"• [🗑️ ลบ] {proposal.get('summary', '?')}")
 
             elif tool == "propose_delete_row":
-                location = proposal.get("database_name", "?")
                 pending_list.append({
                     "write_type": "database_delete",
                     "page_id": proposal.get("page_id"),
@@ -273,7 +268,6 @@ async def run(user_message: str, history: list[dict] | None = None) -> dict:
                 preview_lines.append(f"• [🗑️ ลบ] {proposal.get('summary', '?')}")
 
             else:  # propose_create
-                location = proposal.get("database_name", "?")
                 pending_list.append({
                     "write_type": "database",
                     "database_id": proposal.get("database_id"),
