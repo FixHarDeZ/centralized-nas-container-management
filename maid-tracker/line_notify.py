@@ -16,7 +16,7 @@ import os
 import requests
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
-from calc import compute_overall_balance as _compute_overall_balance, compute_resign_summary as _compute_resign_summary
+from calc import compute_overall_balance, compute_resign_summary
 
 LINE_API_URL = "https://api.line.me/v2/bot/message/push"
 TOKEN    = os.environ.get("MAID_LINE_CHANNEL_ACCESS_TOKEN", "")
@@ -106,7 +106,7 @@ def notify_attendance(
     status_label = STATUS_LABEL.get(status, status) + half_label
 
     try:
-        b   = _compute_overall_balance(emp_id, start_date, monthly_salary)
+        b   = compute_overall_balance(emp_id, start_date, monthly_salary)
         msg = (
             f"📋 บันทึกการทำงาน — {emp_name}\n"
             f"📅 {work_date}:  {status_label}\n"
@@ -147,7 +147,7 @@ def notify_payment(
         )
 
     try:
-        b   = _compute_overall_balance(emp_id, start_date, monthly_salary)
+        b   = compute_overall_balance(emp_id, start_date, monthly_salary)
         msg = (
             f"💰 จ่ายเงินเดือนแล้ว — {emp_name}\n"
             f"📅 {month_name} {year}  {period_label}\n"
@@ -184,7 +184,7 @@ def notify_cancel_attendance(
     status_label = STATUS_LABEL.get(prev_status, prev_status) + half_label
 
     try:
-        b   = _compute_overall_balance(emp_id, start_date, monthly_salary)
+        b   = compute_overall_balance(emp_id, start_date, monthly_salary)
         msg = (
             f"↩️ ยกเลิกการบันทึก — {emp_name}\n"
             f"📅 {work_date}:  ยกเลิก{status_label}\n"
@@ -212,7 +212,7 @@ def notify_resign(
 
     try:
         end_date = date.fromisoformat(end_date_str)
-        s        = _compute_resign_summary(emp_id, start_date, end_date, monthly_salary)
+        s        = compute_resign_summary(emp_id, start_date, end_date, monthly_salary)
 
         balance  = s["cumulative_balance"]
         bal_amt  = s["balance_amount"]
@@ -266,7 +266,7 @@ def notify_balance_query(
     if not TOKEN or not GROUP_ID:
         return
     try:
-        b   = _compute_overall_balance(emp_id, start_date, monthly_salary)
+        b   = compute_overall_balance(emp_id, start_date, monthly_salary)
         msg = (
             f"📊 ยอดสะสม — {emp_name}\n"
             f"\n"
@@ -299,7 +299,7 @@ def notify_monthly_report(employees: list[dict]) -> None:
     for emp in employees:
         try:
             start = date.fromisoformat(emp["start_date"])
-            b     = _compute_overall_balance(emp["id"], start, emp["monthly_salary"])
+            b     = compute_overall_balance(emp["id"], start, emp["monthly_salary"])
             bal   = b["balance"]
             sign  = "+" if bal >= 0 else ""
             kind  = "เครดิต" if bal >= 0 else "ค้างลา"

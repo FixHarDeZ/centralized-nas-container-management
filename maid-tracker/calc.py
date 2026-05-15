@@ -193,9 +193,7 @@ def compute_leave_deduction(
         deduction_amount: deduction_days × daily_rate for this month
         effective_balance: balance after this month's cap is applied
     """
-    import calendar as _cal
-
-    _, last = _cal.monthrange(year, month)
+    _, last = calendar.monthrange(year, month)
     end_of_target = date(year, month, last)
 
     conn = sqlite3.connect(DB_PATH)
@@ -216,7 +214,7 @@ def compute_leave_deduction(
     cur_y, cur_m = start_date.year, start_date.month
 
     while (cur_y, cur_m) <= (year, month):
-        _, n = _cal.monthrange(cur_y, cur_m)
+        _, n = calendar.monthrange(cur_y, cur_m)
         m_end = date(cur_y, cur_m, n)
         d = max(date(cur_y, cur_m, 1), start_date)
 
