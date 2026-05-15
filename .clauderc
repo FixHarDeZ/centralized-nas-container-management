@@ -1,9 +1,0 @@
-{
-  "rules": [
-    "Always check .notes/ directory before modifying code",
-    "When working in a sub-stack directory, prioritize '.notes/00_INDEX.md' for project context.",
-    "After modifying code, update the corresponding summary in '.notes/00_INDEX.md' to reflect changes and maintain project documentation.",
-    "DO NOT read README.md in sub-directories unless explicitly asked by the user, as it is considered redundant context.",
-    "Summary updates must be synced to Notion via scripts/sync_notion.py"  
-  ]
-}
