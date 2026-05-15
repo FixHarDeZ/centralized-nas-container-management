@@ -43,7 +43,6 @@ def _prop_value(prop: dict):
     return str(val) if val is not None else None
 
 
-
 async def search(token: str, query: str) -> list[dict]:
     async with httpx.AsyncClient() as client:
         r = await client.post(
