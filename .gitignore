@@ -1,5 +1,4 @@
 .DS_Store
 .env
-CLAUDE.md
 __pycache__/
 *.pyc
