@@ -18,7 +18,7 @@ This file guides Claude Code (claude.ai/code) on project rules, architecture, an
 *   **Deployment:** ใช้สคริปต์ `./deploy.sh` เพื่อ rsync โค้ดผ่าน SSH (Key-based) และสั่ง Restart Container อัตโนมัติ (ใช้ `NAS_SUDO_PASSWORD` ในการสั่ง `sudo docker compose down && up -d --build`)
 
 ### Adding New Stack to DSM
-1. รัน `./deploy.sh` เพื่ออัปโหลดไฟล์ไปที่ NAS (`/volume1/docker/`)
+1. รัน `scripts/deploy.sh` เพื่ออัปโหลดไฟล์ไปที่ NAS (`/volume1/docker/`)
 2. เปิด **Container Manager** -> **Project** -> **Create** -> เลือก Path โฟลเดอร์ -> กด **Build**
 
 ---
