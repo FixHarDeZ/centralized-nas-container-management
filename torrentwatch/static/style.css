@@ -95,8 +95,12 @@ html, body {
 
 /* ─── Bottom Navigation ───────────────────────────────────────────────── */
 .tw-bottom-nav {
-  position: sticky;
+  position: fixed;
   bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 540px;
   z-index: 100;
   background: rgba(17,17,24,0.97);
   border-top: 1px solid var(--border-dim);
@@ -104,7 +108,6 @@ html, body {
   -webkit-backdrop-filter: blur(12px);
   display: flex;
   height: var(--nav-h);
-  flex-shrink: 0;
 }
 .tw-nav-item {
   flex: 1;
@@ -283,7 +286,7 @@ html, body {
 }
 
 /* ─── Torrent list ────────────────────────────────────────────────────── */
-.tw-list { padding: 0 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.tw-list { padding: 0 10px calc(var(--nav-h) + 12px); display: flex; flex-direction: column; gap: 8px; }
 
 /* ─── Torrent card ────────────────────────────────────────────────────── */
 .tw-card {
@@ -451,7 +454,7 @@ html, body {
   padding: 10px 14px 6px;
   flex-shrink: 0;
 }
-.tw-kw-list { padding: 0 14px 12px; display: flex; flex-direction: column; gap: 6px; }
+.tw-kw-list { padding: 0 14px calc(var(--nav-h) + 12px); display: flex; flex-direction: column; gap: 6px; }
 .tw-kw-item {
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -477,7 +480,7 @@ html, body {
 
 /* ─── Settings panel ─────────────────────────────────────────────────── */
 .tw-settings-scroll {
-  padding: 10px 12px 12px;
+  padding: 10px 12px calc(var(--nav-h) + 12px);
   display: flex;
   flex-direction: column;
   gap: 8px;
