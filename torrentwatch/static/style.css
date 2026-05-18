@@ -346,7 +346,7 @@ html, body {
 .tw-badge-cat {
   font-size: 9.5px;
   background: #1e1b4b;
-  color: #818cf8;
+  color: #a5b4fc;
   padding: 1px 7px;
   border-radius: 5px;
   white-space: nowrap;
@@ -397,7 +397,7 @@ html, body {
 .tw-stat-leech    { color: var(--leech); }
 .tw-stat-completed { color: var(--completed); }
 .tw-stat-lbl { font-size: 9px; color: var(--text-dim); margin-left: 1px; }
-.tw-stat-sep { font-size: 10px; color: var(--border); margin: 0 2px; font-weight: 700; }
+.tw-stat-sep { font-size: 10px; color: var(--text-dim); margin: 0 2px; font-weight: 700; }
 
 /* ─── DL badges ─────────────────────────────────────────────────────── */
 .tw-card-dl-badges { display: flex; flex-wrap: wrap; gap: 4px; }
