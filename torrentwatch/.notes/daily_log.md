@@ -4,6 +4,29 @@
 
 ### Session Log Entry
 **Timestamp:** 2026-05-18
+**Title:** Frontend Redesign — Modern Minimal UI + Bottom Navigation
+
+**ไฟล์ที่แก้ไข:**
+
+- **`static/style.css`** (rewrite): Design system ใหม่ทั้งหมด — color palette เปลี่ยนจาก purple (`#818cf8`) เป็น indigo (`#6366f1`), bottom nav classes (`tw-bottom-nav`, `tw-nav-item`), card thumb ใช้ `object-fit: cover` + `box-shadow`, stats row ใหม่ (`tw-card-stats`, `tw-stat-val`, `tw-stat-sep`), kw-star badge absolute, settings ใช้ `tw-settings-scroll` + `tw-settings-body`, toast/go-top offset ใช้ `calc(var(--nav-h) + 12px)`
+- **`static/index.html`** (rewrite): ย้าย nav จากด้านบน (`tw-tabs`) ไปด้านล่าง (`tw-bottom-nav`), search input ห่อใน `tw-search-wrap` พร้อม icon, settings รวม LINE + Telegram + Auto-DL เป็น Notification card เดียว, section title เปลี่ยนจาก `<div>` เป็น `<h2>` (accessibility), version bump → `v=20260518b`
+- **`static/app.js`** (targeted edits): เปลี่ยน nav selector `.tw-tab` → `.tw-nav-item`, rewrite `cardHTML()` ใช้ stats row แทน badge row + `★ kw` absolute badge + detail link เป็น action ที่ 3, status badge แสดง `● scraping...` / `◉ idle`, `fmt()` helper สำหรับ k-format
+
+**Bugs fixed ระหว่าง review:**
+- `--surface1` stale CSS variable ใน Telegram result panel → แก้เป็น `--bg-elevated`
+- Bottom nav ใช้ `position: sticky` ไม่ติดตอน scroll ลง → เปลี่ยนเป็น `position: fixed` + `calc(var(--nav-h) + 12px)` padding ใน list/settings
+- `.tw-badge-cat` color `#818cf8` (old accent) → `#a5b4fc`
+- `.tw-stat-sep` สี `var(--border)` มองไม่เห็น → `var(--text-dim)`
+- `fmt()` ไม่ handle null/undefined/NaN → guard ด้วย `+n` + isNaN check
+
+**Deploy:** `torrentwatch` container rebuilt + restarted บน NAS สำเร็จ
+
+**Hotfix (หลัง deploy):** `object-fit: cover` → `object-fit: contain` บน `.tw-card-thumb` — ให้เห็นภาพทั้งหมดไม่ถูก crop (commit `366579e`)
+
+---
+
+### Session Log Entry
+**Timestamp:** 2026-05-18
 **Title:** Feature — Telegram Notification Support
 
 **ไฟล์ที่แก้ไข:**
