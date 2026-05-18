@@ -418,6 +418,10 @@ html, body {
 .tw-badge-dl-local { background: #1e3a5f; color: var(--dl-local); }
 .tw-badge-dl-nas   { background: #431407; color: var(--dl-nas); }
 .tw-badge-info     { background: #1e293b; color: #94a3b8; }
+.tw-badge-size    { font-size: 12px; font-weight: 700; padding: 2px 7px; }
+.tw-badge-size-sm { background: rgba(107,114,128,0.15); color: #9ca3af; }
+.tw-badge-size-md { background: rgba(245,158,11,0.15);  color: #f59e0b; }
+.tw-badge-size-lg { background: rgba(239,68,68,0.15);   color: #ef4444; }
 
 /* ─── Card actions ───────────────────────────────────────────────────── */
 .tw-card-actions { display: flex; gap: 5px; margin-top: 2px; }
@@ -698,6 +702,7 @@ html, body {
   transition: all .15s;
 }
 .tw-btn-icon:hover { color: var(--text); border-color: var(--accent); }
+.tw-btn-icon:disabled { opacity: 0.3; cursor: not-allowed; pointer-events: none; }
 
 /* ─── Toast ──────────────────────────────────────────────────────────── */
 #toast {
