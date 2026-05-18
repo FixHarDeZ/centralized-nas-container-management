@@ -132,6 +132,8 @@ async def handle_message(event: dict) -> None:
             "/debug2 <query> — deep search (รวม embedded tables)\n"
             "/debug3 <page_id> — ดู raw blocks ของ page\n"
             "/debug4 <db_id> — ดู raw rows ของ database\n\n"
+            "📝 จดโน้ต:\n"
+            "จดหน่อย / note please / take a note — เริ่มจดลง Quick note\n\n"
             "💬 วิธีใช้งาน:\n"
             "• ถามข้อมูล: \"ขอ user pass Jira\", \"API token ของ groq คืออะไร\"\n"
             "• เพิ่มข้อมูล: \"เพิ่ม api token...\", \"บันทึก...\"\n"
@@ -145,8 +147,59 @@ async def handle_message(event: dict) -> None:
     if text == "/clear":
         store.pop_pending(user_id)
         store.pop_pending_general(user_id)
+        store.pop_pending_note(user_id)
         store.clear_history(user_id)
         await line_client.push(user_id, "ล้างประวัติการสนทนาแล้วค่ะ 🗑️", token)
+        return
+
+    # Handle pending note flow
+    if store.has_pending_note(user_id):
+        note_state = store.get_pending_note(user_id)
+
+        if note_state["phase"] == "asking_topic":
+            title = text.strip()
+            if not settings.NOTION_QUICK_NOTE_PAGE_ID:
+                store.pop_pending_note(user_id)
+                await line_client.push(user_id, "ยังไม่ได้ตั้งค่า Quick note page ค่ะ (NOTION_QUICK_NOTE_PAGE_ID)", token)
+                return
+            try:
+                page = await notion_mod.create_page(
+                    settings.NOTION_TOKEN,
+                    settings.NOTION_QUICK_NOTE_PAGE_ID,
+                    title,
+                )
+                page_id = page["id"]
+            except Exception as e:
+                logger.error(f"create_page error: {e}", exc_info=True)
+                store.pop_pending_note(user_id)
+                await line_client.push(user_id, "สร้าง page ไม่สำเร็จค่ะ ลองใหม่อีกครั้งนะคะ", token)
+                return
+            store.set_pending_note(user_id, {"phase": "waiting_content", "page_id": page_id, "title": title})
+            await line_client.push(user_id, f"สร้าง page '{title}' แล้วค่ะ 📄 ส่งเนื้อหาที่จะจดมาได้เลยค่ะ", token)
+            return
+
+        if note_state["phase"] == "waiting_content":
+            page_id = note_state["page_id"]
+            title = note_state["title"]
+            store.pop_pending_note(user_id)
+            try:
+                await notion_mod.append_blocks(settings.NOTION_TOKEN, page_id, text)
+            except Exception as e:
+                logger.error(f"append_blocks error: {e}", exc_info=True)
+                notion_url = f"https://notion.so/{page_id.replace('-', '')}"
+                await line_client.push(
+                    user_id,
+                    f"บันทึกไม่สำเร็จค่ะ ลองเปิด page โดยตรงที่:\n{notion_url}",
+                    token,
+                )
+                return
+            await line_client.push(user_id, f"บันทึกเรียบร้อยแล้วค่ะ ✅", token)
+            return
+
+    # Detect note-taking intent
+    if _is_note_intent(text):
+        store.set_pending_note(user_id, {"phase": "asking_topic"})
+        await line_client.push(user_id, "จะจดเรื่องอะไรคะ? 📝", token)
         return
 
     # Handle pending general-knowledge confirmation
