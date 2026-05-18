@@ -518,10 +518,11 @@ def get_resign_summary(emp_id: int):
 @app.get("/api/employees/{emp_id}/attendance")
 def get_attendance(emp_id: int, year: int, month: int):
     conn = get_db()
-    emp = conn.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
-    if not emp:
+    row = conn.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
+    if not row:
         conn.close()
         raise HTTPException(404, "Employee not found")
+    emp          = dict(row)
     start_date   = date.fromisoformat(emp["start_date"])
     holiday_mode = emp.get("holiday_mode") or "sunday"
     today        = date.today()
