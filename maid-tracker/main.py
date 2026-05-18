@@ -13,6 +13,8 @@ import hmac
 import hashlib
 import base64
 import json
+import secrets
+import time
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 import calendar
@@ -67,6 +69,22 @@ _BASIC_USER = os.environ.get("NGINX_BASIC_AUTH_USER", "").strip()
 _BASIC_PASS = os.environ.get("NGINX_BASIC_AUTH_PASS", "").strip()
 
 _AUTH_SKIP_PATHS = {"/webhook/line"}
+_SESSION_MAX_AGE = 7 * 24 * 3600  # 7 days
+_sessions: dict[str, float] = {}   # token → expiry timestamp
+
+
+def _validate_basic(auth_header: str) -> bool:
+    if not auth_header.startswith("Basic "):
+        return False
+    try:
+        decoded = base64.b64decode(auth_header[6:]).decode()
+        user, _, pw = decoded.partition(":")
+        return (
+            hmac.compare_digest(user.encode(), _BASIC_USER.encode())
+            and hmac.compare_digest(pw.encode(), _BASIC_PASS.encode())
+        )
+    except Exception:
+        return False
 
 
 @app.middleware("http")
@@ -74,17 +92,28 @@ async def basic_auth_middleware(request: Request, call_next):
     if not _BASIC_USER or request.url.path in _AUTH_SKIP_PATHS:
         return await call_next(request)
 
-    auth_header = request.headers.get("Authorization", "")
-    if auth_header.startswith("Basic "):
-        try:
-            decoded = base64.b64decode(auth_header[6:]).decode()
-            user, _, pw = decoded.partition(":")
-            ok_user = hmac.compare_digest(user.encode(), _BASIC_USER.encode())
-            ok_pass = hmac.compare_digest(pw.encode(), _BASIC_PASS.encode())
-            if ok_user and ok_pass:
-                return await call_next(request)
-        except Exception:
-            pass
+    now = time.time()
+
+    # 1. Valid session cookie → pass through immediately
+    token = request.cookies.get("maid_session")
+    if token:
+        expiry = _sessions.get(token)
+        if expiry and expiry > now:
+            return await call_next(request)
+        _sessions.pop(token, None)  # expired — remove
+
+    # 2. Valid Basic Auth → issue session cookie and pass through
+    if _validate_basic(request.headers.get("Authorization", "")):
+        new_token = secrets.token_hex(32)
+        _sessions[new_token] = now + _SESSION_MAX_AGE
+        response = await call_next(request)
+        response.set_cookie(
+            "maid_session", new_token,
+            max_age=_SESSION_MAX_AGE,
+            httponly=True,
+            samesite="lax",
+        )
+        return response
 
     return Response(
         status_code=401,
