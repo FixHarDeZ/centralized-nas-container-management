@@ -6,6 +6,7 @@ import secrets
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
+from typing import Literal
 from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
@@ -76,7 +77,7 @@ class SourceRename(BaseModel):
     label: str
 
 class SourceReorder(BaseModel):
-    direction: str  # "up" or "down"
+    direction: Literal["up", "down"]
 
 @app.get("/api/sources")
 def api_get_sources():
@@ -104,10 +105,8 @@ def api_toggle_source(source_id: int, body: SourceToggle):
 def api_rename_source(source_id: int, body: SourceRename):
     db.rename_source(source_id, body.label)
 
-@app.post("/api/sources/{source_id}/reorder")
+@app.post("/api/sources/{source_id}/reorder", status_code=200)
 def api_reorder_source(source_id: int, body: SourceReorder):
-    if body.direction not in ("up", "down"):
-        raise HTTPException(400, "direction must be 'up' or 'down'")
     db.reorder_source(source_id, body.direction)
     return db.get_sources()
 
