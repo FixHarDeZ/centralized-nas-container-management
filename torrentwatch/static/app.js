@@ -239,7 +239,7 @@ function renderTorrentList(listId, torrents, readOnly) {
 }
 
 function cardHTML(t, readOnly) {
-  const fmt = n => n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "k" : String(n);
+  const fmt = n => { const v = +n; return (isNaN(v) || v < 0) ? "0" : v >= 1000 ? (v / 1000).toFixed(1).replace(/\.0$/, "") + "k" : String(v); };
 
   const kwStar    = t.keyword_match ? `<span class="tw-kw-star">★ kw</span>` : "";
   const catBadge  = t.category ? `<span class="tw-badge-cat">${escHtml(catLabel(t.category))}</span>` : "";
