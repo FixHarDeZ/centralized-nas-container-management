@@ -472,38 +472,38 @@ async function viewList() {
         const resigned = !!e.end_date;
         return `
         <div class="col-12 col-sm-6 col-lg-4">
-          <div class="card emp-card p-3${resigned ? " border-secondary opacity-75" : ""}" onclick="navigate('/employee/${e.id}')">
+          <div class="emp-card p-3" onclick="navigate('/employee/${e.id}')">
             <div class="d-flex align-items-center gap-3">
-              <div class="rounded-circle ${resigned ? "bg-secondary" : "bg-primary"} text-white d-flex align-items-center justify-content-center"
-                   style="width:52px;height:52px;font-size:1.4rem;font-weight:700;flex-shrink:0">
+              <div class="emp-avatar${resigned ? " resigned" : ""}">
                 ${e.name.charAt(0)}
               </div>
               <div class="flex-grow-1 overflow-hidden">
-                <div class="fw-bold fs-5 text-truncate">
+                <div class="fw-bold fs-5 text-truncate" style="color:var(--text)">
                   ${e.name}
-                  ${resigned ? `<span class="badge bg-secondary ms-1" style="font-size:0.65rem">${t("resignedBadge")}</span>` : ""}
+                  ${resigned ? `<span class="badge ms-1" style="font-size:0.62rem;background:#e2e8f0;color:#64748b">${t("resignedBadge")}</span>` : ""}
                 </div>
-                <div class="text-muted small">${dispNat(e.nationality)}${e.age ? " · " + e.age + (currentLang === "th" ? " ปี" : " yrs") : ""}</div>
-                <div class="text-muted small">${e.phone || (currentLang === "th" ? "ไม่ระบุเบอร์" : "No phone")}</div>
+                <div class="small" style="color:var(--text-muted)">${dispNat(e.nationality)}${e.age ? " · " + e.age + (currentLang === "th" ? " ปี" : " yrs") : ""}</div>
+                <div class="small" style="color:var(--text-muted)">${e.phone || (currentLang === "th" ? "ไม่ระบุเบอร์" : "No phone")}</div>
               </div>
+              <i class="bi bi-chevron-right" style="color:#cbd5e1;font-size:.9rem"></i>
             </div>
-            <hr class="my-2" />
+            <div style="height:1px;background:var(--border);margin:12px 0"></div>
             <div class="d-flex justify-content-between small">
-              <span class="text-muted">${resigned ? t("labelResigned") + " " + formatDate(e.end_date) : t("labelStarted") + " " + formatDate(e.start_date)}</span>
-              <span class="${resigned ? "text-secondary" : "text-success"} fw-semibold">${fmtDuration(e.total_days_employed)}</span>
+              <span style="color:var(--text-muted)">${resigned ? t("labelResigned") + " " + formatDate(e.end_date) : t("labelStarted") + " " + formatDate(e.start_date)}</span>
+              <span class="fw-semibold" style="color:${resigned ? "var(--text-muted)" : "var(--success)"}">${fmtDuration(e.total_days_employed)}</span>
             </div>
             <div class="d-flex justify-content-between small mt-1">
-              <span class="text-muted">${t("labelSalary")}</span>
-              <span class="fw-bold">${fmtMoney(e.monthly_salary)} ${t("baht")}</span>
+              <span style="color:var(--text-muted)">${t("labelSalary")}</span>
+              <span class="fw-bold" style="color:var(--text)">${fmtMoney(e.monthly_salary)} ${t("baht")}</span>
             </div>
           </div>
         </div>`;
       }).join("");
 
   ROOT.innerHTML = `
-    <div class="d-flex justify-content-between align-items-center mb-4">
-      <h4 class="fw-bold mb-0"><i class="bi bi-people-fill me-2 text-primary"></i>${t("listTitle")}</h4>
-      <button class="btn btn-primary" onclick="navigate('/employee/new')">
+    <div class="page-header">
+      <h4 class="page-title"><i class="bi bi-people-fill"></i>${t("listTitle")}</h4>
+      <button class="btn btn-primary px-4" style="border-radius:10px;font-weight:600" onclick="navigate('/employee/new')">
         <i class="bi bi-plus-lg me-1"></i>${t("addBtn")}
       </button>
     </div>
@@ -706,42 +706,45 @@ async function viewEmployeeDetail(id) {
   const monthLabel = `${t("months")[mo]} ${yr + t("yearOffset")}`;
 
   ROOT.innerHTML = `
-    <div class="page-breadcrumb mb-2">
-      <a href="#/" onclick="navigate('/')">${t("home")}</a> › ${emp.name}
+    <div class="page-breadcrumb mb-3">
+      <a href="#/" onclick="navigate('/')">${t("home")}</a>
+      <i class="bi bi-chevron-right" style="font-size:.7rem"></i>
+      ${emp.name}
     </div>
 
     <!-- Profile header -->
-    <div class="card border-0 shadow-sm mb-4">
+    <div class="card mb-4" style="overflow:hidden">
       <div class="card-body p-4">
         <div class="d-flex align-items-start gap-4 flex-wrap">
-          <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center flex-shrink-0"
-               style="width:72px;height:72px;font-size:2rem;font-weight:800">
+          <div class="profile-avatar${resigned ? " resigned" : ""}">
             ${emp.name.charAt(0)}
           </div>
           <div class="flex-grow-1">
-            <h4 class="fw-bold mb-1">${emp.name}</h4>
-            <div class="text-muted mb-2">${dispNat(emp.nationality)}${emp.age ? " · " + emp.age + (currentLang === "th" ? " ปี" : " yrs") : ""}</div>
-            <div class="row g-2 small">
-              ${emp.phone    ? `<div class="col-auto"><i class="bi bi-telephone me-1 text-primary"></i>${emp.phone}</div>` : ""}
-              ${emp.line_id  ? `<div class="col-auto"><i class="bi bi-chat-fill me-1 text-success"></i>${emp.line_id}</div>` : ""}
-              ${emp.facebook ? `<div class="col-auto"><i class="bi bi-facebook me-1 text-primary"></i>${emp.facebook}</div>` : ""}
+            <h4 class="fw-bold mb-1" style="letter-spacing:-.02em">${emp.name}
+              ${resigned ? `<span class="badge ms-2" style="font-size:.65rem;background:#e2e8f0;color:#64748b;border-radius:6px">${t("resignedBadge")}</span>` : ""}
+            </h4>
+            <div class="mb-2" style="color:var(--text-muted)">${dispNat(emp.nationality)}${emp.age ? " · " + emp.age + (currentLang === "th" ? " ปี" : " yrs") : ""}</div>
+            <div class="d-flex flex-wrap gap-3 small" style="color:var(--text-muted)">
+              ${emp.phone    ? `<span><i class="bi bi-telephone me-1 text-primary"></i>${emp.phone}</span>` : ""}
+              ${emp.line_id  ? `<span><i class="bi bi-chat-fill me-1 text-success"></i>${emp.line_id}</span>` : ""}
+              ${emp.facebook ? `<span><i class="bi bi-facebook me-1 text-primary"></i>${emp.facebook}</span>` : ""}
             </div>
           </div>
           <div class="d-flex gap-2 flex-wrap">
-            <button class="btn btn-sm btn-outline-primary" onclick="navigate('/employee/${id}/edit')">
+            <button class="btn btn-sm btn-outline-primary" style="border-radius:8px" onclick="navigate('/employee/${id}/edit')">
               <i class="bi bi-pencil me-1"></i>${t("edit")}
             </button>
             ${resigned
-              ? `<button class="btn btn-sm btn-outline-secondary" onclick="cancelResign(${id}, '${emp.name}')">
+              ? `<button class="btn btn-sm btn-outline-secondary" style="border-radius:8px" onclick="cancelResign(${id}, '${emp.name}')">
                    <i class="bi bi-arrow-counterclockwise me-1"></i>${t("btnCancelResign")}
                  </button>`
-              : `<button class="btn btn-sm btn-outline-warning" onclick="confirmResign(${id}, '${emp.name}')">
+              : `<button class="btn btn-sm btn-outline-warning" style="border-radius:8px" onclick="confirmResign(${id}, '${emp.name}')">
                    <i class="bi bi-door-open me-1"></i>${t("btnResign")}
                  </button>`}
-            <a class="btn btn-sm btn-outline-success" href="/api/employees/${id}/export/attendance" download>
+            <a class="btn btn-sm btn-outline-secondary" style="border-radius:8px" href="/api/employees/${id}/export/attendance" download>
               <i class="bi bi-download me-1"></i>${t("btnExportCsv")}
             </a>
-            <button class="btn btn-sm btn-outline-danger" onclick="confirmDelete(${id}, '${emp.name}')">
+            <button class="btn btn-sm btn-outline-danger" style="border-radius:8px" onclick="confirmDelete(${id}, '${emp.name}')">
               <i class="bi bi-trash"></i>
             </button>
           </div>
@@ -752,40 +755,40 @@ async function viewEmployeeDetail(id) {
     <!-- Stats row -->
     <div class="row g-3 mb-4">
       <div class="col-6 col-md-3">
-        <div class="stat-card bg-white">
-          <div class="stat-num text-primary">${fmtDuration(overall.total_days_employed)}</div>
-          <div class="stat-label text-muted">${t("detailDuration")}</div>
+        <div class="stat-card">
+          <div class="stat-num" style="color:var(--primary)">${fmtDuration(overall.total_days_employed)}</div>
+          <div class="stat-label">${t("detailDuration")}</div>
         </div>
       </div>
       <div class="col-6 col-md-3">
-        <div class="stat-card bg-white">
-          <div class="stat-num text-success">${overall.total_work_days}</div>
-          <div class="stat-label text-muted">${t("detailWorkDays")}</div>
+        <div class="stat-card">
+          <div class="stat-num" style="color:var(--success)">${overall.total_work_days}</div>
+          <div class="stat-label">${t("detailWorkDays")}</div>
         </div>
       </div>
       <div class="col-6 col-md-3">
-        <div class="stat-card bg-white">
-          <div class="stat-num text-danger">${overall.total_leave_days}</div>
-          <div class="stat-label text-muted">${t("detailLeaveDays")}</div>
+        <div class="stat-card">
+          <div class="stat-num" style="color:var(--danger)">${overall.total_leave_days}</div>
+          <div class="stat-label">${t("detailLeaveDays")}</div>
         </div>
       </div>
       ${overall.holiday_mode === "monthly" ? `
       <div class="col-6 col-md-3">
-        <div class="stat-card bg-white">
-          <div class="stat-num ${overall.leave_balance >= 0 ? "text-success" : "text-danger"}">${overall.leave_balance >= 0 ? "+" : ""}${overall.leave_balance}</div>
-          <div class="stat-label text-muted">${t("leaveBalanceCurrent")}</div>
+        <div class="stat-card">
+          <div class="stat-num" style="color:${overall.leave_balance >= 0 ? "var(--success)" : "var(--danger)"}">${overall.leave_balance >= 0 ? "+" : ""}${overall.leave_balance}</div>
+          <div class="stat-label">${t("leaveBalanceCurrent")}</div>
         </div>
       </div>` : `
       <div class="col-6 col-md-3">
-        <div class="stat-card bg-white">
-          <div class="stat-num text-info">${overall.total_compensatory_days}</div>
-          <div class="stat-label text-muted">${t("detailCompDays")}</div>
+        <div class="stat-card">
+          <div class="stat-num" style="color:#0284c7">${overall.total_compensatory_days}</div>
+          <div class="stat-label">${t("detailCompDays")}</div>
         </div>
       </div>`}
     </div>
 
     <!-- Overall balance -->
-    <div class="finance-banner bg-white mb-4">
+    <div class="finance-banner mb-4">
       <div class="d-flex align-items-center gap-3 flex-wrap">
         <i class="bi ${balIcon} fs-2 ${balClass}"></i>
         <div class="flex-grow-1">
@@ -856,24 +859,24 @@ async function viewEmployeeDetail(id) {
     <!-- Quick action buttons -->
     <div class="row g-3">
       <div class="col-6 col-md-3">
-        <button class="btn btn-success w-100 py-3" onclick="navigate('/employee/${id}/leaves?y=${yr}&m=${mo}')">
-          <i class="bi bi-calendar3 fs-4 d-block mb-1"></i>
-          <span class="fw-semibold">${t("btnCalendar")}</span>
-          <div class="small opacity-75">${monthLabel}</div>
+        <button class="action-btn primary-action" onclick="navigate('/employee/${id}/leaves?y=${yr}&m=${mo}')">
+          <i class="bi bi-calendar3 action-btn-icon"></i>
+          <span class="action-btn-label">${t("btnCalendar")}</span>
+          <span class="action-btn-sub">${monthLabel}</span>
         </button>
       </div>
       <div class="col-6 col-md-3">
-        <button class="btn btn-outline-primary w-100 py-3" onclick="navigate('/employee/${id}/summary?y=${yr}&m=${mo}')">
-          <i class="bi bi-bar-chart-line fs-4 d-block mb-1"></i>
-          <span class="fw-semibold">${t("btnMonthlySummary")}</span>
-          <div class="small opacity-75">${monthLabel}</div>
+        <button class="action-btn" onclick="navigate('/employee/${id}/summary?y=${yr}&m=${mo}')">
+          <i class="bi bi-bar-chart-line action-btn-icon" style="color:var(--primary)"></i>
+          <span class="action-btn-label">${t("btnMonthlySummary")}</span>
+          <span class="action-btn-sub">${monthLabel}</span>
         </button>
       </div>
       <div class="col-6 col-md-3">
-        <button class="btn btn-outline-success w-100 py-3" onclick="navigate('/employee/${id}/payments?y=${yr}&m=${mo}')">
-          <i class="bi bi-cash-coin fs-4 d-block mb-1"></i>
-          <span class="fw-semibold">${t("btnPayment")}</span>
-          <div class="small opacity-75">${monthLabel}</div>
+        <button class="action-btn" onclick="navigate('/employee/${id}/payments?y=${yr}&m=${mo}')">
+          <i class="bi bi-cash-coin action-btn-icon" style="color:var(--success)"></i>
+          <span class="action-btn-label">${t("btnPayment")}</span>
+          <span class="action-btn-sub">${monthLabel}</span>
         </button>
       </div>
     </div>`;
