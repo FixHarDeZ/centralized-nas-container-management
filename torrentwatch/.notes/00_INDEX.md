@@ -1,6 +1,6 @@
 # TorrentWatch — Project Index (Memory Blueprint)
 
-> อัปเดตล่าสุด: 2026-05-18  
+> อัปเดตล่าสุด: 2026-05-18 (database schema: sort_order added)
 > ใช้ไฟล์นี้เป็น cold-start memory ก่อนเริ่มงานทุกครั้ง
 
 ---
@@ -81,8 +81,9 @@ torrentwatch/
 
 ### `sources`
 ```sql
-id, url (UNIQUE), label, enabled, created_at
+id, url (UNIQUE), label, enabled, sort_order (DEFAULT 0), created_at
 ```
+**New in v2:** `sort_order` allows users to reorder sources via UI ↑↓ buttons. Migration backfills existing sources with `sort_order = id`. `get_sources()` / `get_enabled_sources()` now order by `sort_order ASC, id ASC`. New sources get `sort_order = MAX(sort_order) + 1`. Function `reorder_source(source_id, direction)` swaps with nearest neighbor.
 
 ### `torrents`
 ```sql
@@ -240,7 +241,7 @@ Bearbit block request ที่ Referer ไม่ใช่ bearbit URL:
 
 ---
 
-## Known Gaps (ณ 2026-05-15)
+## Known Gaps (ณ 2026-05-18)
 
 | Gap | รายละเอียด | ไฟล์ที่เกี่ยวข้อง |
 |---|---|---|
@@ -249,12 +250,21 @@ Bearbit block request ที่ Referer ไม่ใช่ bearbit URL:
 | ✅ Category filter — **FIXED** | chip bar แสดงใต้ toolbar (Today tab) | app.js, index.html |
 | ✅ Text search — **FIXED** | search input กรอง title (Today tab) | app.js, index.html |
 | ✅ Retention configurable — **FIXED** | `retention_days` setting ใน UI | db.py, index.html |
+| ✅ Source reorder — **ADDED** | ↑↓ buttons ใน Settings, persist ใน DB `sort_order` (2026-05-18) | db.py, main.py, app.js |
+| ✅ File size badge — **ADDED** | badge สีตามขนาด gray/amber/red ใน torrent cards (2026-05-18) | app.js, style.css |
 | COL_COMPLETED ยังไม่ verify | column 9 ของ bearbit สันนิษฐานว่าเป็น completed — ใช้ `/api/debug/html` ตรวจ | scraper.py |
 | Cover image โหลดตรงจาก bearbit CDN | ถ้า session expire รูปแตกพร้อมกัน | scraper.py |
 
 ---
 
 ## Recent Changes
+
+### 2026-05-18 (Source Reorder + Size Badge)
+
+1. **`db.py`** — `sort_order` column migration + backfill + `reorder_source()` + updated `get_sources()`/`add_source()`
+2. **`main.py`** — `POST /api/sources/{id}/reorder` endpoint + `Literal["up","down"]` type
+3. **`static/app.js`** — ↑↓ reorder buttons ใน `renderSourcesList()` + `sizeClass()` helper + `cardHTML()` size badge
+4. **`static/style.css`** — `.tw-badge-size*` (4 rules) + `.tw-btn-icon:disabled`
 
 ### 2026-05-18 (Frontend Redesign)
 
