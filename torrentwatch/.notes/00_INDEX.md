@@ -256,6 +256,12 @@ Bearbit block request ที่ Referer ไม่ใช่ bearbit URL:
 
 ## Recent Changes
 
+### 2026-05-18 (Frontend Redesign)
+
+1. **`static/style.css`** (rewrite) — Modern Minimal dark, indigo accent `#6366f1`, bottom nav (`tw-bottom-nav`/`tw-nav-item`), card stats row, `position: fixed` bottom nav
+2. **`static/index.html`** (rewrite) — bottom nav, search icon wrap, Notification card รวม LINE+Telegram+Auto-DL, `<h2>` section titles
+3. **`static/app.js`** (edits) — nav selector `.tw-tab` → `.tw-nav-item`, `cardHTML()` ใหม่ (stats row + kw-star), status badge dot, `fmt()` null-safe
+
 ### 2026-05-18 (Telegram notification)
 
 1. **`telegram_notify.py`** ใหม่ — Telegram Bot API (sendMessage, getUpdates)
