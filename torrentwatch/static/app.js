@@ -491,8 +491,12 @@ function renderSourcesList(sources) {
     list.innerHTML = `<p style="color:var(--text-muted);font-size:13px">ยังไม่มี source</p>`;
     return;
   }
-  list.innerHTML = sources.map(s => `
+  list.innerHTML = sources.map((s, i) => `
     <div class="tw-source-item" data-src-id="${s.id}">
+      <div style="display:flex;flex-direction:column;gap:2px">
+        <button class="tw-btn-icon src-reorder" data-src-id="${s.id}" data-direction="up" title="ขึ้น"${i === 0 ? " disabled" : ""}><i class="bi bi-chevron-up"></i></button>
+        <button class="tw-btn-icon src-reorder" data-src-id="${s.id}" data-direction="down" title="ลง"${i === sources.length - 1 ? " disabled" : ""}><i class="bi bi-chevron-down"></i></button>
+      </div>
       <label class="tw-toggle-row" style="flex:1;gap:8px;margin:0">
         <input type="checkbox" class="tw-toggle src-toggle" data-src-id="${s.id}" ${s.enabled ? "checked" : ""}>
       </label>
@@ -511,6 +515,20 @@ function renderSourcesList(sources) {
       await loadSources();
     });
   });
+
+  list.querySelectorAll(".src-reorder").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      if (btn.disabled) return;
+      try {
+        await api("POST", `/sources/${btn.dataset.srcId}/reorder`, { direction: btn.dataset.direction });
+        await loadSources();
+        loadSettings();
+      } catch (e) {
+        toast("เรียงลำดับไม่สำเร็จ: " + e.message, "error");
+      }
+    });
+  });
+
   list.querySelectorAll(".src-rename").forEach(btn => {
     btn.addEventListener("click", () => {
       const row = btn.closest(".tw-source-item");
