@@ -156,7 +156,7 @@ async def handle_message(event: dict) -> None:
     if store.has_pending_note(user_id):
         note_state = store.get_pending_note(user_id)
 
-        if note_state["phase"] == "asking_topic":
+        if note_state.get("phase") == "asking_topic":
             title = text.strip()
             if not title:
                 await line_client.push(user_id, "กรุณาบอกชื่อหัวข้อด้วยนะคะ 📝", token)
@@ -177,7 +177,7 @@ async def handle_message(event: dict) -> None:
             await line_client.push(user_id, f"สร้าง page '{title}' แล้วค่ะ 📄 ส่งเนื้อหาที่จะจดมาได้เลยค่ะ", token)
             return
 
-        if note_state["phase"] == "waiting_content":
+        if note_state.get("phase") == "waiting_content":
             page_id = note_state["page_id"]
             title = note_state["title"]
             store.pop_pending_note(user_id)
