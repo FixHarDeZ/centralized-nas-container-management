@@ -107,9 +107,19 @@ GROQ_API_KEY=gsk_...
 OPENROUTER_API_KEY=sk-or-v1-...
 
 NOTION_TOKEN=ntn_...
+NOTION_QUICK_NOTE_PAGE_ID=32-char-hex-uuid
 ```
 
-> `LINE_SECRETARY_ALLOWED_USER_IDS` — your LINE user ID (found in LINE Developers Console → Messaging API → Your user ID). Comma-separated for multiple users.
+| Variable | Description |
+| --- | --- |
+| `LINE_SECRETARY_CHANNEL_SECRET` | LINE Messaging API channel secret |
+| `LINE_SECRETARY_CHANNEL_ACCESS_TOKEN` | LINE Messaging API channel access token |
+| `LINE_SECRETARY_ALLOWED_USER_IDS` | Your LINE user ID(s) — found in LINE Developers Console → Messaging API → Your user ID. Comma-separated for multiple users. |
+| `NOTION_TOKEN` | Notion Internal Integration Token |
+| `NOTION_QUICK_NOTE_PAGE_ID` | Notion page ID of your "Quick note" page (parent page for creating new notes). To find it: open Notion → go to Quick note page → copy the page URL → the page ID is the last 32 hexadecimal characters. Leave empty (`""`) to disable the quick note feature; if set but invalid, the bot will show an error. |
+| `AI_PROVIDER` | AI provider mode: `"auto"` (Groq primary, fallback to OpenRouter), `"groq"`, or `"openrouter"`. |
+| `GROQ_API_KEY` | Groq API key (only needed if using Groq) |
+| `OPENROUTER_API_KEY` | OpenRouter API key (only needed if using OpenRouter) |
 
 ### 5. Deploy
 
@@ -250,9 +260,19 @@ GROQ_API_KEY=gsk_...
 OPENROUTER_API_KEY=sk-or-v1-...
 
 NOTION_TOKEN=ntn_...
+NOTION_QUICK_NOTE_PAGE_ID=32-char-hex-uuid
 ```
 
-> `LINE_SECRETARY_ALLOWED_USER_IDS` คือ LINE user ID ของคุณ (ดูได้ใน LINE Developers Console → Messaging API → Your user ID) ถ้ามีหลายคนให้คั่นด้วย comma
+| ตัวแปร | คำอธิบาย |
+| --- | --- |
+| `LINE_SECRETARY_CHANNEL_SECRET` | LINE Messaging API channel secret |
+| `LINE_SECRETARY_CHANNEL_ACCESS_TOKEN` | LINE Messaging API channel access token |
+| `LINE_SECRETARY_ALLOWED_USER_IDS` | LINE user ID ของคุณ — ดูได้ใน LINE Developers Console → Messaging API → Your user ID ถ้ามีหลายคนให้คั่นด้วย comma |
+| `NOTION_TOKEN` | Notion Internal Integration Token |
+| `NOTION_QUICK_NOTE_PAGE_ID` | Notion page ID ของ "Quick note" page (parent page สำหรับสร้าง note ใหม่) วิธีหาค่า: เปิด Notion → ไปที่ Quick note page → copy link → page ID คือ 32 ตัวอักษร hex ตัวสุดท้าย ตั้งเป็น "" เพื่อปิด quick note feature; ถ้าตั้งแต่เป็น invalid bot จะแสดง error |
+| `AI_PROVIDER` | Mode ของ AI provider: `"auto"` (Groq หลัก, fallback ไป OpenRouter), `"groq"`, หรือ `"openrouter"` |
+| `GROQ_API_KEY` | Groq API key (ต้องมีเฉพาะเมื่อใช้ Groq) |
+| `OPENROUTER_API_KEY` | OpenRouter API key (ต้องมีเฉพาะเมื่อใช้ OpenRouter) |
 
 ### 5. Deploy
 
