@@ -445,7 +445,7 @@ async def append_blocks(token: str, page_id: str, text: str) -> dict:
         for line in lines[:100]
     ]
     async with httpx.AsyncClient() as client:
-        r = await client.post(
+        r = await client.patch(
             f"{NOTION_API}/blocks/{page_id}/children",
             headers=_headers(token),
             json={"children": children},
