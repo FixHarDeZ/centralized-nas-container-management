@@ -30,6 +30,17 @@ app = FastAPI(title="Line Secretary", lifespan=lifespan)
 CONFIRM_WORDS = {"ใช่", "yes", "y", "ตกลง", "ok", "ยืนยัน", "confirm", "ใช"}
 CANCEL_WORDS = {"ไม่", "no", "n", "ยกเลิก", "cancel", "ไม่ใช่", "ไม่ครับ", "ไม่ค่ะ"}
 
+_NOTE_INTENT_KEYWORDS = [
+    "จดหน่อย", "จดให้หน่อย", "จดให้ด้วย", "จดด้วย",
+    "เตรียมจด", "ช่วยจด", "จดไว้", "บันทึกให้หน่อย",
+    "note please", "please note", "help me note", "take a note", "make a note",
+]
+
+
+def _is_note_intent(text: str) -> bool:
+    t = text.lower().strip()
+    return any(k in t for k in _NOTE_INTENT_KEYWORDS)
+
 
 @app.get("/health")
 async def health():
