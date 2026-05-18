@@ -44,10 +44,10 @@ function toast(msg, type = "") {
 }
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
-document.querySelectorAll(".tw-tab").forEach(btn => {
+document.querySelectorAll(".tw-nav-item").forEach(btn => {
   btn.addEventListener("click", () => {
     state.tab = btn.dataset.tab;
-    document.querySelectorAll(".tw-tab").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".tw-nav-item").forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
     document.querySelectorAll(".tw-panel").forEach(p => p.classList.remove("active"));
     document.getElementById("panel-" + state.tab).classList.add("active");
@@ -239,44 +239,57 @@ function renderTorrentList(listId, torrents, readOnly) {
 }
 
 function cardHTML(t, readOnly) {
-  const dlLocal    = t.downloaded_local ? `<span class="tw-badge tw-badge-dl-local"><i class="bi bi-check-lg"></i> Local</span>` : "";
-  const dlNas      = t.downloaded_nas   ? `<span class="tw-badge tw-badge-dl-nas"><i class="bi bi-check-lg"></i> NAS</span>` : "";
-  const kwBadge    = t.keyword_match    ? `<span class="tw-badge tw-badge-kw"><i class="bi bi-star-fill"></i> KW</span>` : "";
-  const catBadge   = t.category         ? `<span class="tw-badge tw-badge-cat">${escHtml(catLabel(t.category))}</span>` : "";
-  const stickyBadge = t.is_sticky       ? `<span class="tw-badge tw-badge-sticky"><i class="bi bi-pin-fill"></i> Sticky</span>` : "";
-  const completedBadge = t.completed > 0 ? `<span class="tw-badge tw-badge-completed"><i class="bi bi-check2-circle"></i>${t.completed}</span>` : "";
+  const fmt = n => n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, "") + "k" : String(n);
+
+  const kwStar    = t.keyword_match ? `<span class="tw-kw-star">★ kw</span>` : "";
+  const catBadge  = t.category ? `<span class="tw-badge-cat">${escHtml(catLabel(t.category))}</span>` : "";
+  const stickyBadge = t.is_sticky ? `<span class="tw-badge tw-badge-sticky"><i class="bi bi-pin-fill"></i> Sticky</span>` : "";
+
   const thumb = t.cover_url
-    ? `<img class="tw-card-thumb" src="${escHtml(t.cover_url)}" alt="" loading="lazy" data-lightbox="${escHtml(t.cover_url)}" onerror="this.outerHTML='<div class=\'tw-card-thumb-placeholder\'><i class=\'bi bi-film\'></i></div>'">`
+    ? `<img class="tw-card-thumb" src="${escHtml(t.cover_url)}" alt="" loading="lazy" data-lightbox="${escHtml(t.cover_url)}" onerror="this.outerHTML='<div class=\\'tw-card-thumb-placeholder\\'><i class=\\'bi bi-film\\'></i></div>'">`
     : `<div class="tw-card-thumb-placeholder"><i class="bi bi-film"></i></div>`;
+
+  const statsHTML = [
+    `<span class="tw-stat-val tw-stat-seed">${fmt(t.seeds)}</span><span class="tw-stat-lbl">seed</span>`,
+    `<span class="tw-stat-sep">·</span>`,
+    `<span class="tw-stat-val tw-stat-leech">${fmt(t.leeches)}</span><span class="tw-stat-lbl">leech</span>`,
+    t.completed > 0 ? `<span class="tw-stat-sep">·</span><span class="tw-stat-val tw-stat-completed">${fmt(t.completed)}</span><span class="tw-stat-lbl">dl</span>` : "",
+    t.file_size ? `<span class="tw-stat-sep">·</span><span class="tw-stat-lbl">${escHtml(t.file_size)}</span>` : "",
+  ].join("");
+
+  const dlBadges = [
+    t.downloaded_local ? `<span class="tw-badge tw-badge-dl-local"><i class="bi bi-check-lg"></i> Local</span>` : "",
+    t.downloaded_nas   ? `<span class="tw-badge tw-badge-dl-nas"><i class="bi bi-check-lg"></i> NAS</span>` : "",
+  ].filter(Boolean).join("");
+
   const actions = readOnly ? "" : `
     <div class="tw-card-actions">
       <button class="tw-action-btn btn-dl-local${t.downloaded_local ? " done-local" : ""}" data-id="${t.id}" data-title="${escHtml(t.title)}">
-        <i class="bi bi-download"></i> Browser
+        <i class="bi bi-download"></i> Local
       </button>
       <button class="tw-action-btn btn-dl-nas${t.downloaded_nas ? " done-nas" : ""}" data-id="${t.id}">
         <i class="bi bi-folder-symlink"></i> NAS
       </button>
+      <a class="tw-action-btn" href="/api/detail/${t.id}" target="_blank" rel="noopener">
+        <i class="bi bi-box-arrow-up-right"></i>
+      </a>
     </div>`;
 
   return `
   <div class="tw-card${t.downloaded_local || t.downloaded_nas ? " downloaded" : ""}${t.keyword_match ? " keyword-match" : ""}" data-id="${t.id}">
     ${thumb}
     <div class="tw-card-body">
-      <a class="tw-card-title tw-title-link" href="/api/detail/${t.id}" target="_blank" rel="noopener">${escHtml(t.title)}</a>
       <div class="tw-card-meta">
-        ${catBadge}
         <span class="tw-card-time">${_fmtTime(t.posted_at)}</span>
+        ${catBadge}
+        ${stickyBadge}
       </div>
-      <div class="tw-card-badges">
-        <span class="tw-badge tw-badge-seed"><i class="bi bi-arrow-up-circle-fill"></i>${t.seeds}</span>
-        <span class="tw-badge tw-badge-leech"><i class="bi bi-arrow-down-circle-fill"></i>${t.leeches}</span>
-        ${completedBadge}
-        ${t.file_size ? `<span class="tw-badge tw-badge-info"><i class="bi bi-hdd"></i>${escHtml(t.file_size)}</span>` : ""}
-        ${t.file_count > 1 ? `<span class="tw-badge tw-badge-info"><i class="bi bi-files"></i>${t.file_count}</span>` : ""}
-        ${stickyBadge}${kwBadge}${dlLocal}${dlNas}
-      </div>
+      <a class="tw-card-title tw-title-link" href="/api/detail/${t.id}" target="_blank" rel="noopener">${escHtml(t.title)}</a>
+      <div class="tw-card-stats">${statsHTML}</div>
+      ${dlBadges ? `<div class="tw-card-dl-badges">${dlBadges}</div>` : ""}
       ${actions}
     </div>
+    ${kwStar}
   </div>`;
 }
 
@@ -678,8 +691,9 @@ async function updateStatusBadge() {
       const srcPart = prog.source_total > 1 ? `${prog.source} (${prog.source_idx}/${prog.source_total})` : prog.source;
       label = `⟳ ${srcPart} — หน้า ${(prog.page ?? 0) + 1} พบ ${prog.found ?? 0} รายการ`;
     }
-    el.textContent = label;
-    el.style.color = "var(--accent)";
+    el.textContent = "● " + label;
+    el.classList.add("running");
+    el.style.color = "";
     if (btn) btn.classList.add("spinning");
     // Poll fast while running
     schedulePoll(1500);
@@ -690,7 +704,8 @@ async function updateStatusBadge() {
       _wasRunning = false;
       loadToday();
     }
-    el.textContent = status.last_scrape ? `อัปเดต: ${status.last_scrape}` : "";
+    el.textContent = status.last_scrape ? "◉ " + status.last_scrape : "◉ idle";
+    el.classList.remove("running");
     el.style.color = "";
     if (btn) btn.classList.remove("spinning");
     // Back to slow polling
