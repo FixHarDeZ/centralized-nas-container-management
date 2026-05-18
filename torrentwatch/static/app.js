@@ -643,8 +643,8 @@ document.getElementById("btn-telegram-get-chat-id").addEventListener("click", as
       resultDiv.innerHTML = `<span style="color:#f59e0b">⚠ ไม่พบ chat — ลองส่งข้อความหา bot ก่อนแล้วลองใหม่</span>`;
     } else {
       resultDiv.innerHTML = r.chats.map(c =>
-        `<div>💬 <b>${escHtml(c.name || "(no name)")}</b> [${escHtml(c.type)}]<br>Chat ID: <code style="user-select:all;background:var(--surface1);padding:1px 5px;border-radius:4px">${c.chat_id}</code></div>`
-      ).join("<hr style='border-color:var(--surface1);margin:6px 0'>");
+        `<div>💬 <b>${escHtml(c.name || "(no name)")}</b> [${escHtml(c.type)}]<br>Chat ID: <code style="user-select:all;background:var(--bg-elevated);padding:1px 5px;border-radius:4px">${c.chat_id}</code></div>`
+      ).join("<hr style='border-color:var(--bg-elevated);margin:6px 0'>");
     }
     resultDiv.style.display = "block";
   } catch (e) {
