@@ -32,7 +32,7 @@
           <button class="tw-sort-btn active" data-sort="seeds"><i class="bi bi-arrow-up-circle-fill tw-seed-icon"></i> Seed</button>
           <button class="tw-sort-btn" data-sort="leeches"><i class="bi bi-arrow-down-circle-fill tw-leech-icon"></i> Leech</button>
           <button class="tw-sort-btn" data-sort="completed"><i class="bi bi-check2-circle tw-completed-icon"></i> DL</button>
-          <button class="tw-sort-btn" data-sort="date"><i class="bi bi-clock"></i></button>
+          <button class="tw-sort-btn" data-sort="date" title="ล่าสุด" aria-label="เรียงตามวันที่"><i class="bi bi-clock"></i></button>
         </div>
         <div class="tw-filter-group">
           <button class="tw-filter-btn active" data-filter="all">ทั้งหมด</button>
@@ -62,7 +62,7 @@
           <button class="tw-sort-btn active" data-sort="seeds"><i class="bi bi-arrow-up-circle-fill tw-seed-icon"></i> Seed</button>
           <button class="tw-sort-btn" data-sort="leeches"><i class="bi bi-arrow-down-circle-fill tw-leech-icon"></i> Leech</button>
           <button class="tw-sort-btn" data-sort="completed"><i class="bi bi-check2-circle tw-completed-icon"></i> DL</button>
-          <button class="tw-sort-btn" data-sort="date"><i class="bi bi-clock"></i></button>
+          <button class="tw-sort-btn" data-sort="date" title="ล่าสุด" aria-label="เรียงตามวันที่"><i class="bi bi-clock"></i></button>
         </div>
       </div>
       <div class="tw-list" id="list-history"></div>
@@ -84,7 +84,7 @@
 
         <!-- Sources -->
         <div class="tw-settings-card">
-          <div class="tw-section-title"><i class="bi bi-link-45deg"></i> Sources</div>
+          <h2 class="tw-section-title"><i class="bi bi-link-45deg"></i> Sources</h2>
           <div class="tw-settings-body">
             <div id="sources-list" class="tw-sources-list"></div>
             <div class="tw-source-add-row">
@@ -96,7 +96,7 @@
 
         <!-- Threshold -->
         <div class="tw-settings-card">
-          <div class="tw-section-title"><i class="bi bi-sliders"></i> Threshold</div>
+          <h2 class="tw-section-title"><i class="bi bi-sliders"></i> Threshold</h2>
           <div class="tw-settings-body">
             <div class="tw-field-row">
               <label>Seed min</label>
@@ -122,7 +122,7 @@
 
         <!-- Notification (LINE + Telegram + Auto-DL combined) -->
         <div class="tw-settings-card">
-          <div class="tw-section-title"><i class="bi bi-bell"></i> Notification</div>
+          <h2 class="tw-section-title"><i class="bi bi-bell"></i> Notification</h2>
           <div class="tw-settings-body">
             <div class="tw-field-row">
               <label for="cfg-line-notify">LINE Notify</label>
@@ -168,7 +168,7 @@
 
         <!-- Schedule -->
         <div class="tw-settings-card">
-          <div class="tw-section-title"><i class="bi bi-clock-history"></i> Schedule</div>
+          <h2 class="tw-section-title"><i class="bi bi-clock-history"></i> Schedule</h2>
           <div class="tw-settings-body">
             <div class="tw-schedule-info">
               <div class="tw-schedule-row"><span class="tw-schedule-time">19:00 – 01:00</span><span class="tw-schedule-freq">ทุก 30 นาที</span></div>
@@ -177,7 +177,7 @@
               <div class="tw-schedule-row"><span class="tw-schedule-time">23:58</span><span class="tw-schedule-freq">สิ้นวัน</span></div>
             </div>
             <div class="tw-field-row">
-              <label>รวม sticky/pinned</label>
+              <label for="cfg-scrape-sticky">รวม sticky/pinned</label>
               <label class="tw-toggle-row">
                 <input type="checkbox" class="tw-toggle" id="cfg-scrape-sticky">
               </label>
@@ -191,7 +191,7 @@
 
         <!-- Danger Zone -->
         <div class="tw-settings-card">
-          <div class="tw-section-title"><i class="bi bi-trash3"></i> Danger Zone</div>
+          <h2 class="tw-section-title"><i class="bi bi-trash3"></i> Danger Zone</h2>
           <div class="tw-settings-body">
             <p class="tw-hint" style="margin-bottom:10px">ลบ torrent ทั้งหมดของ source แล้ว scrape ใหม่</p>
             <div id="clear-source-btns" class="tw-sources-list"></div>
