@@ -105,6 +105,7 @@ def init_db():
         # Migrate: add new columns if missing (existing installs)
         for col_sql in [
             "ALTER TABLE sources ADD COLUMN label TEXT DEFAULT ''",
+            "ALTER TABLE sources ADD COLUMN sort_order INTEGER DEFAULT 0",
             "ALTER TABLE torrents ADD COLUMN posted_at   TEXT DEFAULT ''",
             "ALTER TABLE torrents ADD COLUMN category    TEXT DEFAULT ''",
             "ALTER TABLE torrents ADD COLUMN file_count  INTEGER DEFAULT 0",
@@ -116,6 +117,9 @@ def init_db():
                 c.execute(col_sql)
             except Exception:
                 pass
+
+        # Backfill sort_order for sources added before this migration
+        c.execute("UPDATE sources SET sort_order = id WHERE sort_order = 0")
 
 
 def seed_default_sources(urls: list[str]):
@@ -137,12 +141,18 @@ def _now() -> str:
 
 def get_sources() -> list[dict]:
     with _conn() as c:
-        return [dict(r) for r in c.execute("SELECT * FROM sources ORDER BY id").fetchall()]
+        return [dict(r) for r in c.execute("SELECT * FROM sources ORDER BY sort_order ASC, id ASC").fetchall()]
 
 
 def add_source(url: str) -> dict:
     with _conn() as c:
-        c.execute("INSERT INTO sources(url, enabled, created_at) VALUES (?, 1, ?)", (url, _now()))
+        max_order = c.execute(
+            "SELECT COALESCE(MAX(sort_order), 0) FROM sources"
+        ).fetchone()[0]
+        c.execute(
+            "INSERT INTO sources(url, enabled, sort_order, created_at) VALUES (?, 1, ?, ?)",
+            (url, max_order + 1, _now())
+        )
         row = c.execute("SELECT * FROM sources WHERE url = ?", (url,)).fetchone()
         return dict(row)
 
@@ -160,6 +170,31 @@ def toggle_source(source_id: int, enabled: bool):
 def rename_source(source_id: int, label: str):
     with _conn() as c:
         c.execute("UPDATE sources SET label = ? WHERE id = ?", (label.strip(), source_id))
+
+
+def reorder_source(source_id: int, direction: str):
+    """Swap sort_order with the nearest neighbor in the given direction."""
+    with _conn() as c:
+        current = c.execute(
+            "SELECT id, sort_order FROM sources WHERE id = ?", (source_id,)
+        ).fetchone()
+        if not current:
+            return
+        cur_order = current["sort_order"]
+        if direction == "up":
+            neighbor = c.execute(
+                "SELECT id, sort_order FROM sources WHERE sort_order < ? ORDER BY sort_order DESC LIMIT 1",
+                (cur_order,)
+            ).fetchone()
+        else:
+            neighbor = c.execute(
+                "SELECT id, sort_order FROM sources WHERE sort_order > ? ORDER BY sort_order ASC LIMIT 1",
+                (cur_order,)
+            ).fetchone()
+        if not neighbor:
+            return
+        c.execute("UPDATE sources SET sort_order = ? WHERE id = ?", (neighbor["sort_order"], source_id))
+        c.execute("UPDATE sources SET sort_order = ? WHERE id = ?", (cur_order, neighbor["id"]))
 
 
 def sync_stickies(source_id: int, seen_site_ids: set[str], today: str):
@@ -211,7 +246,7 @@ def sync_stickies(source_id: int, seen_site_ids: set[str], today: str):
 
 def get_enabled_sources() -> list[dict]:
     with _conn() as c:
-        return [dict(r) for r in c.execute("SELECT * FROM sources WHERE enabled = 1 ORDER BY id").fetchall()]
+        return [dict(r) for r in c.execute("SELECT * FROM sources WHERE enabled = 1 ORDER BY sort_order ASC, id ASC").fetchall()]
 
 
 # ─── Torrents ─────────────────────────────────────────────────────────────────
