@@ -410,3 +410,45 @@ async def archive_row(token: str, page_id: str) -> dict:
             timeout=15,
         )
         return r.json()
+
+
+async def create_page(token: str, parent_page_id: str, title: str) -> dict:
+    async with httpx.AsyncClient() as client:
+        r = await client.post(
+            f"{NOTION_API}/pages",
+            headers=_headers(token),
+            json={
+                "parent": {"page_id": parent_page_id},
+                "properties": {
+                    "title": {
+                        "title": [{"type": "text", "text": {"content": title}}]
+                    }
+                },
+            },
+            timeout=15,
+        )
+        return r.json()
+
+
+async def append_blocks(token: str, page_id: str, text: str) -> dict:
+    lines = [line[:2000] for line in text.split("\n") if line.strip()]
+    if not lines:
+        lines = [text[:2000]]
+    children = [
+        {
+            "object": "block",
+            "type": "paragraph",
+            "paragraph": {
+                "rich_text": [{"type": "text", "text": {"content": line}}]
+            },
+        }
+        for line in lines[:100]
+    ]
+    async with httpx.AsyncClient() as client:
+        r = await client.patch(
+            f"{NOTION_API}/blocks/{page_id}/children",
+            headers=_headers(token),
+            json={"children": children},
+            timeout=15,
+        )
+        return r.json()
