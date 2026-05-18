@@ -2,6 +2,23 @@
 
 ---
 
+## 2026-05-18
+
+### แก้บัค Basic Auth loop เมื่อกดปฏิทินการทำงาน
+
+**ปัญหา:** browser บางตัวไม่ส่ง cached Basic Auth credentials กับ `fetch()` requests (แม้ same-origin) ทำให้ API return 401 + `WWW-Authenticate` → browser โชว์ dialog → loop
+
+**วิธีแก้ (main.py):**
+- เพิ่ม session cookie mechanism ใน `basic_auth_middleware`
+- หลังจาก Basic Auth สำเร็จครั้งแรก → ออก `maid_session` cookie (httponly, samesite=lax, อายุ 7 วัน)
+- request ถัดไปใช้ cookie แทน — browser ส่ง cookie อัตโนมัติ ไม่ต้องพึ่ง Basic Auth credential cache
+- เพิ่ม `_validate_basic()` helper + `_sessions` dict (in-memory, expire auto)
+- เพิ่ม import `secrets`, `time`
+
+**ไฟล์ที่เปลี่ยน:** `maid-tracker/main.py` (middleware section เท่านั้น, ไม่มี frontend change)
+
+---
+
 ## 2026-05-12
 
 ### สร้าง maid-tracker stack ใหม่
