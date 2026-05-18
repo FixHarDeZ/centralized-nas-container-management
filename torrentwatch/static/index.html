@@ -3,33 +3,26 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-  <meta name="theme-color" content="#0d0d1a">
+  <meta name="theme-color" content="#111118">
   <title>TorrentWatch</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-  <link rel="stylesheet" href="/static/style.css?v=20260518">
+  <link rel="stylesheet" href="/static/style.css?v=20260518b">
 </head>
 <body>
   <div id="app">
+
     <!-- Header -->
     <header class="tw-header">
       <div class="tw-header-inner">
-        <span class="tw-logo"><i class="bi bi-broadcast"></i> TorrentWatch</span>
+        <span class="tw-logo">Torrent<span class="tw-logo-dot">.</span>Watch</span>
         <div class="tw-header-actions">
-          <span id="status-badge" class="tw-status-badge" title="Last scrape"></span>
+          <span id="status-badge" class="tw-status-badge"></span>
           <button class="tw-icon-btn" id="btn-scrape-now" title="Scrape now">
             <i class="bi bi-arrow-clockwise"></i>
           </button>
         </div>
       </div>
     </header>
-
-    <!-- Tab bar -->
-    <nav class="tw-tabs">
-      <button class="tw-tab active" data-tab="today"><i class="bi bi-calendar-day"></i> วันนี้</button>
-      <button class="tw-tab" data-tab="history"><i class="bi bi-clock-history"></i> ประวัติ</button>
-      <button class="tw-tab" data-tab="keywords"><i class="bi bi-tags"></i> Keyword</button>
-      <button class="tw-tab" data-tab="settings"><i class="bi bi-gear"></i> ตั้งค่า</button>
-    </nav>
 
     <!-- ── Today ── -->
     <section class="tw-panel active" id="panel-today">
@@ -38,17 +31,20 @@
         <div class="tw-sort-group">
           <button class="tw-sort-btn active" data-sort="seeds"><i class="bi bi-arrow-up-circle-fill tw-seed-icon"></i> Seed</button>
           <button class="tw-sort-btn" data-sort="leeches"><i class="bi bi-arrow-down-circle-fill tw-leech-icon"></i> Leech</button>
-          <button class="tw-sort-btn" data-sort="completed"><i class="bi bi-check2-circle tw-completed-icon"></i> โหลดจบ</button>
-          <button class="tw-sort-btn" data-sort="date"><i class="bi bi-clock"></i> ล่าสุด</button>
+          <button class="tw-sort-btn" data-sort="completed"><i class="bi bi-check2-circle tw-completed-icon"></i> DL</button>
+          <button class="tw-sort-btn" data-sort="date"><i class="bi bi-clock"></i></button>
         </div>
         <div class="tw-filter-group">
           <button class="tw-filter-btn active" data-filter="all">ทั้งหมด</button>
-          <button class="tw-filter-btn" data-filter="keyword"><i class="bi bi-star-fill"></i> Keyword</button>
-          <button class="tw-filter-btn" id="btn-toggle-sticky" title="แสดง/ซ่อน Sticky"><i class="bi bi-pin-fill"></i> Sticky</button>
+          <button class="tw-filter-btn" data-filter="keyword"><i class="bi bi-star-fill"></i> KW</button>
+          <button class="tw-filter-btn" id="btn-toggle-sticky" title="แสดง/ซ่อน Sticky"><i class="bi bi-pin-fill"></i></button>
         </div>
       </div>
       <div class="tw-search-row">
-        <input class="tw-input tw-search-input" id="search-input" type="search" placeholder="ค้นหาชื่อ..." autocomplete="off">
+        <div class="tw-search-wrap">
+          <i class="bi bi-search tw-search-icon"></i>
+          <input class="tw-search-input" id="search-input" type="search" placeholder="ค้นหาชื่อ..." autocomplete="off">
+        </div>
       </div>
       <div class="tw-source-bar tw-cat-bar" id="cat-bar-today" style="display:none;padding-top:0;padding-bottom:6px"></div>
       <div class="tw-last-updated" id="last-updated-today"></div>
@@ -65,8 +61,8 @@
         <div class="tw-sort-group">
           <button class="tw-sort-btn active" data-sort="seeds"><i class="bi bi-arrow-up-circle-fill tw-seed-icon"></i> Seed</button>
           <button class="tw-sort-btn" data-sort="leeches"><i class="bi bi-arrow-down-circle-fill tw-leech-icon"></i> Leech</button>
-          <button class="tw-sort-btn" data-sort="completed"><i class="bi bi-check2-circle tw-completed-icon"></i> โหลดจบ</button>
-          <button class="tw-sort-btn" data-sort="date"><i class="bi bi-clock"></i> ล่าสุด</button>
+          <button class="tw-sort-btn" data-sort="completed"><i class="bi bi-check2-circle tw-completed-icon"></i> DL</button>
+          <button class="tw-sort-btn" data-sort="date"><i class="bi bi-clock"></i></button>
         </div>
       </div>
       <div class="tw-list" id="list-history"></div>
@@ -84,131 +80,166 @@
 
     <!-- ── Settings ── -->
     <section class="tw-panel" id="panel-settings">
-      <div class="tw-settings-card">
-        <h2 class="tw-section-title"><i class="bi bi-link-45deg"></i> Sources</h2>
-        <div id="sources-list" class="tw-sources-list"></div>
-        <div class="tw-source-add-row">
-          <input class="tw-input" id="source-url-input" type="url" placeholder="https://bearbit.org/view...php">
-          <button class="tw-btn-primary" id="btn-add-source"><i class="bi bi-plus-lg"></i></button>
-        </div>
-      </div>
+      <div class="tw-settings-scroll">
 
-      <div class="tw-settings-card">
-        <h2 class="tw-section-title"><i class="bi bi-sliders"></i> Threshold</h2>
-        <div class="tw-field-row">
-          <label>Seed min</label>
-          <input class="tw-input-sm" id="cfg-seed-min" type="number" min="0">
-        </div>
-        <div class="tw-field-row">
-          <label>Leech min</label>
-          <input class="tw-input-sm" id="cfg-leech-min" type="number" min="0">
-        </div>
-        <div class="tw-field-row">
-          <label>Completed min</label>
-          <input class="tw-input-sm" id="cfg-completed-min" type="number" min="0">
-        </div>
-        <div class="tw-field-row" style="margin-top:8px">
-          <label>เงื่อนไข</label>
-          <div class="tw-radio-group">
-            <label class="tw-radio-label"><input type="radio" name="filter_mode" id="cfg-mode-and" value="and"> AND (ทั้งคู่)</label>
-            <label class="tw-radio-label"><input type="radio" name="filter_mode" id="cfg-mode-or" value="or"> OR (อย่างใดอย่างหนึ่ง)</label>
+        <!-- Sources -->
+        <div class="tw-settings-card">
+          <div class="tw-section-title"><i class="bi bi-link-45deg"></i> Sources</div>
+          <div class="tw-settings-body">
+            <div id="sources-list" class="tw-sources-list"></div>
+            <div class="tw-source-add-row">
+              <input class="tw-input" id="source-url-input" type="url" placeholder="https://bearbit.org/view...php">
+              <button class="tw-btn-primary" id="btn-add-source"><i class="bi bi-plus-lg"></i></button>
+            </div>
           </div>
         </div>
-      </div>
 
-      <div class="tw-settings-card">
-        <h2 class="tw-section-title"><i class="bi bi-clock-history"></i> Auto Scrape</h2>
-        <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px">ตารางเวลาคงที่ (Asia/Bangkok)</p>
-        <div class="tw-schedule-info">
-          <div class="tw-schedule-row"><span class="tw-schedule-time">19:00 – 01:00</span><span class="tw-schedule-freq">ทุก 30 นาที</span></div>
-          <div class="tw-schedule-row tw-schedule-pause"><span class="tw-schedule-time">01:00 – 06:00</span><span class="tw-schedule-freq">หยุด</span></div>
-          <div class="tw-schedule-row"><span class="tw-schedule-time">06:00 – 19:00</span><span class="tw-schedule-freq">ทุก 1 ชั่วโมง</span></div>
-          <div class="tw-schedule-row"><span class="tw-schedule-time">23:58</span><span class="tw-schedule-freq">สิ้นวัน</span></div>
+        <!-- Threshold -->
+        <div class="tw-settings-card">
+          <div class="tw-section-title"><i class="bi bi-sliders"></i> Threshold</div>
+          <div class="tw-settings-body">
+            <div class="tw-field-row">
+              <label>Seed min</label>
+              <input class="tw-input-sm" id="cfg-seed-min" type="number" min="0">
+            </div>
+            <div class="tw-field-row">
+              <label>Leech min</label>
+              <input class="tw-input-sm" id="cfg-leech-min" type="number" min="0">
+            </div>
+            <div class="tw-field-row">
+              <label>Completed min</label>
+              <input class="tw-input-sm" id="cfg-completed-min" type="number" min="0">
+            </div>
+            <div class="tw-field-row">
+              <label>เงื่อนไข</label>
+              <div class="tw-radio-group">
+                <label class="tw-radio-label"><input type="radio" name="filter_mode" id="cfg-mode-and" value="and"> AND</label>
+                <label class="tw-radio-label"><input type="radio" name="filter_mode" id="cfg-mode-or" value="or"> OR</label>
+              </div>
+            </div>
+          </div>
         </div>
-        <div class="tw-field-row" style="margin-top:12px">
-          <label>รวม sticky/pinned</label>
-          <label class="tw-toggle-row" style="margin:0">
-            <input type="checkbox" class="tw-toggle" id="cfg-scrape-sticky">
-            <span style="font-size:12px;color:var(--text-muted)">รวมรายการ sticky ในผลลัพธ์</span>
-          </label>
-        </div>
-        <div class="tw-field-row" style="margin-top:8px">
-          <label>Auto-download to NAS</label>
-          <label class="tw-toggle-row" style="margin:0">
-            <input type="checkbox" class="tw-toggle" id="cfg-auto-dl">
-            <span style="font-size:12px;color:var(--text-muted)">บันทึก keyword match ไป NAS อัตโนมัติ</span>
-          </label>
-        </div>
-        <div class="tw-field-row">
-          <label>เก็บประวัติ (วัน)</label>
-          <input class="tw-input-sm" id="cfg-retention" type="number" min="1" max="90">
-        </div>
-      </div>
 
-      <div class="tw-settings-card">
-        <h2 class="tw-section-title"><i class="bi bi-line"></i> LINE Notification</h2>
-        <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px">ส่งแจ้งเตือนเมื่อพบ keyword match ใหม่</p>
-        <div class="tw-field-row">
-          <label>เปิดใช้งาน</label>
-          <label class="tw-toggle-row" style="margin:0">
-            <input type="checkbox" class="tw-toggle" id="cfg-line-notify">
-            <span style="font-size:12px;color:var(--text-muted)">ส่ง LINE เมื่อพบ keyword match</span>
-          </label>
-        </div>
-        <p id="line-status-hint" style="font-size:11px;margin-top:4px;margin-bottom:8px"></p>
-        <div class="tw-field-row" style="margin-top:4px">
-          <button class="tw-btn-secondary" id="btn-line-test" style="width:100%">
-            <i class="bi bi-send"></i> ทดสอบส่ง LINE
-          </button>
-        </div>
-      </div>
+        <!-- Notification (LINE + Telegram + Auto-DL combined) -->
+        <div class="tw-settings-card">
+          <div class="tw-section-title"><i class="bi bi-bell"></i> Notification</div>
+          <div class="tw-settings-body">
+            <div class="tw-field-row">
+              <label for="cfg-line-notify">LINE Notify</label>
+              <label class="tw-toggle-row">
+                <input type="checkbox" class="tw-toggle" id="cfg-line-notify">
+              </label>
+            </div>
+            <p id="line-status-hint" class="tw-hint"></p>
+            <div class="tw-field-row">
+              <button class="tw-btn-secondary" id="btn-line-test" style="width:100%">
+                <i class="bi bi-send"></i> ทดสอบส่ง LINE
+              </button>
+            </div>
 
-      <div class="tw-settings-card">
-        <h2 class="tw-section-title"><i class="bi bi-telegram"></i> Telegram Notification</h2>
-        <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px">ส่งแจ้งเตือนเมื่อพบ keyword match ใหม่</p>
-        <div class="tw-field-row">
-          <label>เปิดใช้งาน</label>
-          <label class="tw-toggle-row" style="margin:0">
-            <input type="checkbox" class="tw-toggle" id="cfg-telegram-notify">
-            <span style="font-size:12px;color:var(--text-muted)">ส่ง Telegram เมื่อพบ keyword match</span>
-          </label>
-        </div>
-        <p id="telegram-status-hint" style="font-size:11px;margin-top:4px;margin-bottom:8px"></p>
-        <div class="tw-field-row" style="margin-top:4px">
-          <button class="tw-btn-secondary" id="btn-telegram-test" style="width:100%">
-            <i class="bi bi-send"></i> ทดสอบส่ง Telegram
-          </button>
-        </div>
-        <div class="tw-field-row" style="margin-top:8px">
-          <button class="tw-btn-secondary" id="btn-telegram-get-chat-id" style="width:100%;background:var(--surface2)">
-            <i class="bi bi-search"></i> ค้นหา Chat ID
-          </button>
-        </div>
-        <div id="telegram-chat-id-result" style="display:none;margin-top:8px;font-size:12px;background:var(--surface2);padding:8px 10px;border-radius:6px;word-break:break-all"></div>
-      </div>
+            <div class="tw-field-row" style="margin-top:14px">
+              <label for="cfg-telegram-notify">Telegram</label>
+              <label class="tw-toggle-row">
+                <input type="checkbox" class="tw-toggle" id="cfg-telegram-notify">
+              </label>
+            </div>
+            <p id="telegram-status-hint" class="tw-hint"></p>
+            <div class="tw-field-row">
+              <button class="tw-btn-secondary" id="btn-telegram-test" style="width:100%">
+                <i class="bi bi-send"></i> ทดสอบส่ง Telegram
+              </button>
+            </div>
+            <div class="tw-field-row" style="margin-top:4px">
+              <button class="tw-btn-secondary" id="btn-telegram-get-chat-id" style="width:100%;background:var(--bg-elevated)">
+                <i class="bi bi-search"></i> ค้นหา Chat ID
+              </button>
+            </div>
+            <div id="telegram-chat-id-result" style="display:none;margin-top:8px;font-size:12px;background:var(--bg-elevated);padding:8px 10px;border-radius:6px;word-break:break-all"></div>
 
-      <div class="tw-settings-card">
-        <h2 class="tw-section-title"><i class="bi bi-trash3"></i> ล้างข้อมูล</h2>
-        <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px">ลบ torrent ทั้งหมดของ source แล้ว scrape ใหม่</p>
-        <div id="clear-source-btns" class="tw-sources-list"></div>
-      </div>
+            <div class="tw-field-row" style="margin-top:14px">
+              <label for="cfg-auto-dl">Auto-DL to NAS</label>
+              <label class="tw-toggle-row">
+                <input type="checkbox" class="tw-toggle" id="cfg-auto-dl">
+              </label>
+            </div>
+            <p class="tw-hint">บันทึก keyword match ไป NAS อัตโนมัติ</p>
+          </div>
+        </div>
 
-      <button class="tw-btn-primary tw-save-btn" id="btn-save-settings">
-        <i class="bi bi-check-lg"></i> บันทึก
-      </button>
+        <!-- Schedule -->
+        <div class="tw-settings-card">
+          <div class="tw-section-title"><i class="bi bi-clock-history"></i> Schedule</div>
+          <div class="tw-settings-body">
+            <div class="tw-schedule-info">
+              <div class="tw-schedule-row"><span class="tw-schedule-time">19:00 – 01:00</span><span class="tw-schedule-freq">ทุก 30 นาที</span></div>
+              <div class="tw-schedule-row tw-schedule-pause"><span class="tw-schedule-time">01:00 – 06:00</span><span class="tw-schedule-freq">หยุด</span></div>
+              <div class="tw-schedule-row"><span class="tw-schedule-time">06:00 – 19:00</span><span class="tw-schedule-freq">ทุก 1 ชั่วโมง</span></div>
+              <div class="tw-schedule-row"><span class="tw-schedule-time">23:58</span><span class="tw-schedule-freq">สิ้นวัน</span></div>
+            </div>
+            <div class="tw-field-row">
+              <label>รวม sticky/pinned</label>
+              <label class="tw-toggle-row">
+                <input type="checkbox" class="tw-toggle" id="cfg-scrape-sticky">
+              </label>
+            </div>
+            <div class="tw-field-row">
+              <label>เก็บประวัติ (วัน)</label>
+              <input class="tw-input-sm" id="cfg-retention" type="number" min="1" max="90">
+            </div>
+          </div>
+        </div>
+
+        <!-- Danger Zone -->
+        <div class="tw-settings-card">
+          <div class="tw-section-title"><i class="bi bi-trash3"></i> Danger Zone</div>
+          <div class="tw-settings-body">
+            <p class="tw-hint" style="margin-bottom:10px">ลบ torrent ทั้งหมดของ source แล้ว scrape ใหม่</p>
+            <div id="clear-source-btns" class="tw-sources-list"></div>
+          </div>
+        </div>
+
+        <button class="tw-btn-primary tw-save-btn" id="btn-save-settings">
+          <i class="bi bi-check-lg"></i> บันทึกการตั้งค่า
+        </button>
+
+      </div>
     </section>
+
+    <!-- Bottom Navigation -->
+    <nav class="tw-bottom-nav">
+      <button class="tw-nav-item active" data-tab="today">
+        <div class="tw-nav-indicator"></div>
+        <i class="bi bi-collection-play tw-nav-icon"></i>
+        <span class="tw-nav-label">วันนี้</span>
+      </button>
+      <button class="tw-nav-item" data-tab="history">
+        <div class="tw-nav-indicator"></div>
+        <i class="bi bi-clock-history tw-nav-icon"></i>
+        <span class="tw-nav-label">ประวัติ</span>
+      </button>
+      <button class="tw-nav-item" data-tab="keywords">
+        <div class="tw-nav-indicator"></div>
+        <i class="bi bi-tags tw-nav-icon"></i>
+        <span class="tw-nav-label">Keyword</span>
+      </button>
+      <button class="tw-nav-item" data-tab="settings">
+        <div class="tw-nav-indicator"></div>
+        <i class="bi bi-gear tw-nav-icon"></i>
+        <span class="tw-nav-label">ตั้งค่า</span>
+      </button>
+    </nav>
+
   </div>
 
   <button id="btn-go-top" title="กลับขึ้นบน" aria-label="Go to top">
     <i class="bi bi-arrow-up"></i>
   </button>
 
-  <!-- Lightbox overlay -->
   <div id="lightbox" class="tw-lightbox" role="dialog" aria-modal="true">
     <button class="tw-lightbox-close" id="lightbox-close" aria-label="ปิด"><i class="bi bi-x-lg"></i></button>
     <img class="tw-lightbox-img" id="lightbox-img" src="" alt="">
   </div>
 
-  <script src="/static/app.js?v=20260518"></script>
+  <script src="/static/app.js?v=20260518b"></script>
 </body>
 </html>
