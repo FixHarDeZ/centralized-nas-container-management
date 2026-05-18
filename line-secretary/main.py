@@ -158,9 +158,8 @@ async def handle_message(event: dict) -> None:
 
         if note_state["phase"] == "asking_topic":
             title = text.strip()
-            if not settings.NOTION_QUICK_NOTE_PAGE_ID:
-                store.pop_pending_note(user_id)
-                await line_client.push(user_id, "ยังไม่ได้ตั้งค่า Quick note page ค่ะ (NOTION_QUICK_NOTE_PAGE_ID)", token)
+            if not title:
+                await line_client.push(user_id, "กรุณาบอกชื่อหัวข้อด้วยนะคะ 📝", token)
                 return
             try:
                 page = await notion_mod.create_page(
@@ -193,11 +192,14 @@ async def handle_message(event: dict) -> None:
                     token,
                 )
                 return
-            await line_client.push(user_id, f"บันทึกเรียบร้อยแล้วค่ะ ✅", token)
+            await line_client.push(user_id, "บันทึกเรียบร้อยแล้วค่ะ ✅", token)
             return
 
     # Detect note-taking intent
     if _is_note_intent(text):
+        if not settings.NOTION_QUICK_NOTE_PAGE_ID:
+            await line_client.push(user_id, "ยังไม่ได้ตั้งค่า Quick note page ค่ะ (NOTION_QUICK_NOTE_PAGE_ID)", token)
+            return
         store.set_pending_note(user_id, {"phase": "asking_topic"})
         await line_client.push(user_id, "จะจดเรื่องอะไรคะ? 📝", token)
         return
