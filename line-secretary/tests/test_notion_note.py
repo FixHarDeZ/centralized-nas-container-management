@@ -39,7 +39,7 @@ async def test_append_blocks_single_line():
     with patch("httpx.AsyncClient", return_value=mock_client):
         await notion.append_blocks("tok", "page-id", "Hello world")
 
-    args, kwargs = mock_client.patch.call_args
+    args, kwargs = mock_client.post.call_args
     children = kwargs["json"]["children"]
     assert len(children) == 1
     assert children[0]["type"] == "paragraph"
@@ -53,7 +53,7 @@ async def test_append_blocks_multiline():
     with patch("httpx.AsyncClient", return_value=mock_client):
         await notion.append_blocks("tok", "page-id", "Line 1\nLine 2\nLine 3")
 
-    args, kwargs = mock_client.patch.call_args
+    args, kwargs = mock_client.post.call_args
     children = kwargs["json"]["children"]
     assert len(children) == 3
     assert children[0]["paragraph"]["rich_text"][0]["text"]["content"] == "Line 1"
@@ -67,7 +67,7 @@ async def test_append_blocks_skips_empty_lines():
     with patch("httpx.AsyncClient", return_value=mock_client):
         await notion.append_blocks("tok", "page-id", "A\n\n\nB")
 
-    args, kwargs = mock_client.patch.call_args
+    args, kwargs = mock_client.post.call_args
     children = kwargs["json"]["children"]
     assert len(children) == 2
     assert children[0]["paragraph"]["rich_text"][0]["text"]["content"] == "A"
@@ -81,7 +81,7 @@ async def test_append_blocks_all_whitespace_falls_back():
     with patch("httpx.AsyncClient", return_value=mock_client):
         await notion.append_blocks("tok", "page-id", "   \n  \n   ")
 
-    args, kwargs = mock_client.patch.call_args
+    args, kwargs = mock_client.post.call_args
     children = kwargs["json"]["children"]
     # Falls back to original text as single block
     assert len(children) == 1
@@ -95,6 +95,6 @@ async def test_append_blocks_truncates_long_line():
     with patch("httpx.AsyncClient", return_value=mock_client):
         await notion.append_blocks("tok", "page-id", long_line)
 
-    args, kwargs = mock_client.patch.call_args
+    args, kwargs = mock_client.post.call_args
     children = kwargs["json"]["children"]
     assert len(children[0]["paragraph"]["rich_text"][0]["text"]["content"]) == 2000
