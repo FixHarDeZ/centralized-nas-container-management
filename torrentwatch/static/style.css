@@ -311,7 +311,7 @@ html, body {
   width: 88px;
   height: 124px;
   border-radius: 9px;
-  object-fit: cover;
+  object-fit: contain;
   background: #000;
   cursor: zoom-in;
   box-shadow: 0 4px 14px rgba(0,0,0,0.5);
