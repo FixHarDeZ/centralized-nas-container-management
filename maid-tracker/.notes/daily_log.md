@@ -2,6 +2,23 @@
 
 ---
 
+## 2026-05-18 (2)
+
+### ปรับ Frontend ให้ Modern
+
+**ไฟล์ที่เปลี่ยน:**
+- `static/style.css` — redesign ทั้งหมด: CSS variables/tokens, navbar gradient (dark slate), calendar status colors ใหม่, card shadows, avatar, action buttons, stat cards
+- `static/index.html` — เพิ่ม Google Font Sarabun, meta theme-color, ปรับ navbar HTML
+- `static/app.js` — อัปเดต employee list cards (avatar สี่เหลี่ยมมน, chevron), profile header (rounded avatar), quick action buttons (action-btn class), stat cards, breadcrumb style
+
+**Design decisions:**
+- Primary: `#4f46e5` (indigo) แทน Bootstrap blue
+- Navbar: gradient `#0f172a → #1e1b4b → #312e81`
+- Calendar colors: ใช้ Tailwind-inspired palette (ecfdf5, fff1f2, eff6ff)
+- Avatar: border-radius 14px แทน circle
+
+---
+
 ## 2026-05-18
 
 ### แก้บัค Basic Auth loop เมื่อกดปฏิทินการทำงาน
