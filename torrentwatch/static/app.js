@@ -227,6 +227,18 @@ document.getElementById("history-date-select").addEventListener("change", e => {
   else document.getElementById("list-history").innerHTML = "";
 });
 
+// ─── Size badge helper ────────────────────────────────────────────────────────
+function sizeClass(s) {
+  if (!s) return "tw-badge-size-sm";
+  const m = s.match(/([\d.]+)\s*(GB|MB|KB)/i);
+  if (!m) return "tw-badge-size-sm";
+  if (/MB|KB/i.test(m[2])) return "tw-badge-size-sm";
+  const gb = parseFloat(m[1]);
+  if (gb >= 5) return "tw-badge-size-lg";
+  if (gb >= 1) return "tw-badge-size-md";
+  return "tw-badge-size-sm";
+}
+
 // ─── Torrent card renderer ────────────────────────────────────────────────────
 function renderTorrentList(listId, torrents, readOnly) {
   const list = document.getElementById(listId);
@@ -254,7 +266,7 @@ function cardHTML(t, readOnly) {
     `<span class="tw-stat-sep">·</span>`,
     `<span class="tw-stat-val tw-stat-leech">${fmt(t.leeches)}</span><span class="tw-stat-lbl">leech</span>`,
     t.completed > 0 ? `<span class="tw-stat-sep">·</span><span class="tw-stat-val tw-stat-completed">${fmt(t.completed)}</span><span class="tw-stat-lbl">dl</span>` : "",
-    t.file_size ? `<span class="tw-stat-sep">·</span><span class="tw-stat-lbl">${escHtml(t.file_size)}</span>` : "",
+    t.file_size ? `<span class="tw-badge tw-badge-size ${sizeClass(t.file_size)}">${escHtml(t.file_size)}</span>` : "",
   ].join("");
 
   const dlBadges = [
