@@ -4,6 +4,30 @@
 
 ### Session Log Entry
 **Timestamp:** 2026-05-18
+**Title:** Database Schema — sort_order Migration for Source Reordering
+
+**ไฟล์ที่แก้ไข:**
+
+- **`db.py`**: 
+  - `init_db()`: เพิ่ม migration `"ALTER TABLE sources ADD COLUMN sort_order INTEGER DEFAULT 0"` เข้าไป
+  - `init_db()`: backfill `UPDATE sources SET sort_order = id WHERE sort_order = 0` สำหรับ existing sources
+  - `get_sources()`: เปลี่ยน `ORDER BY id` → `ORDER BY sort_order ASC, id ASC`
+  - `get_enabled_sources()`: เปลี่ยน `ORDER BY id` → `ORDER BY sort_order ASC, id ASC`
+  - `add_source()`: คำนวณ `max_order = MAX(sort_order)` ก่อนแล้ว insert ด้วย `sort_order = max_order + 1` (new sources เข้าท้ายลิสต์)
+  - `reorder_source()` (ใหม่): Swap sort_order กับ neighbor ตามทิศทาง "up"/"down"
+
+**Verification:** test script ผ่านสี่ assertions:
+1. Initial order [('a', 1), ('b', 2), ('c', 3)] ✓
+2. Move first down: ['b', 'a', 'c'] ✓
+3. Move last up: ['b', 'c', 'a'] ✓
+4. All assertions passed ✓
+
+**Commit:** `c40a36b` — feat(torrentwatch): add sort_order to sources — migration, backfill, reorder_source()
+
+---
+
+### Session Log Entry
+**Timestamp:** 2026-05-18
 **Title:** Frontend Redesign — Modern Minimal UI + Bottom Navigation
 
 **ไฟล์ที่แก้ไข:**
@@ -253,6 +277,55 @@ Fix (`scheduler.py`):
 
 - `_do_scrape()`: เรียก `await scraper.relogin()` ทุกครั้งก่อนเริ่ม loop sources เพื่อ establish fresh session ก่อน scrape แต่ละรอบ
 - ถ้า relogin fail → return ภายใน try block (finally ยัง reset `_scrape_status = "idle"` เสมอ)
+
+---
+
+---
+
+### Session Log Entry
+**Timestamp:** 2026-05-18
+**Title:** Feature — Source Reorder (↑↓) + File Size Colored Badge
+
+**Feature 1: Source Reorder**
+
+- **`db.py`**:
+  - `CREATE TABLE sources`: เพิ่ม `sort_order INTEGER DEFAULT 0` ใน DDL
+  - migration loop: เพิ่ม `"ALTER TABLE sources ADD COLUMN sort_order INTEGER DEFAULT 0"`
+  - backfill: `UPDATE sources SET sort_order = id WHERE sort_order = 0`
+  - `get_sources()` + `get_enabled_sources()`: เปลี่ยน `ORDER BY id` → `ORDER BY sort_order ASC, id ASC`
+  - `add_source()`: คำนวณ `max_order = MAX(sort_order)` insert ด้วย `sort_order = max_order + 1`
+  - `seed_default_sources()`: เพิ่ม `sort_order` ใน INSERT ด้วย `enumerate(urls, start=1)`
+  - `reorder_source(source_id, direction)` (ใหม่): swap sort_order กับ nearest neighbor ทิศ "up"/"down"
+- **`main.py`**:
+  - `from typing import Literal` เพิ่ม import
+  - `SourceReorder(BaseModel)` model ใหม่: `direction: Literal["up", "down"]`
+  - `POST /api/sources/{source_id}/reorder` endpoint ใหม่ — returns updated sources list
+- **`static/app.js`**:
+  - `renderSourcesList()`: เปลี่ยน `.map(s =>` → `.map((s, i) =>` + เพิ่ม ↑↓ chevron buttons
+  - ↑ disabled เมื่อ `i === 0`, ↓ disabled เมื่อ `i === sources.length - 1`
+  - event handler `.src-reorder`: เรียก `POST /api/sources/{id}/reorder` → `await loadSources()` → `loadSettings()`
+
+**Feature 2: File Size Colored Badge**
+
+- **`static/style.css`**:
+  - `.tw-badge-size` — `font-size: 12px; font-weight: 700; padding: 2px 7px` (companion class กับ `.tw-badge`)
+  - `.tw-badge-size-sm` — gray `rgba(107,114,128,0.15)` / `#9ca3af` (MB หรือ <1 GB)
+  - `.tw-badge-size-md` — amber `rgba(245,158,11,0.15)` / `#f59e0b` (1–4.9 GB)
+  - `.tw-badge-size-lg` — red `rgba(239,68,68,0.15)` / `#ef4444` (≥5 GB)
+  - `.tw-btn-icon:disabled` — `opacity: 0.3; cursor: not-allowed; pointer-events: none` (bonus fix)
+- **`static/app.js`**:
+  - `sizeClass(s)` helper (ก่อน card renderer section): parse GB จาก string → return tier class
+  - `cardHTML()`: เปลี่ยน `tw-stat-sep + tw-stat-lbl` → `<span class="tw-badge tw-badge-size ${sizeClass(...)}">`
+
+**Commits:**
+- `c40a36b` feat(torrentwatch): add sort_order to sources — migration, backfill, reorder_source()
+- `53b1b1b` fix(torrentwatch): seed_default_sources with sort_order + add sort_order to CREATE TABLE DDL
+- `f6592a6` feat(torrentwatch): add POST /api/sources/{id}/reorder endpoint
+- `8110d2b` fix(torrentwatch): use Literal type for direction + explicit status_code=200
+- `2c85ea0` feat(torrentwatch): source reorder ↑↓ buttons in Settings
+- `50b5fc3` feat(torrentwatch): file size colored badge — gray/amber/red by tier
+
+**Pushed to:** `origin/main` (15cbe43 → 50b5fc3)
 
 ---
 

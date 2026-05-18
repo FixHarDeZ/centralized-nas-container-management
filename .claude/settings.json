@@ -1,43 +1,10 @@
 {
   "permissions": {
-    "allow": [
-      "Bash(gh auth:*)",
-      "Bash(ssh -T git@github.com)",
-      "Bash(git commit -m ':*)",
-      "Bash(gh release create v1.2.2 --title 'v1.2.2 — Docs cleanup: Container Manager as primary workflow' --notes ':*)",
-      "Read(//Users/peerawat.ujaiyen/.claude/**)",
-      "Read(//usr/local/bin/**)",
-      "Read(//Users/peerawat.ujaiyen/.nvm/versions/**)",
-      "Bash(/opt/homebrew/bin/node --check /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management/maid-tracker/static/app.js)",
-      "Bash(gh release create v1.7.2 --title 'v1.7.2 — Acknowledgment message before LINE webhook attendance recording' --notes ' *)",
-      "Skill(maid-release)",
-      "Skill(maid-release:*)",
-      "Bash(git commit -m ' *)",
-      "Bash(gh release create v1.12.0 --title 'v1.12.0 — Synology Reverse Proxy for external HTTPS' --notes ' *)",
-      "Bash(git -C /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management/.claude/worktrees/quirky-goldstine add maid-tracker/)",
-      "Bash(git -C /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management/.claude/worktrees/quirky-goldstine commit -m ' *)",
-      "Bash(git -C /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management/.claude/worktrees/quirky-goldstine status)",
-      "Bash(git worktree *)",
-      "Bash(git branch *)",
-      "Bash(xargs sed *)",
-      "Bash(git -C /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management rm --cached CLAUDE.md)",
-      "Bash(git -C /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management status)",
-      "Bash(git -C /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management diff --staged)",
-      "Bash(git -C /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management log --oneline -5)",
-      "Bash(git -C /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management add .gitignore README.md homepage/README.md jellyfin/README.md maid-tracker/README.md portainer/README.md uptime-kuma/README.md .claude/settings.json)",
-      "Bash(git -C /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management commit -m ' *)",
-      "Bash(git -C /Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management push)",
-      "Bash(gh release create v2.0.0 --title 'v2.0.0 — SSH key auth, env consolidation, and security hardening' --notes ' *)",
-      "Bash(gh release create v2.0.1 --title 'v2.0.1 — Port documentation and English translations' --notes ' *)",
-      "Skill(release)",
-      "Skill(release:*)",
-      "Bash(gh release create v2.2.1 --title 'v2.2.1 — Table cell content in fallback keyword matching' --notes ' *)",
-      "Bash(gh release create v2.3.1 --title 'v2.3.1 — Find tables nested inside toggle blocks' --notes ' *)",
-      "Bash(gh release create v2.5.0 --title 'v2.5.0 — Groq→OpenRouter auto-failover' --notes ' *)",
-      "WebFetch(domain:gist.github.com)"
-    ],
+    "allow": ["*"],
     "additionalDirectories": [
       "/Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management/.claude"
-    ]
+    ],
+    "defaultMode": "bypassPermissions",
+    "skipDangerousModePermissionPrompt": true
   }
 }
