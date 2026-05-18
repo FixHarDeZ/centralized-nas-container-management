@@ -1,6 +1,6 @@
 # TorrentWatch — Project Index (Memory Blueprint)
 
-> อัปเดตล่าสุด: 2026-05-15  
+> อัปเดตล่าสุด: 2026-05-18  
 > ใช้ไฟล์นี้เป็น cold-start memory ก่อนเริ่มงานทุกครั้ง
 
 ---
@@ -72,7 +72,8 @@ torrentwatch/
 | `NGINX_BASIC_AUTH_USER` | Basic Auth username (shared with homepage) |
 | `NGINX_BASIC_AUTH_PASS` | Basic Auth password |
 
-⚠️ `LINE_ACCESS_TOKEN` และ `LINE_USER_ID` **ยังไม่ได้เพิ่มใน config.py** (ดู Known Gaps)
+| `TORRENTWATCH_TELEGRAM_BOT_TOKEN` | Telegram Bot Token จาก @BotFather |
+| `TORRENTWATCH_TELEGRAM_CHAT_ID` | Chat ID ปลายทาง (ค้นหาจากปุ่มใน Settings UI) |
 
 ---
 
@@ -244,6 +245,7 @@ Bearbit block request ที่ Referer ไม่ใช่ bearbit URL:
 | Gap | รายละเอียด | ไฟล์ที่เกี่ยวข้อง |
 |---|---|---|
 | ✅ LINE notification — **FIXED** | wired เข้า config.py + scheduler.py แล้ว (2026-05-13) | config.py, scheduler.py |
+| ✅ Telegram notification — **ADDED** | telegram_notify.py ใหม่ + wired ใน scheduler (2026-05-18) — ต้องใส่ TELEGRAM_CHAT_ID ใน .env | telegram_notify.py, config.py, scheduler.py |
 | ✅ Category filter — **FIXED** | chip bar แสดงใต้ toolbar (Today tab) | app.js, index.html |
 | ✅ Text search — **FIXED** | search input กรอง title (Today tab) | app.js, index.html |
 | ✅ Retention configurable — **FIXED** | `retention_days` setting ใน UI | db.py, index.html |
@@ -253,6 +255,15 @@ Bearbit block request ที่ Referer ไม่ใช่ bearbit URL:
 ---
 
 ## Recent Changes
+
+### 2026-05-18 (Telegram notification)
+
+1. **`telegram_notify.py`** ใหม่ — Telegram Bot API (sendMessage, getUpdates)
+2. **`config.py`** — เพิ่ม `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` env vars
+3. **`db.py`** — เพิ่ม `telegram_notify_keyword_enabled` setting (default "0")
+4. **`scheduler.py`** — wire Telegram notify ข้าง LINE, เพิ่ม `telegram_configured` ใน status
+5. **`main.py`** — `POST /api/telegram/test`, `GET /api/telegram/get-chat-id`
+6. **`static/`** — Telegram settings card + JS handlers (toggle, test, get-chat-id)
 
 ### 2026-05-15 (clean code)
 

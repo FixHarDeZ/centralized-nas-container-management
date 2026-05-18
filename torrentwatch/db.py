@@ -9,14 +9,15 @@ import config
 _TZ = ZoneInfo(config.TZ)
 
 _DEFAULT_SETTINGS = {
-    "seed_min":                    "10",
-    "leech_min":                   "10",
-    "completed_min":               "20",
-    "filter_mode":                 "or",   # "and" or "or"
-    "scrape_sticky":               "1",    # "0" = skip sticky/pinned, "1" = include them
-    "line_notify_keyword_enabled": "0",    # "0" = off, "1" = push LINE on keyword match
-    "auto_download_nas":           "0",    # "0" = off, "1" = auto-save keyword matches to /downloads
-    "retention_days":              "7",    # days to keep torrent records before weekly cleanup
+    "seed_min":                        "10",
+    "leech_min":                       "10",
+    "completed_min":                   "20",
+    "filter_mode":                     "or",   # "and" or "or"
+    "scrape_sticky":                   "1",    # "0" = skip sticky/pinned, "1" = include them
+    "line_notify_keyword_enabled":     "0",    # "0" = off, "1" = push LINE on keyword match
+    "telegram_notify_keyword_enabled": "0",    # "0" = off, "1" = push Telegram on keyword match
+    "auto_download_nas":               "0",    # "0" = off, "1" = auto-save keyword matches to /downloads
+    "retention_days":                  "7",    # days to keep torrent records before weekly cleanup
 }
 
 

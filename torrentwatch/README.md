@@ -25,6 +25,8 @@ A daily torrent monitor that scrapes [bearbit.org](https://bearbit.org) on a sch
 - **History tab** — browse any past date (read-only, frozen data)
 - **Fixed auto-scrape schedule** (Asia/Bangkok): 19:00–01:00 every 30 min · 01:00–06:00 paused · 06:00–19:00 every 60 min
 - **Live progress** — header badge shows source/page/count in real-time during scrape; auto-refreshes the list when done
+- **LINE notification** — push to LINE when new keyword-matched torrents are found (configure via Settings UI)
+- **Telegram notification** — push to Telegram Bot when new keyword-matched torrents are found; built-in Chat ID discovery helper in Settings UI
 - **HTTP Basic Auth** — web UI protected via `NGINX_BASIC_AUTH_USER` / `NGINX_BASIC_AUTH_PASS`
 - **Weekly cleanup** — deletes records older than 7 days every Sunday at 03:00
 
@@ -62,6 +64,14 @@ NAS_TORRENT_PATH=/var/services/homes/<NAS_USER>/Torrents_Watch
 # HTTP Basic Auth — shared with homepage (leave empty to disable auth)
 NGINX_BASIC_AUTH_USER=your_username
 NGINX_BASIC_AUTH_PASS=your_password
+
+# LINE notification (optional) — get token from LINE Developers Console
+TORRENTWATCH_LINE_ACCESS_TOKEN=your_line_channel_access_token
+TORRENTWATCH_LINE_USER_ID=your_line_user_id
+
+# Telegram notification (optional) — get token from @BotFather
+TORRENTWATCH_TELEGRAM_BOT_TOKEN=your_bot_token
+TORRENTWATCH_TELEGRAM_CHAT_ID=your_chat_id   # use "ค้นหา Chat ID" button in Settings UI
 ```
 
 ### 3. NAS Watch Folder
@@ -106,8 +116,13 @@ Router must forward external port `5062 → NAS`.
 |---|---|---|
 | Seed min | `10` | Minimum seeds for a torrent to pass |
 | Leech min | `10` | Minimum leeches for a torrent to pass |
-| Filter mode | `OR` | `AND` = both must meet · `OR` = either is enough |
-| รวม sticky/pinned | off | Include bearbit pinned entries; syncs removals automatically |
+| Completed min | `20` | Minimum completed/snatches (`0` = disabled in AND mode) |
+| Filter mode | `OR` | `AND` = all thresholds must meet · `OR` = any one is enough |
+| รวม sticky/pinned | on | Include bearbit pinned entries; syncs removals automatically |
+| Auto-download to NAS | off | Auto-save keyword-matched `.torrent` to `/downloads` |
+| เก็บประวัติ | `7` days | Retention period; older records deleted on Sunday 03:00 |
+| LINE notification | off | Push to LINE when new keyword-matched torrents are found |
+| Telegram notification | off | Push to Telegram Bot when new keyword-matched torrents are found |
 
 **Auto-scrape schedule** is fixed (not configurable):
 
@@ -132,6 +147,9 @@ Router must forward external port `5062 → NAS`.
 | `GET /api/settings` · `PUT` | Read/update settings (rebuilds scrape job on interval/time change) |
 | `POST /api/scrape` | Manual scrape trigger |
 | `GET /api/status` | Scraper + scheduler state, including live `scrape_progress` |
+| `POST /api/line/test` | Send a test LINE message to verify configuration |
+| `POST /api/telegram/test` | Send a test Telegram message to verify configuration |
+| `GET /api/telegram/get-chat-id` | Call `getUpdates` to discover your Telegram chat ID |
 | `GET /api/debug/html?source_id=…` | Raw scraped HTML — for selector tuning |
 | `GET /api/debug/login-page` | Raw bearbit login page |
 | `POST /api/debug/relogin` | Force re-login |
@@ -178,6 +196,8 @@ TorrentWatch เป็น app สำหรับ monitor torrent ใหม่จ
 - Auto scrape ตารางเวลาคงที่: 19:00–01:00 ทุก 30 นาที · 01:00–06:00 หยุด · 06:00–19:00 ทุก 1 ชม.
 - Header badge แสดง progress live: source / page / จำนวน items ระหว่าง scrape
 - HTTP Basic Auth — ป้องกัน UI ด้วย `NGINX_BASIC_AUTH_USER` / `NGINX_BASIC_AUTH_PASS`
+- **LINE notification** — push แจ้งเตือนเมื่อพบ keyword match ใหม่ (ตั้งค่าผ่าน Settings UI)
+- **Telegram notification** — push แจ้งเตือนเมื่อพบ keyword match ใหม่ มี helper ค้นหา Chat ID ใน Settings UI
 - ลบข้อมูลเก่าอัตโนมัติทุก Sunday 03:00 (เกิน 7 วัน)
 
 ## การตั้งค่า
@@ -199,6 +219,14 @@ NAS_TORRENT_PATH=/var/services/homes/<NAS_USER>/Torrents_Watch
 # HTTP Basic Auth — ใช้ร่วมกับ homepage (ว่างเปล่า = ไม่มี auth)
 NGINX_BASIC_AUTH_USER=your_username
 NGINX_BASIC_AUTH_PASS=your_password
+
+# LINE notification (optional)
+TORRENTWATCH_LINE_ACCESS_TOKEN=your_line_channel_access_token
+TORRENTWATCH_LINE_USER_ID=your_line_user_id
+
+# Telegram notification (optional)
+TORRENTWATCH_TELEGRAM_BOT_TOKEN=your_bot_token
+TORRENTWATCH_TELEGRAM_CHAT_ID=your_chat_id   # หาได้จากปุ่ม "ค้นหา Chat ID" ใน Settings
 ```
 
 ### 3. Deploy

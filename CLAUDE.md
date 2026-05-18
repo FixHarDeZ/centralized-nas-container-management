@@ -15,7 +15,9 @@ This file guides Claude Code (claude.ai/code) on project rules, architecture, an
 
 *   **Environment:** ไฟล์ `.env` อยู่ที่ root ใช้ร่วมกันทุก Stacks (**ห้าม Commit เด็ดขาด**)
 *   **Target OS:** Synology DSM 7.3.2 (Container Manager) บน DS925+ NAS
-*   **Deployment:** ใช้สคริปต์ `scripts/deploy.sh` เพื่อ rsync โค้ดผ่าน SSH (Key-based) และสั่ง Restart Container อัตโนมัติ (ใช้ `NAS_SUDO_PASSWORD` ในการสั่ง `sudo docker compose down && up -d --build`)
+*   **Deployment:** ใช้สคริปต์ `scripts/deploy.sh` เพื่ออัปโหลดโค้ดผ่าน SSH (`tar | ssh`) และสั่ง Restart Container อัตโนมัติ (ใช้ `NAS_SUDO_PASSWORD` ในการสั่ง `sudo docker compose up -d --build`)
+*   **⚠️ ห้ามใช้ `rsync` ใน deploy scripts:** macOS bundled rsync คือ `openrsync` (protocol 29) ซึ่ง **ไม่ compatible** กับ Synology NAS GNU rsync (protocol 31) ทำให้ transfer ล้มเหลวทุกครั้ง — ให้ใช้ `tar | ssh` แทนเสมอ
+*   **⚠️ SSH multi-arg gotcha:** `ssh host bash -l -c "cmd | pipe"` ส่ง 3 args แยกกัน remote shell ตีความ pipe ผิด — ต้องห่อทั้งหมดเป็น single quoted string: `ssh host "bash -lc \"cmd | pipe\""`
 
 ### Adding New Stack to DSM
 1. รัน `scripts/deploy.sh` เพื่ออัปโหลดไฟล์ไปที่ NAS (`/volume1/docker/`)

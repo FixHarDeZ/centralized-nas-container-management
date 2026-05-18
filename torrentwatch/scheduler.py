@@ -21,6 +21,7 @@ from apscheduler.triggers.cron import CronTrigger
 import config
 import db
 import line_notify
+import telegram_notify
 import scraper
 
 _TZ = ZoneInfo(config.TZ)
@@ -59,7 +60,8 @@ async def _do_scrape():
     filter_mode   = settings.get("filter_mode", "and")
     scrape_sticky_val = settings.get("scrape_sticky", "0")
     skip_sticky  = scrape_sticky_val != "1"
-    line_notify_enabled = settings.get("line_notify_keyword_enabled", "0") == "1"
+    line_notify_enabled     = settings.get("line_notify_keyword_enabled", "0") == "1"
+    telegram_notify_enabled = settings.get("telegram_notify_keyword_enabled", "0") == "1"
     auto_dl      = settings.get("auto_download_nas", "0") == "1"
     nas_dir      = Path(config.NAS_DOWNLOADS_DIR)
     print(f"[scheduler] scrape_sticky={scrape_sticky_val!r} → skip_sticky={skip_sticky}")
@@ -118,6 +120,13 @@ async def _do_scrape():
                     await line_notify.notify_keyword_matches(source_url, new_keyword_matches)
             except Exception as e:
                 print(f"[scheduler] LINE notify error {source_url}: {e}")
+
+            # Push Telegram notification for newly-found keyword-matched torrents only
+            try:
+                if telegram_notify_enabled and new_keyword_matches:
+                    await telegram_notify.notify_keyword_matches(source_url, new_keyword_matches)
+            except Exception as e:
+                print(f"[scheduler] Telegram notify error {source_url}: {e}")
 
             # Auto-download new keyword matches directly to NAS watch folder
             if auto_dl and new_keyword_matches:
@@ -229,7 +238,8 @@ def status() -> dict:
         "scrape_status":   _scrape_status,
         "scraper_ready":   scraper.is_ready(),
         "scrape_progress": _scrape_progress,
-        "line_configured": bool(config.LINE_ACCESS_TOKEN and config.LINE_USER_ID),
+        "line_configured":     bool(config.LINE_ACCESS_TOKEN and config.LINE_USER_ID),
+        "telegram_configured": bool(config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID),
     }
 
 
