@@ -132,7 +132,7 @@ NOTION_TOKEN=ntn_...
 ## Deploy
 
 ```bash
-./deploy.sh   # อัปโหลด + restart line-secretary บน NAS
+scripts/deploy.sh   # อัปโหลด + restart line-secretary บน NAS
 ```
 
 NAS path: `/volume1/docker/line-secretary`
