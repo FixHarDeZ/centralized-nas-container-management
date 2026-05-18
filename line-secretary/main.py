@@ -192,8 +192,14 @@ async def handle_message(event: dict) -> None:
                     token,
                 )
                 return
-            await line_client.push(user_id, "บันทึกเรียบร้อยแล้วค่ะ ✅", token)
+            await line_client.push(user_id, f"บันทึกลง '{title}' เรียบร้อยแล้วค่ะ ✅", token)
             return
+
+        # unknown phase — clear and reset
+        logger.warning(f"Unknown pending_note phase for {user_id}: {note_state.get('phase')}")
+        store.pop_pending_note(user_id)
+        await line_client.push(user_id, "เกิดข้อผิดพลาดในขั้นตอนจดโน้ตค่ะ กรุณาเริ่มใหม่อีกครั้ง", token)
+        return
 
     # Detect note-taking intent
     if _is_note_intent(text):
