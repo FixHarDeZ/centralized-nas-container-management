@@ -45,6 +45,7 @@ def init_db():
                 url        TEXT UNIQUE NOT NULL,
                 label      TEXT DEFAULT '',
                 enabled    INTEGER DEFAULT 1,
+                sort_order INTEGER DEFAULT 0,
                 created_at TEXT NOT NULL
             );
 
@@ -129,8 +130,11 @@ def seed_default_sources(urls: list[str]):
         existing = {r["url"] for r in c.execute("SELECT url FROM sources").fetchall()}
         if not existing:
             now = _now()
-            for url in urls:
-                c.execute("INSERT OR IGNORE INTO sources(url, enabled, created_at) VALUES (?, 1, ?)", (url, now))
+            for i, url in enumerate(urls, start=1):
+                c.execute(
+                    "INSERT OR IGNORE INTO sources(url, enabled, sort_order, created_at) VALUES (?, 1, ?, ?)",
+                    (url, i, now)
+                )
 
 
 def _now() -> str:
