@@ -17,6 +17,7 @@ from pydantic import BaseModel
 import config
 import db
 import line_notify
+import telegram_notify
 import scraper
 import scheduler
 
@@ -336,6 +337,24 @@ async def api_line_test():
         return {"status": "ok", "message": "Test message sent"}
     else:
         raise HTTPException(400, result.get("error", "LINE send failed"))
+
+
+# ─── Telegram ─────────────────────────────────────────────────────────────────
+
+@app.post("/api/telegram/test")
+async def api_telegram_test():
+    """Send a test Telegram message to verify the configuration."""
+    result = await telegram_notify.send_test_message()
+    if result["ok"]:
+        return {"status": "ok", "message": "Test message sent"}
+    else:
+        raise HTTPException(400, result.get("error", "Telegram send failed"))
+
+
+@app.get("/api/telegram/get-chat-id")
+async def api_telegram_get_chat_id():
+    """Call getUpdates to help user discover their Telegram chat_id."""
+    return await telegram_notify.get_updates()
 
 
 @app.delete("/api/debug/clear-today/{source_id}", status_code=204)

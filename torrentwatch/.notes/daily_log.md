@@ -3,6 +3,30 @@
 ---
 
 ### Session Log Entry
+**Timestamp:** 2026-05-18
+**Title:** Feature — Telegram Notification Support
+
+**ไฟล์ที่แก้ไข:**
+
+- **`telegram_notify.py`** (ใหม่): Telegram Bot API — `_send()`, `notify_keyword_matches()`, `send_test_message()`, `get_updates()` (ช่วย discover chat_id)
+- **`config.py`**: เพิ่ม `TORRENTWATCH_TELEGRAM_BOT_TOKEN` + `TORRENTWATCH_TELEGRAM_CHAT_ID` env vars
+- **`db.py`**: เพิ่ม `telegram_notify_keyword_enabled = "0"` ใน `_DEFAULT_SETTINGS`
+- **`scheduler.py`**: import `telegram_notify`; อ่าน `telegram_notify_enabled` จาก settings; push Telegram หลัง LINE notify; เพิ่ม `telegram_configured` ใน `status()` dict
+- **`main.py`**: import `telegram_notify`; เพิ่ม `POST /api/telegram/test` และ `GET /api/telegram/get-chat-id`
+- **`static/index.html`**: เพิ่ม Telegram settings card (toggle, test button, get-chat-id button + result div); bump version string → `v=20260518`
+- **`static/app.js`**: load/save `telegram_notify_keyword_enabled`; Telegram status hint; event handlers สำหรับ test + get-chat-id
+- **`.env`**: เพิ่ม `TORRENTWATCH_TELEGRAM_BOT_TOKEN` (token ใส่แล้ว) + `TORRENTWATCH_TELEGRAM_CHAT_ID` (ต้องกรอก)
+
+**วิธี Test:**
+
+1. ใส่ Bot Token ใน `.env` แล้ว (เพิ่มแล้ว)
+2. เปิด Settings → "ค้นหา Chat ID" → ส่งข้อความหา bot ก่อน → กดปุ่ม → copy chat_id มาใส่ `.env`
+3. กด "ทดสอบส่ง Telegram" ตรวจสอบใน Telegram
+4. เปิด toggle "เปิดใช้งาน" + บันทึก → จะส่งทุกครั้งที่พบ keyword match
+
+---
+
+### Session Log Entry
 **Timestamp:** 2026-05-15
 **Title:** Clean Code — Import hygiene, deduplication, private API elimination
 

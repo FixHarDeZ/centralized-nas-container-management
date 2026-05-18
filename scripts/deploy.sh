@@ -91,6 +91,7 @@ done
 
 # ── SSH setup — multiplexing keeps one connection alive for all commands ──────
 MUX_SOCKET="/tmp/nas_deploy_mux_$$"
+SSH_WRAPPER=""   # set later; referenced in trap for cleanup
 
 if [[ -n "${NAS_SSH_ALIAS}" ]]; then
   SSH_DEST="${NAS_SSH_ALIAS}"
@@ -103,7 +104,7 @@ fi
 SSH_MUX="-o ControlMaster=auto -o ControlPath=${MUX_SOCKET} -o ControlPersist=120"
 SSH_OPTS="${SSH_BASE} ${SSH_MUX}"
 
-trap 'ssh -o ControlPath="${MUX_SOCKET}" -O exit "${SSH_DEST}" 2>/dev/null; rm -f "${MUX_SOCKET}"' EXIT
+trap 'ssh -o ControlPath="${MUX_SOCKET}" -O exit "${SSH_DEST}" 2>/dev/null; rm -f "${MUX_SOCKET}" "${SSH_WRAPPER:-}"' EXIT
 
 # ── Connection check — establishes the mux master ────────────────────────────
 log "Connecting to ${SSH_DEST} ..."
@@ -137,33 +138,37 @@ if [[ "$RESTART_ONLY" == false ]]; then
     echo ""
   fi
 
-  RSYNC_OPTS=(
-    -avz --progress --delete
-    --exclude='.git/'
-    --exclude='.env'
-    --exclude='__pycache__/'
-    --exclude='*.pyc'
-    --exclude='*.pyo'
-    --exclude='.DS_Store'
-    --exclude='.notes/'
-    --exclude='*.egg-info/'
-    --exclude='.venv/'
-    --exclude='node_modules/'
+  # macOS ships openrsync (protocol 29) which is incompatible with Synology's
+  # GNU rsync (protocol 31). Use tar+ssh instead — proven reliable across all
+  # macOS versions and NAS firmware. Files are piped in a single SSH session
+  # reusing the mux master established above.
+  TAR_EXCLUDES=(
+    --exclude='./.git'
+    --exclude='./.env'
+    --exclude='./__pycache__'
+    --exclude='./*.pyc'
+    --exclude='./*.pyo'
+    --exclude='./.DS_Store'
+    --exclude='./.notes'
+    --exclude='./*.egg-info'
+    --exclude='./.venv'
+    --exclude='./node_modules'
   )
-  [[ "$DRY_RUN" == true ]] && RSYNC_OPTS+=(--dry-run)
 
-  log "Syncing project files ..."
-  rsync "${RSYNC_OPTS[@]}" \
-    -e "ssh ${SSH_OPTS}" \
-    "${PROJECT_ROOT}/" \
-    "${SSH_DEST}:${NAS_TARGET_PATH}/"
+  if [[ "$DRY_RUN" == true ]]; then
+    log "DRY RUN — files that would be uploaded:"
+    COPYFILE_DISABLE=1 tar -czf - "${TAR_EXCLUDES[@]}" -C "${PROJECT_ROOT}" . \
+      | ssh $SSH_OPTS "${SSH_DEST}" \
+        "tar -tzf - 2>/dev/null | grep -v '/$' | head -50"
+    warn "Dry run complete — no files were transferred."
+  else
+    log "Uploading project files via tar+ssh ..."
+    COPYFILE_DISABLE=1 tar -czf - "${TAR_EXCLUDES[@]}" -C "${PROJECT_ROOT}" . \
+      | ssh $SSH_OPTS "${SSH_DEST}" \
+        "mkdir -p '${NAS_TARGET_PATH}' && tar -xzf - -C '${NAS_TARGET_PATH}' --no-same-permissions --no-same-owner 2>/dev/null; exit 0"
 
-  if [[ "$DRY_RUN" == false ]]; then
     log "Uploading .env ..."
-    rsync -az \
-      -e "ssh ${SSH_OPTS}" \
-      "${PROJECT_ROOT}/.env" \
-      "${SSH_DEST}:${NAS_TARGET_PATH}/.env"
+    ssh $SSH_OPTS "${SSH_DEST}" "cat > '${NAS_TARGET_PATH}/.env'" < "${PROJECT_ROOT}/.env"
     ok "Upload complete ($(elapsed))"
   fi
 fi
@@ -225,11 +230,14 @@ log "Restarting: ${STACKS_TO_RESTART[*]}"
 for stack in "${STACKS_TO_RESTART[@]}"; do
   echo ""
   printf "${C_BOLD}── %s ──${C_RESET}\n" "$stack"
-  ssh $SSH_OPTS "${SSH_DEST}" bash -l -c \
-    "echo '${NAS_SUDO_PASSWORD}' | sudo -S docker compose \
+  # Pass the entire command as ONE quoted string so SSH sends it verbatim to the
+  # remote shell. Splitting into bash/-l/-c/cmd as separate ssh args causes the
+  # remote shell to parse the pipe incorrectly (password never reaches sudo -S).
+  ssh $SSH_OPTS "${SSH_DEST}" \
+    "bash -lc \"echo '${NAS_SUDO_PASSWORD}' | sudo -S docker compose \
       --env-file '${NAS_TARGET_PATH}/.env' \
       -f '${NAS_TARGET_PATH}/${stack}/docker-compose.yml' \
-      up -d --build 2>&1"
+      up -d --build 2>&1\""
   ok "$stack restarted"
 done
 

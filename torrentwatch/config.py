@@ -18,3 +18,7 @@ BASIC_AUTH_PASS = os.environ.get("NGINX_BASIC_AUTH_PASS", "")
 # LINE Messaging API — push notifications for keyword matches
 LINE_ACCESS_TOKEN = os.environ.get("TORRENTWATCH_LINE_ACCESS_TOKEN", "")
 LINE_USER_ID      = os.environ.get("TORRENTWATCH_LINE_USER_ID", "")
+
+# Telegram Bot API — push notifications for keyword matches
+TELEGRAM_BOT_TOKEN = os.environ.get("TORRENTWATCH_TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID   = os.environ.get("TORRENTWATCH_TELEGRAM_CHAT_ID", "")

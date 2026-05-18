@@ -422,6 +422,7 @@ async function loadSettings() {
   document.getElementById("cfg-auto-dl").checked = settings.auto_download_nas === "1";
   document.getElementById("cfg-retention").value = settings.retention_days ?? 7;
   document.getElementById("cfg-line-notify").checked = settings.line_notify_keyword_enabled === "1";
+  document.getElementById("cfg-telegram-notify").checked = settings.telegram_notify_keyword_enabled === "1";
 
   const hint = document.getElementById("line-status-hint");
   if (hint) {
@@ -431,6 +432,17 @@ async function loadSettings() {
     } else {
       hint.textContent = "⚠ ยังไม่ได้ตั้งค่า TORRENTWATCH_LINE_ACCESS_TOKEN / TORRENTWATCH_LINE_USER_ID ใน .env";
       hint.style.color = "#f59e0b";
+    }
+  }
+
+  const tgHint = document.getElementById("telegram-status-hint");
+  if (tgHint) {
+    if (status.telegram_configured) {
+      tgHint.textContent = "✓ Telegram Bot token + Chat ID ตั้งค่าแล้ว — พร้อมส่งแจ้งเตือน";
+      tgHint.style.color = "var(--seed)";
+    } else {
+      tgHint.textContent = "⚠ ยังไม่ได้ตั้งค่า TORRENTWATCH_TELEGRAM_BOT_TOKEN / TORRENTWATCH_TELEGRAM_CHAT_ID ใน .env";
+      tgHint.style.color = "#f59e0b";
     }
   }
 
@@ -559,8 +571,9 @@ document.getElementById("btn-save-settings").addEventListener("click", async () 
     completed_min:               document.getElementById("cfg-completed-min").value,
     filter_mode:                 document.querySelector('input[name="filter_mode"]:checked')?.value ?? "and",
     scrape_sticky:               document.getElementById("cfg-scrape-sticky").checked ? "1" : "0",
-    line_notify_keyword_enabled: document.getElementById("cfg-line-notify").checked ? "1" : "0",
-    auto_download_nas:           document.getElementById("cfg-auto-dl").checked ? "1" : "0",
+    line_notify_keyword_enabled:     document.getElementById("cfg-line-notify").checked ? "1" : "0",
+    telegram_notify_keyword_enabled: document.getElementById("cfg-telegram-notify").checked ? "1" : "0",
+    auto_download_nas:               document.getElementById("cfg-auto-dl").checked ? "1" : "0",
     retention_days:              document.getElementById("cfg-retention").value,
   };
   try {
@@ -584,6 +597,49 @@ document.getElementById("btn-line-test").addEventListener("click", async () => {
   } finally {
     btn.disabled = false;
     btn.innerHTML = '<i class="bi bi-send"></i> ทดสอบส่ง LINE';
+  }
+});
+
+// ─── Telegram test + get-chat-id ─────────────────────────────────────────────
+document.getElementById("btn-telegram-test").addEventListener("click", async () => {
+  const btn = document.getElementById("btn-telegram-test");
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split"></i> กำลังส่ง...';
+  try {
+    const r = await api("POST", "/telegram/test");
+    toast(r?.message || "ส่งทดสอบแล้ว — ตรวจสอบ Telegram", "success");
+  } catch (e) {
+    toast("ส่งไม่สำเร็จ: " + e.message, "error");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-send"></i> ทดสอบส่ง Telegram';
+  }
+});
+
+document.getElementById("btn-telegram-get-chat-id").addEventListener("click", async () => {
+  const btn = document.getElementById("btn-telegram-get-chat-id");
+  const resultDiv = document.getElementById("telegram-chat-id-result");
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split"></i> กำลังดึงข้อมูล...';
+  resultDiv.style.display = "none";
+  try {
+    const r = await api("GET", "/telegram/get-chat-id");
+    if (!r.ok) {
+      resultDiv.innerHTML = `<span style="color:#f59e0b">⚠ ${escHtml(r.error)}</span>`;
+    } else if (!r.chats || r.chats.length === 0) {
+      resultDiv.innerHTML = `<span style="color:#f59e0b">⚠ ไม่พบ chat — ลองส่งข้อความหา bot ก่อนแล้วลองใหม่</span>`;
+    } else {
+      resultDiv.innerHTML = r.chats.map(c =>
+        `<div>💬 <b>${escHtml(c.name || "(no name)")}</b> [${escHtml(c.type)}]<br>Chat ID: <code style="user-select:all;background:var(--surface1);padding:1px 5px;border-radius:4px">${c.chat_id}</code></div>`
+      ).join("<hr style='border-color:var(--surface1);margin:6px 0'>");
+    }
+    resultDiv.style.display = "block";
+  } catch (e) {
+    resultDiv.innerHTML = `<span style="color:#f87171">ข้อผิดพลาด: ${escHtml(e.message)}</span>`;
+    resultDiv.style.display = "block";
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-search"></i> ค้นหา Chat ID';
   }
 });
 
