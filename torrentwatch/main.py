@@ -75,6 +75,9 @@ class SourceToggle(BaseModel):
 class SourceRename(BaseModel):
     label: str
 
+class SourceReorder(BaseModel):
+    direction: str  # "up" or "down"
+
 @app.get("/api/sources")
 def api_get_sources():
     return db.get_sources()
@@ -100,6 +103,13 @@ def api_toggle_source(source_id: int, body: SourceToggle):
 @app.patch("/api/sources/{source_id}/label", status_code=204)
 def api_rename_source(source_id: int, body: SourceRename):
     db.rename_source(source_id, body.label)
+
+@app.post("/api/sources/{source_id}/reorder")
+def api_reorder_source(source_id: int, body: SourceReorder):
+    if body.direction not in ("up", "down"):
+        raise HTTPException(400, "direction must be 'up' or 'down'")
+    db.reorder_source(source_id, body.direction)
+    return db.get_sources()
 
 
 # ─── Categories ──────────────────────────────────────────────────────────────
