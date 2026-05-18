@@ -4,6 +4,7 @@ State shape:
   {
     "pending":         { user_id: write_payload },
     "pending_general": { user_id: original_question },
+    "pending_note":    { user_id: note_creation_state },
     "history":         { user_id: [ {role, content}, ... ] }  # max MAX_HISTORY exchanges
   }
 
@@ -25,6 +26,7 @@ _DATA_FILE = "/data/state.json"
 _state: dict = {
     "pending": {},
     "pending_general": {},
+    "pending_note": {},
     "history": {},
 }
 
@@ -98,6 +100,28 @@ def pop_pending_general(user_id: str) -> str | None:
 
 def has_pending_general(user_id: str) -> bool:
     return user_id in _state["pending_general"]
+
+
+# ── pending_note ──────────────────────────────────────────────────
+
+def get_pending_note(user_id: str) -> dict | None:
+    return _state["pending_note"].get(user_id)
+
+
+def set_pending_note(user_id: str, payload: dict) -> None:
+    _state["pending_note"][user_id] = payload
+    _save()
+
+
+def pop_pending_note(user_id: str) -> dict | None:
+    val = _state["pending_note"].pop(user_id, None)
+    if val is not None:
+        _save()
+    return val
+
+
+def has_pending_note(user_id: str) -> bool:
+    return user_id in _state["pending_note"]
 
 
 # ── history ───────────────────────────────────────────────────────
