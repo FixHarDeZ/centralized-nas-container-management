@@ -11,6 +11,7 @@ const state = {
   historyDate: "",
   settings: {},
   search: "",
+  searchHistory: "",
   activeCategory: "",
   catNames: {},   // cat_id → display name from /api/categories
 };
@@ -60,6 +61,7 @@ function onTabActivate(tab) {
   if (tab === "history") loadHistoryDates();
   if (tab === "keywords") loadKeywords();
   if (tab === "settings") loadSettings();
+  if (tab === "stats") loadStats();
 }
 
 // ─── Sources ──────────────────────────────────────────────────────────────────
@@ -96,6 +98,11 @@ function renderSourceChips() {
           state.activeCategory = "";
           state.search = "";
           const searchEl = document.getElementById("search-input");
+          if (searchEl) searchEl.value = "";
+        }
+        if (tab === "history") {
+          state.searchHistory = "";
+          const searchEl = document.getElementById("history-search-input");
           if (searchEl) searchEl.value = "";
         }
         renderSourceChips();
@@ -210,21 +217,48 @@ async function loadHistoryDates() {
     sel.value = prev;
     loadHistory(prev);
   } else {
-    document.getElementById("list-history").innerHTML = "";
+    loadHistory(null);
   }
 }
 
 async function loadHistory(date) {
   const sid = state.activeSource.history;
-  if (!sid || !date) return;
+  if (!sid) return;
+  const q = state.searchHistory;
+
+  if (!date) {
+    if (q.length >= 2) {
+      // Global search across all dates
+      const data = await api("GET", `/search?source_id=${sid}&q=${encodeURIComponent(q)}`).catch(() => ({ torrents: [] }));
+      const results = data.torrents || [];
+      if (!results.length) {
+        document.getElementById("list-history").innerHTML = `<div class="tw-empty"><i class="bi bi-search"></i>ไม่พบ "${escHtml(q)}"</div>`;
+      } else {
+        renderTorrentList("list-history", results, true);
+      }
+    } else {
+      document.getElementById("list-history").innerHTML = `<div class="tw-empty"><i class="bi bi-search"></i>เลือกวันที่ หรือพิมพ์ชื่อเพื่อค้นหาทั้งหมด</div>`;
+    }
+    return;
+  }
+
   const data = await api("GET", `/history?source_id=${sid}&date=${date}&sort=${state.sort.history}`).catch(() => ({ torrents: [] }));
-  renderTorrentList("list-history", data.torrents || [], true);
+  let rows = data.torrents || [];
+  if (q) {
+    const ql = q.toLowerCase();
+    rows = rows.filter(t => t.title.toLowerCase().includes(ql));
+  }
+  renderTorrentList("list-history", rows, true);
 }
 
 document.getElementById("history-date-select").addEventListener("change", e => {
   state.historyDate = e.target.value;
-  if (state.historyDate) loadHistory(state.historyDate);
-  else document.getElementById("list-history").innerHTML = "";
+  loadHistory(state.historyDate || null);
+});
+
+document.getElementById("history-search-input").addEventListener("input", e => {
+  state.searchHistory = e.target.value.trim();
+  loadHistory(state.historyDate || null);
 });
 
 // ─── Size badge helper ────────────────────────────────────────────────────────
@@ -258,7 +292,7 @@ function cardHTML(t, readOnly) {
   const stickyBadge = t.is_sticky ? `<span class="tw-badge tw-badge-sticky"><i class="bi bi-pin-fill"></i> Sticky</span>` : "";
 
   const thumb = t.cover_url
-    ? `<img class="tw-card-thumb" src="${escHtml(t.cover_url)}" alt="" loading="lazy" data-lightbox="${escHtml(t.cover_url)}" onerror="this.outerHTML='<div class=\\'tw-card-thumb-placeholder\\'><i class=\\'bi bi-film\\'></i></div>'">`
+    ? `<img class="tw-card-thumb" src="${escHtml(t.cover_url)}" alt="" loading="lazy" data-lightbox="${escHtml(t.cover_url)}" data-proxy="/api/cover/${t.id}" onerror="if(!this._tried){this._tried=1;this.src=this.dataset.proxy;this.onerror=null}">`
     : `<div class="tw-card-thumb-placeholder"><i class="bi bi-film"></i></div>`;
 
   const statsHTML = [
@@ -269,9 +303,17 @@ function cardHTML(t, readOnly) {
     t.file_size ? `<span class="tw-badge tw-badge-size ${sizeClass(t.file_size)}">${escHtml(t.file_size)}</span>` : "",
   ].join("");
 
+  const watchedStatus = t.watched_status || 0;
+  const watchBadge = watchedStatus === 1
+    ? `<span class="tw-badge tw-badge-watched"><i class="bi bi-eye-fill"></i> ดูแล้ว</span>`
+    : watchedStatus === 2
+    ? `<span class="tw-badge tw-badge-skipped"><i class="bi bi-x-circle-fill"></i> ข้าม</span>`
+    : "";
+
   const dlBadges = [
     t.downloaded_local ? `<span class="tw-badge tw-badge-dl-local"><i class="bi bi-check-lg"></i> Local</span>` : "",
     t.downloaded_nas   ? `<span class="tw-badge tw-badge-dl-nas"><i class="bi bi-check-lg"></i> NAS</span>` : "",
+    watchBadge,
   ].filter(Boolean).join("");
 
   const actions = readOnly ? "" : `
@@ -282,13 +324,19 @@ function cardHTML(t, readOnly) {
       <button class="tw-action-btn btn-dl-nas${t.downloaded_nas ? " done-nas" : ""}" data-id="${t.id}">
         <i class="bi bi-folder-symlink"></i> NAS
       </button>
+      <button class="tw-action-btn btn-watch${watchedStatus === 1 ? " done-watch" : ""}" data-id="${t.id}" title="ดูแล้ว">
+        <i class="bi bi-${watchedStatus === 1 ? "eye-fill" : "eye"}"></i>
+      </button>
+      <button class="tw-action-btn btn-skip${watchedStatus === 2 ? " done-skip" : ""}" data-id="${t.id}" title="ข้ามรายการนี้">
+        <i class="bi bi-${watchedStatus === 2 ? "x-circle-fill" : "x-circle"}"></i>
+      </button>
       <a class="tw-action-btn" href="/api/detail/${t.id}" target="_blank" rel="noopener">
         <i class="bi bi-box-arrow-up-right"></i>
       </a>
     </div>`;
 
   return `
-  <div class="tw-card${t.downloaded_local || t.downloaded_nas ? " downloaded" : ""}${t.keyword_match ? " keyword-match" : ""}" data-id="${t.id}">
+  <div class="tw-card${t.downloaded_local || t.downloaded_nas ? " downloaded" : ""}${t.keyword_match ? " keyword-match" : ""}${watchedStatus === 1 ? " tw-card-watched" : ""}${watchedStatus === 2 ? " tw-card-skipped" : ""}" data-id="${t.id}">
     ${thumb}
     <div class="tw-card-body">
       <div class="tw-card-meta">
@@ -298,7 +346,7 @@ function cardHTML(t, readOnly) {
       </div>
       <a class="tw-card-title tw-title-link" href="/api/detail/${t.id}" target="_blank" rel="noopener">${escHtml(t.title)}</a>
       <div class="tw-card-stats">${statsHTML}</div>
-      ${dlBadges ? `<div class="tw-card-dl-badges">${dlBadges}</div>` : ""}
+      <div class="tw-card-dl-badges">${dlBadges}</div>
       ${actions}
     </div>
     ${kwStar}
@@ -353,6 +401,75 @@ function attachCardActions(list) {
       }
     });
   });
+
+  list.querySelectorAll(".btn-watch").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const id = btn.dataset.id;
+      const isWatched = btn.classList.contains("done-watch");
+      const newStatus = isWatched ? 0 : 1;
+      try {
+        await api("POST", `/torrents/${id}/status`, { status: newStatus });
+        btn.classList.toggle("done-watch", newStatus === 1);
+        btn.innerHTML = `<i class="bi bi-${newStatus === 1 ? "eye-fill" : "eye"}"></i>`;
+        const card = btn.closest(".tw-card");
+        card.classList.toggle("tw-card-watched", newStatus === 1);
+        if (newStatus === 1) card.classList.remove("tw-card-skipped");
+        _syncWatchBadge(card, newStatus);
+        // sync skip button in same card
+        const skipBtn = card.querySelector(".btn-skip");
+        if (skipBtn && newStatus === 1) {
+          skipBtn.classList.remove("done-skip");
+          skipBtn.innerHTML = `<i class="bi bi-x-circle"></i>`;
+        }
+        toast(newStatus === 1 ? "บันทึกว่าดูแล้ว" : "ยกเลิก", "success");
+      } catch (e) {
+        toast("ไม่สำเร็จ: " + e.message, "error");
+      }
+    });
+  });
+
+  list.querySelectorAll(".btn-skip").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const id = btn.dataset.id;
+      const isSkipped = btn.classList.contains("done-skip");
+      const newStatus = isSkipped ? 0 : 2;
+      try {
+        await api("POST", `/torrents/${id}/status`, { status: newStatus });
+        btn.classList.toggle("done-skip", newStatus === 2);
+        btn.innerHTML = `<i class="bi bi-${newStatus === 2 ? "x-circle-fill" : "x-circle"}"></i>`;
+        const card = btn.closest(".tw-card");
+        card.classList.toggle("tw-card-skipped", newStatus === 2);
+        if (newStatus === 2) card.classList.remove("tw-card-watched");
+        _syncWatchBadge(card, newStatus);
+        // sync watch button in same card
+        const watchBtn = card.querySelector(".btn-watch");
+        if (watchBtn && newStatus === 2) {
+          watchBtn.classList.remove("done-watch");
+          watchBtn.innerHTML = `<i class="bi bi-eye"></i>`;
+        }
+        toast(newStatus === 2 ? "ข้ามรายการนี้แล้ว" : "ยกเลิก", "success");
+      } catch (e) {
+        toast("ไม่สำเร็จ: " + e.message, "error");
+      }
+    });
+  });
+}
+
+function _syncWatchBadge(card, status) {
+  const badgesDiv = card.querySelector(".tw-card-dl-badges");
+  if (!badgesDiv) return;
+  badgesDiv.querySelectorAll(".tw-badge-watched, .tw-badge-skipped").forEach(b => b.remove());
+  if (status === 1) {
+    const b = document.createElement("span");
+    b.className = "tw-badge tw-badge-watched";
+    b.innerHTML = '<i class="bi bi-eye-fill"></i> ดูแล้ว';
+    badgesDiv.appendChild(b);
+  } else if (status === 2) {
+    const b = document.createElement("span");
+    b.className = "tw-badge tw-badge-skipped";
+    b.innerHTML = '<i class="bi bi-x-circle-fill"></i> ข้าม';
+    badgesDiv.appendChild(b);
+  }
 }
 
 // ─── Sort & filter controls ───────────────────────────────────────────────────
@@ -453,6 +570,8 @@ async function loadSettings() {
   document.getElementById("cfg-scrape-sticky").checked = settings.scrape_sticky === "1";
   document.getElementById("cfg-auto-dl").checked = settings.auto_download_nas === "1";
   document.getElementById("cfg-retention").value = settings.retention_days ?? 7;
+  document.getElementById("cfg-interval-night").value = settings.scrape_interval_night ?? "30";
+  document.getElementById("cfg-interval-day").value   = settings.scrape_interval_day   ?? "60";
   document.getElementById("cfg-line-notify").checked = settings.line_notify_keyword_enabled === "1";
   document.getElementById("cfg-telegram-notify").checked = settings.telegram_notify_keyword_enabled === "1";
 
@@ -625,6 +744,8 @@ document.getElementById("btn-save-settings").addEventListener("click", async () 
     telegram_notify_keyword_enabled: document.getElementById("cfg-telegram-notify").checked ? "1" : "0",
     auto_download_nas:               document.getElementById("cfg-auto-dl").checked ? "1" : "0",
     retention_days:              document.getElementById("cfg-retention").value,
+    scrape_interval_night:       document.getElementById("cfg-interval-night").value,
+    scrape_interval_day:         document.getElementById("cfg-interval-day").value,
   };
   try {
     await api("PUT", "/settings", payload);
@@ -819,6 +940,68 @@ function _fmtTime(posted_at) {
   lbClose.addEventListener("click", closeLightbox);
   document.addEventListener("keydown", e => { if (e.key === "Escape") closeLightbox(); });
 })();
+
+// ─── Stats ────────────────────────────────────────────────────────────────────
+async function loadStats() {
+  const el = document.getElementById("stats-content");
+  el.innerHTML = `<div class="tw-empty"><i class="bi bi-hourglass-split"></i>กำลังโหลด...</div>`;
+  const stats = await api("GET", "/stats").catch(() => null);
+  if (!stats) {
+    el.innerHTML = `<div class="tw-empty"><i class="bi bi-exclamation-circle"></i>โหลดข้อมูลไม่สำเร็จ</div>`;
+    return;
+  }
+
+  const maxDate = Math.max(...(stats.by_date.map(d => d.count)), 1);
+  const maxCat  = Math.max(...(stats.by_category.map(c => c.count)), 1);
+  const maxSrc  = Math.max(...(stats.by_source.map(s => s.count)), 1);
+
+  el.innerHTML = `
+    <div class="tw-stats-grid">
+      ${_statsCard("bi-collection-play", stats.total,            "รายการ",   "var(--accent)")}
+      ${_statsCard("bi-download",        stats.downloaded_local, "Local",    "var(--dl-local)")}
+      ${_statsCard("bi-folder-symlink",  stats.downloaded_nas,   "NAS",      "var(--dl-nas)")}
+      ${_statsCard("bi-eye",             stats.watched,          "ดูแล้ว",   "var(--seed)")}
+      ${_statsCard("bi-x-circle",        stats.skipped,          "ข้าม",     "var(--leech)")}
+    </div>
+
+    <div class="tw-stats-section">
+      <div class="tw-stats-header"><i class="bi bi-calendar3"></i> กิจกรรม 14 วัน</div>
+      <div class="tw-stats-bars">
+        ${stats.by_date.length ? stats.by_date.map(d => _statsBar(d.date.slice(5), d.count, maxDate)).join("") : '<div class="tw-stats-empty">ไม่มีข้อมูล</div>'}
+      </div>
+    </div>
+
+    <div class="tw-stats-section">
+      <div class="tw-stats-header"><i class="bi bi-tag"></i> หมวดหมู่</div>
+      <div class="tw-stats-bars">
+        ${stats.by_category.length ? stats.by_category.map(c => _statsBar(c.category, c.count, maxCat)).join("") : '<div class="tw-stats-empty">ไม่มีข้อมูล</div>'}
+      </div>
+    </div>
+
+    <div class="tw-stats-section" style="margin-bottom:14px">
+      <div class="tw-stats-header"><i class="bi bi-link-45deg"></i> Source</div>
+      <div class="tw-stats-bars">
+        ${stats.by_source.map(s => _statsBar(s.label, s.count, maxSrc)).join("")}
+      </div>
+    </div>`;
+}
+
+function _statsCard(icon, value, label, color) {
+  return `<div class="tw-stat-card">
+    <i class="bi ${icon}" style="color:${color}"></i>
+    <span class="tw-stat-card-val">${value}</span>
+    <span class="tw-stat-card-lbl">${escHtml(label)}</span>
+  </div>`;
+}
+
+function _statsBar(label, count, max) {
+  const pct = Math.round(count / max * 100);
+  return `<div class="tw-stats-bar-row">
+    <span class="tw-stats-bar-label" title="${escHtml(label)}">${escHtml(label)}</span>
+    <div class="tw-stats-bar-track"><div class="tw-stats-bar-fill" style="width:${pct}%"></div></div>
+    <span class="tw-stats-bar-count">${count}</span>
+  </div>`;
+}
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 (async function init() {

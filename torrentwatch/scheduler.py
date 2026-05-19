@@ -168,19 +168,31 @@ def _cleanup_job():
     print(f"[scheduler] weekly cleanup — deleted {deleted} old records (>{days} days)")
 
 
+def _minute_pattern(interval: int) -> str:
+    """Convert an interval (minutes) to a cron minute expression."""
+    patterns = {15: "0,15,30,45", 20: "0,20,40", 30: "0,30", 60: "0"}
+    return patterns.get(interval, "0,30")
+
+
 def reload_scrape_job():
-    """Set up the fixed-schedule scrape jobs. Call after settings change if needed."""
-    # Night window: 19:00–00:30  (every 30 min)
+    """Set up scrape jobs using intervals from DB settings."""
+    settings = db.get_settings()
+    night_interval = int(settings.get("scrape_interval_night", 30))
+    day_interval   = int(settings.get("scrape_interval_day",   60))
+    night_minutes  = _minute_pattern(night_interval)
+    day_minutes    = _minute_pattern(day_interval)
+
+    # Night window: 19:00–01:00
     _scheduler.add_job(
         _scrape_job,
-        CronTrigger(hour="19,20,21,22,23,0", minute="0,30", timezone=config.TZ),
+        CronTrigger(hour="19,20,21,22,23,0", minute=night_minutes, timezone=config.TZ),
         id="scrape_night",
         replace_existing=True,
     )
-    # Day window: 06:00–18:00  (every 60 min)
+    # Day window: 06:00–19:00
     _scheduler.add_job(
         _scrape_job,
-        CronTrigger(hour="6,7,8,9,10,11,12,13,14,15,16,17,18", minute="0", timezone=config.TZ),
+        CronTrigger(hour="6,7,8,9,10,11,12,13,14,15,16,17,18", minute=day_minutes, timezone=config.TZ),
         id="scrape_day",
         replace_existing=True,
     )
@@ -191,7 +203,7 @@ def reload_scrape_job():
         id="scrape_eod",
         replace_existing=True,
     )
-    print("[scheduler] scrape jobs set — night (19:00-01:00 / 30min), day (06:00-19:00 / 60min), end-of-day (23:58)")
+    print(f"[scheduler] scrape jobs set — night (19:00-01:00 / {night_interval}min), day (06:00-19:00 / {day_interval}min), end-of-day (23:58)")
     if _scheduler.running:
         _update_next()
 

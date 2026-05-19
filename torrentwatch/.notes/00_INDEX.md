@@ -1,6 +1,6 @@
 # TorrentWatch — Project Index (Memory Blueprint)
 
-> อัปเดตล่าสุด: 2026-05-19 (UI bug fixes: toast, logo, download local)
+> อัปเดตล่าสุด: 2026-05-20 (6 features: cover proxy, history search, global search, watched/skip, configurable schedule, stats page)
 > ใช้ไฟล์นี้เป็น cold-start memory ก่อนเริ่มงานทุกครั้ง
 
 ---
@@ -90,7 +90,8 @@ id, url (UNIQUE), label, enabled, sort_order (DEFAULT 0), created_at
 id, source_id (FK), site_id, title, detail_url, torrent_url,
 cover_url, seeds, leeches, date_posted, posted_at, category,
 file_count, file_size, completed, is_sticky, first_seen_at, last_updated_at,
-downloaded_local, downloaded_nas
+downloaded_local, downloaded_nas,
+watched_status  -- 0=none, 1=watched, 2=skip
 UNIQUE(source_id, site_id)
 ```
 
@@ -114,6 +115,8 @@ Default settings:
 - `retention_days = "7"` — จำนวนวันเก็บ record ก่อน cleanup
 - `line_notify_keyword_enabled = "0"` — push LINE เมื่อพบ keyword match
 - `auto_download_nas = "0"` — auto-save keyword match ไป /downloads
+- `scrape_interval_night = "30"` — interval (นาที) ช่วง 19:00–01:00 (15/20/30/60)
+- `scrape_interval_day = "60"` — interval (นาที) ช่วง 06:00–19:00 (15/20/30/60)
 
 Index: `idx_torrents_source_date ON torrents(source_id, date_posted)`
 
@@ -196,9 +199,13 @@ is_sticky = bool(row.find("img", src=re.compile(r"sticky\.gif|heart\.gif|pinned\
 | `/api/torrents` | GET | Today's torrents (source_id, sort, filter) |
 | `/api/history` | GET | Past day torrents (read-only) |
 | `/api/history/dates` | GET | Available dates for source |
+| `/api/search` | GET | Global text search across all dates (q, source_id, limit) |
 | `/api/keywords` | GET/POST/DELETE | Per-source keyword CRUD |
-| `/api/settings` | GET/PUT | Global settings |
+| `/api/settings` | GET/PUT | Global settings (PUT triggers scheduler reload) |
 | `/api/scrape` | POST | Manual scrape trigger |
+| `/api/stats` | GET | Aggregate stats (optional source_id filter) |
+| `/api/torrents/{id}/status` | POST | Set watched_status: 0=none, 1=watched, 2=skip |
+| `/api/cover/{id}` | GET | Proxy cover image through authenticated session |
 | `/api/download/local/{id}` | GET | Proxy .torrent to browser (RFC 5987 Thai filename) |
 | `/api/download/nas/{id}` | POST | Save .torrent to `/downloads` |
 | `/api/detail/{id}` | GET | Proxy bearbit detail page (bypass anti-hotlink) |
@@ -215,7 +222,7 @@ is_sticky = bool(row.find("img", src=re.compile(r"sticky\.gif|heart\.gif|pinned\
 
 ```js
 state = {
-  tab: "today" | "history" | "keywords" | "settings",
+  tab: "today" | "history" | "keywords" | "stats" | "settings",
   sources: [],
   activeSource: { today, history, keywords },  // source_id per tab
   sort: { today, history },                    // "seeds" | "leeches" | "completed" | "date"
@@ -223,7 +230,8 @@ state = {
   showSticky: true,
   historyDate: "",
   settings: {},
-  search: "",         // text search on title (Today tab only)
+  search: "",         // text search on title (Today tab)
+  searchHistory: "",  // text search in History — if no date selected, triggers global search
   activeCategory: "", // category chip filter (Today tab only)
 }
 ```
@@ -241,19 +249,24 @@ Bearbit block request ที่ Referer ไม่ใช่ bearbit URL:
 
 ---
 
-## Known Gaps (ณ 2026-05-18)
+## Known Gaps (ณ 2026-05-20)
 
 | Gap | รายละเอียด | ไฟล์ที่เกี่ยวข้อง |
 |---|---|---|
 | ✅ LINE notification — **FIXED** | wired เข้า config.py + scheduler.py แล้ว (2026-05-13) | config.py, scheduler.py |
-| ✅ Telegram notification — **ADDED** | telegram_notify.py ใหม่ + wired ใน scheduler (2026-05-18) — ต้องใส่ TELEGRAM_CHAT_ID ใน .env | telegram_notify.py, config.py, scheduler.py |
+| ✅ Telegram notification — **ADDED** | telegram_notify.py ใหม่ + wired ใน scheduler (2026-05-18) | telegram_notify.py, config.py, scheduler.py |
 | ✅ Category filter — **FIXED** | chip bar แสดงใต้ toolbar (Today tab) | app.js, index.html |
-| ✅ Text search — **FIXED** | search input กรอง title (Today tab) | app.js, index.html |
+| ✅ Text search — **FIXED** | search input กรอง title (Today + History tab) | app.js, index.html |
 | ✅ Retention configurable — **FIXED** | `retention_days` setting ใน UI | db.py, index.html |
 | ✅ Source reorder — **ADDED** | ↑↓ buttons ใน Settings, persist ใน DB `sort_order` (2026-05-18) | db.py, main.py, app.js |
 | ✅ File size badge — **ADDED** | badge สีตามขนาด gray/amber/red ใน torrent cards (2026-05-18) | app.js, style.css |
+| ✅ Cover image proxy — **FIXED** | `GET /api/cover/{id}` proxy ผ่าน authenticated session; onerror fallback ใน img tag | scraper.py, main.py, app.js |
+| ✅ History search — **ADDED** | search box ใน History tab; ถ้าไม่เลือกวัน + พิมพ์ query → global search ข้าม all dates | app.js, index.html |
+| ✅ Global search — **ADDED** | `GET /api/search?q=TEXT&source_id=ID` LIKE search ข้าม all dates | db.py, main.py |
+| ✅ Watched/Skip — **ADDED** | `watched_status` column ใน DB; eye/x-circle buttons บน cards; badge + card dimming | db.py, main.py, app.js, style.css |
+| ✅ Configurable schedule — **ADDED** | `scrape_interval_night`/`scrape_interval_day` settings (15/20/30/60 min); selects ใน UI | db.py, scheduler.py, main.py, index.html, app.js |
+| ✅ Stats page — **ADDED** | Tab สถิติ แสดง 5 summary cards + 14-day chart + category breakdown + source breakdown | db.py, main.py, app.js, index.html, style.css |
 | COL_COMPLETED ยังไม่ verify | column 9 ของ bearbit สันนิษฐานว่าเป็น completed — ใช้ `/api/debug/html` ตรวจ | scraper.py |
-| Cover image โหลดตรงจาก bearbit CDN | ถ้า session expire รูปแตกพร้อมกัน | scraper.py |
 
 ---
 

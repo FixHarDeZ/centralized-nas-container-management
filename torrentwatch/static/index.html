@@ -23,7 +23,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-  <link rel="stylesheet" href="/static/style.css?v=20260520a">
+  <link rel="stylesheet" href="/static/style.css?v=20260520b">
 </head>
 <body>
   <div id="app">
@@ -85,7 +85,20 @@
           <button class="tw-sort-btn" data-sort="date" title="ล่าสุด" aria-label="เรียงตามวันที่"><i class="bi bi-clock"></i></button>
         </div>
       </div>
+      <div class="tw-search-row">
+        <div class="tw-search-wrap">
+          <i class="bi bi-search tw-search-icon"></i>
+          <input class="tw-search-input" id="history-search-input" type="search" placeholder="ค้นหาชื่อ (ไม่เลือกวัน = ค้นทั้งหมด)..." autocomplete="off">
+        </div>
+      </div>
       <div class="tw-list" id="list-history"></div>
+    </section>
+
+    <!-- ── Stats ── -->
+    <section class="tw-panel" id="panel-stats">
+      <div class="tw-stats-scroll" id="stats-content">
+        <div class="tw-empty"><i class="bi bi-bar-chart-line"></i>กำลังโหลด...</div>
+      </div>
     </section>
 
     <!-- ── Keywords ── -->
@@ -205,9 +218,25 @@
           <h2 class="tw-section-title"><i class="bi bi-clock-history"></i> Schedule</h2>
           <div class="tw-settings-body">
             <div class="tw-schedule-info">
-              <div class="tw-schedule-row"><span class="tw-schedule-time">19:00 – 01:00</span><span class="tw-schedule-freq">ทุก 30 นาที</span></div>
+              <div class="tw-schedule-row">
+                <span class="tw-schedule-time">19:00 – 01:00</span>
+                <select class="tw-select-sm" id="cfg-interval-night">
+                  <option value="15">15 นาที</option>
+                  <option value="20">20 นาที</option>
+                  <option value="30">30 นาที</option>
+                  <option value="60">60 นาที</option>
+                </select>
+              </div>
               <div class="tw-schedule-row tw-schedule-pause"><span class="tw-schedule-time">01:00 – 06:00</span><span class="tw-schedule-freq">หยุด</span></div>
-              <div class="tw-schedule-row"><span class="tw-schedule-time">06:00 – 19:00</span><span class="tw-schedule-freq">ทุก 1 ชั่วโมง</span></div>
+              <div class="tw-schedule-row">
+                <span class="tw-schedule-time">06:00 – 19:00</span>
+                <select class="tw-select-sm" id="cfg-interval-day">
+                  <option value="15">15 นาที</option>
+                  <option value="20">20 นาที</option>
+                  <option value="30">30 นาที</option>
+                  <option value="60">60 นาที</option>
+                </select>
+              </div>
               <div class="tw-schedule-row"><span class="tw-schedule-time">23:58</span><span class="tw-schedule-freq">สิ้นวัน</span></div>
             </div>
             <div class="tw-field-row">
@@ -255,6 +284,11 @@
         <div class="tw-nav-indicator"></div>
         <i class="bi bi-tags tw-nav-icon"></i>
         <span class="tw-nav-label">Keyword</span>
+      </button>
+      <button class="tw-nav-item" data-tab="stats">
+        <div class="tw-nav-indicator"></div>
+        <i class="bi bi-bar-chart-line tw-nav-icon"></i>
+        <span class="tw-nav-label">สถิติ</span>
       </button>
       <button class="tw-nav-item" data-tab="settings">
         <div class="tw-nav-indicator"></div>
@@ -316,6 +350,6 @@
     })();
   </script>
 
-  <script src="/static/app.js?v=20260520a"></script>
+  <script src="/static/app.js?v=20260520b"></script>
 </body>
 </html>
