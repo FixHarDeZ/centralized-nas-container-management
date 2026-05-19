@@ -102,6 +102,11 @@ GROQ_API_KEY=gsk_...
 OPENROUTER_API_KEY=sk-or-v1-...
 
 NOTION_TOKEN=ntn_...
+NOTION_QUICK_NOTE_PAGE_ID=...          # parent page สำหรับ quick note (optional)
+
+# Proactive reminders (optional — leave blank to disable)
+NOTION_REMINDER_DB_IDS=db-id-1,db-id-2   # comma-sep database IDs ที่มี date property
+NOTION_REMINDER_TIME=08:00               # Bangkok time HH:MM (default 08:00)
 ```
 
 ---
@@ -115,17 +120,21 @@ NOTION_TOKEN=ntn_...
 | `/debug3 <page_id>` | Raw block children ของ page |
 | `/debug4 <db_id>` | Raw database query response |
 | `/provider` | Provider ที่ใช้อยู่ + เวลา Groq resume |
+| `/cache` | Cache stats: จำนวน page + เวลา rebuild ล่าสุด |
 
 ---
 
 ## Key Behaviours / Gotchas
 
-- **Whitelist-only** — user IDs นอก whitelist ถูก silent ignore
-- **Write confirmation** — ทุก write ต้องรอ "ใช่" ก่อน execute
+- **Whitelist-only** — user IDs นอก whitelist ถูก silent ignore; non-text messages (image/sticker) ตอบ "รับแค่ข้อความ"
+- **Write confirmation** — ทุก write ต้องรอ "ใช่" ก่อน execute; pending หมดอายุ 6 ชั่วโมงอัตโนมัติ
 - **Notion sharing** — integration ต้อง share ที่ root page จึงจะเห็น subpages
 - **Cache warm-up** — API call แรกหลัง restart อาจช้ากว่าปกติ (cache ยัง cold)
 - **Groq daily limit** — 100K tokens/day สำหรับ 70b model; auto mode จะ failover เอง
 - **Toggle content** — Notion search API ไม่ index toggle blocks, ใช้ fallback scan จาก cache แทน
+- **Quick note** — ถ้าชื่อ page ตรงกับ page เดิม (case-insensitive) จะ append แทนสร้างใหม่; รองรับ Markdown: `# ## ###` heading, `- *` bullet, `[ ] [x]` to-do
+- **Agent timeout** — LLM call มี hard timeout 45 วินาที ทั้ง attempt แรกและ retry
+- **Proactive reminders** — background loop เช็ค Notion DB ที่ตั้งไว้ทุกวันตอนเวลาที่กำหนด (Bangkok) แล้ว push LINE ถ้าพบ row ที่ date = วันนี้
 
 ---
 

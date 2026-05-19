@@ -80,5 +80,9 @@ class PageCache:
         await self._rebuild()
         return len(self._pages)
 
+    def stats(self) -> dict:
+        age = int(time.monotonic() - self._pages_ts) if self._pages_ts else -1
+        return {"pages": len(self._pages), "indexed": len(self._headers), "age_seconds": age}
+
 
 cache = PageCache()

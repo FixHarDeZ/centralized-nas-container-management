@@ -17,7 +17,10 @@ A personal AI secretary LINE bot that searches and records information in your N
 - Relevance-ranked context — most keyword-matching pages are packed into the LLM prompt first, so the right data is always included even when total results exceed the context limit
 - Automatic Groq→OpenRouter failover — when both keys are set (`AI_PROVIDER=auto`), Groq is used first (free); on rate-limit it switches to OpenRouter automatically and switches back once Groq resets
 - Answers only from your Notion data — never hallucinates from general knowledge; if the answer isn't in Notion, asks whether to answer from general knowledge instead
-- Proposes a confirmation before writing any new record to Notion
+- Proposes a confirmation before writing any new record to Notion; pending confirmations auto-expire after 6 hours
+- Quick note with rich Markdown-like formatting — `# heading`, `- bullet`, `[ ] todo`, `[x] done`; if you name an existing page the bot appends to it instead of creating a new one
+- Proactive daily reminders — push LINE notifications for Notion database rows whose date = today (configurable time, Bangkok timezone)
+- Non-text messages (images, stickers, etc.) receive a polite "text only" reply instead of being silently dropped
 - Includes 🔗 Notion page URLs in replies — so you can click directly to the source
 - Whitelist-based access — only your LINE user ID can use the bot
 
@@ -109,6 +112,10 @@ OPENROUTER_API_KEY=sk-or-v1-...
 
 NOTION_TOKEN=ntn_...
 NOTION_QUICK_NOTE_PAGE_ID=32-char-hex-uuid
+
+# Proactive reminders (optional — leave blank to disable)
+NOTION_REMINDER_DB_IDS=32-char-database-id
+NOTION_REMINDER_TIME=08:00
 ```
 
 | Variable | Description |
@@ -121,6 +128,8 @@ NOTION_QUICK_NOTE_PAGE_ID=32-char-hex-uuid
 | `AI_PROVIDER` | AI provider mode: `"auto"` (Groq primary, fallback to OpenRouter), `"groq"`, or `"openrouter"`. |
 | `GROQ_API_KEY` | Groq API key (only needed if using Groq) |
 | `OPENROUTER_API_KEY` | OpenRouter API key (only needed if using OpenRouter) |
+| `NOTION_REMINDER_DB_IDS` | Comma-separated Notion database IDs (must be full-page databases with a `date` property). The bot will push a LINE reminder for every row whose date = today. Leave empty to disable. To find an ID: open the database in Notion → Copy link → the ID is the 32 hex characters at the end of the URL. |
+| `NOTION_REMINDER_TIME` | Time to send the daily reminder in Bangkok time (UTC+7), format `HH:MM`. Defaults to `08:00`. |
 
 ### 5. Deploy
 
@@ -141,6 +150,8 @@ Send these in LINE chat to inspect raw data (owner only):
 | `/debug3 <page_id>` | Raw block children of a Notion page |
 | `/debug4 <db_id>` | Raw database query response |
 | `/provider` | Active AI provider and time remaining until Groq resumes (if rate-limited) |
+| `/cache` | Cache stats — page count and time since last rebuild |
+| `/refresh` | Force immediate cache rebuild |
 
 ## Example usage
 

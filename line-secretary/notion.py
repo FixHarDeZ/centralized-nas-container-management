@@ -258,6 +258,34 @@ async def query_database(token: str, database_id: str) -> list[dict]:
         return rows
 
 
+async def get_database_rows_with_dates(token: str, database_id: str) -> list[dict]:
+    """Return rows that have at least one date property, with title + dates + url."""
+    async with httpx.AsyncClient() as client:
+        r = await client.post(
+            f"{NOTION_API}/databases/{database_id}/query",
+            headers=_headers(token),
+            json={"page_size": 100},
+            timeout=15,
+        )
+    if r.status_code != 200:
+        raise ValueError(f"Notion API {r.status_code} for DB {database_id}: {r.json().get('message', r.text)}")
+    results = []
+    for page in r.json().get("results", []):
+        title = ""
+        dates: dict[str, str] = {}
+        for name, prop in page.get("properties", {}).items():
+            ptype = prop.get("type", "")
+            if ptype == "title":
+                title = "".join(rt.get("plain_text", "") for rt in (prop.get("title") or []))
+            elif ptype == "date":
+                val = prop.get("date")
+                if val and val.get("start"):
+                    dates[name] = val["start"]
+        if dates:
+            results.append({"title": title or "?", "dates": dates, "url": page.get("url", "")})
+    return results
+
+
 async def get_page_headers(token: str, page_id: str) -> str:
     """Read block text + table rows, including tables nested one level inside toggle/container blocks.
 
@@ -430,20 +458,37 @@ async def create_page(token: str, parent_page_id: str, title: str) -> dict:
         return r.json()
 
 
+def _line_to_block(line: str) -> dict:
+    """Convert a single text line to a Notion block based on Markdown-like prefix."""
+    if line.startswith("### "):
+        return {"object": "block", "type": "heading_3",
+                "heading_3": {"rich_text": [{"type": "text", "text": {"content": line[4:]}}]}}
+    if line.startswith("## "):
+        return {"object": "block", "type": "heading_2",
+                "heading_2": {"rich_text": [{"type": "text", "text": {"content": line[3:]}}]}}
+    if line.startswith("# "):
+        return {"object": "block", "type": "heading_1",
+                "heading_1": {"rich_text": [{"type": "text", "text": {"content": line[2:]}}]}}
+    if line.startswith(("- ", "* ")):
+        return {"object": "block", "type": "bulleted_list_item",
+                "bulleted_list_item": {"rich_text": [{"type": "text", "text": {"content": line[2:]}}]}}
+    if line.startswith(("[ ] ", "- [ ] ")):
+        content = line.split("] ", 1)[-1]
+        return {"object": "block", "type": "to_do",
+                "to_do": {"rich_text": [{"type": "text", "text": {"content": content}}], "checked": False}}
+    if line.startswith(("[x] ", "- [x] ")):
+        content = line.split("] ", 1)[-1]
+        return {"object": "block", "type": "to_do",
+                "to_do": {"rich_text": [{"type": "text", "text": {"content": content}}], "checked": True}}
+    return {"object": "block", "type": "paragraph",
+            "paragraph": {"rich_text": [{"type": "text", "text": {"content": line}}]}}
+
+
 async def append_blocks(token: str, page_id: str, text: str) -> dict:
     lines = [line[:2000] for line in text.split("\n") if line.strip()]
     if not lines:
         lines = [text[:2000]]
-    children = [
-        {
-            "object": "block",
-            "type": "paragraph",
-            "paragraph": {
-                "rich_text": [{"type": "text", "text": {"content": line}}]
-            },
-        }
-        for line in lines[:100]
-    ]
+    children = [_line_to_block(line) for line in lines[:100]]
     async with httpx.AsyncClient() as client:
         r = await client.patch(
             f"{NOTION_API}/blocks/{page_id}/children",
