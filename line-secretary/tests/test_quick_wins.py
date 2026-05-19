@@ -1,4 +1,7 @@
 import agent
+from unittest.mock import AsyncMock, patch
+import pytest
+import main
 
 
 # ── URL in context ────────────────────────────────────────────────
@@ -57,3 +60,39 @@ async def test_force_refresh_replaces_stale_pages():
 
     assert n == 2
     assert c._pages[0]["id"] == "new1"
+
+
+# ── _push_long ────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_push_long_short_text_single_call():
+    with patch("line_client.push", new_callable=AsyncMock) as mock_push:
+        await main._push_long("U1", "สั้นๆ", "tok")
+    mock_push.assert_called_once_with("U1", "สั้นๆ", "tok")
+
+
+@pytest.mark.asyncio
+async def test_push_long_exactly_at_limit_single_call():
+    with patch("line_client.push", new_callable=AsyncMock) as mock_push:
+        text = "x" * 4000
+        await main._push_long("U1", text, "tok", max_len=4000)
+    mock_push.assert_called_once()
+    assert len(mock_push.call_args[0][1]) == 4000
+
+
+@pytest.mark.asyncio
+async def test_push_long_over_limit_splits():
+    with patch("line_client.push", new_callable=AsyncMock) as mock_push:
+        text = "x" * 8001
+        await main._push_long("U1", text, "tok", max_len=4000)
+    assert mock_push.call_count == 3
+    assert len(mock_push.call_args_list[0][0][1]) == 4000
+    assert len(mock_push.call_args_list[1][0][1]) == 4000
+    assert len(mock_push.call_args_list[2][0][1]) == 1
+
+
+@pytest.mark.asyncio
+async def test_push_long_empty_string():
+    with patch("line_client.push", new_callable=AsyncMock) as mock_push:
+        await main._push_long("U1", "", "tok")
+    mock_push.assert_called_once_with("U1", "", "tok")

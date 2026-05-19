@@ -42,6 +42,15 @@ def _is_note_intent(text: str) -> bool:
     return any(k in t for k in _NOTE_INTENT_KEYWORDS)
 
 
+async def _push_long(user_id: str, text: str, token: str, max_len: int = 4000) -> None:
+    """Send text as one or more LINE messages, splitting at max_len chars."""
+    if len(text) <= max_len:
+        await line_client.push(user_id, text, token)
+        return
+    for i in range(0, len(text), max_len):
+        await line_client.push(user_id, text[i:i + max_len], token)
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok"}
@@ -281,4 +290,4 @@ async def handle_message(event: dict) -> None:
         # those are bad LLM outputs that would poison future context.
         if not agent._parse_propose(reply):
             store.add_history(user_id, text, reply)
-    await line_client.push(user_id, reply, token)
+    await _push_long(user_id, reply, token)
