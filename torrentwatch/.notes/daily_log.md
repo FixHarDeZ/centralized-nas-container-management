@@ -3,6 +3,26 @@
 ---
 
 ### Session Log Entry
+**Timestamp:** 2026-05-19
+**Title:** UI Bug Fixes — Toast, Logo, Download Local
+
+**ไฟล์ที่แก้ไข:**
+
+- `static/index.html` — revert logo to Bootstrap icon `bi-broadcast`, bump cache version `v=20260519f`
+- `static/style.css` — toast: `opacity+visibility` แทน `translateY`-only; logo: `flex-shrink:0`; `.tw-logo-icon` color accent
+- `static/app.js` — download local: ลบ `pointer-events:none` (บล็อก `.click()`), blob size guard, DOM 30s cleanup, แสดง KB ใน toast
+
+**Bugs แก้:**
+
+1. Toast ค้างใน nav bar — translateY(80px) ไม่พอซ่อน (nav สูง 70px), แก้ด้วย opacity+visibility transition
+2. Logo หาย — SVG/::before render ไม่ได้ cross-browser, revert เป็น Bootstrap icon ที่พิสูจน์แล้วว่าทำงาน
+3. Download Local ไม่โหลดไฟล์ — `pointer-events:none` บน anchor บล็อก `.click()` dispatch
+
+**Release:** v2.19.1
+
+---
+
+### Session Log Entry
 **Timestamp:** 2026-05-18
 **Title:** Database Schema — sort_order Migration for Source Reordering
 

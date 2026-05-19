@@ -1964,7 +1964,29 @@ function formatDate(isoStr) {
   return `${+d} ${t("months")[+m]} ${+y + t("yearOffset")}`;
 }
 
+// ─── Theme toggle (light / dark) ─────────────────────────────
+
+function applyThemeIcon(theme) {
+  const icon = document.querySelector("#themeToggle i");
+  if (!icon) return;
+  icon.className = theme === "dark" ? "bi bi-sun-fill" : "bi bi-moon-stars-fill";
+  const btn = document.getElementById("themeToggle");
+  if (btn) btn.setAttribute("title", theme === "dark" ? "Switch to light" : "Switch to dark");
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute("data-bs-theme") || "light";
+  const next = current === "light" ? "dark" : "light";
+  document.documentElement.setAttribute("data-bs-theme", next);
+  try { localStorage.setItem("maidTrackerTheme", next); } catch (e) {}
+  applyThemeIcon(next);
+}
+
+// Sync icon with whatever the pre-paint script set
+applyThemeIcon(document.documentElement.getAttribute("data-bs-theme") || "light");
+
 // Expose globals called from inline handlers
+window.toggleTheme     = toggleTheme;
 window.switchLang      = switchLang;
 window.navigate        = navigate;
 window.cycleDay        = cycleDay;
