@@ -313,15 +313,22 @@ function attachCardActions(list) {
       btn.classList.add("loading");
       try {
         const resp = await fetch(`/api/download/local/${id}`);
-        if (!resp.ok) throw new Error(await resp.text());
+        if (!resp.ok) throw new Error(`${resp.status} ${(await resp.text()).slice(0, 100)}`);
         const blob = await resp.blob();
+        if (!blob.size) throw new Error("ไฟล์ว่างเปล่า (0 bytes)");
         const url  = URL.createObjectURL(blob);
         const a    = document.createElement("a");
-        a.href = url; a.download = title.slice(0, 100) + ".torrent";
-        a.click(); URL.revokeObjectURL(url);
+        a.href     = url;
+        a.download = title.slice(0, 100) + ".torrent";
+        a.rel      = "noopener";
+        // Hidden but interactable — NO pointer-events:none (it blocks .click() dispatch)
+        a.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;";
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 30000);
         btn.classList.add("done-local");
         btn.closest(".tw-card").classList.add("downloaded");
-        toast("ดาวน์โหลดแล้ว", "success");
+        toast(`ดาวน์โหลดแล้ว (${Math.round(blob.size / 1024)} KB)`, "success");
       } catch (e) {
         toast("ดาวน์โหลดไม่สำเร็จ: " + e.message, "error");
       } finally {
