@@ -116,6 +116,16 @@ async def handle_message(event: dict) -> None:
         await line_client.push(user_id, reply[:4000], token)
         return
 
+    # /refresh → force immediate cache rebuild
+    if text == "/refresh":
+        try:
+            n = await _cache.force_refresh()
+            await line_client.push(user_id, f"รีเฟรช cache เรียบร้อยค่ะ 🔄 ({n} pages)", token)
+        except Exception as e:
+            logger.error(f"force_refresh error: {e}", exc_info=True)
+            await line_client.push(user_id, "รีเฟรช cache ไม่สำเร็จค่ะ ลองใหม่อีกครั้งนะคะ", token)
+        return
+
     # /provider → show active provider and failover status
     if text == "/provider":
         await line_client.push(user_id, _provider.status_text(settings), token)
@@ -127,6 +137,7 @@ async def handle_message(event: dict) -> None:
             "📖 คำสั่งที่ใช้ได้:\n"
             "/help — แสดงคำสั่งทั้งหมดนี้\n"
             "/clear — ล้างประวัติสนทนา + pending (ใช้เมื่อบอทติด)\n"
+            "/refresh — รีเฟรช Notion page cache ทันที\n"
             "/provider — ดู AI provider ที่ใช้งานอยู่\n"
             "/debug <query> — ค้นหา Notion ดิบๆ\n"
             "/debug2 <query> — deep search (รวม embedded tables)\n"
