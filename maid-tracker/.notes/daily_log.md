@@ -84,3 +84,22 @@
 - Employee detail: stat card แสดง leave_balance แทน comp_days
 
 **อัปเดต:** README.md + CLAUDE.md ทั้งสองไฟล์
+
+---
+
+## 2026-05-19
+
+### Fix: default theme เป็น light
+
+**ไฟล์ที่แก้:** `static/index.html` บรรทัด 21
+
+**เปลี่ยนจาก:**
+```js
+var theme = saved || (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+```
+**เป็น:**
+```js
+var theme = saved || "light";
+```
+
+**ผล:** ผู้ใช้ใหม่ (ไม่มี localStorage) จะเห็น light theme เสมอ ไม่ตาม OS preference อีกต่อไป ส่วนผู้ที่เคย toggle ยังจำค่าเดิมได้ปกติ

@@ -1,6 +1,6 @@
 # TorrentWatch — Project Index (Memory Blueprint)
 
-> อัปเดตล่าสุด: 2026-05-18 (database schema: sort_order added)
+> อัปเดตล่าสุด: 2026-05-19 (UI bug fixes: toast, logo, download local)
 > ใช้ไฟล์นี้เป็น cold-start memory ก่อนเริ่มงานทุกครั้ง
 
 ---
