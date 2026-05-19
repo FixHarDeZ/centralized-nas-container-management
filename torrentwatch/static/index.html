@@ -3,10 +3,27 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-  <meta name="theme-color" content="#111118">
+  <meta name="theme-color" content="#f5f7fb" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0e1018" media="(prefers-color-scheme: dark)">
   <title>TorrentWatch</title>
+
+  <!-- Apply theme before paint to avoid flash -->
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem("tw-theme") || "light";
+        document.documentElement.setAttribute("data-theme", t);
+      } catch (e) {}
+    })();
+  </script>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
+
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-  <link rel="stylesheet" href="/static/style.css?v=20260518b">
+  <link rel="stylesheet" href="/static/style.css?v=20260519f">
 </head>
 <body>
   <div id="app">
@@ -14,9 +31,12 @@
     <!-- Header -->
     <header class="tw-header">
       <div class="tw-header-inner">
-        <span class="tw-logo">Torrent<span class="tw-logo-dot">.</span>Watch</span>
+        <span class="tw-logo"><i class="bi bi-broadcast tw-logo-icon"></i> TorrentWatch</span>
         <div class="tw-header-actions">
           <span id="status-badge" class="tw-status-badge"></span>
+          <button class="tw-icon-btn" id="btn-theme-toggle" title="สลับ Light / Dark" aria-label="Toggle theme">
+            <i class="bi bi-moon-stars" id="theme-icon"></i>
+          </button>
           <button class="tw-icon-btn" id="btn-scrape-now" title="Scrape now">
             <i class="bi bi-arrow-clockwise"></i>
           </button>
@@ -94,6 +114,20 @@
           </div>
         </div>
 
+        <!-- Appearance -->
+        <div class="tw-settings-card">
+          <h2 class="tw-section-title"><i class="bi bi-palette"></i> Appearance</h2>
+          <div class="tw-settings-body">
+            <div class="tw-field-row">
+              <label>ธีม</label>
+              <div class="tw-radio-group" id="theme-radio-group">
+                <label class="tw-radio-label"><input type="radio" name="theme_mode" value="light"> Light</label>
+                <label class="tw-radio-label"><input type="radio" name="theme_mode" value="dark"> Dark</label>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Threshold -->
         <div class="tw-settings-card">
           <h2 class="tw-section-title"><i class="bi bi-sliders"></i> Threshold</h2>
@@ -150,11 +184,11 @@
               </button>
             </div>
             <div class="tw-field-row" style="margin-top:4px">
-              <button class="tw-btn-secondary" id="btn-telegram-get-chat-id" style="width:100%;background:var(--bg-elevated)">
+              <button class="tw-btn-secondary" id="btn-telegram-get-chat-id" style="width:100%">
                 <i class="bi bi-search"></i> ค้นหา Chat ID
               </button>
             </div>
-            <div id="telegram-chat-id-result" style="display:none;margin-top:8px;font-size:12px;background:var(--bg-elevated);padding:8px 10px;border-radius:6px;word-break:break-all"></div>
+            <div id="telegram-chat-id-result" style="display:none;margin-top:8px;font-size:12px;padding:8px 10px;border-radius:6px;word-break:break-all"></div>
 
             <div class="tw-field-row" style="margin-top:14px">
               <label for="cfg-auto-dl">Auto-DL to NAS</label>
@@ -240,6 +274,48 @@
     <img class="tw-lightbox-img" id="lightbox-img" src="" alt="">
   </div>
 
-  <script src="/static/app.js?v=20260518b"></script>
+  <!-- Theme toggle (additive — works independently of app.js) -->
+  <script>
+    (function () {
+      var root = document.documentElement;
+      var btn = document.getElementById("btn-theme-toggle");
+      var icon = document.getElementById("theme-icon");
+      var radios = document.querySelectorAll('input[name="theme_mode"]');
+      var themeMeta = document.querySelector('meta[name="theme-color"]:not([media])') ||
+                      document.querySelector('meta[name="theme-color"]');
+
+      function applyTheme(t) {
+        root.setAttribute("data-theme", t);
+        try { localStorage.setItem("tw-theme", t); } catch (e) {}
+        if (icon) {
+          icon.className = "bi " + (t === "dark" ? "bi-sun" : "bi-moon-stars");
+        }
+        if (btn) {
+          btn.title = t === "dark" ? "สลับเป็น Light" : "สลับเป็น Dark";
+        }
+        radios.forEach(function (r) { r.checked = (r.value === t); });
+      }
+
+      function currentTheme() {
+        return root.getAttribute("data-theme") || "light";
+      }
+
+      // Initial sync (icon + radios)
+      applyTheme(currentTheme());
+
+      if (btn) {
+        btn.addEventListener("click", function () {
+          applyTheme(currentTheme() === "dark" ? "light" : "dark");
+        });
+      }
+      radios.forEach(function (r) {
+        r.addEventListener("change", function () {
+          if (r.checked) applyTheme(r.value);
+        });
+      });
+    })();
+  </script>
+
+  <script src="/static/app.js?v=20260519f"></script>
 </body>
 </html>
