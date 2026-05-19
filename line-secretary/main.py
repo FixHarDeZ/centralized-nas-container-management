@@ -243,7 +243,7 @@ async def handle_message(event: dict) -> None:
                 return
             reply = result["text"]
             store.add_history(user_id, question, reply)
-            await line_client.push(user_id, reply, token)
+            await _push_long(user_id, reply, token)
             return
         if lower in CANCEL_WORDS:
             store.pop_pending_general(user_id)
@@ -258,7 +258,7 @@ async def handle_message(event: dict) -> None:
         if lower in CONFIRM_WORDS:
             action = store.pop_pending(user_id)
             reply = await agent.execute_write(action)
-            await line_client.push(user_id, reply, token)
+            await _push_long(user_id, reply, token)
             return
         if lower in CANCEL_WORDS:
             store.pop_pending(user_id)
