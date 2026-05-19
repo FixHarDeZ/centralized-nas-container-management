@@ -75,5 +75,10 @@ class PageCache:
         self._header_ts[page_id] = time.monotonic()
         return h
 
+    async def force_refresh(self) -> int:
+        """Immediately rebuild the cache. Returns number of pages indexed."""
+        await self._rebuild()
+        return len(self._pages)
+
 
 cache = PageCache()
