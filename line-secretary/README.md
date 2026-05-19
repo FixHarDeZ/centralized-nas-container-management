@@ -18,6 +18,7 @@ A personal AI secretary LINE bot that searches and records information in your N
 - Automatic Groq→OpenRouter failover — when both keys are set (`AI_PROVIDER=auto`), Groq is used first (free); on rate-limit it switches to OpenRouter automatically and switches back once Groq resets
 - Answers only from your Notion data — never hallucinates from general knowledge; if the answer isn't in Notion, asks whether to answer from general knowledge instead
 - Proposes a confirmation before writing any new record to Notion
+- Includes 🔗 Notion page URLs in replies — so you can click directly to the source
 - Whitelist-based access — only your LINE user ID can use the bot
 
 ## How it works
@@ -147,13 +148,13 @@ Send these in LINE chat to inspect raw data (owner only):
 You:  ขอเลขบัตรเครดิต UOB
 Bot:  บัตร UOB Preferred Platinum: xxxx-xxxx-xxxx-2917
       บัตร UOB World: xxxx-xxxx-xxxx-0262
-      (จาก page Credit cards)
+      🔗 https://notion.so/Credit-cards-abc123def456...
 
 You:  github api token ฉันคืออะไร
 Bot:  GitHub token: ghp_xxxxxxxxxxxx
-      (จาก page API Token)
+      🔗 https://notion.so/API-Token-abc123def456...
 
-You:  จด github token ใหม่ให้หน่อย github ghp_newtoken123
+You:  จด github token ใหม่ให้หน่อย ghp_newtoken123
 Bot:  จะบันทึก GitHub token ghp_newtoken123 ใน 'API Token' ใช่ไหมคะ?
       ตอบ 'ใช่' เพื่อยืนยัน
 You:  ใช่
@@ -190,6 +191,7 @@ Line Secretary คือ LINE bot เลขาส่วนตัว AI ที่
 - Groq→OpenRouter auto-failover — ถ้าตั้งทั้งสอง key ไว้ (`AI_PROVIDER=auto`) จะใช้ Groq (ฟรี) เป็นหลัก พอ rate limit หมดจะสลับไป OpenRouter อัตโนมัติ และกลับมาใช้ Groq เองเมื่อ reset
 - ตอบจากข้อมูลใน Notion เท่านั้น — ไม่ตอบจากความรู้ของ AI เอง ถ้าหาไม่เจอจะถามก่อนว่าต้องการให้ตอบจากความรู้ทั่วไปได้ไหม
 - มี confirmation step ก่อนจะ write ข้อมูลใหม่ลง Notion ทุกครั้ง
+- ใส่ 🔗 Notion page URL ในแต่ละคำตอบ — เพื่อให้กดไปหน้า Notion ต้นฉบับได้เลย
 - จำกัดการใช้งานด้วย LINE user ID whitelist
 
 ## การทำงาน
