@@ -21,7 +21,7 @@ Rules:
 - Use female Thai politeness particles: ค่ะ for statements, คะ for questions — never ครับ
 - Be concise and direct
 - The Notion data has "pages" (text) and "databases" (table rows)
-- If the data contains the answer, state it clearly and mention which Notion page or database it came from (e.g. "จาก page API Token")
+- If the data contains the answer, state it clearly, mention which page it came from, and end your reply on a new line with 🔗 followed by the page URL from the Notion data (e.g. "🔗 https://notion.so/abc123"). Use the `url` field from the matching page or database in the data.
 - Match user queries to data flexibly — "kmotor" matches "K-Motor Help me", "twitter" matches "Twitter (X)", "aia" matches "AIA", etc. Use judgment for abbreviated or partial names
 - If the Notion data does not contain the answer — even if you know the answer from your training — say "ไม่พบข้อมูลใน Notion ค่ะ" and nothing else
 
@@ -345,25 +345,27 @@ async def _process_item(token: str, item: dict) -> tuple[list, list]:
     """Process one search result item — returns (pages, databases)."""
     item_pages: list[dict] = []
     item_dbs: list[dict] = []
+    url = item.get("url") or f"https://notion.so/{item['id'].replace('-', '')}"
 
     if item["type"] == "database":
         rows = await notion.query_database(token, item["id"])
-        item_dbs.append({"id": item["id"], "title": item["title"], "rows": rows})
+        item_dbs.append({"id": item["id"], "title": item["title"], "rows": rows, "url": url})
 
     elif item["type"] == "page":
         rows = await notion.query_database(token, item["id"])
         if rows:
-            item_dbs.append({"id": item["id"], "title": item["title"], "rows": rows})
+            item_dbs.append({"id": item["id"], "title": item["title"], "rows": rows, "url": url})
         else:
             content = await notion.get_page_content(token, item["id"])
             if content:
-                item_pages.append({"id": item["id"], "title": item["title"], "content": content})
+                item_pages.append({"id": item["id"], "title": item["title"], "content": content, "url": url})
             for db_name, db_id in re.findall(
                 r'\[EMBEDDED DATABASE: "([^"]+)" database_id=([a-f0-9-]+)\]', content or ""
             ):
                 try:
                     db_rows = await notion.query_database(token, db_id)
-                    item_dbs.append({"id": db_id, "title": db_name, "rows": db_rows})
+                    db_url = f"https://notion.so/{db_id.replace('-', '')}"
+                    item_dbs.append({"id": db_id, "title": db_name, "rows": db_rows, "url": db_url})
                 except Exception as e:
                     logger.error(f"query embedded db {db_id} error: {e}")
 
