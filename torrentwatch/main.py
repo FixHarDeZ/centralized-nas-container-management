@@ -159,6 +159,16 @@ def api_history_dates(source_id: int):
     return db.get_history_dates(source_id)
 
 
+@app.get("/api/search")
+def api_search(source_id: int, q: str, limit: int = 50):
+    if not q or len(q.strip()) < 2:
+        raise HTTPException(400, "Query must be at least 2 characters")
+    rows = db.search_torrents(source_id, q.strip(), min(limit, 200))
+    keywords = db.get_keywords_for_source(source_id)
+    rows = _with_keyword_flag(rows, keywords)
+    return {"query": q, "count": len(rows), "torrents": rows}
+
+
 # ─── Download ─────────────────────────────────────────────────────────────────
 
 def _content_disposition(title: str) -> str:
@@ -220,6 +230,38 @@ async def api_download_nas(torrent_id: int):
 
 # ─── Proxy detail page (bypass bearbit anti-hotlink check) ────────────────────
 
+@app.get("/api/cover/{torrent_id}")
+async def api_cover(torrent_id: int):
+    """Proxy cover image through authenticated scraper session (fixes CDN session-expire breaks)."""
+    t = db.get_torrent(torrent_id)
+    if not t or not t.get("cover_url"):
+        raise HTTPException(404, "No cover image")
+    data = await scraper.fetch_cover_bytes(t["cover_url"])
+    if not data:
+        raise HTTPException(502, "Failed to fetch cover image")
+    url_lower = t["cover_url"].lower()
+    ct = "image/jpeg"
+    if ".png" in url_lower: ct = "image/png"
+    elif ".gif" in url_lower: ct = "image/gif"
+    elif ".webp" in url_lower: ct = "image/webp"
+    return Response(content=data, media_type=ct, headers={"Cache-Control": "max-age=3600"})
+
+
+@app.get("/api/stats")
+def api_stats(source_id: int | None = None):
+    return db.get_stats(source_id)
+
+
+class TorrentStatusBody(BaseModel):
+    status: int  # 0=normal, 1=watched, 2=skip
+
+@app.post("/api/torrents/{torrent_id}/status", status_code=204)
+def api_set_torrent_status(torrent_id: int, body: TorrentStatusBody):
+    if body.status not in (0, 1, 2):
+        raise HTTPException(400, "status must be 0, 1, or 2")
+    db.mark_torrent_status(torrent_id, body.status)
+
+
 @app.get("/api/detail/{torrent_id}")
 async def api_proxy_detail(torrent_id: int):
     """Proxy the torrent detail page through our backend so bearbit's Referer check passes."""
@@ -276,6 +318,7 @@ def api_get_settings():
 @app.put("/api/settings", status_code=204)
 def api_update_settings(body: dict):
     db.update_settings(body)
+    scheduler.reload_scrape_job()
 
 
 # ─── Scrape / Status ─────────────────────────────────────────────────────────

@@ -1151,3 +1151,158 @@ html, body {
   color: var(--text) !important;
   border: 1px solid var(--border);
 }
+
+/* ─── Watched / Skip card states ─────────────────────────────────────── */
+.tw-card.tw-card-watched { opacity: 0.6; }
+.tw-card.tw-card-watched::after {
+  content: "";
+  position: absolute; inset: 0;
+  border-radius: var(--radius);
+  border: 2px solid var(--seed);
+  pointer-events: none;
+}
+.tw-card.tw-card-skipped { opacity: 0.35; }
+.tw-card.tw-card-skipped::after {
+  content: "";
+  position: absolute; inset: 0;
+  border-radius: var(--radius);
+  border: 2px solid var(--leech);
+  pointer-events: none;
+}
+.tw-badge-watched { background: var(--seed-soft);  color: var(--seed);  }
+.tw-badge-skipped { background: var(--leech-soft); color: var(--leech); }
+
+.tw-action-btn.done-watch {
+  background: var(--seed-soft);
+  border-color: color-mix(in srgb, var(--seed) 25%, transparent);
+  color: var(--seed);
+}
+.tw-action-btn.done-skip {
+  background: var(--leech-soft);
+  border-color: color-mix(in srgb, var(--leech) 25%, transparent);
+  color: var(--leech);
+}
+
+/* ─── Schedule interval select ───────────────────────────────────────── */
+.tw-select-sm {
+  background: var(--bg-soft);
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--text);
+  padding: 5px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+  transition: all .15s;
+}
+.tw-select-sm:focus {
+  border-color: var(--accent);
+  background: var(--bg-card);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+/* ─── Stats panel ────────────────────────────────────────────────────── */
+.tw-stats-scroll {
+  padding: 0 0 calc(var(--nav-h) + 20px);
+  display: flex;
+  flex-direction: column;
+}
+.tw-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  padding: 12px 14px 4px;
+}
+.tw-stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 8px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  box-shadow: var(--shadow-sm);
+}
+.tw-stat-card .bi { font-size: 20px; }
+.tw-stat-card-val {
+  font-size: 22px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+  color: var(--text-strong);
+  line-height: 1;
+}
+.tw-stat-card-lbl {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-weight: 500;
+  text-align: center;
+}
+.tw-stats-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin: 8px 14px 0;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+.tw-stats-header {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid var(--border-dim);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-soft) 60%, var(--bg-card)) 0%, var(--bg-card) 100%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tw-stats-header .bi { font-size: 13px; color: var(--accent); }
+.tw-stats-bars { padding: 8px 14px 10px; display: flex; flex-direction: column; gap: 7px; }
+.tw-stats-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tw-stats-bar-label {
+  font-size: 11.5px;
+  color: var(--text);
+  width: 80px;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tw-stats-bar-track {
+  flex: 1;
+  background: var(--bg-soft);
+  border-radius: 4px;
+  height: 8px;
+  overflow: hidden;
+}
+.tw-stats-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 4px;
+  min-width: 3px;
+  transition: width .4s ease;
+}
+.tw-stats-bar-count {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  width: 32px;
+  text-align: right;
+  flex-shrink: 0;
+}
+.tw-stats-empty {
+  font-size: 12px;
+  color: var(--text-dim);
+  padding: 6px 0;
+}

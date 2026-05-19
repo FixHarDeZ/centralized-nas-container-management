@@ -293,6 +293,28 @@ async def resolve_download_url(detail_url: str) -> str | None:
     return None
 
 
+async def fetch_cover_bytes(cover_url: str) -> bytes | None:
+    """Fetch a cover image through the authenticated session (bypasses CDN session checks)."""
+    global _login_ok
+    headers = {"Referer": f"{config.SITE_BASE_URL}/"}
+    try:
+        resp = await _client.get(cover_url, headers=headers)
+        if resp.status_code == 200 and resp.content:
+            return resp.content
+        return None
+    except Exception as e:
+        print(f"[scraper] cover fetch error: {e} — re-logging in and retrying")
+        try:
+            _login_ok = await _login()
+            if not _login_ok:
+                return None
+            resp = await _client.get(cover_url, headers=headers)
+            return resp.content if resp.status_code == 200 else None
+        except Exception as e2:
+            print(f"[scraper] cover retry failed: {e2}")
+            return None
+
+
 async def fetch_torrent_bytes(torrent_url: str, detail_url: str = "") -> bytes | None:
     """Download .torrent file bytes. If torrent_url fails, resolve from detail_url.
 

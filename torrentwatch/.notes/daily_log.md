@@ -4,6 +4,60 @@
 
 ### Session Log Entry
 **Timestamp:** 2026-05-20
+**Title:** 6 Features — Cover Proxy, History Search, Global Search, Watched/Skip, Configurable Schedule, Stats Page
+
+**Feature 1: Cover Image Proxy**
+- **`scraper.py`**: `fetch_cover_bytes(cover_url)` — fetches image through authenticated session with Referer header + re-login retry on failure
+- **`main.py`**: `GET /api/cover/{torrent_id}` — proxies cover bytes with `Cache-Control: max-age=3600`; guesses content-type from URL extension
+- **`static/app.js`**: `cardHTML()` — added `data-proxy="/api/cover/{id}"` attribute + `onerror` fallback: try direct URL first, retry via proxy only on failure (zero overhead normally, transparent recovery on session expire)
+
+**Feature 2: History Tab Search (within date) + Feature 9: Global Search (across all dates)**
+- **`static/index.html`**: added `<input id="history-search-input">` search row in History panel (same style as Today tab)
+- **`static/app.js`**:
+  - `state.searchHistory` added to state
+  - `loadHistory(date)` refactored: if `date=null` AND `q.length >= 2` → calls `GET /api/search?source_id=X&q=TEXT` (global); if `date=null` AND no query → shows placeholder; if date selected → filters client-side by `state.searchHistory`
+  - Source chip click in history tab resets `state.searchHistory` + clears input
+  - `history-date-select` onChange now calls `loadHistory(date || null)`
+  - `history-search-input` input event calls `loadHistory(state.historyDate || null)`
+- **`main.py`**: `GET /api/search?source_id=ID&q=TEXT&limit=50` — SQLite LIKE search, keyword-flagged, max 200 results
+- **`db.py`**: `search_torrents(source_id, q, limit)` — `LIKE '%q%'` ordered by date DESC, seeds DESC
+
+**Feature 3: Mark as Watched / Skip**
+- **`db.py`**:
+  - `watched_status INTEGER DEFAULT 0` added to CREATE TABLE + migration in `init_db()`
+  - `mark_torrent_status(torrent_id, status)`: 0=none, 1=watched, 2=skip
+- **`main.py`**: `POST /api/torrents/{id}/status` body `{status: 0|1|2}` → 204
+- **`static/app.js`**:
+  - `cardHTML()`: renders `tw-badge-watched` / `tw-badge-skipped` in `tw-card-dl-badges`; always renders the badges div (not conditional); card class includes `tw-card-watched` / `tw-card-skipped`; watch/skip buttons in actions row (eye + x-circle icons)
+  - `attachCardActions()`: `.btn-watch` and `.btn-skip` handlers toggle status via API, sync badge + card class + sibling button state in-DOM (no re-render)
+  - `_syncWatchBadge(card, status)`: removes old badge, appends new one
+
+**Feature 4: Configurable Scheduler**
+- **`db.py`**: added `scrape_interval_night: "30"` and `scrape_interval_day: "60"` to `_DEFAULT_SETTINGS`
+- **`scheduler.py`**: `_minute_pattern(interval)` maps 15→"0,15,30,45", 20→"0,20,40", 30→"0,30", 60→"0"; `reload_scrape_job()` reads intervals from DB settings
+- **`main.py`**: `PUT /api/settings` now calls `scheduler.reload_scrape_job()` after saving
+- **`static/index.html`**: replaced static schedule text in Schedule card with two `<select class="tw-select-sm">` for night/day interval (options: 15/20/30/60 min)
+- **`static/app.js`**: `loadSettings()` populates selects; save payload includes `scrape_interval_night` and `scrape_interval_day`
+
+**Feature 7: Stats Page**
+- **`db.py`**: `get_stats(source_id)` — aggregate query: total, dl_local, dl_nas, watched, skipped, by_category (top 20), by_date (last 14 days), by_source
+- **`main.py`**: `GET /api/stats?source_id=ID` (optional source filter)
+- **`static/index.html`**: Stats panel (`#panel-stats`) + 5th nav tab (สถิติ / bi-bar-chart-line)
+- **`static/app.js`**: `loadStats()` + `_statsCard()` + `_statsBar()` helpers; renders summary grid (5 stat cards), 14-day activity bar chart, category breakdown, source breakdown — all CSS bars with dynamic widths
+
+**CSS (`static/style.css`)**:
+- `.tw-card-watched` / `.tw-card-skipped` — opacity dim + colored border overlay via `::after`
+- `.tw-badge-watched` / `.tw-badge-skipped` — green/red badge tokens
+- `.tw-action-btn.done-watch` / `.done-skip` — tinted action button states
+- `.tw-select-sm` — styled `<select>` for schedule intervals
+- Stats panel styles: `.tw-stats-scroll`, `.tw-stats-grid`, `.tw-stat-card`, `.tw-stats-section`, `.tw-stats-header`, `.tw-stats-bars`, `.tw-stats-bar-row`, `.tw-stats-bar-track`, `.tw-stats-bar-fill`, `.tw-stats-bar-count`
+
+**Files Changed:** `db.py`, `scraper.py`, `main.py`, `scheduler.py`, `static/index.html`, `static/app.js`, `static/style.css`
+
+---
+
+### Session Log Entry
+**Timestamp:** 2026-05-20
 **Title:** Fix card thumbnail zoom (object-fit: cover → contain)
 
 **ไฟล์ที่แก้ไข:**

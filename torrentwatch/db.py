@@ -18,6 +18,8 @@ _DEFAULT_SETTINGS = {
     "telegram_notify_keyword_enabled": "0",    # "0" = off, "1" = push Telegram on keyword match
     "auto_download_nas":               "0",    # "0" = off, "1" = auto-save keyword matches to /downloads
     "retention_days":                  "7",    # days to keep torrent records before weekly cleanup
+    "scrape_interval_night":           "30",   # minutes between scrapes 19:00–01:00 (15/20/30/60)
+    "scrape_interval_day":             "60",   # minutes between scrapes 06:00–19:00 (15/20/30/60)
 }
 
 
@@ -69,6 +71,7 @@ def init_db():
                 last_updated_at  TEXT NOT NULL,
                 downloaded_local INTEGER DEFAULT 0,
                 downloaded_nas   INTEGER DEFAULT 0,
+                watched_status   INTEGER DEFAULT 0,
                 UNIQUE(source_id, site_id)
             );
 
@@ -107,12 +110,13 @@ def init_db():
         for col_sql in [
             "ALTER TABLE sources ADD COLUMN label TEXT DEFAULT ''",
             "ALTER TABLE sources ADD COLUMN sort_order INTEGER DEFAULT 0",
-            "ALTER TABLE torrents ADD COLUMN posted_at   TEXT DEFAULT ''",
-            "ALTER TABLE torrents ADD COLUMN category    TEXT DEFAULT ''",
-            "ALTER TABLE torrents ADD COLUMN file_count  INTEGER DEFAULT 0",
-            "ALTER TABLE torrents ADD COLUMN file_size   TEXT DEFAULT ''",
-            "ALTER TABLE torrents ADD COLUMN completed   INTEGER DEFAULT 0",
-            "ALTER TABLE torrents ADD COLUMN is_sticky   INTEGER DEFAULT 0",
+            "ALTER TABLE torrents ADD COLUMN posted_at      TEXT DEFAULT ''",
+            "ALTER TABLE torrents ADD COLUMN category       TEXT DEFAULT ''",
+            "ALTER TABLE torrents ADD COLUMN file_count     INTEGER DEFAULT 0",
+            "ALTER TABLE torrents ADD COLUMN file_size      TEXT DEFAULT ''",
+            "ALTER TABLE torrents ADD COLUMN completed      INTEGER DEFAULT 0",
+            "ALTER TABLE torrents ADD COLUMN is_sticky      INTEGER DEFAULT 0",
+            "ALTER TABLE torrents ADD COLUMN watched_status INTEGER DEFAULT 0",
         ]:
             try:
                 c.execute(col_sql)
@@ -336,6 +340,65 @@ def mark_downloaded_local(torrent_id: int):
 def mark_downloaded_nas(torrent_id: int):
     with _conn() as c:
         c.execute("UPDATE torrents SET downloaded_nas = 1 WHERE id = ?", (torrent_id,))
+
+
+def mark_torrent_status(torrent_id: int, status: int):
+    """Set watched_status: 0=none, 1=watched, 2=skip."""
+    with _conn() as c:
+        c.execute("UPDATE torrents SET watched_status = ? WHERE id = ?", (status, torrent_id))
+
+
+def get_stats(source_id: int | None = None) -> dict:
+    flt = "AND source_id = ?" if source_id else ""
+    args = (source_id,) if source_id else ()
+    with _conn() as c:
+        row = c.execute(f"""
+            SELECT COUNT(*) as total,
+                   SUM(downloaded_local) as dl_local,
+                   SUM(downloaded_nas)   as dl_nas,
+                   SUM(CASE WHEN watched_status=1 THEN 1 ELSE 0 END) as watched,
+                   SUM(CASE WHEN watched_status=2 THEN 1 ELSE 0 END) as skipped
+            FROM torrents WHERE 1=1 {flt}
+        """, args).fetchone()
+
+        by_cat = c.execute(f"""
+            SELECT category, COUNT(*) as count
+            FROM torrents WHERE category != '' {flt}
+            GROUP BY category ORDER BY count DESC LIMIT 20
+        """, args).fetchall()
+
+        by_date = c.execute(f"""
+            SELECT date_posted, COUNT(*) as count
+            FROM torrents WHERE date_posted >= date('now', '-14 days') {flt}
+            GROUP BY date_posted ORDER BY date_posted ASC
+        """, args).fetchall()
+
+        by_source = c.execute("""
+            SELECT COALESCE(NULLIF(s.label,''), s.url) as label, COUNT(t.id) as count
+            FROM sources s LEFT JOIN torrents t ON t.source_id = s.id
+            GROUP BY s.id ORDER BY count DESC
+        """).fetchall()
+
+        return {
+            "total":            row["total"] or 0,
+            "downloaded_local": row["dl_local"] or 0,
+            "downloaded_nas":   row["dl_nas"] or 0,
+            "watched":          row["watched"] or 0,
+            "skipped":          row["skipped"] or 0,
+            "by_category": [{"category": r["category"], "count": r["count"]} for r in by_cat],
+            "by_date":     [{"date": r["date_posted"], "count": r["count"]} for r in by_date],
+            "by_source":   [{"label": r["label"], "count": r["count"]} for r in by_source],
+        }
+
+
+def search_torrents(source_id: int, q: str, limit: int = 50) -> list[dict]:
+    pattern = f"%{q}%"
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT * FROM torrents WHERE source_id=? AND title LIKE ? ORDER BY date_posted DESC, seeds DESC LIMIT ?",
+            (source_id, pattern, limit)
+        ).fetchall()
+        return [dict(r) for r in rows]
 
 
 # ─── Keywords ─────────────────────────────────────────────────────────────────
