@@ -19,8 +19,10 @@ A personal AI secretary LINE bot that searches and records information in your N
 - Answers only from your Notion data — never hallucinates from general knowledge; if the answer isn't in Notion, asks whether to answer from general knowledge instead
 - Proposes a confirmation before writing any new record to Notion; pending confirmations auto-expire after 6 hours
 - Quick note with rich Markdown-like formatting — `# heading`, `- bullet`, `[ ] todo`, `[x] done`; if you name an existing page the bot appends to it instead of creating a new one
-- Proactive daily reminders — push LINE notifications for Notion database rows whose date = today (configurable time, Bangkok timezone)
-- Non-text messages (images, stickers, etc.) receive a polite "text only" reply instead of being silently dropped
+- Send an image while in a note flow and it is uploaded directly to the Notion page via Notion's File Upload API
+- Agent can create new Notion pages with content, not just add rows to existing tables
+- Page index uses cursor-based pagination — no cap on workspace size; search returns up to 20 results per query
+- Non-text messages (images, stickers, etc.) receive a polite reply; images outside note flow prompt you to start one first
 - Includes 🔗 Notion page URLs in replies — so you can click directly to the source
 - Whitelist-based access — only your LINE user ID can use the bot
 
