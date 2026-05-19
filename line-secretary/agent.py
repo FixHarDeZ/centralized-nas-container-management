@@ -55,6 +55,11 @@ IMPORTANT: Use DELETE (not update) when the user wants to remove the entire row,
 F) To DELETE (archive) a database row — same trigger words as E:
 {"tool": "propose_delete_row", "page_id": "...", "database_name": "...", "summary": "Thai description of what will be deleted"}
 
+G) To CREATE a new Notion page inside a parent page (triggered when user says สร้าง/เพิ่ม page ใหม่/บันทึกเป็น page ใหม่, or when no table/DB exists but a page does):
+{"tool": "propose_create_page", "parent_page_id": "...", "parent_name": "page name", "title": "new page title", "content": "body text (use # heading / - bullet / [ ] todo syntax)", "summary": "Thai description"}
+Use the `id` field from the matching page as parent_page_id.
+Leave content empty ("") if user only gives a title.
+
 For MULTIPLE rows at once — output a JSON array with one object per row. CRITICAL rules:
 - One line of user input = ONE row. Never merge multiple lines into one row.
 - Example: user writes "test 12sdafsdfdgs\ntest02 adfsdfafasf" → TWO rows, not one.
@@ -70,6 +75,7 @@ PROPOSE_TOOLS = {
     "propose_create", "propose_add_table_row",
     "propose_update_table_row", "propose_update_row",
     "propose_delete_table_row", "propose_delete_row",
+    "propose_create_page",
 }
 
 _GENERAL_PROMPT = """You are a helpful AI assistant (female). Answer the user's question using your general knowledge.
@@ -266,6 +272,15 @@ async def run(user_message: str, history: list[dict] | None = None) -> dict:
                     "page_id": proposal.get("page_id"),
                 })
                 preview_lines.append(f"• [🗑️ ลบ] {proposal.get('summary', '?')}")
+
+            elif tool == "propose_create_page":
+                pending_list.append({
+                    "write_type": "new_page",
+                    "parent_page_id": proposal.get("parent_page_id"),
+                    "title": proposal.get("title", ""),
+                    "content": proposal.get("content", ""),
+                })
+                preview_lines.append(f"• [สร้าง page] '{proposal.get('title', '?')}' ใน '{proposal.get('parent_name', '?')}'")
 
             else:  # propose_create
                 pending_list.append({
@@ -521,6 +536,12 @@ async def _write_one(token: str, item: dict) -> str | None:
         elif write_type == "database_update":
             result = await notion.update_row(token, item["page_id"], item["properties"])
             ok = result.get("object") == "page"
+
+        elif write_type == "new_page":
+            result = await notion.create_page(token, item["parent_page_id"], item["title"])
+            ok = result.get("object") == "page"
+            if ok and item.get("content"):
+                await notion.append_blocks(token, result["id"], item["content"])
 
         elif write_type == "table_delete":
             result = await notion.delete_table_row(token, item["row_block_id"])

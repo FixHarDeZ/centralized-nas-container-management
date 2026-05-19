@@ -14,12 +14,6 @@ class Settings(BaseSettings):
 
     NOTION_QUICK_NOTE_PAGE_ID: str = ""
 
-    # Proactive reminders: comma-separated Notion database IDs to check for today's dates.
-    # Leave empty to disable.
-    NOTION_REMINDER_DB_IDS: str = ""
-    # Time to send daily reminders (HH:MM, Bangkok time UTC+7)
-    NOTION_REMINDER_TIME: str = "08:00"
-
     DATA_DIR: str = "/data"
 
     model_config = SettingsConfigDict(extra="ignore")

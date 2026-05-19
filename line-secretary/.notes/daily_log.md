@@ -1,5 +1,36 @@
 # Daily Log — line-secretary
 
+## 2026-05-20
+
+### ลบ Reminder + 5 features ใหม่
+
+**ลบ Reminder feature** — ออกจาก `main.py`, `notion.py`, `config.py`, `.env.example` ทั้งหมด
+
+**#3 `/history` command** (`main.py`)
+- แสดงประวัติล่าสุด 4 exchange (user/bot แต่ละคู่) truncate ที่ 120 ตัวอักษรต่อ line
+
+**#4 Pagination** (`notion.py`)
+- `list_all_pages()` เปลี่ยนจาก limit=50 เป็น cursor-based pagination (page_size=100)
+- วน loop `has_more` + `next_cursor` จนครบทุก page — ไม่ miss pages อีก
+
+**#5 Search page_size** (`notion.py`)
+- เพิ่มจาก 8 → 20 results ต่อ query
+
+**#7 Agent สร้าง Notion page** (`agent.py`)
+- เพิ่ม `propose_create_page` tool ใน SYSTEM_PROMPT (case G) และ PROPOSE_TOOLS set
+- Handler ใน `agent.run()`: สร้าง pending `write_type: "new_page"`
+- Execute ใน `_write_one()`: call `notion.create_page()` แล้ว `notion.append_blocks()` ถ้ามี content
+- รองรับ Markdown-like formatting เหมือน quick note
+
+**#8 LINE image → Notion** (`line_client.py`, `notion.py`, `main.py`)
+- `line_client.download_content()` — ดึง binary จาก LINE Data API
+- `notion.upload_image()` — Notion File Upload API (2 step: create + send)
+- `notion.append_image_block()` — append `image` block ด้วย `file_upload_id`
+- `handle_non_text_message()` — ถ้าส่งรูปตอน `waiting_content` phase → upload แนบ note อัตโนมัติ
+- ถ้าส่งรูปนอก note flow → แจ้ง "พิมพ์ 'จดหน่อย' ก่อน"
+
+**Test:** 27/27 passed
+
 ## 2026-05-19
 
 ### 7 Features ใหม่ (batch)

@@ -1,5 +1,4 @@
 import asyncio
-import datetime
 import json
 import logging
 import time
@@ -26,8 +25,6 @@ async def lifespan(app: FastAPI):
     store.init(settings.DATA_DIR)
     _cache.init(settings.NOTION_TOKEN)
     _cache.start()
-    if settings.NOTION_REMINDER_DB_IDS.strip():
-        asyncio.create_task(_reminder_loop())
     yield
 
 
@@ -48,10 +45,6 @@ def _is_note_intent(text: str) -> bool:
     return any(k in t for k in _NOTE_INTENT_KEYWORDS)
 
 
-def _today_bangkok() -> str:
-    return (datetime.datetime.utcnow() + datetime.timedelta(hours=7)).strftime("%Y-%m-%d")
-
-
 async def _push_long(user_id: str, text: str, token: str, max_len: int = 4000) -> None:
     """Send text as one or more LINE messages, splitting at max_len chars."""
     if len(text) <= max_len:
@@ -59,60 +52,6 @@ async def _push_long(user_id: str, text: str, token: str, max_len: int = 4000) -
         return
     for i in range(0, len(text), max_len):
         await line_client.push(user_id, text[i:i + max_len], token)
-
-
-# ── Proactive reminders ────────────────────────────────────────────────────────
-
-async def _check_reminders() -> None:
-    today = _today_bangkok()
-    db_ids = [d.strip() for d in settings.NOTION_REMINDER_DB_IDS.split(",") if d.strip()]
-    reminder_lines: list[str] = []
-
-    for db_id in db_ids:
-        try:
-            rows = await notion_mod.get_database_rows_with_dates(settings.NOTION_TOKEN, db_id)
-            for row in rows:
-                matching = {k: v for k, v in row["dates"].items() if v.startswith(today)}
-                if matching:
-                    date_info = ", ".join(f"{k}: {v}" for k, v in matching.items())
-                    url_part = f"\n  🔗 {row['url']}" if row.get("url") else ""
-                    reminder_lines.append(f"• {row['title']} ({date_info}){url_part}")
-        except Exception as e:
-            logger.error(f"Reminder check error for DB {db_id}: {e}")
-
-    if not reminder_lines:
-        logger.info(f"Reminder check: no events for {today}")
-        return
-
-    msg = f"📅 วันนี้ ({today}) มีกำหนดการ:\n" + "\n".join(reminder_lines)
-    token = settings.LINE_SECRETARY_CHANNEL_ACCESS_TOKEN
-    for user_id in settings.allowed_user_ids:
-        try:
-            await _push_long(user_id, msg, token)
-        except Exception as e:
-            logger.error(f"Reminder push error for {user_id}: {e}")
-
-
-async def _reminder_loop() -> None:
-    while True:
-        now_bkk = datetime.datetime.utcnow() + datetime.timedelta(hours=7)
-        try:
-            h, m = map(int, settings.NOTION_REMINDER_TIME.split(":"))
-        except Exception:
-            h, m = 8, 0
-
-        next_run = now_bkk.replace(hour=h, minute=m, second=0, microsecond=0)
-        if next_run <= now_bkk:
-            next_run += datetime.timedelta(days=1)
-
-        sleep_secs = (next_run - now_bkk).total_seconds()
-        logger.info(f"Reminder: next check in {sleep_secs:.0f}s (at {next_run.strftime('%Y-%m-%d %H:%M')} BKK)")
-        await asyncio.sleep(sleep_secs)
-
-        try:
-            await _check_reminders()
-        except Exception as e:
-            logger.error(f"Reminder loop error: {e}")
 
 
 # ── Webhook ────────────────────────────────────────────────────────────────────
@@ -146,8 +85,39 @@ async def handle_non_text_message(event: dict) -> None:
     user_id = event["source"]["userId"]
     if user_id not in settings.allowed_user_ids:
         return
-    msg_type = event.get("message", {}).get("type", "ข้อความ")
+    msg = event.get("message", {})
+    msg_type = msg.get("type", "")
     token = settings.LINE_SECRETARY_CHANNEL_ACCESS_TOKEN
+
+    if msg_type == "image":
+        # If user is in waiting_content note phase → attach image to the note
+        if store.has_pending_note(user_id):
+            note_state = store.get_pending_note(user_id)
+            if note_state.get("phase") == "waiting_content":
+                page_id = note_state["page_id"]
+                title = note_state["title"]
+                appending = note_state.get("appending", False)
+                store.pop_pending_note(user_id)
+                try:
+                    image_bytes = await line_client.download_content(msg["id"], token)
+                    file_upload_id = await notion_mod.upload_image(
+                        settings.NOTION_TOKEN, image_bytes, f"image_{msg['id']}.jpg"
+                    )
+                    await notion_mod.append_image_block(settings.NOTION_TOKEN, page_id, file_upload_id)
+                    verb = "เพิ่มรูปภาพลง" if appending else "บันทึกรูปภาพลง"
+                    await line_client.push(user_id, f"{verb} '{title}' เรียบร้อยแล้วค่ะ 🖼️", token)
+                except Exception as e:
+                    logger.error(f"Image upload to Notion error: {e}", exc_info=True)
+                    await line_client.push(user_id, "อัปโหลดรูปภาพไม่สำเร็จค่ะ ลองใหม่อีกครั้งนะคะ", token)
+                return
+        # Not in note flow
+        await line_client.push(
+            user_id,
+            "ส่งรูปภาพแนบใน note ได้ค่ะ 📎\nพิมพ์ 'จดหน่อย' เพื่อเริ่ม note แล้วส่งรูปมาได้เลย",
+            token,
+        )
+        return
+
     await line_client.push(user_id, f"รับแค่ข้อความ (text) ค่ะ ไม่สามารถประมวลผล {msg_type} ได้ค่ะ", token)
 
 
@@ -241,6 +211,7 @@ async def handle_message(event: dict) -> None:
         await line_client.push(user_id, (
             "📖 คำสั่งที่ใช้ได้:\n"
             "/help — แสดงคำสั่งทั้งหมดนี้\n"
+            "/history — แสดงประวัติสนทนาล่าสุด 4 รอบ\n"
             "/clear — ล้างประวัติสนทนา + pending (ใช้เมื่อบอทติด)\n"
             "/refresh — รีเฟรช Notion page cache ทันที\n"
             "/cache — แสดงสถิติ cache (จำนวน page + เวลาอัปเดต)\n"
@@ -260,6 +231,20 @@ async def handle_message(event: dict) -> None:
             "⚠️ ทุก write (เพิ่ม/แก้/ลบ) ต้องยืนยันด้วย 'ใช่' ก่อนเสมอค่ะ\n"
             "⏰ pending ที่ไม่ได้ยืนยันจะหมดอายุใน 6 ชั่วโมงอัตโนมัติค่ะ"
         ), token)
+        return
+
+    # /history → show last 4 conversation exchanges
+    if text == "/history":
+        hist = store.get_history(user_id)
+        if not hist:
+            await line_client.push(user_id, "ยังไม่มีประวัติการสนทนาค่ะ", token)
+            return
+        lines = []
+        for i in range(0, len(hist) - 1, 2):
+            u = hist[i].get("content", "")[:120]
+            b = hist[i + 1].get("content", "")[:120] if i + 1 < len(hist) else ""
+            lines.append(f"คุณ: {u}\nบอท: {b}")
+        await _push_long(user_id, "📜 ประวัติล่าสุด:\n\n" + "\n\n".join(lines), token)
         return
 
     # /clear → wipe history + pending for this user (useful when bot gets stuck)

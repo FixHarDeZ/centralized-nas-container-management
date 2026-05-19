@@ -48,7 +48,7 @@ async def search(token: str, query: str) -> list[dict]:
         r = await client.post(
             f"{NOTION_API}/search",
             headers=_headers(token),
-            json={"query": query, "page_size": 8},
+            json={"query": query, "page_size": 20},
             timeout=15,
         )
         return [
@@ -258,34 +258,6 @@ async def query_database(token: str, database_id: str) -> list[dict]:
         return rows
 
 
-async def get_database_rows_with_dates(token: str, database_id: str) -> list[dict]:
-    """Return rows that have at least one date property, with title + dates + url."""
-    async with httpx.AsyncClient() as client:
-        r = await client.post(
-            f"{NOTION_API}/databases/{database_id}/query",
-            headers=_headers(token),
-            json={"page_size": 100},
-            timeout=15,
-        )
-    if r.status_code != 200:
-        raise ValueError(f"Notion API {r.status_code} for DB {database_id}: {r.json().get('message', r.text)}")
-    results = []
-    for page in r.json().get("results", []):
-        title = ""
-        dates: dict[str, str] = {}
-        for name, prop in page.get("properties", {}).items():
-            ptype = prop.get("type", "")
-            if ptype == "title":
-                title = "".join(rt.get("plain_text", "") for rt in (prop.get("title") or []))
-            elif ptype == "date":
-                val = prop.get("date")
-                if val and val.get("start"):
-                    dates[name] = val["start"]
-        if dates:
-            results.append({"title": title or "?", "dates": dates, "url": page.get("url", "")})
-    return results
-
-
 async def get_page_headers(token: str, page_id: str) -> str:
     """Read block text + table rows, including tables nested one level inside toggle/container blocks.
 
@@ -370,19 +342,27 @@ async def get_page_headers(token: str, page_id: str) -> str:
     return "\n".join(lines)
 
 
-async def list_all_pages(token: str, limit: int = 50) -> list[dict]:
-    """Return all accessible pages (used as fallback when search returns nothing)."""
+async def list_all_pages(token: str) -> list[dict]:
+    """Return all accessible pages using cursor-based pagination."""
+    all_items: list[dict] = []
+    body: dict = {"filter": {"value": "page", "property": "object"}, "page_size": 100}
     async with httpx.AsyncClient() as client:
-        r = await client.post(
-            f"{NOTION_API}/search",
-            headers=_headers(token),
-            json={"filter": {"value": "page", "property": "object"}, "page_size": limit},
-            timeout=15,
-        )
-        return [
-            {"id": item["id"], "type": "page", "title": _extract_title(item)}
-            for item in r.json().get("results", [])
-        ]
+        while True:
+            r = await client.post(
+                f"{NOTION_API}/search",
+                headers=_headers(token),
+                json=body,
+                timeout=15,
+            )
+            data = r.json()
+            all_items.extend(data.get("results", []))
+            if not data.get("has_more"):
+                break
+            body["start_cursor"] = data["next_cursor"]
+    return [
+        {"id": item["id"], "type": "page", "title": _extract_title(item)}
+        for item in all_items
+    ]
 
 
 async def get_raw_blocks(token: str, page_id: str) -> dict:
@@ -482,6 +462,49 @@ def _line_to_block(line: str) -> dict:
                 "to_do": {"rich_text": [{"type": "text", "text": {"content": content}}], "checked": True}}
     return {"object": "block", "type": "paragraph",
             "paragraph": {"rich_text": [{"type": "text", "text": {"content": line}}]}}
+
+
+async def upload_image(token: str, image_bytes: bytes, filename: str = "image.jpg") -> str:
+    """Upload image via Notion File Upload API. Returns file_upload_id."""
+    async with httpx.AsyncClient() as client:
+        # Step 1: create upload object
+        r = await client.post(
+            f"{NOTION_API}/file_uploads",
+            headers={k: v for k, v in _headers(token).items() if k != "Content-Type"},
+            json={"mode": "single_part"},
+            timeout=15,
+        )
+        if r.status_code != 200:
+            raise ValueError(f"file_upload create failed {r.status_code}: {r.text[:200]}")
+        data = r.json()
+        upload_url = data["upload_url"]
+        file_upload_id = data["id"]
+
+        # Step 2: upload binary
+        r2 = await client.post(
+            upload_url,
+            files={"file": (filename, image_bytes, "image/jpeg")},
+            timeout=60,
+        )
+        if r2.status_code not in (200, 201):
+            raise ValueError(f"file upload send failed {r2.status_code}: {r2.text[:200]}")
+    return file_upload_id
+
+
+async def append_image_block(token: str, page_id: str, file_upload_id: str) -> dict:
+    """Append an image block using a Notion file_upload_id."""
+    async with httpx.AsyncClient() as client:
+        r = await client.patch(
+            f"{NOTION_API}/blocks/{page_id}/children",
+            headers=_headers(token),
+            json={"children": [{
+                "object": "block",
+                "type": "image",
+                "image": {"type": "file_upload", "file_upload": {"id": file_upload_id}},
+            }]},
+            timeout=15,
+        )
+        return r.json()
 
 
 async def append_blocks(token: str, page_id: str, text: str) -> dict:
