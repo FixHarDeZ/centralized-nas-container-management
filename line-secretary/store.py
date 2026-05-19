@@ -2,9 +2,9 @@
 
 State shape:
   {
-    "pending":         { user_id: write_payload },
-    "pending_general": { user_id: original_question },
-    "pending_note":    { user_id: note_creation_state },
+    "pending":         { user_id: {"data": write_payload, "ts": float} },
+    "pending_general": { user_id: {"data": original_question, "ts": float} },
+    "pending_note":    { user_id: {"data": note_creation_state, "ts": float} },
     "history":         { user_id: [ {role, content}, ... ] }  # max MAX_HISTORY exchanges
   }
 
@@ -16,10 +16,29 @@ is negligible for a personal bot.
 import json
 import logging
 import os
+import time
 
 logger = logging.getLogger(__name__)
 
 MAX_HISTORY = 4  # exchanges (= 8 messages) kept per user
+PENDING_TTL = 6 * 3600  # 6 hours — pending confirmations auto-expire after this
+
+
+def _wrap(data) -> dict:
+    return {"data": data, "ts": time.time()}
+
+
+def _unwrap(entry):
+    """Return the payload from a wrapped or legacy entry."""
+    if isinstance(entry, dict) and "data" in entry and "ts" in entry:
+        return entry["data"]
+    return entry  # backward compat: old format stored raw payload
+
+
+def _expired(entry) -> bool:
+    if isinstance(entry, dict) and "ts" in entry:
+        return time.time() - entry["ts"] > PENDING_TTL
+    return False  # old format: no expiry
 
 _DATA_FILE = "/data/state.json"
 
@@ -61,67 +80,94 @@ def _save() -> None:
 # ── pending ──────────────────────────────────────────────────────
 
 def get_pending(user_id: str) -> dict | None:
-    return _state["pending"].get(user_id)
+    entry = _state["pending"].get(user_id)
+    return _unwrap(entry) if entry is not None else None
 
 
 def set_pending(user_id: str, payload: dict) -> None:
-    _state["pending"][user_id] = payload
+    _state["pending"][user_id] = _wrap(payload)
     _save()
 
 
 def pop_pending(user_id: str) -> dict | None:
-    val = _state["pending"].pop(user_id, None)
-    if val is not None:
+    entry = _state["pending"].pop(user_id, None)
+    if entry is not None:
         _save()
-    return val
+    return _unwrap(entry) if entry is not None else None
 
 
 def has_pending(user_id: str) -> bool:
-    return user_id in _state["pending"]
+    entry = _state["pending"].get(user_id)
+    if entry is None:
+        return False
+    if _expired(entry):
+        _state["pending"].pop(user_id, None)
+        _save()
+        logger.info(f"Expired pending for {user_id}")
+        return False
+    return True
 
 
 # ── pending_general ───────────────────────────────────────────────
 
 def get_pending_general(user_id: str) -> str | None:
-    return _state["pending_general"].get(user_id)
+    entry = _state["pending_general"].get(user_id)
+    return _unwrap(entry) if entry is not None else None
 
 
 def set_pending_general(user_id: str, question: str) -> None:
-    _state["pending_general"][user_id] = question
+    _state["pending_general"][user_id] = _wrap(question)
     _save()
 
 
 def pop_pending_general(user_id: str) -> str | None:
-    val = _state["pending_general"].pop(user_id, None)
-    if val is not None:
+    entry = _state["pending_general"].pop(user_id, None)
+    if entry is not None:
         _save()
-    return val
+    return _unwrap(entry) if entry is not None else None
 
 
 def has_pending_general(user_id: str) -> bool:
-    return user_id in _state["pending_general"]
+    entry = _state["pending_general"].get(user_id)
+    if entry is None:
+        return False
+    if _expired(entry):
+        _state["pending_general"].pop(user_id, None)
+        _save()
+        logger.info(f"Expired pending_general for {user_id}")
+        return False
+    return True
 
 
 # ── pending_note ──────────────────────────────────────────────────
 
 def get_pending_note(user_id: str) -> dict | None:
-    return _state["pending_note"].get(user_id)
+    entry = _state["pending_note"].get(user_id)
+    return _unwrap(entry) if entry is not None else None
 
 
 def set_pending_note(user_id: str, payload: dict) -> None:
-    _state["pending_note"][user_id] = payload
+    _state["pending_note"][user_id] = _wrap(payload)
     _save()
 
 
 def pop_pending_note(user_id: str) -> dict | None:
-    val = _state["pending_note"].pop(user_id, None)
-    if val is not None:
+    entry = _state["pending_note"].pop(user_id, None)
+    if entry is not None:
         _save()
-    return val
+    return _unwrap(entry) if entry is not None else None
 
 
 def has_pending_note(user_id: str) -> bool:
-    return user_id in _state["pending_note"]
+    entry = _state["pending_note"].get(user_id)
+    if entry is None:
+        return False
+    if _expired(entry):
+        _state["pending_note"].pop(user_id, None)
+        _save()
+        logger.info(f"Expired pending_note for {user_id}")
+        return False
+    return True
 
 
 # ── history ───────────────────────────────────────────────────────

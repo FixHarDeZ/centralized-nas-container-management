@@ -486,7 +486,7 @@ html, body {
   width: 86px;
   height: 122px;
   border-radius: 9px;
-  object-fit: cover;
+  object-fit: contain;
   background: var(--bg-soft);
   cursor: zoom-in;
   box-shadow: 0 4px 10px rgba(15,19,32,0.10);

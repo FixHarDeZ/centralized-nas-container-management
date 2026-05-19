@@ -3,6 +3,19 @@
 ---
 
 ### Session Log Entry
+**Timestamp:** 2026-05-20
+**Title:** Fix card thumbnail zoom (object-fit: cover → contain)
+
+**ไฟล์ที่แก้ไข:**
+
+- `static/style.css` — `.tw-card-thumb` เปลี่ยน `object-fit: cover` → `object-fit: contain` ให้รูปแสดงพอดีช่องแทนการ crop/zoom
+- `static/index.html` — bump cache version `v=20260520a`
+
+**หมายเหตุ:** เคยแก้แล้วครั้งก่อน (commit 366579e) แต่ redesign รอบล่าสุด revert กลับเป็น cover
+
+---
+
+### Session Log Entry
 **Timestamp:** 2026-05-19
 **Title:** UI Bug Fixes — Toast, Logo, Download Local
 
