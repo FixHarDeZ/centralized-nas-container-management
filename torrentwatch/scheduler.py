@@ -66,6 +66,8 @@ async def _do_scrape():
     auto_dl      = settings.get("auto_download_nas", "0") == "1"
     nas_dir      = Path(config.NAS_DOWNLOADS_DIR)
     print(f"[scheduler] scrape_sticky={scrape_sticky_val!r} → skip_sticky={skip_sticky}")
+    if notify_sticky_enabled and skip_sticky:
+        print("[scheduler] warning: notify_sticky_enabled=1 but scrape_sticky=0 — sticky entries are not scraped, no sticky notifications will fire")
 
     sources     = db.get_enabled_sources()
     total_found = 0
