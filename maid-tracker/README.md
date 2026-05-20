@@ -213,7 +213,7 @@ Use `deploy.sh` from the repo root, or restart manually in Container Manager.
 
 ```bash
 # From repo root
-./deploy.sh
+scripts/deploy.sh
 # Choose to restart maid-tracker when prompted
 ```
 
@@ -283,7 +283,7 @@ MAID_LINE_CHANNEL_ACCESS_TOKEN=<your token>
 MAID_LINE_GROUP_ID=C1a2b3c4d5...
 ```
 
-Then redeploy (`./deploy.sh` from repo root).
+Then redeploy (`scripts/deploy.sh` from repo root).
 
 ## Webhook Setup
 
@@ -557,7 +557,7 @@ Keyword ทั้งหมดอยู่ใน [`keywords.py`](keywords.py) —
 
 ```bash
 # จาก root ของ repo
-./deploy.sh
+scripts/deploy.sh
 # เลือก restart maid-tracker เมื่อถามทีหลัง
 ```
 
@@ -621,7 +621,7 @@ MAID_LINE_CHANNEL_ACCESS_TOKEN=<token ของคุณ>
 MAID_LINE_GROUP_ID=C1a2b3c4d5...
 ```
 
-จากนั้น redeploy (`./deploy.sh` จาก root ของ repo)
+จากนั้น redeploy (`scripts/deploy.sh` จาก root ของ repo)
 
 ## ตั้งค่า Webhook
 

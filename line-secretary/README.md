@@ -136,7 +136,7 @@ NOTION_REMINDER_TIME=08:00
 ### 5. Deploy
 
 ```bash
-./deploy.sh   # upload files and optionally restart line-secretary
+scripts/deploy.sh   # upload files and optionally restart line-secretary
 ```
 
 Register in Synology Container Manager → Project → Create → path `/volume1/docker/line-secretary`.
@@ -292,7 +292,7 @@ NOTION_QUICK_NOTE_PAGE_ID=32-char-hex-uuid
 ### 5. Deploy
 
 ```bash
-./deploy.sh   # อัปโหลดไฟล์และ restart stack
+scripts/deploy.sh   # อัปโหลดไฟล์และ restart stack
 ```
 
 จากนั้น register ใน Synology Container Manager → Project → Create → path `/volume1/docker/line-secretary`
