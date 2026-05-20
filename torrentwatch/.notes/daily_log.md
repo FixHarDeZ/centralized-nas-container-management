@@ -3,6 +3,26 @@
 ---
 
 ### Session Log Entry
+**Timestamp:** 2026-05-20 (session 3)
+**Title:** Bug fix — Auto Sticky rows from viewno18sbx.php ไม่ถูก scrape
+
+**Root Cause:**
+`_parse_row()` detect sticky โดยดู `<img src>` ที่ match regex `sticky\.gif|heart\.gif|pinned\.gif` เท่านั้น แต่ `viewno18sbx.php` ใช้ text label **"Auto Sticky:"** แทน image → `is_sticky = False` → rows ถูก filter ออกด้วย date filter (sticky entries มี date เก่า)
+
+**Fix (scraper.py:510):**
+อัปเดต `is_sticky` detection เพิ่ม 3 check:
+1. `img[src]` match `autosticky` (เผื่ออนาคต)
+2. `img[alt]` match `sticky` (case-insensitive)
+3. `NavigableString` match `auto\s*sticky` (จับ text node "Auto Sticky:")
+
+**ไฟล์ที่แก้:**
+- `scraper.py:510` — triple-check sticky detection
+
+**หมายเหตุ:** ควรยืนยัน fix ด้วย `GET /api/debug/html?source_id=<id>` เพื่อดู HTML จริงของ sticky row บน viewno18sbx.php ว่าเป็น text node หรือ element อื่น
+
+---
+
+### Session Log Entry
 **Timestamp:** 2026-05-20 (session 2)
 **Title:** Clean up untracked dev artifact files
 

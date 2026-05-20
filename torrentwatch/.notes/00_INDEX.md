@@ -161,10 +161,16 @@ Download URL: `SITE_BASE_URL/download.php?id={site_id}&hashinfo={hashinfo}`
 - `db.sync_stickies()`: ถ้า site_id ยังอยู่ → refresh `date_posted=today`; ถ้าหายไป → clear `is_sticky=0` (ไม่ backdate)
 - Sticky detection: regex `sticky\.gif|heart\.gif|pinned\.gif` บน `<img src>`
 
-### Sticky Detection Regex (scraper.py:375)
+### Sticky Detection (scraper.py:510)
 ```python
-is_sticky = bool(row.find("img", src=re.compile(r"sticky\.gif|heart\.gif|pinned\.gif", re.I)))
+# Triple-check: image src, image alt, or text label "Auto Sticky:"
+is_sticky = bool(
+    row.find("img", src=re.compile(r"sticky\.gif|heart\.gif|pinned\.gif|autosticky", re.I))
+    or row.find("img", alt=re.compile(r"sticky", re.I))
+    or row.find(string=re.compile(r"auto\s*sticky", re.I))
+)
 ```
+Bug fix 2026-05-20: viewno18sbx.php ใช้ text "Auto Sticky:" แทน image → rows ไม่ถูก detect เป็น sticky → ถูก drop ด้วย date filter (date เก่า)
 
 ### Category Mapping
 ```python

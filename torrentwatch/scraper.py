@@ -507,7 +507,12 @@ def _parse_listing(html: str, base_url: str, today: str, seed_min: int, leech_mi
 
 
 def _parse_row(row, base_url: str, today: str, skip_sticky: bool = True) -> dict | None:
-    is_sticky = bool(row.find("img", src=re.compile(r"sticky\.gif|heart\.gif|pinned\.gif", re.I)))
+    # Detect sticky via image src OR text label ("Sticky:" on viewbrsb, "Auto Sticky:" on viewno18sbx)
+    is_sticky = bool(
+        row.find("img", src=re.compile(r"sticky\.gif|heart\.gif|pinned\.gif|autosticky", re.I))
+        or row.find("img", alt=re.compile(r"sticky", re.I))
+        or row.find(string=re.compile(r"auto\s*sticky", re.I))
+    )
     if skip_sticky and is_sticky:
         print(f"[scraper] _parse_row: skip_sticky=True — dropping sticky row")
         return None
