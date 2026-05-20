@@ -27,6 +27,7 @@ A daily torrent monitor that scrapes [bearbit.org](https://bearbit.org) on a sch
 - **Live progress** — header badge shows source/page/count in real-time during scrape; auto-refreshes the list when done
 - **LINE notification** — push to LINE when new keyword-matched torrents are found (configure via Settings UI)
 - **Telegram notification** — push to Telegram Bot when new keyword-matched torrents are found; built-in Chat ID discovery helper in Settings UI
+- **Sticky notification** — push to LINE + Telegram when a new sticky/pinned torrent is first discovered; toggle in Settings UI
 - **HTTP Basic Auth** — web UI protected via `NGINX_BASIC_AUTH_USER` / `NGINX_BASIC_AUTH_PASS`
 - **Weekly cleanup** — deletes records older than 7 days every Sunday at 03:00
 
@@ -89,7 +90,7 @@ The host path `NAS_TORRENT_PATH` must already exist on the NAS before starting t
 ### 4. Deploy
 
 ```bash
-./deploy.sh   # upload files and restart torrentwatch
+scripts/deploy.sh   # upload files and restart torrentwatch
 ```
 
 Register in Synology Container Manager → Project → Create → path `/volume1/docker/torrentwatch`.
@@ -232,7 +233,7 @@ TORRENTWATCH_TELEGRAM_CHAT_ID=your_chat_id   # หาได้จากปุ่
 ### 3. Deploy
 
 ```bash
-./deploy.sh   # อัปโหลดไฟล์และ restart torrentwatch
+scripts/deploy.sh   # อัปโหลดไฟล์และ restart torrentwatch
 ```
 
 Register ใน Synology Container Manager → Project → Create → path `/volume1/docker/torrentwatch`
