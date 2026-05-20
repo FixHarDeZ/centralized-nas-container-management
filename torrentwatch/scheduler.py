@@ -62,6 +62,7 @@ async def _do_scrape():
     skip_sticky  = scrape_sticky_val != "1"
     line_notify_enabled     = settings.get("line_notify_keyword_enabled", "0") == "1"
     telegram_notify_enabled = settings.get("telegram_notify_keyword_enabled", "0") == "1"
+    notify_sticky_enabled   = settings.get("notify_sticky_enabled", "0") == "1"
     auto_dl      = settings.get("auto_download_nas", "0") == "1"
     nas_dir      = Path(config.NAS_DOWNLOADS_DIR)
     print(f"[scheduler] scrape_sticky={scrape_sticky_val!r} → skip_sticky={skip_sticky}")
@@ -97,11 +98,14 @@ async def _do_scrape():
                 entries, seen_sticky_ids = [], set()
 
             new_keyword_matches: list[dict] = []
+            new_sticky_entries:  list[dict] = []
             for entry in entries:
                 try:
                     is_new, torrent_id = db.upsert_torrent(source_id, entry["site_id"], entry)
                     if is_new and entry.get("keyword_match"):
                         new_keyword_matches.append({**entry, "id": torrent_id})
+                    if is_new and entry.get("is_sticky"):
+                        new_sticky_entries.append({**entry, "id": torrent_id})
                 except Exception as e:
                     print(f"[scheduler] upsert error {source_url} site_id={entry.get('site_id')}: {e}")
 
@@ -127,6 +131,18 @@ async def _do_scrape():
                     await telegram_notify.notify_keyword_matches(source_url, new_keyword_matches)
             except Exception as e:
                 print(f"[scheduler] Telegram notify error {source_url}: {e}")
+
+            # Push sticky notification for newly-found sticky torrents
+            try:
+                if notify_sticky_enabled and new_sticky_entries:
+                    line_on = bool(config.LINE_ACCESS_TOKEN and config.LINE_USER_ID)
+                    tg_on   = bool(config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID)
+                    if line_on:
+                        await line_notify.notify_sticky_new(source_url, new_sticky_entries)
+                    if tg_on:
+                        await telegram_notify.notify_sticky_new(source_url, new_sticky_entries)
+            except Exception as e:
+                print(f"[scheduler] sticky notify error {source_url}: {e}")
 
             # Auto-download new keyword matches directly to NAS watch folder
             if auto_dl and new_keyword_matches:
