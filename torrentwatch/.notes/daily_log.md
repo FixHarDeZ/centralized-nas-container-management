@@ -3,6 +3,21 @@
 ---
 
 ### Session Log Entry
+**Timestamp:** 2026-05-20 (session 4)
+**Title:** feat — Sticky notification toggle
+
+**งานที่ทำ:**
+- เพิ่ม setting `notify_sticky_enabled = "0"` ใน `db.py` `_DEFAULT_SETTINGS`
+- เพิ่ม `notify_sticky_new(source_url, entries)` ใน `line_notify.py` + `telegram_notify.py`
+- `scheduler.py`: เก็บ `new_sticky_entries` เมื่อ `is_new AND is_sticky` แล้ว call notify เมื่อ setting เปิด
+- UI: toggle "📌 Sticky Notify" ใน Notification card (index.html + app.js), version → 20260520c
+
+**ไฟล์ที่แก้:**
+- `db.py`, `scheduler.py`, `line_notify.py`, `telegram_notify.py`, `static/index.html`, `static/app.js`
+
+---
+
+### Session Log Entry
 **Timestamp:** 2026-05-20 (session 3)
 **Title:** Bug fix — Auto Sticky rows from viewno18sbx.php ไม่ถูก scrape
 
