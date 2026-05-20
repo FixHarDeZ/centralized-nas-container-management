@@ -66,7 +66,7 @@ cp .env.example .env
 nano .env
 
 # 2. Run
-./deploy.sh
+scripts/deploy.sh
 ```
 
 > `NAS_SUDO_PASSWORD` in `.env` is only used to run `sudo docker compose` during stack restarts. SSH itself uses key auth exclusively.

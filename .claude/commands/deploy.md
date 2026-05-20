@@ -1,5 +1,5 @@
 ---
-allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(cat .env:*), Bash(ls:*), Bash(./deploy.sh:*)
+allowed-tools: Bash(git status:*), Bash(git diff:*), Bash(cat .env:*), Bash(ls:*), Bash(scripts/deploy.sh:*)
 description: Upload the project to the NAS via deploy.sh and optionally restart stacks
 ---
 
@@ -16,7 +16,7 @@ description: Upload the project to the NAS via deploy.sh and optionally restart 
    - If there are uncommitted changes, warn the user that the working tree will be uploaded as-is (not just committed files). Ask if they want to commit first or continue.
 
 2. **Run deploy**
-   - Run `./deploy.sh` interactively so the user can respond to its prompts (restart all / per-stack / skip).
+   - Run `scripts/deploy.sh` interactively so the user can respond to its prompts (restart all / per-stack / skip).
    - SSH auth is key-based (no `sshpass` needed). If the connection fails, check that `NAS_SSH_KEY` in `.env` points to the correct private key and that the key is present in `~/.ssh/authorized_keys` on the NAS.
 
 3. **Report**
