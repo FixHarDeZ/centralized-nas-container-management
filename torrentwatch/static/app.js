@@ -29,6 +29,19 @@ async function api(method, path, body) {
   return r.json().catch(() => null);
 }
 
+// ─── Cover image fallback ─────────────────────────────────────────────────────
+function coverFallback(img) {
+  if (!img._tried) {
+    img._tried = 1;
+    img.src = img.dataset.proxy;
+  } else {
+    const ph = document.createElement("div");
+    ph.className = "tw-card-thumb-placeholder";
+    ph.innerHTML = '<i class="bi bi-film"></i>';
+    img.replaceWith(ph);
+  }
+}
+
 // ─── Toast ────────────────────────────────────────────────────────────────────
 let _toastTimer;
 function toast(msg, type = "") {
@@ -292,7 +305,7 @@ function cardHTML(t, readOnly) {
   const stickyBadge = t.is_sticky ? `<span class="tw-badge tw-badge-sticky"><i class="bi bi-pin-fill"></i> Sticky</span>` : "";
 
   const thumb = t.cover_url
-    ? `<img class="tw-card-thumb" src="${escHtml(t.cover_url)}" alt="" loading="lazy" data-lightbox="${escHtml(t.cover_url)}" data-proxy="/api/cover/${t.id}" onerror="if(!this._tried){this._tried=1;this.src=this.dataset.proxy;this.onerror=null}">`
+    ? `<img class="tw-card-thumb" src="${escHtml(t.cover_url)}" alt="" loading="lazy" data-lightbox="${escHtml(t.cover_url)}" data-proxy="/api/cover/${t.id}" onerror="coverFallback(this)">`
     : `<div class="tw-card-thumb-placeholder"><i class="bi bi-film"></i></div>`;
 
   const statsHTML = [
