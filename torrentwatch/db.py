@@ -16,6 +16,7 @@ _DEFAULT_SETTINGS = {
     "scrape_sticky":                   "1",    # "0" = skip sticky/pinned, "1" = include them
     "line_notify_keyword_enabled":     "0",    # "0" = off, "1" = push LINE on keyword match
     "telegram_notify_keyword_enabled": "0",    # "0" = off, "1" = push Telegram on keyword match
+    "notify_sticky_enabled":           "0",    # "1" = push notify when a new sticky torrent is first seen
     "auto_download_nas":               "0",    # "0" = off, "1" = auto-save keyword matches to /downloads
     "retention_days":                  "7",    # days to keep torrent records before weekly cleanup
     "scrape_interval_night":           "30",   # minutes between scrapes 19:00–01:00 (15/20/30/60)
