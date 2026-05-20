@@ -45,6 +45,22 @@ async def notify_keyword_matches(source_url: str, matches: list[dict]):
     await _send("\n".join(lines))
 
 
+async def notify_sticky_new(source_url: str, entries: list[dict]):
+    """Push when new sticky/pinned torrents are first discovered."""
+    if not entries:
+        return
+    from urllib.parse import urlparse
+    label = urlparse(source_url).path.split("/")[-1] or source_url
+
+    lines = [f"📌 Sticky ใหม่! — {label}\n"]
+    for t in entries[:10]:
+        lines.append(f"🎬 {t['title']}\n   🌱{t['seeds']}  📥{t['leeches']}")
+    if len(entries) > 10:
+        lines.append(f"...และอีก {len(entries) - 10} รายการ")
+    lines.append(f"\n🕒 {_now()}")
+    await _send("\n".join(lines))
+
+
 async def send_test_message() -> dict:
     """Send a test push and return {"ok": bool, "error": str}."""
     if not config.TELEGRAM_BOT_TOKEN or not config.TELEGRAM_CHAT_ID:
