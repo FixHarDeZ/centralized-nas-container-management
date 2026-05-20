@@ -3,6 +3,23 @@
 ---
 
 ### Session Log Entry
+**Timestamp:** 2026-05-20 (session 2)
+**Title:** Clean up untracked dev artifact files
+
+**งานที่ทำ:**
+- ตรวจสอบ 5 untracked files ที่ค้างอยู่ใน working tree
+- ยืนยันว่าไม่มีไฟล์ที่ tracked อ้างถึงเลย
+- ลบทั้งหมด:
+  - `torrentwatch/preview.html` — dev preview ที่สร้างช่วง redesign
+  - `torrentwatch/bootstrap-icons-inline.css` — referenced เฉพาะ preview.html
+  - `torrentwatch/check.png` — ไม่มี reference
+  - `torrentwatch/preview-today.png` — ไม่มี reference
+  - `maid-tracker/static/style.css.original` — backup ก่อน redesign
+- Working tree clean หลังลบ
+
+---
+
+### Session Log Entry
 **Timestamp:** 2026-05-20
 **Title:** 6 Features — Cover Proxy, History Search, Global Search, Watched/Skip, Configurable Schedule, Stats Page
 
