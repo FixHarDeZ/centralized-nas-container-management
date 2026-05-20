@@ -23,7 +23,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&family=Noto+Sans+Thai:wght@400;500;600;700&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-  <link rel="stylesheet" href="/static/style.css?v=20260520b">
+  <link rel="stylesheet" href="/static/style.css?v=20260520c">
 </head>
 <body>
   <div id="app">
@@ -210,6 +210,14 @@
               </label>
             </div>
             <p class="tw-hint">บันทึก keyword match ไป NAS อัตโนมัติ</p>
+
+            <div class="tw-field-row" style="margin-top:14px">
+              <label for="cfg-sticky-notify">📌 Sticky Notify</label>
+              <label class="tw-toggle-row">
+                <input type="checkbox" class="tw-toggle" id="cfg-sticky-notify">
+              </label>
+            </div>
+            <p class="tw-hint">แจ้งเตือนเมื่อพบ sticky/pinned ใหม่ (ผ่าน LINE + Telegram ที่ตั้งค่าไว้)</p>
           </div>
         </div>
 
@@ -350,6 +358,6 @@
     })();
   </script>
 
-  <script src="/static/app.js?v=20260520b"></script>
+  <script src="/static/app.js?v=20260520c"></script>
 </body>
 </html>

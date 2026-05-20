@@ -587,6 +587,7 @@ async function loadSettings() {
   document.getElementById("cfg-interval-day").value   = settings.scrape_interval_day   ?? "60";
   document.getElementById("cfg-line-notify").checked = settings.line_notify_keyword_enabled === "1";
   document.getElementById("cfg-telegram-notify").checked = settings.telegram_notify_keyword_enabled === "1";
+  document.getElementById("cfg-sticky-notify").checked = settings.notify_sticky_enabled === "1";
 
   const hint = document.getElementById("line-status-hint");
   if (hint) {
@@ -756,6 +757,7 @@ document.getElementById("btn-save-settings").addEventListener("click", async () 
     line_notify_keyword_enabled:     document.getElementById("cfg-line-notify").checked ? "1" : "0",
     telegram_notify_keyword_enabled: document.getElementById("cfg-telegram-notify").checked ? "1" : "0",
     auto_download_nas:               document.getElementById("cfg-auto-dl").checked ? "1" : "0",
+    notify_sticky_enabled:           document.getElementById("cfg-sticky-notify").checked ? "1" : "0",
     retention_days:              document.getElementById("cfg-retention").value,
     scrape_interval_night:       document.getElementById("cfg-interval-night").value,
     scrape_interval_day:         document.getElementById("cfg-interval-day").value,
