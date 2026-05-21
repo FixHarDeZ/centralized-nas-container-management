@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file guides Claude Code (claude.ai/code) on project rules, architecture, and deployment for this Synology NAS Docker repository.
+Guidance for Claude Code (claude.ai/code) on project rules, architecture, and deployment for this Synology NAS Docker repository.
 
 ## 📌 Memory & Documentation Rules (Strict)
 
@@ -11,74 +11,36 @@ This file guides Claude Code (claude.ai/code) on project rules, architecture, an
 
 ---
 
-## 🛠️ Tech Stack & Global Config
+## 🛠️ Environment & Deployment Gotchas
 
-*   **Environment:** ไฟล์ `.env` อยู่ที่ root ใช้ร่วมกันทุก Stacks (**ห้าม Commit เด็ดขาด**)
-*   **Target OS:** Synology DSM 7.3.2 (Container Manager) บน DS925+ NAS
-*   **Deployment:** ใช้สคริปต์ `scripts/deploy.sh` เพื่ออัปโหลดโค้ดผ่าน SSH (`tar | ssh`) และสั่ง Restart Container อัตโนมัติ (ใช้ `NAS_SUDO_PASSWORD` ในการสั่ง `sudo docker compose up -d --build`)
-*   **⚠️ ห้ามใช้ `rsync` ใน deploy scripts:** macOS bundled rsync คือ `openrsync` (protocol 29) ซึ่ง **ไม่ compatible** กับ Synology NAS GNU rsync (protocol 31) ทำให้ transfer ล้มเหลวทุกครั้ง — ให้ใช้ `tar | ssh` แทนเสมอ
-*   **⚠️ SSH multi-arg gotcha:** `ssh host bash -l -c "cmd | pipe"` ส่ง 3 args แยกกัน remote shell ตีความ pipe ผิด — ต้องห่อทั้งหมดเป็น single quoted string: `ssh host "bash -lc \"cmd | pipe\""`
-
-### Adding New Stack to DSM
-1. รัน `scripts/deploy.sh` เพื่ออัปโหลดไฟล์ไปที่ NAS (`/volume1/docker/`)
-2. เปิด **Container Manager** -> **Project** -> **Create** -> เลือก Path โฟลเดอร์ -> กด **Build**
+*   **NAS Environment:** Synology DSM 7.3.2 (Container Manager) บน DS925+ NAS Target Path: `/volume1/docker/`
+*   **Shared Env:** ไฟล์ `.env` อยู่ที่ root ใช้ร่วมกันทุก Stacks (**ห้าม Commit เด็ดขาด**)
+*   **Deployment Flow:** ใช้ `scripts/deploy.sh` ในการแพ็กซอร์สโค้ดและส่งผ่าน SSH เท่านั้น 
+*   **⚠️ ห้ามใช้ `rsync`:** macOS bundled rsync (`openrsync` protocol 29) ไม่ compatible กับ Synology GNU rsync (protocol 31) ส่งผลให้ Transfer ล้มเหลว ให้ใช้ `tar | ssh` แทนเสมอ
+*   **⚠️ SSH Multi-arg Shell Quote:** หากส่งคำสั่งที่มี pipe หรือ sub-shell ผ่าน SSH ต้องห่อเป็น single quoted string เสมอเพื่อป้องกัน remote shell ตีความพลาด: `ssh host "bash -lc \"cmd | pipe\""`
 
 ---
 
-## 📦 Stacks Directory & Ports
+## 📦 Stacks & Ports Directory
 
-| Directory | Purpose | Port (Internal / HTTPS via Proxy) |
-| :--- | :--- | :--- |
-| `homepage/` | Dashboard UI (gethomepage) | 3000 / 443 |
-| `jellyfin/` | Media server (NVIDIA GPU Transcoding) | 8096 |
-| `maid-tracker/` | ระบบลงเวลา/คำนวณเงินเดือนแม่บ้าน (FastAPI + SQLite) | 5055 |
-| `portainer/` | Docker management UI | 9000 |
-| `uptime-kuma/` | Service health monitor | 3001 |
-| `watchtower/` | อัปเดต Container อัตโนมัติ + LINE Notification Sidecar | — |
-| `line-secretary/`| AI LINE Bot เลขาส่วนตัว (FastAPI + Groq LLM + Notion) | 5057 / 5058 |
-| `torrentwatch/` | สคริปต์ดูด/กรอง Torrent จาก bearbit.org + แจ้งเตือน LINE | 5059 / 5062 |
-
----
-
-## 📐 Stack Architecture Summary
-
-### 1. Homepage (`homepage/`)
-*   ต่อหลัง Nginx Proxy (ทำ HTTPS + HTTP Basic Auth ด้วย `NGINX_BASIC_AUTH_*`)
-*   ดึง SSL Cert จากระบบ Synology (`/usr/syno/etc/certificate/system/default/`)
-*   ใช้ `HOMEPAGE_VAR_*` จาก root `.env` ในการใส่ความลับลง `services.yaml`
-*   Widget ของ NAS ให้ใช้ IP ตรง `http://192.168.x.x:5000` (HTTP) เพื่อเลี่ยง Cert mismatch
-
-### 2. Watchtower (`watchtower/`)
-*   มี 2 Services: ตัวหลักอัปเดตอิมเมจ (ทุก 24 ชม.) + ตัว Sidecar (`watchtower-notifier` รันด้วย Python 3.12-slim)
-*   Sidecar อ่าน Log ผ่าน Unix Socket โดยตรง และส่ง Push Notification เข้า LINE Messaging API
-*   ตัว Sidecar ติดป้ายกำกับห้ามตัวเองอัปเดตอัตโนมัติ (`com.centurylinklabs.watchtower.enable=false`)
-
-### 3. Maid Tracker (`maid-tracker/`)
-*   FastAPI + SQLite (ข้อมูลเซฟใน volume `maid_tracker_data` ที่ `/data`) + Static SPA (Bootstrap 5)
-*   **Logic:** ทำงาน จ-ส (อาทิตย์ = Holiday), ขาด/ลา/มาชดเชย คิดทศนิยมได้ (0.5 / 1.0 วัน) เก็บในตาราง `attendance` ฟิลด์ `half_day`
-*   **Salary:** เรทรายวัน = `เงินเดือน ÷ จำนวนวันทำงานในเดือนนั้นๆ` ไม่หักเงินรายเดือน แต่สะสมยอดลา/ชดเชยไปคิดตอนลาออก
-*   ส่งแจ้งเตือน Check-in/out และสรุปรายเดือนเข้า LINE
-
-### 4. Line Secretary (`line-secretary/`)
-*   FastAPI รับ Webhook จาก LINE (ต้องใช้พอร์ต HTTPS 5058) + ใช้ Groq (`llama-3.3-70b-versatile`)
-*   มี Agent Tools สำหรับจัดการ Notion (Search, Get Content, Schema, Query, Propose Create)
-*   **Security:** มี Whitelist ผู้ใช้ (`LINE_SECRETARY_ALLOWED_USER_IDS`), การเขียนข้อมูลลง Notion ต้องรอผู้ใช้พิมพ์ยืนยันว่า **"ใช่"** เสมอ
-*   เซฟ State (`pending`, `history` ย้อนหลัง 4 ครั้ง) ไว้ที่ `/data/state.json` (ข้อมูลไม่หายตอนรีสตาร์ท)
-
-### 5. TorrentWatch (`torrentwatch/`)
-*   FastAPI (พอร์ต HTTPS 5062) + เก็บข้อมูลใน volume `torrentwatch_data`
-*   **Schedule (เวลาไทย):** 19:00–01:00 (ทุก 30 นาที) / 01:00–06:00 (หยุดรัน) / 06:00–19:00 (ทุก 60 นาที)
-*   รองรับ Multi-source แยก Keyword และตั้งค่าผ่าน Settings UI ดึงปักหมุด bearbit ได้ (และเคลียร์ออกอัตโนมัติถ้าหลุดหมุด)
-*   โหลดไฟล์เข้าเครื่องผ่าน Proxy Browser หรือเซฟลง `/downloads` (NAS path) โดยตรง
-*   ลบประวัติเก่าเกิน 7 วันทุกวันอาทิตย์ตี 3, แก้ Selector การดูดเว็บได้ที่ด้านบนของ `scraper.py`
-*   มี endpoint `/api/status` เป็น Public สำหรับดึงไปโชว์ที่ Homepage
+| Directory | Purpose | Port (Internal / Proxy) | Critical Gotchas / Architecture |
+| :--- | :--- | :--- | :--- |
+| `homepage/` | Dashboard UI | 3000 / 443 | ต่อหลัง Nginx Proxy + Basic Auth. ดึง SSL จาก NAS `/usr/syno/etc/certificate/system/default/`. **Widget ห้ามใช้ HTTPS/Domain** ให้ยิงตรงไปที่ DSM HTTP `http://192.168.x.x:5000` เพื่อเลี่ยง Cert Mismatch |
+| `jellyfin/` | Media Server | 8096 / — | รองรับ NVIDIA GPU Transcoding |
+| `maid-tracker/` | ระบบเวลา/เงินเดือนแม่บ้าน | 5055 / — | FastAPI + SQLite (Volume `/data`). คำนวณเงินเดือน จ-ส: `เงินเดือน ÷ จำนวนวันทำงานจริงเดือนนั้น`. ลา/ชดเชยบันทึกทศนิยมได้ (`half_day`) แจ้งเตือนผ่าน LINE |
+| `portainer/` | Docker Management | 9000 / — | UI สำหรับจัดการคอนเทนเนอร์ในระบบ |
+| `uptime-kuma/`| Service Monitor | 3001 / — | ตรวจสอบสถานะการทำงานของ Services |
+| `watchtower/` | Auto-update Container | — / — | มี Sidecar `watchtower-notifier` (Python 3.12-slim) อ่าน Unix Socket Log ส่ง LINE. ติดป้ายกำกับตัวเองห้ามอัปเดต: `com.centurylinklabs.watchtower.enable=false` |
+| `line-secretary/`| AI LINE Bot เลขาส่วนตัว | 5057 / 5058 (HTTPS)| FastAPI + Groq (`llama-3.3-70b-versatile`) + Notion Tools. มี Whitelist ID. **การเซฟลง Notion ต้องรอพิมพ์ยืนยัน "ใช่" เสมอ**. Save State ไว้ที่ `/data/state.json` |
+| `torrentwatch/` | Scraper & Filter | 5059 / 5062 (HTTPS)| FastAPI + Volume `/data`. สแกน bearbit.org ตามช่วงเวลา (19:00-01:00 รันทุก 30 นาที / 01:00-06:00 หยุด / 06:00-19:00 รันทุก 60 นาที) โหลดเข้า `/downloads` ตรง. ลบประวัติเก่าเกิน 7 วัน ทุกวันอาทิตย์ 03:00. มี Endpoint `/api/status` แบบ Public |
 
 ---
 
 ## 🚀 Release & Security Process
 
-เมื่อมีการเรียกใช้คำสั่ง `/release` **ให้ทำตามลำดับนี้ก่อน Commit เสมอ:**
-1.  **Update Stack README:** หากแก้ฟีเจอร์, ตั้งค่า, API หรือสถาปัตยกรรมของ Stack ใด ให้แก้ `README.md` ในโฟลเดอร์นั้นทันที
-2.  **Update Root Docs:** หากกระทบภาพรวม (เช่น เพิ่ม Stack ใหม่, เปลี่ยนพอร์ต, เพิ่ม Env) ให้แก้ `CLAUDE.md` และ `README.md` ที่ root
-3.  **One Commit:** รวมไฟล์เอกสารที่อัปเดตเข้ากับ Commit ของโค้ดหลักพร้อมกันเลย (ห้ามแยก Commit เอกสาร)
-4.  **Security:** ห้าม Commit `.env`, ห้าม Hardcode ไอพี/ชื่อโฮสต์/รหัสผ่านจริง ให้ใช้ Placeholder เช่น `<NAS_HOST>`, `<NAS_USER>` แทนเสมอ
+เมื่อใช้คำสั่ง `/release` **ให้ปฏิบัติเรียงตามลำดับอย่างเคร่งครัดก่อน Commit เสมอ:**
+
+1. **Update Stack README:** แก้ไขฟีเจอร์/สถาปัตยกรรมของ Stack ไหน ให้เข้าไปอัปเดต `README.md` ของโฟลเดอร์นั้นทันที
+2. **Update Root Docs:** หากมีการเปลี่ยนพอร์ต, เพิ่ม Stack ใหม่ หรือเพิ่ม Env Configuration ให้แก้ไข `CLAUDE.md` และ `README.md` ที่ root
+3. **Atomic Commit:** รวมไฟล์เอกสารที่อัปเดตทั้งหมดเข้ากับ Commit ของซอร์สโค้ดหลักในรอบนั้นทันที (ห้ามแยก Commit เอกสารออกจากโค้ด)
+4. **Security Guardrail:** ห้าม Commit `.env` หรือ Hardcode ไอพี/รหัสผ่านจริงลงในโค้ดหรือเอกสาร ให้แทนที่ด้วย Placeholder เช่น `<NAS_HOST>`, `<NAS_USER>`, `<NAS_SUDO_PASSWORD>` ทุกครั้ง
