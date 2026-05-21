@@ -116,8 +116,9 @@ def init_db():
             "ALTER TABLE torrents ADD COLUMN file_count     INTEGER DEFAULT 0",
             "ALTER TABLE torrents ADD COLUMN file_size      TEXT DEFAULT ''",
             "ALTER TABLE torrents ADD COLUMN completed      INTEGER DEFAULT 0",
-            "ALTER TABLE torrents ADD COLUMN is_sticky      INTEGER DEFAULT 0",
-            "ALTER TABLE torrents ADD COLUMN watched_status INTEGER DEFAULT 0",
+            "ALTER TABLE torrents ADD COLUMN is_sticky       INTEGER DEFAULT 0",
+            "ALTER TABLE torrents ADD COLUMN watched_status  INTEGER DEFAULT 0",
+            "ALTER TABLE torrents ADD COLUMN sticky_notified INTEGER DEFAULT 0",
         ]:
             try:
                 c.execute(col_sql)
@@ -331,6 +332,26 @@ def get_torrent(torrent_id: int) -> dict | None:
     with _conn() as c:
         row = c.execute("SELECT * FROM torrents WHERE id = ?", (torrent_id,)).fetchone()
         return dict(row) if row else None
+
+
+def get_unnotified_stickies(source_id: int) -> list[dict]:
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT * FROM torrents WHERE source_id=? AND is_sticky=1 AND sticky_notified=0",
+            (source_id,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def mark_stickies_notified(torrent_ids: list[int]):
+    if not torrent_ids:
+        return
+    with _conn() as c:
+        placeholders = ",".join("?" * len(torrent_ids))
+        c.execute(
+            f"UPDATE torrents SET sticky_notified=1 WHERE id IN ({placeholders})",
+            torrent_ids,
+        )
 
 
 def mark_downloaded_local(torrent_id: int):

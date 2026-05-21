@@ -100,14 +100,11 @@ async def _do_scrape():
                 entries, seen_sticky_ids = [], set()
 
             new_keyword_matches: list[dict] = []
-            new_sticky_entries:  list[dict] = []
             for entry in entries:
                 try:
                     is_new, torrent_id = db.upsert_torrent(source_id, entry["site_id"], entry)
                     if is_new and entry.get("keyword_match"):
                         new_keyword_matches.append({**entry, "id": torrent_id})
-                    if is_new and entry.get("is_sticky"):
-                        new_sticky_entries.append({**entry, "id": torrent_id})
                 except Exception as e:
                     print(f"[scheduler] upsert error {source_url} site_id={entry.get('site_id')}: {e}")
 
@@ -134,15 +131,20 @@ async def _do_scrape():
             except Exception as e:
                 print(f"[scheduler] Telegram notify error {source_url}: {e}")
 
-            # Push sticky notification for newly-found sticky torrents
+            # Notify for sticky entries not yet notified (includes entries already in DB
+            # before notify was enabled, and entries just promoted by sync_stickies)
             try:
-                if notify_sticky_enabled and new_sticky_entries:
-                    line_on = bool(config.LINE_ACCESS_TOKEN and config.LINE_USER_ID)
-                    tg_on   = bool(config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID)
-                    if line_on:
-                        await line_notify.notify_sticky_new(source_url, new_sticky_entries)
-                    if tg_on:
-                        await telegram_notify.notify_sticky_new(source_url, new_sticky_entries)
+                if notify_sticky_enabled:
+                    unnotified = db.get_unnotified_stickies(source_id)
+                    if unnotified:
+                        line_on = bool(config.LINE_ACCESS_TOKEN and config.LINE_USER_ID)
+                        tg_on   = bool(config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID)
+                        if line_on:
+                            await line_notify.notify_sticky_new(source_url, unnotified)
+                        if tg_on:
+                            await telegram_notify.notify_sticky_new(source_url, unnotified)
+                        db.mark_stickies_notified([e["id"] for e in unnotified])
+                        print(f"[scheduler] sticky notify sent for {len(unnotified)} entries")
             except Exception as e:
                 print(f"[scheduler] sticky notify error {source_url}: {e}")
 
