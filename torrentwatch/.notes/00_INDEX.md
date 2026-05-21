@@ -91,7 +91,8 @@ id, source_id (FK), site_id, title, detail_url, torrent_url,
 cover_url, seeds, leeches, date_posted, posted_at, category,
 file_count, file_size, completed, is_sticky, first_seen_at, last_updated_at,
 downloaded_local, downloaded_nas,
-watched_status  -- 0=none, 1=watched, 2=skip
+watched_status    -- 0=none, 1=watched, 2=skip
+sticky_notified   -- 0=ยังไม่ notify, 1=notify แล้ว (added 2026-05-21)
 UNIQUE(source_id, site_id)
 ```
 
@@ -117,7 +118,7 @@ Default settings:
 - `auto_download_nas = "0"` — auto-save keyword match ไป /downloads
 - `scrape_interval_night = "30"` — interval (นาที) ช่วง 19:00–01:00 (15/20/30/60)
 - `scrape_interval_day = "60"` — interval (นาที) ช่วง 06:00–19:00 (15/20/30/60)
-- `notify_sticky_enabled = "0"` — push LINE+Telegram เมื่อพบ sticky/pinned torrent ใหม่ครั้งแรก (is_new AND is_sticky)
+- `notify_sticky_enabled = "0"` — push LINE+Telegram เมื่อพบ sticky/pinned torrent ที่ยังไม่เคย notify (sticky_notified=0)
 
 Index: `idx_torrents_source_date ON torrents(source_id, date_posted)`
 
@@ -273,7 +274,7 @@ Bearbit block request ที่ Referer ไม่ใช่ bearbit URL:
 | ✅ Watched/Skip — **ADDED** | `watched_status` column ใน DB; eye/x-circle buttons บน cards; badge + card dimming | db.py, main.py, app.js, style.css |
 | ✅ Configurable schedule — **ADDED** | `scrape_interval_night`/`scrape_interval_day` settings (15/20/30/60 min); selects ใน UI | db.py, scheduler.py, main.py, index.html, app.js |
 | ✅ Stats page — **ADDED** | Tab สถิติ แสดง 5 summary cards + 14-day chart + category breakdown + source breakdown | db.py, main.py, app.js, index.html, style.css |
-| ✅ Sticky notification — **ADDED** | toggle ใน Settings → แจ้งเตือน LINE+Telegram เมื่อ is_new AND is_sticky | db.py, scheduler.py, line_notify.py, telegram_notify.py |
+| ✅ Sticky notification — **FIXED** | toggle ใน Settings → แจ้งเตือน LINE+Telegram; ใช้ sticky_notified flag แทน is_new (2026-05-21) | db.py, scheduler.py, line_notify.py, telegram_notify.py |
 | COL_COMPLETED ยังไม่ verify | column 9 ของ bearbit สันนิษฐานว่าเป็น completed — ใช้ `/api/debug/html` ตรวจ | scraper.py |
 
 ---

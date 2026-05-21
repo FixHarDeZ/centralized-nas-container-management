@@ -3,6 +3,22 @@
 ---
 
 ### Session Log Entry
+**Timestamp:** 2026-05-21
+**Title:** fix — sticky notify ไม่ทำงานเมื่อ enable หลัง scrape ไปแล้ว
+
+**งานที่ทำ:**
+- **Root cause:** `scheduler.py` เช็ค `is_new AND is_sticky` — แต่ sticky entries ถูก scrape เข้า DB ก่อน enable `notify_sticky` ทำให้ `is_new=False` ตลอด ไม่มี notification ออก
+- เพิ่ม column `sticky_notified INTEGER DEFAULT 0` ใน `torrents` table (migration auto-run)
+- เพิ่ม `db.get_unnotified_stickies(source_id)` + `db.mark_stickies_notified(ids)`
+- เปลี่ยน scheduler ให้ query `is_sticky=1 AND sticky_notified=0` แทนพึ่ง `is_new` → จับ entries เก่าที่มีอยู่ก่อน enable notify, entries ที่ถูก promote โดย sync_stickies, และ entries ใหม่จริงๆ
+
+**ไฟล์ที่แก้:**
+- `db.py` (sticky_notified column + 2 new functions)
+- `scheduler.py` (notify logic refactor)
+
+---
+
+### Session Log Entry
 **Timestamp:** 2026-05-20 (session 4)
 **Title:** feat — Sticky notification toggle
 
