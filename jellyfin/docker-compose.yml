@@ -13,10 +13,10 @@ services:
       - ${NAS_VOLUME_ROOT}/docker/jellyfin/config:/config
       - ${NAS_VOLUME_ROOT}/docker/jellyfin/cache:/cache
       # Media Folders (ตั้งเป็น Read-Only ตามต้นฉบับของคุณ)
-      - ${NAS_VOLUME_ROOT}/Movies:/data/movies:ro
-      - ${NAS_VOLUME_ROOT}/Series:/data/series:ro
-      - ${NAS_VOLUME_ROOT}/private_media/porn:/data/private:ro
-      - ${NAS_VOLUME_ROOT}/Concerts:/data/concerts:ro
+      - ${NAS_MEDIA_ROOT}/Movies:/data/movies:ro
+      - ${NAS_MEDIA_ROOT}/Series:/data/series:ro
+      - ${NAS_MEDIA_ROOT}/private_media/porn:/data/private:ro
+      - ${NAS_MEDIA_ROOT}/Concerts:/data/concerts:ro
     environment:
       # NVIDIA GPU Settings (สำคัญมากสำหรับการทำ Transcoding)
       - NVIDIA_VISIBLE_DEVICES=all
