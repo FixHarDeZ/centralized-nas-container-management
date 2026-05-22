@@ -5,7 +5,7 @@ services:
     restart: unless-stopped
     ports:
       - "5057:8000"
-    env_file: ../.env
+    env_file: .env
     environment:
       - TZ=Asia/Bangkok
     volumes:

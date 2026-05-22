@@ -1,4 +1,6 @@
 .DS_Store
+# Matches both root .env and every <stack>/.env (gitignore patterns without a
+# leading slash match at any directory depth). .env.example files are tracked.
 .env
 __pycache__/
 *.pyc

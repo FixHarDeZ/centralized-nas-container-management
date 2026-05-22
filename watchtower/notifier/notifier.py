@@ -237,12 +237,6 @@ def handle_line(log_line: str) -> None:
 def main() -> None:
     print(f"[{now()}] Notifier starting (Docker socket API mode)")
     print(f"[{now()}] Socket: {DOCKER_SOCKET} | Container: {WATCHTOWER_CONTAINER}")
-    send_line(
-        f"🤖 LINE Notifier พร้อมทำงานแล้ว\n"
-        f"👁 กำลังติดตาม: {WATCHTOWER_CONTAINER}\n"
-        f"🕒 {now()}\n\n"
-        f"✅ [Startup check] LINE notification ทำงานปกติ"
-    )
 
     docker = DockerSocketSession(DOCKER_SOCKET)
 

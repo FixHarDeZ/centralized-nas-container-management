@@ -13,11 +13,13 @@ Guidance for Claude Code (claude.ai/code) on project rules, architecture, and de
 
 ## 🛠️ Environment & Deployment Gotchas
 
-*   **NAS Environment:** Synology DSM 7.3.2 (Container Manager) บน DS925+ NAS Target Path: `/volume1/docker/`
-*   **Shared Env:** ไฟล์ `.env` อยู่ที่ root ใช้ร่วมกันทุก Stacks (**ห้าม Commit เด็ดขาด**)
-*   **Deployment Flow:** ใช้ `scripts/deploy.sh` ในการแพ็กซอร์สโค้ดและส่งผ่าน SSH เท่านั้น 
+*   **NAS Environment:** Synology DSM 7.3.2 (Container Manager) บน DS925+ NAS Target Path: `/volume2/docker/`
+*   **Per-Stack .env:** ทุก stack มี `.env` ของตัวเองใน folder ของมัน (เช่น `homepage/.env`) — secrets จำกัดเฉพาะ container ที่ใช้จริง **ห้าม Commit** (gitignore pattern `.env` ครอบคลุมทุก level). Root `.env` ใช้เฉพาะ `deploy.sh` + `scripts/sync_notion.py` (`NAS_*`, `NOTION_*`) เท่านั้น — containers ไม่เห็น root `.env`
+*   **.env.example:** ทุก stack มี template `.env.example` (commit ได้) — `cp <stack>/.env.example <stack>/.env` แล้วเติมค่า
+*   **Deployment Flow:** ใช้ `scripts/deploy.sh` — tar รวมทั้ง project (รวม `<stack>/.env` ทั้งหมด) ส่งผ่าน SSH เท่านั้น. Root `.env` **ไม่ถูก upload** (excluded จาก tar). Restart ใช้ `docker compose --project-directory <stack>/ -f <stack>/docker-compose.yml up -d --build` เพื่อให้ compose หา `<stack>/.env` เจอเอง
 *   **⚠️ ห้ามใช้ `rsync`:** macOS bundled rsync (`openrsync` protocol 29) ไม่ compatible กับ Synology GNU rsync (protocol 31) ส่งผลให้ Transfer ล้มเหลว ให้ใช้ `tar | ssh` แทนเสมอ
 *   **⚠️ SSH Multi-arg Shell Quote:** หากส่งคำสั่งที่มี pipe หรือ sub-shell ผ่าน SSH ต้องห่อเป็น single quoted string เสมอเพื่อป้องกัน remote shell ตีความพลาด: `ssh host "bash -lc \"cmd | pipe\""`
+*   **⚠️ DSM Auto-Block:** Container ที่ยิง DSM API (homepage widget) ถูก auto-block IP ได้ถ้า login fail ซ้ำๆ — error code 407 ที่ homepage display เป็น "Authentication failed. 2FA enabled." จริงๆ คือ Max Tries ของ Auto Block. **Fix:** Control Panel → Security → Protection → Allow List ใส่ private subnets (`10.0.0.0/255.0.0.0`, `172.16.0.0/255.240.0.0`, `192.168.0.0/255.255.0.0`) แล้วลบ Docker IPs ออกจาก Block List
 
 ---
 

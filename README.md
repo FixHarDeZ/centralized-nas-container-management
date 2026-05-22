@@ -35,19 +35,33 @@ All stacks except `watchtower` are exposed externally via **Synology Reverse Pro
 
 ## Environment Variables
 
-**All stacks share a single `.env` at the project root** — edit once, then deploy.
+**Each stack owns its own `.env`** — secrets are scoped to the container that needs them. The root `.env` holds deploy + local-script config only.
 
-```bash
-# First time: copy the template and fill in real values
-cp .env.example .env
-nano .env
+```text
+.env                      # deploy.sh + scripts/sync_notion.py (NAS_*, NOTION_*)
+homepage/.env             # HOMEPAGE_VAR_*, NGINX_BASIC_AUTH_*, NAS_VOLUME_ROOT
+jellyfin/.env             # NAS_VOLUME_ROOT, NAS_MEDIA_ROOT
+line-secretary/.env       # LINE_SECRETARY_*, NOTION_TOKEN, GROQ/OpenRouter keys
+maid-tracker/.env         # MAID_LINE_*, NGINX_BASIC_AUTH_*, MONTHLY_REPORT_TIME
+portainer/                # (no .env needed)
+torrentwatch/.env         # TORRENTWATCH_*, NGINX_BASIC_AUTH_*, NAS_TORRENT_PATH
+uptime-kuma/.env          # NAS_VOLUME_ROOT
+watchtower/.env           # WATCHTOWER_LINE_*
 ```
 
-`.env` is gitignored — never commit it. Use `.env.example` as the reference template.
+```bash
+# First time: copy each template and fill in real values
+cp .env.example .env
+for d in homepage jellyfin line-secretary maid-tracker torrentwatch uptime-kuma watchtower; do
+  cp "$d/.env.example" "$d/.env"
+done
+```
+
+All `.env` files are gitignored — never commit them. `.env.example` files are tracked as templates.
 
 ## Uploading to NAS
 
-Use `deploy.sh` to sync the project from your local machine to `/volume1/docker` on the NAS over SSH (key-based auth). The script uploads all files and copies `.env` to the NAS automatically.
+`scripts/deploy.sh` syncs the project from your local machine to `$NAS_TARGET_PATH` (default `/volume2/docker`) over SSH (key-based auth). Per-stack `.env` files are uploaded inside the project tarball; the **root `.env` is intentionally excluded** (it holds local-only deploy/script secrets that containers never need).
 
 **Prerequisites (one-time setup)**
 
@@ -61,15 +75,12 @@ Use `deploy.sh` to sync the project from your local machine to `/volume1/docker`
 **Deploy**
 
 ```bash
-# 1. Copy the example config and fill in your details (first time only)
-cp .env.example .env
-nano .env
-
+# 1. Make sure all .env files are filled in (root + each stack)
 # 2. Run
 scripts/deploy.sh
 ```
 
-> `NAS_SUDO_PASSWORD` in `.env` is only used to run `sudo docker compose` during stack restarts. SSH itself uses key auth exclusively.
+> `NAS_SUDO_PASSWORD` in the root `.env` is only used to run `sudo docker compose` during stack restarts. SSH itself uses key auth exclusively. Compose finds each stack's `.env` automatically via `--project-directory`.
 
 ## Adding a Stack to Container Manager (DSM 7.3.2)
 
@@ -88,7 +99,7 @@ After uploading files to the NAS via `deploy.sh`, register each stack in Synolog
 
 ## Architecture Notes
 
-- **Homepage** — sits behind an Nginx reverse proxy that handles HTTPS (port 3000 on host → 443 inside container) and HTTP Basic Auth (credentials: `NGINX_BASIC_AUTH_USER` / `NGINX_BASIC_AUTH_PASS`). TLS uses the Synology system certificate mounted from `/usr/syno/etc/certificate/system/default/`. Config files in `homepage/config/` are hot-reloaded. Secrets are injected via `HOMEPAGE_VAR_*` env vars from root `.env` and referenced in `services.yaml` as `{{HOMEPAGE_VAR_*}}`. DSM/Download Station widgets reuse `NAS_USER` and `NAS_SUDO_PASSWORD` directly.
+- **Homepage** — sits behind an Nginx reverse proxy that handles HTTPS (port 3000 on host → 443 inside container) and HTTP Basic Auth (credentials: `NGINX_BASIC_AUTH_USER` / `NGINX_BASIC_AUTH_PASS`). TLS uses the Synology system certificate mounted from `/usr/syno/etc/certificate/system/default/`. Config files in `homepage/config/` are hot-reloaded. Secrets are injected via `HOMEPAGE_VAR_*` env vars from `homepage/.env` and referenced in `services.yaml` as `{{HOMEPAGE_VAR_*}}`. DSM / Download Station widgets authenticate with `HOMEPAGE_VAR_NAS_USERNAME` / `HOMEPAGE_VAR_NAS_PASSWORD` — use a dedicated DSM user (no 2FA) and whitelist private subnets in DSM → Security → Protection to avoid auto-blocking the Docker container IP.
 - **External HTTPS** — all stacks except homepage use **Synology Reverse Proxy** (DSM → Control Panel → Login Portal → Advanced) for HTTPS termination. Synology handles the SSL cert and auto-renewal; containers run plain HTTP internally.
 - **DSM / Download Station widgets** — Homepage connects to the Synology API over HTTP (`HOMEPAGE_VAR_NAS_URL=http://192.168.x.x:5000`) to avoid SSL certificate mismatch when using an IP address.
 - **Maid Tracker** — FastAPI + SQLite single-container app. Database persisted in a named volume `maid_tracker_data`. Local build. The container runs on port 5055 internally; external access is via **Synology Reverse Proxy** on port 5056 (`https://<NAS_HOST>:5056`), which handles TLS termination — the container itself serves plain HTTP.
