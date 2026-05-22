@@ -142,6 +142,9 @@ if [[ "$RESTART_ONLY" == false ]]; then
   # GNU rsync (protocol 31). Use tar+ssh instead — proven reliable across all
   # macOS versions and NAS firmware. Files are piped in a single SSH session
   # reusing the mux master established above.
+  #
+  # Note: only the ROOT .env is excluded (deploy/script secrets stay local).
+  # Per-stack <stack>/.env files ARE uploaded so containers can read them.
   TAR_EXCLUDES=(
     --exclude='./.git'
     --exclude='./.env'
@@ -171,13 +174,6 @@ if [[ "$RESTART_ONLY" == false ]]; then
       | ssh $SSH_OPTS "${SSH_DEST}" "cat > '${TMP_TAR}'"
     ssh $SSH_OPTS "${SSH_DEST}" \
       "bash -lc \"echo '${NAS_SUDO_PASSWORD}' | sudo -S bash -c 'mkdir -p \\\"${NAS_TARGET_PATH}\\\" && tar -xzf \\\"${TMP_TAR}\\\" -C \\\"${NAS_TARGET_PATH}\\\" --no-same-permissions --no-same-owner 2>/dev/null && rm -f \\\"${TMP_TAR}\\\"'\""
-
-    log "Uploading .env ..."
-    ssh $SSH_OPTS "${SSH_DEST}" "cat > /tmp/nas_env_$$ && bash -lc \"echo '${NAS_SUDO_PASSWORD}' | sudo -S cp /tmp/nas_env_$$ '${NAS_TARGET_PATH}/.env' && rm /tmp/nas_env_$$\"" < "${PROJECT_ROOT}/.env"
-
-    log "Distributing .env to stack subdirectories ..."
-    ssh $SSH_OPTS "${SSH_DEST}" \
-      "bash -lc \"echo '${NAS_SUDO_PASSWORD}' | sudo -S find '${NAS_TARGET_PATH}' -maxdepth 1 -mindepth 1 -type d -exec cp '${NAS_TARGET_PATH}/.env' {}/.env \\;\""
     ok "Upload complete ($(elapsed))"
   fi
 fi
@@ -242,9 +238,11 @@ for stack in "${STACKS_TO_RESTART[@]}"; do
   # Pass the entire command as ONE quoted string so SSH sends it verbatim to the
   # remote shell. Splitting into bash/-l/-c/cmd as separate ssh args causes the
   # remote shell to parse the pipe incorrectly (password never reaches sudo -S).
+  # --project-directory makes compose resolve the stack's own .env for both
+  # variable interpolation and env_file: .env inside docker-compose.yml.
   ssh $SSH_OPTS "${SSH_DEST}" \
     "bash -lc \"echo '${NAS_SUDO_PASSWORD}' | sudo -S docker compose \
-      --env-file '${NAS_TARGET_PATH}/.env' \
+      --project-directory '${NAS_TARGET_PATH}/${stack}' \
       -f '${NAS_TARGET_PATH}/${stack}/docker-compose.yml' \
       up -d --build 2>&1\""
   ok "$stack restarted"

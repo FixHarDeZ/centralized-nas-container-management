@@ -12,7 +12,7 @@ services:
       - ./config:/app/config
       - /var/run/docker.sock:/var/run/docker.sock:ro   # สำหรับ Docker widget
       - ${NAS_VOLUME_ROOT}:${NAS_VOLUME_ROOT}:ro
-    env_file: ../.env
+    env_file: .env
     environment:
       - TZ=Asia/Bangkok
       - HOMEPAGE_VAR_VOLUME_ROOT=${NAS_VOLUME_ROOT}
@@ -25,7 +25,7 @@ services:
       - "3000:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-    env_file: ../.env
+    env_file: .env
     environment:
       - TZ=Asia/Bangkok
     command:

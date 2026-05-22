@@ -7,7 +7,7 @@ services:
       - "5055:8000"
     volumes:
       - maid_tracker_data:/data
-    env_file: ../.env
+    env_file: .env
     environment:
       - TZ=Asia/Bangkok
       - DATA_DIR=/data
