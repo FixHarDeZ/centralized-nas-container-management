@@ -11,10 +11,11 @@ services:
     volumes:
       - ./config:/app/config
       - /var/run/docker.sock:/var/run/docker.sock:ro   # สำหรับ Docker widget
-      - /volume1:/volume1:ro
+      - ${NAS_VOLUME_ROOT}:${NAS_VOLUME_ROOT}:ro
     env_file: ../.env
     environment:
       - TZ=Asia/Bangkok
+      - HOMEPAGE_VAR_VOLUME_ROOT=${NAS_VOLUME_ROOT}
 
   nginx:
     image: nginx:alpine
