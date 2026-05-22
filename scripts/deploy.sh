@@ -162,17 +162,22 @@ if [[ "$RESTART_ONLY" == false ]]; then
         "tar -tzf - 2>/dev/null | grep -v '/$' | head -50"
     warn "Dry run complete — no files were transferred."
   else
+    # Files on NAS are root-owned (written by docker/Container Manager).
+    # Strategy: pipe tar to a tmp file the SSH user can write, then extract with sudo.
+    TMP_TAR="/tmp/nas_deploy_$$.tar.gz"
+
     log "Uploading project files via tar+ssh ..."
     COPYFILE_DISABLE=1 tar -czf - "${TAR_EXCLUDES[@]}" -C "${PROJECT_ROOT}" . \
-      | ssh $SSH_OPTS "${SSH_DEST}" \
-        "mkdir -p '${NAS_TARGET_PATH}' && tar -xzf - -C '${NAS_TARGET_PATH}' --no-same-permissions --no-same-owner 2>/dev/null; exit 0"
+      | ssh $SSH_OPTS "${SSH_DEST}" "cat > '${TMP_TAR}'"
+    ssh $SSH_OPTS "${SSH_DEST}" \
+      "bash -lc \"echo '${NAS_SUDO_PASSWORD}' | sudo -S bash -c 'mkdir -p \\\"${NAS_TARGET_PATH}\\\" && tar -xzf \\\"${TMP_TAR}\\\" -C \\\"${NAS_TARGET_PATH}\\\" --no-same-permissions --no-same-owner 2>/dev/null && rm -f \\\"${TMP_TAR}\\\"'\""
 
     log "Uploading .env ..."
-    ssh $SSH_OPTS "${SSH_DEST}" "cat > '${NAS_TARGET_PATH}/.env'" < "${PROJECT_ROOT}/.env"
+    ssh $SSH_OPTS "${SSH_DEST}" "cat > /tmp/nas_env_$$ && bash -lc \"echo '${NAS_SUDO_PASSWORD}' | sudo -S cp /tmp/nas_env_$$ '${NAS_TARGET_PATH}/.env' && rm /tmp/nas_env_$$\"" < "${PROJECT_ROOT}/.env"
 
     log "Distributing .env to stack subdirectories ..."
     ssh $SSH_OPTS "${SSH_DEST}" \
-      "for d in '${NAS_TARGET_PATH}'/*/; do cp '${NAS_TARGET_PATH}/.env' \"\${d}.env\"; done"
+      "bash -lc \"echo '${NAS_SUDO_PASSWORD}' | sudo -S find '${NAS_TARGET_PATH}' -maxdepth 1 -mindepth 1 -type d -exec cp '${NAS_TARGET_PATH}/.env' {}/.env \\;\""
     ok "Upload complete ($(elapsed))"
   fi
 fi
