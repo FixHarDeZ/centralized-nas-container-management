@@ -7,7 +7,7 @@
     cpu: true
     memory: true
     disk:
-      - /volume1
+      - "{{HOMEPAGE_VAR_VOLUME_ROOT}}"
     cacheInterval: 5000
 
 - datetime:
