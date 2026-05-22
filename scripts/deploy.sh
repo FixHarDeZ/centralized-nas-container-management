@@ -169,6 +169,10 @@ if [[ "$RESTART_ONLY" == false ]]; then
 
     log "Uploading .env ..."
     ssh $SSH_OPTS "${SSH_DEST}" "cat > '${NAS_TARGET_PATH}/.env'" < "${PROJECT_ROOT}/.env"
+
+    log "Distributing .env to stack subdirectories ..."
+    ssh $SSH_OPTS "${SSH_DEST}" \
+      "for d in '${NAS_TARGET_PATH}'/*/; do cp '${NAS_TARGET_PATH}/.env' \"\${d}.env\"; done"
     ok "Upload complete ($(elapsed))"
   fi
 fi
