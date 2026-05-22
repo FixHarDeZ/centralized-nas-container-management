@@ -5,33 +5,42 @@ Root-level notes สำหรับ cross-stack changes และ project-wide d
 
 ---
 
-## Environment Variables (`.env`)
+## โครงสร้าง .env (อัปเดต 2026-05-23)
 
-| Variable | ค่าปัจจุบัน | ใช้งาน |
-|---|---|---|
-| `NAS_VOLUME_ROOT` | `/volume1` หรือ `/volume2` | docker container data paths ทุก stack |
-| `NAS_MEDIA_ROOT` | `/volume1` | Jellyfin media library paths เท่านั้น |
-| `NAS_TARGET_PATH` | `/volumeX/docker` | deploy.sh upload destination |
+**Per-stack .env** — secrets แยกตาม stack ตั้งแต่ 2026-05-23:
 
-**การย้าย volume:** แก้ `NAS_VOLUME_ROOT` + `NAS_TARGET_PATH` ใน `.env` แล้ว deploy — ทุก stack ตามอัตโนมัติ  
-**การย้ายแค่ media:** แก้ `NAS_MEDIA_ROOT` อย่างเดียว
+| ไฟล์ | ใช้งาน |
+|---|---|
+| `.env` (root) | deploy.sh (`NAS_*`) + scripts/sync_notion.py (`NOTION_*`) เท่านั้น — containers ไม่เห็น |
+| `homepage/.env` | `HOMEPAGE_VAR_*`, `NGINX_BASIC_AUTH_*`, `NAS_VOLUME_ROOT` |
+| `jellyfin/.env` | `NAS_VOLUME_ROOT`, `NAS_MEDIA_ROOT` |
+| `line-secretary/.env` | `LINE_SECRETARY_*`, `NOTION_TOKEN`, `GROQ_API_KEY`, `OPENROUTER_API_KEY` |
+| `maid-tracker/.env` | `MAID_LINE_*`, `NGINX_BASIC_AUTH_*`, `MONTHLY_REPORT_TIME` |
+| `torrentwatch/.env` | `TORRENTWATCH_*`, `NGINX_BASIC_AUTH_*`, `NAS_TORRENT_PATH` |
+| `uptime-kuma/.env` | `NAS_VOLUME_ROOT` |
+| `watchtower/.env` | `WATCHTOWER_LINE_*` |
+| `portainer/` | ไม่มี .env |
+
+ทุก `.env` gitignored — `.env.example` ทุก stack commit ได้
+
+**deploy.sh restart ใช้ `--project-directory <stack>/`** เพื่อให้ compose หา `<stack>/.env` เจอเอง
 
 ---
 
-## Stacks ที่ใช้ NAS_VOLUME_ROOT
-- `uptime-kuma` — data volume
-- `homepage` — volume mount + disk widget (`{{HOMEPAGE_VAR_VOLUME_ROOT}}`)
-- `jellyfin` — config/cache volumes
+## DSM Auto-Block Gotcha (2026-05-23)
 
-## Stacks ที่ใช้ NAS_MEDIA_ROOT
-- `jellyfin` — Movies, Series, Concerts, private_media
+Homepage widgets ที่ยิง DSM API จะถูก auto-block IP ถ้า login fail ซ้ำ → error 407 แสดงเป็น "2FA enabled" ใน log
 
-## Stacks ที่ไม่ใช้ path variables
-- `maid-tracker`, `portainer`, `watchtower`, `line-secretary`, `torrentwatch` — ไม่มี host volume path ที่ขึ้นกับ volume root
+**Fix ถาวร:** DSM → Security → Protection → Allow List ใส่:
+- `10.0.0.0 / 255.0.0.0`
+- `172.16.0.0 / 255.240.0.0`
+- `192.168.0.0 / 255.255.0.0`
 
 ---
 
 ## Change Log
+
 | วันที่ | เรื่อง |
 |---|---|
 | 2026-05-22 | เพิ่ม NAS_VOLUME_ROOT / NAS_MEDIA_ROOT — replace hardcoded /volume1 ทั้ง project |
+| 2026-05-23 | Refactor per-stack .env, fix homepage DSM auto-block, fix watchtower notifier 429 |
