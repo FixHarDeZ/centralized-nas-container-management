@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>News Feed Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:system-ui,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh}
+  header{background:#1e293b;padding:1rem 1.5rem;display:flex;align-items:center;gap:1rem;border-bottom:1px solid #334155}
+  header h1{font-size:1.1rem;font-weight:600}
+  .badge{background:#3b82f6;color:#fff;border-radius:999px;padding:.15rem .6rem;font-size:.75rem}
+  nav{display:flex;gap:.25rem;padding:.75rem 1.5rem;background:#1e293b;border-bottom:1px solid #334155;flex-wrap:wrap}
+  nav button{background:none;border:none;color:#94a3b8;padding:.4rem .8rem;border-radius:.375rem;cursor:pointer;font-size:.875rem}
+  nav button.active{background:#3b82f6;color:#fff}
+  main{padding:1.5rem;max-width:1200px;margin:0 auto}
+  .section{display:none}.section.active{display:block}
+  .card{background:#1e293b;border:1px solid #334155;border-radius:.5rem;padding:1.25rem;margin-bottom:1rem}
+  .card h2{font-size:.95rem;font-weight:600;margin-bottom:.75rem;color:#94a3b8}
+  .dot{display:inline-block;width:.5rem;height:.5rem;border-radius:50%;margin-right:.35rem}
+  .dot.green{background:#22c55e}.dot.red{background:#ef4444}
+  table{width:100%;border-collapse:collapse;font-size:.85rem}
+  th,td{text-align:left;padding:.5rem .75rem;border-bottom:1px solid #334155}
+  th{color:#64748b;font-weight:500}
+  .article-card{border-bottom:1px solid #334155;padding:.75rem 0;cursor:pointer}
+  .article-card:last-child{border-bottom:none}
+  .article-title{font-weight:500;margin-bottom:.25rem}
+  .article-meta{font-size:.75rem;color:#64748b;margin-bottom:.25rem}
+  .article-summary{font-size:.85rem;color:#94a3b8;display:none;margin-top:.5rem;line-height:1.5}
+  .article-card.open .article-summary{display:block}
+  .source-badge{background:#1d4ed8;color:#93c5fd;border-radius:.25rem;padding:.1rem .4rem;font-size:.7rem;margin-right:.4rem}
+  input[type=text],input[type=time],select{background:#0f172a;border:1px solid #334155;color:#e2e8f0;padding:.4rem .6rem;border-radius:.375rem;font-size:.85rem}
+  button.btn{background:#3b82f6;color:#fff;border:none;padding:.5rem 1rem;border-radius:.375rem;cursor:pointer;font-size:.875rem}
+  button.btn:hover{background:#2563eb}
+  button.btn-sm{padding:.25rem .6rem;font-size:.75rem}
+  .rank-row{display:flex;align-items:center;gap:.75rem;padding:.4rem 0;border-bottom:1px solid #1e293b}
+  .rank-num{color:#64748b;width:1.5rem;flex-shrink:0;font-size:.85rem}
+  .rank-name{flex:1;font-size:.85rem}
+  .rank-price{color:#22c55e;font-size:.8rem}
+  .digest-entry{padding:.5rem 0;border-bottom:1px solid #334155;cursor:pointer;font-size:.85rem}
+  .digest-detail{display:none;padding:.5rem;background:#0f172a;border-radius:.375rem;margin-top:.35rem}
+  .digest-entry.open .digest-detail{display:block}
+  .search-row{display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap}
+  .search-row input{flex:1;min-width:180px}
+  footer{text-align:center;padding:1rem;color:#475569;font-size:.75rem}
+</style>
+</head>
+<body>
+<header>
+  <h1>📰 News Feed Bot</h1>
+  <span class="badge" id="health-badge">loading…</span>
+</header>
+<nav>
+  <button class="active" onclick="showTab('source-health')">Source Health</button>
+  <button onclick="showTab('news-timeline')">News Timeline</button>
+  <button onclick="showTab('price-tracker')">AI Price Tracker</button>
+  <button onclick="showTab('ai-leaderboard')">Leaderboard</button>
+  <button onclick="showTab('digest-history')">Digest History</button>
+  <button onclick="showTab('schedule-config')">Schedule Config</button>
+</nav>
+<main>
+  <div id="source-health" class="section active">
+    <div class="card"><h2>Articles per source (last 24h)</h2><canvas id="sourceChart" height="80"></canvas></div>
+    <div class="card" id="source-status-list"><h2>Source Status</h2></div>
+  </div>
+  <div id="news-timeline" class="section">
+    <div class="search-row">
+      <input type="text" id="news-search" placeholder="Search articles…" oninput="filterNews()">
+      <select id="news-source-filter" onchange="filterNews()"><option value="">All sources</option></select>
+    </div>
+    <div class="card" id="news-list"><h2>News Timeline</h2></div>
+  </div>
+  <div id="price-tracker" class="section">
+    <div class="search-row">
+      <select id="price-provider-filter" onchange="loadPrices()"><option value="">All providers</option></select>
+      <select id="price-sort" onchange="loadPrices()">
+        <option value="combined_asc">Combined ↑</option>
+        <option value="prompt_asc">Prompt ↑</option>
+        <option value="complete_asc">Completion ↑</option>
+        <option value="prompt_desc">Prompt ↓</option>
+      </select>
+    </div>
+    <div class="card"><table id="price-table"><thead><tr><th>Model</th><th>Provider</th><th>Prompt/1M</th><th>Completion/1M</th><th>Context</th></tr></thead><tbody></tbody></table></div>
+  </div>
+  <div id="ai-leaderboard" class="section">
+    <div class="card"><h2>Top 10 Cheapest (by combined)</h2><div id="leaderboard-cheap"></div></div>
+    <div class="card"><h2>Top 5 Most Expensive</h2><div id="leaderboard-expensive"></div></div>
+  </div>
+  <div id="digest-history" class="section">
+    <div class="card"><h2>Past Digests</h2><div id="digest-list"></div></div>
+  </div>
+  <div id="schedule-config" class="section">
+    <div class="card">
+      <h2>Digest Times (Bangkok)</h2>
+      <div id="digest-times-inputs"></div>
+    </div>
+    <div class="card">
+      <h2>Enabled Sources</h2>
+      <div id="source-toggles"></div>
+    </div>
+    <div class="card">
+      <h2>Summarizer Model</h2>
+      <label>Provider: <select id="cfg-provider"><option value="anthropic">Anthropic</option><option value="openrouter">OpenRouter</option></select></label>&nbsp;
+      <label>Model: <input type="text" id="cfg-model" style="width:220px"></label>
+    </div>
+    <br>
+    <button class="btn" onclick="saveSchedule()">Save Config</button>
+    <span id="save-status" style="margin-left:.75rem;font-size:.85rem;color:#22c55e"></span>
+  </div>
+</main>
+<footer id="footer-info">–</footer>
+<script src="/app.js"></script>
+</body>
+</html>
