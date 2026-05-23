@@ -11,6 +11,7 @@ from app.models import get_conn, init_db
 from app.scheduler import setup_scheduler
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -20,8 +21,13 @@ async def lifespan(app: FastAPI):
     if db_path == DB_PATH:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
     conn = get_conn(db_path)
-    init_db(conn)
-    conn.close()
+    try:
+        init_db(conn)
+    except Exception:
+        logger.exception("Failed to initialise database at %s", db_path)
+        raise
+    finally:
+        conn.close()
     app.state.db_path = db_path
 
     scheduler = setup_scheduler(db_path)
@@ -38,6 +44,7 @@ app.include_router(schedule.router)
 app.include_router(digest.router)
 app.include_router(health.router)
 
+# Routers must be registered BEFORE the catch-all static mount
 _static = Path(__file__).parent / "static"
 if _static.exists():
     app.mount("/", StaticFiles(directory=str(_static), html=True), name="static")

@@ -5,7 +5,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
-from app.config import DB_PATH, get_config
+from app.config import get_config  # DB_PATH removed — db_path passed in
 from app.fetcher import fetch_all
 from app.models import get_conn, get_recent_articles_for_digest, insert_digest_log
 from app.notifier import send_digest
@@ -14,38 +14,35 @@ from app.pricer import fetch_prices
 logger = logging.getLogger(__name__)
 
 
-def _fetch_job() -> None:
-    config = get_config()
-    logger.info("fetch_job starting")
-    new_ids = fetch_all(DB_PATH, config)
-    logger.info("fetch_job done: %d new articles", len(new_ids))
-
-
-def _price_job() -> None:
-    logger.info("price_job starting")
-    count = fetch_prices(DB_PATH)
-    logger.info("price_job done: %d models upserted", count)
-
-
-def _digest_job() -> None:
-    config = get_config()
-    conn = get_conn(DB_PATH)
-    try:
-        articles = get_recent_articles_for_digest(conn, hours=6, limit=5)
-        sent = send_digest(articles, config)
-        if sent and articles:
-            insert_digest_log(
-                conn,
-                datetime.now(timezone.utc).isoformat(),
-                [a["id"] for a in articles],
-                ",".join(sent),
-            )
-        logger.info("digest_job sent to: %s", sent)
-    finally:
-        conn.close()
-
-
 def setup_scheduler(db_path: str) -> BackgroundScheduler:
+    def _fetch_job() -> None:
+        config = get_config()
+        logger.info("fetch_job starting")
+        new_ids = fetch_all(db_path, config)
+        logger.info("fetch_job done: %d new articles", len(new_ids))
+
+    def _price_job() -> None:
+        logger.info("price_job starting")
+        count = fetch_prices(db_path)
+        logger.info("price_job done: %d models upserted", count)
+
+    def _digest_job() -> None:
+        config = get_config()
+        conn = get_conn(db_path)
+        try:
+            articles = get_recent_articles_for_digest(conn, hours=6, limit=5)
+            sent = send_digest(articles, config)
+            if sent and articles:
+                insert_digest_log(
+                    conn,
+                    datetime.now(timezone.utc).isoformat(),
+                    [a["id"] for a in articles],
+                    ",".join(sent),
+                )
+            logger.info("digest_job sent to: %s", sent)
+        finally:
+            conn.close()
+
     scheduler = BackgroundScheduler(timezone="Asia/Bangkok")
 
     scheduler.add_job(
