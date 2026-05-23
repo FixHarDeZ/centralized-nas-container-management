@@ -1,3 +1,5 @@
+version: '3.8'
+
 networks:
   auth_net:
     name: auth_net
@@ -13,6 +15,7 @@ services:
     volumes:
       - ./authelia:/config
       - authelia_data:/data
+    env_file: .env
     environment:
       - TZ=Asia/Bangkok
       - AUTHELIA_SESSION_SECRET=${AUTHELIA_SESSION_SECRET}
@@ -31,6 +34,7 @@ services:
       - "8222:80"
     volumes:
       - vaultwarden_data:/data
+    env_file: .env
     environment:
       - TZ=Asia/Bangkok
       - ADMIN_TOKEN=${VAULTWARDEN_ADMIN_TOKEN}
