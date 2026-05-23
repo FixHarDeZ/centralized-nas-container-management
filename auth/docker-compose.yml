@@ -1,0 +1,43 @@
+networks:
+  auth_net:
+    name: auth_net
+    driver: bridge
+
+services:
+  authelia:
+    image: authelia/authelia:latest
+    container_name: authelia
+    restart: unless-stopped
+    ports:
+      - "9091:9091"
+    volumes:
+      - ./authelia:/config
+      - authelia_data:/data
+    environment:
+      - TZ=Asia/Bangkok
+      - AUTHELIA_SESSION_SECRET=${AUTHELIA_SESSION_SECRET}
+      - AUTHELIA_STORAGE_ENCRYPTION_KEY=${AUTHELIA_STORAGE_ENCRYPTION_KEY}
+      - AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET=${AUTHELIA_JWT_SECRET}
+    networks:
+      - auth_net
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+
+  vaultwarden:
+    image: vaultwarden/server:latest
+    container_name: vaultwarden
+    restart: unless-stopped
+    ports:
+      - "8222:80"
+    volumes:
+      - vaultwarden_data:/data
+    environment:
+      - TZ=Asia/Bangkok
+      - ADMIN_TOKEN=${VAULTWARDEN_ADMIN_TOKEN}
+      - WEBSOCKET_ENABLED=true
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+
+volumes:
+  authelia_data:
+  vaultwarden_data:
