@@ -42,10 +42,10 @@ All stacks except `watchtower` are exposed externally via **Synology Reverse Pro
 ```text
 .env                      # deploy.sh + scripts/sync_notion.py (NAS_*, NOTION_*)
 auth/.env                 # AUTHELIA_SESSION_SECRET, AUTHELIA_STORAGE_ENCRYPTION_KEY, AUTHELIA_JWT_SECRET, VAULTWARDEN_ADMIN_TOKEN
-homepage/.env             # HOMEPAGE_VAR_*, NGINX_BASIC_AUTH_*, NAS_VOLUME_ROOT
+homepage/.env             # HOMEPAGE_VAR_*, NAS_VOLUME_ROOT
 jellyfin/.env             # NAS_VOLUME_ROOT, NAS_MEDIA_ROOT
 line-secretary/.env       # LINE_SECRETARY_*, NOTION_TOKEN, GROQ/OpenRouter keys
-maid-tracker/.env         # MAID_LINE_*, NGINX_BASIC_AUTH_*, MONTHLY_REPORT_TIME
+maid-tracker/.env         # MAID_LINE_*, MONTHLY_REPORT_TIME
 portainer/                # (no .env needed)
 torrentwatch/.env         # TORRENTWATCH_*, NGINX_BASIC_AUTH_*, NAS_TORRENT_PATH
 uptime-kuma/.env          # NAS_VOLUME_ROOT
@@ -56,7 +56,7 @@ hermes-agent/.env         # OPENROUTER_API_KEY, TELEGRAM_BOT_TOKEN, DISCORD_BOT_
 ```bash
 # First time: copy each template and fill in real values
 cp .env.example .env
-for d in homepage jellyfin line-secretary maid-tracker torrentwatch uptime-kuma watchtower hermes-agent; do
+for d in auth homepage jellyfin line-secretary maid-tracker torrentwatch uptime-kuma watchtower hermes-agent; do
   cp "$d/.env.example" "$d/.env"
 done
 ```
@@ -103,7 +103,7 @@ After uploading files to the NAS via `deploy.sh`, register each stack in Synolog
 
 ## Architecture Notes
 
-- **Homepage** — sits behind an Nginx reverse proxy that handles HTTPS (port 3000 on host → 443 inside container) and HTTP Basic Auth (credentials: `NGINX_BASIC_AUTH_USER` / `NGINX_BASIC_AUTH_PASS`). TLS uses the Synology system certificate mounted from `/usr/syno/etc/certificate/system/default/`. Config files in `homepage/config/` are hot-reloaded. Secrets are injected via `HOMEPAGE_VAR_*` env vars from `homepage/.env` and referenced in `services.yaml` as `{{HOMEPAGE_VAR_*}}`. DSM / Download Station widgets authenticate with `HOMEPAGE_VAR_NAS_USERNAME` / `HOMEPAGE_VAR_NAS_PASSWORD` — use a dedicated DSM user (no 2FA) and whitelist private subnets in DSM → Security → Protection to avoid auto-blocking the Docker container IP.
+- **Homepage** — sits behind an Nginx reverse proxy that handles HTTPS (port 3000 on host → 443 inside container) with Authelia SSO forward-auth. TLS uses the Synology system certificate mounted from `/usr/syno/etc/certificate/system/default/`. Config files in `homepage/config/` are hot-reloaded. Secrets are injected via `HOMEPAGE_VAR_*` env vars from `homepage/.env` and referenced in `services.yaml` as `{{HOMEPAGE_VAR_*}}`. DSM / Download Station widgets authenticate with `HOMEPAGE_VAR_NAS_USERNAME` / `HOMEPAGE_VAR_NAS_PASSWORD` — use a dedicated DSM user (no 2FA) and whitelist private subnets in DSM → Security → Protection to avoid auto-blocking the Docker container IP.
 - **External HTTPS** — all stacks except homepage use **Synology Reverse Proxy** (DSM → Control Panel → Login Portal → Advanced) for HTTPS termination. Synology handles the SSL cert and auto-renewal; containers run plain HTTP internally.
 - **DSM / Download Station widgets** — Homepage connects to the Synology API over HTTP (`HOMEPAGE_VAR_NAS_URL=http://192.168.x.x:5000`) to avoid SSL certificate mismatch when using an IP address.
 - **Maid Tracker** — FastAPI + SQLite single-container app. Database persisted in a named volume `maid_tracker_data`. Local build. The container runs on port 5055 internally; external access is via **Synology Reverse Proxy** on port 5056 (`https://<NAS_HOST>:5056`), which handles TLS termination — the container itself serves plain HTTP.
