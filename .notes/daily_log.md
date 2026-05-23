@@ -2,6 +2,39 @@
 
 ---
 
+## 2026-05-23 (ช่วงที่ 6) — news-feed: CLAUDE.md update + final test
+
+### งานที่ทำ
+- เพิ่ม `news-feed/` row ในตาราง Stacks & Ports ของ CLAUDE.md หลัง `torrentwatch/`
+- รวม: port 5064, FastAPI + APScheduler + SQLite, Anthropic/OpenRouter/DeepSeek LLM switchable, digest 07:00/12:00/18:00 → LINE + Telegram
+- รันทดสอบ full test suite: **41 tests passed** ✅
+- Commit: `7b6a0b1` — docs: add news-feed stack to CLAUDE.md ports table
+
+### สถานะ
+- Task 14 DONE ✅
+- news-feed stack ready for deployment (user fills `.env` + `deploy.sh -s news-feed`)
+
+---
+
+---
+
+## 2026-05-23 (ช่วงที่ 5) — news-feed stack: Dockerfile, compose, env.example, README
+
+### งานที่ทำ
+
+**สร้าง news-feed stack container files:**
+- `news-feed/Dockerfile` — Python 3.12-slim, UID 1000 app user, uvicorn CMD
+- `news-feed/docker-compose.yml` — 1 service (news-feed), port 5064:8000, named volume news_feed_data:/data, TZ=Asia/Bangkok
+- `news-feed/.env.example` — ANTHROPIC_API_KEY, LINE_*, TELEGRAM_*, ADMIN_TOKEN, SUMMARIZER_PROVIDER/MODEL, OPENROUTER_API_KEY, DIGEST_TIMES, ENABLED_SOURCES, DATA_DIR (all placeholders)
+- `news-feed/README.md` — Setup, Dashboard, Switch LLM Model, Manual Digest Trigger
+
+**Commit:** `fa27c6b` — feat(news-feed): add Dockerfile, compose, env.example, README
+
+### สถานะ
+- Dockerfile syntax ✅ verified
+- All 4 files created ✅ and committed
+- Ready for: `cp news-feed/.env.example news-feed/.env` + fill secrets + `scripts/deploy.sh -s news-feed`
+
 ---
 
 ## 2026-05-23 (ช่วงที่ 4) — auth stack: Authelia SSO + Vaultwarden + migrate homepage/maid-tracker

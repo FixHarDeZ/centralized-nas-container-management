@@ -5,7 +5,8 @@ ARG HERMES_REF=main
 
 ENV PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \
-    PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers
+    PLAYWRIGHT_BROWSERS_PATH=/opt/playwright-browsers \
+    HERMES_WEB_DIST=/opt/hermes/hermes_cli/web_dist
 
 # System packages — Node.js 22 LTS from NodeSource
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -29,10 +30,17 @@ RUN git clone --depth 1 \
 WORKDIR /opt/hermes
 
 # Python deps — messaging extras covers Telegram, Discord, WhatsApp, Slack gateways
-RUN uv sync --extra messaging
+RUN uv sync --extra messaging --extra web
 
-# Node.js dashboard frontend assets
-RUN npm ci && npm run build
+# Node.js agent-browser dependency (root-level, no build step)
+RUN npm ci
+
+# Web UI — install deps and build assets into hermes_cli/web_dist at image build time
+# so the dashboard can start without running npm at runtime as unprivileged user
+RUN cd web && npm install --prefer-offline --no-audit && npm run build
+
+# Editable install so hermes CLI is properly importable
+RUN uv pip install --no-cache-dir --no-deps -e "."
 
 # Non-root user — uid 10000 matches official image default;
 # entrypoint.sh remaps to HERMES_UID/HERMES_GID (1000/100) at runtime via gosu

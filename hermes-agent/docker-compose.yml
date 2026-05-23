@@ -35,7 +35,7 @@ services:
       - hermes_agent_data:/opt/data
     labels:
       - "com.centurylinklabs.watchtower.enable=false"
-    command: ["dashboard", "--host", "0.0.0.0", "--no-open"]
+    command: ["dashboard", "--host", "0.0.0.0", "--no-open", "--insecure"]
 
 volumes:
   hermes_agent_data:
