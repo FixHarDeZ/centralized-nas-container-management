@@ -5,8 +5,8 @@ Guidance for Claude Code (claude.ai/code) on project rules, architecture, and de
 ## 📌 Memory & Documentation Rules (Strict)
 
 *   **Before Task:** อ่านไฟล์ใน `.notes/` ของ sub-directory นั้นๆ ก่อนเริ่มงานเสมอ
-*   **After Task:** สรุปสิ่งที่ทำลงใน `.notes/daily_log.md` ทุกครั้งที่จบงาน
-*   **Every Session End:** อัปเดตข้อมูลที่เปลี่ยนไป (DB schema, API, settings, gaps) ใน `.notes/00_INDEX.md` ควบคู่กับ log เสมอ (ไม่มีข้อยกเว้น ไม่ต้องรอ structural change)
+*   **After Task:** สรุปสิ่งที่ทำลงใน `<stack>/.notes/daily_log.md` ของ sub-directory ที่ทำงานอยู่เสมอ (เช่น งานใน `news-feed/` → เขียนที่ `news-feed/.notes/daily_log.md`) **ห้ามเขียนที่ root `.notes/`**
+*   **Every Session End:** อัปเดตข้อมูลที่เปลี่ยนไป (DB schema, API, settings, gaps) ใน `<stack>/.notes/00_INDEX.md` ของ sub-directory นั้นๆ ควบคู่กับ log เสมอ (ไม่มีข้อยกเว้น ไม่ต้องรอ structural change)
 *   **Notion Sync:** บันทึกขึ้น Notion ด้วยคำสั่ง: `python3 scripts/sync_notion.py "[Title]" "[Content]"`
 
 ---
