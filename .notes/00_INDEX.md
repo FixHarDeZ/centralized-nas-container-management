@@ -14,11 +14,11 @@ Root-level notes สำหรับ cross-stack changes และ project-wide d
 | `.env` (root) | deploy.sh (`NAS_*`) + scripts/sync_notion.py (`NOTION_*`) เท่านั้น — containers ไม่เห็น |
 | `homepage/.env` | `HOMEPAGE_VAR_*`, `NGINX_BASIC_AUTH_*`, `NAS_VOLUME_ROOT` |
 | `jellyfin/.env` | `NAS_VOLUME_ROOT`, `NAS_MEDIA_ROOT` |
-| `line-secretary/.env` | `LINE_SECRETARY_*`, `NOTION_TOKEN`, `GROQ_API_KEY`, `OPENROUTER_API_KEY` |
+| `line-secretary/.env` | `LINE_SECRETARY_*`, `NOTION_TOKEN`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_URL`, `TELEGRAM_ALLOWED_CHAT_IDS` |
 | `maid-tracker/.env` | `MAID_LINE_*`, `NGINX_BASIC_AUTH_*`, `MONTHLY_REPORT_TIME` |
 | `torrentwatch/.env` | `TORRENTWATCH_*`, `NGINX_BASIC_AUTH_*`, `NAS_TORRENT_PATH` |
 | `uptime-kuma/.env` | `NAS_VOLUME_ROOT` |
-| `watchtower/.env` | `WATCHTOWER_LINE_*` |
+| `watchtower/.env` | `WATCHTOWER_LINE_*`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` |
 | `portainer/` | ไม่มี .env |
 
 ทุก `.env` gitignored — `.env.example` ทุก stack commit ได้
@@ -44,3 +44,4 @@ Homepage widgets ที่ยิง DSM API จะถูก auto-block IP ถ้
 |---|---|
 | 2026-05-22 | เพิ่ม NAS_VOLUME_ROOT / NAS_MEDIA_ROOT — replace hardcoded /volume1 ทั้ง project |
 | 2026-05-23 | Refactor per-stack .env, fix homepage DSM auto-block, fix watchtower notifier 429 |
+| 2026-05-23 | เพิ่ม Telegram bot: line-secretary webhook + watchtower notification. Router port 8443 → NAS |
