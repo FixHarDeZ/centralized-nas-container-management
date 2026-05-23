@@ -2,6 +2,19 @@
 
 ---
 
+## 2026-05-23 (ช่วงที่ 3) — Debug & deploy Telegram bot (line-secretary)
+
+### งานที่ทำ
+- Debug ว่าทำไม `/start` bot เงียบ → root cause: โค้ด Telegram ทั้งหมด local ยังไม่ได้ commit/deploy
+- Router port forward 8443 → NAS 192.168.50.200 (Synology RP รับต่อไป localhost:5057)
+- Commit รวม feat(telegram) ทั้งหมด → deploy `line-secretary` + `watchtower`
+
+### Key Learnings
+- Telegram webhook ต้องการ internet → NAS path: `router:8443 → NAS:8443 (RP) → localhost:5057`
+- Telegram allowed ports: 443, 80, 88, 8443 เท่านั้น
+
+---
+
 ## 2026-05-23 (ช่วงที่ 2) — Telegram support: watchtower + line-secretary
 
 ### งานที่ทำ
