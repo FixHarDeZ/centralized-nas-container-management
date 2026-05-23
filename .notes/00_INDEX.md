@@ -19,6 +19,7 @@ Root-level notes สำหรับ cross-stack changes และ project-wide d
 | `hermes-agent/.env`   | `OPENROUTER_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USERS`, `DISCORD_BOT_TOKEN`, `DISCORD_ALLOWED_GUILDS`, `HERMES_UID`, `HERMES_GID` |
 | `maid-tracker/.env` | `MAID_LINE_*`, `MONTHLY_REPORT_TIME` (ลบ `NGINX_BASIC_AUTH_*` แล้ว — ใช้ Authelia แทน) |
 | `torrentwatch/.env` | `TORRENTWATCH_*`, `NGINX_BASIC_AUTH_*`, `NAS_TORRENT_PATH` |
+| `news-feed/.env` | `ANTHROPIC_API_KEY`, `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_USER_ID`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `ADMIN_TOKEN`, `SUMMARIZER_PROVIDER`, `SUMMARIZER_MODEL`, `OPENROUTER_API_KEY`, `DIGEST_TIMES`, `ENABLED_SOURCES`, `DATA_DIR` |
 | `uptime-kuma/.env` | `NAS_VOLUME_ROOT` |
 | `watchtower/.env` | `WATCHTOWER_LINE_*`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` |
 | `portainer/` | ไม่มี .env |
@@ -49,3 +50,4 @@ Homepage widgets ที่ยิง DSM API จะถูก auto-block IP ถ้
 | 2026-05-23 | เพิ่ม Telegram bot: line-secretary webhook + watchtower notification. Router port 8443 → NAS |
 | 2026-05-23 | เพิ่ม hermes-agent stack (Telegram + Discord, port 5063). ย้าย Telegram ออกจาก line-secretary |
 | 2026-05-23 | สร้าง auth/ stack (Authelia SSO port 9091 + Vaultwarden port 8222). Migrate homepage + maid-tracker จาก basic auth → Authelia forward-auth |
+| 2026-05-23 | สร้าง news-feed/ stack (FastAPI + APScheduler + SQLite, port 5064). RSS 7 แหล่ง, สรุปภาษาไทย Anthropic/OpenRouter switchable, digest → LINE + Telegram |
