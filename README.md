@@ -15,6 +15,7 @@ Docker stacks for Synology DS925+ NAS, managed via Synology Container Manager.
 | `uptime-kuma/` | Service health monitor | `3001` | `https://…:3002` |
 | `watchtower/` | Auto-update containers + LINE notification sidecar | — | — |
 | `line-secretary/` | AI personal assistant LINE bot backed by Notion | `5057` | `https://…:5058` |
+| `hermes-agent/` | Autonomous AI agent — Telegram + Discord (NousResearch/hermes-agent) | `5063` (dashboard) | — |
 | `torrentwatch/` | Daily torrent monitor for bearbit.org — scrapes, filters, LINE alerts | `5059` | `https://…:5062` |
 
 ### Reverse Proxy Summary
@@ -47,12 +48,13 @@ portainer/                # (no .env needed)
 torrentwatch/.env         # TORRENTWATCH_*, NGINX_BASIC_AUTH_*, NAS_TORRENT_PATH
 uptime-kuma/.env          # NAS_VOLUME_ROOT
 watchtower/.env           # WATCHTOWER_LINE_*
+hermes-agent/.env         # OPENROUTER_API_KEY, TELEGRAM_BOT_TOKEN, DISCORD_BOT_TOKEN, HERMES_UID/GID
 ```
 
 ```bash
 # First time: copy each template and fill in real values
 cp .env.example .env
-for d in homepage jellyfin line-secretary maid-tracker torrentwatch uptime-kuma watchtower; do
+for d in homepage jellyfin line-secretary maid-tracker torrentwatch uptime-kuma watchtower hermes-agent; do
   cp "$d/.env.example" "$d/.env"
 done
 ```

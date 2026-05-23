@@ -34,6 +34,7 @@ Guidance for Claude Code (claude.ai/code) on project rules, architecture, and de
 | `uptime-kuma/`| Service Monitor | 3001 / — | ตรวจสอบสถานะการทำงานของ Services |
 | `watchtower/` | Auto-update Container | — / — | มี Sidecar `watchtower-notifier` (Python 3.12-slim) อ่าน Unix Socket Log ส่ง LINE. ติดป้ายกำกับตัวเองห้ามอัปเดต: `com.centurylinklabs.watchtower.enable=false` |
 | `line-secretary/`| AI LINE Bot เลขาส่วนตัว | 5057 / 5058 (HTTPS)| FastAPI + Groq (`llama-3.3-70b-versatile`) + Notion Tools. มี Whitelist ID. **การเซฟลง Notion ต้องรอพิมพ์ยืนยัน "ใช่" เสมอ**. Save State ไว้ที่ `/data/state.json` |
+| `hermes-agent/` | Autonomous AI Agent (Telegram + Discord) | 5063 (dashboard) / — (gateway) | Build clones `NousResearch/hermes-agent` from GitHub (`ARG HERMES_REF`). `config.yaml` auto-generated on first run. `network_mode: host` dropped — uses bridge networking. Port 5060/5061 blocked by browsers (SIP), uses 5063. |
 | `torrentwatch/` | Scraper & Filter | 5059 / 5062 (HTTPS)| FastAPI + Volume `/data`. สแกน bearbit.org ตามช่วงเวลา (19:00-01:00 รันทุก 30 นาที / 01:00-06:00 หยุด / 06:00-19:00 รันทุก 60 นาที) โหลดเข้า `/downloads` ตรง. ลบประวัติเก่าเกิน 7 วัน ทุกวันอาทิตย์ 03:00. มี Endpoint `/api/status` แบบ Public |
 
 ---
