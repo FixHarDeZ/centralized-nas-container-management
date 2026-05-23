@@ -1,0 +1,24 @@
+# Hermes Agent configuration
+# Copy this to the data volume: docker cp config.yaml.example hermes-gateway:/opt/data/config.yaml
+# Or let hermes generate defaults on first run, then edit via:
+#   docker exec -it hermes-gateway vi /opt/data/config.yaml
+
+# ─── LLM ────────────────────────────────────────────────────────────────────
+# Model slug — any OpenRouter-compatible identifier
+# Options: nous/hermes-3-405b | openai/gpt-4o | anthropic/claude-opus-4-6
+model: nous/hermes-3-405b
+provider: auto   # auto-detects API keys from environment
+
+# ─── Telegram ───────────────────────────────────────────────────────────────
+telegram:
+  reply_to_mode: first        # first | all | off
+  disable_link_previews: true
+
+# ─── Discord ────────────────────────────────────────────────────────────────
+discord:
+  require_mention: true   # must @hermes in servers; DMs work without mention
+  auto_thread: true        # auto-create thread per conversation in channels
+
+# ─── Session ────────────────────────────────────────────────────────────────
+session:
+  reset_on_idle_minutes: 60  # clear context after 60 min silence
