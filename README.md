@@ -12,6 +12,7 @@ Docker stacks for Synology DS925+ NAS, managed via Synology Container Manager.
 | `jellyfin/` | Media server with NVIDIA GPU transcoding | `8096` | `https://…:8097` |
 | `maid-tracker/` | Household worker attendance & salary tracker | `5055` | `https://…:5056` |
 | `portainer/` | Docker management UI | `9000` | `https://…:9444` |
+| `auth/` | Centralized SSO (Authelia) + Password Vault (Vaultwarden) | `9091` (Authelia) / `8222` (Vaultwarden) | — |
 | `uptime-kuma/` | Service health monitor | `3001` | `https://…:3002` |
 | `watchtower/` | Auto-update containers + LINE notification sidecar | — | — |
 | `line-secretary/` | AI personal assistant LINE bot backed by Notion | `5057` | `https://…:5058` |
@@ -40,6 +41,7 @@ All stacks except `watchtower` are exposed externally via **Synology Reverse Pro
 
 ```text
 .env                      # deploy.sh + scripts/sync_notion.py (NAS_*, NOTION_*)
+auth/.env                 # AUTHELIA_SESSION_SECRET, AUTHELIA_STORAGE_ENCRYPTION_KEY, AUTHELIA_JWT_SECRET, VAULTWARDEN_ADMIN_TOKEN
 homepage/.env             # HOMEPAGE_VAR_*, NGINX_BASIC_AUTH_*, NAS_VOLUME_ROOT
 jellyfin/.env             # NAS_VOLUME_ROOT, NAS_MEDIA_ROOT
 line-secretary/.env       # LINE_SECRETARY_*, NOTION_TOKEN, GROQ/OpenRouter keys

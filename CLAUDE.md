@@ -31,6 +31,7 @@ Guidance for Claude Code (claude.ai/code) on project rules, architecture, and de
 | `jellyfin/` | Media Server | 8096 / — | รองรับ NVIDIA GPU Transcoding |
 | `maid-tracker/` | ระบบเวลา/เงินเดือนแม่บ้าน | 5055 / — | FastAPI + SQLite (Volume `/data`). คำนวณเงินเดือน จ-ส: `เงินเดือน ÷ จำนวนวันทำงานจริงเดือนนั้น`. ลา/ชดเชยบันทึกทศนิยมได้ (`half_day`) แจ้งเตือนผ่าน LINE |
 | `portainer/` | Docker Management | 9000 / — | UI สำหรับจัดการคอนเทนเนอร์ในระบบ |
+| `auth/` | Centralized SSO + Password Vault | 9091 (Authelia) / 8222 (Vaultwarden) | สร้าง Docker network `auth_net` ที่ stack อื่น join. Authelia ทำ forward-auth แทน basic auth. Vaultwarden มี auth ของตัวเอง. Watchtower disabled บนทั้งสอง service |
 | `uptime-kuma/`| Service Monitor | 3001 / — | ตรวจสอบสถานะการทำงานของ Services |
 | `watchtower/` | Auto-update Container | — / — | มี Sidecar `watchtower-notifier` (Python 3.12-slim) อ่าน Unix Socket Log ส่ง LINE. ติดป้ายกำกับตัวเองห้ามอัปเดต: `com.centurylinklabs.watchtower.enable=false` |
 | `line-secretary/`| AI LINE Bot เลขาส่วนตัว | 5057 / 5058 (HTTPS)| FastAPI + Groq (`llama-3.3-70b-versatile`) + Notion Tools. มี Whitelist ID. **การเซฟลง Notion ต้องรอพิมพ์ยืนยัน "ใช่" เสมอ**. Save State ไว้ที่ `/data/state.json` |
