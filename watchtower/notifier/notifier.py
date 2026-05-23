@@ -20,6 +20,8 @@ LINE_USER_ID         = os.environ["WATCHTOWER_LINE_USER_ID"]
 WATCHTOWER_CONTAINER = os.environ.get("WATCHTOWER_CONTAINER_NAME", "watchtower")
 DOCKER_SOCKET        = os.environ.get("DOCKER_SOCKET", "/var/run/docker.sock")
 TZ                   = ZoneInfo(os.environ.get("TZ", "Asia/Bangkok"))
+TELEGRAM_BOT_TOKEN   = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID     = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 # ─── Watchtower 1.7.x structured log patterns ──────────────────────────────
 # ตัวอย่าง log จริง:
@@ -69,6 +71,25 @@ def send_line(text: str) -> None:
         print(f"[{now()}] LINE sent: {text[:100].replace(chr(10), ' ')}")
     except Exception as e:
         print(f"[{now()}] ERROR sending LINE: {e}")
+
+
+# ─── Telegram ───────────────────────────────────────────────────────────────
+def send_telegram(text: str) -> None:
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        return
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    try:
+        resp = requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": text}, timeout=10)
+        if resp.status_code != 200:
+            print(f"[{now()}] ERROR sending Telegram: {resp.status_code} {resp.text[:100]}")
+    except Exception as e:
+        print(f"[{now()}] ERROR sending Telegram: {e}")
+
+
+def notify(text: str) -> None:
+    """Send to both LINE and Telegram (Telegram is optional — skipped if not configured)."""
+    send_line(text)
+    send_telegram(text)
 
 
 # ─── Docker socket HTTP (no CLI needed) ────────────────────────────────────
@@ -156,7 +177,7 @@ def handle_line(log_line: str) -> None:
         _image_queue.clear()
         _containers_updated_order.clear()
         _session_start_time = None
-        send_line(
+        notify(
             f"🟢 Watchtower เริ่มทำงานแล้ว\n"
             f"📋 กำลังตรวจสอบ container updates...\n"
             f"🕒 {now()}"
@@ -180,7 +201,7 @@ def handle_line(log_line: str) -> None:
         img = _image_queue.pop(0) if _image_queue else {"name": "unknown image", "id": "?"}
         _pending_updates[container_name] = {"image_name": img["name"], "new_id": img["id"], "old_id": None}
         _containers_updated_order.append(container_name)
-        send_line(
+        notify(
             f"🔄 Container อัปเดตแล้ว!\n"
             f"📦 {container_name}\n"
             f"🖼 {img['name']}\n"
@@ -213,12 +234,12 @@ def handle_line(log_line: str) -> None:
                 old = v.get("old_id") or "?"
                 new = v.get("new_id") or "?"
                 lines.append(f"  • {k}: {v['image_name']}\n    {old} → {new}")
-            send_line(
+            notify(
                 f"✅ ตรวจสอบเสร็จ — อัปเดต {updated_count} container\n"
                 f"{chr(10).join(lines)}{duration}\n🕒 {now()}"
             )
         else:
-            send_line(
+            notify(
                 f"✅ ตรวจสอบเสร็จ — ไม่มี container ที่ต้องอัปเดต"
                 f"{duration}\n🕒 {now()}"
             )
@@ -230,7 +251,7 @@ def handle_line(log_line: str) -> None:
 
     # ── Error ──────────────────────────────────────────────────────────────
     if PAT_ERROR.search(log_line):
-        send_line(f"🔴 Watchtower พบ Error!\n📋 {extract_msg(log_line)[:200]}\n🕒 {now()}")
+        notify(f"🔴 Watchtower พบ Error!\n📋 {extract_msg(log_line)[:200]}\n🕒 {now()}")
 
 
 # ─── Main loop ─────────────────────────────────────────────────────────────
