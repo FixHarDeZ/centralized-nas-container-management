@@ -1,0 +1,41 @@
+from unittest.mock import MagicMock, patch
+from app.summarizer import summarize
+
+
+@patch("app.summarizer.anthropic.Anthropic")
+def test_summarize_anthropic(mock_cls, base_config):
+    mock_client = MagicMock()
+    mock_cls.return_value = mock_client
+    mock_client.messages.create.return_value = MagicMock(
+        content=[MagicMock(text="สรุปทดสอบ")]
+    )
+    result = summarize("Title", "Body text", base_config)
+    assert result == "สรุปทดสอบ"
+    mock_client.messages.create.assert_called_once()
+
+
+@patch("app.summarizer.httpx.post")
+def test_summarize_openrouter(mock_post, base_config):
+    mock_resp = MagicMock()
+    mock_resp.raise_for_status = MagicMock()
+    mock_resp.json.return_value = {"choices": [{"message": {"content": "สรุป OR"}}]}
+    mock_post.return_value = mock_resp
+
+    config = {**base_config, "summarizer_provider": "openrouter", "summarizer_model": "deepseek/deepseek-chat"}
+    result = summarize("Title", "Body text", config)
+    assert result == "สรุป OR"
+    assert mock_post.call_args[0][0] == "https://openrouter.ai/api/v1/chat/completions"
+
+
+@patch("app.summarizer.time.sleep")
+@patch("app.summarizer.anthropic.Anthropic")
+def test_summarize_retries_on_failure(mock_cls, mock_sleep, base_config):
+    mock_client = MagicMock()
+    mock_cls.return_value = mock_client
+    mock_client.messages.create.side_effect = [
+        Exception("rate limit"),
+        MagicMock(content=[MagicMock(text="สรุปหลัง retry")]),
+    ]
+    result = summarize("Title", "Body", base_config)
+    assert result == "สรุปหลัง retry"
+    assert mock_client.messages.create.call_count == 2
