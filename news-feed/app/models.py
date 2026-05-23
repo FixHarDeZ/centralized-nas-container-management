@@ -1,6 +1,5 @@
 import json
 import sqlite3
-from datetime import datetime, timezone
 from typing import Optional
 
 
@@ -81,12 +80,11 @@ def get_article(conn: sqlite3.Connection, article_id: str) -> Optional[dict]:
 
 
 def get_recent_articles_for_digest(conn: sqlite3.Connection, hours: int = 6, limit: int = 5) -> list[dict]:
-    cutoff = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     rows = conn.execute(
         "SELECT * FROM articles WHERE summary_th IS NOT NULL "
-        "AND fetched_at >= datetime(?, ?) "
+        "AND fetched_at >= datetime('now', ?) "
         "ORDER BY published DESC LIMIT ?",
-        (cutoff, f"-{hours} hours", limit),
+        (f"-{hours} hours", limit),
     ).fetchall()
     return [dict(r) for r in rows]
 
@@ -97,7 +95,7 @@ def get_article_count(conn: sqlite3.Connection) -> int:
 
 def get_last_fetch_time(conn: sqlite3.Connection) -> Optional[str]:
     row = conn.execute("SELECT MAX(fetched_at) FROM articles").fetchone()
-    return row[0] if row else None
+    return row[0]  # MAX() returns None on empty table
 
 
 def get_source_counts(conn: sqlite3.Connection, hours: int = 24) -> list[dict]:

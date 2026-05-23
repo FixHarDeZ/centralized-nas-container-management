@@ -94,3 +94,32 @@ def test_insert_and_get_digest_log(db, sample_article):
     assert len(history) == 1
     assert history[0]["article_ids"] == ["abc123"]
     assert history[0]["channels"] == "line,telegram"
+
+
+def test_get_recent_articles_no_summary(db, sample_article):
+    insert_article(db, sample_article)
+    # summary_th is NULL — should not appear in digest
+    results = get_recent_articles_for_digest(db, hours=9999, limit=10)
+    assert results == []
+
+
+def test_get_recent_articles_with_summary(db, sample_article):
+    insert_article(db, sample_article)
+    update_article_summary(db, "abc123", "สรุปทดสอบ")
+    results = get_recent_articles_for_digest(db, hours=9999, limit=10)
+    assert len(results) == 1
+    assert results[0]["id"] == "abc123"
+    assert results[0]["summary_th"] == "สรุปทดสอบ"
+
+
+def test_get_recent_articles_respects_limit(db):
+    for i in range(5):
+        art = {
+            "id": f"id{i}", "source": "techcrunch_ai", "title": f"Title {i}",
+            "url": f"https://example.com/{i}", "published": "2026-05-23T07:00:00",
+            "fetched_at": "2026-05-23T07:01:00",
+        }
+        insert_article(db, art)
+        update_article_summary(db, f"id{i}", "สรุป")
+    results = get_recent_articles_for_digest(db, hours=9999, limit=3)
+    assert len(results) == 3
