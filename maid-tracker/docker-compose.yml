@@ -3,14 +3,39 @@ services:
     build: .
     container_name: maid-tracker
     restart: unless-stopped
-    ports:
-      - "5055:8000"
+    expose:
+      - "8000"
     volumes:
       - maid_tracker_data:/data
     env_file: .env
     environment:
       - TZ=Asia/Bangkok
       - DATA_DIR=/data
+    networks:
+      - default
+
+  maid-nginx:
+    image: nginx:alpine
+    container_name: maid-tracker-nginx
+    restart: unless-stopped
+    ports:
+      - "5055:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    environment:
+      - TZ=Asia/Bangkok
+    depends_on:
+      - maid-tracker
+    networks:
+      - default
+      - auth_net
 
 volumes:
   maid_tracker_data:
+
+networks:
+  default:
+    driver: bridge
+  auth_net:
+    external: true
+    name: auth_net
