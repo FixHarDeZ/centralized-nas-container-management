@@ -1,0 +1,38 @@
+# news-feed
+
+AI & IT news feed bot with Thai summaries. Fetches RSS from 7 sources, summarises via Claude or DeepSeek (OpenRouter), sends digest to LINE + Telegram, serves a dashboard at port 5064.
+
+## Setup
+
+1. Copy and fill env:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Fill in `.env`: at minimum `ANTHROPIC_API_KEY` (or `OPENROUTER_API_KEY` + set `SUMMARIZER_PROVIDER=openrouter`), `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_USER_ID`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
+
+3. Deploy:
+   ```bash
+   scripts/deploy.sh -s news-feed
+   ```
+
+## Dashboard
+
+`http://<NAS_HOST>:5064` — Source Health, News Timeline, AI Price Tracker, Leaderboard, Digest History, Schedule Config.
+
+## Switch LLM Model
+
+Via dashboard → Schedule Config → set Provider + Model → Save.
+Or via API:
+```bash
+curl -X POST http://<NAS_HOST>:5064/api/schedule \
+  -H 'Content-Type: application/json' \
+  -d '{"summarizer_provider":"openrouter","summarizer_model":"deepseek/deepseek-chat"}'
+```
+
+## Manual Digest Trigger
+
+```bash
+curl -X POST http://<NAS_HOST>:5064/api/digest/trigger \
+  -H "X-Admin-Token: <ADMIN_TOKEN>"
+```

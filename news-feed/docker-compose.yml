@@ -1,0 +1,15 @@
+services:
+  news-feed:
+    build: .
+    container_name: news-feed
+    restart: unless-stopped
+    ports:
+      - "5064:8000"
+    env_file: .env
+    environment:
+      - TZ=Asia/Bangkok
+    volumes:
+      - news_feed_data:/data
+
+volumes:
+  news_feed_data:
