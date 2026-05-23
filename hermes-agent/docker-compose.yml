@@ -1,0 +1,37 @@
+services:
+  hermes-gateway:
+    build:
+      context: .
+      args:
+        HERMES_REF: main
+    image: hermes-agent
+    container_name: hermes-gateway
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - TZ=Asia/Bangkok
+      - HERMES_UID=${HERMES_UID:-1000}
+      - HERMES_GID=${HERMES_GID:-100}
+    volumes:
+      - hermes_agent_data:/opt/data
+    command: ["gateway", "run"]
+
+  hermes-dashboard:
+    image: hermes-agent
+    container_name: hermes-dashboard
+    restart: unless-stopped
+    depends_on:
+      - hermes-gateway
+    env_file: .env
+    environment:
+      - TZ=Asia/Bangkok
+      - HERMES_UID=${HERMES_UID:-1000}
+      - HERMES_GID=${HERMES_GID:-100}
+    ports:
+      - "5063:9119"
+    volumes:
+      - hermes_agent_data:/opt/data
+    command: ["dashboard", "--host", "0.0.0.0", "--no-open"]
+
+volumes:
+  hermes_agent_data:
