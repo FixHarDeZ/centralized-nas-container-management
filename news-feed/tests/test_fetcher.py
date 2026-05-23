@@ -34,6 +34,14 @@ def test_fetch_all_inserts_new_articles(mock_parse, mock_get, mock_summarize, tm
     new_ids = fetch_all(db_path, base_config)
     assert len(new_ids) == 1
 
+    from app.models import get_conn as _get_conn, get_article
+    conn2 = _get_conn(db_path)
+    row = get_article(conn2, new_ids[0])
+    conn2.close()
+    assert row is not None
+    assert row["url"] == "https://example.com/1"
+    assert row["summary_th"] == "สรุปทดสอบ"
+
 
 @patch("app.fetcher.summarize", return_value="สรุปทดสอบ")
 @patch("app.fetcher.httpx.get")
