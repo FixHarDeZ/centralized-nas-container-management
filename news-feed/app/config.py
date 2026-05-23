@@ -14,7 +14,10 @@ SOURCES: dict[str, str] = {
 
 DATA_DIR = Path(os.getenv("DATA_DIR", "/data"))
 DB_PATH = str(DATA_DIR / "news.db")
-_SCHEDULE_FILE = DATA_DIR / "schedule.json"
+
+
+def _schedule_file() -> Path:
+    return Path(os.getenv("DATA_DIR", "/data")) / "schedule.json"
 
 
 def _env_defaults() -> dict:
@@ -27,14 +30,16 @@ def _env_defaults() -> dict:
 
 
 def get_config() -> dict:
-    if _SCHEDULE_FILE.exists():
-        return json.loads(_SCHEDULE_FILE.read_text())
+    sf = _schedule_file()
+    if sf.exists():
+        return json.loads(sf.read_text())
     return _env_defaults()
 
 
 def update_config(data: dict) -> dict:
     current = get_config()
     current.update(data)
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    _SCHEDULE_FILE.write_text(json.dumps(current, indent=2))
+    data_dir = Path(os.getenv("DATA_DIR", "/data"))
+    data_dir.mkdir(parents=True, exist_ok=True)
+    _schedule_file().write_text(json.dumps(current, indent=2))
     return current
