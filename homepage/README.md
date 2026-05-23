@@ -4,7 +4,7 @@
 
 Dashboard UI for the home lab, powered by [gethomepage/homepage](https://gethomepage.dev).
 
-**Local URL:** `https://<NAS_IP>:3000` (HTTPS + HTTP Basic Auth via Nginx)
+**Local URL:** `https://<NAS_IP>:3000` (HTTPS + Authelia SSO via Nginx)
 **External URL:** `https://<NAS_HOST>` (port 443, via Synology Reverse Proxy → Nginx → Homepage)
 
 ## File Structure
@@ -13,7 +13,7 @@ Dashboard UI for the home lab, powered by [gethomepage/homepage](https://gethome
 homepage/
 ├── docker-compose.yml
 ├── nginx/
-│   └── nginx.conf        ← Nginx reverse proxy + Basic Auth config
+│   └── nginx.conf        ← Nginx reverse proxy + Authelia forward-auth config
 └── config/
     ├── settings.yaml     ← theme, layout
     ├── widgets.yaml      ← top bar: datetime, search, resources
@@ -34,18 +34,17 @@ cp .env.example .env
 
 Then upload to the NAS with `deploy.sh` from the project root.
 
-## HTTPS + HTTP Basic Auth
+## HTTPS + Authelia SSO
 
-Access to the homepage is protected by Nginx with TLS and HTTP Basic Auth.
+Access to the homepage is protected by Nginx with TLS and Authelia SSO forward-auth.
 
 | Item | Detail |
 |------|--------|
-| Credentials | Set `NGINX_BASIC_AUTH_USER` and `NGINX_BASIC_AUTH_PASS` in root `.env` |
-| Hash generation | `htpasswd` runs automatically on container startup — no manual hashing needed |
+| Authentication | Authelia SSO forward-auth — managed by the `auth/` stack |
 | Port layout | Nginx listens on **443 SSL**, exposed on host port **3000**; homepage is internal-only |
 | TLS certificate | Synology default cert mounted from `/usr/syno/etc/certificate/system/default/` — uses `RSA-cert.pem` / `RSA-privkey.pem` |
 
-To change the password: update root `.env` and restart the stack (`docker compose down && docker compose up -d`).
+The `auth/` stack must be running before starting homepage (provides `auth_net` network and Authelia endpoint).
 
 ### Host Validation
 

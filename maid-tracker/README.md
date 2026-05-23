@@ -6,7 +6,7 @@ Household staff attendance & salary tracking system — Single-Page Application 
 
 ![Maid Tracker](../screenshots/maid-tracker.png)
 
-**Local URL:** `http://<NAS_IP>:5055`
+**Local URL:** `http://<NAS_IP>:5055` (via nginx sidecar with Authelia forward-auth — direct container access no longer available)
 **External URL:** `https://<NAS_HOST>:5056` (via Synology Reverse Proxy)
 
 ## Stack
@@ -16,18 +16,18 @@ Household staff attendance & salary tracking system — Single-Page Application 
 | Backend | FastAPI (Python 3.12) |
 | Database | SQLite (persisted in named volume) |
 | Frontend | Vanilla JS + Bootstrap 5 (SPA, hash-based routing) |
-| Host port | `5055` → container `8000` |
+| Host port | `5055` → nginx sidecar (Authelia forward-auth) → container `8000` |
 
 ## Ports & Reverse Proxy
 
 | Layer | Detail |
 |---|---|
-| Container | HTTP on port `8000` |
-| Host port | `5055` (plain HTTP, LAN only) |
+| Container | HTTP on port `8000` (internal only — not directly accessible) |
+| Nginx sidecar | Port `5055` on host → Authelia forward-auth → container `8000` |
 | Synology Reverse Proxy | `https://…:5056` → `http://localhost:5055` |
 | Router port forward | External `5056` → NAS `5056` |
 
-TLS is terminated by Synology Reverse Proxy — the container itself runs plain HTTP. The public HTTPS URL is also required for LINE webhook delivery (see [Webhook Setup](#webhook-setup)).
+TLS is terminated by Synology Reverse Proxy — the nginx sidecar handles Authelia forward-auth, then proxies to the FastAPI container. The `auth/` stack must be running first (provides the `auth_net` network). The public HTTPS URL is also required for LINE webhook delivery (see [Webhook Setup](#webhook-setup)).
 
 ## Features
 
@@ -390,7 +390,7 @@ reminders (
 | Backend | FastAPI (Python 3.12) |
 | Database | SQLite (persisted ใน named volume) |
 | Frontend | Vanilla JS + Bootstrap 5 (SPA, hash-based routing) |
-| Port | 5055 → container 8000 |
+| Port | 5055 → nginx sidecar (Authelia forward-auth) → container 8000 |
 
 ## Features
 
