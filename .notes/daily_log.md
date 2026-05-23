@@ -2,6 +2,44 @@
 
 ---
 
+## 2026-05-23 (ช่วงที่ 2) — Telegram support: watchtower + line-secretary
+
+### งานที่ทำ
+
+#### 1. Watchtower notifier — เพิ่ม Telegram
+- เพิ่ม `send_telegram()` + `notify()` helper ใน `notifier.py`
+- `notify()` ส่งทั้ง LINE และ Telegram พร้อมกันทุก event (session start, update, done, error)
+- Token ใช้ bot เดียวกับ TorrentWatch (`TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`)
+
+#### 2. Line-secretary — เพิ่ม Telegram bot webhook
+- สร้าง `telegram_client.py` — `send()` แบบ async + `set_webhook()` register กับ Telegram
+- อัปเดต `config.py` เพิ่ม `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_URL`, `TELEGRAM_ALLOWED_CHAT_IDS`
+- เพิ่ม `/webhook/telegram` endpoint ใน `main.py` — รับข้อความจาก Telegram แล้วผ่าน agent เดิมทั้งหมด (note flow, pending confirm, history, LLM)
+- Startup `lifespan` เรียก `set_webhook()` อัตโนมัติถ้า token + URL ตั้งค่าไว้
+- Webhook URL ต้องเป็น port 443/80/88/8443 เท่านั้น (Telegram limitation) → ใช้ port 8443
+
+#### 3. Fix deploy.sh — .env upload bug
+- บน macOS bsdtar `--exclude='./.env'` match `.env` ทุก level ไม่ใช่แค่ root
+- แก้: exclude `.env` จาก tar ทั้งหมด แล้ว upload per-stack `.env` แยกชัดเจนหลัง tar extract
+- ทุก stack `.env` ถูก push ขึ้น NAS อย่างถูกต้องและตรวจสอบได้
+
+### ไฟล์ที่เปลี่ยน
+- `watchtower/notifier/notifier.py`
+- `watchtower/.env`, `watchtower/.env.example`
+- `line-secretary/telegram_client.py` (ใหม่)
+- `line-secretary/config.py`, `line-secretary/main.py`
+- `line-secretary/.env`, `line-secretary/.env.example`
+- `scripts/deploy.sh` (fix bsdtar .env exclude + per-stack upload)
+
+### Setup ที่ต้องทำบน NAS (one-time)
+- Synology RP: `https://<NAS_HOST>:8443` → `http://localhost:5057` (line-secretary Telegram webhook)
+
+### สถานะ
+- Watchtower Telegram ✅ ทำงานแล้ว
+- Line-secretary Telegram webhook ✅ registered (HTTP 200) — รอ user ทดสอบ
+
+---
+
 ## 2026-05-23 — Homepage widgets fix + Per-stack .env refactor + Watchtower 429 fix
 
 ### งานที่ทำ

@@ -143,11 +143,12 @@ if [[ "$RESTART_ONLY" == false ]]; then
   # macOS versions and NAS firmware. Files are piped in a single SSH session
   # reusing the mux master established above.
   #
-  # Note: only the ROOT .env is excluded (deploy/script secrets stay local).
-  # Per-stack <stack>/.env files ARE uploaded so containers can read them.
+  # All .env files are excluded from the tar because macOS bsdtar treats
+  # --exclude='./.env' as a glob that matches .env at ANY depth, not just root.
+  # Instead, per-stack .env files are uploaded explicitly after the tar step.
   TAR_EXCLUDES=(
     --exclude='./.git'
-    --exclude='./.env'
+    --exclude='.env'
     --exclude='./__pycache__'
     --exclude='./*.pyc'
     --exclude='./*.pyo'
@@ -174,6 +175,18 @@ if [[ "$RESTART_ONLY" == false ]]; then
       | ssh $SSH_OPTS "${SSH_DEST}" "cat > '${TMP_TAR}'"
     ssh $SSH_OPTS "${SSH_DEST}" \
       "bash -lc \"echo '${NAS_SUDO_PASSWORD}' | sudo -S bash -c 'mkdir -p \\\"${NAS_TARGET_PATH}\\\" && tar -xzf \\\"${TMP_TAR}\\\" -C \\\"${NAS_TARGET_PATH}\\\" --no-same-permissions --no-same-owner 2>/dev/null && rm -f \\\"${TMP_TAR}\\\"'\""
+
+    log "Uploading per-stack .env files ..."
+    for stack in "${ALL_STACKS[@]}"; do
+      local_env="${PROJECT_ROOT}/${stack}/.env"
+      if [[ -f "$local_env" ]]; then
+        TMP_ENV="/tmp/nas_env_${stack}_$$"
+        ssh $SSH_OPTS "${SSH_DEST}" "cat > '${TMP_ENV}'" < "$local_env"
+        ssh $SSH_OPTS "${SSH_DEST}" \
+          "bash -lc \"echo '${NAS_SUDO_PASSWORD}' | sudo -S cp '${TMP_ENV}' '${NAS_TARGET_PATH}/${stack}/.env' && rm -f '${TMP_ENV}'\""
+        dim "$stack/.env"
+      fi
+    done
     ok "Upload complete ($(elapsed))"
   fi
 fi
