@@ -29,7 +29,7 @@ news-feed/
     ├── main.py          # FastAPI app + lifespan startup (mounts static, registers scheduler)
     ├── scheduler.py     # APScheduler jobs: fetch_job, price_job, digest_job
     ├── fetcher.py       # feedparser RSS reader; deduplicates by URL sha256
-    ├── summarizer.py    # Anthropic SDK call; returns Thai summary string
+    ├── summarizer.py    # routes to Anthropic SDK or OpenRouter based on SUMMARIZER_PROVIDER
     ├── notifier.py      # LINE Messaging API push + Telegram Bot API send
     ├── pricer.py        # httpx GET openrouter.ai JSON API → parse model list
     ├── models.py        # sqlite3 init_db(), helper functions (no ORM)
@@ -141,14 +141,26 @@ SELECT articles WHERE fetched_at >= NOW()-6h AND summary_th IS NOT NULL
   → INSERT digest_log
 ```
 
-### Claude Summarization
+### Summarization
 
-- **Model:** `claude-sonnet-4-6`
-- **Max tokens:** 300
-- **Prompt caching:** system prompt cached (ephemeral cache)
-- **System prompt:** (cached) "คุณคือผู้ช่วยสรุปข่าวเทคโนโลยีเป็นภาษาไทย กระชับ อ่านง่าย"
-- **User prompt:** `สรุปบทความนี้ 2-3 ประโยค:\nTitle: {title}\nContent: {body[:1500]}`
-- **Retry:** exponential backoff 3x on rate limit / 5xx
+`summarizer.py` routes based on `SUMMARIZER_PROVIDER` (from `/data/schedule.json`, falling back to env var):
+
+**Provider: `anthropic`** (default)
+- Uses Anthropic Python SDK
+- Model: value of `SUMMARIZER_MODEL` (e.g. `claude-sonnet-4-6`)
+- Prompt caching: system prompt cached (ephemeral cache, cuts cost on repeated calls)
+
+**Provider: `openrouter`**
+- Uses `httpx` POST to `https://openrouter.ai/api/v1/chat/completions` (OpenAI-compatible)
+- Model: value of `SUMMARIZER_MODEL` (e.g. `deepseek/deepseek-chat`, `meta-llama/llama-3.3-70b-instruct`)
+- Header: `Authorization: Bearer {OPENROUTER_API_KEY}`, `HTTP-Referer: news-feed-nas`
+
+**Shared prompt (both providers):**
+- System: `"คุณคือผู้ช่วยสรุปข่าวเทคโนโลยีเป็นภาษาไทย กระชับ อ่านง่าย"`
+- User: `สรุปบทความนี้ 2-3 ประโยค:\nTitle: {title}\nContent: {body[:1500]}`
+- Max tokens: 300
+
+**Retry:** exponential backoff 3x on rate limit / 5xx for both providers
 
 ---
 
@@ -186,7 +198,7 @@ Single-page app at `/`. Served by FastAPI `StaticFiles`. No build step. Chart.js
 
 5. **Digest History** — timeline of past digest sends; click entry to see article list for that digest.
 
-6. **Schedule Config** — edit digest times (inline time inputs). Toggle enabled/disabled per source. Save button → `POST /api/schedule`.
+6. **Schedule Config** — edit digest times (inline time inputs). Toggle enabled/disabled per source. **Model selector**: provider dropdown (`anthropic` / `openrouter`) + model text input (e.g. `deepseek/deepseek-chat`). Save button → `POST /api/schedule`.
 
 Footer: Last digest time + manual `[Trigger Digest]` button (calls `POST /api/digest/trigger` with admin token stored in sessionStorage).
 
@@ -209,6 +221,12 @@ TELEGRAM_CHAT_ID=...
 # Admin
 ADMIN_TOKEN=...
 
+# Summarizer — provider: "anthropic" or "openrouter"
+SUMMARIZER_PROVIDER=anthropic
+SUMMARIZER_MODEL=claude-sonnet-4-6
+# Required only if SUMMARIZER_PROVIDER=openrouter:
+OPENROUTER_API_KEY=sk-or-...
+
 # Schedule (Bangkok time, comma-separated HH:MM)
 DIGEST_TIMES=07:00,12:00,18:00
 
@@ -220,7 +238,7 @@ DATA_DIR=/data
 TZ=Asia/Bangkok
 ```
 
-Schedule config (digest times + enabled sources) is persisted to `/data/schedule.json` so POST changes survive restarts. `.env` values are defaults only.
+Schedule config (digest times, enabled sources, **summarizer provider + model**) is persisted to `/data/schedule.json` so POST changes survive restarts. `.env` values are defaults on first boot only.
 
 ---
 
