@@ -87,7 +87,7 @@ async function loadPrices() {
   const params = new URLSearchParams({ sort });
   if (provider) params.set('provider', provider);
   allPrices = await api('/api/prices?' + params);
-  if (!document.getElementById('price-provider-filter').options.length > 1) {
+  if (document.getElementById('price-provider-filter').options.length <= 1) {
     const providers = [...new Set(allPrices.map(p=>p.provider))];
     const sel = document.getElementById('price-provider-filter');
     sel.innerHTML = '<option value="">All providers</option>' + providers.map(p=>`<option value="${p}">${p}</option>`).join('');
@@ -152,13 +152,20 @@ async function saveSchedule() {
   const sources = [...document.querySelectorAll('#source-toggles input:checked')].map(i=>i.value);
   const provider = document.getElementById('cfg-provider').value;
   const model = document.getElementById('cfg-model').value;
-  await fetch('/api/schedule', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({ digest_times: times, enabled_sources: sources, summarizer_provider: provider, summarizer_model: model }),
-  });
-  document.getElementById('save-status').textContent = '✓ Saved';
-  setTimeout(()=>document.getElementById('save-status').textContent='', 2000);
+  try {
+    const r = await fetch('/api/schedule', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ digest_times: times, enabled_sources: sources, summarizer_provider: provider, summarizer_model: model }),
+    });
+    if (!r.ok) throw new Error(r.status);
+    document.getElementById('save-status').textContent = '✓ Saved';
+    document.getElementById('save-status').style.color = '#22c55e';
+  } catch(e) {
+    document.getElementById('save-status').textContent = '✗ Save failed';
+    document.getElementById('save-status').style.color = '#ef4444';
+  }
+  setTimeout(()=>document.getElementById('save-status').textContent='', 3000);
 }
 
 // Init
