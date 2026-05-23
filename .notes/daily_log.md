@@ -2,6 +2,23 @@
 
 ---
 
+---
+
+## 2026-05-23 — hermes-agent stack + line-secretary Telegram cleanup
+
+- สร้าง `hermes-agent/` stack: containerize official NousResearch/hermes-agent
+  - 2 services: `hermes-gateway` (Telegram + Discord, outbound polling) + `hermes-dashboard` (port 5063)
+  - Dockerfile clones repo from GitHub at build time (ARG HERMES_REF=main, pinnable to tag)
+  - UID 10000 inside container, remapped to 1000/100 (Synology admin) at runtime via gosu
+  - Ports 5060/5061 blocked by browsers (SIP) → ใช้ port 5063 แทน
+- Strip Telegram จาก `line-secretary` (3 commits):
+  - ลบ TELEGRAM_* fields จาก config.py
+  - ลบ import, lifespan call, _push_tg, /webhook/telegram, handle_telegram_message จาก main.py
+  - ลบ telegram_client.py + อัปเดต .env.example
+  - line-secretary เหลือแค่ LINE-only
+
+---
+
 ## 2026-05-23 (ช่วงที่ 3) — Debug & deploy Telegram bot (line-secretary)
 
 ### งานที่ทำ
