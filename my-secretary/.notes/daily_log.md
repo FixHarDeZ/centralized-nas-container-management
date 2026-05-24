@@ -1,4 +1,43 @@
-# Daily Log — line-secretary
+# Daily Log — my-secretary
+
+## 2026-05-24
+
+### เพิ่ม Telegram support + rename line-secretary → my-secretary
+
+**Rename (ก่อนหน้า session นี้)**
+- `git mv line-secretary my-secretary` — เปลี่ยนชื่อ folder + service + volume + container
+- อัปเดต `scripts/deploy.sh` ALL_STACKS, `CLAUDE.md`, `.notes/00_INDEX.md`
+
+**Telegram support — ไฟล์ที่เปลี่ยน:**
+
+`my-secretary/telegram_client.py` (ใหม่)
+- `send_message(chat_id, text, token)` — POST to Telegram API, split ที่ 4096 chars
+- `register_webhook(token, url, secret_token)` — POST to `setWebhook`
+
+`my-secretary/config.py`
+- เพิ่ม 4 env ใหม่: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_URL`, `TELEGRAM_WEBHOOK_SECRET`, `TELEGRAM_ALLOWED_CHAT_IDS`
+- เพิ่ม property `telegram_allowed_chat_ids` → `set[str]`
+
+`my-secretary/main.py`
+- **Refactor `_push_long(user_id, text, token)` → `_push_long(text, push_fn)`** — platform-agnostic
+- **Refactor `handle_message(event)` → `handle_message(user_id, text, push_fn)`** — LINE whitelist check ข้ามสำหรับ `tg_` prefix
+- **Refactor `handle_non_text_message`** รับ `(user_id, msg, push_fn, download_fn=None)`
+- LINE webhook: เปลี่ยนมาสร้าง `push_fn = lambda t: line_client.push(_uid, t, token)` แล้วส่งเข้า `handle_message`
+- เพิ่ม `POST /webhook/telegram`: validate `X-Telegram-Bot-Api-Secret-Token`, check whitelist, dispatch `handle_message("tg_{chat_id}", text, push_fn)`
+- lifespan: เรียก `telegram_client.register_webhook()` ถ้า token + url ตั้งไว้
+
+`my-secretary/.env.example`, `my-secretary/README.md`, `README.md`
+- เพิ่ม Telegram section
+
+**Tests:** 38/38 passed (เพิ่ม 11 test ใหม่)
+- `test_send_message_short`, `test_send_message_splits_at_4096`, `test_register_webhook`
+- `test_telegram_allowed_chat_ids_parsed/empty`
+- webhook endpoint: wrong secret (403), missing secret (403), no message (200), no text (200), unauthorized chat (200), dispatches handle_message
+
+**ผลกระทบข้างเคียง**
+- `agent.py` + `store.py`: เพิ่ม `from __future__ import annotations` เพื่อแก้ Python 3.9 compat บน macOS dev machine (Python 3.12 บน NAS ไม่มีปัญหา)
+- `tests/conftest.py`: เพิ่ม `DATA_DIR` → tempdir, Telegram env defaults
+- `tests/test_quick_wins.py`: อัปเดต `test_push_long_*` ให้ตรงกับ signature ใหม่
 
 ## 2026-05-20
 
