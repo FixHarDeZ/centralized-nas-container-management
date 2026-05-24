@@ -66,33 +66,33 @@ async def test_force_refresh_replaces_stale_pages():
 
 @pytest.mark.asyncio
 async def test_push_long_short_text_single_call():
-    with patch("line_client.push", new_callable=AsyncMock) as mock_push:
-        await main._push_long("U1", "สั้นๆ", "tok")
-    mock_push.assert_called_once_with("U1", "สั้นๆ", "tok")
+    mock_push = AsyncMock()
+    await main._push_long("สั้นๆ", mock_push)
+    mock_push.assert_called_once_with("สั้นๆ")
 
 
 @pytest.mark.asyncio
 async def test_push_long_exactly_at_limit_single_call():
-    with patch("line_client.push", new_callable=AsyncMock) as mock_push:
-        text = "x" * 4000
-        await main._push_long("U1", text, "tok", max_len=4000)
+    mock_push = AsyncMock()
+    text = "x" * 4000
+    await main._push_long(text, mock_push, max_len=4000)
     mock_push.assert_called_once()
-    assert len(mock_push.call_args[0][1]) == 4000
+    assert len(mock_push.call_args[0][0]) == 4000
 
 
 @pytest.mark.asyncio
 async def test_push_long_over_limit_splits():
-    with patch("line_client.push", new_callable=AsyncMock) as mock_push:
-        text = "x" * 8001
-        await main._push_long("U1", text, "tok", max_len=4000)
+    mock_push = AsyncMock()
+    text = "x" * 8001
+    await main._push_long(text, mock_push, max_len=4000)
     assert mock_push.call_count == 3
-    assert len(mock_push.call_args_list[0][0][1]) == 4000
-    assert len(mock_push.call_args_list[1][0][1]) == 4000
-    assert len(mock_push.call_args_list[2][0][1]) == 1
+    assert len(mock_push.call_args_list[0][0][0]) == 4000
+    assert len(mock_push.call_args_list[1][0][0]) == 4000
+    assert len(mock_push.call_args_list[2][0][0]) == 1
 
 
 @pytest.mark.asyncio
 async def test_push_long_empty_string():
-    with patch("line_client.push", new_callable=AsyncMock) as mock_push:
-        await main._push_long("U1", "", "tok")
-    mock_push.assert_called_once_with("U1", "", "tok")
+    mock_push = AsyncMock()
+    await main._push_long("", mock_push)
+    mock_push.assert_called_once_with("")
