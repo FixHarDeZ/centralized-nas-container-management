@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, patch
 import telegram_client
+from config import Settings
 
 
 @pytest.mark.asyncio
@@ -49,3 +50,24 @@ async def test_register_webhook():
             timeout=15,
         )
         mock_resp.raise_for_status.assert_called_once()
+
+
+def test_telegram_allowed_chat_ids_parsed():
+    s = Settings(
+        LINE_SECRETARY_CHANNEL_SECRET="s",
+        LINE_SECRETARY_CHANNEL_ACCESS_TOKEN="t",
+        LINE_SECRETARY_ALLOWED_USER_IDS="U1",
+        NOTION_TOKEN="n",
+        TELEGRAM_ALLOWED_CHAT_IDS="111,222, 333",
+    )
+    assert s.telegram_allowed_chat_ids == {"111", "222", "333"}
+
+
+def test_telegram_allowed_chat_ids_empty():
+    s = Settings(
+        LINE_SECRETARY_CHANNEL_SECRET="s",
+        LINE_SECRETARY_CHANNEL_ACCESS_TOKEN="t",
+        LINE_SECRETARY_ALLOWED_USER_IDS="U1",
+        NOTION_TOKEN="n",
+    )
+    assert s.telegram_allowed_chat_ids == set()
