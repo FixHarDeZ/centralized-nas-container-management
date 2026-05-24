@@ -1,5 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, patch
+from fastapi.testclient import TestClient
 import telegram_client
 from config import Settings
 
@@ -69,5 +70,95 @@ def test_telegram_allowed_chat_ids_empty():
         LINE_SECRETARY_CHANNEL_ACCESS_TOKEN="t",
         LINE_SECRETARY_ALLOWED_USER_IDS="U1",
         NOTION_TOKEN="n",
+        TELEGRAM_ALLOWED_CHAT_IDS="",  # explicitly empty, ignores env
     )
     assert s.telegram_allowed_chat_ids == set()
+
+
+# ── Telegram webhook endpoint tests ───────────────────────────────────────────
+
+import main
+
+
+@pytest.fixture
+def client():
+    with TestClient(main.app) as c:
+        yield c
+
+
+def _tg_payload(chat_id: int, text: str) -> dict:
+    return {
+        "update_id": 1,
+        "message": {
+            "message_id": 1,
+            "chat": {"id": chat_id, "type": "private"},
+            "text": text,
+        },
+    }
+
+
+def test_telegram_webhook_wrong_secret(client):
+    resp = client.post(
+        "/webhook/telegram",
+        json=_tg_payload(9999, "hello"),
+        headers={"X-Telegram-Bot-Api-Secret-Token": "WRONG"},
+    )
+    assert resp.status_code == 403
+
+
+def test_telegram_webhook_missing_secret(client):
+    resp = client.post("/webhook/telegram", json=_tg_payload(9999, "hello"))
+    assert resp.status_code == 403
+
+
+def test_telegram_webhook_no_message(client):
+    resp = client.post(
+        "/webhook/telegram",
+        json={"update_id": 1},
+        headers={"X-Telegram-Bot-Api-Secret-Token": "test_tg_secret"},
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True}
+
+
+def test_telegram_webhook_no_text(client):
+    payload = {
+        "update_id": 1,
+        "message": {
+            "message_id": 1,
+            "chat": {"id": 9999, "type": "private"},
+            "sticker": {"file_id": "abc"},
+        },
+    }
+    resp = client.post(
+        "/webhook/telegram",
+        json=payload,
+        headers={"X-Telegram-Bot-Api-Secret-Token": "test_tg_secret"},
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True}
+
+
+def test_telegram_webhook_unauthorized_chat(client):
+    resp = client.post(
+        "/webhook/telegram",
+        json=_tg_payload(8888, "hello"),  # 8888 not in allowed list (only 9999)
+        headers={"X-Telegram-Bot-Api-Secret-Token": "test_tg_secret"},
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True}
+
+
+def test_telegram_webhook_dispatches_handle_message(client):
+    with patch("main.handle_message", new_callable=AsyncMock) as mock_handle:
+        resp = client.post(
+            "/webhook/telegram",
+            json=_tg_payload(9999, "สวัสดีค่ะ"),
+            headers={"X-Telegram-Bot-Api-Secret-Token": "test_tg_secret"},
+        )
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True}
+    mock_handle.assert_called_once()
+    call_args = mock_handle.call_args
+    assert call_args.args[0] == "tg_9999"
+    assert call_args.args[1] == "สวัสดีค่ะ"

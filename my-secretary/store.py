@@ -13,6 +13,8 @@ No threading lock needed — FastAPI handles one event loop; concurrency here
 is negligible for a personal bot.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import os
