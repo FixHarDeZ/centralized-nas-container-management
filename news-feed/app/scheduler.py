@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -30,7 +30,10 @@ def setup_scheduler(db_path: str) -> BackgroundScheduler:
         config = get_config()
         conn = get_conn(db_path)
         try:
-            articles = get_recent_articles_for_digest(conn, hours=6, limit=5)
+            history = get_digest_history(conn, limit=20)
+            sent_ids = {aid for entry in history for aid in entry["article_ids"]}
+            candidates = get_recent_articles_for_digest(conn, hours=6, limit=20)
+            articles = [a for a in candidates if a["id"] not in sent_ids][:5]
             sent = send_digest(articles, config)
             if sent and articles:
                 insert_digest_log(
@@ -51,6 +54,7 @@ def setup_scheduler(db_path: str) -> BackgroundScheduler:
         id="fetch_job",
         replace_existing=True,
         max_instances=1,
+        next_run_time=datetime.now(timezone.utc) + timedelta(seconds=5),
     )
 
     scheduler.add_job(

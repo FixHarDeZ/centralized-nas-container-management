@@ -116,7 +116,7 @@ if ! ssh $SSH_OPTS "${SSH_DEST}" "echo OK" &>/dev/null; then
 fi
 ok "Connection OK"
 
-ALL_STACKS=(auth torrentwatch line-secretary homepage jellyfin maid-tracker portainer uptime-kuma watchtower hermes-agent)
+ALL_STACKS=(news-feed torrentwatch line-secretary homepage jellyfin maid-tracker portainer uptime-kuma watchtower hermes-agent)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # UPLOAD
@@ -187,6 +187,17 @@ if [[ "$RESTART_ONLY" == false ]]; then
         dim "$stack/.env"
       fi
     done
+
+    # nginx .htpasswd files must be world-readable (644) so the nginx worker
+    # process can open them. tar extraction with --no-same-permissions can
+    # leave them as 600 (root-only), causing a 500 Permission denied error.
+    log "Fixing .htpasswd permissions ..."
+    for stack in "${ALL_STACKS[@]}"; do
+      htpasswd_file="${NAS_TARGET_PATH}/${stack}/nginx/.htpasswd"
+      ssh $SSH_OPTS "${SSH_DEST}" \
+        "bash -lc \"echo '${NAS_SUDO_PASSWORD}' | sudo -S bash -c '[ -f \\\"${htpasswd_file}\\\" ] && chmod 644 \\\"${htpasswd_file}\\\"'\"" 2>/dev/null || true
+    done
+
     ok "Upload complete ($(elapsed))"
   fi
 fi

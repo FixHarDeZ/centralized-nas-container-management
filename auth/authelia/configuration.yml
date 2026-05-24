@@ -1,5 +1,6 @@
 server:
-  address: 'tcp://0.0.0.0:9091'
+  host: 0.0.0.0
+  port: 9091
 
 log:
   level: 'info'
@@ -8,28 +9,20 @@ authentication_backend:
   file:
     path: '/config/users_database.yml'
     password:
-      algorithm: argon2
-      argon2:
-        iterations: 3
-        memory: 65536
-        parallelism: 4
-        key_length: 32
-        salt_length: 16
+      algorithm: 'argon2id'
+      iterations: 3
+      memory: 65536
+      parallelism: 4
+      key_length: 32
+      salt_length: 16
 
 access_control:
-  default_policy: 'deny'
-  rules:
-    - domain: '<NAS_HOST>'
-      policy: 'one_factor'
+  default_policy: 'one_factor'
 
 session:
   name: 'authelia_session'
   expiration: '12h'
   inactivity: '45m'
-  cookies:
-    - domain: '<NAS_HOST>'
-      authelia_url: 'http://<NAS_HOST>:9091'
-      default_redirection_url: 'http://<NAS_HOST>:3000'
 
 storage:
   local:

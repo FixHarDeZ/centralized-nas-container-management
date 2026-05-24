@@ -2,7 +2,7 @@
 
 **สร้าง:** 2026-05-23  
 **Ports:** 9091 (Authelia) / 8222 (Vaultwarden)  
-**Status:** Complete — รอ one-time setup ก่อน deploy
+**Status:** ⚠️ ถอดออกจาก deploy pipeline แล้ว (2026-05-24) — Vaultwarden ยังทำงานบน NAS, Authelia ถูกตัดออก
 
 ---
 
@@ -20,9 +20,10 @@ Docker network `auth_net` (bridge) — stack อื่น join ผ่าน `ext
 
 | File | Responsibility |
 |------|---------------|
-| `docker-compose.yml` | 2 services + auth_net, watchtower disabled ทั้งคู่ |
-| `authelia/configuration.yml` | Authelia config (default_policy: deny, session, storage, notifier) |
-| `authelia/users_database.yml` | User list + Argon2 password hashes |
+| `docker-compose.yml` | 2 services + auth_net, pin Authelia 4.37.5, watchtower disabled ทั้งคู่ |
+| `authelia/entrypoint.sh` | exec authelia โดยตรง (ไม่มี sed แล้ว) |
+| `authelia/configuration.yml` | Authelia 4.37 format: server.host/port, ไม่มี session.domain (cookie scoped ตาม access host) |
+| `authelia/users_database.yml` | User list + Argon2id password hashes |
 | `.env.example` | Secrets template |
 
 ---
@@ -46,21 +47,23 @@ Docker network `auth_net` (bridge) — stack อื่น join ผ่าน `ext
 | `maid-tracker/` | maid-nginx | 5055 |
 
 Pattern nginx config:
+
 ```nginx
 auth_request /authelia;
-error_page 401 =302 http://<NAS_HOST>:9091;
+error_page 401 =302 http://<AUTHELIA_HOST>:9091;   # ใช้ IP ตรง ไม่ใช้ DDNS domain
 ```
+
+`AUTHELIA_HOST` ตั้งในแต่ละ stack's `.env` (ค่า LAN IP เช่น `192.168.50.200`) เพราะ Authelia session cookie ต้อง scope ตาม host ที่เข้า
 
 ---
 
 ## One-time Setup (ก่อน deploy ครั้งแรก)
 
-1. `cp .env.example .env` + เติม secrets จริง
-2. แทน `<NAS_HOST>` ใน `authelia/configuration.yml` และ nginx configs ของ homepage + maid-tracker
-3. Generate Argon2 hash: `docker run --rm authelia/authelia:latest authelia crypto hash generate argon2 --password 'YOUR_PASS'`
-4. ใส่ hash ใน `authelia/users_database.yml`
-5. Deploy auth ก่อน (สร้าง auth_net): `scripts/deploy.sh -s auth`
-6. Redeploy homepage + maid-tracker
+1. `cp .env.example .env` + เติม: `AUTHELIA_SESSION_SECRET`, `AUTHELIA_STORAGE_ENCRYPTION_KEY`, `AUTHELIA_JWT_SECRET`, `VAULTWARDEN_ADMIN_TOKEN`
+2. Generate Argon2id hash: `docker run --rm authelia/authelia:4.37.5 authelia hash-password -- 'YOUR_PASS'`
+3. ใส่ hash ใน `authelia/users_database.yml`
+4. Deploy auth ก่อน (สร้าง auth_net): `bash scripts/deploy.sh`
+5. Redeploy homepage + maid-tracker
 
 ---
 
@@ -68,12 +71,14 @@ error_page 401 =302 http://<NAS_HOST>:9091;
 
 - **auth ต้อง deploy ก่อนเสมอ** — stack อื่นที่ join auth_net จะ start ไม่ได้ถ้า network ยังไม่มี
 - **Watchtower disabled** บนทั้ง Authelia และ Vaultwarden (critical infra)
-- **default_policy: deny** — ทุก route ต้อง explicit allow ไม่งั้นถูก block หมด
+- **Pin 4.37.5 ห้ามใช้ latest** — Authelia 4.38 enforce HTTPS สำหรับ `authelia_url` แต่ setup นี้ HTTP-only; `AUTHELIA_SESSION_COOKIES_0_*` env vars ก็ไม่ support ใน 4.38
+- **ไม่มี session.domain ใน configuration** — cookie จะ scope ตาม host ที่ browser ใช้เข้า Authelia (เพื่อรองรับ IP access บน LAN); ถ้าอยากใช้ domain ต้องเพิ่ม local DNS หรือ /etc/hosts ให้ domain → NAS IP
+- **AUTHELIA_HOST ต้องตั้งค่าใน homepage/.env และ maid-tracker/.env** ด้วย LAN IP เช่น `192.168.50.200`
 
 ---
 
 ## Change Log
 
-| วันที่ | เรื่อง |
-|--------|--------|
-| 2026-05-23 | สร้าง stack, migrate homepage + maid-tracker จาก basic auth → Authelia forward-auth |
+- **2026-05-23** — สร้าง stack, migrate homepage + maid-tracker จาก basic auth → Authelia forward-auth
+- **2026-05-23** — แก้ crash-loop (รอบ 1): ลบ template syntax, ทดสอบ AUTHELIA_SESSION_COOKIES_0_* (ไม่ work)
+- **2026-05-24** — แก้ crash-loop (รอบ 2): pin 4.37.5, entrypoint.sh+sed, rewrite config → running ✅

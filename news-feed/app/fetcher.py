@@ -3,7 +3,6 @@ import logging
 from datetime import datetime, timezone
 
 import feedparser
-import httpx
 from bs4 import BeautifulSoup
 
 from app.config import SOURCES
@@ -12,7 +11,7 @@ from app.summarizer import summarize
 
 logger = logging.getLogger(__name__)
 
-_HEADERS = {"User-Agent": "news-feed-bot/1.0 (NAS RSS reader)"}
+_ENTRIES_PER_SOURCE = 10
 
 
 def _entry_url(entry) -> str:
@@ -27,17 +26,12 @@ def _entry_published(entry) -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _fetch_body(url: str) -> str:
-    try:
-        r = httpx.get(url, headers=_HEADERS, timeout=15, follow_redirects=True)
-        r.raise_for_status()
-        soup = BeautifulSoup(r.text, "html.parser")
-        for tag in soup(["script", "style", "nav", "header", "footer"]):
-            tag.decompose()
-        return soup.get_text(separator=" ", strip=True)[:1500]
-    except Exception as exc:
-        logger.warning("body fetch failed %s: %s", url, exc)
+def _entry_body(entry) -> str:
+    """Extract text from RSS entry.summary — no HTTP fetch needed."""
+    raw = entry.get("summary") or entry.get("description") or ""
+    if not raw:
         return ""
+    return BeautifulSoup(raw, "html.parser").get_text(separator=" ", strip=True)[:1500]
 
 
 def fetch_all(db_path: str, config: dict) -> list[str]:
@@ -53,7 +47,7 @@ def fetch_all(db_path: str, config: dict) -> list[str]:
             except Exception as exc:
                 logger.error("feedparser error %s: %s", source_key, exc)
                 continue
-            for entry in feed.entries:
+            for entry in feed.entries[:_ENTRIES_PER_SOURCE]:
                 entry_url = _entry_url(entry)
                 if not entry_url:
                     continue
@@ -69,7 +63,7 @@ def fetch_all(db_path: str, config: dict) -> list[str]:
                     "published": _entry_published(entry),
                     "fetched_at": fetched_at,
                 })
-                body = _fetch_body(entry_url)
+                body = _entry_body(entry)
                 try:
                     summary = summarize(entry.get("title", ""), body, config)
                     update_article_summary(conn, article_id, summary)

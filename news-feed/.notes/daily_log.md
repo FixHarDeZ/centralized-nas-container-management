@@ -2,6 +2,48 @@
 
 ---
 
+## 2026-05-24 (2) — Optimize fetcher + fetch/digest trigger endpoints
+
+### Feature: Immediate fetch on start
+- `scheduler.py` — เพิ่ม `next_run_time=datetime.now(UTC) + 5s` ใน fetch_job → fetch รันทันทีทุกครั้งที่ container start
+
+### Feature: POST /api/fetch/trigger
+- สร้าง `app/api/fetch.py` — endpoint ใหม่ protected by `X-Admin-Token`
+- register ใน `main.py`
+
+### Optimize: fetcher.py
+- **ลบ `_fetch_body()`** — ไม่ fetch full article body จาก URL อีก (httpx GET ต่อบทความ)
+- **ใช้ `_entry_body(entry)`** แทน — parse `entry.summary`/`entry.description` จาก RSS feed ตรงๆ ด้วย BeautifulSoup (ไม่มี HTTP call)
+- **จำกัด `feed.entries[:10]`** — cap 10 บทความต่อ source ต่อรอบ
+- ลบ `httpx` import ออกจาก fetcher.py
+
+### Config: ENABLED_SOURCES
+- เปลี่ยนจาก 7 sources → `techcrunch_ai` อย่างเดียว
+- ล้าง `schedule.json` + `news.db` บน NAS แล้วเริ่มใหม่สะอาด
+
+### ผลลัพธ์
+- Fetch เวลา: 5+ นาที → ~60 วินาที
+- Digest ส่ง Telegram สำเร็จ: `sent_to: ["telegram"], article_count: 5` ✅
+
+---
+
+## 2026-05-24 — Deploy fix: PermissionError + SQLite unable to open
+
+### Bug 1 — PermissionError: /app/app/__init__.py
+
+**Root cause:** `COPY app/ ./app/` ดึง permission `600` (root-only) จากไฟล์บน NAS ที่ tar extract มา → `USER app` (uid 1000) อ่านไม่ได้
+**Fix:** `COPY --chown=app:app app/ ./app/`
+
+### Bug 2 — sqlite3.OperationalError: unable to open database file
+
+**Root cause:** Docker named volume `/data` ถูก create เป็น `root:root 755` → app user เป็นแค่ "others" (r-x) เขียน `news.db` ไม่ได้
+**Fix ทันที:** `sudo chown 1000:1000 /volume2/@docker/volumes/news-feed_news_feed_data/_data`
+**Fix ถาวร:** เพิ่ม `RUN mkdir -p /data && chown app:app /data` ใน Dockerfile ก่อน `USER app`
+
+**Status:** Running ✅ — `GET /api/health → {status: ok, article_count: 0}`
+
+---
+
 ## 2026-05-23 — สร้าง stack ทั้งหมด (14 tasks)
 
 ### งานที่ทำ
