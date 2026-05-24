@@ -1,7 +1,7 @@
 services:
-  line-secretary:
+  my-secretary:
     build: .
-    container_name: line-secretary
+    container_name: my-secretary
     restart: unless-stopped
     ports:
       - "5057:8000"
@@ -9,7 +9,7 @@ services:
     environment:
       - TZ=Asia/Bangkok
     volumes:
-      - line_secretary_data:/data
+      - my_secretary_data:/data
 
 volumes:
-  line_secretary_data:
+  my_secretary_data:
