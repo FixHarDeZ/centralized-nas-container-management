@@ -15,7 +15,7 @@ Docker stacks for Synology DS925+ NAS, managed via Synology Container Manager.
 | `auth/` | Centralized SSO (Authelia) + Password Vault (Vaultwarden) | `9091` (Authelia) / `8222` (Vaultwarden) | — |
 | `uptime-kuma/` | Service health monitor | `3001` | `https://…:3002` |
 | `watchtower/` | Auto-update containers + LINE notification sidecar | — | — |
-| `line-secretary/` | AI personal assistant LINE bot backed by Notion | `5057` | `https://…:5058` |
+| `my-secretary/` | AI personal assistant bot (LINE + Telegram) backed by Notion | `5057` | `https://…:5058` |
 | `hermes-agent/` | Autonomous AI agent — Telegram + Discord (NousResearch/hermes-agent) | `5063` (dashboard) | — |
 | `torrentwatch/` | Daily torrent monitor for bearbit.org — scrapes, filters, LINE alerts | `5059` | `https://…:5062` |
 
@@ -30,7 +30,7 @@ All stacks except `watchtower` are exposed externally via **Synology Reverse Pro
 | maid-tracker | `https://…:5056` | `http://localhost:5055` |
 | portainer | `https://…:9444` | `http://localhost:9000` |
 | uptime-kuma | `https://…:3002` | `http://localhost:3001` |
-| line-secretary | `https://…:5058` | `http://localhost:5057` |
+| my-secretary | `https://…:5058` | `http://localhost:5057` |
 | torrentwatch | `https://…:5062` | `http://localhost:5059` |
 
 > Your router must forward each **external port → NAS** so traffic reaches Synology Reverse Proxy. Homepage is the only exception — it has its own Nginx inside the container that handles TLS, so Synology RP simply forwards `:443` to port `3000` unencrypted and lets Nginx take over from there.
@@ -44,7 +44,7 @@ All stacks except `watchtower` are exposed externally via **Synology Reverse Pro
 auth/.env                 # AUTHELIA_SESSION_SECRET, AUTHELIA_STORAGE_ENCRYPTION_KEY, AUTHELIA_JWT_SECRET, VAULTWARDEN_ADMIN_TOKEN
 homepage/.env             # HOMEPAGE_VAR_*, NAS_VOLUME_ROOT
 jellyfin/.env             # NAS_VOLUME_ROOT, NAS_MEDIA_ROOT
-line-secretary/.env       # LINE_SECRETARY_*, NOTION_TOKEN, GROQ/OpenRouter keys
+my-secretary/.env         # LINE_SECRETARY_*, TELEGRAM_BOT_TOKEN, NOTION_TOKEN, GROQ/OpenRouter keys
 maid-tracker/.env         # MAID_LINE_*, MONTHLY_REPORT_TIME
 portainer/                # (no .env needed)
 torrentwatch/.env         # TORRENTWATCH_*, NGINX_BASIC_AUTH_*, NAS_TORRENT_PATH
@@ -56,7 +56,7 @@ hermes-agent/.env         # OPENROUTER_API_KEY, TELEGRAM_BOT_TOKEN, DISCORD_BOT_
 ```bash
 # First time: copy each template and fill in real values
 cp .env.example .env
-for d in auth homepage jellyfin line-secretary maid-tracker torrentwatch uptime-kuma watchtower hermes-agent; do
+for d in auth homepage jellyfin my-secretary maid-tracker torrentwatch uptime-kuma watchtower hermes-agent; do
   cp "$d/.env.example" "$d/.env"
 done
 ```
@@ -110,5 +110,5 @@ After uploading files to the NAS via `deploy.sh`, register each stack in Synolog
 - **Watchtower** — runs two services: the updater and a Python sidecar that tails Watchtower logs via raw Docker socket HTTP and pushes LINE notifications. The sidecar is excluded from auto-updates via `com.centurylinklabs.watchtower.enable=false`.
 - **Portainer** — standard CE deployment on port 9000. HTTPS is handled upstream by Synology Reverse Proxy. Data persisted in `portainer_data` named volume.
 - **TorrentWatch** — FastAPI + Python 3.12 daily torrent monitor that scrapes bearbit.org on a schedule, filters today's uploads by seed/leech threshold and per-source keywords, and surfaces results via a mobile-first dark web UI. Supports multiple listing URLs (each with its own keyword list), cover images, file size/count display, and two download modes: proxy .torrent to browser or save directly to a NAS watch folder. LINE push notifications on keyword matches. Auto scrape schedule configurable (30 min / 1 hour, night window or all day). Data older than 7 days is cleaned up weekly. Port 5059 internally; external HTTPS via Synology Reverse Proxy on port 5062.
-- **Line Secretary** — FastAPI + Python 3.12 personal AI secretary LINE bot backed by Notion. Stateless (no volume needed). Uses OpenAI-compatible API — configurable to Groq (`AI_PROVIDER=groq`, free tier) or OpenRouter (`AI_PROVIDER=openrouter`, pay-per-use). On startup, `PageCache` reads all Notion page headers into memory and refreshes them every 10 minutes via a background asyncio task — subsequent requests serve the header phase from cache (~0 Notion API calls vs. ~20 per message cold). On every message, runs Notion keyword search and a parallel fallback header scan, then merges results — ensures content inside nested toggle blocks and table cells (not indexed by Notion's search API) is still found. Retrieved pages and databases are scored by keyword relevance and packed into the LLM context highest-score-first (`_rank_context`), so the most relevant data is always included even when the full result set exceeds the 20K context limit. Supports reading simple tables, toggle blocks, and embedded databases. Write operations go through a confirmation step. Port 5057 internally; external HTTPS via Synology Reverse Proxy on port 5058.
+- **my-secretary** — FastAPI + Python 3.12 personal AI secretary bot backed by Notion. Supports LINE and Telegram via a shared `handle_message(user_id, text, push_fn)` core — platform differences are encapsulated in the webhook handler and push callback. State is isolated per platform: LINE users keyed as `U{id}`, Telegram users as `tg_{chat_id}`. Telegram webhook registered automatically on startup if `TELEGRAM_BOT_TOKEN` and `TELEGRAM_WEBHOOK_URL` are set. Uses OpenAI-compatible API — configurable to Groq (`AI_PROVIDER=groq`, free tier) or OpenRouter (`AI_PROVIDER=openrouter`, pay-per-use). On startup, `PageCache` reads all Notion page headers into memory and refreshes them every 10 minutes. On every message, runs Notion keyword search and a parallel fallback header scan. Write operations go through a confirmation step. Port 5057 internally; external HTTPS via Synology Reverse Proxy on port 5058.
 

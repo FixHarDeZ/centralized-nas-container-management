@@ -1,10 +1,8 @@
-# Line Secretary
+# my-secretary
 
 **EN** | [ไทย](#ภาษาไทย)
 
-A personal AI secretary LINE bot that searches and records information in your Notion workspace. Runs as a Docker container on Synology NAS.
-
-![Line Secretary screenshot](../screenshots/line-secretary.png)
+A personal AI secretary bot that searches and records information in your Notion workspace. Runs as a Docker container on Synology NAS. Supports both **LINE** and **Telegram** — state is isolated per platform.
 
 ---
 
@@ -12,47 +10,25 @@ A personal AI secretary LINE bot that searches and records information in your N
 
 - Ask anything in natural language (Thai or English) — the bot searches your Notion and answers
 - Reads pages, simple tables, toggle sections, and embedded databases automatically
-- Always runs both Notion search and header-based fallback scan in parallel — finds content even in toggle blocks that Notion's search doesn't index; both plain text paragraphs and table cells inside toggles are included in the keyword index (e.g. searching "mesh node" finds troubleshoot steps inside a toggle, searching "aeon" finds the row inside a Credit cards table)
+- Always runs both Notion search and header-based fallback scan in parallel — finds content even in toggle blocks that Notion's search doesn't index; both plain text paragraphs and table cell inside toggles are included in the keyword index
 - Page headers cached in memory at startup and refreshed every 10 minutes — ~90% fewer Notion API calls per message once warm
-- Relevance-ranked context — most keyword-matching pages are packed into the LLM prompt first, so the right data is always included even when total results exceed the context limit
+- Relevance-ranked context — most keyword-matching pages are packed into the LLM prompt first
 - Automatic Groq→OpenRouter failover — when both keys are set (`AI_PROVIDER=auto`), Groq is used first (free); on rate-limit it switches to OpenRouter automatically and switches back once Groq resets
 - Answers only from your Notion data — never hallucinates from general knowledge; if the answer isn't in Notion, asks whether to answer from general knowledge instead
 - Proposes a confirmation before writing any new record to Notion; pending confirmations auto-expire after 6 hours
 - Quick note with rich Markdown-like formatting — `# heading`, `- bullet`, `[ ] todo`, `[x] done`; if you name an existing page the bot appends to it instead of creating a new one
-- Send an image while in a note flow and it is uploaded directly to the Notion page via Notion's File Upload API
-- Agent can create new Notion pages with content, not just add rows to existing tables
-- Page index uses cursor-based pagination — no cap on workspace size; search returns up to 20 results per query
-- Non-text messages (images, stickers, etc.) receive a polite reply; images outside note flow prompt you to start one first
+- Send an image while in a note flow (LINE only) and it is uploaded directly to the Notion page via Notion's File Upload API
 - Includes 🔗 Notion page URLs in replies — so you can click directly to the source
-- Whitelist-based access — only your LINE user ID can use the bot
+- Whitelist-based access — only your LINE user IDs / Telegram chat IDs can use the bot
 
 ## How it works
 
 ```
-You (LINE) → Webhook → FastAPI app
-                           ↓
-               In-memory page cache (warm after startup, refreshed every 10 min)
-                           ↓
-               Notion search + fallback header scan (parallel, mostly from cache)
-                           ↓
-               Auto-read pages, tables, toggles (recursive)
-                           ↓
-               Relevance ranking → highest-scoring pages sent to LLM first
-                           ↓
-               LLM (Groq or OpenRouter) generates Thai/English answer
-                           ↓
-               If answer not in Notion → ask user to confirm general knowledge use
-                           ↓
-               Answer → LINE push
+LINE:      POST /webhook           → verify X-Line-Signature         → handle_message("U{id}", text, line_push_fn)
+Telegram:  POST /webhook/telegram  → verify X-Telegram-Bot-Api-Secret-Token → handle_message("tg_{chat_id}", text, tg_push_fn)
 ```
 
-1. On startup the app reads all page headers into memory — subsequent requests use the cache (0 Notion API calls for the header phase)
-2. Every message triggers both a Notion keyword search and a header-based fallback scan — results are merged
-3. Pages, toggle blocks, and simple tables are read recursively (up to 2 levels deep)
-4. Retrieved pages and databases are scored by keyword relevance and packed into the LLM context in order — most relevant first
-5. The LLM receives the ranked Notion data and generates a Thai/English answer
-6. If no relevant Notion data exists, the bot asks for confirmation before answering from general knowledge
-7. Write requests go through a confirmation step before touching Notion
+Both platforms share the same `handle_message()` core logic. State (history, pending confirmations) is keyed by `U{LINE_user_id}` for LINE and `tg_{chat_id}` for Telegram — no cross-platform sharing.
 
 ## Stack
 
@@ -61,7 +37,7 @@ You (LINE) → Webhook → FastAPI app
 | Runtime | Python 3.12 · FastAPI · Uvicorn |
 | AI | Groq `llama-3.3-70b-versatile` (primary, free) → OpenRouter fallback (auto mode) |
 | Knowledge base | Notion API (Internal Integration Token) |
-| Messaging | LINE Messaging API |
+| Messaging | LINE Messaging API · Telegram Bot API |
 | Host port | `5057` → container `8000` |
 | Reverse proxy | Synology RP `https://…:5058` → `http://localhost:5057` |
 
@@ -75,11 +51,10 @@ In auto mode the bot uses Groq (free) as the primary provider. When Groq's daily
 
 **Groq (free, primary)**
 - Sign up at [console.groq.com](https://console.groq.com) and create an API key
-- Free tier: 100K tokens/day for the 70b model, 500K tokens/day for the 8b model
+- Free tier: 100K tokens/day for the 70b model
 
 **OpenRouter (pay-per-use, fallback)**
 - Get a key at [openrouter.ai](https://openrouter.ai) — supports Claude, GPT, Llama, and more
-- Used automatically when Groq is rate-limited (in auto mode)
 
 ### 2. Notion Integration Token
 
@@ -88,62 +63,71 @@ In auto mode the bot uses Groq (free) as the primary provider. When Groq's daily
 3. In Notion, open the root page you want the bot to access → **Share** → invite the integration
    > Sharing a parent page (e.g. Personal Home) gives access to all its subpages at once
 
-### 3. LINE Official Account
+### 3. LINE Setup
 
 1. Go to [developers.line.biz](https://developers.line.biz) → Create a **Messaging API** channel
 2. Copy **Channel Secret** and **Channel Access Token**
 3. Set webhook URL: `https://<NAS_HOST>:5058/webhook`
 4. Enable **Use webhooks**, disable **Auto-reply messages**
+5. Find your LINE user ID in Developers Console → Messaging API → Your user ID
 
-### 4. Environment variables
+### 4. Telegram Setup
 
-Add to the root `.env`:
+1. Create a bot with [@BotFather](https://t.me/BotFather) and copy the token to `TELEGRAM_BOT_TOKEN`
+2. Set `TELEGRAM_WEBHOOK_URL` to your NAS HTTPS endpoint (Synology Reverse Proxy → port 8443):
+   ```
+   https://<NAS_HOST>:8443/webhook/telegram
+   ```
+3. Set `TELEGRAM_WEBHOOK_SECRET` to any random string (used to validate Telegram's requests)
+4. Set `TELEGRAM_ALLOWED_CHAT_IDS` to your numeric Telegram chat ID (find it via [@userinfobot](https://t.me/userinfobot))
+5. Deploy and restart — the bot registers its webhook automatically on startup
+
+> **Note:** LINE and Telegram maintain separate conversation histories. Chatting on LINE does not share context with Telegram.
+
+### 5. Environment variables
 
 ```env
 LINE_SECRETARY_CHANNEL_SECRET=...
 LINE_SECRETARY_CHANNEL_ACCESS_TOKEN=...
 LINE_SECRETARY_ALLOWED_USER_IDS=Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
-# AI provider:
-#   "auto"        — Groq primary (free), auto-switches to OpenRouter on rate-limit, auto-switches back
-#   "groq"        — Groq only
-#   "openrouter"  — OpenRouter only
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_WEBHOOK_URL=https://<NAS_HOST>:8443/webhook/telegram
+TELEGRAM_WEBHOOK_SECRET=random-secret-string
+TELEGRAM_ALLOWED_CHAT_IDS=123456789
+
 AI_PROVIDER=auto
 GROQ_API_KEY=gsk_...
 OPENROUTER_API_KEY=sk-or-v1-...
 
 NOTION_TOKEN=ntn_...
 NOTION_QUICK_NOTE_PAGE_ID=32-char-hex-uuid
-
-# Proactive reminders (optional — leave blank to disable)
-NOTION_REMINDER_DB_IDS=32-char-database-id
-NOTION_REMINDER_TIME=08:00
 ```
 
 | Variable | Description |
 | --- | --- |
 | `LINE_SECRETARY_CHANNEL_SECRET` | LINE Messaging API channel secret |
 | `LINE_SECRETARY_CHANNEL_ACCESS_TOKEN` | LINE Messaging API channel access token |
-| `LINE_SECRETARY_ALLOWED_USER_IDS` | Your LINE user ID(s) — found in LINE Developers Console → Messaging API → Your user ID. Comma-separated for multiple users. |
+| `LINE_SECRETARY_ALLOWED_USER_IDS` | Your LINE user ID(s). Comma-separated for multiple users. |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token from @BotFather |
+| `TELEGRAM_WEBHOOK_URL` | Full HTTPS URL for the Telegram webhook. Allowed ports: 443, 80, 88, 8443. |
+| `TELEGRAM_WEBHOOK_SECRET` | Secret token for validating Telegram requests (any random string) |
+| `TELEGRAM_ALLOWED_CHAT_IDS` | Comma-separated numeric chat IDs allowed to use the bot. Leave empty to allow all (not recommended). |
 | `NOTION_TOKEN` | Notion Internal Integration Token |
-| `NOTION_QUICK_NOTE_PAGE_ID` | Notion page ID of your "Quick note" page (parent page for creating new notes). To find it: open Notion → go to Quick note page → copy the page URL → the page ID is the last 32 hexadecimal characters. Leave empty (`""`) to disable the quick note feature; if set but invalid, the bot will show an error. |
-| `AI_PROVIDER` | AI provider mode: `"auto"` (Groq primary, fallback to OpenRouter), `"groq"`, or `"openrouter"`. |
-| `GROQ_API_KEY` | Groq API key (only needed if using Groq) |
-| `OPENROUTER_API_KEY` | OpenRouter API key (only needed if using OpenRouter) |
-| `NOTION_REMINDER_DB_IDS` | Comma-separated Notion database IDs (must be full-page databases with a `date` property). The bot will push a LINE reminder for every row whose date = today. Leave empty to disable. To find an ID: open the database in Notion → Copy link → the ID is the 32 hex characters at the end of the URL. |
-| `NOTION_REMINDER_TIME` | Time to send the daily reminder in Bangkok time (UTC+7), format `HH:MM`. Defaults to `08:00`. |
+| `NOTION_QUICK_NOTE_PAGE_ID` | Notion page ID of your "Quick note" parent page. Leave empty to disable the feature. |
+| `AI_PROVIDER` | `"auto"` (Groq primary + OpenRouter fallback), `"groq"`, or `"openrouter"` |
+| `GROQ_API_KEY` | Groq API key |
+| `OPENROUTER_API_KEY` | OpenRouter API key |
 
-### 5. Deploy
+### 6. Deploy
 
 ```bash
-scripts/deploy.sh   # upload files and optionally restart line-secretary
+scripts/deploy.sh -s my-secretary -y
 ```
-
-Register in Synology Container Manager → Project → Create → path `/volume1/docker/line-secretary`.
 
 ## Debug commands
 
-Send these in LINE chat to inspect raw data (owner only):
+Send these in LINE or Telegram chat to inspect raw data (whitelisted users only):
 
 | Command | Description |
 |---|---|
@@ -154,184 +138,32 @@ Send these in LINE chat to inspect raw data (owner only):
 | `/provider` | Active AI provider and time remaining until Groq resumes (if rate-limited) |
 | `/cache` | Cache stats — page count and time since last rebuild |
 | `/refresh` | Force immediate cache rebuild |
-
-## Example usage
-
-```
-You:  ขอเลขบัตรเครดิต UOB
-Bot:  บัตร UOB Preferred Platinum: xxxx-xxxx-xxxx-2917
-      บัตร UOB World: xxxx-xxxx-xxxx-0262
-      🔗 https://notion.so/Credit-cards-abc123def456...
-
-You:  github api token ฉันคืออะไร
-Bot:  GitHub token: ghp_xxxxxxxxxxxx
-      🔗 https://notion.so/API-Token-abc123def456...
-
-You:  จด github token ใหม่ให้หน่อย ghp_newtoken123
-Bot:  จะบันทึก GitHub token ghp_newtoken123 ใน 'API Token' ใช่ไหมคะ?
-      ตอบ 'ใช่' เพื่อยืนยัน
-You:  ใช่
-Bot:  บันทึกเรียบร้อยแล้วค่ะ
-
-You:  มีตัวอย่าง ssh ที่ใช้ key ไหม
-Bot:  ไม่พบข้อมูลใน Notion ค่ะ
-      ต้องการให้ตอบจากความรู้ทั่วไปได้ไหมคะ?
-You:  ใช่
-Bot:  ตัวอย่าง ssh ที่ใช้ key file:
-      ssh -i ~/.ssh/id_rsa user@hostname
-      (จากความรู้ทั่วไป)
-```
+| `/history` | Last 4 conversation exchanges |
+| `/clear` | Wipe conversation history + pending state (use when bot gets stuck) |
 
 ---
 
 ## ภาษาไทย
 
-[EN](#line-secretary)
+[EN](#my-secretary)
 
-Line Secretary คือ LINE bot เลขาส่วนตัว AI ที่ค้นหาและบันทึกข้อมูลใน Notion ของคุณ รันเป็น Docker container บน Synology NAS
-
-![Line Secretary screenshot](screenshots/line-secretary.png)
+my-secretary คือ AI bot เลขาส่วนตัวที่ค้นหาและบันทึกข้อมูลใน Notion ของคุณ รันเป็น Docker container บน Synology NAS รองรับทั้ง **LINE** และ **Telegram** — ประวัติการสนทนาแยกกันต่างหาก
 
 ---
 
 ## คุณสมบัติ
 
 - ถามเป็นภาษาไทยหรืออังกฤษก็ได้ bot จะค้นหาใน Notion แล้วตอบ
-- อ่าน page ธรรมดา, ตาราง (simple table), toggle section, และ database อัตโนมัติ
-- รัน Notion search และ fallback scan พร้อมกันเสมอ — เจอข้อมูลแม้ซ่อนใน toggle ที่ Notion ไม่ index ทั้ง text paragraph และ table cell ข้างใน toggle ถูก index ไว้ใน keyword index (เช่น ค้น "mesh node" แล้วเจอขั้นตอนแก้ปัญหาใน toggle, ค้น "aeon" แล้วเจอบัตร Aeon ใน table Credit cards)
-- เก็บ header ของทุก page ไว้ใน memory ตั้งแต่ตอน start และ refresh ทุก 10 นาที — ลด Notion API call ต่อ message ลงประมาณ 90% หลัง warm up
-- จัดลำดับ context ตาม relevance — page ที่มี keyword ตรงกับคำถามมากสุดจะถูกส่งให้ LLM ก่อนเสมอ แม้ข้อมูลรวมจะเกิน context limit
-- Groq→OpenRouter auto-failover — ถ้าตั้งทั้งสอง key ไว้ (`AI_PROVIDER=auto`) จะใช้ Groq (ฟรี) เป็นหลัก พอ rate limit หมดจะสลับไป OpenRouter อัตโนมัติ และกลับมาใช้ Groq เองเมื่อ reset
-- ตอบจากข้อมูลใน Notion เท่านั้น — ไม่ตอบจากความรู้ของ AI เอง ถ้าหาไม่เจอจะถามก่อนว่าต้องการให้ตอบจากความรู้ทั่วไปได้ไหม
-- มี confirmation step ก่อนจะ write ข้อมูลใหม่ลง Notion ทุกครั้ง
-- ใส่ 🔗 Notion page URL ในแต่ละคำตอบ — เพื่อให้กดไปหน้า Notion ต้นฉบับได้เลย
-- จำกัดการใช้งานด้วย LINE user ID whitelist
-
-## การทำงาน
-
-```
-คุณ (LINE) → Webhook → FastAPI
-                           ↓
-              In-memory page cache (warm ตั้งแต่ startup, refresh ทุก 10 นาที)
-                           ↓
-              Notion search + fallback header scan (พร้อมกัน, ส่วนใหญ่มาจาก cache)
-                           ↓
-              อ่าน page, table, toggle แบบ recursive
-                           ↓
-              Relevance ranking → ส่ง page ที่เกี่ยวข้องสุดให้ LLM ก่อน
-                           ↓
-              LLM (Groq หรือ OpenRouter) วิเคราะห์ข้อมูล + ตอบ
-                           ↓
-              ถ้าไม่พบใน Notion → ถามยืนยันก่อนตอบจากความรู้ทั่วไป
-                           ↓
-              ส่งคำตอบกลับ LINE
-```
+- อ่าน page ธรรมดา, ตาราง, toggle section, และ database อัตโนมัติ
+- รัน Notion search และ fallback scan พร้อมกันเสมอ — เจอข้อมูลแม้ซ่อนใน toggle
+- เก็บ header ของทุก page ไว้ใน memory ตั้งแต่ตอน start และ refresh ทุก 10 นาที
+- จัดลำดับ context ตาม relevance — page ที่เกี่ยวข้องสุดจะถูกส่งให้ LLM ก่อนเสมอ
+- Groq→OpenRouter auto-failover ใน `AI_PROVIDER=auto`
+- ตอบจากข้อมูลใน Notion เท่านั้น — ถ้าหาไม่เจอจะถามก่อนว่าต้องการให้ตอบจากความรู้ทั่วไปได้ไหม
+- มี confirmation step ก่อนจะ write ข้อมูลลง Notion ทุกครั้ง
+- ใส่ 🔗 Notion page URL ในแต่ละคำตอบ
+- จำกัดการใช้งานด้วย LINE user ID / Telegram chat ID whitelist
 
 ## การตั้งค่า
 
-### 1. AI Provider
-
-**แนะนำ: ตั้งทั้งสอง key แล้วใช้ `AI_PROVIDER=auto`**
-
-ใน auto mode bot จะใช้ Groq (ฟรี) เป็นหลัก พอ Groq หมด daily limit จะสลับไป OpenRouter อัตโนมัติ และกลับมาใช้ Groq เองเมื่อ reset — ไม่ต้อง restart
-
-**Groq (ฟรี, primary)**
-- สมัครที่ [console.groq.com](https://console.groq.com) แล้ว create API key
-- Free tier: 100K tokens/วัน (70b model), 500K tokens/วัน (8b model)
-
-**OpenRouter (จ่ายตาม token ที่ใช้, fallback)**
-- รับ key ที่ [openrouter.ai](https://openrouter.ai) — รองรับ Claude, GPT, Llama และอื่นๆ
-- ใช้อัตโนมัติเมื่อ Groq rate-limited (ใน auto mode)
-
-### 2. Notion Integration Token
-
-1. ไปที่ [notion.so/my-integrations](https://www.notion.so/my-integrations) → **New integration**
-2. Copy **Internal Integration Token**
-3. ใน Notion เปิด root page ที่อยากให้ bot เข้าถึง → **Share** → invite integration นั้น
-   > ถ้า share ที่ root page (เช่น Personal Home) จะได้ access ทุก subpage ทีเดียว
-
-### 3. LINE Official Account
-
-1. ไปที่ [developers.line.biz](https://developers.line.biz) → สร้าง channel แบบ **Messaging API**
-2. Copy **Channel Secret** และ **Channel Access Token**
-3. ตั้ง Webhook URL: `https://<NAS_HOST>:5058/webhook`
-4. เปิด **Use webhooks**, ปิด **Auto-reply messages**
-
-### 4. Environment Variables
-
-เพิ่มใน `.env` ที่ root ของ project:
-
-```env
-LINE_SECRETARY_CHANNEL_SECRET=...
-LINE_SECRETARY_CHANNEL_ACCESS_TOKEN=...
-LINE_SECRETARY_ALLOWED_USER_IDS=Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-
-# AI provider:
-#   "auto"       — Groq หลัก (ฟรี), สลับ OpenRouter อัตโนมัติเมื่อ rate limit, กลับมาเองเมื่อ reset
-#   "groq"       — Groq อย่างเดียว
-#   "openrouter" — OpenRouter อย่างเดียว
-AI_PROVIDER=auto
-GROQ_API_KEY=gsk_...
-OPENROUTER_API_KEY=sk-or-v1-...
-
-NOTION_TOKEN=ntn_...
-NOTION_QUICK_NOTE_PAGE_ID=32-char-hex-uuid
-```
-
-| ตัวแปร | คำอธิบาย |
-| --- | --- |
-| `LINE_SECRETARY_CHANNEL_SECRET` | LINE Messaging API channel secret |
-| `LINE_SECRETARY_CHANNEL_ACCESS_TOKEN` | LINE Messaging API channel access token |
-| `LINE_SECRETARY_ALLOWED_USER_IDS` | LINE user ID ของคุณ — ดูได้ใน LINE Developers Console → Messaging API → Your user ID ถ้ามีหลายคนให้คั่นด้วย comma |
-| `NOTION_TOKEN` | Notion Internal Integration Token |
-| `NOTION_QUICK_NOTE_PAGE_ID` | Notion page ID ของ "Quick note" page (parent page สำหรับสร้าง note ใหม่) วิธีหาค่า: เปิด Notion → ไปที่ Quick note page → copy link → page ID คือ 32 ตัวอักษร hex ตัวสุดท้าย ตั้งเป็น "" เพื่อปิด quick note feature; ถ้าตั้งแต่เป็น invalid bot จะแสดง error |
-| `AI_PROVIDER` | Mode ของ AI provider: `"auto"` (Groq หลัก, fallback ไป OpenRouter), `"groq"`, หรือ `"openrouter"` |
-| `GROQ_API_KEY` | Groq API key (ต้องมีเฉพาะเมื่อใช้ Groq) |
-| `OPENROUTER_API_KEY` | OpenRouter API key (ต้องมีเฉพาะเมื่อใช้ OpenRouter) |
-
-### 5. Deploy
-
-```bash
-scripts/deploy.sh   # อัปโหลดไฟล์และ restart stack
-```
-
-จากนั้น register ใน Synology Container Manager → Project → Create → path `/volume1/docker/line-secretary`
-
-## Debug commands
-
-ส่งใน LINE chat เพื่อ inspect ข้อมูลดิบ (เฉพาะเจ้าของ):
-
-| Command | ทำอะไร |
-|---|---|
-| `/debug <query>` | แสดง raw search results จาก Notion |
-| `/debug2 <query>` | แสดง deep search ทั้ง pages และ databases |
-| `/debug3 <page_id>` | แสดง raw blocks ของ page นั้น |
-| `/debug4 <db_id>` | แสดง raw database query response |
-| `/provider` | แสดง provider ที่ใช้อยู่ และเวลาที่ Groq จะ resume (ถ้า rate-limited) |
-
-## ตัวอย่างการใช้งาน
-
-```
-คุณ:  ขอเลขบัตรเครดิต UOB
-Bot:  บัตร UOB Preferred Platinum: xxxx-xxxx-xxxx-2917
-      บัตร UOB World: xxxx-xxxx-xxxx-0262
-      (จาก page Credit cards)
-
-คุณ:  github api token ฉันคืออะไร
-Bot:  GitHub token: ghp_xxxxxxxxxxxx
-      (จาก page API Token)
-
-คุณ:  จด github token ใหม่ให้หน่อย ghp_newtoken123
-Bot:  จะบันทึก GitHub token ghp_newtoken123 ใน 'API Token' ใช่ไหมคะ?
-      ตอบ 'ใช่' เพื่อยืนยัน
-คุณ:  ใช่
-Bot:  บันทึกเรียบร้อยแล้วค่ะ
-
-คุณ:  มีตัวอย่าง ssh ที่ใช้ key ไหม
-Bot:  ไม่พบข้อมูลใน Notion ค่ะ
-      ต้องการให้ตอบจากความรู้ทั่วไปได้ไหมคะ?
-คุณ:  ใช่
-Bot:  ตัวอย่าง ssh ที่ใช้ key file:
-      ssh -i ~/.ssh/id_rsa user@hostname
-      (จากความรู้ทั่วไป)
-```
+ดูขั้นตอนการตั้งค่าทั้งหมดในหัวข้อ [Setup](#setup) ด้านบน (ภาษาอังกฤษ) — มีทั้งการตั้งค่า LINE, Telegram, Notion, AI Provider, และ deploy script
