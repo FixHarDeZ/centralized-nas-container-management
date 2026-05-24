@@ -91,6 +91,7 @@ Single Python 3.12-slim container:
 - `get_recent_articles_for_digest` ใช้ SQLite `datetime('now', ?)` ตรงๆ ไม่ผ่าน Python datetime
 - **`schedule.json` บน NAS override `.env` ทั้งหมด** — ถ้าเปลี่ยน ENABLED_SOURCES ใน .env ต้องลบ `schedule.json` ด้วย (`rm /volume2/@docker/volumes/news-feed_news_feed_data/_data/schedule.json`)
 - **`entry.summary` ใน RSS ไม่ใช่ full body** — เพียงพอสำหรับ summarization, ไม่ต้อง fetch article URL
+- **Digest dedup:** `_digest_job` ต้องโหลด `digest_log` ก่อนแล้วกรอง `sent_ids` ออก — ไม่งั้นบทความที่ fetch ใน window 6h ก่อน digest ล่าสุดจะถูกส่งซ้ำ
 
 ---
 
@@ -101,3 +102,4 @@ Single Python 3.12-slim container:
 | 2026-05-23 | สร้าง stack ทั้งหมด (14 tasks), 41 tests ผ่าน |
 | 2026-05-24 | Fix deploy: `COPY --chown=app:app`, `chown 1000:1000 /data`, Dockerfile `RUN mkdir /data` |
 | 2026-05-24 | Optimize fetcher: RSS summary แทน full-body fetch, limit 10/source, `POST /api/fetch/trigger`, immediate fetch on start |
+| 2026-05-24 | Fix digest dedup: กรอง `sent_ids` จาก `digest_log` ก่อน pick 5 บทความ |

@@ -18,6 +18,7 @@ Docker stacks for Synology DS925+ NAS, managed via Synology Container Manager.
 | `my-secretary/` | AI personal assistant bot (LINE + Telegram) backed by Notion | `5057` | `https://…:5058` |
 | `hermes-agent/` | Autonomous AI agent — Telegram + Discord (NousResearch/hermes-agent) | `5063` (dashboard) | — |
 | `torrentwatch/` | Daily torrent monitor for bearbit.org — scrapes, filters, LINE alerts | `5059` | `https://…:5062` |
+| `news-feed/` | AI & IT news feed bot — Thai summaries via Claude/DeepSeek, digest to LINE + Telegram, dashboard | `5064` | — |
 
 ### Reverse Proxy Summary
 
@@ -51,12 +52,13 @@ torrentwatch/.env         # TORRENTWATCH_*, NGINX_BASIC_AUTH_*, NAS_TORRENT_PATH
 uptime-kuma/.env          # NAS_VOLUME_ROOT
 watchtower/.env           # WATCHTOWER_LINE_*
 hermes-agent/.env         # OPENROUTER_API_KEY, TELEGRAM_BOT_TOKEN, DISCORD_BOT_TOKEN, HERMES_UID/GID
+news-feed/.env            # ANTHROPIC_API_KEY, OPENROUTER_API_KEY, LINE_CHANNEL_ACCESS_TOKEN, LINE_USER_ID, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, ADMIN_TOKEN, SUMMARIZER_PROVIDER/MODEL
 ```
 
 ```bash
 # First time: copy each template and fill in real values
 cp .env.example .env
-for d in auth homepage jellyfin my-secretary maid-tracker torrentwatch uptime-kuma watchtower hermes-agent; do
+for d in auth homepage jellyfin my-secretary maid-tracker torrentwatch uptime-kuma watchtower hermes-agent news-feed; do
   cp "$d/.env.example" "$d/.env"
 done
 ```
@@ -111,4 +113,5 @@ After uploading files to the NAS via `deploy.sh`, register each stack in Synolog
 - **Portainer** — standard CE deployment on port 9000. HTTPS is handled upstream by Synology Reverse Proxy. Data persisted in `portainer_data` named volume.
 - **TorrentWatch** — FastAPI + Python 3.12 daily torrent monitor that scrapes bearbit.org on a schedule, filters today's uploads by seed/leech threshold and per-source keywords, and surfaces results via a mobile-first dark web UI. Supports multiple listing URLs (each with its own keyword list), cover images, file size/count display, and two download modes: proxy .torrent to browser or save directly to a NAS watch folder. LINE push notifications on keyword matches. Auto scrape schedule configurable (30 min / 1 hour, night window or all day). Data older than 7 days is cleaned up weekly. Port 5059 internally; external HTTPS via Synology Reverse Proxy on port 5062.
 - **my-secretary** — FastAPI + Python 3.12 personal AI secretary bot backed by Notion. Supports LINE and Telegram via a shared `handle_message(user_id, text, push_fn)` core — platform differences are encapsulated in the webhook handler and push callback. State is isolated per platform: LINE users keyed as `U{id}`, Telegram users as `tg_{chat_id}`. Telegram webhook registered automatically on startup if `TELEGRAM_BOT_TOKEN` and `TELEGRAM_WEBHOOK_URL` are set. Uses OpenAI-compatible API — configurable to Groq (`AI_PROVIDER=groq`, free tier) or OpenRouter (`AI_PROVIDER=openrouter`, pay-per-use). On startup, `PageCache` reads all Notion page headers into memory and refreshes them every 10 minutes. On every message, runs Notion keyword search and a parallel fallback header scan. Write operations go through a confirmation step. Port 5057 internally; external HTTPS via Synology Reverse Proxy on port 5058.
+- **news-feed** — Single-container FastAPI + APScheduler + SQLite stack. Fetches RSS from 7 sources (TechCrunch AI, VentureBeat, The Verge, Ars Technica, GSMArena, 9to5Mac, Android Authority), summarises articles in Thai via Anthropic Claude (default) or OpenRouter/DeepSeek (switchable at runtime via dashboard). Sends digest to LINE + Telegram at configurable times (default 07:00/12:00/18:00 Bangkok). Dashboard at port 5064 provides Source Health, News Timeline, AI Price Tracker, Leaderboard, Digest History, and Schedule Config. Data persisted in `news_feed_data` named volume. No external reverse proxy — LAN access only.
 

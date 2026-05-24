@@ -15,7 +15,7 @@ Root-level notes สำหรับ cross-stack changes และ project-wide d
 | `auth/.env` | `AUTHELIA_SESSION_SECRET`, `AUTHELIA_STORAGE_ENCRYPTION_KEY`, `AUTHELIA_JWT_SECRET`, `VAULTWARDEN_ADMIN_TOKEN` |
 | `homepage/.env` | `HOMEPAGE_VAR_*`, `NAS_VOLUME_ROOT` (ลบ `NGINX_BASIC_AUTH_*` แล้ว — ใช้ Authelia แทน) |
 | `jellyfin/.env` | `NAS_VOLUME_ROOT`, `NAS_MEDIA_ROOT` |
-| `line-secretary/.env` | `LINE_SECRETARY_*`, `NOTION_TOKEN`, `GROQ_API_KEY`, `OPENROUTER_API_KEY` |
+| `my-secretary/.env` | `LINE_SECRETARY_*`, `NOTION_TOKEN`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_CHAT_IDS` |
 | `hermes-agent/.env`   | `OPENROUTER_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USERS`, `DISCORD_BOT_TOKEN`, `DISCORD_ALLOWED_GUILDS`, `HERMES_UID`, `HERMES_GID` |
 | `maid-tracker/.env` | `MAID_LINE_*`, `MONTHLY_REPORT_TIME` (ลบ `NGINX_BASIC_AUTH_*` แล้ว — ใช้ Authelia แทน) |
 | `torrentwatch/.env` | `TORRENTWATCH_*`, `NGINX_BASIC_AUTH_*`, `NAS_TORRENT_PATH` |
@@ -47,7 +47,7 @@ Homepage widgets ที่ยิง DSM API จะถูก auto-block IP ถ้
 |---|---|
 | 2026-05-22 | เพิ่ม NAS_VOLUME_ROOT / NAS_MEDIA_ROOT — replace hardcoded /volume1 ทั้ง project |
 | 2026-05-23 | Refactor per-stack .env, fix homepage DSM auto-block, fix watchtower notifier 429 |
-| 2026-05-23 | เพิ่ม Telegram bot: line-secretary webhook + watchtower notification. Router port 8443 → NAS |
-| 2026-05-23 | เพิ่ม hermes-agent stack (Telegram + Discord, port 5063). ย้าย Telegram ออกจาก line-secretary |
+| 2026-05-23 | เพิ่ม Telegram bot: my-secretary webhook + watchtower notification. Router port 8443 → NAS |
+| 2026-05-23 | เพิ่ม hermes-agent stack (Telegram + Discord, port 5063). ย้าย Telegram ออกจาก my-secretary |
 | 2026-05-23 | สร้าง auth/ stack (Authelia SSO port 9091 + Vaultwarden port 8222). Migrate homepage + maid-tracker จาก basic auth → Authelia forward-auth |
 | 2026-05-23 | สร้าง news-feed/ stack (FastAPI + APScheduler + SQLite, port 5064). RSS 7 แหล่ง, สรุปภาษาไทย Anthropic/OpenRouter switchable, digest → LINE + Telegram |

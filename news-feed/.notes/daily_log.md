@@ -2,6 +2,28 @@
 
 ---
 
+## 2026-05-24 (3) — Fix: digest dedup — ไม่ส่งข่าวซ้ำระหว่างรอบ
+
+### Bug
+`_digest_job` ใช้ `get_recent_articles_for_digest(hours=6)` แต่ไม่เช็ค `digest_log` → บทความที่เคยส่งแล้วอาจถูกส่งซ้ำถ้า `fetched_at` ยังอยู่ใน window 6 ชั่วโมง
+
+**Root cause:** รอบ 07:00→12:00 ห่างกัน 5 ชั่วโมง แต่ query window 6 ชั่วโมง → overlap 1 ชั่วโมง; การเทสตอนเช้า fetch บทความที่ 09:00 → 12:00 ยังอยู่ใน window → ส่งซ้ำ
+
+### Fix — `scheduler.py` `_digest_job`
+```python
+history = get_digest_history(conn, limit=20)
+sent_ids = {aid for entry in history for aid in entry["article_ids"]}
+candidates = get_recent_articles_for_digest(conn, hours=6, limit=20)
+articles = [a for a in candidates if a["id"] not in sent_ids][:5]
+```
+- โหลด `digest_log` 20 รายการล่าสุด → รวม IDs ที่เคยส่ง
+- ดึง candidates 20 บทความ → กรองออก → เหลือ 5 ตัวแรก
+
+### Deploy
+`bash scripts/deploy.sh -s news-feed -y` — build + restart สำเร็จ (9s) ✅
+
+---
+
 ## 2026-05-24 (2) — Optimize fetcher + fetch/digest trigger endpoints
 
 ### Feature: Immediate fetch on start
