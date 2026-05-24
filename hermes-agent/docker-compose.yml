@@ -12,6 +12,7 @@ services:
       - TZ=Asia/Bangkok
       - HERMES_UID=${HERMES_UID:-1000}
       - HERMES_GID=${HERMES_GID:-100}
+      - HERMES_HOME=/opt/data
     volumes:
       - hermes_agent_data:/opt/data
     labels:
@@ -29,6 +30,7 @@ services:
       - TZ=Asia/Bangkok
       - HERMES_UID=${HERMES_UID:-1000}
       - HERMES_GID=${HERMES_GID:-100}
+      - HERMES_HOME=/opt/data
     ports:
       - "5063:9119"
     volumes:

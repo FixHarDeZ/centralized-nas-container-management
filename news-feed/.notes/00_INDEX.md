@@ -2,7 +2,7 @@
 
 **สร้าง:** 2026-05-23  
 **Port:** 5064 (external) → 8000 (internal)  
-**Status:** Complete — รอ deploy
+**Status:** Running ✅ (2026-05-24)
 
 ---
 
@@ -89,6 +89,8 @@ Single Python 3.12-slim container:
 - Scheduler jobs ต้องเป็น closures capture `db_path` — ไม่ใช่อ่าน module-level `DB_PATH`
 - StaticFiles mount ที่ `/` ต้อง register **หลัง** API routers ทุกตัว (catch-all)
 - `get_recent_articles_for_digest` ใช้ SQLite `datetime('now', ?)` ตรงๆ ไม่ผ่าน Python datetime
+- **`schedule.json` บน NAS override `.env` ทั้งหมด** — ถ้าเปลี่ยน ENABLED_SOURCES ใน .env ต้องลบ `schedule.json` ด้วย (`rm /volume2/@docker/volumes/news-feed_news_feed_data/_data/schedule.json`)
+- **`entry.summary` ใน RSS ไม่ใช่ full body** — เพียงพอสำหรับ summarization, ไม่ต้อง fetch article URL
 
 ---
 
@@ -97,3 +99,5 @@ Single Python 3.12-slim container:
 | วันที่ | เรื่อง |
 |--------|--------|
 | 2026-05-23 | สร้าง stack ทั้งหมด (14 tasks), 41 tests ผ่าน |
+| 2026-05-24 | Fix deploy: `COPY --chown=app:app`, `chown 1000:1000 /data`, Dockerfile `RUN mkdir /data` |
+| 2026-05-24 | Optimize fetcher: RSS summary แทน full-body fetch, limit 10/source, `POST /api/fetch/trigger`, immediate fetch on start |

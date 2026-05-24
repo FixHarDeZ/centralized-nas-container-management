@@ -2,6 +2,35 @@
 
 ---
 
+## 2026-05-24 — ย้ายกลับ basic auth (ลบ Authelia)
+
+### งานที่ทำ
+
+**เหตุผล:** ลบ Authelia auth stack ออก → maid-nginx กลับมาใช้ basic auth เหมือนเดิม
+
+**ไฟล์ที่เปลี่ยน:**
+
+`maid-tracker/nginx/nginx.conf`:
+- ลบ `location /authelia` (forward-auth endpoint) ออก
+- ลบ `auth_request /authelia` และ `error_page 401 =302` ออก
+- เพิ่ม `auth_basic "Restricted"` + `auth_basic_user_file /etc/nginx/.htpasswd`
+- mount path เปลี่ยนจาก `templates/default.conf.template` → `conf.d/default.conf`
+
+`maid-tracker/docker-compose.yml`:
+- ลบ `auth_net` external network ออก
+- ลบ `AUTHELIA_HOST` + `NAS_HOST` env vars ออกจาก maid-nginx service
+- เพิ่ม volume mount: `./nginx/.htpasswd:/etc/nginx/.htpasswd:ro`
+
+`maid-tracker/nginx/.htpasswd` (ใหม่, ไม่ commit):
+- APR1 hash สำหรับ user `fixhardez`
+
+`maid-tracker/.env.example` + `.env`:
+- ลบ `NAS_HOST` + `AUTHELIA_HOST` block + `NGINX_BASIC_AUTH_*` ออก
+
+**Deploy:** `scripts/deploy.sh -s maid-tracker -y` — image rebuilt + maid-tracker-nginx created ✅
+
+---
+
 ## 2026-05-18 (2)
 
 ### ปรับ Frontend ให้ Modern

@@ -26,17 +26,14 @@ services:
       - "3000:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/.htpasswd:/etc/nginx/.htpasswd:ro
     environment:
       - TZ=Asia/Bangkok
     depends_on:
       - homepage
     networks:
       - default
-      - auth_net
 
 networks:
   default:
     driver: bridge
-  auth_net:
-    external: true
-    name: auth_net
