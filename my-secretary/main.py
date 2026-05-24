@@ -1,7 +1,7 @@
 import asyncio
+import hmac
 import json
 import logging
-import time
 from contextlib import asynccontextmanager
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
@@ -11,6 +11,7 @@ import line_client
 import notion as notion_mod
 import provider as _provider
 import store
+import telegram_client
 from cache import cache as _cache
 from config import settings
 
@@ -25,10 +26,20 @@ async def lifespan(app: FastAPI):
     store.init(settings.DATA_DIR)
     _cache.init(settings.NOTION_TOKEN)
     _cache.start()
+    if settings.TELEGRAM_BOT_TOKEN and settings.TELEGRAM_WEBHOOK_URL:
+        try:
+            await telegram_client.register_webhook(
+                settings.TELEGRAM_BOT_TOKEN,
+                settings.TELEGRAM_WEBHOOK_URL,
+                settings.TELEGRAM_WEBHOOK_SECRET,
+            )
+            logger.info("Telegram webhook registered: %s", settings.TELEGRAM_WEBHOOK_URL)
+        except Exception as e:
+            logger.warning("Telegram webhook registration failed: %s", e)
     yield
 
 
-app = FastAPI(title="Line Secretary", lifespan=lifespan)
+app = FastAPI(title="my-secretary", lifespan=lifespan)
 
 CONFIRM_WORDS = {"ใช่", "yes", "y", "ตกลง", "ok", "ยืนยัน", "confirm", "ใช"}
 CANCEL_WORDS = {"ไม่", "no", "n", "ยกเลิก", "cancel", "ไม่ใช่", "ไม่ครับ", "ไม่ค่ะ"}
@@ -45,13 +56,13 @@ def _is_note_intent(text: str) -> bool:
     return any(k in t for k in _NOTE_INTENT_KEYWORDS)
 
 
-async def _push_long(user_id: str, text: str, token: str, max_len: int = 4000) -> None:
-    """Send text as one or more LINE messages, splitting at max_len chars."""
+async def _push_long(text: str, push_fn, max_len: int = 4000) -> None:
+    """Send text in chunks, splitting at max_len chars."""
     if len(text) <= max_len:
-        await line_client.push(user_id, text, token)
+        await push_fn(text)
         return
     for i in range(0, len(text), max_len):
-        await line_client.push(user_id, text[i:i + max_len], token)
+        await push_fn(text[i:i + max_len])
 
 
 # ── Webhook ────────────────────────────────────────────────────────────────────
@@ -70,28 +81,58 @@ async def webhook(request: Request, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=400, detail="Invalid signature")
 
     data = json.loads(body)
+    token = settings.LINE_SECRETARY_CHANNEL_ACCESS_TOKEN
     for event in data.get("events", []):
         if event.get("type") != "message":
             continue
+        user_id = event["source"]["userId"]
+        push_fn = lambda t, _uid=user_id: line_client.push(_uid, t, token)
         if event["message"]["type"] == "text":
-            background_tasks.add_task(handle_message, event)
+            text = event["message"]["text"].strip()
+            background_tasks.add_task(handle_message, user_id, text, push_fn)
         else:
-            background_tasks.add_task(handle_non_text_message, event)
+            msg = event.get("message", {})
+            download_fn = lambda mid: line_client.download_content(mid, token)
+            background_tasks.add_task(handle_non_text_message, user_id, msg, push_fn, download_fn)
 
     return {"status": "ok"}
 
 
-async def handle_non_text_message(event: dict) -> None:
-    user_id = event["source"]["userId"]
-    if user_id not in settings.allowed_user_ids:
-        return
-    msg = event.get("message", {})
+@app.post("/webhook/telegram")
+async def webhook_telegram(request: Request, background_tasks: BackgroundTasks):
+    if not settings.TELEGRAM_BOT_TOKEN:
+        raise HTTPException(status_code=404)
+
+    secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+    if settings.TELEGRAM_WEBHOOK_SECRET and not hmac.compare_digest(
+        secret, settings.TELEGRAM_WEBHOOK_SECRET
+    ):
+        raise HTTPException(status_code=403, detail="Invalid secret")
+
+    data = await request.json()
+    message = data.get("message")
+    if not message or not message.get("text"):
+        return {"ok": True}
+
+    chat_id = message["chat"]["id"]
+    text = message["text"].strip()
+
+    allowed = settings.telegram_allowed_chat_ids
+    if allowed and str(chat_id) not in allowed:
+        logger.warning(f"Unauthorized Telegram chat: {chat_id}")
+        return {"ok": True}
+
+    token = settings.TELEGRAM_BOT_TOKEN
+    push_fn = lambda t: telegram_client.send_message(chat_id, t, token)
+    background_tasks.add_task(handle_message, f"tg_{chat_id}", text, push_fn)
+    return {"ok": True}
+
+
+async def handle_non_text_message(user_id: str, msg: dict, push_fn, download_fn=None) -> None:
     msg_type = msg.get("type", "")
-    token = settings.LINE_SECRETARY_CHANNEL_ACCESS_TOKEN
 
     if msg_type == "image":
-        # If user is in waiting_content note phase → attach image to the note
-        if store.has_pending_note(user_id):
+        if store.has_pending_note(user_id) and download_fn is not None:
             note_state = store.get_pending_note(user_id)
             if note_state.get("phase") == "waiting_content":
                 page_id = note_state["page_id"]
@@ -99,34 +140,29 @@ async def handle_non_text_message(event: dict) -> None:
                 appending = note_state.get("appending", False)
                 store.pop_pending_note(user_id)
                 try:
-                    image_bytes = await line_client.download_content(msg["id"], token)
+                    image_bytes = await download_fn(msg["id"])
                     file_upload_id = await notion_mod.upload_image(
                         settings.NOTION_TOKEN, image_bytes, f"image_{msg['id']}.jpg"
                     )
                     await notion_mod.append_image_block(settings.NOTION_TOKEN, page_id, file_upload_id)
                     verb = "เพิ่มรูปภาพลง" if appending else "บันทึกรูปภาพลง"
-                    await line_client.push(user_id, f"{verb} '{title}' เรียบร้อยแล้วค่ะ 🖼️", token)
+                    await push_fn(f"{verb} '{title}' เรียบร้อยแล้วค่ะ 🖼️")
                 except Exception as e:
                     logger.error(f"Image upload to Notion error: {e}", exc_info=True)
-                    await line_client.push(user_id, "อัปโหลดรูปภาพไม่สำเร็จค่ะ ลองใหม่อีกครั้งนะคะ", token)
+                    await push_fn("อัปโหลดรูปภาพไม่สำเร็จค่ะ ลองใหม่อีกครั้งนะคะ")
                 return
-        # Not in note flow
-        await line_client.push(
-            user_id,
-            "ส่งรูปภาพแนบใน note ได้ค่ะ 📎\nพิมพ์ 'จดหน่อย' เพื่อเริ่ม note แล้วส่งรูปมาได้เลย",
-            token,
+        await push_fn(
+            "ส่งรูปภาพแนบใน note ได้ค่ะ 📎\nพิมพ์ 'จดหน่อย' เพื่อเริ่ม note แล้วส่งรูปมาได้เลย"
         )
         return
 
-    await line_client.push(user_id, f"รับแค่ข้อความ (text) ค่ะ ไม่สามารถประมวลผล {msg_type} ได้ค่ะ", token)
+    await push_fn(f"รับแค่ข้อความ (text) ค่ะ ไม่สามารถประมวลผล {msg_type} ได้ค่ะ")
 
 
-async def handle_message(event: dict) -> None:
-    user_id = event["source"]["userId"]
-    text = event["message"]["text"].strip()
-    token = settings.LINE_SECRETARY_CHANNEL_ACCESS_TOKEN
-
-    if user_id not in settings.allowed_user_ids:
+async def handle_message(user_id: str, text: str, push_fn) -> None:
+    # LINE users are checked against whitelist; Telegram users (tg_ prefix) are
+    # already verified in webhook_telegram before reaching here.
+    if not user_id.startswith("tg_") and user_id not in settings.allowed_user_ids:
         logger.warning(f"Unauthorized user: {user_id}")
         return
 
@@ -138,7 +174,7 @@ async def handle_message(event: dict) -> None:
             reply = f"[DEBUG] search('{query}'):\n{json.dumps(results, ensure_ascii=False, indent=2)}"
         except Exception as e:
             reply = f"[DEBUG] Error: {e}"
-        await line_client.push(user_id, reply[:4000], token)
+        await push_fn(reply[:4000])
         return
 
     # /debug2 <query> → full deep search (pages + embedded databases)
@@ -149,7 +185,7 @@ async def handle_message(event: dict) -> None:
             reply = f"[DEBUG2] deep_search('{query}'):\n{json.dumps(result, ensure_ascii=False, indent=2)}"
         except Exception as e:
             reply = f"[DEBUG2] Error: {e}"
-        await line_client.push(user_id, reply[:4000], token)
+        await push_fn(reply[:4000])
         return
 
     # /debug3 <page_id> → raw blocks of a page
@@ -160,7 +196,7 @@ async def handle_message(event: dict) -> None:
             reply = f"[DEBUG3] blocks({page_id[:8]}...):\n{json.dumps(result, ensure_ascii=False, indent=2)}"
         except Exception as e:
             reply = f"[DEBUG3] Error: {e}"
-        await line_client.push(user_id, reply[:4000], token)
+        await push_fn(reply[:4000])
         return
 
     # /debug4 <db_id> → raw database query
@@ -171,17 +207,17 @@ async def handle_message(event: dict) -> None:
             reply = f"[DEBUG4] query_db_raw({db_id[:8]}...):\n{json.dumps(result, ensure_ascii=False, indent=2)}"
         except Exception as e:
             reply = f"[DEBUG4] Error: {e}"
-        await line_client.push(user_id, reply[:4000], token)
+        await push_fn(reply[:4000])
         return
 
     # /refresh → force immediate cache rebuild
     if text == "/refresh":
         try:
             n = await _cache.force_refresh()
-            await line_client.push(user_id, f"รีเฟรช cache เรียบร้อยค่ะ 🔄 ({n} pages)", token)
+            await push_fn(f"รีเฟรช cache เรียบร้อยค่ะ 🔄 ({n} pages)")
         except Exception as e:
             logger.error(f"force_refresh error: {e}", exc_info=True)
-            await line_client.push(user_id, "รีเฟรช cache ไม่สำเร็จค่ะ ลองใหม่อีกครั้งนะคะ", token)
+            await push_fn("รีเฟรช cache ไม่สำเร็จค่ะ ลองใหม่อีกครั้งนะคะ")
         return
 
     # /cache → show cache stats
@@ -194,21 +230,19 @@ async def handle_message(event: dict) -> None:
             age_str = f"{age} วินาที"
         else:
             age_str = f"{age // 60} นาที {age % 60} วิ"
-        await line_client.push(
-            user_id,
-            f"Cache: {s['pages']} pages ({s['indexed']} indexed) | อัปเดตเมื่อ {age_str} ที่แล้วค่ะ",
-            token,
+        await push_fn(
+            f"Cache: {s['pages']} pages ({s['indexed']} indexed) | อัปเดตเมื่อ {age_str} ที่แล้วค่ะ"
         )
         return
 
     # /provider → show active provider and failover status
     if text == "/provider":
-        await line_client.push(user_id, _provider.status_text(settings), token)
+        await push_fn(_provider.status_text(settings))
         return
 
     # /help → show available commands and usage tips
     if text == "/help":
-        await line_client.push(user_id, (
+        await push_fn(
             "📖 คำสั่งที่ใช้ได้:\n"
             "/help — แสดงคำสั่งทั้งหมดนี้\n"
             "/history — แสดงประวัติสนทนาล่าสุด 4 รอบ\n"
@@ -230,21 +264,21 @@ async def handle_message(event: dict) -> None:
             "• ลบข้อมูล: \"ลบ ... ออก\"\n\n"
             "⚠️ ทุก write (เพิ่ม/แก้/ลบ) ต้องยืนยันด้วย 'ใช่' ก่อนเสมอค่ะ\n"
             "⏰ pending ที่ไม่ได้ยืนยันจะหมดอายุใน 6 ชั่วโมงอัตโนมัติค่ะ"
-        ), token)
+        )
         return
 
     # /history → show last 4 conversation exchanges
     if text == "/history":
         hist = store.get_history(user_id)
         if not hist:
-            await line_client.push(user_id, "ยังไม่มีประวัติการสนทนาค่ะ", token)
+            await push_fn("ยังไม่มีประวัติการสนทนาค่ะ")
             return
         lines = []
         for i in range(0, len(hist) - 1, 2):
             u = hist[i].get("content", "")[:120]
             b = hist[i + 1].get("content", "")[:120] if i + 1 < len(hist) else ""
             lines.append(f"คุณ: {u}\nบอท: {b}")
-        await _push_long(user_id, "📜 ประวัติล่าสุด:\n\n" + "\n\n".join(lines), token)
+        await _push_long("📜 ประวัติล่าสุด:\n\n" + "\n\n".join(lines), push_fn)
         return
 
     # /clear → wipe history + pending for this user (useful when bot gets stuck)
@@ -253,7 +287,7 @@ async def handle_message(event: dict) -> None:
         store.pop_pending_general(user_id)
         store.pop_pending_note(user_id)
         store.clear_history(user_id)
-        await line_client.push(user_id, "ล้างประวัติการสนทนาแล้วค่ะ 🗑️", token)
+        await push_fn("ล้างประวัติการสนทนาแล้วค่ะ 🗑️")
         return
 
     # Handle pending note flow
@@ -263,14 +297,11 @@ async def handle_message(event: dict) -> None:
         if note_state.get("phase") == "asking_topic":
             title = text.strip()
             if not title:
-                await line_client.push(user_id, "กรุณาบอกชื่อหัวข้อด้วยนะคะ 📝", token)
+                await push_fn("กรุณาบอกชื่อหัวข้อด้วยนะคะ 📝")
                 return
 
-            # Check if a page with this title already exists → append instead of create
-            # Phase 1: cache (fast, 0 API calls when warm)
             all_pages = await _cache.get_pages()
             existing = next((p for p in all_pages if p["title"].strip().lower() == title.lower()), None)
-            # Phase 2: Notion search fallback (catches pages not yet in cache / stale cache)
             if not existing:
                 try:
                     search_results = await notion_mod.search(settings.NOTION_TOKEN, title)
@@ -289,11 +320,7 @@ async def handle_message(event: dict) -> None:
                     "title": existing["title"],
                     "appending": True,
                 })
-                await line_client.push(
-                    user_id,
-                    f"พบ page '{existing['title']}' แล้วค่ะ 📎 ส่งเนื้อหาที่จะเพิ่มมาได้เลยค่ะ",
-                    token,
-                )
+                await push_fn(f"พบ page '{existing['title']}' แล้วค่ะ 📎 ส่งเนื้อหาที่จะเพิ่มมาได้เลยค่ะ")
                 return
 
             try:
@@ -306,7 +333,7 @@ async def handle_message(event: dict) -> None:
             except Exception as e:
                 logger.error(f"create_page error: {e}", exc_info=True)
                 store.pop_pending_note(user_id)
-                await line_client.push(user_id, "สร้าง page ไม่สำเร็จค่ะ ลองใหม่อีกครั้งนะคะ", token)
+                await push_fn("สร้าง page ไม่สำเร็จค่ะ ลองใหม่อีกครั้งนะคะ")
                 return
             store.set_pending_note(user_id, {
                 "phase": "waiting_content",
@@ -314,7 +341,7 @@ async def handle_message(event: dict) -> None:
                 "title": title,
                 "appending": False,
             })
-            await line_client.push(user_id, f"สร้าง page '{title}' แล้วค่ะ 📄 ส่งเนื้อหาที่จะจดมาได้เลยค่ะ\n(รองรับ # หัวข้อ / - bullet / [ ] todo)", token)
+            await push_fn(f"สร้าง page '{title}' แล้วค่ะ 📄 ส่งเนื้อหาที่จะจดมาได้เลยค่ะ\n(รองรับ # หัวข้อ / - bullet / [ ] todo)")
             return
 
         if note_state.get("phase") == "waiting_content":
@@ -327,29 +354,24 @@ async def handle_message(event: dict) -> None:
             except Exception as e:
                 logger.error(f"append_blocks error: {e}", exc_info=True)
                 notion_url = f"https://notion.so/{page_id.replace('-', '')}"
-                await line_client.push(
-                    user_id,
-                    f"บันทึกไม่สำเร็จค่ะ ลองเปิด page โดยตรงที่:\n{notion_url}",
-                    token,
-                )
+                await push_fn(f"บันทึกไม่สำเร็จค่ะ ลองเปิด page โดยตรงที่:\n{notion_url}")
                 return
             verb = "เพิ่มเนื้อหาลง" if appending else "บันทึกลง"
-            await line_client.push(user_id, f"{verb} '{title}' เรียบร้อยแล้วค่ะ ✅", token)
+            await push_fn(f"{verb} '{title}' เรียบร้อยแล้วค่ะ ✅")
             return
 
-        # unknown phase — clear and reset
         logger.warning(f"Unknown pending_note phase for {user_id}: {note_state.get('phase')}")
         store.pop_pending_note(user_id)
-        await line_client.push(user_id, "เกิดข้อผิดพลาดในขั้นตอนจดโน้ตค่ะ กรุณาเริ่มใหม่อีกครั้ง", token)
+        await push_fn("เกิดข้อผิดพลาดในขั้นตอนจดโน้ตค่ะ กรุณาเริ่มใหม่อีกครั้ง")
         return
 
     # Detect note-taking intent
     if _is_note_intent(text):
         if not settings.NOTION_QUICK_NOTE_PAGE_ID:
-            await line_client.push(user_id, "ยังไม่ได้ตั้งค่า Quick note page ค่ะ (NOTION_QUICK_NOTE_PAGE_ID)", token)
+            await push_fn("ยังไม่ได้ตั้งค่า Quick note page ค่ะ (NOTION_QUICK_NOTE_PAGE_ID)")
             return
         store.set_pending_note(user_id, {"phase": "asking_topic"})
-        await line_client.push(user_id, "จะจดเรื่องอะไรคะ? 📝 (บอกชื่อหัวข้อ หรือชื่อ page ที่มีอยู่แล้ว)", token)
+        await push_fn("จะจดเรื่องอะไรคะ? 📝 (บอกชื่อหัวข้อ หรือชื่อ page ที่มีอยู่แล้ว)")
         return
 
     # Handle pending general-knowledge confirmation
@@ -363,21 +385,20 @@ async def handle_message(event: dict) -> None:
                     timeout=AGENT_TIMEOUT,
                 )
             except asyncio.TimeoutError:
-                await line_client.push(user_id, "ขอโทษค่ะ ใช้เวลานานเกินไป กรุณาลองใหม่อีกครั้งนะคะ", token)
+                await push_fn("ขอโทษค่ะ ใช้เวลานานเกินไป กรุณาลองใหม่อีกครั้งนะคะ")
                 return
             except Exception as e:
                 logger.error(f"run_general error: {e}", exc_info=True)
-                await line_client.push(user_id, "เกิดข้อผิดพลาดค่ะ ลองใหม่อีกครั้งนะคะ", token)
+                await push_fn("เกิดข้อผิดพลาดค่ะ ลองใหม่อีกครั้งนะคะ")
                 return
             reply = result["text"]
             store.add_history(user_id, question, reply)
-            await _push_long(user_id, reply, token)
+            await _push_long(reply, push_fn)
             return
         if lower in CANCEL_WORDS:
             store.pop_pending_general(user_id)
-            await line_client.push(user_id, "ได้ค่ะ ถ้าต้องการข้อมูลอื่นถามได้เลยนะคะ", token)
+            await push_fn("ได้ค่ะ ถ้าต้องการข้อมูลอื่นถามได้เลยนะคะ")
             return
-        # Not a confirm/cancel word — clear and treat as new query
         store.pop_pending_general(user_id)
 
     # Handle pending write confirmation
@@ -386,13 +407,12 @@ async def handle_message(event: dict) -> None:
         if lower in CONFIRM_WORDS:
             action = store.pop_pending(user_id)
             reply = await agent.execute_write(action)
-            await _push_long(user_id, reply, token)
+            await _push_long(reply, push_fn)
             return
         if lower in CANCEL_WORDS:
             store.pop_pending(user_id)
-            await line_client.push(user_id, "ยกเลิกแล้วค่ะ", token)
+            await push_fn("ยกเลิกแล้วค่ะ")
             return
-        # Not a confirmation word — treat as new query
         store.pop_pending(user_id)
 
     try:
@@ -401,7 +421,7 @@ async def handle_message(event: dict) -> None:
             timeout=AGENT_TIMEOUT,
         )
     except asyncio.TimeoutError:
-        await line_client.push(user_id, "ขอโทษค่ะ ใช้เวลานานเกินไป กรุณาลองใหม่อีกครั้งนะคะ", token)
+        await push_fn("ขอโทษค่ะ ใช้เวลานานเกินไป กรุณาลองใหม่อีกครั้งนะคะ")
         return
     except Exception as e:
         logger.warning(f"Agent first attempt failed for {user_id}: {type(e).__name__}: {e} — retrying in 3s")
@@ -412,11 +432,11 @@ async def handle_message(event: dict) -> None:
                 timeout=AGENT_TIMEOUT,
             )
         except asyncio.TimeoutError:
-            await line_client.push(user_id, "ขอโทษค่ะ ใช้เวลานานเกินไป กรุณาลองใหม่อีกครั้งนะคะ", token)
+            await push_fn("ขอโทษค่ะ ใช้เวลานานเกินไป กรุณาลองใหม่อีกครั้งนะคะ")
             return
         except Exception as e2:
             logger.error(f"Agent retry also failed for {user_id}: {e2}", exc_info=True)
-            await line_client.push(user_id, "เกิดข้อผิดพลาดขึ้นค่ะ ลองใหม่อีกครั้งนะคะ", token)
+            await push_fn("เกิดข้อผิดพลาดขึ้นค่ะ ลองใหม่อีกครั้งนะคะ")
             return
 
     if result["type"] == "confirm":
@@ -426,8 +446,6 @@ async def handle_message(event: dict) -> None:
 
     reply = result["text"]
     if result["type"] == "answer":
-        # Safety: don't store replies that contain raw JSON proposals —
-        # those are bad LLM outputs that would poison future context.
         if not agent._parse_propose(reply):
             store.add_history(user_id, text, reply)
-    await _push_long(user_id, reply, token)
+    await _push_long(reply, push_fn)
