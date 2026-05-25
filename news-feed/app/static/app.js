@@ -385,6 +385,23 @@ async function saveSchedule() {
 
 // Copy button handler (delegated)
 const _copyTimers = new WeakMap();
+
+function _copyText(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(text);
+  }
+  // HTTP fallback: execCommand (works without HTTPS)
+  const el = document.createElement('textarea');
+  el.value = text;
+  el.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0';
+  document.body.appendChild(el);
+  el.focus();
+  el.select();
+  try { document.execCommand('copy'); } catch (_) {}
+  document.body.removeChild(el);
+  return Promise.resolve();
+}
+
 document.addEventListener('click', e => {
   const btn = e.target.closest('.copy-btn');
   if (!btn) return;
@@ -392,7 +409,7 @@ document.addEventListener('click', e => {
   const idx = parseInt(btn.dataset.idx, 10);
   const modelId = _shownPrices[idx]?.model_id;
   if (!modelId) return;
-  navigator.clipboard.writeText(modelId).then(() => {
+  _copyText(modelId).then(() => {
     clearTimeout(_copyTimers.get(btn));
     btn.textContent = '✓';
     _copyTimers.set(btn, setTimeout(() => { btn.textContent = '📋'; }, 1500));
