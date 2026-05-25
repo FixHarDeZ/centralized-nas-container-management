@@ -247,9 +247,11 @@ async function loadLeaderboard() {
 
   // Top Intelligence: match validPrices against MODEL_ELO_SCORES, sort desc by ELO, top 10
   const eloMatched = [];
+  const sortedEloEntries = Object.entries(MODEL_ELO_SCORES)
+    .sort((a, b) => b[0].length - a[0].length);
   for (const p of validPrices) {
     const mid = p.model_id.toLowerCase();
-    for (const [sub, elo] of Object.entries(MODEL_ELO_SCORES)) {
+    for (const [sub, elo] of sortedEloEntries) {
       if (mid.includes(sub) && !eloMatched.find(e => e.p === p)) {
         eloMatched.push({ p, elo });
         break;
