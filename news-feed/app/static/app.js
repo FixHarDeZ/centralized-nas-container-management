@@ -1,6 +1,47 @@
 let allNews = [];
 let allPrices = [];
 let _shownPrices = [];
+let _priceZoneFilter = '';
+
+const PROVIDER_ZONES = {
+  'openai':       { zone: 'US', flag: '🇺🇸', label: 'US' },
+  'anthropic':    { zone: 'US', flag: '🇺🇸', label: 'US' },
+  'google':       { zone: 'US', flag: '🇺🇸', label: 'US' },
+  'meta-llama':   { zone: 'US', flag: '🇺🇸', label: 'US' },
+  'x-ai':         { zone: 'US', flag: '🇺🇸', label: 'US' },
+  'amazon':       { zone: 'US', flag: '🇺🇸', label: 'US' },
+  'microsoft':    { zone: 'US', flag: '🇺🇸', label: 'US' },
+  'nvidia':       { zone: 'US', flag: '🇺🇸', label: 'US' },
+  'perplexity':   { zone: 'US', flag: '🇺🇸', label: 'US' },
+  'writer':       { zone: 'US', flag: '🇺🇸', label: 'US' },
+  'deepseek':     { zone: 'CN', flag: '🇨🇳', label: 'CN' },
+  'qwen':         { zone: 'CN', flag: '🇨🇳', label: 'CN' },
+  'baidu':        { zone: 'CN', flag: '🇨🇳', label: 'CN' },
+  '01-ai':        { zone: 'CN', flag: '🇨🇳', label: 'CN' },
+  'minimax':      { zone: 'CN', flag: '🇨🇳', label: 'CN' },
+  'moonshot':     { zone: 'CN', flag: '🇨🇳', label: 'CN' },
+  'zhipuai':      { zone: 'CN', flag: '🇨🇳', label: 'CN' },
+  'baichuan':     { zone: 'CN', flag: '🇨🇳', label: 'CN' },
+  'iflytek':      { zone: 'CN', flag: '🇨🇳', label: 'CN' },
+  'bytedance':    { zone: 'CN', flag: '🇨🇳', label: 'CN' },
+  'tencent':      { zone: 'CN', flag: '🇨🇳', label: 'CN' },
+  'mistralai':    { zone: 'EU', flag: '🇪🇺', label: 'EU' },
+  'aleph-alpha':  { zone: 'EU', flag: '🇪🇺', label: 'EU' },
+  'silo':         { zone: 'EU', flag: '🇪🇺', label: 'EU' },
+};
+
+function getZone(modelId) {
+  const prefix = (modelId || '').split('/')[0].toLowerCase();
+  return PROVIDER_ZONES[prefix] || { zone: 'Others', flag: '🌍', label: 'Others' };
+}
+
+function setZoneFilter(zone) {
+  _priceZoneFilter = zone;
+  document.querySelectorAll('.zone-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.zone === zone);
+  });
+  filterPrices();
+}
 
 async function api(path) {
   const r = await fetch(path);
@@ -94,13 +135,16 @@ function filterNews() {
 function renderPriceTable(prices) {
   _shownPrices = prices;
   const tbody = document.querySelector('#price-table tbody');
-  tbody.innerHTML = prices.map((p, i) => `<tr>
-    <td>${p.name}</td><td><span class="model-id">${p.model_id}</span> <button class="copy-btn" data-idx="${i}" title="Copy model ID">📋</button></td><td>${p.provider}</td>
+  tbody.innerHTML = prices.map((p, i) => {
+    const z = getZone(p.model_id);
+    return `<tr>
+    <td>${p.name} <span class="zone-badge">${z.flag} ${z.label}</span></td><td><span class="model-id">${p.model_id}</span> <button class="copy-btn" data-idx="${i}" title="Copy model ID">📋</button></td><td>${p.provider}</td>
     <td>$${(p.prompt_price||0).toFixed(3)}</td>
     <td>$${(p.complete_price||0).toFixed(3)}</td>
     <td>${p.context_length ? p.context_length.toLocaleString() : '–'}</td>
     <td>${p.updated_at ? new Date(p.updated_at).toLocaleString('th-TH') : '–'}</td>
-  </tr>`).join('');
+  </tr>`;
+  }).join('');
 }
 
 async function loadPrices() {
@@ -131,10 +175,10 @@ async function loadPrices() {
 
 function filterPrices() {
   const q = document.getElementById('price-search').value.toLowerCase();
-  renderPriceTable(q
-    ? allPrices.filter(p => p.name.toLowerCase().includes(q) || p.model_id.toLowerCase().includes(q))
-    : allPrices
-  );
+  let filtered = allPrices;
+  if (q) filtered = filtered.filter(p => p.name.toLowerCase().includes(q) || p.model_id.toLowerCase().includes(q));
+  if (_priceZoneFilter) filtered = filtered.filter(p => getZone(p.model_id).zone === _priceZoneFilter);
+  renderPriceTable(filtered);
 }
 
 async function loadLeaderboard() {
