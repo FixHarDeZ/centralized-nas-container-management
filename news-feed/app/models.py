@@ -38,6 +38,12 @@ def init_db(conn: sqlite3.Connection) -> None:
         );
     """)
     conn.commit()
+    # Migration: add free_expires_at column if not present (manually set, NOT from OpenRouter)
+    try:
+        conn.execute("ALTER TABLE prices ADD COLUMN free_expires_at TEXT")
+        conn.commit()
+    except Exception:
+        pass  # column already exists
 
 
 def article_exists(conn: sqlite3.Connection, article_id: str) -> bool:
@@ -117,6 +123,18 @@ def upsert_price(conn: sqlite3.Connection, model: dict) -> None:
          model["complete_price"], model.get("context_length"), model["updated_at"]),
     )
     conn.commit()
+
+
+def set_free_expiry(conn: sqlite3.Connection, model_id: str, expires_at: Optional[str]) -> bool:
+    import re
+    if expires_at is not None and not re.match(r"^\d{4}-\d{2}-\d{2}$", expires_at):
+        raise ValueError("Invalid date format, use YYYY-MM-DD")
+    cur = conn.execute(
+        "UPDATE prices SET free_expires_at = ? WHERE model_id = ?",
+        (expires_at, model_id),
+    )
+    conn.commit()
+    return cur.rowcount > 0
 
 
 def get_price_updated_at(conn: sqlite3.Connection) -> Optional[str]:
