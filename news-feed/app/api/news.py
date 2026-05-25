@@ -4,9 +4,18 @@ from typing import Annotated, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.deps import get_db
-from app.models import get_article, get_articles
+from app.models import get_article, get_articles, get_source_counts
 
 router = APIRouter(prefix="/api/news", tags=["news"])
+
+
+@router.get("/sources")
+def list_source_counts(
+    db: Annotated[sqlite3.Connection, Depends(get_db)],
+    hours: int = Query(24, ge=1, le=168),
+):
+    """Return article count per source for the last N hours (default 24h)."""
+    return get_source_counts(db, hours=hours)
 
 
 @router.get("")

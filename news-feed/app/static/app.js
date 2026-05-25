@@ -14,7 +14,7 @@ function showTab(id) {
   document.getElementById(id).classList.add('active');
   const tabs = ['source-health','news-timeline','price-tracker','ai-leaderboard','digest-history','schedule-config'];
   document.querySelectorAll('nav button')[tabs.indexOf(id)].classList.add('active');
-  if (id === 'source-health') loadSourceHealth();
+  if (id === 'source-health') { if (!_sourceHealthLoaded) loadSourceHealth(); }
   if (id === 'news-timeline') loadNews();
   if (id === 'price-tracker') loadPrices();
   if (id === 'ai-leaderboard') loadLeaderboard();
@@ -33,13 +33,13 @@ async function loadHealth() {
 }
 
 let sourceChart;
+let _sourceHealthLoaded = false;
+
 async function loadSourceHealth() {
   try {
-    const news = await api('/api/news?limit=500');
-    const counts = {};
-    news.forEach(a => { counts[a.source] = (counts[a.source]||0)+1; });
-    const labels = Object.keys(counts);
-    const data = labels.map(k => counts[k]);
+    const sources = await api('/api/news/sources?hours=24');
+    const labels = sources.map(s => s.source);
+    const data = sources.map(s => s.count);
     if (sourceChart) sourceChart.destroy();
     sourceChart = new Chart(document.getElementById('sourceChart'), {
       type: 'bar',
@@ -47,10 +47,19 @@ async function loadSourceHealth() {
       options: { plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#94a3b8' } }, y: { ticks: { color: '#94a3b8' } } } },
     });
     const statusEl = document.getElementById('source-status-list');
-    statusEl.innerHTML = '<h2>Source Status</h2>' + labels.map(s =>
-      `<div style="padding:.35rem 0"><span class="dot green"></span>${s} <small style="color:#64748b">(${counts[s]} articles)</small></div>`
-    ).join('');
-  } catch(e) { console.error(e); }
+    statusEl.innerHTML = '<h2>Source Status</h2>' + (sources.length
+      ? sources.map(s =>
+          `<div style="padding:.35rem 0"><span class="dot green"></span>${s.source} <small style="color:#64748b">(${s.count} articles in last 24h)</small></div>`
+        ).join('')
+      : '<p style="color:#64748b;padding:.5rem 0;font-size:.85rem">No articles fetched yet</p>'
+    );
+    _sourceHealthLoaded = true;
+  } catch(e) { console.error('loadSourceHealth error:', e); }
+}
+
+function refreshSourceHealth() {
+  _sourceHealthLoaded = false;
+  loadSourceHealth();
 }
 
 async function loadNews() {
