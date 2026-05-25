@@ -93,3 +93,24 @@ def test_list_prices(client):
     r = client.get("/api/prices")
     assert r.status_code == 200
     assert isinstance(r.json(), list)
+
+
+def test_patch_expiry(client):
+    from app.models import get_conn, upsert_price
+    conn = get_conn(app.state.db_path)
+    upsert_price(conn, {
+        "model_id": "openai/gpt-4o", "provider": "openai", "name": "GPT-4o",
+        "prompt_price": 5.0, "complete_price": 15.0, "context_length": 128000,
+        "updated_at": "2026-05-23T00:00:00",
+    })
+    conn.close()
+    r = client.patch("/api/prices/openai/gpt-4o/expiry", json={"expires_at": "2025-12-31"})
+    assert r.status_code == 200
+    data = r.json()
+    assert data["model_id"] == "openai/gpt-4o"
+    assert data["free_expires_at"] == "2025-12-31"
+
+
+def test_patch_expiry_model_not_found(client):
+    r = client.patch("/api/prices/nonexistent/model/expiry", json={"expires_at": "2025-12-31"})
+    assert r.status_code == 404

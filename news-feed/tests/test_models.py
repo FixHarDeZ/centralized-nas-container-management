@@ -1,7 +1,7 @@
 from app.models import (
     article_exists, insert_article, update_article_summary,
     get_articles, get_article, get_article_count, get_last_fetch_time,
-    get_source_counts, upsert_price, get_prices,
+    get_source_counts, upsert_price, get_prices, set_free_expiry,
     insert_digest_log, get_digest_history, get_recent_articles_for_digest,
 )
 
@@ -123,3 +123,37 @@ def test_get_recent_articles_respects_limit(db):
         update_article_summary(db, f"id{i}", "สรุป")
     results = get_recent_articles_for_digest(db, hours=9999, limit=3)
     assert len(results) == 3
+
+
+def _insert_test_price(db, model_id="openai/gpt-4o"):
+    upsert_price(db, {
+        "model_id": model_id, "provider": "openai", "name": "GPT-4o",
+        "prompt_price": 5.0, "complete_price": 15.0, "context_length": 128000,
+        "updated_at": "2026-05-23T00:00:00",
+    })
+
+
+def test_set_free_expiry(db):
+    _insert_test_price(db)
+    assert set_free_expiry(db, "openai/gpt-4o", "2025-12-31") is True
+    prices = get_prices(db)
+    assert prices[0]["free_expires_at"] == "2025-12-31"
+
+
+def test_set_free_expiry_clear(db):
+    _insert_test_price(db)
+    set_free_expiry(db, "openai/gpt-4o", "2025-12-31")
+    assert set_free_expiry(db, "openai/gpt-4o", None) is True
+    prices = get_prices(db)
+    assert prices[0]["free_expires_at"] is None
+
+
+def test_set_free_expiry_not_found(db):
+    assert set_free_expiry(db, "nonexistent/model", "2025-12-31") is False
+
+
+def test_set_free_expiry_invalid_date(db):
+    _insert_test_price(db)
+    import pytest
+    with pytest.raises(ValueError, match="Invalid date format"):
+        set_free_expiry(db, "openai/gpt-4o", "31-12-2025")
