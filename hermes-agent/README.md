@@ -9,7 +9,8 @@ LINE messaging is handled by the separate `line-secretary` stack.
 | Container | Role | Port |
 |---|---|---|
 | `hermes-gateway` | Gateway to Telegram + Discord (outbound polling) | — |
-| `hermes-dashboard` | Web UI for monitoring and config | `5063` |
+| `hermes-dashboard` | Web UI for monitoring and config (internal only) | `9119` |
+| `hermes-nginx` | Basic-auth reverse proxy for dashboard | `5063` |
 
 ## Setup
 
@@ -62,7 +63,8 @@ Should show Telegram/Discord connected. Open dashboard at `http://<NAS_HOST>:506
 
 ## Dashboard
 
-Port `5063` is LAN-accessible. Do **not** expose to WAN without adding a reverse proxy with authentication.
+Port `5063` is now served by an internal `nginx:alpine` sidecar with HTTP Basic Auth, proxying to `hermes-dashboard:9119` (including WebSocket upgrade headers for live dashboard traffic).
+Create `nginx/.htpasswd` before deploy (same format as homepage), then authenticate in the browser before accessing the dashboard.
 
 ## Updating hermes-agent
 

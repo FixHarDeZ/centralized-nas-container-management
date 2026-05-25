@@ -16,7 +16,7 @@ Docker stacks for Synology DS925+ NAS, managed via Synology Container Manager.
 | `uptime-kuma/` | Service health monitor | `3001` | `https://…:3002` |
 | `watchtower/` | Auto-update containers + LINE notification sidecar | — | — |
 | `my-secretary/` | AI personal assistant bot (LINE + Telegram) backed by Notion | `5057` | `https://…:5058` |
-| `hermes-agent/` | Autonomous AI agent — Telegram + Discord (NousResearch/hermes-agent) | `5063` (dashboard) | — |
+| `hermes-agent/` | Autonomous AI agent — Telegram + Discord (NousResearch/hermes-agent) | `5063` (Nginx basic-auth dashboard) | — |
 | `torrentwatch/` | Daily torrent monitor for bearbit.org — scrapes, filters, LINE alerts | `5059` | `https://…:5062` |
 | `news-feed/` | AI & IT news feed bot — Thai summaries via Claude/DeepSeek, digest to LINE + Telegram, dashboard | `5064` | — |
 
