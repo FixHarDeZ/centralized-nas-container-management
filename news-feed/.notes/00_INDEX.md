@@ -1,15 +1,16 @@
 # news-feed Stack — Index
 
 **สร้าง:** 2026-05-23  
-**Port:** 5064 (external) → 8000 (internal)  
+**Port:** 5064 (external) → Nginx :80 → news-feed :8000 (internal)  
 **Status:** Running ✅ (2026-05-25)
 
 ---
 
 ## Architecture
 
-Single Python 3.12-slim container:
-- **FastAPI** — HTTP API + StaticFiles dashboard
+Two-container stack:
+- **Nginx (`news-feed-nginx`)** — reverse proxy on port 5064 with HTTP Basic Auth via `/etc/nginx/.htpasswd`
+- **FastAPI (`news-feed`)** — internal app exposed only on Docker network port 8000
 - **APScheduler BackgroundScheduler** — fetch (60min), price (6h), digest (cron)
 - **SQLite** at `/data/news.db` (WAL mode)
 - **Schedule config** at `/data/schedule.json` — อ่านทุก job run, เปลี่ยนได้ live
@@ -95,6 +96,7 @@ Single Python 3.12-slim container:
 - **Copy button XSS safety**: ใช้ `data-idx` (integer) + JS array lookup แทนการใส่ model_id ใน HTML attribute
 - **Leaderboard categorization**: `paidPositive` ใช้ `combined > 0` (ไม่ใช่ `prompt>0 && complete>0`) — ป้องกัน mixed-price models (prompt=$0, complete=$5) หายไปจากทุก category
 - **Source Health 422**: `/api/news` มี `le=100` แต่ frontend เคยขอ `limit=500` → 422 → silent error → blank chart. Fix: เพิ่ม `/api/news/sources` endpoint ที่ใช้ aggregate SQL แทน
+- **Basic Auth sidecar**: dashboard/API public access ต้องผ่าน `news-feed-nginx`; ไฟล์ `nginx/.htpasswd` เป็น secret, gitignored, ต้องสร้างบนเครื่อง deploy/NAS เอง
 
 ---
 
@@ -111,3 +113,5 @@ Single Python 3.12-slim container:
 | 2026-05-25 | Dashboard: Price Tracker search bar, กรองราคาติดลบ, Free Models section ใน Leaderboard |
 | 2026-05-25 | Feature: Geo zone filter in Price Tracker (PROVIDER_ZONES + zone buttons + badge), escapeHtml() XSS fix |
 | 2026-05-25 | Feature: Leaderboard zone badges, 🏆 Top Hit, 🧠 Top Intelligence sections (ELO-based, longest-match-first) |
+| 2026-05-25 | Feature: Free model expiry — `free_expires_at` DB column + `PATCH /api/prices/{id}/expiry` + color-coded badge (urgent/warn/ok) + inline 📅 edit in Leaderboard |
+| 2026-05-25 | Infra: เพิ่ม `nginx:alpine` basic-auth reverse proxy on port 5064; app เปลี่ยนเป็น internal-only `expose: 8000` และ `nginx/.htpasswd` เป็น local/NAS secret |

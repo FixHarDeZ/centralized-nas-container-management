@@ -2,7 +2,55 @@
 
 ---
 
-## 2026-05-25 (7) — Feature: Geo zone filter + Leaderboard Top Hit + Top Intelligence
+## 2026-05-25 (10) — Infra: Nginx basic-auth sidecar for dashboard
+
+### Changes
+- เพิ่ม `nginx/nginx.conf` ตาม pattern ของ homepage: `auth_basic "Restricted"` + proxy ไป `http://news-feed:8000`
+- `docker-compose.yml`: `news-feed` เปลี่ยนจาก `ports: 5064:8000` เป็น `expose: 8000`
+- เพิ่ม service `news-feed-nginx` (`nginx:alpine`) เปิด public port `5064:80` และ mount `nginx.conf` + `.htpasswd`
+- ยืนยันว่า root `.gitignore` มี `.htpasswd` อยู่แล้ว → `news-feed/nginx/.htpasswd` ถูก ignore, ไม่ commit
+- อัปเดต README ให้ระบุว่าต้องสร้าง `nginx/.htpasswd` บนเครื่อง deploy/NAS เอง และ curl ผ่าน basic auth
+
+### Validation
+- `docker compose config` ผ่าน ✅
+- `git check-ignore -v news-feed/nginx/.htpasswd` ชี้ไปที่ root `.gitignore` ✅
+
+---
+
+## 2026-05-25 (9) — Fix: Copy button กดไม่ได้ (HTTP clipboard fallback)
+
+### Root Cause
+`navigator.clipboard.writeText()` ต้องการ HTTPS หรือ localhost. news-feed เปิดที่ port 5064 ผ่าน plain HTTP → `navigator.clipboard = undefined` → synchronous TypeError → ไม่ถูก `.catch()` จับ → ปุ่มเงียบ ไม่มี feedback ใดๆ
+
+### Fix
+- เพิ่ม `_copyText(text)` helper ใน app.js
+- ลองใช้ `navigator.clipboard.writeText()` ก่อน (HTTPS)
+- Fallback เป็น `textarea + document.execCommand('copy')` ซึ่งทำงานได้บน plain HTTP
+- Commit: `fix(news-feed): clipboard HTTP fallback for copy button`
+
+---
+
+## 2026-05-25 (8) — Feature: Free model expiry date in Leaderboard
+
+### Task 1: Backend (DB + API)
+- `prices` table: `ALTER TABLE prices ADD COLUMN free_expires_at TEXT` migration (idempotent try/except for `OperationalError` with "duplicate column" check only)
+- `set_free_expiry(conn, model_id, expires_at)` in models.py: `datetime.strptime()` semantic validation, returns bool, None clears
+- `upsert_price()` confirmed NOT touching `free_expires_at` — preserved across price syncs
+- `PATCH /api/prices/{model_id:path}/expiry` — 404 not found, 422 bad date, success `{model_id, free_expires_at}`
+- 7 new tests (46 total)
+- Commits: `ce85139`, `0284fb7`, `1e7c559`
+
+### Task 2: Frontend (Display + Inline Edit)
+- `freeExpiryStatus(expires_at)` helper: expired/urgent (≤3d)/warn (≤7d)/ok (>7d)/invalid → {label, className}
+- CSS: `.expiry-badge`, `.expiry-ok` (dark green), `.expiry-warn` (amber), `.expiry-urgent` (red + pulse-red animation), `.expiry-edit-input`
+- Free models rows: expiry badge color-coded + 📅 button (data-idx → `_freeModels[]` lookup)
+- 📅 click: toggles inline date input → `change` → PATCH → `loadLeaderboard()` reload
+- Safety: model_id URL-encoded via `split('/').map(encodeURIComponent).join('/')`, input.value captured before `input.remove()` (race fix), NaN guard on invalid dates
+- Commits: `6e2856c`, `94ea1c5`
+
+---
+
+
 
 ### Task 1: Geo zone filter — AI Price Tracker
 - `PROVIDER_ZONES` constant (25 providers → {zone, flag, label}: US/CN/EU/Others)
