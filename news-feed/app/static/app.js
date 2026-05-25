@@ -103,8 +103,8 @@ async function loadPrices() {
     sel.innerHTML = '<option value="">All providers</option>' + providers.map(p=>`<option value="${p}">${p}</option>`).join('');
   }
   const tbody = document.querySelector('#price-table tbody');
-  tbody.innerHTML = allPrices.map(p => `<tr>
-    <td>${p.name}</td><td><span class="model-id">${p.model_id}</span> <button class="copy-btn" data-model-id="${p.model_id}" title="Copy model ID">📋</button></td><td>${p.provider}</td>
+  tbody.innerHTML = allPrices.map((p, i) => `<tr>
+    <td>${p.name}</td><td><span class="model-id">${p.model_id}</span> <button class="copy-btn" data-idx="${i}" title="Copy model ID">📋</button></td><td>${p.provider}</td>
     <td>$${(p.prompt_price||0).toFixed(3)}</td>
     <td>$${(p.complete_price||0).toFixed(3)}</td>
     <td>${p.context_length ? p.context_length.toLocaleString() : '–'}</td>
@@ -189,13 +189,17 @@ async function saveSchedule() {
 }
 
 // Copy button handler (delegated)
+const _copyTimers = new WeakMap();
 document.addEventListener('click', e => {
   const btn = e.target.closest('.copy-btn');
   if (!btn) return;
-  navigator.clipboard.writeText(btn.dataset.modelId).then(() => {
-    const orig = btn.textContent;
+  const idx = parseInt(btn.dataset.idx, 10);
+  const modelId = allPrices[idx]?.model_id;
+  if (!modelId) return;
+  navigator.clipboard.writeText(modelId).then(() => {
+    clearTimeout(_copyTimers.get(btn));
     btn.textContent = '✓';
-    setTimeout(() => btn.textContent = orig, 1500);
+    _copyTimers.set(btn, setTimeout(() => { btn.textContent = '📋'; }, 1500));
   }).catch(err => console.error('Copy failed:', err));
 });
 
