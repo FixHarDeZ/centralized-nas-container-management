@@ -1,5 +1,6 @@
 let allNews = [];
 let allPrices = [];
+let _shownPrices = [];
 
 async function api(path) {
   const r = await fetch(path);
@@ -81,6 +82,18 @@ function filterNews() {
   ));
 }
 
+function renderPriceTable(prices) {
+  _shownPrices = prices;
+  const tbody = document.querySelector('#price-table tbody');
+  tbody.innerHTML = prices.map((p, i) => `<tr>
+    <td>${p.name}</td><td><span class="model-id">${p.model_id}</span> <button class="copy-btn" data-idx="${i}" title="Copy model ID">📋</button></td><td>${p.provider}</td>
+    <td>$${(p.prompt_price||0).toFixed(3)}</td>
+    <td>$${(p.complete_price||0).toFixed(3)}</td>
+    <td>${p.context_length ? p.context_length.toLocaleString() : '–'}</td>
+    <td>${p.updated_at ? new Date(p.updated_at).toLocaleString('th-TH') : '–'}</td>
+  </tr>`).join('');
+}
+
 async function loadPrices() {
   const provider = document.getElementById('price-provider-filter').value;
   const sort = document.getElementById('price-sort').value;
@@ -90,7 +103,9 @@ async function loadPrices() {
     api('/api/prices?' + params),
     api('/api/prices/updated'),
   ]);
-  allPrices = prices;
+  allPrices = prices.filter(p => (p.prompt_price||0) >= 0 && (p.complete_price||0) >= 0);
+  const searchEl = document.getElementById('price-search');
+  if (searchEl) searchEl.value = '';
   const updatedEl = document.getElementById('price-updated');
   if (updatedData.updated_at) {
     updatedEl.textContent = `🕐 Last updated: ${new Date(updatedData.updated_at).toLocaleString('th-TH')}`;
@@ -102,14 +117,15 @@ async function loadPrices() {
     const sel = document.getElementById('price-provider-filter');
     sel.innerHTML = '<option value="">All providers</option>' + providers.map(p=>`<option value="${p}">${p}</option>`).join('');
   }
-  const tbody = document.querySelector('#price-table tbody');
-  tbody.innerHTML = allPrices.map((p, i) => `<tr>
-    <td>${p.name}</td><td><span class="model-id">${p.model_id}</span> <button class="copy-btn" data-idx="${i}" title="Copy model ID">📋</button></td><td>${p.provider}</td>
-    <td>$${(p.prompt_price||0).toFixed(3)}</td>
-    <td>$${(p.complete_price||0).toFixed(3)}</td>
-    <td>${p.context_length ? p.context_length.toLocaleString() : '–'}</td>
-    <td>${p.updated_at ? new Date(p.updated_at).toLocaleString('th-TH') : '–'}</td>
-  </tr>`).join('');
+  renderPriceTable(allPrices);
+}
+
+function filterPrices() {
+  const q = document.getElementById('price-search').value.toLowerCase();
+  renderPriceTable(q
+    ? allPrices.filter(p => p.name.toLowerCase().includes(q) || p.model_id.toLowerCase().includes(q))
+    : allPrices
+  );
 }
 
 async function loadLeaderboard() {
@@ -194,7 +210,7 @@ document.addEventListener('click', e => {
   const btn = e.target.closest('.copy-btn');
   if (!btn) return;
   const idx = parseInt(btn.dataset.idx, 10);
-  const modelId = allPrices[idx]?.model_id;
+  const modelId = _shownPrices[idx]?.model_id;
   if (!modelId) return;
   navigator.clipboard.writeText(modelId).then(() => {
     clearTimeout(_copyTimers.get(btn));

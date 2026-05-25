@@ -78,6 +78,7 @@
   <div id="price-tracker" class="section">
     <div id="price-updated" style="color:#64748b;font-size:.8rem;margin-bottom:.75rem"></div>
     <div class="search-row">
+      <input type="text" id="price-search" placeholder="Search model or ID…" oninput="filterPrices()">
       <select id="price-provider-filter" onchange="loadPrices()"><option value="">All providers</option></select>
       <select id="price-sort" onchange="loadPrices()">
         <option value="combined_asc">Combined ↑</option>
