@@ -2,6 +2,27 @@
 
 ---
 
+## 2026-05-25 — Add Nginx basic-auth sidecar for dashboard
+
+### งานที่ทำ
+
+- สร้าง `hermes-agent/nginx/nginx.conf` ตาม pattern เดียวกับ `homepage` โดยให้ `auth_basic "Restricted"`, proxy ไป `http://hermes-dashboard:9119` และส่ง WebSocket upgrade headers สำหรับ dashboard traffic
+- สร้าง `hermes-agent/nginx/.htpasswd` ด้วย APR1 hash เดียวกับ homepage และตั้ง permission เป็น `644`
+- แก้ `docker-compose.yml` ให้ `hermes-dashboard` เปิดแค่ internal `expose: 9119` และเพิ่ม service `hermes-nginx` เปิด `5063:80`
+- อัปเดตเอกสาร `hermes-agent/README.md`, root `README.md`, `CLAUDE.md`, และ `hermes-agent/.notes/00_INDEX.md`
+
+### Verification
+
+- รัน `docker compose -f hermes-agent/docker-compose.yml config` ผ่าน
+- ตรวจสอบว่า `5063` ถูก bind ที่ `hermes-nginx` และ dashboard ภายในใช้ `9119` เท่านั้น
+
+### Notes
+
+- ไฟล์ `.htpasswd` ไม่ถูก commit เพราะ root `.gitignore` กันไว้แล้ว
+- deploy script มี logic `chmod 644` ให้ไฟล์ `nginx/.htpasswd` บน NAS อยู่แล้ว ลดปัญหา nginx อ่านไฟล์ไม่ได้
+
+---
+
 ## 2026-05-24 — Fix model loading: HERMES_HOME + YAML structure
 
 ### Bug: "No models provided" HTTP 400 from OpenRouter
