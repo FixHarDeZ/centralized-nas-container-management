@@ -16,14 +16,9 @@ def _make_entry(url, title="Test", published="2026-05-23T07:00:00"):
 
 
 @patch("app.fetcher.summarize", return_value="สรุปทดสอบ")
-@patch("app.fetcher.httpx.get")
 @patch("app.fetcher.feedparser.parse")
-def test_fetch_all_inserts_new_articles(mock_parse, mock_get, mock_summarize, tmp_path, base_config):
+def test_fetch_all_inserts_new_articles(mock_parse, mock_summarize, tmp_path, base_config):
     mock_parse.return_value = _make_feed([_make_entry("https://example.com/1")])
-    mock_resp = MagicMock()
-    mock_resp.raise_for_status = MagicMock()
-    mock_resp.text = "<html><body><p>Article body text here</p></body></html>"
-    mock_get.return_value = mock_resp
 
     db_path = str(tmp_path / "test.db")
     from app.models import get_conn, init_db
@@ -44,14 +39,9 @@ def test_fetch_all_inserts_new_articles(mock_parse, mock_get, mock_summarize, tm
 
 
 @patch("app.fetcher.summarize", return_value="สรุปทดสอบ")
-@patch("app.fetcher.httpx.get")
 @patch("app.fetcher.feedparser.parse")
-def test_fetch_all_skips_duplicates(mock_parse, mock_get, mock_summarize, tmp_path, base_config):
+def test_fetch_all_skips_duplicates(mock_parse, mock_summarize, tmp_path, base_config):
     mock_parse.return_value = _make_feed([_make_entry("https://example.com/1")])
-    mock_resp = MagicMock()
-    mock_resp.raise_for_status = MagicMock()
-    mock_resp.text = "<p>body</p>"
-    mock_get.return_value = mock_resp
 
     db_path = str(tmp_path / "test2.db")
     from app.models import get_conn, init_db

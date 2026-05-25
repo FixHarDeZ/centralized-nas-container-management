@@ -7,7 +7,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from app.config import get_config  # DB_PATH removed — db_path passed in
 from app.fetcher import fetch_all
-from app.models import get_conn, get_recent_articles_for_digest, insert_digest_log
+from app.models import get_conn, get_digest_history, get_recent_articles_for_digest, insert_digest_log
 from app.notifier import send_digest
 from app.pricer import fetch_prices
 
