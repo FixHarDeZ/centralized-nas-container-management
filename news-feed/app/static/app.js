@@ -30,6 +30,12 @@ const PROVIDER_ZONES = {
   'silo':         { zone: 'EU', flag: '🇪🇺', label: 'EU' },
 };
 
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = String(s ?? '');
+  return d.innerHTML;
+}
+
 function getZone(modelId) {
   const prefix = (modelId || '').split('/')[0].toLowerCase();
   return PROVIDER_ZONES[prefix] || { zone: 'Others', flag: '🌍', label: 'Others' };
@@ -138,7 +144,7 @@ function renderPriceTable(prices) {
   tbody.innerHTML = prices.map((p, i) => {
     const z = getZone(p.model_id);
     return `<tr>
-    <td>${p.name} <span class="zone-badge">${z.flag} ${z.label}</span></td><td><span class="model-id">${p.model_id}</span> <button class="copy-btn" data-idx="${i}" title="Copy model ID">📋</button></td><td>${p.provider}</td>
+    <td>${escapeHtml(p.name)} <span class="zone-badge">${z.flag} ${z.label}</span></td><td><span class="model-id">${escapeHtml(p.model_id)}</span> <button class="copy-btn" data-idx="${i}" title="Copy model ID">📋</button></td><td>${escapeHtml(p.provider)}</td>
     <td>$${(p.prompt_price||0).toFixed(3)}</td>
     <td>$${(p.complete_price||0).toFixed(3)}</td>
     <td>${p.context_length ? p.context_length.toLocaleString() : '–'}</td>
