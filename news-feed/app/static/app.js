@@ -141,8 +141,9 @@ async function loadLeaderboard() {
   }
 
   // Categorize: free = both prices === 0, paid = both prices > 0
-  const freeModels = prices.filter(p => (p.prompt_price||0) === 0 && (p.complete_price||0) === 0);
-  const paidPositive = prices.filter(p => (p.prompt_price||0) > 0 && (p.complete_price||0) > 0);
+  const validPrices = prices.filter(p => (p.prompt_price||0) >= 0 && (p.complete_price||0) >= 0);
+  const freeModels = validPrices.filter(p => (p.prompt_price||0) === 0 && (p.complete_price||0) === 0);
+  const paidPositive = validPrices.filter(p => (p.prompt_price||0) > 0 && (p.complete_price||0) > 0);
 
   // Top 10 Cheapest: paid positive only (already sorted combined_asc)
   const cheapEl = document.getElementById('leaderboard-cheap');
