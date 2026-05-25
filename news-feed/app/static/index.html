@@ -47,6 +47,10 @@
   .model-id{font-family:monospace;color:#94a3b8;font-size:.8rem}
   .copy-btn{background:none;border:none;cursor:pointer;font-size:.85rem;padding:.1rem .3rem;color:#64748b;border-radius:.25rem}
   .copy-btn:hover{background:#1e293b;color:#e2e8f0}
+  .zone-btn{background:none;border:1px solid #334155;color:#94a3b8;padding:.25rem .6rem;border-radius:.375rem;cursor:pointer;font-size:.78rem}
+  .zone-btn.active{background:#3b82f6;color:#fff;border-color:#3b82f6}
+  .zone-btn:hover:not(.active){background:#1e293b;color:#e2e8f0}
+  .zone-badge{display:inline-block;font-size:.7rem;background:#1e3a5f;color:#93c5fd;border-radius:.25rem;padding:.05rem .35rem;margin-left:.35rem;vertical-align:middle}
 </style>
 </head>
 <body>
@@ -92,6 +96,13 @@
         <option value="complete_asc">Completion ↑</option>
         <option value="prompt_desc">Prompt ↓</option>
       </select>
+    </div>
+    <div class="search-row" style="margin-top:-.5rem">
+      <button class="zone-btn active" data-zone="" onclick="setZoneFilter('')">All</button>
+      <button class="zone-btn" data-zone="US" onclick="setZoneFilter('US')">🇺🇸 US</button>
+      <button class="zone-btn" data-zone="CN" onclick="setZoneFilter('CN')">🇨🇳 CN</button>
+      <button class="zone-btn" data-zone="EU" onclick="setZoneFilter('EU')">🇪🇺 EU</button>
+      <button class="zone-btn" data-zone="Others" onclick="setZoneFilter('Others')">🌍 Others</button>
     </div>
     <div class="card"><table id="price-table"><thead><tr><th>Model</th><th>Model ID</th><th>Provider</th><th>Prompt/1M</th><th>Completion/1M</th><th>Context</th><th>Updated</th></tr></thead><tbody></tbody></table></div>
   </div>
