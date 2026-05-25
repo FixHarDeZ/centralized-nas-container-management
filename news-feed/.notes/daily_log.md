@@ -2,6 +2,20 @@
 
 ---
 
+## 2026-05-25 — Feature: AI Price Tracker + Leaderboard timestamps
+
+### Changes
+- **API:** เพิ่ม `GET /api/prices/updated` — returns `MAX(updated_at)` from prices table
+- **Models:** เพิ่ม `get_price_updated_at(conn)` function
+- **Frontend Price Tracker:** แสดง "🕐 Last updated: ..." ที่ด้านบน section + เพิ่มคอลัมน์ "Updated" ในตาราง
+- **Frontend Leaderboard:** แสดง "🕐 Last updated: ..." ที่ด้านบน section (แสดง "Not yet updated" ถ้ายังไม่มีข้อมูล)
+- Timestamp format: `th-TH` locale
+
+### Deploy
+ยังไม่ได้ deploy — รอ push + deploy
+
+---
+
 ## 2026-05-24 (3) — Fix: digest dedup — ไม่ส่งข่าวซ้ำระหว่างรอบ
 
 ### Bug

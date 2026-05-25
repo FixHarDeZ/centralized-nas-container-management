@@ -72,6 +72,7 @@
     <div class="card" id="news-list"><h2>News Timeline</h2></div>
   </div>
   <div id="price-tracker" class="section">
+    <div id="price-updated" style="color:#64748b;font-size:.8rem;margin-bottom:.75rem"></div>
     <div class="search-row">
       <select id="price-provider-filter" onchange="loadPrices()"><option value="">All providers</option></select>
       <select id="price-sort" onchange="loadPrices()">
@@ -81,9 +82,10 @@
         <option value="prompt_desc">Prompt ↓</option>
       </select>
     </div>
-    <div class="card"><table id="price-table"><thead><tr><th>Model</th><th>Provider</th><th>Prompt/1M</th><th>Completion/1M</th><th>Context</th></tr></thead><tbody></tbody></table></div>
+    <div class="card"><table id="price-table"><thead><tr><th>Model</th><th>Provider</th><th>Prompt/1M</th><th>Completion/1M</th><th>Context</th><th>Updated</th></tr></thead><tbody></tbody></table></div>
   </div>
   <div id="ai-leaderboard" class="section">
+    <div id="leaderboard-updated" style="color:#64748b;font-size:.8rem;margin-bottom:.75rem"></div>
     <div class="card"><h2>Top 10 Cheapest (by combined)</h2><div id="leaderboard-cheap"></div></div>
     <div class="card"><h2>Top 5 Most Expensive</h2><div id="leaderboard-expensive"></div></div>
   </div>

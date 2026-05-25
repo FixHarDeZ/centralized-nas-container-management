@@ -119,6 +119,11 @@ def upsert_price(conn: sqlite3.Connection, model: dict) -> None:
     conn.commit()
 
 
+def get_price_updated_at(conn: sqlite3.Connection) -> Optional[str]:
+    row = conn.execute("SELECT MAX(updated_at) FROM prices").fetchone()
+    return row[0]
+
+
 def get_prices(conn: sqlite3.Connection, provider: Optional[str] = None,
                sort: str = "combined_asc") -> list[dict]:
     sort_map = {
