@@ -30,6 +30,29 @@ const PROVIDER_ZONES = {
   'silo':         { zone: 'EU', flag: '🇪🇺', label: 'EU' },
 };
 
+const TOP_HIT_MODELS = [
+  'gpt-4.1', 'gpt-4o-mini', 'gpt-4o', 'o4-mini', 'o3',
+  'claude-opus-4', 'claude-sonnet-4', 'claude-3-7-sonnet', 'claude-3-5-sonnet',
+  'gemini-2.5-pro', 'gemini-2.0-flash',
+  'deepseek-r1', 'deepseek-v3',
+  'llama-4', 'llama-3.3-70b',
+  'mistral-large',
+  'grok-3',
+];
+
+const MODEL_ELO_SCORES = {
+  'o3': 1420, 'o4-mini': 1395,
+  'gpt-4.1': 1370, 'gpt-4o': 1330, 'gpt-4o-mini': 1270,
+  'claude-opus-4': 1415, 'claude-sonnet-4': 1380, 'claude-3-7-sonnet': 1360, 'claude-3-5-sonnet': 1310,
+  'gemini-2.5-pro': 1410, 'gemini-2.0-flash': 1295,
+  'deepseek-r1': 1360, 'deepseek-v3': 1320,
+  'grok-3': 1350,
+  'llama-4': 1310, 'llama-3.3-70b': 1250,
+  'mistral-large': 1240,
+  'qwen-2.5-72b': 1230, 'qwen3': 1330,
+  'gemma-3-27b': 1210,
+};
+
 function escapeHtml(s) {
   const d = document.createElement('div');
   d.textContent = String(s ?? '');
@@ -204,39 +227,85 @@ async function loadLeaderboard() {
   const freeModels = validPrices.filter(p => (p.prompt_price||0) === 0 && (p.complete_price||0) === 0);
   const paidPositive = validPrices.filter(p => (p.prompt_price||0) + (p.complete_price||0) > 0);
 
+  // Top Hit: match validPrices against TOP_HIT_MODELS in order (first substring match wins per entry)
+  const topHitMatched = [];
+  for (const sub of TOP_HIT_MODELS) {
+    const found = validPrices.find(p => p.model_id.toLowerCase().includes(sub) && !topHitMatched.includes(p));
+    if (found) topHitMatched.push(found);
+    if (topHitMatched.length >= 10) break;
+  }
+  const topHitEl = document.getElementById('leaderboard-top-hit');
+  topHitEl.innerHTML = topHitMatched.length ? topHitMatched.map((p, i) => {
+    const z = getZone(p.model_id);
+    const combined = (p.prompt_price||0) + (p.complete_price||0);
+    return `<div class="rank-row">
+      <span class="rank-num">${i+1}</span>
+      <span class="rank-name">${escapeHtml(p.name)} <span class="zone-badge">${z.flag} ${z.label}</span><br><small style="color:#64748b">${escapeHtml(p.model_id)}</small></span>
+      <span class="rank-price">${combined > 0 ? '$' + combined.toFixed(3) + '/1M' : '<span style="color:#22c55e;font-weight:600">FREE</span>'}</span>
+    </div>`;
+  }).join('') : '<p style="color:#64748b;font-size:.85rem">No data available</p>';
+
+  // Top Intelligence: match validPrices against MODEL_ELO_SCORES, sort desc by ELO, top 10
+  const eloMatched = [];
+  for (const p of validPrices) {
+    const mid = p.model_id.toLowerCase();
+    for (const [sub, elo] of Object.entries(MODEL_ELO_SCORES)) {
+      if (mid.includes(sub) && !eloMatched.find(e => e.p === p)) {
+        eloMatched.push({ p, elo });
+        break;
+      }
+    }
+  }
+  eloMatched.sort((a, b) => b.elo - a.elo);
+  const topElo = eloMatched.slice(0, 10);
+  const intelEl = document.getElementById('leaderboard-intelligence');
+  intelEl.innerHTML = topElo.length ? topElo.map(({ p, elo }, i) => {
+    const z = getZone(p.model_id);
+    const combined = (p.prompt_price||0) + (p.complete_price||0);
+    return `<div class="rank-row">
+      <span class="rank-num">${i+1}</span>
+      <span class="rank-name">${escapeHtml(p.name)} <span class="zone-badge">${z.flag} ${z.label}</span><br><small style="color:#64748b">${escapeHtml(p.model_id)}</small></span>
+      <span class="rank-price"><span style="color:#a78bfa;font-size:.78rem">ELO ${elo}</span> ${combined > 0 ? '· $' + combined.toFixed(3) + '/1M' : '· <span style="color:#22c55e;font-weight:600">FREE</span>'}</span>
+    </div>`;
+  }).join('') : '<p style="color:#64748b;font-size:.85rem">No data available</p>';
+
   // Top 10 Cheapest: paid positive only (already sorted combined_asc)
   const cheapList = paidPositive.slice(0, 10);
   const cheapEl = document.getElementById('leaderboard-cheap');
-  cheapEl.innerHTML = cheapList.length ? cheapList.map((p, i) => `
-    <div class="rank-row">
+  cheapEl.innerHTML = cheapList.length ? cheapList.map((p, i) => {
+    const z = getZone(p.model_id);
+    return `<div class="rank-row">
       <span class="rank-num">${i+1}</span>
-      <span class="rank-name">${p.name}<br><small style="color:#64748b">${p.model_id}</small></span>
+      <span class="rank-name">${escapeHtml(p.name)} <span class="zone-badge">${z.flag} ${z.label}</span><br><small style="color:#64748b">${escapeHtml(p.model_id)}</small></span>
       <span class="rank-price">$${((p.prompt_price||0)+(p.complete_price||0)).toFixed(3)}/1M</span>
-    </div>`).join('')
-    : '<p style="color:#64748b;font-size:.85rem">No paid models available</p>';
+    </div>`;
+  }).join('') : '<p style="color:#64748b;font-size:.85rem">No paid models available</p>';
 
   // Free Models: all free models (no rank numbers)
   const freeEl = document.getElementById('leaderboard-free');
   if (!freeModels.length) {
     freeEl.innerHTML = '<p style="color:#64748b;font-size:.85rem">No free models found</p>';
   } else {
-    freeEl.innerHTML = freeModels.map(p => `
-      <div class="rank-row">
-        <span class="rank-name">${p.name}<br><small style="color:#64748b">${p.model_id}</small></span>
+    freeEl.innerHTML = freeModels.map(p => {
+      const z = getZone(p.model_id);
+      return `<div class="rank-row">
+        <span class="rank-name">${escapeHtml(p.name)} <span class="zone-badge">${z.flag} ${z.label}</span><br><small style="color:#64748b">${escapeHtml(p.model_id)}</small></span>
         <span class="rank-price" style="color:#22c55e;font-weight:600">FREE</span>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   }
 
   // Top 5 Most Expensive: paid positive only, sorted reverse
   const expensiveList = [...paidPositive].reverse().slice(0, 5);
   const expEl = document.getElementById('leaderboard-expensive');
-  expEl.innerHTML = expensiveList.length ? expensiveList.map((p, i) => `
-    <div class="rank-row">
+  expEl.innerHTML = expensiveList.length ? expensiveList.map((p, i) => {
+    const z = getZone(p.model_id);
+    return `<div class="rank-row">
       <span class="rank-num">${i+1}</span>
-      <span class="rank-name">${p.name}<br><small style="color:#64748b">${p.model_id}</small></span>
+      <span class="rank-name">${escapeHtml(p.name)} <span class="zone-badge">${z.flag} ${z.label}</span><br><small style="color:#64748b">${escapeHtml(p.model_id)}</small></span>
       <span class="rank-price" style="color:#ef4444">$${((p.prompt_price||0)+(p.complete_price||0)).toFixed(3)}/1M</span>
-    </div>`).join('')
-    : '<p style="color:#64748b;font-size:.85rem">No paid models available</p>';
+    </div>`;
+  }).join('') : '<p style="color:#64748b;font-size:.85rem">No paid models available</p>';
 }
 
 async function loadDigestHistory() {
