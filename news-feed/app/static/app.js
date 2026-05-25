@@ -139,16 +139,36 @@ async function loadLeaderboard() {
   } else {
     updatedEl.textContent = '🕐 Not yet updated';
   }
+
+  // Categorize: free = both prices === 0, paid = both prices > 0
+  const freeModels = prices.filter(p => (p.prompt_price||0) === 0 && (p.complete_price||0) === 0);
+  const paidPositive = prices.filter(p => (p.prompt_price||0) > 0 && (p.complete_price||0) > 0);
+
+  // Top 10 Cheapest: paid positive only (already sorted combined_asc)
   const cheapEl = document.getElementById('leaderboard-cheap');
-  cheapEl.innerHTML = prices.slice(0,10).map((p,i) => `
+  cheapEl.innerHTML = paidPositive.slice(0, 10).map((p, i) => `
     <div class="rank-row">
       <span class="rank-num">${i+1}</span>
       <span class="rank-name">${p.name}<br><small style="color:#64748b">${p.model_id}</small></span>
       <span class="rank-price">$${((p.prompt_price||0)+(p.complete_price||0)).toFixed(3)}/1M</span>
     </div>`).join('');
-  const expensive = [...prices].reverse().slice(0,5);
+
+  // Free Models: all free models (no rank numbers)
+  const freeEl = document.getElementById('leaderboard-free');
+  if (!freeModels.length) {
+    freeEl.innerHTML = '<p style="color:#64748b;font-size:.85rem">No free models found</p>';
+  } else {
+    freeEl.innerHTML = freeModels.map(p => `
+      <div class="rank-row">
+        <span class="rank-name">${p.name}<br><small style="color:#64748b">${p.model_id}</small></span>
+        <span class="rank-price" style="color:#22c55e;font-weight:600">FREE</span>
+      </div>`).join('');
+  }
+
+  // Top 5 Most Expensive: paid positive only, sorted reverse
+  const expensive = [...paidPositive].reverse().slice(0, 5);
   const expEl = document.getElementById('leaderboard-expensive');
-  expEl.innerHTML = expensive.map((p,i) => `
+  expEl.innerHTML = expensive.map((p, i) => `
     <div class="rank-row">
       <span class="rank-num">${i+1}</span>
       <span class="rank-name">${p.name}<br><small style="color:#64748b">${p.model_id}</small></span>
