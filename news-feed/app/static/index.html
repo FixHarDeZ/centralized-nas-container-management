@@ -65,7 +65,13 @@
 </nav>
 <main>
   <div id="source-health" class="section active">
-    <div class="card"><h2>Articles per source (last 24h)</h2><canvas id="sourceChart" height="80"></canvas></div>
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
+        <h2 style="margin-bottom:0">Articles per source (last 24h)</h2>
+        <button class="btn btn-sm" onclick="refreshSourceHealth()">↻ Refresh</button>
+      </div>
+      <canvas id="sourceChart" height="80"></canvas>
+    </div>
     <div class="card" id="source-status-list"><h2>Source Status</h2></div>
   </div>
   <div id="news-timeline" class="section">
