@@ -38,7 +38,7 @@ def setup_scheduler(db_path: str) -> BackgroundScheduler:
             if sent and articles:
                 insert_digest_log(
                     conn,
-                    datetime.now(timezone.utc).isoformat(),
+                    datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                     [a["id"] for a in articles],
                     ",".join(sent),
                 )

@@ -18,12 +18,16 @@ def _entry_url(entry) -> str:
     return entry.get("link") or entry.get("id") or ""
 
 
+_DT_FMT = "%Y-%m-%dT%H:%M:%SZ"
+
+
 def _entry_published(entry) -> str:
-    for field in ("published", "updated"):
+    """Return UTC ISO-8601 string with Z suffix, safe for new Date() in all browsers."""
+    for field in ("published_parsed", "updated_parsed"):
         val = entry.get(field)
         if val:
-            return val
-    return datetime.now(timezone.utc).isoformat()
+            return datetime(*val[:6], tzinfo=timezone.utc).strftime(_DT_FMT)
+    return datetime.now(timezone.utc).strftime(_DT_FMT)
 
 
 def _entry_body(entry) -> str:
@@ -54,7 +58,7 @@ def fetch_all(db_path: str, config: dict) -> list[str]:
                 article_id = hashlib.sha256(entry_url.encode()).hexdigest()[:16]
                 if article_exists(conn, article_id):
                     continue
-                fetched_at = datetime.now(timezone.utc).isoformat()
+                fetched_at = datetime.now(timezone.utc).strftime(_DT_FMT)
                 insert_article(conn, {
                     "id": article_id,
                     "source": source_key,

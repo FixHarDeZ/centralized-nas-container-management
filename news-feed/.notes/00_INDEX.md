@@ -2,7 +2,7 @@
 
 **สร้าง:** 2026-05-23  
 **Port:** 5064 (external) → 8000 (internal)  
-**Status:** Running ✅ (2026-05-24)
+**Status:** Running ✅ (2026-05-25)
 
 ---
 
@@ -45,8 +45,8 @@ Single Python 3.12-slim container:
 | GET | `/api/schedule` | — | Current config |
 | POST | `/api/schedule` | — | Update digest times, sources, LLM model |
 | GET | `/api/digest/history` | — | Last 30 digest logs |
-| POST | `/api/digest/trigger` | X-Admin-Token | Manual digest now |
 | GET | `/api/health` | — | status, article_count, last_fetch |
+| GET | `/api/news/sources` | — | Article count per source (last N hours, default 24h) |
 
 ---
 
@@ -91,7 +91,10 @@ Single Python 3.12-slim container:
 - `get_recent_articles_for_digest` ใช้ SQLite `datetime('now', ?)` ตรงๆ ไม่ผ่าน Python datetime
 - **`schedule.json` บน NAS override `.env` ทั้งหมด** — ถ้าเปลี่ยน ENABLED_SOURCES ใน .env ต้องลบ `schedule.json` ด้วย (`rm /volume2/@docker/volumes/news-feed_news_feed_data/_data/schedule.json`)
 - **`entry.summary` ใน RSS ไม่ใช่ full body** — เพียงพอสำหรับ summarization, ไม่ต้อง fetch article URL
-- **Digest dedup:** `_digest_job` ต้องโหลด `digest_log` ก่อนแล้วกรอง `sent_ids` ออก — ไม่งั้นบทความที่ fetch ใน window 6h ก่อน digest ล่าสุดจะถูกส่งซ้ำ
+- **`_shownPrices[]` vs `allPrices[]`**: หลัง search filter index ใน rendered table ไม่ตรงกับ `allPrices` — `renderPriceTable(prices)` เก็บ `_shownPrices = prices` แล้ว copy handler ใช้ `_shownPrices[idx]`
+- **Copy button XSS safety**: ใช้ `data-idx` (integer) + JS array lookup แทนการใส่ model_id ใน HTML attribute
+- **Leaderboard categorization**: `paidPositive` ใช้ `combined > 0` (ไม่ใช่ `prompt>0 && complete>0`) — ป้องกัน mixed-price models (prompt=$0, complete=$5) หายไปจากทุก category
+- **Source Health 422**: `/api/news` มี `le=100` แต่ frontend เคยขอ `limit=500` → 422 → silent error → blank chart. Fix: เพิ่ม `/api/news/sources` endpoint ที่ใช้ aggregate SQL แทน
 
 ---
 
@@ -103,3 +106,8 @@ Single Python 3.12-slim container:
 | 2026-05-24 | Fix deploy: `COPY --chown=app:app`, `chown 1000:1000 /data`, Dockerfile `RUN mkdir /data` |
 | 2026-05-24 | Optimize fetcher: RSS summary แทน full-body fetch, limit 10/source, `POST /api/fetch/trigger`, immediate fetch on start |
 | 2026-05-24 | Fix digest dedup: กรอง `sent_ids` จาก `digest_log` ก่อน pick 5 บทความ |
+| 2026-05-25 | Fix Invalid Date: เปลี่ยน `isoformat()` → `strftime("%Y-%m-%dT%H:%M:%SZ")` ใน fetcher/pricer/scheduler, feedparser ใช้ `published_parsed` แทน raw string |
+| 2026-05-25 | Dashboard: ย้าย "Last fetch" ไป header, เพิ่ม Model ID column + copy button (XSS-safe) ใน Price Tracker |
+| 2026-05-25 | Dashboard: Price Tracker search bar, กรองราคาติดลบ, Free Models section ใน Leaderboard |
+| 2026-05-25 | Feature: Geo zone filter in Price Tracker (PROVIDER_ZONES + zone buttons + badge), escapeHtml() XSS fix |
+| 2026-05-25 | Feature: Leaderboard zone badges, 🏆 Top Hit, 🧠 Top Intelligence sections (ELO-based, longest-match-first) |

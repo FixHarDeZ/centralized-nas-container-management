@@ -2,6 +2,152 @@
 
 ---
 
+## 2026-05-25 (7) — Feature: Geo zone filter + Leaderboard Top Hit + Top Intelligence
+
+### Task 1: Geo zone filter — AI Price Tracker
+- `PROVIDER_ZONES` constant (25 providers → {zone, flag, label}: US/CN/EU/Others)
+- `getZone(modelId)` helper with Others fallback
+- Zone filter buttons (All | 🇺🇸 US | 🇨🇳 CN | 🇪🇺 EU | 🌍 Others) in price-tracker search row
+- `filterPrices()` applies both text search + zone filter
+- Zone badge in Model column of price table
+- `escapeHtml()` helper added + applied to all user-data innerHTML injections (XSS fix)
+- Commits: `ca9b110`, `5a097ec`
+
+### Task 2: Leaderboard enhancements
+- Zone badge added to all existing rows (cheapest/free/expensive)
+- `TOP_HIT_MODELS` array (17 popular model substrings, order = rank priority)
+- `MODEL_ELO_SCORES` object (20 models with Chatbot Arena ELO scores, approx.)
+- 🏆 Top Hit card — top 10 matched from live price data
+- 🧠 Top Intelligence card — top 10 by ELO, matched from live price data
+- Bug fix: ELO matching sorts keys by length desc (longest-match-first) to prevent `gpt-4o` matching `gpt-4o-mini`
+- Commits: `2cacc56`, `1e8910e`
+
+### Tests
+38/38 passed ✅
+
+---
+
+## 2026-05-25 (6) — Fix: Source Health 422 bug + token efficiency
+
+### Root Cause
+`/api/news` มี `le=100` (max 100) แต่ frontend ขอ `?limit=500` → FastAPI return 422 → `catch(e) { console.error(e) }` กลืน error เงียบ → Source Health แสดง blank chart ตลอด
+
+### Fix 1 — API endpoint ใหม่ (ประหยัด resource)
+- `api/news.py`: เพิ่ม `GET /api/news/sources?hours=24` — ใช้ `get_source_counts()` ที่มีอยู่แล้ว → aggregate SQL (`COUNT(*) GROUP BY source`) แทนการ fetch 500 rows
+
+### Fix 2 — Frontend caching (ไม่ re-fetch ทุก tab switch)
+- `app.js`: `loadSourceHealth()` ใช้ `/api/news/sources` แทน `/api/news?limit=500`
+- เพิ่ม `_sourceHealthLoaded` flag → โหลดครั้งเดียว, ไม่ re-fetch เมื่อกลับมา tab เดิม
+- เพิ่ม `refreshSourceHealth()` สำหรับ force reload
+- เพิ่ม empty state message "No articles fetched yet"
+- Error log มี context แทน silent swallow
+
+### Fix 3 — UI
+- `index.html`: เพิ่ม ↻ Refresh button ใน source-health card
+
+### Tests
+26/26 passed ✅
+
+### Deploy
+รอ push + deploy
+
+
+
+### Task 1: AI Price Tracker
+- `index.html`: เพิ่ม `<input id="price-search">` ใน `.search-row` ก่อน selects
+- `app.js`:
+  - Extract `renderPriceTable(prices)` จาก `loadPrices()` — sets `_shownPrices` global
+  - `loadPrices()` filter negative prices (`prompt<0 || complete<0`) ออกจาก `allPrices`
+  - `filterPrices()` search ตาม name/model_id, call `renderPriceTable(filtered)`
+  - Copy handler เปลี่ยนจาก `allPrices[idx]` → `_shownPrices[idx]` (safe after search filter)
+
+### Task 2: Leaderboard
+- `index.html`: เพิ่ม card `🆓 Free Models` ระหว่าง cheap และ expensive card
+- `app.js` `loadLeaderboard()`:
+  - `validPrices` = filter negatives ก่อน
+  - `freeModels` = validPrices ที่ both prices === 0 (แสดงทุกตัว, ไม่มี rank, badge "FREE")
+  - `paidPositive` = validPrices ที่ combined > 0 (รวม mixed-price เช่น prompt=0, complete>0)
+  - Top 10 Cheapest = paidPositive first 10 (ไม่มี free, ไม่มี negative)
+  - Top 5 Expensive = paidPositive reversed first 5
+  - Empty state สำหรับทุก section
+
+### Quality fixes (จาก code review)
+- Mixed-price models (เช่น prompt=$0, complete=$5) ไม่หลุด category — ใช้ combined > 0
+- Empty state handling สำหรับ Top 10 และ Top 5
+
+### Commits
+- `7bb211f` feat: price tracker search bar + filter negative prices
+- `7a61b02` feat: leaderboard free models section + filter negatives
+- `bd1a709` fix: filter negative prices in leaderboard before categorizing
+- `4f0775e` fix: leaderboard mixed-price models + empty states
+
+### Deploy
+รอ push + deploy
+
+
+
+### Changes
+- `index.html`: เพิ่ม `<th>Model ID</th>` เป็น column ที่ 2 ใน `#price-table` header + CSS `.model-id` (monospace, #94a3b8) + CSS `.copy-btn`
+- `app.js`: `loadPrices()` row template ใช้ `(p, i)` map → แสดง `model_id` span + copy button พร้อม `data-idx="${i}"`
+- `app.js`: delegated click handler ที่ `document` level (ไม่ใช่ใน loadPrices ที่ re-add ทุกครั้ง) — ใช้ `WeakMap` สำหรับ timeout tracking
+
+### Security & Quality Fixes (จาก code review)
+- **XSS prevention**: ใช้ `data-idx` + `allPrices[idx].model_id` lookup แทนการ embed `model_id` ลงใน HTML attribute โดยตรง
+- **Race condition fix**: `_copyTimers = new WeakMap()` track timeout ID ต่อปุ่ม → `clearTimeout` ก่อน set ใหม่ทุกครั้ง
+
+### Commits
+- `d57a6a2` feat: add model ID column with copy button to AI Price Tracker
+- `eac984b` fix: prevent XSS in copy button and race condition with rapid clicks
+
+### Deploy
+รอ push + deploy
+
+
+
+### Root Cause
+**ไม่ใช่เรื่อง space separator** — ปัญหาจริงคือ format ที่ Python ส่งออกมา:
+
+| Source | Format จริง | ปัญหา |
+|--------|------------|-------|
+| `datetime.now(timezone.utc).isoformat()` | `"2026-05-25T14:17:40.183000+00:00"` | append `'Z'` → `"...+00:00Z"` = **Invalid** |
+| feedparser raw `entry.published` | `"Mon, 25 May 2026 07:00:00 +0000"` | `.replace(' ','T')` → `"Mon,T25TMay..."` = **Invalid** |
+
+Fix ก่อนหน้า (`.replace(' ','T') + 'Z'`) แก้ได้เฉพาะ SQLite `datetime('now')` format แต่ทุก field จริงๆ มาจาก Python `isoformat()` ไม่ใช่ SQLite function
+
+### Fix — Backend (เปลี่ยน format ที่ source)
+- `fetcher.py`: `_entry_published()` ใช้ feedparser `published_parsed`/`updated_parsed` (UTC `struct_time`) แทน raw string → format เป็น `strftime("%Y-%m-%dT%H:%M:%SZ")`
+- `fetcher.py`: `fetched_at` → `strftime("%Y-%m-%dT%H:%M:%SZ")` (ไม่ใช้ `isoformat()`)
+- `pricer.py`: `updated_at` → `strftime("%Y-%m-%dT%H:%M:%SZ")`
+- `scheduler.py`: `sent_at` → `strftime("%Y-%m-%dT%H:%M:%SZ")`
+
+### Fix — Frontend (ทำให้เรียบง่าย)
+- `app.js`: ลบ `.replace(' ','T') + 'Z'` ออกทุกจุด → ใช้ `new Date(str)` ตรงๆ เพราะ backend ส่ง ISO 8601 + Z ที่ถูกต้องแล้ว
+
+### Tests
+38/38 passed ✅
+
+### Deploy
+รอ push + deploy
+
+
+
+### Bug
+- AI Price Tracker / Leaderboard / Digest History แสดงเป็น "Invalid Date"
+- **Root cause:** SQLite datetime `"2026-05-25 12:30:00"` (space separator) + `'Z'` → `new Date()` ใน Safari/Firefox ไม่ยอมรับ format นี้ (ต้องการ ISO 8601 ที่มี `T`)
+
+### Fix
+- `app.js` — ทุก `new Date(str + 'Z')` เปลี่ยนเป็น `new Date(str.replace(' ','T') + 'Z')` ครอบคลุม: `h.last_fetch`, `updatedData.updated_at` (x2), `p.updated_at`, `d.sent_at`
+- `app.js` — `a.published` ใน News Timeline ก็แก้เช่นกัน (`.replace(' ','T')`)
+
+### UI: Move Last fetch to header
+- `index.html` — ย้าย `footer-info` (Last fetch) จาก `<footer>` ไปแสดงที่ `<header>` ด้านขวา (margin-left:auto)
+- `<footer>` เปลี่ยนเป็น hidden element เพื่อไม่ให้แสดงที่ด้านล่าง
+
+### Deploy
+รอ push + deploy
+
+---
+
 ## 2026-05-25 — Feature: AI Price Tracker + Leaderboard timestamps
 
 ### Changes

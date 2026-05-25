@@ -19,7 +19,7 @@ def fetch_prices(db_path: str) -> int:
         return 0
 
     models = resp.json().get("data", [])
-    updated_at = datetime.now(timezone.utc).isoformat()
+    updated_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     conn = get_conn(db_path)
     count = 0
     try:
