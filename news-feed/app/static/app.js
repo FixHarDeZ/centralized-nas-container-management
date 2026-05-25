@@ -86,7 +86,17 @@ async function loadPrices() {
   const sort = document.getElementById('price-sort').value;
   const params = new URLSearchParams({ sort });
   if (provider) params.set('provider', provider);
-  allPrices = await api('/api/prices?' + params);
+  const [prices, updatedData] = await Promise.all([
+    api('/api/prices?' + params),
+    api('/api/prices/updated'),
+  ]);
+  allPrices = prices;
+  const updatedEl = document.getElementById('price-updated');
+  if (updatedData.updated_at) {
+    updatedEl.textContent = `🕐 Last updated: ${new Date(updatedData.updated_at + 'Z').toLocaleString('th-TH')}`;
+  } else {
+    updatedEl.textContent = '🕐 Not yet updated';
+  }
   if (document.getElementById('price-provider-filter').options.length <= 1) {
     const providers = [...new Set(allPrices.map(p=>p.provider))];
     const sel = document.getElementById('price-provider-filter');
@@ -98,11 +108,21 @@ async function loadPrices() {
     <td>$${(p.prompt_price||0).toFixed(3)}</td>
     <td>$${(p.complete_price||0).toFixed(3)}</td>
     <td>${p.context_length ? p.context_length.toLocaleString() : '–'}</td>
+    <td>${p.updated_at ? new Date(p.updated_at + 'Z').toLocaleString('th-TH') : '–'}</td>
   </tr>`).join('');
 }
 
 async function loadLeaderboard() {
-  const prices = await api('/api/prices?sort=combined_asc');
+  const [prices, updatedData] = await Promise.all([
+    api('/api/prices?sort=combined_asc'),
+    api('/api/prices/updated'),
+  ]);
+  const updatedEl = document.getElementById('leaderboard-updated');
+  if (updatedData.updated_at) {
+    updatedEl.textContent = `🕐 Last updated: ${new Date(updatedData.updated_at + 'Z').toLocaleString('th-TH')}`;
+  } else {
+    updatedEl.textContent = '🕐 Not yet updated';
+  }
   const cheapEl = document.getElementById('leaderboard-cheap');
   cheapEl.innerHTML = prices.slice(0,10).map((p,i) => `
     <div class="rank-row">
