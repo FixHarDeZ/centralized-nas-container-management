@@ -157,3 +157,16 @@ def test_set_free_expiry_invalid_date(db):
     import pytest
     with pytest.raises(ValueError, match="Invalid date format"):
         set_free_expiry(db, "openai/gpt-4o", "31-12-2025")
+
+
+def test_upsert_price_preserves_free_expires_at(db):
+    model = {"model_id": "openai/gpt-4o", "provider": "openai", "name": "GPT-4o",
+             "prompt_price": 5.0, "complete_price": 15.0, "context_length": 128000,
+             "updated_at": "2026-01-01T00:00:00Z"}
+    upsert_price(db, model)
+    set_free_expiry(db, "openai/gpt-4o", "2026-12-31")
+    # upsert again with updated prices
+    upsert_price(db, {**model, "prompt_price": 3.0})
+    prices = get_prices(db)
+    assert prices[0]["prompt_price"] == 3.0  # updated
+    assert prices[0]["free_expires_at"] == "2026-12-31"  # preserved

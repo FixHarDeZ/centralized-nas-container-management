@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from datetime import datetime
 from typing import Optional
 
 
@@ -42,8 +43,9 @@ def init_db(conn: sqlite3.Connection) -> None:
     try:
         conn.execute("ALTER TABLE prices ADD COLUMN free_expires_at TEXT")
         conn.commit()
-    except Exception:
-        pass  # column already exists
+    except sqlite3.OperationalError as e:
+        if "duplicate column" not in str(e):
+            raise
 
 
 def article_exists(conn: sqlite3.Connection, article_id: str) -> bool:
@@ -126,9 +128,11 @@ def upsert_price(conn: sqlite3.Connection, model: dict) -> None:
 
 
 def set_free_expiry(conn: sqlite3.Connection, model_id: str, expires_at: Optional[str]) -> bool:
-    import re
-    if expires_at is not None and not re.match(r"^\d{4}-\d{2}-\d{2}$", expires_at):
-        raise ValueError("Invalid date format, use YYYY-MM-DD")
+    if expires_at is not None:
+        try:
+            datetime.strptime(expires_at, "%Y-%m-%d")
+        except ValueError:
+            raise ValueError("Invalid date format, use YYYY-MM-DD")
     cur = conn.execute(
         "UPDATE prices SET free_expires_at = ? WHERE model_id = ?",
         (expires_at, model_id),
