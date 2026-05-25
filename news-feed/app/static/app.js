@@ -59,6 +59,7 @@ function freeExpiryStatus(expires_at) {
   const todayMidnight = new Date();
   todayMidnight.setHours(0, 0, 0, 0);
   const expiryDate = new Date(expires_at + 'T00:00:00');
+  if (isNaN(expiryDate.getTime())) return { label: '⚠️ Invalid', className: 'expiry-urgent' };
   const daysLeft = Math.ceil((expiryDate - todayMidnight) / 86400000);
   if (daysLeft <= 0) return { label: '⚠️ Expired', className: 'expiry-urgent' };
   if (daysLeft <= 3) return { label: `⚠️ ${daysLeft}d left`, className: 'expiry-urgent' };
@@ -417,11 +418,15 @@ document.addEventListener('click', e => {
   btn.after(input);
 
   input.addEventListener('change', async () => {
+    const expiryValue = input.value;
+    const modelId = model.model_id;
+    input.remove();
     try {
-      const r = await fetch(`/api/prices/${model.model_id}/expiry`, {
+      const safeId = modelId.split('/').map(encodeURIComponent).join('/');
+      const r = await fetch(`/api/prices/${safeId}/expiry`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ expires_at: input.value || null }),
+        body: JSON.stringify({ expires_at: expiryValue || null }),
       });
       if (!r.ok) throw new Error(r.status);
       loadLeaderboard();
