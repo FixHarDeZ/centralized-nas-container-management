@@ -44,12 +44,16 @@
   .search-row{display:flex;gap:.5rem;margin-bottom:1rem;flex-wrap:wrap}
   .search-row input{flex:1;min-width:180px}
   footer{text-align:center;padding:1rem;color:#475569;font-size:.75rem}
+  .model-id{font-family:monospace;color:#94a3b8;font-size:.8rem}
+  .copy-btn{background:none;border:none;cursor:pointer;font-size:.85rem;padding:.1rem .3rem;color:#64748b;border-radius:.25rem}
+  .copy-btn:hover{background:#1e293b;color:#e2e8f0}
 </style>
 </head>
 <body>
 <header>
   <h1>📰 News Feed Bot</h1>
   <span class="badge" id="health-badge">loading…</span>
+  <span id="footer-info" style="color:#64748b;font-size:.75rem;margin-left:auto">–</span>
 </header>
 <nav>
   <button class="active" onclick="showTab('source-health')">Source Health</button>
@@ -82,7 +86,7 @@
         <option value="prompt_desc">Prompt ↓</option>
       </select>
     </div>
-    <div class="card"><table id="price-table"><thead><tr><th>Model</th><th>Provider</th><th>Prompt/1M</th><th>Completion/1M</th><th>Context</th><th>Updated</th></tr></thead><tbody></tbody></table></div>
+    <div class="card"><table id="price-table"><thead><tr><th>Model</th><th>Model ID</th><th>Provider</th><th>Prompt/1M</th><th>Completion/1M</th><th>Context</th><th>Updated</th></tr></thead><tbody></tbody></table></div>
   </div>
   <div id="ai-leaderboard" class="section">
     <div id="leaderboard-updated" style="color:#64748b;font-size:.8rem;margin-bottom:.75rem"></div>
@@ -111,7 +115,7 @@
     <span id="save-status" style="margin-left:.75rem;font-size:.85rem;color:#22c55e"></span>
   </div>
 </main>
-<footer id="footer-info">–</footer>
+<footer style="display:none" id="footer-info-old">–</footer>
 <script src="/app.js"></script>
 </body>
 </html>

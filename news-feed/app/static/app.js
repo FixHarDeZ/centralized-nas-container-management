@@ -27,7 +27,7 @@ async function loadHealth() {
     const badge = document.getElementById('health-badge');
     badge.textContent = `${h.article_count} articles`;
     document.getElementById('footer-info').textContent =
-      `Last fetch: ${h.last_fetch ? new Date(h.last_fetch+'Z').toLocaleString('th-TH') : 'never'}`;
+      `Last fetch: ${h.last_fetch ? new Date(h.last_fetch).toLocaleString('th-TH') : 'never'}`;
   } catch(e) { document.getElementById('health-badge').textContent = 'error'; }
 }
 
@@ -93,7 +93,7 @@ async function loadPrices() {
   allPrices = prices;
   const updatedEl = document.getElementById('price-updated');
   if (updatedData.updated_at) {
-    updatedEl.textContent = `🕐 Last updated: ${new Date(updatedData.updated_at + 'Z').toLocaleString('th-TH')}`;
+    updatedEl.textContent = `🕐 Last updated: ${new Date(updatedData.updated_at).toLocaleString('th-TH')}`;
   } else {
     updatedEl.textContent = '🕐 Not yet updated';
   }
@@ -104,11 +104,11 @@ async function loadPrices() {
   }
   const tbody = document.querySelector('#price-table tbody');
   tbody.innerHTML = allPrices.map(p => `<tr>
-    <td>${p.name}</td><td>${p.provider}</td>
+    <td>${p.name}</td><td><span class="model-id">${p.model_id}</span> <button class="copy-btn" data-model-id="${p.model_id}" title="Copy model ID">📋</button></td><td>${p.provider}</td>
     <td>$${(p.prompt_price||0).toFixed(3)}</td>
     <td>$${(p.complete_price||0).toFixed(3)}</td>
     <td>${p.context_length ? p.context_length.toLocaleString() : '–'}</td>
-    <td>${p.updated_at ? new Date(p.updated_at + 'Z').toLocaleString('th-TH') : '–'}</td>
+    <td>${p.updated_at ? new Date(p.updated_at).toLocaleString('th-TH') : '–'}</td>
   </tr>`).join('');
 }
 
@@ -119,7 +119,7 @@ async function loadLeaderboard() {
   ]);
   const updatedEl = document.getElementById('leaderboard-updated');
   if (updatedData.updated_at) {
-    updatedEl.textContent = `🕐 Last updated: ${new Date(updatedData.updated_at + 'Z').toLocaleString('th-TH')}`;
+    updatedEl.textContent = `🕐 Last updated: ${new Date(updatedData.updated_at).toLocaleString('th-TH')}`;
   } else {
     updatedEl.textContent = '🕐 Not yet updated';
   }
@@ -146,7 +146,7 @@ async function loadDigestHistory() {
   if (!history.length) { el.innerHTML = '<p style="color:#64748b">No digests sent yet</p>'; return; }
   el.innerHTML = history.map(d => `
     <div class="digest-entry" onclick="this.classList.toggle('open')">
-      <span>${new Date(d.sent_at+'Z').toLocaleString('th-TH')}</span>
+      <span>${new Date(d.sent_at).toLocaleString('th-TH')}</span>
       <span style="color:#64748b;font-size:.75rem;margin-left:.5rem">${d.channels} · ${d.article_ids.length} articles</span>
       <div class="digest-detail">${d.article_ids.map(id=>`<div style="font-size:.8rem;color:#94a3b8">• ${id}</div>`).join('')}</div>
     </div>`).join('');
@@ -187,6 +187,17 @@ async function saveSchedule() {
   }
   setTimeout(()=>document.getElementById('save-status').textContent='', 3000);
 }
+
+// Copy button handler (delegated)
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.copy-btn');
+  if (!btn) return;
+  navigator.clipboard.writeText(btn.dataset.modelId).then(() => {
+    const orig = btn.textContent;
+    btn.textContent = '✓';
+    setTimeout(() => btn.textContent = orig, 1500);
+  }).catch(err => console.error('Copy failed:', err));
+});
 
 // Init
 loadHealth();
