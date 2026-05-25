@@ -140,19 +140,21 @@ async function loadLeaderboard() {
     updatedEl.textContent = '🕐 Not yet updated';
   }
 
-  // Categorize: free = both prices === 0, paid = both prices > 0
+  // Categorize: free = both prices === 0, paid = combined > 0 (includes mixed-price models)
   const validPrices = prices.filter(p => (p.prompt_price||0) >= 0 && (p.complete_price||0) >= 0);
   const freeModels = validPrices.filter(p => (p.prompt_price||0) === 0 && (p.complete_price||0) === 0);
-  const paidPositive = validPrices.filter(p => (p.prompt_price||0) > 0 && (p.complete_price||0) > 0);
+  const paidPositive = validPrices.filter(p => (p.prompt_price||0) + (p.complete_price||0) > 0);
 
   // Top 10 Cheapest: paid positive only (already sorted combined_asc)
+  const cheapList = paidPositive.slice(0, 10);
   const cheapEl = document.getElementById('leaderboard-cheap');
-  cheapEl.innerHTML = paidPositive.slice(0, 10).map((p, i) => `
+  cheapEl.innerHTML = cheapList.length ? cheapList.map((p, i) => `
     <div class="rank-row">
       <span class="rank-num">${i+1}</span>
       <span class="rank-name">${p.name}<br><small style="color:#64748b">${p.model_id}</small></span>
       <span class="rank-price">$${((p.prompt_price||0)+(p.complete_price||0)).toFixed(3)}/1M</span>
-    </div>`).join('');
+    </div>`).join('')
+    : '<p style="color:#64748b;font-size:.85rem">No paid models available</p>';
 
   // Free Models: all free models (no rank numbers)
   const freeEl = document.getElementById('leaderboard-free');
@@ -167,14 +169,15 @@ async function loadLeaderboard() {
   }
 
   // Top 5 Most Expensive: paid positive only, sorted reverse
-  const expensive = [...paidPositive].reverse().slice(0, 5);
+  const expensiveList = [...paidPositive].reverse().slice(0, 5);
   const expEl = document.getElementById('leaderboard-expensive');
-  expEl.innerHTML = expensive.map((p, i) => `
+  expEl.innerHTML = expensiveList.length ? expensiveList.map((p, i) => `
     <div class="rank-row">
       <span class="rank-num">${i+1}</span>
       <span class="rank-name">${p.name}<br><small style="color:#64748b">${p.model_id}</small></span>
       <span class="rank-price" style="color:#ef4444">$${((p.prompt_price||0)+(p.complete_price||0)).toFixed(3)}/1M</span>
-    </div>`).join('');
+    </div>`).join('')
+    : '<p style="color:#64748b;font-size:.85rem">No paid models available</p>';
 }
 
 async function loadDigestHistory() {
