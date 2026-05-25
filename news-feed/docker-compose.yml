@@ -3,13 +3,27 @@ services:
     build: .
     container_name: news-feed
     restart: unless-stopped
-    ports:
-      - "5064:8000"
+    expose:
+      - "8000"
     env_file: .env
     environment:
       - TZ=Asia/Bangkok
     volumes:
       - news_feed_data:/data
+
+  nginx:
+    image: nginx:alpine
+    container_name: news-feed-nginx
+    restart: unless-stopped
+    ports:
+      - "5064:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/.htpasswd:/etc/nginx/.htpasswd:ro
+    environment:
+      - TZ=Asia/Bangkok
+    depends_on:
+      - news-feed
 
 volumes:
   news_feed_data:
