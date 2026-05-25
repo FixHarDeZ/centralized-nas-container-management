@@ -2,6 +2,7 @@ let allNews = [];
 let allPrices = [];
 let _shownPrices = [];
 let _priceZoneFilter = '';
+let _freeModels = [];
 
 const PROVIDER_ZONES = {
   'openai':       { zone: 'US', flag: '🇺🇸', label: 'US' },
@@ -52,6 +53,19 @@ const MODEL_ELO_SCORES = {
   'qwen-2.5-72b': 1230, 'qwen3': 1330,
   'gemma-3-27b': 1210,
 };
+
+function freeExpiryStatus(expires_at) {
+  if (!expires_at) return { label: '–', className: '' };
+  const todayMidnight = new Date();
+  todayMidnight.setHours(0, 0, 0, 0);
+  const expiryDate = new Date(expires_at + 'T00:00:00');
+  const daysLeft = Math.ceil((expiryDate - todayMidnight) / 86400000);
+  if (daysLeft <= 0) return { label: '⚠️ Expired', className: 'expiry-urgent' };
+  if (daysLeft <= 3) return { label: `⚠️ ${daysLeft}d left`, className: 'expiry-urgent' };
+  if (daysLeft <= 7) return { label: `${daysLeft}d left`, className: 'expiry-warn' };
+  const label = expiryDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  return { label, className: 'expiry-ok' };
+}
 
 function escapeHtml(s) {
   const d = document.createElement('div');
@@ -284,15 +298,25 @@ async function loadLeaderboard() {
   }).join('') : '<p style="color:#64748b;font-size:.85rem">No paid models available</p>';
 
   // Free Models: all free models (no rank numbers)
+  _freeModels = freeModels;
   const freeEl = document.getElementById('leaderboard-free');
   if (!freeModels.length) {
     freeEl.innerHTML = '<p style="color:#64748b;font-size:.85rem">No free models found</p>';
   } else {
-    freeEl.innerHTML = freeModels.map(p => {
+    freeEl.innerHTML = freeModels.map((p, i) => {
       const z = getZone(p.model_id);
-      return `<div class="rank-row">
-        <span class="rank-name">${escapeHtml(p.name)} <span class="zone-badge">${z.flag} ${z.label}</span><br><small style="color:#64748b">${escapeHtml(p.model_id)}</small></span>
-        <span class="rank-price" style="color:#22c55e;font-weight:600">FREE</span>
+      const expiryStatus = freeExpiryStatus(p.free_expires_at);
+      return `<div class="rank-row" data-idx="${i}">
+        <span class="rank-name">${escapeHtml(p.name)} <span class="zone-badge">${z.flag} ${z.label}</span>
+          <br><small style="color:#64748b">${escapeHtml(p.model_id)}</small>
+        </span>
+        <span style="display:flex;align-items:center;gap:.4rem">
+          ${expiryStatus.className
+            ? `<span class="expiry-badge ${expiryStatus.className}">${expiryStatus.label}</span>`
+            : `<span style="color:#475569;font-size:.75rem">–</span>`
+          }
+          <button class="copy-btn set-expiry-btn" data-idx="${i}" title="Set expiry date">📅</button>
+        </span>
       </div>`;
     }).join('');
   }
@@ -363,6 +387,7 @@ const _copyTimers = new WeakMap();
 document.addEventListener('click', e => {
   const btn = e.target.closest('.copy-btn');
   if (!btn) return;
+  if (btn.classList.contains('set-expiry-btn')) return;
   const idx = parseInt(btn.dataset.idx, 10);
   const modelId = _shownPrices[idx]?.model_id;
   if (!modelId) return;
@@ -371,6 +396,39 @@ document.addEventListener('click', e => {
     btn.textContent = '✓';
     _copyTimers.set(btn, setTimeout(() => { btn.textContent = '📋'; }, 1500));
   }).catch(err => console.error('Copy failed:', err));
+});
+
+// Set expiry button handler (delegated)
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.set-expiry-btn');
+  if (!btn) return;
+  const idx = parseInt(btn.dataset.idx, 10);
+  const model = _freeModels[idx];
+  if (!model) return;
+
+  const row = btn.closest('.rank-row');
+  const existingInput = row.querySelector('.expiry-edit-input');
+  if (existingInput) { existingInput.remove(); return; }
+
+  const input = document.createElement('input');
+  input.type = 'date';
+  input.className = 'expiry-edit-input';
+  input.value = model.free_expires_at || '';
+  btn.after(input);
+
+  input.addEventListener('change', async () => {
+    try {
+      const r = await fetch(`/api/prices/${model.model_id}/expiry`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expires_at: input.value || null }),
+      });
+      if (!r.ok) throw new Error(r.status);
+      loadLeaderboard();
+    } catch (err) {
+      console.error('Failed to update expiry:', err);
+    }
+  });
 });
 
 // Init
