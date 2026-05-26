@@ -65,6 +65,38 @@
           
 # ─── 📝 Tools & Notes ─────────────────────────────────────────────────────────
 - 📝 Tools & Notes:
+    - News Feed:
+        icon: mdi-newspaper-variant-outline
+        href: "{{HOMEPAGE_VAR_NEWS_FEED_URL}}"
+        description: AI & IT News Digest (Thai)
+        ping: "{{HOMEPAGE_VAR_NEWS_FEED_URL}}"
+        widget:
+          type: customapi
+          url: "{{HOMEPAGE_VAR_NEWS_FEED_URL}}/api/health"
+          refreshInterval: 120000
+          mappings:
+            - field: status
+              label: Status
+              format: text
+            - field: article_count
+              label: Articles
+              format: number
+            - field: last_fetch
+              label: Last Fetch
+              format: text
+
+    - Hermes Agent:
+        icon: mdi-robot
+        href: "{{HOMEPAGE_VAR_HERMES_URL}}"
+        description: Autonomous AI Agent (Telegram + Discord)
+        ping: "{{HOMEPAGE_VAR_HERMES_URL}}"
+
+    - My Secretary:
+        icon: mdi-robot-outline
+        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15057"
+        description: AI Personal Assistant (LINE + Telegram)
+        ping: "{{HOMEPAGE_VAR_MY_SECRETARY_URL}}"
+
     - Maid Tracker:
         icon: mdi-broom
         href: "{{HOMEPAGE_VAR_MAID_TRACKER_URL}}"
@@ -85,7 +117,7 @@
         icon: synology-drive.png
         href: "{{HOMEPAGE_VAR_QUICKCONNECT_URL}}/drive/"
         description: Cloud File Storage
-        
+
 # ─── 🌐 Remote Access ─────────────────────────────────────────────────────────
 - 🌐 Remote Access:
     - Jellyfin (DDNS):
