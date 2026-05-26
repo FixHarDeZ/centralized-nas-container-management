@@ -5,7 +5,7 @@ import json
 import logging
 import re
 
-from openai import AsyncOpenAI, RateLimitError
+from openai import APIStatusError, AsyncOpenAI, RateLimitError
 
 import notion
 import provider as _provider
@@ -133,10 +133,16 @@ async def _search_variants(client: AsyncOpenAI, small_model: str, message: str) 
     If the message contains English/numbers → fast path (no LLM):
       "ขอข้อมูล book bank ทั้งหมด" → ["book bank", "bookbank", <original>]
 
+    For multi-line messages (e.g. write intent + value), only the first line is
+    used for keyword extraction so the token VALUE doesn't pollute the query:
+      "เพิ่ม api token ให้หน่อย\ntest-token abc123" → ["api token", "apitoken", <original>]
+
     If the message is Thai-only → one LLM call to translate:
       "ขอข้อมูลยื่นภาษี" → ["tax filing", <original>]
     """
-    english_words = re.findall(r"[a-zA-Z0-9]+", message)
+    # Use only the first line for keyword extraction (intent line, not value line)
+    first_line = message.split("\n")[0]
+    english_words = re.findall(r"[a-zA-Z0-9]+", first_line)
     variants: list[str] = []
 
     if english_words:
@@ -161,6 +167,13 @@ async def _search_variants(client: AsyncOpenAI, small_model: str, message: str) 
             if not settings.OPENROUTER_API_KEY:
                 raise
             client, _, small_model = _provider.on_groq_rate_limit(e, settings)
+            r = await client.chat.completions.create(
+                model=small_model, messages=translate_msgs, max_tokens=30, temperature=0,
+            )
+        except APIStatusError as e:
+            if e.status_code != 413 or not settings.OPENROUTER_API_KEY:
+                raise
+            client, _, small_model = _provider.on_groq_too_large(settings)
             r = await client.chat.completions.create(
                 model=small_model, messages=translate_msgs, max_tokens=30, temperature=0,
             )
@@ -205,6 +218,13 @@ async def run(user_message: str, history: list[dict] | None = None) -> dict:
     notion_data = await _deep_search(settings.NOTION_TOKEN, search_queries)
     ranked = _rank_context(notion_data, search_queries, MAX_CONTEXT_CHARS)
     context = json.dumps(ranked, ensure_ascii=False)
+    logger.info(
+        f"Context built: {len(context)} chars | pages={[p['title'] for p in ranked.get('pages', [])]} "
+        f"| dbs={[d['title'] for d in ranked.get('databases', [])]}"
+    )
+    # DEBUG: show content snippet of each page so we can verify what the LLM sees
+    for _p in ranked.get("pages", []):
+        logger.info(f"  PAGE[{_p['title']}]: {repr(_p.get('content','')[:300])}")
 
     msgs = [
         {"role": "system", "content": SYSTEM_PROMPT},
@@ -219,6 +239,13 @@ async def run(user_message: str, history: list[dict] | None = None) -> dict:
         if not settings.OPENROUTER_API_KEY:
             raise
         client, main_model, _ = _provider.on_groq_rate_limit(e, settings)
+        response = await client.chat.completions.create(
+            model=main_model, messages=msgs, max_tokens=2048, temperature=0.3,
+        )
+    except APIStatusError as e:
+        if e.status_code != 413 or not settings.OPENROUTER_API_KEY:
+            raise
+        client, main_model, _ = _provider.on_groq_too_large(settings)
         response = await client.chat.completions.create(
             model=main_model, messages=msgs, max_tokens=2048, temperature=0.3,
         )
@@ -354,6 +381,13 @@ async def run_general(user_message: str, history: list[dict] | None = None) -> d
         response = await client.chat.completions.create(
             model=main_model, messages=msgs, max_tokens=1024, temperature=0.5,
         )
+    except APIStatusError as e:
+        if e.status_code != 413 or not settings.OPENROUTER_API_KEY:
+            raise
+        client, main_model, _ = _provider.on_groq_too_large(settings)
+        response = await client.chat.completions.create(
+            model=main_model, messages=msgs, max_tokens=1024, temperature=0.5,
+        )
     output = (response.choices[0].message.content or "").strip()
     return {"type": "answer", "text": output or "ไม่มีคำตอบค่ะ"}
 
@@ -418,22 +452,39 @@ async def _fallback_scan(token: str, keywords: list[str]) -> dict:
 
     logger.info(f"Fallback kw_set: {kw_set} | win4 sample: {list(win4)[:5]}")
 
-    def _header_matches(header: str) -> bool:
+    def _header_score(header: str, title: str) -> int:
+        """Score relevance. Title matches are weighted 10× over body matches
+        so 'API Token | API Key' always outranks daily-log pages that merely
+        mention 'api' somewhere in their long body text."""
         h = header.lower()
+        t = title.lower()
         h_compact = re.sub(r"[-_\s]", "", h)
-        return (
-            any(kw in h for kw in kw_set) or
-            any(kw in h_compact for kw in kw_compact) or
-            any(w in h for w in win4)
-        )
+        t_compact = re.sub(r"[-_\s]", "", t)
+        # Title hits (very strong signal)
+        score = sum(t.count(kw) * 10 for kw in kw_set)
+        score += sum(t_compact.count(kw) * 10 for kw in kw_compact)
+        # Body hits (weaker signal)
+        score += sum(h.count(kw) for kw in kw_set)
+        score += sum(h_compact.count(kw) for kw in kw_compact)
+        score += sum(h.count(w) for w in win4)
+        return score
 
-    # Phase 2: full deep read only for pages whose headers match
-    candidates = [page for page, header in zip(all_pages, headers) if _header_matches(header)]
+    # Phase 2: score all pages, keep only top 10 matches to avoid hammering Notion API
+    scored = [(page, _header_score(header, page["title"])) for page, header in zip(all_pages, headers)]
+    scored.sort(key=lambda x: x[1], reverse=True)
+    candidates = [page for page, score in scored if score > 0][:10]
     if not candidates:
         candidates = all_pages[:5]  # no match → read top 5 recent pages
-    logger.info(f"Fallback candidates: {[p['title'] for p in candidates]}")
+    logger.info(f"Fallback candidates ({len(candidates)}): {[p['title'] for p in candidates]}")
 
-    processed = await asyncio.gather(*[_process_item(token, p) for p in candidates])
+    # Semaphore: cap concurrent Notion fetches to avoid rate-limiting
+    sem = asyncio.Semaphore(5)
+
+    async def _process_limited(p: dict) -> tuple[list, list]:
+        async with sem:
+            return await _process_item(token, p)
+
+    processed = await asyncio.gather(*[_process_limited(p) for p in candidates])
     pages: list[dict] = []
     databases: list[dict] = []
     for p, d in processed:
@@ -504,7 +555,13 @@ async def _deep_search(token: str, queries: list[str] | str) -> dict:
                 search_items.append(item)
 
     if search_items:
-        processed = await asyncio.gather(*[_process_item(token, item) for item in search_items])
+        sem = asyncio.Semaphore(5)
+
+        async def _process_search_limited(item: dict) -> tuple[list, list]:
+            async with sem:
+                return await _process_item(token, item)
+
+        processed = await asyncio.gather(*[_process_search_limited(item) for item in search_items])
         search_pages: list[dict] = []
         search_dbs: list[dict] = []
         for p, d in processed:

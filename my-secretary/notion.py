@@ -1,8 +1,12 @@
 import asyncio
+import logging
+
 import httpx
 
 NOTION_API = "https://api.notion.com/v1"
 MAX_CONTENT_CHARS = 6000
+
+logger = logging.getLogger(__name__)
 
 
 def _headers(token: str) -> dict:
@@ -71,6 +75,12 @@ async def get_page_content(token: str, page_id: str, _depth: int = 0) -> str:
             headers=_headers(token),
             timeout=15,
         )
+        if r.status_code == 429:
+            logger.warning(f"Notion rate-limited fetching blocks/{page_id} (depth={_depth})")
+            return ""
+        if r.status_code != 200:
+            logger.warning(f"Notion blocks/{page_id} returned {r.status_code} (depth={_depth})")
+            return ""
         blocks = r.json().get("results", [])
 
     lines = []

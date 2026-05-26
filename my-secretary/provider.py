@@ -63,7 +63,9 @@ def _auto_mode(settings) -> bool:
 
 
 def _build(cfg: dict, api_key: str) -> AsyncOpenAI:
-    return AsyncOpenAI(base_url=cfg["base_url"], api_key=api_key)
+    # max_retries=0: disable SDK's internal retries so our failover logic in agent.py
+    # catches errors immediately instead of waiting 30+ seconds per retry cycle.
+    return AsyncOpenAI(base_url=cfg["base_url"], api_key=api_key, max_retries=0)
 
 
 def get_client(settings) -> tuple[AsyncOpenAI, str, str]:
@@ -74,6 +76,12 @@ def get_client(settings) -> tuple[AsyncOpenAI, str, str]:
     if settings.AI_PROVIDER == "openrouter" or not settings.GROQ_API_KEY:
         return _build(_OR, settings.OPENROUTER_API_KEY), _OR["main"], _OR["small"]
     return _build(_GROQ, settings.GROQ_API_KEY), _GROQ["main"], _GROQ["small"]
+
+
+def on_groq_too_large(settings) -> tuple[AsyncOpenAI, str, str]:
+    """Request was too large for Groq (413). Fall over to OpenRouter without blocking Groq."""
+    logger.warning("Groq rejected request as too large (413) — retrying with OpenRouter")
+    return _build(_OR, settings.OPENROUTER_API_KEY), _OR["main"], _OR["small"]
 
 
 def on_groq_rate_limit(error: RateLimitError, settings) -> tuple[AsyncOpenAI, str, str]:
