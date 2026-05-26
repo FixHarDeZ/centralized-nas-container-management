@@ -39,7 +39,7 @@ Both platforms share the same `handle_message()` core logic. State (history, pen
 | Knowledge base | Notion API (Internal Integration Token) |
 | Messaging | LINE Messaging API · Telegram Bot API |
 | Host port | `5057` → container `8000` |
-| Reverse proxy | Synology RP `https://…:5058` → `http://localhost:5057` |
+| Reverse proxy | Synology RP `https://…:15057` → `http://localhost:5057` |
 
 ## Setup
 
@@ -67,7 +67,7 @@ In auto mode the bot uses Groq (free) as the primary provider. When Groq's daily
 
 1. Go to [developers.line.biz](https://developers.line.biz) → Create a **Messaging API** channel
 2. Copy **Channel Secret** and **Channel Access Token**
-3. Set webhook URL: `https://<NAS_HOST>:5058/webhook`
+3. Set webhook URL: `https://<NAS_HOST>:15057/webhook`
 4. Enable **Use webhooks**, disable **Auto-reply messages**
 5. Find your LINE user ID in Developers Console → Messaging API → Your user ID
 

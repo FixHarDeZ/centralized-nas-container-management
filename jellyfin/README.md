@@ -5,7 +5,7 @@
 Media server with NVIDIA GPU hardware transcoding.
 
 **Local URL:** `http://<NAS_IP>:8096`
-**External URL:** `https://<NAS_HOST>:8097` (via Synology Reverse Proxy)
+**External URL:** `https://<NAS_HOST>:18096` (via Synology Reverse Proxy)
 
 ## Ports & Reverse Proxy
 
@@ -13,8 +13,8 @@ Media server with NVIDIA GPU hardware transcoding.
 |---|---|
 | Container | HTTP on port `8096` |
 | Host port | `8096` (plain HTTP, LAN only) |
-| Synology Reverse Proxy | `https://…:8097` → `http://localhost:8096` |
-| Router port forward | External `8097` → NAS `8097` |
+| Synology Reverse Proxy | `https://…:18096` → `http://localhost:8096` |
+| Router port forward | External `18096` → NAS `18096` |
 
 TLS is terminated by Synology Reverse Proxy — Jellyfin itself runs plain HTTP internally.
 
