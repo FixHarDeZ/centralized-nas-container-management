@@ -67,35 +67,15 @@
 - 📝 Tools & Notes:
     - News Feed:
         icon: mdi-newspaper-variant-outline
-        href: "{{HOMEPAGE_VAR_NEWS_FEED_URL}}"
+        href: "{{HOMEPAGE_VAR_NEWS_FEED_HTTPS}}"
         description: AI & IT News Digest (Thai)
-        ping: "{{HOMEPAGE_VAR_NEWS_FEED_URL}}"
-        widget:
-          type: customapi
-          url: "{{HOMEPAGE_VAR_NEWS_FEED_URL}}/api/health"
-          refreshInterval: 120000
-          mappings:
-            - field: status
-              label: Status
-              format: text
-            - field: article_count
-              label: Articles
-              format: number
-            - field: last_fetch
-              label: Last Fetch
-              format: text
+        ping: "{{HOMEPAGE_VAR_NEWS_FEED_HTTPS}}"
 
     - Hermes Agent:
         icon: mdi-robot
-        href: "{{HOMEPAGE_VAR_HERMES_URL}}"
+        href: "{{HOMEPAGE_VAR_HERMES_HTTPS}}"
         description: Autonomous AI Agent (Telegram + Discord)
-        ping: "{{HOMEPAGE_VAR_HERMES_URL}}"
-
-    - My Secretary:
-        icon: mdi-robot-outline
-        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15057"
-        description: AI Personal Assistant (LINE + Telegram)
-        ping: "{{HOMEPAGE_VAR_MY_SECRETARY_URL}}"
+        ping: "{{HOMEPAGE_VAR_HERMES_HTTP}}"
 
     - Maid Tracker:
         icon: mdi-broom
