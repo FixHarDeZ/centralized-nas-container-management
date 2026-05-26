@@ -8,6 +8,7 @@
     memory: true
     disk:
       - "{{HOMEPAGE_VAR_VOLUME_ROOT}}"
+      - "{{HOMEPAGE_VAR_VOLUME_STORAGE}}"
     cacheInterval: 5000
 
 - datetime:

@@ -11,10 +11,12 @@ services:
       - ./config:/app/config
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ${NAS_VOLUME_ROOT}:${NAS_VOLUME_ROOT}:ro
+      - ${NAS_VOLUME_STORAGE}:${NAS_VOLUME_STORAGE}:ro
     env_file: .env
     environment:
       - TZ=Asia/Bangkok
       - HOMEPAGE_VAR_VOLUME_ROOT=${NAS_VOLUME_ROOT}
+      - HOMEPAGE_VAR_VOLUME_STORAGE=${NAS_VOLUME_STORAGE}
     networks:
       - default
 
