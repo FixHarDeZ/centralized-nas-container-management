@@ -4,8 +4,8 @@ title: Fix's NAS Dashboard
 description: Synology DS925+ Home Lab
 
 # ─── Theme ────────────────────────────────────────────────────────────────────
-color: slate
-theme: dark   # ตาม OS: dark บน dark mode / light บน light mode
+color: stone  # หรือใช้ zinc (เทาโมเดิร์น), indigo (น้ำเงินสว่าง), หรือ stone ก็ได้ครับ
+theme: light    # บังคับเป็นธีมสว่างเพื่อความ Clean & Modern
 
 # ─── Layout ───────────────────────────────────────────────────────────────────
 layout:
