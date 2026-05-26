@@ -2,6 +2,40 @@
 
 ## 2026-05-26
 
+### Bug fix session 2: Notion toggle/table content ไม่ทำงานบน Telegram
+
+**ปัญหา:** Feature อ่านจาก toggle list / table ใน Notion ใช้ได้บน LINE แต่ไม่ได้บน Telegram
+- "ขอ api token ทั้งหมด" → "ไม่พบข้อมูลใน Notion ค่ะ" ทั้งที่ page มีข้อมูลครบ
+- "เพิ่ม api token หน่อย test-token xxx" → propose write ไป 'Scenario' แทน 'API Token | API Key'
+
+**Root causes (3 ชั้น):**
+
+1. **History pollution** (`store.py` / `main.py`):
+   - เมื่อ LLM ตอบ "ไม่พบข้อมูลใน Notion ค่ะ" response นั้นถูก **บันทึกลง conversation history**
+   - request ครั้งต่อไปที่ถามคำถามเดิม LLM เห็น pattern "ไม่พบ" ใน history → ตอบซ้ำ แม้ว่า context ใหม่มีข้อมูลครบ
+   - **Fix:** `main.py` — ไม่บันทึก response ที่มี `"ไม่พบข้อมูลใน Notion"` เข้า history
+
+2. **Context ranking ไม่ weighted ตาม title** (`agent.py` `_rank_context`):
+   - `_rank_context` นับ keyword hits จาก `title + content` โดยให้น้ำหนักเท่ากัน → daily log pages ที่มีคำว่า "api"/"token" เยอะใน body content ชนะ 'API Token | API Key' (exact title match)
+   - **Fix:** `_rank_context` → title matches ×10, body matches ×1 (เหมือน `_fallback_scan` ที่แก้ก่อนหน้า)
+
+3. **Fallback ranking เดิม** (`agent.py` `_fallback_scan`): แก้ไปแล้ว session ก่อน ✅
+
+**ผลลัพธ์หลัง fix:**
+- `Context built: pages=['API Token | API Key', ...]` — rank #1 ✅
+- WRITE: `PATCH /blocks/33759cb6.../children → 200 OK` — เขียนลง 'API Token | API Key' ถูก table ✅
+- "ไม่พบ" จะไม่ถูกบันทึกลง history อีกต่อไป → ป้องกัน re-poisoning ✅
+
+**Diagnostic logs เพิ่ม (ถาวร):**
+- `PAGE[<title>]: <content[:300]>` — แสดง content snippet ของแต่ละ page ที่ส่งให้ LLM
+- ช่วย debug ว่า LLM เห็นอะไรบ้าง
+
+**ไฟล์ที่เปลี่ยน:**
+- `my-secretary/main.py` — ไม่บันทึก "ไม่พบ" ลง history
+- `my-secretary/agent.py` — title ×10 ใน `_rank_context` + diagnostic page content log
+
+---
+
 ### Bug fix: Groq 413 "Request Too Large" → failover to OpenRouter
 
 **ปัญหา:** Telegram user ถามคำถามที่ดึง Notion context ใหญ่ (เช่น "ขอ uid เกม wuwa") แล้วได้รับ "เกิดข้อผิดพลาดขึ้นค่ะ ลองใหม่อีกครั้งนะคะ"

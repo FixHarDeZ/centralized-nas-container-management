@@ -446,6 +446,7 @@ async def handle_message(user_id: str, text: str, push_fn) -> None:
 
     reply = result["text"]
     if result["type"] == "answer":
-        if not agent._parse_propose(reply):
+        # Don't store "ไม่พบ" in history — it poisons future lookups for the same topic
+        if not agent._parse_propose(reply) and "ไม่พบข้อมูลใน Notion" not in reply:
             store.add_history(user_id, text, reply)
     await _push_long(reply, push_fn)

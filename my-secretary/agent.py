@@ -496,6 +496,10 @@ async def _fallback_scan(token: str, keywords: list[str]) -> dict:
 def _rank_context(notion_data: dict, queries: list[str], max_chars: int) -> dict:
     """Score each page/db by keyword hits, pack highest-scoring items first.
 
+    Title matches are weighted 10× over body matches so exact-title pages
+    (e.g. 'API Token | API Key') always outrank long content pages that merely
+    mention the same keywords many times in their body.
+
     Uses continue (not break) so a single oversized item doesn't block smaller
     high-relevance items from being included.
     """
@@ -509,14 +513,15 @@ def _rank_context(notion_data: dict, queries: list[str], max_chars: int) -> dict
 
     scored: list[tuple[int, str, dict]] = []
     for p in notion_data.get("pages", []):
-        s = _count(p.get("title", "") + " " + p.get("content", ""))
+        # Title hits carry 10× weight so named pages always beat random body mentions
+        s = _count(p.get("title", "")) * 10 + _count(p.get("content", ""))
         scored.append((s, "page", p))
     for d in notion_data.get("databases", []):
         rows_text = " ".join(
             " ".join(str(v) for v in row.get("properties", {}).values() if v is not None)
             for row in d.get("rows", [])
         )
-        s = _count(d.get("title", "") + " " + rows_text)
+        s = _count(d.get("title", "")) * 10 + _count(rows_text)
         scored.append((s, "database", d))
 
     scored.sort(key=lambda x: x[0], reverse=True)
