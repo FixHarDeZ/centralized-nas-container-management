@@ -12,13 +12,13 @@ Docker stacks for Synology DS925+ NAS, managed via Synology Container Manager.
 | `jellyfin/` | Media server with NVIDIA GPU transcoding | `8096` | `https://…:18096` |
 | `maid-tracker/` | Household worker attendance & salary tracker | `5055` | `https://…:15055` |
 | `portainer/` | Docker management UI | `9000` | `https://…:19000` |
-| `auth/` | Centralized SSO (Authelia) + Password Vault (Vaultwarden) | `9091` (Authelia) / `8222` (Vaultwarden) | — |
 | `uptime-kuma/` | Service health monitor | `3001` | `https://…:13001` |
 | `watchtower/` | Auto-update containers + LINE notification sidecar | — | — |
-| `my-secretary/` | AI personal assistant bot (LINE + Telegram) backed by Notion | `5057` | `https://…:15057` |
-| `hermes-agent/` | Autonomous AI agent — Telegram + Discord (NousResearch/hermes-agent) | `5063` (Nginx basic-auth dashboard) | — |
+| `my-secretary/` | AI personal assistant bot (LINE) backed by Notion | `5057` | `https://…:15057` |
+| `my-secretary/` | AI personal assistant bot (Telegram) backed by Notion | `5057` | `https://…:8443` |
+| `hermes-agent/` | Autonomous AI agent — Telegram + Discord (NousResearch/hermes-agent) | `5063` (Nginx basic-auth dashboard) | `https://…:15063` |
 | `torrentwatch/` | Daily torrent monitor for bearbit.org — scrapes, filters, LINE alerts | `5059` | `https://…:15059` |
-| `news-feed/` | AI & IT news feed bot — Thai summaries via Claude/DeepSeek, digest to LINE + Telegram, dashboard | `5064` | — |
+| `news-feed/` | AI & IT news feed bot — Thai summaries via Claude/DeepSeek, digest to LINE + Telegram, dashboard | `5064` | `https://…:15064` |
 
 ### Reverse Proxy Summary
 
@@ -28,11 +28,14 @@ All stacks except `watchtower` are exposed externally via **Synology Reverse Pro
 |---|---|---|
 | homepage | `https://…:443` | `http://localhost:3000` → internal Nginx → Homepage |
 | jellyfin | `https://…:18096` | `http://localhost:8096` |
-| maid-tracker | `https://…:15055` | `http://localhost:5055` |
+| maid-tracker | `https://…:15055` | `http://localhost:5055` → internal Nginx → Maid Tracker |
 | portainer | `https://…:19000` | `http://localhost:9000` |
 | uptime-kuma | `https://…:13001` | `http://localhost:3001` |
-| my-secretary | `https://…:15057` | `http://localhost:5057` |
+| Line my-secretary | `https://…:15057` | `http://localhost:5057` |
+| Telegram my-secretary | `https://…:8443` | `http://localhost:5057` |
 | torrentwatch | `https://…:15059` | `http://localhost:5059` |
+| Hermes | `https://…:15063` | `http://localhost:5063` |
+| news-feed | `https://…:15064` | `http://localhost:5064` |
 
 > Your router must forward each **external port → NAS** so traffic reaches Synology Reverse Proxy. Homepage is the only exception — it has its own Nginx inside the container that handles TLS, so Synology RP simply forwards `:443` to port `3000` unencrypted and lets Nginx take over from there.
 
@@ -42,7 +45,6 @@ All stacks except `watchtower` are exposed externally via **Synology Reverse Pro
 
 ```text
 .env                      # deploy.sh + scripts/sync_notion.py (NAS_*, NOTION_*)
-auth/.env                 # AUTHELIA_SESSION_SECRET, AUTHELIA_STORAGE_ENCRYPTION_KEY, AUTHELIA_JWT_SECRET, VAULTWARDEN_ADMIN_TOKEN
 homepage/.env             # HOMEPAGE_VAR_*, NAS_VOLUME_ROOT
 jellyfin/.env             # NAS_VOLUME_ROOT, NAS_MEDIA_ROOT
 my-secretary/.env         # LINE_SECRETARY_*, TELEGRAM_BOT_TOKEN, NOTION_TOKEN, GROQ/OpenRouter keys
@@ -58,7 +60,7 @@ news-feed/.env            # ANTHROPIC_API_KEY, OPENROUTER_API_KEY, LINE_CHANNEL_
 ```bash
 # First time: copy each template and fill in real values
 cp .env.example .env
-for d in auth homepage jellyfin my-secretary maid-tracker torrentwatch uptime-kuma watchtower hermes-agent news-feed; do
+for d in homepage jellyfin my-secretary maid-tracker torrentwatch uptime-kuma watchtower hermes-agent news-feed; do
   cp "$d/.env.example" "$d/.env"
 done
 ```
