@@ -22,8 +22,8 @@
 |-------|-------|
 | Container (internal) | HTTP `8000` |
 | Host port | `5055` |
-| Synology Reverse Proxy | `https://<NAS_HOST>:5056` → `http://localhost:5055` |
-| LINE Webhook URL | `https://<NAS_HOST>:5056/webhook/line` |
+| Synology Reverse Proxy | `https://<NAS_HOST>:15055` → `http://localhost:5055` |
+| LINE Webhook URL | `https://<NAS_HOST>:15055/webhook/line` |
 
 ---
 

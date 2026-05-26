@@ -40,7 +40,7 @@ A daily torrent monitor that scrapes [bearbit.org](https://bearbit.org) on a sch
 | Scraper | httpx async session + BeautifulSoup4 · login + Referer handling |
 | Scheduler | APScheduler `BackgroundScheduler` |
 | Host port | `5059` → container `8000` |
-| Reverse proxy | Synology RP `https://…:5062` → `http://localhost:5059` |
+| Reverse proxy | Synology RP `https://…:15059` → `http://localhost:5059` |
 
 ## Setup
 
@@ -102,14 +102,14 @@ DSM → Control Panel → Login Portal → Advanced → Reverse Proxy → Create
 | Field | Value |
 |---|---|
 | Source Protocol | HTTPS |
-| Source Port | `5062` |
+| Source Port | `15059` |
 | Destination Protocol | HTTP |
 | Destination Hostname | `localhost` |
 | Destination Port | `5059` |
 
-Router must forward external port `5062 → NAS`.
+Router must forward external port `15059 → NAS`.
 
-> Ports 5060 and 5061 are blocked by browsers (SIP protocol) — use 5062 or higher.
+> Ports 5060 and 5061 are blocked by browsers (SIP protocol) — use 15059 or higher.
 
 ## Settings (Web UI)
 
@@ -241,4 +241,4 @@ Register ใน Synology Container Manager → Project → Create → path `/vol
 ### 4. เข้าใช้งาน
 
 - LAN: `http://192.168.x.x:5059`
-- External: `https://<NAS_HOST>:5062` (ผ่าน Synology Reverse Proxy)
+- External: `https://<NAS_HOST>:15059` (ผ่าน Synology Reverse Proxy)

@@ -18,8 +18,8 @@ AI bot เลขาส่วนตัว ค้นหาและบันทึ
 |---|---|
 | Host port | `5057` |
 | Container port | `8000` |
-| Synology RP (HTTPS) | `5058` → `http://localhost:5057` |
-| LINE Webhook URL | `https://<NAS_HOST>:5058/webhook` |
+| Synology RP (HTTPS) | `15057` → `http://localhost:5057` |
+| LINE Webhook URL | `https://<NAS_HOST>:15057/webhook` |
 | Telegram Webhook URL | `https://<NAS_HOST>:8443/webhook/telegram` |
 
 ---

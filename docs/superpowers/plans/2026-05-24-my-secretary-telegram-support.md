@@ -948,7 +948,7 @@ Find the existing README and add a **Telegram Setup** section after the LINE set
 Find the row for `my-secretary` in the stacks table and update the description to reflect Telegram support. Change:
 
 ```
-| my-secretary | AI Bot เลขาส่วนตัว | 5057 / 5058 |
+| my-secretary | AI Bot เลขาส่วนตัว | 5057 / 15057 |
 ```
 
 to include `LINE + Telegram` in the description (exact text depends on current README — match the column style).

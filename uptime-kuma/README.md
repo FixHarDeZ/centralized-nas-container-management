@@ -5,7 +5,7 @@
 Service health monitor with a clean web UI.
 
 **Local URL:** `http://<NAS_IP>:3001`
-**External URL:** `https://<NAS_HOST>:3002` (via Synology Reverse Proxy)
+**External URL:** `https://<NAS_HOST>:13001` (via Synology Reverse Proxy)
 
 ## Ports & Reverse Proxy
 
@@ -13,8 +13,8 @@ Service health monitor with a clean web UI.
 |---|---|
 | Container | HTTP on port `3001` |
 | Host port | `3001` (plain HTTP, LAN only) |
-| Synology Reverse Proxy | `https://…:3002` → `http://localhost:3001` |
-| Router port forward | External `3002` → NAS `3002` |
+| Synology Reverse Proxy | `https://…:13001` → `http://localhost:3001` |
+| Router port forward | External `13001` → NAS `13001` |
 
 TLS is terminated by Synology Reverse Proxy — Uptime Kuma itself runs plain HTTP internally.
 

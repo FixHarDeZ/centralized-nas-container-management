@@ -7,7 +7,7 @@
 - 📥 Downloads & Monitoring:
     - TorrentWatch:
         icon: mdi-rss
-        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:5062"
+        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15059"
         description: Torrent Monitor (bearbit.org)
         ping: "{{HOMEPAGE_VAR_TORRENTWATCH_URL}}"
         widget:
@@ -37,7 +37,7 @@
 
     - Portainer:
         icon: portainer.png
-        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:9444"
+        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:19000"
         description: Container Manager
         widget:
           type: portainer
@@ -47,7 +47,7 @@
 
     - Uptime Kuma:
         icon: uptime-kuma.png
-        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:3002/dashboard"
+        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:13001/dashboard"
         description: Service Health Monitor
         widget:
           type: uptimekuma
@@ -90,7 +90,7 @@
 - 🌐 Remote Access:
     - Jellyfin (DDNS):
         icon: jellyfin.png
-        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:8097"
+        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:18096"
         description: External Media Streaming
         ping: "{{HOMEPAGE_VAR_DDNS_BASE_HTTP}}:8096"
         widget:
