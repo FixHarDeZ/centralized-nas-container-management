@@ -7,14 +7,13 @@ Guidance for Claude Code (claude.ai/code) on project rules, architecture, and de
 *   **Before Task:** อ่านไฟล์ใน `.notes/` ของ sub-directory นั้นๆ ก่อนเริ่มงานเสมอ
 *   **After Task:** สรุปสิ่งที่ทำลงใน `<stack>/.notes/daily_log.md` ของ sub-directory ที่ทำงานอยู่เสมอ (เช่น งานใน `news-feed/` → เขียนที่ `news-feed/.notes/daily_log.md`) **ห้ามเขียนที่ root `.notes/`**
 *   **Every Session End:** อัปเดตข้อมูลที่เปลี่ยนไป (DB schema, API, settings, gaps) ใน `<stack>/.notes/00_INDEX.md` ของ sub-directory นั้นๆ ควบคู่กับ log เสมอ (ไม่มีข้อยกเว้น ไม่ต้องรอ structural change)
-*   **Notion Sync:** บันทึกขึ้น Notion ด้วยคำสั่ง: `python3 scripts/sync_notion.py "[Title]" "[Content]"`
 
 ---
 
 ## 🛠️ Environment & Deployment Gotchas
 
 *   **NAS Environment:** Synology DSM 7.3.2 (Container Manager) บน DS925+ NAS Target Path: `/volume2/docker/`
-*   **Per-Stack .env:** ทุก stack มี `.env` ของตัวเองใน folder ของมัน (เช่น `homepage/.env`) — secrets จำกัดเฉพาะ container ที่ใช้จริง **ห้าม Commit** (gitignore pattern `.env` ครอบคลุมทุก level). Root `.env` ใช้เฉพาะ `deploy.sh` + `scripts/sync_notion.py` (`NAS_*`, `NOTION_*`) เท่านั้น — containers ไม่เห็น root `.env`
+*   **Per-Stack .env:** ทุก stack มี `.env` ของตัวเองใน folder ของมัน (เช่น `homepage/.env`) — secrets จำกัดเฉพาะ container ที่ใช้จริง **ห้าม Commit** (gitignore pattern `.env` ครอบคลุมทุก level). Root `.env` ใช้เฉพาะ `deploy.sh` (`NAS_*`) เท่านั้น — containers ไม่เห็น root `.env`
 *   **.env.example:** ทุก stack มี template `.env.example` (commit ได้) — `cp <stack>/.env.example <stack>/.env` แล้วเติมค่า
 *   **Deployment Flow:** ใช้ `scripts/deploy.sh` — tar รวมทั้ง project (รวม `<stack>/.env` ทั้งหมด) ส่งผ่าน SSH เท่านั้น. Root `.env` **ไม่ถูก upload** (excluded จาก tar). Restart ใช้ `docker compose --project-directory <stack>/ -f <stack>/docker-compose.yml up -d --build` เพื่อให้ compose หา `<stack>/.env` เจอเอง
 *   **⚠️ ห้ามใช้ `rsync`:** macOS bundled rsync (`openrsync` protocol 29) ไม่ compatible กับ Synology GNU rsync (protocol 31) ส่งผลให้ Transfer ล้มเหลว ให้ใช้ `tar | ssh` แทนเสมอ

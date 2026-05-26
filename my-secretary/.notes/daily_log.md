@@ -1,5 +1,27 @@
 # Daily Log — my-secretary
 
+## 2026-05-26
+
+### Bug fix: Groq 413 "Request Too Large" → failover to OpenRouter
+
+**ปัญหา:** Telegram user ถามคำถามที่ดึง Notion context ใหญ่ (เช่น "ขอ uid เกม wuwa") แล้วได้รับ "เกิดข้อผิดพลาดขึ้นค่ะ ลองใหม่อีกครั้งนะคะ"
+
+**Root cause:** Groq free tier มี TPM limit 12,000 tokens/min แต่ context ที่ประกอบขึ้น (12,587 tokens) เกิน limit → Groq ตอบ HTTP 413 (`APIStatusError`) ซึ่งไม่ได้รับการ handle (code เดิม catch แค่ `RateLimitError` = 429) → exception propagate ขึ้นไปถึง `handle_message` → retry loop fail → user เห็น error
+
+**Fix:**
+
+`my-secretary/provider.py`
+- เพิ่ม `on_groq_too_large(settings)` — failover ไป OpenRouter โดย **ไม่ block Groq** (ต่างจาก `on_groq_rate_limit` ที่ block ชั่วคราว เพราะ 413 เป็น context ใหญ่เกินไปเท่านั้น ไม่ใช่ quota หมด)
+
+`my-secretary/agent.py`
+- import `APIStatusError` จาก `openai`
+- เพิ่ม `except APIStatusError as e: if e.status_code == 413` handler ใน 3 จุด:
+  1. `_search_variants()` — small model call สำหรับ Thai translation
+  2. `run()` — main LLM call
+  3. `run_general()` — general knowledge call
+
+**Deployed:** ✅ Container rebuilt + restarted สำเร็จ
+
 ## 2026-05-24
 
 ### เพิ่ม Telegram support + rename line-secretary → my-secretary
