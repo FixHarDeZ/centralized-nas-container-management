@@ -143,6 +143,8 @@ NOTION_QUICK_NOTE_PAGE_ID=...          # parent page สำหรับ quick no
 - **Notion sharing** — integration ต้อง share ที่ root page จึงจะเห็น subpages
 - **Cache warm-up** — API call แรกหลัง restart อาจช้ากว่าปกติ (cache ยัง cold)
 - **Groq daily/TPM limit** — 100K tokens/day, 12K TPM สำหรับ 70b model; auto mode failover ไป OpenRouter อัตโนมัติเมื่อเจอ 429 (rate limit) หรือ 413 (context ใหญ่เกิน TPM) โดย 413 ไม่ block Groq สำหรับ request อื่น
+- **Context ranking** — `_rank_context` และ `_fallback_scan` ให้น้ำหนัก title match ×10 เพื่อให้ page ที่ชื่อตรงกับ query เสมอ rank สูงกว่า daily log ที่มี keyword เยอะใน body
+- **History pollution guard** — "ไม่พบข้อมูลใน Notion" response จะ**ไม่ถูกบันทึกลง history** เพื่อป้องกัน LLM ตอบซ้ำ pattern "ไม่พบ" ในคำถามเดิมครั้งต่อไป
 - **Toggle content** — Notion search API ไม่ index toggle blocks, ใช้ fallback scan จาก cache แทน
 - **Quick note** — ถ้าชื่อ page ตรงกับ page เดิม (case-insensitive) จะ append แทนสร้างใหม่; รองรับ Markdown: `# ## ###` heading, `- *` bullet, `[ ] [x]` to-do
 - **Agent timeout** — LLM call มี hard timeout 45 วินาที ทั้ง attempt แรกและ retry
