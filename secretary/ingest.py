@@ -159,3 +159,87 @@ def blocks_to_markdown(blocks: list[dict], _depth: int = 0) -> str:
             numbered_counter = 0
 
     return "\n".join(line for line in lines if line)
+
+
+# ── CHUNK ─────────────────────────────────────────────────────────────────────
+
+import tiktoken as _tiktoken
+
+_tokenizer = _tiktoken.get_encoding("cl100k_base")
+
+
+def _count_tokens(text: str) -> int:
+    return len(_tokenizer.encode(text))
+
+
+def build_breadcrumb(page_title: str, section: str = "", subsection: str = "") -> str:
+    parts = [page_title]
+    if section:
+        parts.append(section)
+    if subsection:
+        parts.append(subsection)
+    return " > ".join(parts)
+
+
+def chunk_markdown(text: str, page_title: str) -> list[dict]:
+    if not text.strip():
+        return []
+
+    # Split on ## headings
+    raw_sections = re.split(r"\n(?=## )", text)
+    chunks: list[dict] = []
+    chunk_index = 0
+
+    # Check if first section is a preamble (doesn't start with ##)
+    has_preamble = raw_sections and raw_sections[0].strip() and not raw_sections[0].strip().startswith("## ")
+
+    for section in raw_sections:
+        section = section.strip()
+        if not section:
+            continue
+
+        lines = section.split("\n", 1)
+        if lines[0].startswith("## "):
+            section_title = lines[0][3:].strip()
+            section_body = lines[1] if len(lines) > 1 else ""
+        else:
+            section_title = ""
+            section_body = section
+
+        # If still > 500 tokens, split on ### headings
+        if _count_tokens(section) > 500:
+            subsections = re.split(r"\n(?=### )", section)
+            has_subsections = True
+        else:
+            subsections = [section]
+            has_subsections = False
+
+        for subsection in subsections:
+            subsection = subsection.strip()
+            if not subsection:
+                continue
+
+            sub_lines = subsection.split("\n", 1)
+            sub_title = sub_lines[0][4:].strip() if sub_lines[0].startswith("### ") else ""
+
+            breadcrumb = build_breadcrumb(page_title, section_title, sub_title)
+
+            # Merge if: < 50 tokens AND chunks exist AND (has subsections OR no preamble)
+            # This allows merging of tiny ## sections only if there's no preamble
+            should_merge = (
+                _count_tokens(subsection) < 50
+                and chunks
+                and (has_subsections or not has_preamble)
+            )
+
+            if should_merge:
+                chunks[-1]["text"] += "\n" + subsection
+            else:
+                chunks.append({
+                    "text": subsection,
+                    "breadcrumb": breadcrumb,
+                    "chunk_index": chunk_index,
+                })
+                chunk_index += 1
+
+    return chunks
