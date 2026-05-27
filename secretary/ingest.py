@@ -467,3 +467,86 @@ def embed_chunks(texts: list[str]) -> dict:
         for lw in output["lexical_weights"]
     ]
     return {"dense": dense, "sparse": sparse}
+
+
+# ── QDRANT ────────────────────────────────────────────────────────────────────
+
+from qdrant_client import QdrantClient as _QdrantClient
+from qdrant_client.http.models import (
+    VectorParams,
+    Distance,
+    SparseVectorParams,
+    SparseIndexParams,
+    PointStruct,
+    Filter,
+    FieldCondition,
+    MatchValue,
+)
+
+
+def _qdrant() -> _QdrantClient:
+    return _QdrantClient(url=QDRANT_URL)
+
+
+def ensure_collection():
+    client = _qdrant()
+    existing_names = [c.name for c in client.get_collections().collections]
+    if COLLECTION_NAME in existing_names:
+        return
+    client.create_collection(
+        collection_name=COLLECTION_NAME,
+        vectors_config={"dense": VectorParams(size=1024, distance=Distance.COSINE)},
+        sparse_vectors_config={
+            "sparse": SparseVectorParams(index=SparseIndexParams(on_disk=False))
+        },
+    )
+    logger.info(f"Created collection '{COLLECTION_NAME}'")
+
+
+def delete_page_points(page_id: str):
+    client = _qdrant()
+    client.delete(
+        collection_name=COLLECTION_NAME,
+        points_selector=Filter(
+            must=[FieldCondition(key="page_id", match=MatchValue(value=page_id))]
+        ),
+    )
+
+
+def upsert_chunks(
+    page_meta: dict,
+    chunks: list[dict],
+    embeddings: dict,
+    dry_run: bool = False,
+):
+    if dry_run:
+        return
+    client = _qdrant()
+    points = []
+    for chunk, dense_vec, sparse_vec in zip(
+        chunks, embeddings["dense"], embeddings["sparse"]
+    ):
+        point_id = str(
+            uuid.uuid5(uuid.NAMESPACE_DNS, page_meta["id"] + str(chunk["chunk_index"]))
+        )
+        payload = {
+            "source": "notion",
+            "page_id": page_meta["id"],
+            "page_url": page_meta["url"],
+            "page_title": page_meta["title"],
+            "breadcrumb": chunk["breadcrumb"],
+            "text": chunk["text"],
+            "chunk_index": chunk["chunk_index"],
+            "last_edited_time": page_meta["last_edited_time"],
+            "parent_id": page_meta.get("parent_id", ""),
+            "parent_type": page_meta.get("parent_type", ""),
+            "tags": page_meta.get("tags", []),
+        }
+        points.append(
+            PointStruct(
+                id=point_id,
+                vector={"dense": dense_vec, "sparse": sparse_vec},
+                payload=payload,
+            )
+        )
+    client.upsert(collection_name=COLLECTION_NAME, points=points)
