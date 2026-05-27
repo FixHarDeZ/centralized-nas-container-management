@@ -20,7 +20,6 @@ services:
   n8n:
     image: n8nio/n8n:latest
     container_name: secretary-n8n
-    user: root
     restart: unless-stopped
     ports:
       - "5678:5678"
@@ -29,8 +28,10 @@ services:
       - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
       - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
       - WEBHOOK_URL=${N8N_WEBHOOK_URL}
+      - GENERIC_TIMEZONE=Asia/Bangkok
+      - TZ=Asia/Bangkok
     volumes:
-      - ./n8n_data:/root/.n8n
+      - ./n8n_data:/home/node/.n8n
 
   secretary-ingest:
     build:
