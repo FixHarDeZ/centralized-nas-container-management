@@ -550,3 +550,134 @@ def upsert_chunks(
             )
         )
     client.upsert(collection_name=COLLECTION_NAME, points=points)
+
+
+# ── SYNC ──────────────────────────────────────────────────────────────────────
+
+import time as _time
+
+
+def _print_summary(stats: dict, total: int, elapsed: float):
+    print("\n" + "─" * 48)
+    print(f"Pages processed:   {total}")
+    print(f"  ✓ Updated:       {stats['updated']}  ({stats['chunks']} chunks created/updated)")
+    print(f"  ↷ Skipped:       {stats['skipped']}")
+    print(f"  ✗ Errors:        {stats['errors']}")
+    print(f"  🗑 Deleted:       {stats['deleted']}")
+    print(f"Notion API calls:  {_api_call_count}")
+    print(f"Total time:        {elapsed:.1f}s")
+    print("─" * 48 + "\n")
+
+
+def sync_page(
+    page_meta: dict,
+    conn: sqlite3.Connection,
+    dry_run: bool = False,
+) -> dict:
+    page_id = page_meta["id"]
+    title = page_meta["title"]
+
+    state = get_state(conn, page_id)
+    if state and state["last_edited_time"] == page_meta["last_edited_time"]:
+        logger.info(f"↷ Skipped (unchanged): {title}")
+        return {"status": "skipped", "chunks": 0}
+
+    try:
+        blocks = fetch_blocks(page_id)
+        markdown = blocks_to_markdown(blocks)
+
+        if not markdown.strip():
+            logger.info(f"↷ Skipped (empty): {title}")
+            return {"status": "skipped", "chunks": 0}
+
+        chunks = chunk_markdown(markdown, title)
+        if not chunks:
+            logger.info(f"↷ Skipped (no chunks): {title}")
+            return {"status": "skipped", "chunks": 0}
+
+        texts = [c["text"] for c in chunks]
+        embeddings = embed_chunks(texts)
+
+        if state and not dry_run:
+            delete_page_points(page_id)
+
+        upsert_chunks(page_meta, chunks, embeddings, dry_run=dry_run)
+
+        if not dry_run:
+            upsert_state(conn, page_id, page_meta["last_edited_time"], len(chunks))
+
+        logger.info(f"✓ Updated: {title} ({len(chunks)} chunks)")
+        return {"status": "updated", "chunks": len(chunks)}
+
+    except Exception as exc:
+        logger.error(f"✗ Error: {title} — {exc}")
+        return {"status": "error", "chunks": 0, "error": str(exc)}
+
+
+def run_incremental(dry_run: bool = False):
+    global _api_call_count
+    _api_call_count = 0
+    t0 = _time.monotonic()
+    conn = init_db(STATE_DB)
+    ensure_collection()
+
+    notion_pages = list_pages()
+    notion_ids = {p["id"] for p in notion_pages}
+    known_pages = list_all_pages(conn)
+
+    stats = {"updated": 0, "skipped": 0, "errors": 0, "chunks": 0, "deleted": 0}
+
+    for page_id in set(known_pages.keys()) - notion_ids:
+        logger.info(f"🗑 Deleted: {page_id}")
+        if not dry_run:
+            delete_page_points(page_id)
+            delete_state(conn, page_id)
+        stats["deleted"] += 1
+
+    for page_meta in notion_pages:
+        result = sync_page(page_meta, conn, dry_run=dry_run)
+        stats[result["status"]] += 1
+        stats["chunks"] += result.get("chunks", 0)
+
+    _print_summary(stats, len(notion_pages), _time.monotonic() - t0)
+
+
+def run_full(dry_run: bool = False):
+    global _api_call_count
+    _api_call_count = 0
+    t0 = _time.monotonic()
+    conn = init_db(STATE_DB)
+    ensure_collection()
+
+    notion_pages = list_pages()
+    stats = {"updated": 0, "skipped": 0, "errors": 0, "chunks": 0, "deleted": 0}
+
+    for page_meta in notion_pages:
+        if not dry_run:
+            state = get_state(conn, page_meta["id"])
+            if state:
+                delete_page_points(page_meta["id"])
+                delete_state(conn, page_meta["id"])
+        result = sync_page(page_meta, conn, dry_run=dry_run)
+        stats[result["status"]] += 1
+        stats["chunks"] += result.get("chunks", 0)
+
+    _print_summary(stats, len(notion_pages), _time.monotonic() - t0)
+
+
+def run_single(page_id: str, dry_run: bool = False):
+    global _api_call_count
+    _api_call_count = 0
+    t0 = _time.monotonic()
+    conn = init_db(STATE_DB)
+    ensure_collection()
+
+    client = _notion_client()
+    page_obj = _notion_request(client.pages.retrieve, page_id=page_id)
+    page_meta = _extract_page_meta(page_obj)
+
+    stats = {"updated": 0, "skipped": 0, "errors": 0, "chunks": 0, "deleted": 0}
+    result = sync_page(page_meta, conn, dry_run=dry_run)
+    stats[result["status"]] += 1
+    stats["chunks"] += result.get("chunks", 0)
+    _print_summary(stats, 1, _time.monotonic() - t0)
