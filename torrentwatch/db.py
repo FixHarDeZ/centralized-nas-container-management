@@ -474,8 +474,8 @@ def update_settings(data: dict):
 # ─── Utilities ────────────────────────────────────────────────────────────────
 
 def torrent_filename(title: str) -> str:
-    """Filesystem-safe ASCII filename for a torrent (strips non-ASCII, max 80 chars)."""
-    safe = re.sub(r'[^\x00-\x7F]', '_', title).strip("_ ")[:80]
+    """Filesystem-safe UTF-8 filename for a torrent (keeps Thai/Unicode, strips path chars)."""
+    safe = re.sub(r'[\\/:*?"<>|]', '_', title.strip())[:120]
     return (safe or "torrent") + ".torrent"
 
 

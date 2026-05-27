@@ -7,11 +7,10 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
-from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -172,18 +171,16 @@ def api_search(source_id: int, q: str, limit: int = 50):
 # ─── Download ─────────────────────────────────────────────────────────────────
 
 def _content_disposition(title: str) -> str:
-    """Build Content-Disposition with RFC 5987 UTF-8 encoding for Thai filenames.
+    """Build Content-Disposition header using ASCII-safe filename only.
 
-    filename*= comes FIRST (RFC 6266 §4.3) so browsers with proper RFC 5987 support
-    (Chrome, Safari, Firefox, Edge) display the Thai title correctly.
+    Deliberately avoids RFC 5987 filename*= UTF-8 encoding — some reverse
+    proxies (including DSM Application Portal) may struggle to parse it,
+    causing the response to stall. Thai characters are replaced with underscores;
+    the browser/torrent client recognises the file by its .torrent extension.
     """
-    clean = title.strip()[:100]
-    utf8_encoded = quote(clean + ".torrent", encoding="utf-8", safe="")
-    ascii_only   = re.sub(r'[^\x20-\x7E]+', ' ', clean).strip()[:60]
-    fallback     = (ascii_only or "torrent") + ".torrent"
-
-    # filename*= FIRST — browsers that support RFC 5987 use this and show Thai
-    return f"attachment; filename*=UTF-8''{utf8_encoded}; filename=\"{fallback}\""
+    ascii_only = re.sub(r'[^\x20-\x7E]+', '_', title.strip())[:80].strip('_')
+    safe = (ascii_only or "torrent") + ".torrent"
+    return f'attachment; filename="{safe}"'
 
 
 
@@ -199,10 +196,17 @@ async def api_download_local(torrent_id: int):
         raise HTTPException(502, "Failed to fetch torrent file from site")
 
     db.mark_downloaded_local(torrent_id)
-    return Response(
-        content=data,
-        media_type="application/x-bittorrent",
-        headers={"Content-Disposition": _content_disposition(t["title"])},
+    # Use StreamingResponse (Transfer-Encoding: chunked, no Content-Length) +
+    # application/octet-stream to avoid DSM reverse proxy content-type filtering
+    # and response buffering that stalls fetch() for binary downloads.
+    return StreamingResponse(
+        iter([data]),
+        media_type="application/octet-stream",
+        headers={
+            "Content-Disposition": _content_disposition(t["title"]),
+            "X-Accel-Buffering": "no",
+            "Cache-Control": "no-store",
+        },
     )
 
 

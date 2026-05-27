@@ -445,6 +445,7 @@
     <div class="search-row">
       <input type="text" id="news-search" placeholder="Search articles…" oninput="filterNews()">
       <select id="news-source-filter" onchange="filterNews()"><option value="">All sources</option></select>
+      <button id="news-sort-btn" class="btn btn-sm" onclick="toggleNewsSort()" style="white-space:nowrap">🕐 Newest first</button>
     </div>
     <div class="card" id="news-list"><h2>News Timeline</h2></div>
   </div>
@@ -478,7 +479,16 @@
     <div class="card"><h2>Top 5 Most Expensive</h2><div id="leaderboard-expensive"></div></div>
   </div>
   <div id="digest-history" class="section">
-    <div class="card"><h2>Past Digests</h2><div id="digest-list"></div></div>
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:.75rem">
+        <h2 style="margin-bottom:0">Past Digests</h2>
+        <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">
+          <button id="test-digest-btn" class="btn" onclick="testDigest()">📤 ส่ง Test Digest</button>
+          <span id="test-digest-status" style="font-size:.82rem"></span>
+        </div>
+      </div>
+      <div id="digest-list"></div>
+    </div>
   </div>
   <div id="schedule-config" class="section">
     <div class="card">

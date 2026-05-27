@@ -3,6 +3,34 @@
 ---
 
 ### Session Log Entry
+**Timestamp:** 2026-05-27
+**Title:** fix — Local Download + NAS filename + dropdown font
+
+**งานที่ทำ:**
+
+**1. Cover image fix** ✅
+- `.tw-card-thumb { object-fit: contain }` (was `cover`)
+
+**2. Local Download fix** ✅ (หลายรอบ)
+- Root cause: DSM Application Portal reverse proxy block/drop binary response
+- Fixed: `StreamingResponse(iter([data]))` + `application/octet-stream` (ไม่ใช่ `x-bittorrent`) + ASCII-only Content-Disposition (ไม่มี RFC 5987 `filename*=UTF-8''...`)
+
+**3. NAS filename Thai → `_`** ✅
+- `db.torrent_filename()`: เปลี่ยนจาก strip non-ASCII → เก็บ Thai ไว้ strip แค่ path-unsafe chars (`\/:*?"<>|`)
+
+**4. History dropdown cramped text** ✅
+- `.tw-date-select`: เปลี่ยน `font-family: var(--font-mono)` → `var(--font-body)` เพราะ Geist Mono ไม่รองรับ Thai
+
+**ไฟล์ที่แก้:**
+- `static/app.js`: download handler (fetch+blob+AbortController 30s)
+- `static/style.css`: object-fit contain + dropdown font
+- `static/index.html`: bump cache versions
+- `main.py`: StreamingResponse + octet-stream + simplified Content-Disposition
+- `db.py`: torrent_filename() keep UTF-8
+
+---
+
+### Session Log Entry
 **Timestamp:** 2026-05-21
 **Title:** fix — sticky notify ไม่ทำงานเมื่อ enable หลัง scrape ไปแล้ว
 
