@@ -243,3 +243,189 @@ def chunk_markdown(text: str, page_title: str) -> list[dict]:
                 chunk_index += 1
 
     return chunks
+
+
+# ── NOTION ────────────────────────────────────────────────────────────────────
+
+from notion_client import Client as _NotionClient
+from tenacity import retry, wait_exponential, stop_after_attempt, retry_if_exception
+
+
+class _TokenBucket:
+    def __init__(self, rate: float = 3.0):
+        self._rate = rate
+        self._tokens = rate
+        self._last = time.monotonic()
+        self._lock = threading.Lock()
+
+    def acquire(self):
+        with self._lock:
+            now = time.monotonic()
+            self._tokens = min(self._rate, self._tokens + (now - self._last) * self._rate)
+            self._last = now
+            if self._tokens >= 1:
+                self._tokens -= 1
+                return
+        time.sleep(1.0 / self._rate)
+        self.acquire()
+
+
+_bucket = _TokenBucket(rate=3.0)
+
+
+def _is_rate_limit(exc: Exception) -> bool:
+    try:
+        from notion_client.errors import APIResponseError
+        return isinstance(exc, APIResponseError) and exc.status in (429, 500)
+    except ImportError:
+        return False
+
+
+@retry(
+    wait=wait_exponential(multiplier=1, min=2, max=30),
+    stop=stop_after_attempt(3),
+    retry=retry_if_exception(_is_rate_limit),
+    reraise=True,
+)
+def _notion_request(fn, *args, **kwargs):
+    global _api_call_count
+    _bucket.acquire()
+    _api_call_count += 1
+    return fn(*args, **kwargs)
+
+
+def _notion_client() -> _NotionClient:
+    if not NOTION_TOKEN:
+        raise ValueError("NOTION_TOKEN env var is required")
+    return _NotionClient(auth=NOTION_TOKEN)
+
+
+def _extract_page_meta(page: dict) -> dict:
+    props = page.get("properties", {})
+    title_prop = next((v for v in props.values() if v.get("type") == "title"), None)
+    title = (
+        "".join(rt["plain_text"] for rt in title_prop.get("title", []))
+        if title_prop
+        else "Untitled"
+    )
+    tags: list[str] = []
+    for prop in props.values():
+        if prop.get("type") == "multi_select":
+            tags = [o["name"] for o in prop.get("multi_select", [])]
+            break
+    parent = page.get("parent", {})
+    parent_type = parent.get("type", "")
+    parent_id = parent.get(parent_type, "") if parent_type else ""
+    return {
+        "id": page["id"],
+        "title": title,
+        "url": page.get("url", ""),
+        "last_edited_time": page.get("last_edited_time", ""),
+        "parent_id": parent_id,
+        "parent_type": parent_type,
+        "tags": tags,
+    }
+
+
+def _list_pages_search(client: _NotionClient) -> list[dict]:
+    results = []
+    cursor = None
+    while True:
+        kwargs: dict = {"filter": {"property": "object", "value": "page"}, "page_size": 100}
+        if cursor:
+            kwargs["start_cursor"] = cursor
+        resp = _notion_request(client.search, **kwargs)
+        for item in resp.get("results", []):
+            if item.get("object") == "page":
+                results.append(_extract_page_meta(item))
+        if not resp.get("has_more"):
+            break
+        cursor = resp.get("next_cursor")
+    return results
+
+
+def _list_pages_database(client: _NotionClient, database_id: str) -> list[dict]:
+    results = []
+    cursor = None
+    while True:
+        body: dict = {"page_size": 100}
+        if cursor:
+            body["start_cursor"] = cursor
+        resp = _notion_request(
+            client.request,
+            path=f"databases/{database_id}/query",
+            method="POST",
+            body=body,
+        )
+        for item in resp.get("results", []):
+            results.append(_extract_page_meta(item))
+        if not resp.get("has_more"):
+            break
+        cursor = resp.get("next_cursor")
+    return results
+
+
+def _list_pages_from_page(
+    client: _NotionClient, root_page_id: str, _visited: Optional[set] = None
+) -> list[dict]:
+    if _visited is None:
+        _visited = set()
+    if root_page_id in _visited:
+        return []
+    _visited.add(root_page_id)
+    results = []
+    cursor = None
+    while True:
+        kwargs: dict = {"block_id": root_page_id, "page_size": 100}
+        if cursor:
+            kwargs["start_cursor"] = cursor
+        resp = _notion_request(client.blocks.children.list, **kwargs)
+        for block in resp.get("results", []):
+            if block.get("type") == "child_page":
+                child_id = block["id"]
+                try:
+                    page_obj = _notion_request(client.pages.retrieve, page_id=child_id)
+                    results.append(_extract_page_meta(page_obj))
+                    results.extend(_list_pages_from_page(client, child_id, _visited))
+                except Exception as exc:
+                    logger.warning(f"Could not retrieve child page {child_id}: {exc}")
+        if not resp.get("has_more"):
+            break
+        cursor = resp.get("next_cursor")
+    return results
+
+
+def list_pages() -> list[dict]:
+    client = _notion_client()
+    if NOTION_SOURCE_TYPE == "search":
+        return _list_pages_search(client)
+    if NOTION_SOURCE_TYPE == "database":
+        if not NOTION_DATABASE_ID:
+            raise ValueError("NOTION_DATABASE_ID required for source_type=database")
+        return _list_pages_database(client, NOTION_DATABASE_ID)
+    if NOTION_SOURCE_TYPE == "page":
+        if not NOTION_ROOT_PAGE_ID:
+            raise ValueError("NOTION_ROOT_PAGE_ID required for source_type=page")
+        return _list_pages_from_page(client, NOTION_ROOT_PAGE_ID)
+    raise ValueError(f"Unknown NOTION_SOURCE_TYPE: {NOTION_SOURCE_TYPE!r}")
+
+
+def fetch_blocks(page_id: str, _depth: int = 0) -> list[dict]:
+    if _depth > 5:
+        return []
+    client = _notion_client()
+    blocks: list[dict] = []
+    cursor = None
+    while True:
+        kwargs: dict = {"block_id": page_id, "page_size": 100}
+        if cursor:
+            kwargs["start_cursor"] = cursor
+        resp = _notion_request(client.blocks.children.list, **kwargs)
+        for block in resp.get("results", []):
+            blocks.append(block)
+            if block.get("has_children") and block.get("type") not in ("child_page", "child_database"):
+                block["_children"] = fetch_blocks(block["id"], _depth + 1)
+        if not resp.get("has_more"):
+            break
+        cursor = resp.get("next_cursor")
+    return blocks
