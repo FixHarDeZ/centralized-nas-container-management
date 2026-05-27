@@ -326,3 +326,29 @@ Stack พร้อม deploy — รอ user เติมค่าใน `.env` 
 - `setup_scheduler(db_path)` jobs ต้องเป็น closures — module-level `DB_PATH` จะไม่ถูก override จาก lifespan
 - `get_recent_articles_for_digest` ใช้ `datetime('now', ?)` ใน SQL ตรงๆ — ไม่ต้องคำนวณ Python datetime
 - Static mount ที่ `/` ต้อง register หลัง API routers ทุกตัว
+
+---
+
+## 2026-05-27 — Fix: Telegram digest debug + sort + test button
+
+### Root Cause (telegram ไม่ส่งตามเวลา)
+ไม่สามารถยืนยัน root cause ได้โดยไม่มี container logs แต่ `_digest_job` silently skip เมื่อไม่มีบทความใหม่ที่มี `summary_th` ใน 6 ชั่วโมงล่าสุด เพิ่ม test endpoint เพื่อ diagnose ได้ทันที
+
+### Fix 1 — `POST /api/digest/test` (ไม่ต้อง X-Admin-Token)
+- Protected by nginx basic auth แทน
+- Fallback ไป 24h window ถ้า 6h ว่าง
+- Return diagnostic: `available_6h`, `available_24h`, `already_sent_ids`, `window_used`
+- Log เข้า digest_log เหมือน scheduled job
+
+### Fix 2 — News Timeline sort toggle
+- `_newsSortNewest` flag + `toggleNewsSort()` function
+- `_sortedNews()` helper reverse array เมื่อ oldest first
+- ปุ่ม "🕐 Newest first / Oldest first" ใน search row
+
+### Fix 3 — Test Digest button in Digest History
+- ปุ่ม "📤 ส่ง Test Digest" ใน header ของ Past Digests card
+- แสดงผลทันที: ส่งสำเร็จ/ไม่มีบทความ/error
+- Auto-reload digest history หลังส่งสำเร็จ
+
+### Tests
+49/49 passed ✅

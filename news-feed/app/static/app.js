@@ -1,4 +1,5 @@
 let allNews = [];
+let _newsSortNewest = true;
 let allPrices = [];
 let _shownPrices = [];
 let _priceZoneFilter = '';
@@ -152,13 +153,31 @@ async function loadNews() {
   const sel = document.getElementById('news-source-filter');
   const sources = [...new Set(allNews.map(a=>a.source))];
   sel.innerHTML = '<option value="">All sources</option>' + sources.map(s=>`<option value="${s}">${s}</option>`).join('');
+  _newsSortNewest = true;
+  _updateSortBtn();
   renderNews(allNews);
 }
 
+function _sortedNews(articles) {
+  return _newsSortNewest ? [...articles] : [...articles].reverse();
+}
+
+function _updateSortBtn() {
+  const btn = document.getElementById('news-sort-btn');
+  if (btn) btn.textContent = _newsSortNewest ? '🕐 Newest first' : '🕐 Oldest first';
+}
+
+function toggleNewsSort() {
+  _newsSortNewest = !_newsSortNewest;
+  _updateSortBtn();
+  filterNews();
+}
+
 function renderNews(articles) {
+  const sorted = _sortedNews(articles);
   const el = document.getElementById('news-list');
-  if (!articles.length) { el.innerHTML = '<h2>News Timeline</h2><p style="color:#64748b;padding:.5rem 0">No articles</p>'; return; }
-  el.innerHTML = '<h2>News Timeline</h2>' + articles.map(a => `
+  if (!sorted.length) { el.innerHTML = '<h2>News Timeline</h2><p style="color:#64748b;padding:.5rem 0">No articles</p>'; return; }
+  el.innerHTML = '<h2>News Timeline</h2>' + sorted.map(a => `
     <div class="article-card" onclick="this.classList.toggle('open')">
       <div class="article-title">${a.title}</div>
       <div class="article-meta"><span class="source-badge">${a.source}</span>${new Date(a.published).toLocaleString('th-TH')}</div>
@@ -345,6 +364,34 @@ async function loadDigestHistory() {
       <span style="color:#64748b;font-size:.75rem;margin-left:.5rem">${d.channels} · ${d.article_ids.length} articles</span>
       <div class="digest-detail">${d.article_ids.map(id=>`<div style="font-size:.8rem;color:#94a3b8">• ${id}</div>`).join('')}</div>
     </div>`).join('');
+}
+
+async function testDigest() {
+  const btn = document.getElementById('test-digest-btn');
+  const statusEl = document.getElementById('test-digest-status');
+  btn.disabled = true;
+  btn.textContent = '⏳ Sending…';
+  statusEl.textContent = '';
+  statusEl.style.color = '';
+  try {
+    const r = await fetch('/api/digest/test', { method: 'POST' });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || r.status);
+    if (data.sent_to && data.sent_to.length > 0) {
+      statusEl.textContent = `✓ ส่งสำเร็จ → ${data.sent_to.join(', ')} (${data.article_count} บทความ, window: ${data.window_used})`;
+      statusEl.style.color = 'var(--success)';
+    } else {
+      statusEl.textContent = `⚠ ไม่มีบทความใหม่ (6h: ${data.available_6h}, 24h: ${data.available_24h}, sent already: ${data.already_sent_ids})`;
+      statusEl.style.color = 'var(--warn)';
+    }
+    loadDigestHistory();
+  } catch(e) {
+    statusEl.textContent = `✗ Error: ${e.message}`;
+    statusEl.style.color = 'var(--danger)';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '📤 ส่ง Test Digest';
+  }
 }
 
 async function loadScheduleConfig() {

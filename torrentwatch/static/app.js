@@ -150,6 +150,10 @@ async function loadToday() {
   const countSticky = all.filter(t => t.is_sticky).length;
   _updateFilterCounts(countAll, countKw, countSticky);
 
+  // Update hero count
+  const countEl = document.getElementById("today-count");
+  if (countEl) countEl.textContent = countAll ? `· ${countAll}` : "";
+
   // Apply active filters client-side (category filter applied last so chip counts reflect pre-category state)
   let torrents = all;
   if (state.filter === "keyword") torrents = torrents.filter(t => t.keyword_match);
@@ -304,16 +308,19 @@ function cardHTML(t, readOnly) {
   const catBadge  = t.category ? `<span class="tw-badge-cat">${escHtml(catLabel(t.category))}</span>` : "";
   const stickyBadge = t.is_sticky ? `<span class="tw-badge tw-badge-sticky"><i class="bi bi-pin-fill"></i> Sticky</span>` : "";
 
-  const thumb = t.cover_url
+  const thumbInner = t.cover_url
     ? `<img class="tw-card-thumb" src="${escHtml(t.cover_url)}" alt="" loading="lazy" data-lightbox="${escHtml(t.cover_url)}" data-proxy="/api/cover/${t.id}" onerror="coverFallback(this)">`
     : `<div class="tw-card-thumb-placeholder"><i class="bi bi-film"></i></div>`;
+  const sizeOverlay = t.file_size
+    ? `<span class="tw-badge tw-badge-size tw-badge-size-poster ${sizeClass(t.file_size)}">${escHtml(t.file_size)}</span>`
+    : "";
+  const thumb = `<div class="tw-card-poster">${thumbInner}${sizeOverlay}</div>`;
 
   const statsHTML = [
     `<span class="tw-stat-val tw-stat-seed">${fmt(t.seeds)}</span><span class="tw-stat-lbl">seed</span>`,
     `<span class="tw-stat-sep">·</span>`,
     `<span class="tw-stat-val tw-stat-leech">${fmt(t.leeches)}</span><span class="tw-stat-lbl">leech</span>`,
     t.completed > 0 ? `<span class="tw-stat-sep">·</span><span class="tw-stat-val tw-stat-completed">${fmt(t.completed)}</span><span class="tw-stat-lbl">dl</span>` : "",
-    t.file_size ? `<span class="tw-badge tw-badge-size ${sizeClass(t.file_size)}">${escHtml(t.file_size)}</span>` : "",
   ].join("");
 
   const watchedStatus = t.watched_status || 0;
@@ -372,8 +379,12 @@ function attachCardActions(list) {
       const id = btn.dataset.id;
       const title = btn.dataset.title || "torrent";
       btn.classList.add("loading");
+      toast("กำลังดาวน์โหลด...", "");
+      const controller = new AbortController();
+      const tId = setTimeout(() => controller.abort(), 30000);
       try {
-        const resp = await fetch(`/api/download/local/${id}`);
+        const resp = await fetch(`/api/download/local/${id}`, { signal: controller.signal });
+        clearTimeout(tId);
         if (!resp.ok) throw new Error(`${resp.status} ${(await resp.text()).slice(0, 100)}`);
         const blob = await resp.blob();
         if (!blob.size) throw new Error("ไฟล์ว่างเปล่า (0 bytes)");
@@ -382,7 +393,6 @@ function attachCardActions(list) {
         a.href     = url;
         a.download = title.slice(0, 100) + ".torrent";
         a.rel      = "noopener";
-        // Hidden but interactable — NO pointer-events:none (it blocks .click() dispatch)
         a.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:1px;height:1px;";
         document.body.appendChild(a);
         a.click();
@@ -391,7 +401,9 @@ function attachCardActions(list) {
         btn.closest(".tw-card").classList.add("downloaded");
         toast(`ดาวน์โหลดแล้ว (${Math.round(blob.size / 1024)} KB)`, "success");
       } catch (e) {
-        toast("ดาวน์โหลดไม่สำเร็จ: " + e.message, "error");
+        clearTimeout(tId);
+        const msg = e.name === "AbortError" ? "หมดเวลา — เซิร์ฟเวอร์ไม่ตอบสนอง" : e.message;
+        toast("ดาวน์โหลดไม่สำเร็จ: " + msg, "error");
       } finally {
         btn.classList.remove("loading");
       }
