@@ -429,3 +429,41 @@ def fetch_blocks(page_id: str, _depth: int = 0) -> list[dict]:
             break
         cursor = resp.get("next_cursor")
     return blocks
+
+
+# ── EMBED ─────────────────────────────────────────────────────────────────────
+
+from qdrant_client.http.models import SparseVector as _SparseVector
+
+_model_instance = None
+
+
+def load_model():
+    global _model_instance
+    if _model_instance is None:
+        from FlagEmbedding import BGEM3FlagModel
+        logger.info("Loading BGEM3FlagModel (first load may take several minutes)...")
+        _model_instance = BGEM3FlagModel("BAAI/bge-m3", use_fp16=True)
+    return _model_instance
+
+
+def embed_chunks(texts: list[str]) -> dict:
+    if not texts:
+        return {"dense": [], "sparse": []}
+    model = load_model()
+    output = model.encode(
+        texts,
+        return_dense=True,
+        return_sparse=True,
+        return_colbert_vecs=False,
+        batch_size=12,
+    )
+    dense = output["dense_vecs"].tolist()
+    sparse = [
+        _SparseVector(
+            indices=[int(k) for k in lw.keys()],
+            values=[float(v) for v in lw.values()],
+        )
+        for lw in output["lexical_weights"]
+    ]
+    return {"dense": dense, "sparse": sparse}
