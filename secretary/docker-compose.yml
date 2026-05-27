@@ -1,0 +1,49 @@
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: secretary-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+    volumes:
+      - ./qdrant_storage:/qdrant/storage
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: secretary-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./ollama_data:/root/.ollama
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: secretary-n8n
+    user: root
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=${N8N_BASIC_AUTH_USER}
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
+      - WEBHOOK_URL=${N8N_WEBHOOK_URL}
+    volumes:
+      - ./n8n_data:/home/node/.n8n
+
+  secretary-ingest:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: secretary-ingest
+    depends_on:
+      - qdrant
+    volumes:
+      - ./ingest_data:/data
+      - hf_cache:/hf_cache
+    env_file: .env
+    restart: "no"
+
+volumes:
+  hf_cache:
