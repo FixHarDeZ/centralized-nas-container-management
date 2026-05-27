@@ -166,36 +166,31 @@ if [[ "$RESTART_ONLY" == false ]]; then
         "tar -tzf - 2>/dev/null | grep -v '/$' | head -50"
     warn "Dry run complete — no files were transferred."
   else
-    # Files on NAS are root-owned (written by docker/Container Manager).
-    # Strategy: pipe tar to a tmp file the SSH user can write, then extract with sudo.
     TMP_TAR="/tmp/nas_deploy_$$.tar.gz"
 
     log "Uploading project files via tar+ssh ..."
     COPYFILE_DISABLE=1 tar -czf - "${TAR_EXCLUDES[@]}" -C "${PROJECT_ROOT}" . \
       | ssh $SSH_OPTS "${SSH_DEST}" "cat > '${TMP_TAR}'"
     ssh $SSH_OPTS "${SSH_DEST}" \
-      "bash -lc \"echo '${NAS_SUDO_PASSWORD}' | sudo -S bash -c 'mkdir -p \\\"${NAS_TARGET_PATH}\\\" && tar -xzf \\\"${TMP_TAR}\\\" -C \\\"${NAS_TARGET_PATH}\\\" --no-same-permissions --no-same-owner 2>/dev/null && rm -f \\\"${TMP_TAR}\\\"'\""
+      "bash -lc \"mkdir -p '${NAS_TARGET_PATH}' && tar -xzf '${TMP_TAR}' -C '${NAS_TARGET_PATH}' --no-same-permissions --no-same-owner 2>/dev/null && rm -f '${TMP_TAR}'\""
 
     log "Uploading per-stack .env files ..."
     for stack in "${ALL_STACKS[@]}"; do
       local_env="${PROJECT_ROOT}/${stack}/.env"
       if [[ -f "$local_env" ]]; then
-        TMP_ENV="/tmp/nas_env_${stack}_$$"
-        ssh $SSH_OPTS "${SSH_DEST}" "cat > '${TMP_ENV}'" < "$local_env"
-        ssh $SSH_OPTS "${SSH_DEST}" \
-          "bash -lc \"echo '${NAS_SUDO_PASSWORD}' | sudo -S cp '${TMP_ENV}' '${NAS_TARGET_PATH}/${stack}/.env' && rm -f '${TMP_ENV}'\""
+        ssh $SSH_OPTS "${SSH_DEST}" "cat > '${NAS_TARGET_PATH}/${stack}/.env'" < "$local_env"
         dim "$stack/.env"
       fi
     done
 
     # nginx .htpasswd files must be world-readable (644) so the nginx worker
     # process can open them. tar extraction with --no-same-permissions can
-    # leave them as 600 (root-only), causing a 500 Permission denied error.
+    # leave them as 600, causing a 500 Permission denied error.
     log "Fixing .htpasswd permissions ..."
     for stack in "${ALL_STACKS[@]}"; do
       htpasswd_file="${NAS_TARGET_PATH}/${stack}/nginx/.htpasswd"
       ssh $SSH_OPTS "${SSH_DEST}" \
-        "bash -lc \"echo '${NAS_SUDO_PASSWORD}' | sudo -S bash -c '[ -f \\\"${htpasswd_file}\\\" ] && chmod 644 \\\"${htpasswd_file}\\\"'\"" 2>/dev/null || true
+        "bash -lc \"[ -f '${htpasswd_file}' ] && chmod 644 '${htpasswd_file}'\"" 2>/dev/null || true
     done
 
     ok "Upload complete ($(elapsed))"
@@ -213,7 +208,7 @@ fi
 
 if [[ -z "${NAS_SUDO_PASSWORD}" ]]; then
   echo ""
-  warn "NAS_SUDO_PASSWORD not set — skipping restart."
+  warn "NAS_SUDO_PASSWORD not set — skipping restart (needed for docker compose)."
   echo "  Add NAS_SUDO_PASSWORD=your_password to .env to enable auto-restart."
   ok "All done ($(elapsed))"
   exit 0
