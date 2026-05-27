@@ -681,3 +681,28 @@ def run_single(page_id: str, dry_run: bool = False):
     stats[result["status"]] += 1
     stats["chunks"] += result.get("chunks", 0)
     _print_summary(stats, 1, _time.monotonic() - t0)
+
+
+# ── CLI ───────────────────────────────────────────────────────────────────────
+
+import argparse
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Notion → Qdrant hybrid-search ingest")
+    parser.add_argument("--full", action="store_true", help="Re-ingest all pages, ignore state")
+    parser.add_argument("--page", metavar="PAGE_ID", help="Ingest a single Notion page by ID")
+    parser.add_argument("--dry-run", action="store_true", help="Show changes without writing")
+    args = parser.parse_args()
+
+    if args.page:
+        run_single(args.page, dry_run=args.dry_run)
+    elif args.full:
+        run_full(dry_run=args.dry_run)
+    else:
+        run_incremental(dry_run=args.dry_run)
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s")
+    main()
