@@ -30,7 +30,7 @@ services:
       - N8N_BASIC_AUTH_PASSWORD=${N8N_BASIC_AUTH_PASSWORD}
       - WEBHOOK_URL=${N8N_WEBHOOK_URL}
     volumes:
-      - ./n8n_data:/home/node/.n8n
+      - ./n8n_data:/root/.n8n
 
   secretary-ingest:
     build:
