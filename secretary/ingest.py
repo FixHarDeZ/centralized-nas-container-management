@@ -71,3 +71,91 @@ def delete_state(conn: sqlite3.Connection, page_id: str):
 def list_all_pages(conn: sqlite3.Connection) -> dict[str, str]:
     rows = conn.execute("SELECT page_id, last_edited_time FROM pages").fetchall()
     return {row[0]: row[1] for row in rows}
+
+
+# ── CONVERT ──────────────────────────────────────────────────────────────────
+
+def _rt(rich_text: list) -> str:
+    return "".join(rt.get("plain_text", "") for rt in (rich_text or []))
+
+
+def _table_to_markdown(children: list[dict]) -> str:
+    if not children:
+        return ""
+    md_rows = []
+    for i, row in enumerate(children):
+        cells = row.get("table_row", {}).get("cells", [])
+        cell_texts = [_rt(cell) for cell in cells]
+        md_rows.append("| " + " | ".join(cell_texts) + " |")
+        if i == 0:
+            md_rows.append("| " + " | ".join(["---"] * len(cell_texts)) + " |")
+    return "\n".join(md_rows)
+
+
+def blocks_to_markdown(blocks: list[dict], _depth: int = 0) -> str:
+    lines = []
+    numbered_counter = 0
+
+    for block in blocks:
+        btype = block.get("type", "")
+        data = block.get(btype, {})
+        children = block.get("_children", [])
+        text = _rt(data.get("rich_text", []))
+
+        if btype == "paragraph":
+            lines.append(text)
+        elif btype == "heading_1":
+            lines.append(f"# {text}")
+        elif btype == "heading_2":
+            lines.append(f"## {text}")
+        elif btype == "heading_3":
+            lines.append(f"### {text}")
+        elif btype == "bulleted_list_item":
+            lines.append(f"- {text}")
+            if children:
+                lines.append(blocks_to_markdown(children, _depth + 1))
+        elif btype == "numbered_list_item":
+            numbered_counter += 1
+            lines.append(f"{numbered_counter}. {text}")
+            if children:
+                lines.append(blocks_to_markdown(children, _depth + 1))
+        elif btype == "to_do":
+            checked = "x" if data.get("checked") else " "
+            lines.append(f"- [{checked}] {text}")
+        elif btype == "quote":
+            lines.append(f"> {text}")
+        elif btype == "callout":
+            emoji = (data.get("icon") or {}).get("emoji", "")
+            lines.append(f"> {emoji} {text}".strip())
+        elif btype == "code":
+            lang = data.get("language", "")
+            lines.append(f"```{lang}\n{text}\n```")
+        elif btype in ("bookmark", "embed", "link_preview"):
+            url = data.get("url", "")
+            caption = _rt(data.get("caption", [])) or url
+            lines.append(f"[{caption}]({url})")
+        elif btype == "image":
+            img = data.get("external") or data.get("file") or {}
+            url = img.get("url", "")
+            caption = _rt(data.get("caption", []))
+            lines.append(f"![{caption}]({url})")
+        elif btype == "divider":
+            lines.append("---")
+        elif btype == "child_page":
+            title = data.get("title", "")
+            lines.append(f"[→ {title}]")
+        elif btype == "toggle":
+            lines.append(f"## {text}")
+            if children:
+                lines.append(blocks_to_markdown(children, _depth + 1))
+        elif btype in ("column_list", "column", "synced_block"):
+            if children:
+                lines.append(blocks_to_markdown(children, _depth + 1))
+        elif btype == "table":
+            lines.append(_table_to_markdown(children))
+        # unknown types: silently skip
+
+        if btype not in ("bulleted_list_item", "numbered_list_item"):
+            numbered_counter = 0
+
+    return "\n".join(line for line in lines if line)
