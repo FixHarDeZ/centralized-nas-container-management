@@ -145,3 +145,46 @@ async def test_query_rerank_path(ac):
     # Rerank promoted index 1 ("B") to first position
     assert body["sources"][0]["breadcrumb"] == "B"
     assert body["sources"][0]["score"] == pytest.approx(0.99)
+
+
+# ---------------------------------------------------------------------------
+# /nous/auth and /nous/auth/status
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_nous_auth_status_unauthenticated(ac):
+    client, _, __, ___ = ac
+
+    fake_manager = MagicMock()
+    fake_manager.auth_status.return_value = {"authenticated": False, "expires_at": None}
+
+    with patch("main.nous_auth") as mock_nous_auth:
+        mock_nous_auth.token_manager = fake_manager
+        resp = await client.get("/nous/auth/status")
+
+    assert resp.status_code == 200
+    assert resp.json() == {"authenticated": False, "expires_at": None}
+
+
+@pytest.mark.asyncio
+async def test_nous_auth_starts_flow(ac):
+    client, _, __, ___ = ac
+
+    fake_manager = MagicMock()
+    fake_manager.start_device_flow = AsyncMock(return_value={
+        "authenticated": False,
+        "verification_uri": "https://portal.nousresearch.com/manage-subscription?user_code=TEST-1234",
+        "user_code": "TEST-1234",
+        "expires_in": 300,
+        "message": "Open https://portal.nousresearch.com/... and enter code: TEST-1234",
+    })
+
+    with patch("main.nous_auth") as mock_nous_auth:
+        mock_nous_auth.token_manager = fake_manager
+        resp = await client.get("/nous/auth")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["user_code"] == "TEST-1234"
+    assert "verification_uri" in body
+    fake_manager.start_device_flow.assert_awaited_once()

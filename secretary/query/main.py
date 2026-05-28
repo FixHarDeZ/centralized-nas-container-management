@@ -17,6 +17,8 @@ from qdrant_client.models import (
 )
 
 import llm_client
+import nous_auth
+from fastapi.responses import JSONResponse
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -58,7 +60,7 @@ def _active_model_name(provider: str) -> str:
     mapping = {
         "anthropic": os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514"),
         "openrouter": os.getenv("OPENROUTER_MODEL", ""),
-        "norus": os.getenv("NORUS_MODEL", ""),
+        "nous": os.getenv("NOUS_MODEL", "Hermes-4-70B"),
     }
     return mapping.get(provider, "unknown")
 
@@ -134,7 +136,11 @@ async def query(req: QueryRequest):
     context_str = "\n\n".join(context_blocks)
     user_msg = f"# Context\n{context_str}\n\n# Question\n{req.question}"
 
-    answer = await llm_client.get_llm_response(SYSTEM_PROMPT, user_msg)
+    try:
+        answer = await llm_client.get_llm_response(SYSTEM_PROMPT, user_msg)
+    except Exception as exc:
+        log.error("LLM call failed: %s", exc)
+        return JSONResponse(status_code=502, content={"error": str(exc)})
 
     sources = [
         {
@@ -187,3 +193,13 @@ async def ingest_trigger():
         return {"status": "error", "summary": combined}
     except Exception as exc:
         return {"status": "error", "summary": str(exc)}
+
+
+@app.get("/nous/auth")
+async def nous_auth_start():
+    return await nous_auth.token_manager.start_device_flow()
+
+
+@app.get("/nous/auth/status")
+async def nous_auth_status():
+    return nous_auth.token_manager.auth_status()
