@@ -1,5 +1,7 @@
 # secretary
 
+![Kim Secretary Telegram Bot](../screenshots/secretary.png)
+
 Personal knowledge base stack. Ingests Notion pages into Qdrant and serves RAG queries via FastAPI, orchestrated with n8n Telegram bot workflows.
 
 ## Architecture

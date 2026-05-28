@@ -34,14 +34,14 @@
   Current block (lines 10-12 of `.env`):
   ```
   NAS_SSH_KEY=~/.ssh/id_ed25519
-  NAS_TARGET_PATH=/volume1/docker
+  NAS_TARGET_PATH=/volume2/docker
   ```
 
   After:
   ```
   NAS_SSH_KEY=~/.ssh/id_ed25519
   NAS_VOLUME_ROOT=/volume1
-  NAS_TARGET_PATH=/volume1/docker
+  NAS_TARGET_PATH=/volume2/docker
   ```
 
 - [ ] **Step 2: Edit `.env.example`** — same insertion at the same position (lines 10-11 of `.env.example`)
@@ -49,14 +49,14 @@
   Current:
   ```
   NAS_SSH_KEY=~/.ssh/id_ed25519
-  NAS_TARGET_PATH=/volume1/docker
+  NAS_TARGET_PATH=/volume2/docker
   ```
 
   After:
   ```
   NAS_SSH_KEY=~/.ssh/id_ed25519
   NAS_VOLUME_ROOT=/volume1
-  NAS_TARGET_PATH=/volume1/docker
+  NAS_TARGET_PATH=/volume2/docker
   ```
 
 - [ ] **Step 3: Verify .env.example looks correct**
@@ -69,7 +69,7 @@
   ```
   NAS_SSH_KEY=~/.ssh/id_ed25519
   NAS_VOLUME_ROOT=/volume1
-  NAS_TARGET_PATH=/volume1/docker
+  NAS_TARGET_PATH=/volume2/docker
   ```
 
 ---
@@ -83,7 +83,7 @@
 
   Current line 12:
   ```yaml
-        - /volume1/docker/uptime-kuma:/app/data
+        - /volume2/docker/uptime-kuma:/app/data
   ```
 
   After:
@@ -99,7 +99,7 @@
 
   Expected output:
   ```
-        - /volume1/docker/uptime-kuma:/app/data:rw
+        - /volume2/docker/uptime-kuma:/app/data:rw
   ```
 
   *(The path should show the resolved value `/volume1/...`, not the literal `${NAS_VOLUME_ROOT}`)*
@@ -162,8 +162,8 @@
   ```yaml
       volumes:
         # Config & Cache
-        - /volume1/docker/jellyfin/config:/config
-        - /volume1/docker/jellyfin/cache:/cache
+        - /volume2/docker/jellyfin/config:/config
+        - /volume2/docker/jellyfin/cache:/cache
         # Media Folders (ตั้งเป็น Read-Only ตามต้นฉบับของคุณ)
         - /volume1/Movies:/data/movies:ro
         - /volume1/Series:/data/series:ro
@@ -190,7 +190,7 @@
   cd jellyfin && docker compose --env-file ../.env config 2>/dev/null | grep -E "/data|/config|/cache"
   ```
 
-  Expected: 6 lines showing resolved paths like `/volume1/docker/jellyfin/config:/config`, `/volume1/Movies:/data/movies:ro`, etc. No `${NAS_VOLUME_ROOT}` literals.
+  Expected: 6 lines showing resolved paths like `/volume2/docker/jellyfin/config:/config`, `/volume1/Movies:/data/movies:ro`, etc. No `${NAS_VOLUME_ROOT}` literals.
 
 ---
 
@@ -295,13 +295,13 @@ After running `./scripts/deploy.sh -s uptime-kuma,homepage,jellyfin`:
 
 ```bash
 # SSH into NAS, then:
-docker compose --env-file /volume1/docker/.env \
-  -f /volume1/docker/uptime-kuma/docker-compose.yml config \
+docker compose --env-file /volume2/docker/.env \
+  -f /volume2/docker/uptime-kuma/docker-compose.yml config \
   | grep app/data
-# Expected: /volume1/docker/uptime-kuma:/app/data
+# Expected: /volume2/docker/uptime-kuma:/app/data
 
-docker compose --env-file /volume1/docker/.env \
-  -f /volume1/docker/homepage/docker-compose.yml config \
+docker compose --env-file /volume2/docker/.env \
+  -f /volume2/docker/homepage/docker-compose.yml config \
   | grep VOLUME_ROOT
 # Expected: HOMEPAGE_VAR_VOLUME_ROOT=/volume1
 ```

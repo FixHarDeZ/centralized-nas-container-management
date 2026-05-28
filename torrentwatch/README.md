@@ -93,7 +93,7 @@ The host path `NAS_TORRENT_PATH` must already exist on the NAS before starting t
 scripts/deploy.sh   # upload files and restart torrentwatch
 ```
 
-Register in Synology Container Manager → Project → Create → path `/volume1/docker/torrentwatch`.
+Register in Synology Container Manager → Project → Create → path `/volume2/docker/torrentwatch`.
 
 ### 5. Synology Reverse Proxy
 
@@ -236,7 +236,7 @@ TORRENTWATCH_TELEGRAM_CHAT_ID=your_chat_id   # หาได้จากปุ่
 scripts/deploy.sh   # อัปโหลดไฟล์และ restart torrentwatch
 ```
 
-Register ใน Synology Container Manager → Project → Create → path `/volume1/docker/torrentwatch`
+Register ใน Synology Container Manager → Project → Create → path `/volume2/docker/torrentwatch`
 
 ### 4. เข้าใช้งาน
 

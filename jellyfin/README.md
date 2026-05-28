@@ -30,8 +30,8 @@ Upload via `deploy.sh` from your local machine and register the stack in Contain
 | `/data/series` | `/volume1/Series` | read-only |
 | `/data/concerts` | `/volume1/Concerts` | read-only |
 | `/data/private` | `/volume1/private_media/porn` | read-only |
-| `/config` | `/volume1/docker/jellyfin/config` | read-write |
-| `/cache` | `/volume1/docker/jellyfin/cache` | read-write |
+| `/config` | `/volume2/docker/jellyfin/config` | read-write |
+| `/cache` | `/volume2/docker/jellyfin/cache` | read-write |
 
 ## Hardware Transcoding
 
