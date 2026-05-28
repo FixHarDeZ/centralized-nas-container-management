@@ -1,14 +1,14 @@
 ---
 # ─── Top Bar Widgets ──────────────────────────────────────────────────────────
 # แสดงข้อมูล system-level ด้านบนสุดของ dashboard
-
 - resources:
     label: System
     cpu: true
     memory: true
+    uptime: true
     disk:
-      - "{{HOMEPAGE_VAR_VOLUME_ROOT}}"
       - "{{HOMEPAGE_VAR_VOLUME_STORAGE}}"
+      - "{{HOMEPAGE_VAR_VOLUME_ROOT}}"
     cacheInterval: 5000
 
 - datetime:

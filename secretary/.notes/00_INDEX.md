@@ -83,6 +83,9 @@ Note: `ASGITransport` does not fire ASGI lifespan — conftest directly assigns 
 ## /ingest-trigger Behavior
 The `POST /ingest-trigger` endpoint in `secretary-query` runs `ingest.py` as a subprocess (at `/ingest/ingest.py` inside the container, bind-mounted from `./ingest/ingest.py`). It inherits env vars from both `query/.env` and `ingest/.env`. State DB writes to `query-data` volume (`/data/ingest_state.db`), separate from the `ingest_state` volume used by `docker compose run --rm secretary-ingest`.
 
+## /query Response — Sources Filtering (2026-05-28)
+`sources` in the response now contains only chunks actually cited by the LLM (`[1]`, `[2]`, etc.), not all top_k_final hits. Regex parse in `main.py:147`. This fixes n8n showing unrelated reference links alongside the answer.
+
 ## Gaps / TODOs
 - n8n workflow JSON not exported/committed yet
 - Ollama service present in compose but no workflow uses it currently
