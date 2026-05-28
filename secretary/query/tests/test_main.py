@@ -1,0 +1,147 @@
+import pytest
+from unittest.mock import AsyncMock, MagicMock, patch
+
+
+def _make_hit(breadcrumb: str, text: str, url: str = "", score: float = 0.9):
+    h = MagicMock()
+    h.payload = {"breadcrumb": breadcrumb, "text": text, "page_url": url}
+    h.score = score
+
+    def _copy(update=None):
+        new = MagicMock()
+        new.payload = h.payload
+        new.score = (update or {}).get("score", h.score)
+        return new
+
+    h.model_copy = _copy
+    return h
+
+
+# ---------------------------------------------------------------------------
+# /health
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_health_ok(ac):
+    client, fake_qdrant, _, __ = ac
+    info = MagicMock()
+    info.points_count = 77
+    fake_qdrant.get_collection = AsyncMock(return_value=info)
+
+    resp = await client.get("/health")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "ok"
+    assert body["qdrant_ok"] is True
+    assert body["collection_stats"]["points_count"] == 77
+
+
+@pytest.mark.asyncio
+async def test_health_qdrant_down(ac):
+    client, fake_qdrant, _, __ = ac
+    fake_qdrant.get_collection = AsyncMock(side_effect=Exception("timeout"))
+
+    resp = await client.get("/health")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "error"
+    assert body["qdrant_ok"] is False
+    assert body["collection_stats"]["points_count"] == 0
+
+
+# ---------------------------------------------------------------------------
+# /query — hybrid (no Cohere)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_query_hybrid_returns_answer(ac):
+    client, fake_qdrant, fake_model, fake_llm = ac
+
+    hits = [_make_hit("Notes > Test", "Test content", "https://notion.so/1")]
+    mock_result = MagicMock()
+    mock_result.points = hits
+    fake_qdrant.query_points = AsyncMock(return_value=mock_result)
+    fake_llm.get_llm_response = AsyncMock(return_value="42")
+
+    resp = await client.post(
+        "/query",
+        json={"question": "What is the answer?", "top_k_retrieve": 5, "top_k_final": 1},
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["answer"] == "42"
+    assert body["retrieval_method"] == "hybrid"
+    assert len(body["sources"]) == 1
+    assert body["sources"][0]["breadcrumb"] == "Notes > Test"
+    assert isinstance(body["latency_ms"], int)
+
+
+@pytest.mark.asyncio
+async def test_query_top_k_final_slices_results(ac):
+    """top_k_final=1 returns only 1 source even if Qdrant returns 3 hits."""
+    client, fake_qdrant, _, fake_llm = ac
+
+    hits = [
+        _make_hit("A", "text a", score=0.9),
+        _make_hit("B", "text b", score=0.8),
+        _make_hit("C", "text c", score=0.7),
+    ]
+    mock_result = MagicMock()
+    mock_result.points = hits
+    fake_qdrant.query_points = AsyncMock(return_value=mock_result)
+
+    resp = await client.post(
+        "/query",
+        json={"question": "q", "top_k_retrieve": 3, "top_k_final": 1},
+    )
+
+    assert resp.status_code == 200
+    assert len(resp.json()["sources"]) == 1
+    assert resp.json()["sources"][0]["breadcrumb"] == "A"
+
+
+# ---------------------------------------------------------------------------
+# /query — hybrid + Cohere rerank path
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_query_rerank_path(ac):
+    client, fake_qdrant, _, fake_llm = ac
+
+    hits = [
+        _make_hit("A", "text a", score=0.9),
+        _make_hit("B", "text b", score=0.8),
+    ]
+    mock_result = MagicMock()
+    mock_result.points = hits
+    fake_qdrant.query_points = AsyncMock(return_value=mock_result)
+
+    # Rerank response: index 1 first (re-orders hits so "B" wins)
+    fake_rerank_result = MagicMock()
+    fake_rerank_result.index = 1
+    fake_rerank_result.relevance_score = 0.99
+    fake_rerank_resp = MagicMock()
+    fake_rerank_resp.results = [fake_rerank_result]
+
+    fake_co = MagicMock()
+    fake_co.rerank = AsyncMock(return_value=fake_rerank_resp)
+    fake_llm.get_llm_response = AsyncMock(return_value="reranked answer")
+
+    with patch("main.cohere") as mock_cohere, \
+         patch("main.COHERE_API_KEY", "co-test-key"):
+        mock_cohere.AsyncClientV2.return_value = fake_co
+        resp = await client.post(
+            "/query",
+            json={"question": "q", "top_k_retrieve": 2, "top_k_final": 1},
+        )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["retrieval_method"] == "hybrid+rerank"
+    assert body["answer"] == "reranked answer"
+    # Rerank promoted index 1 ("B") to first position
+    assert body["sources"][0]["breadcrumb"] == "B"
+    assert body["sources"][0]["score"] == pytest.approx(0.99)
