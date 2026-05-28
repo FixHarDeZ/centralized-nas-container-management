@@ -176,11 +176,12 @@ if [[ "$RESTART_ONLY" == false ]]; then
 
     log "Uploading per-stack .env files ..."
     for stack in "${ALL_STACKS[@]}"; do
-      local_env="${PROJECT_ROOT}/${stack}/.env"
-      if [[ -f "$local_env" ]]; then
-        ssh $SSH_OPTS "${SSH_DEST}" "cat > '${NAS_TARGET_PATH}/${stack}/.env'" < "$local_env"
-        dim "$stack/.env"
-      fi
+      while IFS= read -r local_env; do
+        rel_env="${local_env#${PROJECT_ROOT}/}"
+        nas_dir="${NAS_TARGET_PATH}/$(dirname "${rel_env}")"
+        ssh $SSH_OPTS "${SSH_DEST}" "mkdir -p '${nas_dir}' && cat > '${NAS_TARGET_PATH}/${rel_env}'" < "$local_env"
+        dim "$rel_env"
+      done < <(find "${PROJECT_ROOT}/${stack}" -name '.env' 2>/dev/null)
     done
 
     # nginx .htpasswd files must be world-readable (644) so the nginx worker
