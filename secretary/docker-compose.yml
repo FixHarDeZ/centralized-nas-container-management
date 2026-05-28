@@ -4,18 +4,18 @@ services:
     container_name: secretary-qdrant
     restart: unless-stopped
     ports:
-      - "6333:6333"
+      - "6333:6333"        # internal only ไม่ expose ออกนอก
     volumes:
-      - ./qdrant_storage:/qdrant/storage
+      - qdrant_storage:/qdrant/storage
 
   ollama:
     image: ollama/ollama:latest
     container_name: secretary-ollama
     restart: unless-stopped
     ports:
-      - "11434:11434"
+      - "11434:11434"      # internal only
     volumes:
-      - ./ollama_data:/root/.ollama
+      - ollama_data:/root/.ollama
 
   n8n:
     image: n8nio/n8n:latest
@@ -31,20 +31,68 @@ services:
       - GENERIC_TIMEZONE=Asia/Bangkok
       - TZ=Asia/Bangkok
     volumes:
-      - ./n8n_data:/home/node/.n8n
+      - n8n_data:/home/node/.n8n
+
+  secretary-query:
+    build:
+      context: ./query
+      dockerfile: Dockerfile
+    container_name: secretary-query
+    restart: unless-stopped
+    ports:
+      - "5065:5065"
+    env_file: ./query/.env
+    volumes:
+      - hf_cache:/root/.cache/huggingface
+      - /volume2/docker/secretary/query-data:/data
+    depends_on:
+      - qdrant
 
   secretary-ingest:
     build:
-      context: .
+      context: ./ingest
       dockerfile: Dockerfile
     container_name: secretary-ingest
+    restart: "no"
+    env_file: ./ingest/.env
+    volumes:
+      - ingest_state:/data
+      - hf_cache:/root/.cache/huggingface
     depends_on:
       - qdrant
-    volumes:
-      - ./ingest_data:/data
-      - hf_cache:/hf_cache
-    env_file: .env
-    restart: "no"
 
 volumes:
+  qdrant_storage:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /volume2/docker/secretary/qdrant_storage
+
+  ollama_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /volume2/docker/secretary/ollama_data
+
+  n8n_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /volume2/docker/secretary/n8n_data
+
+  ingest_state:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /volume2/docker/secretary/ingest_state
+
   hf_cache:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /volume2/docker/secretary/hf_cache
