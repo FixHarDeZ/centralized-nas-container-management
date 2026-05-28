@@ -26,4 +26,4 @@ Then:
 
 3. **Remind the user** of the post-upload steps:
    - Run `/deploy` to upload files to the NAS.
-   - In DSM → Container Manager → Project → Create, point to `/volume1/docker/<directory>`.
+   - In DSM → Container Manager → Project → Create, point to `/volume2/docker/<directory>`.

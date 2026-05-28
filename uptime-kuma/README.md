@@ -24,7 +24,7 @@ Upload via `deploy.sh` from your local machine and register the stack in Contain
 
 ## Data
 
-All monitor configs, history, and settings are persisted at `/volume1/docker/uptime-kuma` on the host.
+All monitor configs, history, and settings are persisted at `/volume2/docker/uptime-kuma` on the host.
 
 ## Homepage Integration
 

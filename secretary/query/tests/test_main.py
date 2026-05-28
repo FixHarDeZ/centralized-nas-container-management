@@ -63,7 +63,7 @@ async def test_query_hybrid_returns_answer(ac):
     mock_result = MagicMock()
     mock_result.points = hits
     fake_qdrant.query_points = AsyncMock(return_value=mock_result)
-    fake_llm.get_llm_response = AsyncMock(return_value="42")
+    fake_llm.get_llm_response = AsyncMock(return_value="The answer is [1]")
 
     resp = await client.post(
         "/query",
@@ -72,7 +72,7 @@ async def test_query_hybrid_returns_answer(ac):
 
     assert resp.status_code == 200
     body = resp.json()
-    assert body["answer"] == "42"
+    assert body["answer"] == "The answer is [1]"
     assert body["retrieval_method"] == "hybrid"
     assert len(body["sources"]) == 1
     assert body["sources"][0]["breadcrumb"] == "Notes > Test"
@@ -92,6 +92,7 @@ async def test_query_top_k_final_slices_results(ac):
     mock_result = MagicMock()
     mock_result.points = hits
     fake_qdrant.query_points = AsyncMock(return_value=mock_result)
+    fake_llm.get_llm_response = AsyncMock(return_value="[1]")
 
     resp = await client.post(
         "/query",
@@ -128,7 +129,7 @@ async def test_query_rerank_path(ac):
 
     fake_co = MagicMock()
     fake_co.rerank = AsyncMock(return_value=fake_rerank_resp)
-    fake_llm.get_llm_response = AsyncMock(return_value="reranked answer")
+    fake_llm.get_llm_response = AsyncMock(return_value="reranked answer [1]")
 
     with patch("main.cohere") as mock_cohere, \
          patch("main.COHERE_API_KEY", "co-test-key"):
@@ -141,7 +142,7 @@ async def test_query_rerank_path(ac):
     assert resp.status_code == 200
     body = resp.json()
     assert body["retrieval_method"] == "hybrid+rerank"
-    assert body["answer"] == "reranked answer"
+    assert body["answer"] == "reranked answer [1]"
     # Rerank promoted index 1 ("B") to first position
     assert body["sources"][0]["breadcrumb"] == "B"
     assert body["sources"][0]["score"] == pytest.approx(0.99)

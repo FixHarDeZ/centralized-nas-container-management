@@ -79,3 +79,13 @@
 - OAuth endpoints: portal.nousresearch.com/api/oauth/device/code + /token, client_id=hermes-cli
 - Token stored in /data/nous_token.json (atomic write), NOUS_TOKEN_FILE env var for override
 - Setup: deploy → GET /nous/auth → open verification_uri in browser → enter user_code → approve → token auto-saved
+
+## 2026-05-28 — Fix: filter sources to cited-only
+
+**Problem:** `/query` endpoint returned all top_k_final=6 sources, n8n displayed all as references even when LLM only used 1.
+
+**Root cause:** `sources` was built from all `hits` unconditionally.
+
+**Fix:** After LLM answer, parse citation numbers with `re.findall(r"\[(\d+)\]", answer)`, filter `hits` to only cited indices before building `sources` array (`main.py:147-156`).
+
+**Tests:** Updated 3 test mocks to include `[1]` in LLM return values. Pre-existing `test_query_rerank_path` failure (KeyError 'cohere' in app.state) unchanged.

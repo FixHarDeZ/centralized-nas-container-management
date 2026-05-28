@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import re
 import time
 from contextlib import asynccontextmanager
 
@@ -146,13 +147,15 @@ async def query(req: QueryRequest):
         log.error("LLM call failed: %s", exc)
         return JSONResponse(status_code=502, content={"error": str(exc)})
 
+    cited_indices = sorted({int(m) - 1 for m in re.findall(r"\[(\d+)\]", answer)})
+    cited_hits = [hits[i] for i in cited_indices if i < len(hits)]
     sources = [
         {
             "breadcrumb": h.payload.get("breadcrumb", ""),
             "page_url": h.payload.get("page_url", ""),
             "score": float(h.score),
         }
-        for h in hits
+        for h in cited_hits
     ]
 
     latency_ms = int((time.monotonic() - t0) * 1000)
