@@ -2,6 +2,23 @@
 
 ---
 
+## 2026-05-28 — เพิ่ม n8n widget
+
+### งานที่ทำ
+
+เพิ่ม n8n (Secretary Stack, port 5678/15678) เข้า dashboard ใน section **📝 Tools & Notes**
+
+**ไฟล์ที่เปลี่ยน:**
+
+`homepage/config/services.yaml`:
+- เพิ่ม n8n entry ต่อท้าย Hermes Agent — ใช้ `type: n8n` widget + ping
+
+`homepage/.env.example`:
+- เพิ่ม 2 ตัวแปร: `HOMEPAGE_VAR_N8N_HTTP`, `HOMEPAGE_VAR_N8N_HTTPS`, `HOMEPAGE_VAR_N8N_KEY`
+- สร้าง API key ใน n8n → Settings → API → Create API Key แล้วใส่ใน `.env`
+
+---
+
 ## 2026-05-24 — ย้ายกลับ basic auth (ลบ Authelia)
 
 ### งานที่ทำ

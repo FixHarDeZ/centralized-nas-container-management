@@ -77,6 +77,12 @@
         description: Autonomous AI Agent (Telegram + Discord)
         ping: "{{HOMEPAGE_VAR_HERMES_HTTP}}"
 
+    - n8n:
+        icon: n8n.png
+        href: "{{HOMEPAGE_VAR_N8N_HTTPS}}"
+        description: Workflow Automation (Secretary Stack)
+        ping: "{{HOMEPAGE_VAR_N8N_HTTP}}"
+
     - Maid Tracker:
         icon: mdi-broom
         href: "{{HOMEPAGE_VAR_MAID_TRACKER_URL}}"
