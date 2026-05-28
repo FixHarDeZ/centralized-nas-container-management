@@ -2,6 +2,7 @@ import os
 from anthropic import AsyncAnthropic
 from openai import AsyncOpenAI
 
+import nous_auth
 
 _PROVIDER = os.getenv("LLM_PROVIDER", "anthropic")
 
@@ -51,6 +52,24 @@ async def get_llm_response(system: str, user: str) -> str:
         if not resp.choices:
             error_detail = getattr(resp, "error", None) or "null choices"
             raise RuntimeError(f"OpenRouter returned no choices: {error_detail}")
+        return resp.choices[0].message.content or ""
+
+    if _PROVIDER == "nous":
+        token = await nous_auth.token_manager.get_access_token()
+        client = AsyncOpenAI(
+            base_url="https://inference-api.nousresearch.com/v1",
+            api_key=token,
+        )
+        model = os.getenv("NOUS_MODEL", "Hermes-4-70B")
+        resp = await client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+        )
+        if not resp.choices:
+            raise RuntimeError("Nous returned no choices")
         return resp.choices[0].message.content or ""
 
     raise ValueError(f"Unknown LLM_PROVIDER: {_PROVIDER!r}")
