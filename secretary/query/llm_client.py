@@ -8,6 +8,8 @@ _PROVIDER = os.getenv("LLM_PROVIDER", "anthropic")
 
 _anthropic_client: AsyncAnthropic | None = None
 _openrouter_client: AsyncOpenAI | None = None
+_nous_client: AsyncOpenAI | None = None
+_nous_token: str = ""
 
 
 def _get_anthropic() -> AsyncAnthropic:
@@ -27,6 +29,24 @@ def _get_openrouter() -> AsyncOpenAI:
     return _openrouter_client
 
 
+async def _get_nous() -> AsyncOpenAI:
+    global _nous_client, _nous_token
+    token = await nous_auth.token_manager.get_access_token()
+    if _nous_client is None or token != _nous_token:
+        _nous_client = AsyncOpenAI(
+            base_url="https://inference-api.nousresearch.com/v1",
+            api_key=token,
+        )
+        _nous_token = token
+    return _nous_client
+
+
+def _text_from_openai(resp, provider: str) -> str:
+    if not resp.choices:
+        raise RuntimeError(f"{provider} returned no choices")
+    return resp.choices[0].message.content or ""
+
+
 async def get_llm_response(system: str, user: str) -> str:
     if _PROVIDER == "anthropic":
         client = _get_anthropic()
@@ -39,37 +59,18 @@ async def get_llm_response(system: str, user: str) -> str:
         )
         return msg.content[0].text
 
+    messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+
     if _PROVIDER == "openrouter":
         client = _get_openrouter()
         model = os.environ["OPENROUTER_MODEL"]
-        resp = await client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-        )
-        if not resp.choices:
-            error_detail = getattr(resp, "error", None) or "null choices"
-            raise RuntimeError(f"OpenRouter returned no choices: {error_detail}")
-        return resp.choices[0].message.content or ""
+        resp = await client.chat.completions.create(model=model, messages=messages)
+        return _text_from_openai(resp, "OpenRouter")
 
     if _PROVIDER == "nous":
-        token = await nous_auth.token_manager.get_access_token()
-        client = AsyncOpenAI(
-            base_url="https://inference-api.nousresearch.com/v1",
-            api_key=token,
-        )
+        client = await _get_nous()
         model = os.getenv("NOUS_MODEL", "Hermes-4-70B")
-        resp = await client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-        )
-        if not resp.choices:
-            raise RuntimeError("Nous returned no choices")
-        return resp.choices[0].message.content or ""
+        resp = await client.chat.completions.create(model=model, messages=messages)
+        return _text_from_openai(resp, "Nous")
 
     raise ValueError(f"Unknown LLM_PROVIDER: {_PROVIDER!r}")
