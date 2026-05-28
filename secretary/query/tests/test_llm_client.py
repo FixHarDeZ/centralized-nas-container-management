@@ -9,7 +9,8 @@ def _reload(monkeypatch, provider: str):
     monkeypatch.setenv("LLM_PROVIDER", provider)
     import llm_client as m
     importlib.reload(m)
-    m._openai_client = None  # reset singleton to ensure clean state per test
+    m._anthropic_client = None
+    m._openrouter_client = None
     return m
 
 
@@ -51,38 +52,13 @@ async def test_openrouter_returns_text(monkeypatch):
     fake_client = MagicMock()
     fake_client.chat.completions.create = AsyncMock(return_value=fake_resp)
 
-    with patch.object(m, "_openai_client", fake_client):
+    with patch.object(m, "_openrouter_client", fake_client):
         result = await m.get_llm_response("system", "user")
 
     assert result == "hello from openrouter"
     fake_client.chat.completions.create.assert_awaited_once()
     call_kwargs = fake_client.chat.completions.create.call_args.kwargs
     assert call_kwargs["model"] == "anthropic/claude-test"
-    assert call_kwargs["messages"][0] == {"role": "system", "content": "system"}
-    assert call_kwargs["messages"][1] == {"role": "user", "content": "user"}
-
-
-@pytest.mark.asyncio
-async def test_norus_returns_text(monkeypatch):
-    monkeypatch.setenv("NORUS_API_KEY", "norus-test")
-    monkeypatch.setenv("NORUS_MODEL", "norus-model-v1")
-    monkeypatch.setenv("NORUS_BASE_URL", "https://api.norus.ai/v1")
-    m = _reload(monkeypatch, "norus")
-
-    fake_choice = MagicMock()
-    fake_choice.message.content = "hello from norus"
-    fake_resp = MagicMock()
-    fake_resp.choices = [fake_choice]
-    fake_client = MagicMock()
-    fake_client.chat.completions.create = AsyncMock(return_value=fake_resp)
-
-    with patch.object(m, "_openai_client", fake_client):
-        result = await m.get_llm_response("system", "user")
-
-    assert result == "hello from norus"
-    fake_client.chat.completions.create.assert_awaited_once()
-    call_kwargs = fake_client.chat.completions.create.call_args.kwargs
-    assert call_kwargs["model"] == "norus-model-v1"
     assert call_kwargs["messages"][0] == {"role": "system", "content": "system"}
     assert call_kwargs["messages"][1] == {"role": "user", "content": "user"}
 
