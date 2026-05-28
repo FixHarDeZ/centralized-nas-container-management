@@ -19,10 +19,14 @@ def _token_file() -> Path:
     return Path(os.getenv("NOUS_TOKEN_FILE", "/data/nous_token.json"))
 
 
+_TERMINAL_OAUTH_ERRORS = {"access_denied", "expired_token", "invalid_client", "invalid_grant"}
+
+
 class NousTokenManager:
     def __init__(self):
         self._tokens: dict | None = None
         self._poll_task: asyncio.Task | None = None
+        self._refresh_lock = asyncio.Lock()
         self._load()
 
     def _load(self):
@@ -99,8 +103,12 @@ class NousTokenManager:
                             "expires_at": int(time.time()) + int(d["expires_in"]),
                         })
                         return
-                    if resp.status_code != 400:
-                        log.warning("Nous token poll: unexpected status %s, retrying", resp.status_code)
+                    error = (resp.json() if resp.content else {}).get("error", "")
+                    if error in _TERMINAL_OAUTH_ERRORS:
+                        log.warning("Nous token poll: terminal error %r — aborting", error)
+                        return
+                    if error != "authorization_pending":
+                        log.warning("Nous token poll: unexpected status %s / %r, retrying", resp.status_code, error)
                 except Exception as exc:
                     log.warning("Nous token poll: network error (%s), retrying", exc)
 
@@ -108,7 +116,9 @@ class NousTokenManager:
         if not self._tokens:
             raise RuntimeError("Nous not authenticated — call GET /nous/auth first")
         if not self._is_valid():
-            await self._refresh()
+            async with self._refresh_lock:
+                if not self._is_valid():
+                    await self._refresh()
         return self._tokens["access_token"]
 
     async def _refresh(self):

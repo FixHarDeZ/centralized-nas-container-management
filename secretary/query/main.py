@@ -53,6 +53,8 @@ async def lifespan(app: FastAPI):
     app.state.model = BGEM3FlagModel("BAAI/bge-m3")
     log.info("BGE-M3 loaded")
     log.info("LLM provider: %s | model: %s", provider, _active_model_name(provider))
+    if COHERE_API_KEY:
+        app.state.cohere = cohere.AsyncClientV2(api_key=COHERE_API_KEY)
     qdrant = AsyncQdrantClient(url=QDRANT_URL)
     yield
     await qdrant.close()
@@ -113,7 +115,7 @@ async def query(req: QueryRequest):
 
     retrieval_method = "hybrid"
     if COHERE_API_KEY:
-        co = cohere.AsyncClientV2(api_key=COHERE_API_KEY)
+        co: cohere.AsyncClientV2 = app.state.cohere
         docs = [h.payload.get("text", "") for h in hits]
         rerank_resp = await co.rerank(
             model=COHERE_RERANK_MODEL,
@@ -192,9 +194,9 @@ async def ingest_trigger():
         combined = (stdout + stderr).decode(errors="replace")
         if proc.returncode == 0:
             return {"status": "done", "summary": combined}
-        return {"status": "error", "summary": combined}
+        return JSONResponse(status_code=500, content={"status": "error", "summary": combined})
     except Exception as exc:
-        return {"status": "error", "summary": str(exc)}
+        return JSONResponse(status_code=500, content={"status": "error", "summary": str(exc)})
 
 
 @app.get("/nous/auth")
