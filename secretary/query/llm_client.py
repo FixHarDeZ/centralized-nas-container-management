@@ -6,7 +6,7 @@ from openai import AsyncOpenAI
 _PROVIDER = os.getenv("LLM_PROVIDER", "anthropic")
 
 _anthropic_client: AsyncAnthropic | None = None
-_openai_client: AsyncOpenAI | None = None
+_openrouter_client: AsyncOpenAI | None = None
 
 
 def _get_anthropic() -> AsyncAnthropic:
@@ -16,11 +16,14 @@ def _get_anthropic() -> AsyncAnthropic:
     return _anthropic_client
 
 
-def _get_openai(base_url: str, api_key: str) -> AsyncOpenAI:
-    global _openai_client
-    if _openai_client is None:
-        _openai_client = AsyncOpenAI(base_url=base_url, api_key=api_key)
-    return _openai_client
+def _get_openrouter() -> AsyncOpenAI:
+    global _openrouter_client
+    if _openrouter_client is None:
+        _openrouter_client = AsyncOpenAI(
+            base_url=os.environ["OPENROUTER_BASE_URL"],
+            api_key=os.environ["OPENROUTER_API_KEY"],
+        )
+    return _openrouter_client
 
 
 async def get_llm_response(system: str, user: str) -> str:
@@ -36,10 +39,7 @@ async def get_llm_response(system: str, user: str) -> str:
         return msg.content[0].text
 
     if _PROVIDER == "openrouter":
-        client = _get_openai(
-            base_url=os.environ["OPENROUTER_BASE_URL"],
-            api_key=os.environ["OPENROUTER_API_KEY"],
-        )
+        client = _get_openrouter()
         model = os.environ["OPENROUTER_MODEL"]
         resp = await client.chat.completions.create(
             model=model,
@@ -48,21 +48,9 @@ async def get_llm_response(system: str, user: str) -> str:
                 {"role": "user", "content": user},
             ],
         )
-        return resp.choices[0].message.content
-
-    if _PROVIDER == "norus":
-        client = _get_openai(
-            base_url=os.environ["NORUS_BASE_URL"],
-            api_key=os.environ["NORUS_API_KEY"],
-        )
-        model = os.environ["NORUS_MODEL"]
-        resp = await client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-        )
-        return resp.choices[0].message.content
+        if not resp.choices:
+            error_detail = getattr(resp, "error", None) or "null choices"
+            raise RuntimeError(f"OpenRouter returned no choices: {error_detail}")
+        return resp.choices[0].message.content or ""
 
     raise ValueError(f"Unknown LLM_PROVIDER: {_PROVIDER!r}")
