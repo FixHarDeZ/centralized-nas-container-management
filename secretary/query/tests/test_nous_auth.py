@@ -148,3 +148,34 @@ def test_auth_status_authenticated(monkeypatch, tmp_path):
 
     assert status["authenticated"] is True
     assert status["expires_at"] == future_ts
+
+
+@pytest.mark.asyncio
+async def test_poll_for_token_saves_on_success(monkeypatch, tmp_path):
+    manager = _make_manager(monkeypatch, tmp_path)
+
+    # First response: 400 authorization_pending, second: 200 success
+    pending_resp = MagicMock()
+    pending_resp.status_code = 400
+
+    success_resp = MagicMock()
+    success_resp.status_code = 200
+    success_resp.json.return_value = {
+        "access_token": "polled-token",
+        "refresh_token": "polled-refresh",
+        "expires_in": 3600,
+    }
+
+    mock_http = AsyncMock()
+    mock_http.__aenter__ = AsyncMock(return_value=mock_http)
+    mock_http.__aexit__ = AsyncMock(return_value=False)
+    mock_http.post = AsyncMock(side_effect=[pending_resp, success_resp])
+
+    import nous_auth
+    with patch.object(nous_auth.httpx, "AsyncClient", return_value=mock_http):
+        with patch("asyncio.sleep", new_callable=AsyncMock):
+            await manager._poll_for_token("dev-code", interval=1, expires_in=60)
+
+    assert manager._tokens is not None
+    assert manager._tokens["access_token"] == "polled-token"
+    assert manager._tokens["refresh_token"] == "polled-refresh"

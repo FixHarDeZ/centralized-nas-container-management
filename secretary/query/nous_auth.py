@@ -1,10 +1,13 @@
 import asyncio
 import json
+import logging
 import os
 import time
 from pathlib import Path
 
 import httpx
+
+log = logging.getLogger(__name__)
 
 _DEVICE_CODE_URL = "https://portal.nousresearch.com/api/oauth/device/code"
 _TOKEN_URL = "https://portal.nousresearch.com/api/oauth/token"
@@ -97,9 +100,9 @@ class NousTokenManager:
                         })
                         return
                     if resp.status_code != 400:
-                        return
-                except Exception:
-                    return
+                        log.warning("Nous token poll: unexpected status %s, retrying", resp.status_code)
+                except Exception as exc:
+                    log.warning("Nous token poll: network error (%s), retrying", exc)
 
     async def get_access_token(self) -> str:
         if not self._tokens:
