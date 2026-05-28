@@ -197,7 +197,11 @@ async def ingest_trigger():
 
 @app.get("/nous/auth")
 async def nous_auth_start():
-    return await nous_auth.token_manager.start_device_flow()
+    try:
+        return await nous_auth.token_manager.start_device_flow()
+    except Exception as exc:
+        log.error("Nous device flow failed: %s", exc)
+        return JSONResponse(status_code=503, content={"error": "Nous Portal unavailable", "details": str(exc)})
 
 
 @app.get("/nous/auth/status")

@@ -188,3 +188,36 @@ async def test_nous_auth_starts_flow(ac):
     assert body["user_code"] == "TEST-1234"
     assert "verification_uri" in body
     fake_manager.start_device_flow.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_nous_auth_start_portal_error(ac):
+    client, _, __, ___ = ac
+
+    fake_manager = MagicMock()
+    fake_manager.start_device_flow = AsyncMock(side_effect=Exception("Connection refused"))
+
+    with patch("main.nous_auth") as mock_nous_auth:
+        mock_nous_auth.token_manager = fake_manager
+        resp = await client.get("/nous/auth")
+
+    assert resp.status_code == 503
+    body = resp.json()
+    assert "error" in body
+
+
+@pytest.mark.asyncio
+async def test_nous_auth_status_authenticated(ac):
+    client, _, __, ___ = ac
+
+    fake_manager = MagicMock()
+    fake_manager.auth_status.return_value = {"authenticated": True, "expires_at": 1234567890}
+
+    with patch("main.nous_auth") as mock_nous_auth:
+        mock_nous_auth.token_manager = fake_manager
+        resp = await client.get("/nous/auth/status")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["authenticated"] is True
+    assert body["expires_at"] == 1234567890
