@@ -14,8 +14,7 @@ Docker stacks for Synology DS925+ NAS, managed via Synology Container Manager.
 | `portainer/` | Docker management UI | `9000` | `https://…:19000` |
 | `uptime-kuma/` | Service health monitor | `3001` | `https://…:13001` |
 | `watchtower/` | Auto-update containers + LINE notification sidecar | — | — |
-| `my-secretary/` | AI personal assistant bot (LINE) backed by Notion | `5057` | `https://…:15057` |
-| `my-secretary/` | AI personal assistant bot (Telegram) backed by Notion | `5057` | `https://…:8443` |
+| `secretary/` | Personal knowledge base — Notion→Qdrant RAG + n8n Telegram bot | `5065` (query) / `5678` (n8n) | `https://…:15065` / `https://…:15678` |
 | `hermes-agent/` | Autonomous AI agent — Telegram + Discord (NousResearch/hermes-agent) | `5063` (Nginx basic-auth dashboard) | `https://…:15063` |
 | `torrentwatch/` | Daily torrent monitor for bearbit.org — scrapes, filters, LINE alerts | `5059` | `https://…:15059` |
 | `news-feed/` | AI & IT news feed bot — Thai summaries via Claude/DeepSeek, digest to LINE + Telegram, dashboard | `5064` | `https://…:15064` |
@@ -31,8 +30,8 @@ All stacks except `watchtower` are exposed externally via **Synology Reverse Pro
 | maid-tracker | `https://…:15055` | `http://localhost:5055` → internal Nginx → Maid Tracker |
 | portainer | `https://…:19000` | `http://localhost:9000` |
 | uptime-kuma | `https://…:13001` | `http://localhost:3001` |
-| Line my-secretary | `https://…:15057` | `http://localhost:5057` |
-| Telegram my-secretary | `https://…:8443` | `http://localhost:5057` |
+| secretary-query | `https://…:15065` | `http://localhost:5065` |
+| secretary-n8n | `https://…:15678` | `http://localhost:5678` |
 | torrentwatch | `https://…:15059` | `http://localhost:5059` |
 | Hermes | `https://…:15063` | `http://localhost:5063` |
 | news-feed | `https://…:15064` | `http://localhost:5064` |
@@ -47,7 +46,9 @@ All stacks except `watchtower` are exposed externally via **Synology Reverse Pro
 .env                      # deploy.sh + scripts/sync_notion.py (NAS_*, NOTION_*)
 homepage/.env             # HOMEPAGE_VAR_*, NAS_VOLUME_ROOT
 jellyfin/.env             # NAS_VOLUME_ROOT, NAS_MEDIA_ROOT
-my-secretary/.env         # LINE_SECRETARY_*, TELEGRAM_BOT_TOKEN, NOTION_TOKEN, GROQ/OpenRouter keys
+secretary/.env            # N8N_BASIC_AUTH_USER/PASSWORD, N8N_WEBHOOK_URL
+secretary/ingest/.env     # NOTION_TOKEN, QDRANT_URL, NOTION_SOURCE_TYPE
+secretary/query/.env      # LLM_PROVIDER, ANTHROPIC_API_KEY, COHERE_API_KEY
 maid-tracker/.env         # MAID_LINE_*, MONTHLY_REPORT_TIME
 portainer/                # (no .env needed)
 torrentwatch/.env         # TORRENTWATCH_*, NGINX_BASIC_AUTH_*, NAS_TORRENT_PATH
@@ -60,9 +61,13 @@ news-feed/.env            # ANTHROPIC_API_KEY, OPENROUTER_API_KEY, LINE_CHANNEL_
 ```bash
 # First time: copy each template and fill in real values
 cp .env.example .env
-for d in homepage jellyfin my-secretary maid-tracker torrentwatch uptime-kuma watchtower hermes-agent news-feed; do
+for d in homepage jellyfin maid-tracker torrentwatch uptime-kuma watchtower hermes-agent news-feed; do
   cp "$d/.env.example" "$d/.env"
 done
+# secretary has sub-service envs
+cp secretary/.env.example secretary/.env
+cp secretary/ingest/.env.example secretary/ingest/.env
+cp secretary/query/.env.example secretary/query/.env
 ```
 
 All `.env` files are gitignored — never commit them. `.env.example` files are tracked as templates.
@@ -98,7 +103,7 @@ After uploading files to the NAS via `deploy.sh`, register each stack in Synolog
 2. Click **Create**
 3. Fill in:
    - **Project Name** — e.g. `homepage`
-   - **Path** — point to the stack directory on NAS, e.g. `/volume1/docker/homepage`
+   - **Path** — point to the stack directory on NAS, e.g. `/volume2/docker/homepage`
      Container Manager will automatically detect `docker-compose.yml` in that path
 4. Click **Next** → review the compose config → click **Build**
 5. Container Manager pulls images and starts the containers
@@ -114,6 +119,6 @@ After uploading files to the NAS via `deploy.sh`, register each stack in Synolog
 - **Watchtower** — runs two services: the updater and a Python sidecar that tails Watchtower logs via raw Docker socket HTTP and pushes LINE notifications. The sidecar is excluded from auto-updates via `com.centurylinklabs.watchtower.enable=false`.
 - **Portainer** — standard CE deployment on port 9000. HTTPS is handled upstream by Synology Reverse Proxy. Data persisted in `portainer_data` named volume.
 - **TorrentWatch** — FastAPI + Python 3.12 daily torrent monitor that scrapes bearbit.org on a schedule, filters today's uploads by seed/leech threshold and per-source keywords, and surfaces results via a mobile-first dark web UI. Supports multiple listing URLs (each with its own keyword list), cover images, file size/count display, and two download modes: proxy .torrent to browser or save directly to a NAS watch folder. LINE push notifications on keyword matches. Auto scrape schedule configurable (30 min / 1 hour, night window or all day). Data older than 7 days is cleaned up weekly. Port 5059 internally; external HTTPS via Synology Reverse Proxy on port 15059.
-- **my-secretary** — FastAPI + Python 3.12 personal AI secretary bot backed by Notion. Supports LINE and Telegram via a shared `handle_message(user_id, text, push_fn)` core — platform differences are encapsulated in the webhook handler and push callback. State is isolated per platform: LINE users keyed as `U{id}`, Telegram users as `tg_{chat_id}`. Telegram webhook registered automatically on startup if `TELEGRAM_BOT_TOKEN` and `TELEGRAM_WEBHOOK_URL` are set. Uses OpenAI-compatible API — configurable to Groq (`AI_PROVIDER=groq`, free tier) or OpenRouter (`AI_PROVIDER=openrouter`, pay-per-use). On startup, `PageCache` reads all Notion page headers into memory and refreshes them every 10 minutes. On every message, runs Notion keyword search and a parallel fallback header scan. Write operations go through a confirmation step. Port 5057 internally; external HTTPS via Synology Reverse Proxy on port 15057.
+- **secretary** — Personal knowledge base stack: Notion pages ingested into Qdrant via BGE-M3 hybrid embeddings (dense 1024d + sparse), served as a RAG API (FastAPI :5065), orchestrated by n8n Telegram bot workflows (:5678). Ingest is a one-shot container (`restart: "no"`) run manually or triggered via `POST /ingest-trigger`. Hybrid search uses RRF fusion; optional Cohere `rerank-multilingual-v3.0` improves cross-lingual (Thai query / English content) accuracy. LLM provider switchable via `LLM_PROVIDER`: `anthropic` (default), `openrouter`, or `nous` (OAuth Device Code). BGE-M3 model (~2GB) cached in `hf_cache` volume shared between ingest and query containers.
 - **news-feed** — Single-container FastAPI + APScheduler + SQLite stack. Fetches RSS from 7 sources (TechCrunch AI, VentureBeat, The Verge, Ars Technica, GSMArena, 9to5Mac, Android Authority), summarises articles in Thai via Anthropic Claude (default) or OpenRouter/DeepSeek (switchable at runtime via dashboard). Sends digest to LINE + Telegram at configurable times (default 07:00/12:00/18:00 Bangkok). Dashboard at port 5064 provides Source Health, News Timeline, AI Price Tracker, Leaderboard, Digest History, and Schedule Config. Data persisted in `news_feed_data` named volume. No external reverse proxy — LAN access only.
 

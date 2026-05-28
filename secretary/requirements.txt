@@ -1,7 +1,0 @@
-notion-client>=2.2.0
-qdrant-client>=1.9.0
-FlagEmbedding>=1.2.10
-tiktoken>=0.7.0
-tenacity>=8.2.0
-python-dotenv>=1.0.0
-pytest>=8.0.0

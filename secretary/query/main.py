@@ -35,7 +35,9 @@ Answer based ONLY on the numbered context blocks provided.
 Rules:
 - Respond in the SAME LANGUAGE as the question (Thai or English)
 - Use ONLY the provided context, no outside knowledge
-- If context is insufficient, say:
+- If context contains PARTIAL information, report what was found rather than saying "not found"
+- Only say "not found" when ALL context blocks are completely unrelated to the question
+- If context is truly insufficient, say:
     Thai: "ไม่พบข้อมูลในบันทึก ลองเพิ่มหัวข้อ: <suggested topic>"
     English: "Not found in notes. Consider adding: <suggested topic>"
 - Cite sources inline with [1] [2] [3]
@@ -71,7 +73,7 @@ app = FastAPI(title="secretary-query", lifespan=lifespan)
 class QueryRequest(BaseModel):
     question: str
     top_k_retrieve: int = 20
-    top_k_final: int = 3
+    top_k_final: int = 6
     session_id: str = ""
 
 

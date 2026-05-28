@@ -80,6 +80,9 @@ pytest -v   # 22 tests
 Stubs: `FlagEmbedding` + `torch` + `cohere` mocked at `sys.modules` level (no model download needed).
 Note: `ASGITransport` does not fire ASGI lifespan — conftest directly assigns `main.qdrant` and `main.app.state.model`.
 
+## /ingest-trigger Behavior
+The `POST /ingest-trigger` endpoint in `secretary-query` runs `ingest.py` as a subprocess (at `/ingest/ingest.py` inside the container, bind-mounted from `./ingest/ingest.py`). It inherits env vars from both `query/.env` and `ingest/.env`. State DB writes to `query-data` volume (`/data/ingest_state.db`), separate from the `ingest_state` volume used by `docker compose run --rm secretary-ingest`.
+
 ## Gaps / TODOs
 - n8n workflow JSON not exported/committed yet
 - Ollama service present in compose but no workflow uses it currently

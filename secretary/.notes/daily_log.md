@@ -1,5 +1,17 @@
 # Secretary Stack — Daily Log
 
+## 2026-05-28 (session 2)
+
+### งานที่ทำ
+- Diagnosed RAG inconsistency: ปัญหาหลักคือ retrieval ไม่ใช่ system prompt — `top_k_final=3` ตัด chunks ที่ถูกต้องทิ้ง + Thai query vs English content semantic gap
+- Fix 1: เพิ่ม `top_k_final` default จาก 3 → 6 ใน `query/main.py:QueryRequest`
+- Fix 2: ปรับ SYSTEM_PROMPT — เพิ่ม rule "ถ้า partial context มีอยู่ให้รายงานที่เจอแทนการบอกว่าไม่พบ" เพื่อลด false "ไม่พบข้อมูล"
+- สร้าง `secretary/README.md` (ไม่เคยมีมาก่อน) — ครอบคลุม quickstart, services, volumes, env files, LLM providers, API endpoints, ingest commands
+- อัปเดต root `README.md`: ลบ `my-secretary/` (ถูกลบออกจาก project แล้ว), เพิ่ม `secretary/` row, อัปเดต Reverse Proxy, env vars, Architecture Notes
+
+### ยังต้องทำ
+- Enable Cohere reranking (`COHERE_API_KEY` ใน `query/.env`) เพื่อแก้ cross-lingual Thai/English ได้ดีที่สุด
+
 ## 2026-05-27
 
 ### งานที่ทำ
@@ -44,6 +56,12 @@
 5. First ingest: `docker compose run --rm secretary-ingest`
 
 ## 2026-05-28
+
+### Fix /ingest-trigger (POST /ingest-trigger → python /ingest/ingest.py not found)
+- **Root cause:** `/ingest-trigger` in `query/main.py:185` runs `python /ingest/ingest.py` as subprocess inside `secretary-query` container, but `ingest.py` was moved to `secretary/ingest/` subdirectory as a separate service — file never copied into query container
+- **Fix 1:** `docker-compose.yml` — added `./ingest/ingest.py:/ingest/ingest.py:ro` bind mount + `./ingest/.env` env_file to `secretary-query` service (ingest env vars needed by subprocess)
+- **Fix 2:** `query/requirements.txt` — added `notion-client>=2.2.0`, `tiktoken>=0.7.0`, `tenacity>=8.2.0` (required by ingest.py but missing from query container)
+- **Note:** State DB (`STATE_DB=/data/ingest_state.db`) when triggered via `/ingest-trigger` writes to query-data volume (`/volume2/docker/secretary/query-data/`), separate from `ingest_state` volume used by standalone `secretary-ingest` service — incremental sync works independently per trigger method
 
 ### Nous Portal OAuth integration
 - Removed `norus` provider from llm_client.py, main.py, .env.example, and tests

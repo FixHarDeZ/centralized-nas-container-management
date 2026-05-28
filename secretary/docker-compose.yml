@@ -41,10 +41,13 @@ services:
     restart: unless-stopped
     ports:
       - "5065:5065"
-    env_file: ./query/.env
+    env_file:
+      - ./query/.env
+      - ./ingest/.env
     volumes:
       - hf_cache:/root/.cache/huggingface
       - /volume2/docker/secretary/query-data:/data
+      - ./ingest/ingest.py:/ingest/ingest.py:ro
     depends_on:
       - qdrant
 
