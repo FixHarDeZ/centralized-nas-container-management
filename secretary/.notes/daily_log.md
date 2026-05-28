@@ -42,3 +42,16 @@
 3. `docker compose up -d --build secretary-query`
 4. Smoke test: `curl http://<NAS_HOST>:15065/health`
 5. First ingest: `docker compose run --rm secretary-ingest`
+
+## 2026-05-28
+
+### Nous Portal OAuth integration
+- Removed `norus` provider from llm_client.py, main.py, .env.example, and tests
+- Created `nous_auth.py` (NousTokenManager) — handles OAuth 2.0 Device Code flow, token persistence to /data/nous_token.json, auto-refresh with 60s buffer
+- `_poll_for_token` retries on network errors and unexpected status codes (logs warning, continues)
+- Added `GET /nous/auth` endpoint — starts device flow, returns {verification_uri, user_code, expires_in, message}; returns 503 if Nous Portal unreachable
+- Added `GET /nous/auth/status` endpoint — returns {authenticated: bool, expires_at: int|null}
+- Added `nous` provider block in llm_client.py — creates fresh AsyncOpenAI client per call (Bearer token from nous_auth), inference URL: https://inference-api.nousresearch.com/v1
+- OAuth endpoints: portal.nousresearch.com/api/oauth/device/code + /token, client_id=hermes-cli
+- Token stored in /data/nous_token.json (atomic write), NOUS_TOKEN_FILE env var for override
+- Setup: deploy → GET /nous/auth → open verification_uri in browser → enter user_code → approve → token auto-saved

@@ -43,7 +43,24 @@ n8n (:15678) → Telegram bot
 - First run downloads ~2GB to `hf_cache` volume (shared between ingest + query)
 
 ## LLM Providers (query service)
-`LLM_PROVIDER` env: `anthropic` (default) | `openrouter` | `norus`
+`LLM_PROVIDER` env: `anthropic` (default) | `openrouter` | `nous`
+
+| Provider | Auth | Notes |
+|---|---|---|
+| `anthropic` | `ANTHROPIC_API_KEY` | Default |
+| `openrouter` | `OPENROUTER_API_KEY` | Via OpenAI-compat API |
+| `nous` | OAuth 2.0 Device Code | Token persisted to `/data/nous_token.json`. Setup: `GET /nous/auth` → browser → approve |
+
+### Nous OAuth Endpoints
+- `GET /nous/auth` — starts device flow; returns `{verification_uri, user_code, expires_in, message}`; 503 if Nous Portal unreachable
+- `GET /nous/auth/status` — returns `{authenticated: bool, expires_at: int|null}`
+
+### Nous Auth Implementation
+- File: `secretary/query/nous_auth.py` (`NousTokenManager`)
+- OAuth endpoints: `portal.nousresearch.com/api/oauth/device/code` + `/token`, `client_id=hermes-cli`
+- Inference URL: `https://inference-api.nousresearch.com/v1`
+- Token auto-refresh with 60s buffer; `_poll_for_token` retries on network errors
+- Override token path: `NOUS_TOKEN_FILE` env var
 
 ## Reranking
 Optional Cohere reranking: set `COHERE_API_KEY` in `query/.env`. Model: `rerank-multilingual-v3.0`.
@@ -58,7 +75,7 @@ Run from `secretary/query/`:
 ```bash
 pip install -r requirements-dev.txt
 pip install -r requirements.txt
-pytest -v   # 9 tests
+pytest -v   # 22 tests
 ```
 Stubs: `FlagEmbedding` + `torch` + `cohere` mocked at `sys.modules` level (no model download needed).
 Note: `ASGITransport` does not fire ASGI lifespan — conftest directly assigns `main.qdrant` and `main.app.state.model`.
