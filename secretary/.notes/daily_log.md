@@ -9,8 +9,14 @@
 - สร้าง `secretary/README.md` (ไม่เคยมีมาก่อน) — ครอบคลุม quickstart, services, volumes, env files, LLM providers, API endpoints, ingest commands
 - อัปเดต root `README.md`: ลบ `my-secretary/` (ถูกลบออกจาก project แล้ว), เพิ่ม `secretary/` row, อัปเดต Reverse Proxy, env vars, Architecture Notes
 
-### ยังต้องทำ
-- Enable Cohere reranking (`COHERE_API_KEY` ใน `query/.env`) เพื่อแก้ cross-lingual Thai/English ได้ดีที่สุด
+### Code Cleanup (session 3)
+- Cohere client: ย้ายจาก per-request → `app.state.cohere` init ครั้งเดียวใน lifespan
+- `/ingest-trigger`: เปลี่ยน error response จาก HTTP 200 → HTTP 500
+- Nous client (`llm_client.py`): cache ตาม token string แทน per-call construction
+- Extract `_text_from_openai()` helper — ลบ openrouter/nous duplication
+- `asyncio.Lock` ใน `NousTokenManager.get_access_token` — กัน concurrent refresh stampede
+- `_TERMINAL_OAUTH_ERRORS` constant + stop polling on terminal errors (access_denied ฯลฯ)
+- Deployed และ health check ผ่าน: `{"status":"ok","qdrant_ok":true,"collection_stats":{"points_count":345}}`
 
 ## 2026-05-27
 
