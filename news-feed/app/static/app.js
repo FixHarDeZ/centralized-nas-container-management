@@ -267,7 +267,7 @@ function toggleNewsSort() {
 function _digestBadge(a) {
   if (_sentIds.has(a.id)) return '<span class="digest-badge badge-sent">ส่งแล้ว</span>';
   if (!a.summary_th) return '';
-  const inWindow = new Date(a.fetched_at) >= new Date(Date.now() - 6 * 60 * 60 * 1000);
+  const inWindow = new Date(a.fetched_at) >= new Date(Date.now() - 12 * 60 * 60 * 1000);
   if (inWindow) return '<span class="digest-badge badge-pending">รอส่ง</span>';
   return '<span class="digest-badge badge-expired">พ้น window</span>';
 }

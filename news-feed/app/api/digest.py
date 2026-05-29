@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
 from app.config import get_config
 from app.deps import get_db
-from app.models import get_conn, get_digest_history, get_recent_articles_for_digest, insert_digest_log
+from app.models import get_conn, get_digest_history, get_recent_articles_for_digest, insert_digest_log, select_digest_articles
 from app.notifier import send_digest
 
 router = APIRouter(prefix="/api/digest", tags=["digest"])
@@ -27,7 +27,8 @@ def trigger_digest(x_admin_token: Optional[str] = Header(None)):
     config = get_config()
     conn = get_conn(DB_PATH)
     try:
-        articles = get_recent_articles_for_digest(conn, hours=6, limit=5)
+        candidates = get_recent_articles_for_digest(conn, hours=12, limit=50)
+        articles = select_digest_articles(candidates, sent_ids=set())
         sent = send_digest(articles, config)
         if sent and articles:
             insert_digest_log(
@@ -48,18 +49,17 @@ def test_digest(request: Request):
     config = get_config()
     conn = get_conn(db_path)
     try:
-        # Check articles available in wider window for diagnostic info
-        candidates_6h = get_recent_articles_for_digest(conn, hours=6, limit=20)
-        candidates_24h = get_recent_articles_for_digest(conn, hours=24, limit=5)
+        # Check articles available — diagnostic info
+        candidates_12h = get_recent_articles_for_digest(conn, hours=12, limit=50)
+        candidates_24h = get_recent_articles_for_digest(conn, hours=24, limit=50)
 
-        # Dedup like the scheduler does
         history = get_digest_history(conn, limit=20)
         sent_ids = {aid for entry in history for aid in entry["article_ids"]}
-        articles_6h = [a for a in candidates_6h if a["id"] not in sent_ids][:5]
+        articles_12h = select_digest_articles(candidates_12h, sent_ids)
 
-        # Use 24h window as fallback if nothing in 6h
-        articles = articles_6h or [a for a in candidates_24h if a["id"] not in sent_ids][:5]
-        used_window = "6h" if articles_6h else ("24h" if articles else "none")
+        # Use 24h window as fallback if nothing in 12h
+        articles = articles_12h or select_digest_articles(candidates_24h, sent_ids)
+        used_window = "12h" if articles_12h else ("24h" if articles else "none")
 
         sent = send_digest(articles, config)
         if sent and articles:
@@ -73,7 +73,7 @@ def test_digest(request: Request):
             "sent_to": sent,
             "article_count": len(articles),
             "window_used": used_window,
-            "available_6h": len(candidates_6h),
+            "available_12h": len(candidates_12h),
             "available_24h": len(candidates_24h),
             "already_sent_ids": len(sent_ids),
         }
