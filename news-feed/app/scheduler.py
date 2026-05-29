@@ -13,6 +13,7 @@ from app.models import (
     get_digest_history,
     get_recent_articles_for_digest,
     insert_digest_log,
+    select_digest_articles,
 )
 from app.notifier import send_digest
 from app.pricer import fetch_prices
@@ -47,8 +48,8 @@ def setup_scheduler(db_path: str) -> BackgroundScheduler:
         try:
             history = get_digest_history(conn, limit=20)
             sent_ids = {aid for entry in history for aid in entry["article_ids"]}
-            candidates = get_recent_articles_for_digest(conn, hours=6, limit=20)
-            articles = [a for a in candidates if a["id"] not in sent_ids][:5]
+            candidates = get_recent_articles_for_digest(conn, hours=12, limit=50)
+            articles = select_digest_articles(candidates, sent_ids)
             sent = send_digest(articles, config)
             if sent and articles:
                 insert_digest_log(

@@ -191,6 +191,27 @@ def insert_digest_log(conn: sqlite3.Connection, sent_at: str,
     return cur.lastrowid
 
 
+def select_digest_articles(
+    candidates: list[dict],
+    sent_ids: set[str],
+    max_per_source: int = 2,
+    total: int = 5,
+) -> list[dict]:
+    """Pick up to `total` articles from candidates, max `max_per_source` per source, skipping sent_ids."""
+    source_counts: dict[str, int] = {}
+    selected = []
+    for a in candidates:
+        if a["id"] in sent_ids:
+            continue
+        if source_counts.get(a["source"], 0) >= max_per_source:
+            continue
+        selected.append(a)
+        source_counts[a["source"]] = source_counts.get(a["source"], 0) + 1
+        if len(selected) == total:
+            break
+    return selected
+
+
 def get_sent_article_ids(conn: sqlite3.Connection) -> set[str]:
     rows = conn.execute("SELECT article_ids FROM digest_log").fetchall()
     result: set[str] = set()

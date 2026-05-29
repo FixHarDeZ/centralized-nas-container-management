@@ -3,7 +3,7 @@ from app.models import (
     get_articles, get_article, get_article_count, get_last_fetch_time,
     get_source_counts, upsert_price, get_prices, set_free_expiry,
     insert_digest_log, get_digest_history, get_recent_articles_for_digest,
-    get_sent_article_ids,
+    get_sent_article_ids, select_digest_articles,
     delete_all_articles, delete_articles_older_than,
 )
 
@@ -108,6 +108,47 @@ def test_get_sent_article_ids(db, sample_article):
     insert_digest_log(db, "2026-05-23T12:00:00", ["def456"], "telegram")
     result = get_sent_article_ids(db)
     assert result == {"abc123", "xyz789", "def456"}
+
+
+def _make_article(id, source):
+    return {"id": id, "source": source, "title": "T", "url": f"https://x.com/{id}",
+            "published": "2026-05-23T07:00:00", "fetched_at": "2026-05-23T07:01:00", "summary_th": "s"}
+
+
+def test_select_digest_articles_basic():
+    candidates = [_make_article("a1", "tc"), _make_article("a2", "vb"), _make_article("a3", "tc")]
+    result = select_digest_articles(candidates, sent_ids=set())
+    assert [a["id"] for a in result] == ["a1", "a2", "a3"]
+
+
+def test_select_digest_articles_skips_sent():
+    candidates = [_make_article("a1", "tc"), _make_article("a2", "vb")]
+    result = select_digest_articles(candidates, sent_ids={"a1"})
+    assert [a["id"] for a in result] == ["a2"]
+
+
+def test_select_digest_articles_quota_per_source():
+    candidates = [_make_article(f"tc{i}", "techcrunch") for i in range(5)]
+    result = select_digest_articles(candidates, sent_ids=set(), max_per_source=2, total=5)
+    assert len(result) == 2
+    assert all(a["source"] == "techcrunch" for a in result)
+
+
+def test_select_digest_articles_quota_mixed():
+    candidates = (
+        [_make_article(f"tc{i}", "techcrunch") for i in range(3)] +
+        [_make_article(f"vb{i}", "venturebeat") for i in range(3)]
+    )
+    result = select_digest_articles(candidates, sent_ids=set(), max_per_source=2, total=5)
+    ids = [a["id"] for a in result]
+    assert ids == ["tc0", "tc1", "vb0", "vb1"]
+
+
+def test_select_digest_articles_respects_total():
+    candidates = [_make_article(f"a{i}", f"src{i}") for i in range(10)]
+    result = select_digest_articles(candidates, sent_ids=set(), total=3)
+    assert len(result) == 3
+
 
 
 def test_get_recent_articles_no_summary(db, sample_article):
