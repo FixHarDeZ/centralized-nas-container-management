@@ -470,6 +470,111 @@
     header{padding:.8rem 1rem}
     th,td{padding:.55rem .55rem}
   }
+
+  /* ---------- Mobile bottom nav (hidden on desktop) ---------- */
+  .mobile-bottom-nav {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    height: 56px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    z-index: 30;
+    display: none;
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+  .mob-nav-item {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 2px;
+    border: none; background: transparent; cursor: pointer;
+    min-height: 44px; font-family: inherit;
+    transition: background .12s;
+  }
+  .mob-nav-item .mob-nav-icon { font-size: 1.15rem; line-height: 1; }
+  .mob-nav-item .mob-nav-label { font-size: .52rem; font-weight: 600; color: var(--text-3); }
+  .mob-nav-item.active { background: var(--primary-50); }
+  .mob-nav-item.active .mob-nav-label { color: var(--primary); }
+
+  /* ---------- Mobile drawer ---------- */
+  .mobile-drawer-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(15,23,42,.4); z-index: 40;
+  }
+  .mobile-drawer-overlay.open { display: block; }
+  .mobile-drawer-sheet {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: var(--surface);
+    border-radius: 1.25rem 1.25rem 0 0;
+    padding: .75rem 1rem 2rem;
+  }
+  .mobile-drawer-handle {
+    width: 36px; height: 4px;
+    background: var(--border); border-radius: 99px;
+    margin: 0 auto .75rem;
+  }
+  .mobile-drawer-item {
+    display: flex; align-items: center; gap: .75rem;
+    padding: .7rem .5rem; border-radius: .5rem;
+    font-size: .9rem; color: var(--text); font-weight: 500;
+    border: none; background: transparent; cursor: pointer;
+    width: 100%; text-align: left; font-family: inherit;
+    transition: background .12s;
+  }
+  .mobile-drawer-item:hover { background: var(--bg-tint); }
+
+  /* ---------- Price table expand row (all breakpoints, shown on demand) ---------- */
+  .price-expand-row { display: none; background: var(--surface-2); }
+  .price-expand-row.open { display: table-row; }
+  .price-expand-detail { font-size: .78rem; color: var(--text-3); padding: .1rem 0; }
+  .price-expand-detail > div { margin-bottom: .2rem; display: flex; gap: .5rem; align-items: baseline; }
+  .price-expand-detail .lbl { color: var(--muted); font-size: .72rem; width: 68px; flex-shrink: 0; }
+  .price-expand-detail code {
+    font-family: ui-monospace,"SF Mono",Menlo,Monaco,Consolas,monospace;
+    font-size: .72rem; background: var(--bg-tint);
+    padding: .1rem .35rem; border-radius: .3rem; color: var(--text-2);
+  }
+
+  /* Provider sub-label inside model cell (hidden on desktop) */
+  .price-cell-provider { display: none; font-size: .72rem; color: var(--text-3); margin-top: 1px; }
+
+  /* ========== Mobile responsive (max-width: 640px) ========== */
+  @media (max-width:640px) {
+    /* Show bottom nav, hide top nav */
+    .mobile-bottom-nav { display: flex; }
+    nav { display: none !important; }
+
+    /* Content doesn't hide behind bottom nav */
+    main { padding-bottom: 5rem; }
+
+    /* Header compact */
+    header { padding: .75rem 1rem; }
+
+    /* News controls: search full-width, tools row below */
+    #news-search { width: 100%; flex: none; min-width: unset; }
+    #news-source-filter,
+    #news-sort-btn,
+    #fetch-now-btn { flex: 1; min-width: 0; min-height: 40px; }
+    #fetch-now-status { width: 100%; order: 99; }
+
+    /* Price tracker: search full-width */
+    #price-search { width: 100%; flex: none; min-width: unset; }
+    #price-provider-filter,
+    #price-sort { flex: 1; min-width: 0; }
+
+    /* Price table: hide Model ID(2), Provider(3), Context(6), Updated(7) */
+    /* Remaining visible: Model(1) | Prompt/1M(4) | Completion/1M(5) */
+    #price-table th:nth-child(2), #price-table td:nth-child(2),
+    #price-table th:nth-child(3), #price-table td:nth-child(3),
+    #price-table th:nth-child(6), #price-table td:nth-child(6),
+    #price-table th:nth-child(7), #price-table td:nth-child(7) { display: none; }
+
+    /* Show provider under model name + make row tappable */
+    .price-cell-provider { display: block; }
+    #price-table tbody tr:not(.price-expand-row) { cursor: pointer; }
+
+    /* Leaderboard jump bar: horizontal scroll, no wrap */
+    .lb-jump { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; top: 52px; }
+    .lb-jump::-webkit-scrollbar { display: none; }
+    .lb-card { scroll-margin-top: 116px; }
+  }
 </style>
 </head>
 <body>
