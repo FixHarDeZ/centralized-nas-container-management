@@ -166,12 +166,25 @@ function showTab(id) {
   document.getElementById(id).classList.add('active');
   const tabs = ['source-health','news-timeline','price-tracker','ai-leaderboard','digest-history','schedule-config'];
   document.querySelectorAll('nav button')[tabs.indexOf(id)].classList.add('active');
+  // sync mobile bottom nav
+  const mobTabMap = { 'news-timeline': 'mob-news', 'ai-leaderboard': 'mob-board', 'price-tracker': 'mob-prices' };
+  document.querySelectorAll('.mob-nav-item').forEach(b => b.classList.remove('active'));
+  const mobBtn = document.getElementById(mobTabMap[id]);
+  if (mobBtn) mobBtn.classList.add('active');
   if (id === 'source-health') { if (!_sourceHealthLoaded) loadSourceHealth(); }
   if (id === 'news-timeline') loadNews();
   if (id === 'price-tracker') loadPrices();
   if (id === 'ai-leaderboard') loadLeaderboard();
   if (id === 'digest-history') loadDigestHistory();
   if (id === 'schedule-config') loadScheduleConfig();
+}
+
+function openMobileDrawer() {
+  document.getElementById('mobile-drawer-overlay').classList.add('open');
+}
+
+function closeMobileDrawer() {
+  document.getElementById('mobile-drawer-overlay').classList.remove('open');
 }
 
 async function loadHealth() {
@@ -625,3 +638,4 @@ document.addEventListener('click', e => {
 // Init
 loadHealth();
 loadSourceHealth();
+if (window.matchMedia('(max-width:640px)').matches) showTab('news-timeline');
