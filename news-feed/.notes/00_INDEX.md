@@ -11,7 +11,7 @@
 Two-container stack:
 - **Nginx (`news-feed-nginx`)** — reverse proxy on port 5064 with HTTP Basic Auth via `/etc/nginx/.htpasswd`
 - **FastAPI (`news-feed`)** — internal app exposed only on Docker network port 8000
-- **APScheduler BackgroundScheduler** — fetch (60min), price (6h), digest (cron)
+- **APScheduler BackgroundScheduler** — fetch (60min), price (6h), digest (cron), cleanup (cron 03:30 — retention)
 - **SQLite** at `/data/news.db` (WAL mode)
 - **Schedule config** at `/data/schedule.json` — อ่านทุก job run, เปลี่ยนได้ live
 
@@ -41,7 +41,10 @@ Two-container stack:
 |--------|------|------|-------------|
 | GET | `/` | — | Dashboard (index.html) |
 | GET | `/api/news` | — | List articles (source/date/limit filters) |
+| DELETE | `/api/news` | basic-auth | Clear ALL articles → `{deleted}` |
+| POST | `/api/news/cleanup` | basic-auth | Apply retention now (delete older than retention_days) → `{deleted, retention_days}` |
 | GET | `/api/news/{id}` | — | Single article |
+| POST | `/api/fetch/now` | basic-auth | Force fetch immediately → `{new_articles}` (no token; `/trigger` still token-gated) |
 | GET | `/api/prices` | — | AI model prices (provider/sort filters) |
 | GET | `/api/schedule` | — | Current config |
 | POST | `/api/schedule` | — | Update digest times, sources, LLM model |
@@ -80,6 +83,7 @@ Two-container stack:
 | OPENROUTER_API_KEY | ถ้าใช้ openrouter |
 | DIGEST_TIMES | 07:00,12:00,18:00 |
 | ENABLED_SOURCES | comma-separated source keys |
+| RETENTION_DAYS | จำนวนวันที่เก็บข่าว (default 30) — cleanup job ลบที่เก่ากว่านี้ทุก 03:30 |
 | DATA_DIR | /data (inside container) |
 
 ---
@@ -97,6 +101,11 @@ Two-container stack:
 - **Leaderboard categorization**: `paidPositive` ใช้ `combined > 0` (ไม่ใช่ `prompt>0 && complete>0`) — ป้องกัน mixed-price models (prompt=$0, complete=$5) หายไปจากทุก category
 - **Source Health 422**: `/api/news` มี `le=100` แต่ frontend เคยขอ `limit=500` → 422 → silent error → blank chart. Fix: เพิ่ม `/api/news/sources` endpoint ที่ใช้ aggregate SQL แทน
 - **Basic Auth sidecar**: dashboard/API public access ต้องผ่าน `news-feed-nginx`; ไฟล์ `nginx/.htpasswd` เป็น secret, gitignored, ต้องสร้างบนเครื่อง deploy/NAS เอง
+- **`retention_days` backward-compat**: `schedule.json` เก่าไม่มี key นี้ — consumer ทุกตัวใช้ `.get("retention_days", 30)` จึงไม่ต้องลบ `schedule.json`; ค่าจะถูกเขียนลงไฟล์เมื่อกด Save Config ครั้งแรก
+- **Watchlist เป็น client-side**: เก็บใน `localStorage['nf_watchlist']` (array ของ model_id) — per-browser ไม่ sync ข้าม device, ไม่มี backend state
+- **Leaderboard render split**: `loadLeaderboard()` fetch → set `_lbPrices` → `renderLeaderboard()`; bookmark/collapse เรียก `renderLeaderboard()` ตรงๆ ไม่ re-fetch
+- **`POST /api/fetch/now` อาจนาน**: fetch + summarize หลาย source > 60s → nginx ตั้ง `proxy_read_timeout 300s` กัน 504 (server ทำงานต่อแม้ client timeout)
+- **Summarizer fail silent**: ถ้า OpenRouter model ถูก rate-limit, retry หมดแล้ว skip article เงียบๆ — ไม่มี log error. ตรวจสอบด้วย `POST /api/digest/test` ดู `available_6h`; ถ้า = 0 ทั้งที่ timeline มีข่าว → summarizer fail. Re-summarize backlog ด้วย `docker exec` Python script
 
 ---
 
@@ -115,3 +124,5 @@ Two-container stack:
 | 2026-05-25 | Feature: Leaderboard zone badges, 🏆 Top Hit, 🧠 Top Intelligence sections (ELO-based, longest-match-first) |
 | 2026-05-25 | Feature: Free model expiry — `free_expires_at` DB column + `PATCH /api/prices/{id}/expiry` + color-coded badge (urgent/warn/ok) + inline 📅 edit in Leaderboard |
 | 2026-05-25 | Infra: เพิ่ม `nginx:alpine` basic-auth reverse proxy on port 5064; app เปลี่ยนเป็น internal-only `expose: 8000` และ `nginx/.htpasswd` เป็น local/NAS secret |
+| 2026-05-27 | Fix: Telegram digest debug (`POST /api/digest/test`), News sort toggle, Test Digest button |
+| 2026-05-29 | Feature: Top Hit Cheapest/Free cards, leaderboard jump bar + collapsible + watchlist (localStorage), news retention (`RETENTION_DAYS` + cleanup job + `DELETE /api/news` + `POST /api/news/cleanup`), `POST /api/fetch/now`, Xiaomi→CN zone fix, news sort by published date. 56 tests |

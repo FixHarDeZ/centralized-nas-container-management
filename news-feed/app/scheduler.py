@@ -7,7 +7,13 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from app.config import get_config  # DB_PATH removed — db_path passed in
 from app.fetcher import fetch_all
-from app.models import get_conn, get_digest_history, get_recent_articles_for_digest, insert_digest_log
+from app.models import (
+    delete_articles_older_than,
+    get_conn,
+    get_digest_history,
+    get_recent_articles_for_digest,
+    insert_digest_log,
+)
 from app.notifier import send_digest
 from app.pricer import fetch_prices
 
@@ -25,6 +31,15 @@ def setup_scheduler(db_path: str) -> BackgroundScheduler:
         logger.info("price_job starting")
         count = fetch_prices(db_path)
         logger.info("price_job done: %d models upserted", count)
+
+    def _cleanup_job() -> None:
+        days = int(get_config().get("retention_days", 30))
+        conn = get_conn(db_path)
+        try:
+            deleted = delete_articles_older_than(conn, days)
+            logger.info("cleanup_job done: %d articles older than %dd deleted", deleted, days)
+        finally:
+            conn.close()
 
     def _digest_job() -> None:
         config = get_config()
@@ -61,6 +76,14 @@ def setup_scheduler(db_path: str) -> BackgroundScheduler:
         _price_job,
         trigger=IntervalTrigger(hours=6),
         id="price_job",
+        replace_existing=True,
+        max_instances=1,
+    )
+
+    scheduler.add_job(
+        _cleanup_job,
+        trigger=CronTrigger(hour=3, minute=30),
+        id="cleanup_job",
         replace_existing=True,
         max_instances=1,
     )

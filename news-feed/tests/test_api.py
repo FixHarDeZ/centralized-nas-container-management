@@ -127,3 +127,47 @@ def test_patch_expiry_invalid_date(client):
     conn.close()
     r = client.patch("/api/prices/openai/gpt-4o/expiry", json={"expires_at": "not-a-date"})
     assert r.status_code == 422
+
+
+def test_clear_all_news(client):
+    r = client.delete("/api/news")
+    assert r.status_code == 200
+    assert r.json()["deleted"] >= 1
+    assert client.get("/api/health").json()["article_count"] == 0
+
+
+def test_news_cleanup_removes_old(client):
+    from app.models import get_conn, insert_article
+    conn = get_conn(app.state.db_path)
+    insert_article(conn, {
+        "id": "ancient", "source": "techcrunch_ai", "title": "Ancient",
+        "url": "https://example.com/ancient", "published": "2000-01-01T00:00:00Z",
+        "fetched_at": "2000-01-01T00:00:00Z",
+    })
+    conn.close()
+    r = client.post("/api/news/cleanup")
+    assert r.status_code == 200
+    assert r.json()["deleted"] >= 1
+    assert client.get("/api/news/ancient").status_code == 404
+
+
+def test_fetch_now(client, monkeypatch):
+    import app.api.fetch as fetch_mod
+    monkeypatch.setattr(fetch_mod, "fetch_all", lambda db_path, config: ["a", "b"])
+    r = client.post("/api/fetch/now")
+    assert r.status_code == 200
+    assert r.json()["new_articles"] == 2
+
+
+def test_post_schedule_retention(client, tmp_path, monkeypatch):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    r = client.post("/api/schedule", json={"retention_days": 7})
+    assert r.status_code == 200
+    assert r.json()["retention_days"] == 7
+
+
+def test_post_schedule_retention_invalid_dropped(client, tmp_path, monkeypatch):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    r = client.post("/api/schedule", json={"retention_days": "abc"})
+    assert r.status_code == 200
+    assert r.json()["retention_days"] == 30  # invalid value dropped, default kept

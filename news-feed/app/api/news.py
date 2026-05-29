@@ -3,8 +3,15 @@ from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
+from app.config import get_config
 from app.deps import get_db
-from app.models import get_article, get_articles, get_source_counts
+from app.models import (
+    delete_all_articles,
+    delete_articles_older_than,
+    get_article,
+    get_articles,
+    get_source_counts,
+)
 
 router = APIRouter(prefix="/api/news", tags=["news"])
 
@@ -16,6 +23,21 @@ def list_source_counts(
 ):
     """Return article count per source for the last N hours (default 24h)."""
     return get_source_counts(db, hours=hours)
+
+
+@router.post("/cleanup")
+def cleanup_old_articles(db: Annotated[sqlite3.Connection, Depends(get_db)]):
+    """Apply retention now — delete articles older than configured retention_days."""
+    days = int(get_config().get("retention_days", 30))
+    deleted = delete_articles_older_than(db, days)
+    return {"deleted": deleted, "retention_days": days}
+
+
+@router.delete("")
+def clear_all_articles(db: Annotated[sqlite3.Connection, Depends(get_db)]):
+    """Delete every article (protected by nginx basic auth)."""
+    deleted = delete_all_articles(db)
+    return {"deleted": deleted}
 
 
 @router.get("")

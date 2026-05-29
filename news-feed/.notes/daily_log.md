@@ -2,6 +2,68 @@
 
 ---
 
+## 2026-05-29 — Debug: Summarizer fail silent (rate-limit) + backlog re-summarization
+
+### Root cause
+- `meta-llama/llama-3.3-70b-instruct:free` ถูก Venice (OpenRouter upstream) rate-limit ตั้งแต่ **2026-05-27T16:35Z** — summarizer retry หมดแล้ว silent skip ทุก article ไม่มี log error เลย
+- `schedule.json` บน NAS override `.env` → model จริงที่ใช้คือ free llama ไม่ใช่ deepseek จาก `.env`
+- ผลลัพธ์: articles 53 รายการ (2026-05-28T14:35 – 2026-05-29T01:35) มี `summary_th = NULL` → `get_recent_articles_for_digest` คืน 0 → digest ไม่ส่ง 40+ ชั่วโมง
+
+### Fix
+1. `POST /api/schedule` เปลี่ยน `summarizer_model` เป็น `deepseek/deepseek-chat` (เขียนลง `schedule.json` live)
+2. `docker exec` Python script re-summarize articles ที่ค้าง (2 batch × 30) — null_left=0
+3. `POST /api/digest/test` verify: `sent_to=["telegram"]`, `article_count=5`, `available_6h=20` ✅
+
+### Detection tip
+ดู `available_6h` จาก `POST /api/digest/test` — ถ้า = 0 ทั้งที่ timeline มีข่าว แปลว่า summarizer กำลัง fail
+
+---
+
+## 2026-05-29 — Feature batch: leaderboard nav, Top Hit cards, retention, fetch-now, sort & zone fixes
+
+### 1. Zone fix — Xiaomi & more CN providers
+- `PROVIDER_ZONES` (app.js): เพิ่ม `xiaomi`, `alibaba`, `ernie`, `yi`, `moonshotai`, `kimi`, `z-ai`, `thudm`, `glm`, `stepfun`, `internlm`, `opengvlab` → CN. ก่อนหน้านี้ Xiaomi (โมเดลจีน) ตกไป Others เพราะ prefix ไม่อยู่ใน map
+
+### 2. News Timeline sort bug
+- เดิม `_sortedNews()` แค่ reverse array ตาม order ของ API (อิง published DESC) — ถ้า published เท่ากัน/ผิดรูปแบบจะดูเหมือน sort มั่ว
+- แก้เป็น sort by `new Date(a.published)` ตรงๆ (newest→oldest) แล้วค่อย reverse ตาม toggle → ถูกต้องเสมอไม่ขึ้นกับ order จาก API
+
+### 3. Leaderboard — Top Hit Cheapest + Top Hit Free (cards ใหม่)
+- `_isPopular(modelId)` = match กับ `TOP_HIT_MODELS` (substring)
+- 💸 Top Hit — Cheapest: popular ที่ paid (combined>0) เรียงถูก→แพง top 10
+- 🆓 Top Hit — Free: popular ที่ราคา $0 top 10
+
+### 4. Leaderboard navigation (toggle + jump + watchlist)
+- แยก `loadLeaderboard()` (fetch) ออกจาก `renderLeaderboard()` (render จาก `_lbPrices` cache) — bookmark ไม่ต้อง re-fetch
+- **Jump bar** sticky (`.lb-jump`, `top:104px`) — pill กดแล้ว `scrollIntoView` + auto-expand card (`scroll-margin-top:160px` กัน sticky บัง)
+- **Collapsible cards** — `.lb-head` onclick `toggleLbCard()` toggle `.collapsed` (ซ่อน `.lb-body`, หมุน caret)
+- **Watchlist** — ⭐/☆ ต่อแถว (`_starBtn`), เก็บใน `localStorage['nf_watchlist']` (Set ของ model_id), การ์ด ⭐ My Watchlist ด้านบนสุด. delegated `.star-btn` handler → `toggleBookmark()` → re-render
+- `_rankRow(p, num, priceHtml)` helper รวม row template (มี star) ใช้ทุก card ยกเว้น Free Models (ยังมี 📅 expiry edit เฉพาะตัว)
+- XSS: `escapeAttr()` (escapeHtml + escape `"`) สำหรับ `data-model` attribute
+
+### 5. News retention + clear-all
+- Backend: `config.retention_days` (default 30, env `RETENTION_DAYS`), `schedule.py` allowed_keys + clamp `max(1,int())`
+- `models.delete_articles_older_than(conn, days)` (DELETE WHERE fetched_at < datetime('now','-Nd')), `delete_all_articles(conn)`
+- `scheduler._cleanup_job` CronTrigger 03:30 Bangkok
+- API: `POST /api/news/cleanup` (apply retention now), `DELETE /api/news` (clear all) — ทั้งคู่หลัง nginx basic auth ไม่ต้อง token
+- UI (Schedule Config): input `cfg-retention` + Danger Zone card ปุ่ม `clearAllNews()` มี `confirm()` ก่อนลบ
+
+### 6. Fetch Now button
+- API: `POST /api/fetch/now` (basic-auth, ไม่ต้อง token) คู่กับ `/api/fetch/trigger` เดิม (token)
+- UI: ปุ่ม ⚡ Fetch Now ใน News Timeline → `fetchNow()` → reload news/health/source-health. (ส่ง Telegram ทันที = ปุ่ม 📤 Test Digest เดิมใน Digest History)
+- nginx.conf: เพิ่ม `proxy_read_timeout 300s` กัน 504 ตอน fetch+summarize นาน
+
+### Tests
+- เพิ่ม 7 tests (models: delete_all/delete_old; api: clear-all, cleanup, fetch-now, retention valid/invalid)
+- **56/56 passed** ✅
+- Validation เพิ่ม: boot uvicorn จริง (DATA_DIR temp) ยืนยันทุก endpoint ตอบถูก, node logic test ยืนยัน Top Hit Cheapest/Free + Xiaomi=CN, `node --check app.js` ผ่าน
+- ⚠️ ยังไม่ได้ verify การ render บน browser จริง (ไม่มี browser ใน env) — ตรวจ element-id ใน index.html ครบทุกตัวที่ app.js อ้างถึงแล้ว
+
+### Deploy
+- รอ push + deploy. หมายเหตุ: `schedule.json` บน NAS ไม่มี `retention_days` → consumer ใช้ `.get("retention_days",30)` อยู่แล้ว ไม่ต้องลบไฟล์; จะมีค่าเมื่อกด Save Config ครั้งแรก
+
+---
+
 ## 2026-05-25 (10) — Infra: Nginx basic-auth sidecar for dashboard
 
 ### Changes

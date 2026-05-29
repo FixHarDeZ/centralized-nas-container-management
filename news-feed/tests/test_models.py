@@ -3,6 +3,7 @@ from app.models import (
     get_articles, get_article, get_article_count, get_last_fetch_time,
     get_source_counts, upsert_price, get_prices, set_free_expiry,
     insert_digest_log, get_digest_history, get_recent_articles_for_digest,
+    delete_all_articles, delete_articles_older_than,
 )
 
 
@@ -157,6 +158,32 @@ def test_set_free_expiry_invalid_date(db):
     import pytest
     with pytest.raises(ValueError, match="Invalid date format"):
         set_free_expiry(db, "openai/gpt-4o", "31-12-2025")
+
+
+def test_delete_all_articles(db, sample_article):
+    insert_article(db, sample_article)
+    assert get_article_count(db) == 1
+    deleted = delete_all_articles(db)
+    assert deleted == 1
+    assert get_article_count(db) == 0
+
+
+def test_delete_articles_older_than(db):
+    # Old article (fetched 40 days ago) and a fresh one
+    insert_article(db, {
+        "id": "old1", "source": "techcrunch_ai", "title": "Old",
+        "url": "https://example.com/old", "published": "2026-01-01T00:00:00Z",
+        "fetched_at": "2026-01-01T00:00:00Z",
+    })
+    insert_article(db, {
+        "id": "new1", "source": "techcrunch_ai", "title": "New",
+        "url": "https://example.com/new", "published": "2026-05-29T00:00:00Z",
+        "fetched_at": __import__("datetime").datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+    })
+    deleted = delete_articles_older_than(db, days=30)
+    assert deleted == 1
+    assert get_article(db, "old1") is None
+    assert get_article(db, "new1") is not None
 
 
 def test_upsert_price_preserves_free_expires_at(db):

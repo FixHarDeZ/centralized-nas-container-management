@@ -4,6 +4,8 @@ let allPrices = [];
 let _shownPrices = [];
 let _priceZoneFilter = '';
 let _freeModels = [];
+let _lbPrices = [];
+let _watchlist = new Set(JSON.parse(localStorage.getItem('nf_watchlist') || '[]'));
 
 const PROVIDER_ZONES = {
   'openai':       { zone: 'US', flag: '🇺🇸', label: 'US' },
@@ -18,15 +20,27 @@ const PROVIDER_ZONES = {
   'writer':       { zone: 'US', flag: '🇺🇸', label: 'US' },
   'deepseek':     { zone: 'CN', flag: '🇨🇳', label: 'CN' },
   'qwen':         { zone: 'CN', flag: '🇨🇳', label: 'CN' },
+  'alibaba':      { zone: 'CN', flag: '🇨🇳', label: 'CN' },
   'baidu':        { zone: 'CN', flag: '🇨🇳', label: 'CN' },
+  'ernie':        { zone: 'CN', flag: '🇨🇳', label: 'CN' },
   '01-ai':        { zone: 'CN', flag: '🇨🇳', label: 'CN' },
+  'yi':           { zone: 'CN', flag: '🇨🇳', label: 'CN' },
   'minimax':      { zone: 'CN', flag: '🇨🇳', label: 'CN' },
   'moonshot':     { zone: 'CN', flag: '🇨🇳', label: 'CN' },
+  'moonshotai':   { zone: 'CN', flag: '🇨🇳', label: 'CN' },
+  'kimi':         { zone: 'CN', flag: '🇨🇳', label: 'CN' },
   'zhipuai':      { zone: 'CN', flag: '🇨🇳', label: 'CN' },
+  'z-ai':         { zone: 'CN', flag: '🇨🇳', label: 'CN' },
+  'thudm':        { zone: 'CN', flag: '🇨🇳', label: 'CN' },
+  'glm':          { zone: 'CN', flag: '🇨🇳', label: 'CN' },
   'baichuan':     { zone: 'CN', flag: '🇨🇳', label: 'CN' },
   'iflytek':      { zone: 'CN', flag: '🇨🇳', label: 'CN' },
   'bytedance':    { zone: 'CN', flag: '🇨🇳', label: 'CN' },
   'tencent':      { zone: 'CN', flag: '🇨🇳', label: 'CN' },
+  'xiaomi':       { zone: 'CN', flag: '🇨🇳', label: 'CN' },
+  'stepfun':      { zone: 'CN', flag: '🇨🇳', label: 'CN' },
+  'internlm':     { zone: 'CN', flag: '🇨🇳', label: 'CN' },
+  'opengvlab':    { zone: 'CN', flag: '🇨🇳', label: 'CN' },
   'mistralai':    { zone: 'EU', flag: '🇪🇺', label: 'EU' },
   'aleph-alpha':  { zone: 'EU', flag: '🇪🇺', label: 'EU' },
   'silo':         { zone: 'EU', flag: '🇪🇺', label: 'EU' },
@@ -73,6 +87,58 @@ function escapeHtml(s) {
   const d = document.createElement('div');
   d.textContent = String(s ?? '');
   return d.innerHTML;
+}
+
+function escapeAttr(s) {
+  return escapeHtml(s).replace(/"/g, '&quot;');
+}
+
+function _combined(p) {
+  return (p.prompt_price || 0) + (p.complete_price || 0);
+}
+
+function _isPopular(modelId) {
+  const mid = (modelId || '').toLowerCase();
+  return TOP_HIT_MODELS.some(sub => mid.includes(sub));
+}
+
+function _starBtn(modelId) {
+  const on = _watchlist.has(modelId);
+  return `<button class="star-btn ${on ? 'on' : ''}" data-model="${escapeAttr(modelId)}" title="${on ? 'นำออกจาก watchlist' : 'เก็บเข้า watchlist'}">${on ? '★' : '☆'}</button>`;
+}
+
+function _rankRow(p, num, priceHtml) {
+  const z = getZone(p.model_id);
+  return `<div class="rank-row">
+    ${num != null ? `<span class="rank-num">${num}</span>` : ''}
+    ${_starBtn(p.model_id)}
+    <span class="rank-name">${escapeHtml(p.name)} <span class="zone-badge">${z.flag} ${z.label}</span><br><small style="color:#64748b">${escapeHtml(p.model_id)}</small></span>
+    <span class="rank-price">${priceHtml}</span>
+  </div>`;
+}
+
+function _priceHtml(p) {
+  const c = _combined(p);
+  return c > 0 ? `$${c.toFixed(3)}/1M` : '<span class="free-tag">FREE</span>';
+}
+
+function toggleLbCard(id) {
+  const c = document.getElementById(id);
+  if (c) c.classList.toggle('collapsed');
+}
+
+function jumpToCard(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove('collapsed');
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function toggleBookmark(modelId) {
+  if (_watchlist.has(modelId)) _watchlist.delete(modelId);
+  else _watchlist.add(modelId);
+  localStorage.setItem('nf_watchlist', JSON.stringify([..._watchlist]));
+  renderLeaderboard();
 }
 
 function getZone(modelId) {
@@ -159,7 +225,13 @@ async function loadNews() {
 }
 
 function _sortedNews(articles) {
-  return _newsSortNewest ? [...articles] : [...articles].reverse();
+  // Sort explicitly by published date so the toggle is correct regardless of API order
+  const byNewest = [...articles].sort((a, b) => {
+    const ta = new Date(a.published).getTime() || 0;
+    const tb = new Date(b.published).getTime() || 0;
+    return tb - ta;
+  });
+  return _newsSortNewest ? byNewest : byNewest.reverse();
 }
 
 function _updateSortBtn() {
@@ -249,17 +321,28 @@ async function loadLeaderboard() {
     api('/api/prices?sort=combined_asc'),
     api('/api/prices/updated'),
   ]);
+  _lbPrices = prices;
   const updatedEl = document.getElementById('leaderboard-updated');
-  if (updatedData.updated_at) {
-    updatedEl.textContent = `🕐 Last updated: ${new Date(updatedData.updated_at).toLocaleString('th-TH')}`;
-  } else {
-    updatedEl.textContent = '🕐 Not yet updated';
-  }
+  updatedEl.textContent = updatedData.updated_at
+    ? `🕐 Last updated: ${new Date(updatedData.updated_at).toLocaleString('th-TH')}`
+    : '🕐 Not yet updated';
+  renderLeaderboard();
+}
 
+function renderLeaderboard() {
+  const empty = '<p style="color:#64748b;font-size:.85rem">No data available</p>';
   // Categorize: free = both prices === 0, paid = combined > 0 (includes mixed-price models)
-  const validPrices = prices.filter(p => (p.prompt_price||0) >= 0 && (p.complete_price||0) >= 0);
+  const validPrices = _lbPrices.filter(p => (p.prompt_price||0) >= 0 && (p.complete_price||0) >= 0);
   const freeModels = validPrices.filter(p => (p.prompt_price||0) === 0 && (p.complete_price||0) === 0);
-  const paidPositive = validPrices.filter(p => (p.prompt_price||0) + (p.complete_price||0) > 0);
+  const paidPositive = validPrices.filter(p => _combined(p) > 0);
+  const popular = validPrices.filter(p => _isPopular(p.model_id));
+
+  // Watchlist (bookmarked models, persisted in localStorage)
+  const watch = validPrices.filter(p => _watchlist.has(p.model_id));
+  document.getElementById('lb-watchlist-count').textContent = watch.length ? `(${watch.length})` : '';
+  document.getElementById('leaderboard-watchlist').innerHTML = watch.length
+    ? watch.map(p => _rankRow(p, null, _priceHtml(p))).join('')
+    : '<p style="color:#64748b;font-size:.85rem">ยังไม่มีโมเดลใน watchlist — กด ☆ ที่โมเดลใดก็ได้เพื่อเก็บ</p>';
 
   // Top Hit: match validPrices against TOP_HIT_MODELS in order (first substring match wins per entry)
   const topHitMatched = [];
@@ -268,21 +351,24 @@ async function loadLeaderboard() {
     if (found) topHitMatched.push(found);
     if (topHitMatched.length >= 10) break;
   }
-  const topHitEl = document.getElementById('leaderboard-top-hit');
-  topHitEl.innerHTML = topHitMatched.length ? topHitMatched.map((p, i) => {
-    const z = getZone(p.model_id);
-    const combined = (p.prompt_price||0) + (p.complete_price||0);
-    return `<div class="rank-row">
-      <span class="rank-num">${i+1}</span>
-      <span class="rank-name">${escapeHtml(p.name)} <span class="zone-badge">${z.flag} ${z.label}</span><br><small style="color:#64748b">${escapeHtml(p.model_id)}</small></span>
-      <span class="rank-price">${combined > 0 ? '$' + combined.toFixed(3) + '/1M' : '<span style="color:#22c55e;font-weight:600">FREE</span>'}</span>
-    </div>`;
-  }).join('') : '<p style="color:#64748b;font-size:.85rem">No data available</p>';
+  document.getElementById('leaderboard-top-hit').innerHTML = topHitMatched.length
+    ? topHitMatched.map((p, i) => _rankRow(p, i+1, _priceHtml(p))).join('') : empty;
+
+  // Top Hit Cheapest: popular paid models, cheapest first (validPrices already combined_asc)
+  const hitCheap = popular.filter(p => _combined(p) > 0).slice(0, 10);
+  document.getElementById('leaderboard-tophit-cheap').innerHTML = hitCheap.length
+    ? hitCheap.map((p, i) => _rankRow(p, i+1, `$${_combined(p).toFixed(3)}/1M`)).join('')
+    : '<p style="color:#64748b;font-size:.85rem">No popular paid models available</p>';
+
+  // Top Hit Free: popular models priced at $0
+  const hitFree = popular.filter(p => _combined(p) === 0).slice(0, 10);
+  document.getElementById('leaderboard-tophit-free').innerHTML = hitFree.length
+    ? hitFree.map((p, i) => _rankRow(p, i+1, '<span class="free-tag">FREE</span>')).join('')
+    : '<p style="color:#64748b;font-size:.85rem">No popular free models available</p>';
 
   // Top Intelligence: match validPrices against MODEL_ELO_SCORES, sort desc by ELO, top 10
   const eloMatched = [];
-  const sortedEloEntries = Object.entries(MODEL_ELO_SCORES)
-    .sort((a, b) => b[0].length - a[0].length);
+  const sortedEloEntries = Object.entries(MODEL_ELO_SCORES).sort((a, b) => b[0].length - a[0].length);
   for (const p of validPrices) {
     const mid = p.model_id.toLowerCase();
     for (const [sub, elo] of sortedEloEntries) {
@@ -293,31 +379,18 @@ async function loadLeaderboard() {
     }
   }
   eloMatched.sort((a, b) => b.elo - a.elo);
-  const topElo = eloMatched.slice(0, 10);
-  const intelEl = document.getElementById('leaderboard-intelligence');
-  intelEl.innerHTML = topElo.length ? topElo.map(({ p, elo }, i) => {
-    const z = getZone(p.model_id);
-    const combined = (p.prompt_price||0) + (p.complete_price||0);
-    return `<div class="rank-row">
-      <span class="rank-num">${i+1}</span>
-      <span class="rank-name">${escapeHtml(p.name)} <span class="zone-badge">${z.flag} ${z.label}</span><br><small style="color:#64748b">${escapeHtml(p.model_id)}</small></span>
-      <span class="rank-price"><span style="color:#a78bfa;font-size:.78rem">ELO ${elo}</span> ${combined > 0 ? '· $' + combined.toFixed(3) + '/1M' : '· <span style="color:#22c55e;font-weight:600">FREE</span>'}</span>
-    </div>`;
-  }).join('') : '<p style="color:#64748b;font-size:.85rem">No data available</p>';
+  document.getElementById('leaderboard-intelligence').innerHTML = eloMatched.length
+    ? eloMatched.slice(0, 10).map(({ p, elo }, i) =>
+        _rankRow(p, i+1, `<span style="color:#a78bfa;font-size:.78rem">ELO ${elo}</span> ${_combined(p) > 0 ? '· $' + _combined(p).toFixed(3) + '/1M' : '· <span class="free-tag">FREE</span>'}`)
+      ).join('') : empty;
 
   // Top 10 Cheapest: paid positive only (already sorted combined_asc)
   const cheapList = paidPositive.slice(0, 10);
-  const cheapEl = document.getElementById('leaderboard-cheap');
-  cheapEl.innerHTML = cheapList.length ? cheapList.map((p, i) => {
-    const z = getZone(p.model_id);
-    return `<div class="rank-row">
-      <span class="rank-num">${i+1}</span>
-      <span class="rank-name">${escapeHtml(p.name)} <span class="zone-badge">${z.flag} ${z.label}</span><br><small style="color:#64748b">${escapeHtml(p.model_id)}</small></span>
-      <span class="rank-price">$${((p.prompt_price||0)+(p.complete_price||0)).toFixed(3)}/1M</span>
-    </div>`;
-  }).join('') : '<p style="color:#64748b;font-size:.85rem">No paid models available</p>';
+  document.getElementById('leaderboard-cheap').innerHTML = cheapList.length
+    ? cheapList.map((p, i) => _rankRow(p, i+1, `$${_combined(p).toFixed(3)}/1M`)).join('')
+    : '<p style="color:#64748b;font-size:.85rem">No paid models available</p>';
 
-  // Free Models: all free models (no rank numbers)
+  // Free Models: all free models (no rank numbers, with expiry editing)
   _freeModels = freeModels;
   const freeEl = document.getElementById('leaderboard-free');
   if (!freeModels.length) {
@@ -327,6 +400,7 @@ async function loadLeaderboard() {
       const z = getZone(p.model_id);
       const expiryStatus = freeExpiryStatus(p.free_expires_at);
       return `<div class="rank-row" data-idx="${i}">
+        ${_starBtn(p.model_id)}
         <span class="rank-name">${escapeHtml(p.name)} <span class="zone-badge">${z.flag} ${z.label}</span>
           <br><small style="color:#64748b">${escapeHtml(p.model_id)}</small>
         </span>
@@ -343,15 +417,9 @@ async function loadLeaderboard() {
 
   // Top 5 Most Expensive: paid positive only, sorted reverse
   const expensiveList = [...paidPositive].reverse().slice(0, 5);
-  const expEl = document.getElementById('leaderboard-expensive');
-  expEl.innerHTML = expensiveList.length ? expensiveList.map((p, i) => {
-    const z = getZone(p.model_id);
-    return `<div class="rank-row">
-      <span class="rank-num">${i+1}</span>
-      <span class="rank-name">${escapeHtml(p.name)} <span class="zone-badge">${z.flag} ${z.label}</span><br><small style="color:#64748b">${escapeHtml(p.model_id)}</small></span>
-      <span class="rank-price" style="color:#ef4444">$${((p.prompt_price||0)+(p.complete_price||0)).toFixed(3)}/1M</span>
-    </div>`;
-  }).join('') : '<p style="color:#64748b;font-size:.85rem">No paid models available</p>';
+  document.getElementById('leaderboard-expensive').innerHTML = expensiveList.length
+    ? expensiveList.map((p, i) => _rankRow(p, i+1, `<span style="color:#ef4444">$${_combined(p).toFixed(3)}/1M</span>`)).join('')
+    : '<p style="color:#64748b;font-size:.85rem">No paid models available</p>';
 }
 
 async function loadDigestHistory() {
@@ -407,6 +475,7 @@ async function loadScheduleConfig() {
     </label>`).join('');
   document.getElementById('cfg-provider').value = cfg.summarizer_provider || 'anthropic';
   document.getElementById('cfg-model').value = cfg.summarizer_model || '';
+  document.getElementById('cfg-retention').value = cfg.retention_days || 30;
 }
 
 async function saveSchedule() {
@@ -414,11 +483,12 @@ async function saveSchedule() {
   const sources = [...document.querySelectorAll('#source-toggles input:checked')].map(i=>i.value);
   const provider = document.getElementById('cfg-provider').value;
   const model = document.getElementById('cfg-model').value;
+  const retention = parseInt(document.getElementById('cfg-retention').value, 10) || 30;
   try {
     const r = await fetch('/api/schedule', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ digest_times: times, enabled_sources: sources, summarizer_provider: provider, summarizer_model: model }),
+      body: JSON.stringify({ digest_times: times, enabled_sources: sources, summarizer_provider: provider, summarizer_model: model, retention_days: retention }),
     });
     if (!r.ok) throw new Error(r.status);
     document.getElementById('save-status').textContent = '✓ Saved';
@@ -428,6 +498,50 @@ async function saveSchedule() {
     document.getElementById('save-status').style.color = '#ef4444';
   }
   setTimeout(()=>document.getElementById('save-status').textContent='', 3000);
+}
+
+async function fetchNow() {
+  const btn = document.getElementById('fetch-now-btn');
+  const statusEl = document.getElementById('fetch-now-status');
+  btn.disabled = true;
+  const orig = btn.textContent;
+  btn.textContent = '⏳ Fetching…';
+  statusEl.textContent = '';
+  statusEl.style.color = '';
+  try {
+    const r = await fetch('/api/fetch/now', { method: 'POST' });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || r.status);
+    statusEl.textContent = `✓ ดึงข่าวใหม่ ${data.new_articles} รายการ`;
+    statusEl.style.color = 'var(--success)';
+    loadNews();
+    loadHealth();
+    refreshSourceHealth();
+  } catch (e) {
+    statusEl.textContent = `✗ Error: ${e.message}`;
+    statusEl.style.color = 'var(--danger)';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = orig;
+  }
+}
+
+async function clearAllNews() {
+  if (!confirm('แน่ใจหรือไม่? ข่าวทั้งหมดจะถูกลบและกู้คืนไม่ได้')) return;
+  const statusEl = document.getElementById('clear-status');
+  statusEl.textContent = '⏳ กำลังลบ…';
+  statusEl.style.color = '';
+  try {
+    const r = await fetch('/api/news', { method: 'DELETE' });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || r.status);
+    statusEl.textContent = `✓ ลบแล้ว ${data.deleted} ข่าว`;
+    statusEl.style.color = 'var(--success)';
+    loadHealth();
+  } catch (e) {
+    statusEl.textContent = `✗ Error: ${e.message}`;
+    statusEl.style.color = 'var(--danger)';
+  }
 }
 
 // Copy button handler (delegated)
@@ -461,6 +575,14 @@ document.addEventListener('click', e => {
     btn.textContent = '✓';
     _copyTimers.set(btn, setTimeout(() => { btn.textContent = '📋'; }, 1500));
   }).catch(err => console.error('Copy failed:', err));
+});
+
+// Watchlist star handler (delegated)
+document.addEventListener('click', e => {
+  const btn = e.target.closest('.star-btn');
+  if (!btn) return;
+  const id = btn.dataset.model;
+  if (id) toggleBookmark(id);
 });
 
 // Set expiry button handler (delegated)
