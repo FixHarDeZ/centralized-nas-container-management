@@ -721,6 +721,42 @@
   </div>
 </main>
 <footer style="display:none" id="footer-info-old">–</footer>
+<!-- ===== Mobile Bottom Navigation ===== -->
+<div id="mobile-bottom-nav" class="mobile-bottom-nav">
+  <button id="mob-news" class="mob-nav-item active" onclick="showTab('news-timeline')">
+    <span class="mob-nav-icon">📰</span>
+    <span class="mob-nav-label">News</span>
+  </button>
+  <button id="mob-board" class="mob-nav-item" onclick="showTab('ai-leaderboard')">
+    <span class="mob-nav-icon">🏆</span>
+    <span class="mob-nav-label">Board</span>
+  </button>
+  <button id="mob-prices" class="mob-nav-item" onclick="showTab('price-tracker')">
+    <span class="mob-nav-icon">💰</span>
+    <span class="mob-nav-label">Prices</span>
+  </button>
+  <button class="mob-nav-item" onclick="openMobileDrawer()">
+    <span class="mob-nav-icon">⋯</span>
+    <span class="mob-nav-label">More</span>
+  </button>
+</div>
+
+<!-- ===== Mobile Drawer ===== -->
+<div id="mobile-drawer-overlay" class="mobile-drawer-overlay" onclick="closeMobileDrawer()">
+  <div class="mobile-drawer-sheet" onclick="event.stopPropagation()">
+    <div class="mobile-drawer-handle"></div>
+    <button class="mobile-drawer-item" onclick="showTab('digest-history'); closeMobileDrawer()">
+      <span>📋</span> Digest History
+    </button>
+    <button class="mobile-drawer-item" onclick="showTab('source-health'); closeMobileDrawer()">
+      <span>📊</span> Source Health
+    </button>
+    <button class="mobile-drawer-item" onclick="showTab('schedule-config'); closeMobileDrawer()">
+      <span>⚙️</span> Schedule Config
+    </button>
+  </div>
+</div>
+
 <script src="app.js"></script>
 </body>
 </html>
