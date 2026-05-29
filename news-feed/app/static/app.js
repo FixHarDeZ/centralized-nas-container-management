@@ -280,17 +280,38 @@ function filterNews() {
   ));
 }
 
+function togglePriceExpand(idx) {
+  const row = document.getElementById(`price-expand-${idx}`);
+  if (row) row.classList.toggle('open');
+}
+
 function renderPriceTable(prices) {
   _shownPrices = prices;
   const tbody = document.querySelector('#price-table tbody');
   tbody.innerHTML = prices.map((p, i) => {
     const z = getZone(p.model_id);
-    return `<tr>
-    <td>${escapeHtml(p.name)} <span class="zone-badge">${z.flag} ${z.label}</span></td><td><span class="model-id">${escapeHtml(p.model_id)}</span> <button class="copy-btn" data-idx="${i}" title="Copy model ID">📋</button></td><td>${escapeHtml(p.provider)}</td>
+    const ctx = p.context_length ? p.context_length.toLocaleString() + ' tokens' : '–';
+    const updated = p.updated_at ? new Date(p.updated_at).toLocaleString('th-TH') : '–';
+    return `<tr onclick="togglePriceExpand(${i})">
+    <td>
+      ${escapeHtml(p.name)} <span class="zone-badge">${z.flag} ${z.label}</span>
+      <span class="price-cell-provider">${escapeHtml(p.provider)}</span>
+    </td>
+    <td><span class="model-id">${escapeHtml(p.model_id)}</span> <button class="copy-btn" data-idx="${i}" title="Copy model ID">📋</button></td>
+    <td>${escapeHtml(p.provider)}</td>
     <td>$${(p.prompt_price||0).toFixed(3)}</td>
     <td>$${(p.complete_price||0).toFixed(3)}</td>
     <td>${p.context_length ? p.context_length.toLocaleString() : '–'}</td>
     <td>${p.updated_at ? new Date(p.updated_at).toLocaleString('th-TH') : '–'}</td>
+  </tr>
+  <tr class="price-expand-row" id="price-expand-${i}">
+    <td colspan="7">
+      <div class="price-expand-detail">
+        <div><span class="lbl">Model ID</span><code>${escapeHtml(p.model_id)}</code></div>
+        <div><span class="lbl">Context</span><span>${ctx}</span></div>
+        <div><span class="lbl">Updated</span><span>${updated}</span></div>
+      </div>
+    </td>
   </tr>`;
   }).join('');
 }
@@ -580,6 +601,7 @@ document.addEventListener('click', e => {
   const btn = e.target.closest('.copy-btn');
   if (!btn) return;
   if (btn.classList.contains('set-expiry-btn')) return;
+  e.stopPropagation();  // prevent row expand toggle
   const idx = parseInt(btn.dataset.idx, 10);
   const modelId = _shownPrices[idx]?.model_id;
   if (!modelId) return;
