@@ -22,7 +22,7 @@ Two-container stack:
 | File | Responsibility |
 |------|---------------|
 | `app/config.py` | SOURCES dict, `get_config()`, `update_config()`, DB_PATH |
-| `app/models.py` | SQLite CRUD — articles, prices, digest_log |
+| `app/models.py` | SQLite CRUD — articles, prices, digest_log; `select_digest_articles()`, `get_sent_article_ids()` |
 | `app/deps.py` | FastAPI `get_db` dependency |
 | `app/fetcher.py` | RSS → dedup → body → summarize → insert |
 | `app/summarizer.py` | Anthropic SDK / OpenRouter httpx, retry 3x |
@@ -41,6 +41,7 @@ Two-container stack:
 |--------|------|------|-------------|
 | GET | `/` | — | Dashboard (index.html) |
 | GET | `/api/news` | — | List articles (source/date/limit filters) |
+| GET | `/api/news/sent-ids` | — | All article IDs that appear in any digest_log entry |
 | DELETE | `/api/news` | basic-auth | Clear ALL articles → `{deleted}` |
 | POST | `/api/news/cleanup` | basic-auth | Apply retention now (delete older than retention_days) → `{deleted, retention_days}` |
 | GET | `/api/news/{id}` | — | Single article |
@@ -105,7 +106,7 @@ Two-container stack:
 - **Watchlist เป็น client-side**: เก็บใน `localStorage['nf_watchlist']` (array ของ model_id) — per-browser ไม่ sync ข้าม device, ไม่มี backend state
 - **Leaderboard render split**: `loadLeaderboard()` fetch → set `_lbPrices` → `renderLeaderboard()`; bookmark/collapse เรียก `renderLeaderboard()` ตรงๆ ไม่ re-fetch
 - **`POST /api/fetch/now` อาจนาน**: fetch + summarize หลาย source > 60s → nginx ตั้ง `proxy_read_timeout 300s` กัน 504 (server ทำงานต่อแม้ client timeout)
-- **Summarizer fail silent**: ถ้า OpenRouter model ถูก rate-limit, retry หมดแล้ว skip article เงียบๆ — ไม่มี log error. ตรวจสอบด้วย `POST /api/digest/test` ดู `available_6h`; ถ้า = 0 ทั้งที่ timeline มีข่าว → summarizer fail. Re-summarize backlog ด้วย `docker exec` Python script
+- **Summarizer fail silent**: ถ้า OpenRouter model ถูก rate-limit, retry หมดแล้ว skip article เงียบๆ — ไม่มี log error. ตรวจสอบด้วย `POST /api/digest/test` ดู `available_12h`; ถ้า = 0 ทั้งที่ timeline มีข่าว → summarizer fail. Re-summarize backlog ด้วย `docker exec` Python script
 - **Mobile bottom nav**: แสดงเฉพาะ `@media (max-width:640px)` — desktop nav ซ่อนใน media query. `showTab()` sync active state ผ่าน `mobTabMap` (3 primary tabs เท่านั้น; drawer tabs ไม่มี bottom nav button)
 - **Price table expand row**: `togglePriceExpand(idx)` ใช้ `_shownPrices[idx]` (ไม่ใช่ `allPrices`) — copy button ต้อง `e.stopPropagation()` เพื่อกัน row expand ขึ้นมาพร้อมกัน
 - **Provider badge บน mobile**: `.price-cell-provider` span inject ใน `renderPriceTable()` มี `display:none` ใน base CSS, `display:block` ใน media query เท่านั้น — col 3 (Provider) ซ่อนบน mobile แต่ยังอยู่ใน DOM
@@ -130,3 +131,4 @@ Two-container stack:
 | 2026-05-27 | Fix: Telegram digest debug (`POST /api/digest/test`), News sort toggle, Test Digest button |
 | 2026-05-29 | Feature: Top Hit Cheapest/Free cards, leaderboard jump bar + collapsible + watchlist (localStorage), news retention (`RETENTION_DAYS` + cleanup job + `DELETE /api/news` + `POST /api/news/cleanup`), `POST /api/fetch/now`, Xiaomi→CN zone fix, news sort by published date. 56 tests |
 | 2026-05-29 | Mobile layout: bottom nav bar (News/Board/Prices/More), bottom drawer (Digest/Health/Config), responsive Price table (3-col + tap-to-expand), stacked news controls. CSS `@media(max-width:640px)` only — desktop unchanged. |
+| 2026-05-29 | Digest status badge on News Timeline (ส่งแล้ว/รอส่ง/พ้น window); `GET /api/news/sent-ids`; digest window 6h→12h; max 2 articles/source/digest via `select_digest_articles()`. 65 tests. |
