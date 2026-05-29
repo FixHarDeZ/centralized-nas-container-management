@@ -375,6 +375,62 @@
     font-family:inherit;
   }
 
+  /* ---------- Leaderboard jump bar ---------- */
+  .lb-jump{
+    display:flex;gap:.4rem;flex-wrap:wrap;
+    padding:.55rem .65rem;margin-bottom:1rem;
+    background:var(--surface);
+    border:1px solid var(--border-soft);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow-sm);
+    position:sticky;top:104px;z-index:15;
+  }
+  .lb-pill{
+    background:var(--surface-2);
+    border:1px solid var(--border-soft);
+    color:var(--text-2);
+    padding:.3rem .7rem;
+    border-radius:var(--radius-pill);
+    cursor:pointer;
+    font-size:.76rem;font-weight:550;
+    transition:background .12s ease, color .12s ease, border-color .12s ease;
+    font-family:inherit;white-space:nowrap;
+  }
+  .lb-pill:hover{ background:var(--primary-50); color:var(--primary-700); border-color:var(--primary-100); }
+
+  /* ---------- Collapsible leaderboard cards ---------- */
+  .lb-card{ scroll-margin-top:160px; }
+  .lb-head{ cursor:pointer; user-select:none; display:flex; align-items:center; gap:.5rem; }
+  .lb-head:hover{ color:var(--text-2); }
+  .lb-caret{ display:inline-block; transition:transform .15s ease; font-size:.7rem; color:var(--muted); }
+  .lb-card.collapsed .lb-caret{ transform:rotate(-90deg); }
+  .lb-card.collapsed .lb-body{ display:none; }
+
+  /* ---------- Watchlist star ---------- */
+  .star-btn{
+    background:transparent;border:none;cursor:pointer;
+    font-size:.95rem;line-height:1;
+    padding:.1rem .25rem;flex-shrink:0;
+    color:var(--muted);
+    transition:transform .08s ease;
+  }
+  .star-btn:hover{ transform:scale(1.2); }
+  .star-btn.on{ color:#f59e0b; }
+  .free-tag{ color:var(--success);font-weight:700; }
+
+  /* ---------- Danger zone ---------- */
+  button.btn-danger{
+    background:var(--danger);color:#fff;border:none;
+    padding:.55rem 1.05rem;border-radius:var(--radius-sm);
+    cursor:pointer;font-size:.85rem;font-weight:600;
+    box-shadow:0 1px 2px rgba(220,38,38,.25);
+    transition:background .15s ease, transform .05s ease;
+    font-family:inherit;
+  }
+  button.btn-danger:hover{ background:var(--danger-700); }
+  button.btn-danger:active{ transform:translateY(1px); }
+  .danger-card{ border-color:#fecaca!important; background:var(--danger-50); }
+
   /* ---------- Source toggles container ---------- */
   #source-toggles label{
     display:inline-flex;align-items:center;
@@ -446,6 +502,8 @@
       <input type="text" id="news-search" placeholder="Search articles…" oninput="filterNews()">
       <select id="news-source-filter" onchange="filterNews()"><option value="">All sources</option></select>
       <button id="news-sort-btn" class="btn btn-sm" onclick="toggleNewsSort()" style="white-space:nowrap">🕐 Newest first</button>
+      <button id="fetch-now-btn" class="btn btn-sm" onclick="fetchNow()" style="white-space:nowrap" title="ดึงข่าวตอนนี้ทันที (อาจใช้เวลาสักครู่)">⚡ Fetch Now</button>
+      <span id="fetch-now-status" style="font-size:.82rem"></span>
     </div>
     <div class="card" id="news-list"><h2>News Timeline</h2></div>
   </div>
@@ -471,12 +529,49 @@
     <div class="card"><table id="price-table"><thead><tr><th>Model</th><th>Model ID</th><th>Provider</th><th>Prompt/1M</th><th>Completion/1M</th><th>Context</th><th>Updated</th></tr></thead><tbody></tbody></table></div>
   </div>
   <div id="ai-leaderboard" class="section">
-    <div id="leaderboard-updated" style="color:#64748b;font-size:.8rem;margin-bottom:.75rem"></div>
-    <div class="card"><h2>🏆 Top Hit</h2><div id="leaderboard-top-hit"></div></div>
-    <div class="card"><h2>🧠 Top Intelligence <small style="color:#475569;font-size:.7rem">(Chatbot Arena ELO, approx.)</small></h2><div id="leaderboard-intelligence"></div></div>
-    <div class="card"><h2>Top 10 Cheapest (by combined)</h2><div id="leaderboard-cheap"></div></div>
-    <div class="card"><h2>🆓 Free Models</h2><div id="leaderboard-free"></div></div>
-    <div class="card"><h2>Top 5 Most Expensive</h2><div id="leaderboard-expensive"></div></div>
+    <div id="leaderboard-updated" style="color:#64748b;font-size:.8rem;margin-bottom:.6rem"></div>
+    <div class="lb-jump">
+      <button class="lb-pill" onclick="jumpToCard('lb-watchlist')">⭐ Watchlist</button>
+      <button class="lb-pill" onclick="jumpToCard('lb-tophit')">🏆 Top Hit</button>
+      <button class="lb-pill" onclick="jumpToCard('lb-tophit-cheap')">💸 Hit Cheapest</button>
+      <button class="lb-pill" onclick="jumpToCard('lb-tophit-free')">🆓 Hit Free</button>
+      <button class="lb-pill" onclick="jumpToCard('lb-intel')">🧠 Intelligence</button>
+      <button class="lb-pill" onclick="jumpToCard('lb-cheap')">Cheapest</button>
+      <button class="lb-pill" onclick="jumpToCard('lb-free')">🆓 Free</button>
+      <button class="lb-pill" onclick="jumpToCard('lb-exp')">Expensive</button>
+    </div>
+    <div class="card lb-card" id="lb-watchlist">
+      <h2 class="lb-head" onclick="toggleLbCard('lb-watchlist')"><span class="lb-caret">▾</span>⭐ My Watchlist <small id="lb-watchlist-count" style="color:#475569;font-size:.7rem"></small></h2>
+      <div class="lb-body" id="leaderboard-watchlist"></div>
+    </div>
+    <div class="card lb-card" id="lb-tophit">
+      <h2 class="lb-head" onclick="toggleLbCard('lb-tophit')"><span class="lb-caret">▾</span>🏆 Top Hit</h2>
+      <div class="lb-body" id="leaderboard-top-hit"></div>
+    </div>
+    <div class="card lb-card" id="lb-tophit-cheap">
+      <h2 class="lb-head" onclick="toggleLbCard('lb-tophit-cheap')"><span class="lb-caret">▾</span>💸 Top Hit — Cheapest <small style="color:#475569;font-size:.7rem">(โมเดลดังที่ถูกที่สุด)</small></h2>
+      <div class="lb-body" id="leaderboard-tophit-cheap"></div>
+    </div>
+    <div class="card lb-card" id="lb-tophit-free">
+      <h2 class="lb-head" onclick="toggleLbCard('lb-tophit-free')"><span class="lb-caret">▾</span>🆓 Top Hit — Free <small style="color:#475569;font-size:.7rem">(โมเดลดังที่ฟรี)</small></h2>
+      <div class="lb-body" id="leaderboard-tophit-free"></div>
+    </div>
+    <div class="card lb-card" id="lb-intel">
+      <h2 class="lb-head" onclick="toggleLbCard('lb-intel')"><span class="lb-caret">▾</span>🧠 Top Intelligence <small style="color:#475569;font-size:.7rem">(Chatbot Arena ELO, approx.)</small></h2>
+      <div class="lb-body" id="leaderboard-intelligence"></div>
+    </div>
+    <div class="card lb-card" id="lb-cheap">
+      <h2 class="lb-head" onclick="toggleLbCard('lb-cheap')"><span class="lb-caret">▾</span>Top 10 Cheapest <small style="color:#475569;font-size:.7rem">(by combined)</small></h2>
+      <div class="lb-body" id="leaderboard-cheap"></div>
+    </div>
+    <div class="card lb-card" id="lb-free">
+      <h2 class="lb-head" onclick="toggleLbCard('lb-free')"><span class="lb-caret">▾</span>🆓 Free Models</h2>
+      <div class="lb-body" id="leaderboard-free"></div>
+    </div>
+    <div class="card lb-card" id="lb-exp">
+      <h2 class="lb-head" onclick="toggleLbCard('lb-exp')"><span class="lb-caret">▾</span>Top 5 Most Expensive</h2>
+      <div class="lb-body" id="leaderboard-expensive"></div>
+    </div>
   </div>
   <div id="digest-history" class="section">
     <div class="card">
@@ -504,9 +599,20 @@
       <label>Provider: <select id="cfg-provider"><option value="anthropic">Anthropic</option><option value="openrouter">OpenRouter</option></select></label>&nbsp;
       <label>Model: <input type="text" id="cfg-model" style="width:220px"></label>
     </div>
+    <div class="card">
+      <h2>News Retention</h2>
+      <label>เก็บข่าวไว้ <input type="number" id="cfg-retention" min="1" max="365" style="width:80px"> วัน</label>
+      <small style="color:#64748b;display:block;margin-top:.5rem">ข่าวที่เก่ากว่านี้จะถูกลบอัตโนมัติทุกวันเวลา 03:30 (Bangkok)</small>
+    </div>
     <br>
     <button class="btn" onclick="saveSchedule()">Save Config</button>
     <span id="save-status" style="margin-left:.75rem;font-size:.85rem;color:#22c55e"></span>
+    <div class="card danger-card" style="margin-top:1.5rem">
+      <h2 style="color:var(--danger-700)">⚠️ Danger Zone</h2>
+      <p style="color:var(--text-2);font-size:.85rem;margin-bottom:.75rem">เคลียร์ข่าวทั้งหมดออกจากฐานข้อมูล — ลบแล้วกู้คืนไม่ได้</p>
+      <button class="btn-danger" onclick="clearAllNews()">🗑️ เคลียร์ข่าวทั้งหมด</button>
+      <span id="clear-status" style="margin-left:.75rem;font-size:.85rem"></span>
+    </div>
   </div>
 </main>
 <footer style="display:none" id="footer-info-old">–</footer>

@@ -26,6 +26,7 @@ def _env_defaults() -> dict:
         "enabled_sources": [s.strip() for s in os.getenv("ENABLED_SOURCES", ",".join(SOURCES)).split(",")],
         "summarizer_provider": os.getenv("SUMMARIZER_PROVIDER", "anthropic"),
         "summarizer_model": os.getenv("SUMMARIZER_MODEL", "claude-sonnet-4-6"),
+        "retention_days": int(os.getenv("RETENTION_DAYS", "30")),
     }
 
 

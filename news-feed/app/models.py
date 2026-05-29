@@ -101,6 +101,23 @@ def get_article_count(conn: sqlite3.Connection) -> int:
     return conn.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
 
 
+def delete_articles_older_than(conn: sqlite3.Connection, days: int) -> int:
+    """Delete articles whose fetched_at is older than `days`. Returns rows deleted."""
+    cur = conn.execute(
+        "DELETE FROM articles WHERE fetched_at < datetime('now', ?)",
+        (f"-{int(days)} days",),
+    )
+    conn.commit()
+    return cur.rowcount
+
+
+def delete_all_articles(conn: sqlite3.Connection) -> int:
+    """Delete every article. Returns rows deleted."""
+    cur = conn.execute("DELETE FROM articles")
+    conn.commit()
+    return cur.rowcount
+
+
 def get_last_fetch_time(conn: sqlite3.Connection) -> Optional[str]:
     row = conn.execute("SELECT MAX(fetched_at) FROM articles").fetchone()
     return row[0]  # MAX() returns None on empty table
