@@ -191,6 +191,14 @@ def insert_digest_log(conn: sqlite3.Connection, sent_at: str,
     return cur.lastrowid
 
 
+def get_sent_article_ids(conn: sqlite3.Connection) -> set[str]:
+    rows = conn.execute("SELECT article_ids FROM digest_log").fetchall()
+    result: set[str] = set()
+    for row in rows:
+        result.update(json.loads(row[0]))
+    return result
+
+
 def get_digest_history(conn: sqlite3.Connection, limit: int = 30) -> list[dict]:
     rows = conn.execute(
         "SELECT * FROM digest_log ORDER BY sent_at DESC LIMIT ?", (limit,)
