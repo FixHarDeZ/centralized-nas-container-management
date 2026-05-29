@@ -2,6 +2,88 @@
 
 ---
 
+## 2026-05-29 — Feature: Mobile-Responsive Dashboard Layout
+
+### การเปลี่ยนแปลง
+**เป้าหมาย:** ปรับ dashboard ให้ใช้งานบน smartphone ได้สะดวก — sections หลักที่ใช้บน mobile: News Timeline, Leaderboard, AI Price Tracker
+
+**index.html (CSS)**
+- เพิ่ม CSS สำหรับ `.mobile-bottom-nav` (position:fixed bottom, display:none บน desktop, safe-area-inset-bottom)
+- `.mob-nav-item` min-height 44px (touch target), active state ใช้ `--primary-50`
+- `.mobile-drawer-overlay` / `.mobile-drawer-sheet` / `.mobile-drawer-handle` — bottom sheet drawer
+- `.price-expand-row` / `.price-expand-detail` — expand row สำหรับ price table (ทุก breakpoint)
+- `.price-cell-provider` — provider sub-label ซ่อนบน desktop (display:none), แสดงบน mobile
+- `@media (max-width:640px)`: top nav ซ่อน, bottom nav แสดง, main padding-bottom 5rem, news search full-width, price table ซ่อน columns 2/3/6/7 เหลือ 3 columns, leaderboard jump bar horizontal scroll
+
+**index.html (HTML)**
+- Bottom nav: 4 ปุ่ม (📰 News / 🏆 Board / 💰 Prices / ⋯ More) ids: `mob-news`, `mob-board`, `mob-prices`
+- Drawer: overlay + sheet ด้วย 3 items (Digest History / Source Health / Schedule Config)
+
+**app.js**
+- `showTab()` sync mobile bottom nav active state ผ่าน `mobTabMap`
+- `openMobileDrawer()` / `closeMobileDrawer()` — toggle `.open` class บน overlay
+- Mobile init: `if (window.matchMedia('(max-width:640px)').matches) showTab('news-timeline')` — เริ่มที่ News บน mobile
+- `togglePriceExpand(idx)` — toggle `.open` บน expand row
+- `renderPriceTable()` ปรับใหม่: เพิ่ม `.price-cell-provider` span ในเซลล์โมเดล, render expand row ต่อแต่ละแถว (Model ID, Context, Updated)
+- Copy button handler เพิ่ม `e.stopPropagation()` กัน row expand trigger เมื่อกด copy
+
+### Deploy
+`bash scripts/deploy.sh -s news-feed -y` — build + restart สำเร็จ ✅
+
+### Commits
+- `024069f` Mobile CSS — bottom nav, compact table, responsive controls
+- `d3eb65e` Fix: remove !important on nav hide, touch target 44px
+- `2713814` Bottom nav + drawer HTML
+- `c643973` JS: sync bottom nav, drawer open/close, mobile init
+- `715eb25` Price table compact + expand row
+
+---
+
+## 2026-05-29 — Feature: Digest status badge + 12h window + per-source quota
+
+### Digest status badge on News Timeline
+
+**New API**: `GET /api/news/sent-ids` → `{"sent_ids": [...]}` — aggregate all IDs in `digest_log` table
+
+**models.py**:
+- `get_sent_article_ids(conn)` — query all `digest_log.article_ids`, flatten to `set[str]`
+
+**app.js**:
+- `_sentIds = new Set()` module-level, populated by `loadNews()` via `Promise.all([articles, sent-ids])`
+- `_digestBadge(a)` helper — 3 states:
+  - **ส่งแล้ว** (green) — `_sentIds.has(a.id)`
+  - **รอส่ง** (yellow) — `summary_th != null` AND `fetched_at` within last 12h
+  - **พ้น window** (gray) — `summary_th != null` AND older than 12h
+
+**index.html**: `.badge-sent` (green), `.badge-pending` (yellow), `.badge-expired` (gray via CSS vars)
+
+### Digest logic improvement: 12h window + max 2/source
+
+**Problem**: 6h window → ข่าวดึกตีหนึ่งหลุดถ้า 07:00 queue เต็ม; ไม่มี diversity control ทำให้ source เดียวจับ 5 slot
+
+**models.py**: `select_digest_articles(candidates, sent_ids, max_per_source=2, total=5)` — iterate candidates, skip sent/quota-full, collect up to total
+
+**scheduler.py**: `hours=6→12`, `limit=20→50`, ใช้ `select_digest_articles()`
+
+**digest.py `/trigger`**: `hours=6→12`, ใช้ `select_digest_articles(sent_ids=set())` (force resend intentional)
+
+**digest.py `/test`**: primary window `6h→12h`, fallback ยังเป็น 24h, field `available_6h→available_12h`, ทั้งสองเส้นใช้ quota
+
+### Tests
+- 5 tests ใหม่สำหรับ `select_digest_articles` (basic, skips-sent, quota-per-source, mixed, total-limit)
+- 4 tests ใหม่สำหรับ `get_sent_article_ids` + `/api/news/sent-ids`
+- **65/65 passed** ✅
+
+### Commits
+- `76b3824` feat: digest status badge (sent/pending/expired) on news timeline
+- `19ae945` fix: badge split pending vs expired window
+- `be0c074` feat: 12h window + per-source quota (max 2) for digest
+
+### Deploy
+ทุก commit deploy ทันทีผ่าน `scripts/deploy.sh -s news-feed -y` ✅
+
+---
+
 ## 2026-05-29 — Debug: Summarizer fail silent (rate-limit) + backlog re-summarization
 
 ### Root cause
