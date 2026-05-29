@@ -10,6 +10,7 @@ from app.models import (
     delete_articles_older_than,
     get_article,
     get_articles,
+    get_sent_article_ids,
     get_source_counts,
 )
 
@@ -48,6 +49,12 @@ def list_news(
     limit: int = Query(20, ge=1, le=100),
 ):
     return get_articles(db, source=source, date=date, limit=limit)
+
+
+@router.get("/sent-ids")
+def list_sent_ids(db: Annotated[sqlite3.Connection, Depends(get_db)]):
+    """Return all article IDs that have been included in a digest."""
+    return {"sent_ids": list(get_sent_article_ids(db))}
 
 
 @router.get("/{article_id}")

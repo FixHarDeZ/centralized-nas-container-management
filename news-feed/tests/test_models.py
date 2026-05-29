@@ -3,6 +3,7 @@ from app.models import (
     get_articles, get_article, get_article_count, get_last_fetch_time,
     get_source_counts, upsert_price, get_prices, set_free_expiry,
     insert_digest_log, get_digest_history, get_recent_articles_for_digest,
+    get_sent_article_ids,
     delete_all_articles, delete_articles_older_than,
 )
 
@@ -95,6 +96,18 @@ def test_insert_and_get_digest_log(db, sample_article):
     assert len(history) == 1
     assert history[0]["article_ids"] == ["abc123"]
     assert history[0]["channels"] == "line,telegram"
+
+
+def test_get_sent_article_ids_empty(db):
+    assert get_sent_article_ids(db) == set()
+
+
+def test_get_sent_article_ids(db, sample_article):
+    insert_article(db, sample_article)
+    insert_digest_log(db, "2026-05-23T07:00:00", ["abc123", "xyz789"], "line,telegram")
+    insert_digest_log(db, "2026-05-23T12:00:00", ["def456"], "telegram")
+    result = get_sent_article_ids(db)
+    assert result == {"abc123", "xyz789", "def456"}
 
 
 def test_get_recent_articles_no_summary(db, sample_article):

@@ -2,7 +2,7 @@ import os
 import pytest
 from fastapi.testclient import TestClient
 from app.main import app
-from app.models import get_conn, init_db, insert_article, update_article_summary
+from app.models import get_conn, init_db, insert_article, update_article_summary, insert_digest_log
 
 
 @pytest.fixture
@@ -50,6 +50,30 @@ def test_get_news_item(client):
 def test_get_news_item_404(client):
     r = client.get("/api/news/nope")
     assert r.status_code == 404
+
+
+def test_sent_ids_empty(client):
+    r = client.get("/api/news/sent-ids")
+    assert r.status_code == 200
+    assert r.json()["sent_ids"] == []
+
+
+def test_sent_ids_after_digest(tmp_path, monkeypatch):
+    db_path = str(tmp_path / "sent_ids.db")
+    app.state.db_path = db_path
+    conn = get_conn(db_path)
+    init_db(conn)
+    insert_article(conn, {
+        "id": "art01", "source": "techcrunch_ai", "title": "T",
+        "url": "https://x.com/1", "published": "2026-05-23T07:00:00",
+        "fetched_at": "2026-05-23T07:01:00",
+    })
+    insert_digest_log(conn, "2026-05-23T07:00:00", ["art01"], "line,telegram")
+    conn.close()
+    with TestClient(app) as c:
+        r = c.get("/api/news/sent-ids")
+    assert r.status_code == 200
+    assert "art01" in r.json()["sent_ids"]
 
 
 def test_get_schedule(client):

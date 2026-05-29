@@ -1,4 +1,5 @@
 let allNews = [];
+let _sentIds = new Set();
 let _newsSortNewest = true;
 let allPrices = [];
 let _shownPrices = [];
@@ -228,7 +229,12 @@ function refreshSourceHealth() {
 }
 
 async function loadNews() {
-  allNews = await api('/api/news?limit=100');
+  const [articles, sentData] = await Promise.all([
+    api('/api/news?limit=100'),
+    api('/api/news/sent-ids').catch(() => ({ sent_ids: [] })),
+  ]);
+  allNews = articles;
+  _sentIds = new Set(sentData.sent_ids);
   const sel = document.getElementById('news-source-filter');
   const sources = [...new Set(allNews.map(a=>a.source))];
   sel.innerHTML = '<option value="">All sources</option>' + sources.map(s=>`<option value="${s}">${s}</option>`).join('');
@@ -258,6 +264,12 @@ function toggleNewsSort() {
   filterNews();
 }
 
+function _digestBadge(a) {
+  if (_sentIds.has(a.id)) return '<span class="digest-badge badge-sent">ส่งแล้ว</span>';
+  if (a.summary_th) return '<span class="digest-badge badge-pending">รอส่ง</span>';
+  return '';
+}
+
 function renderNews(articles) {
   const sorted = _sortedNews(articles);
   const el = document.getElementById('news-list');
@@ -265,7 +277,7 @@ function renderNews(articles) {
   el.innerHTML = '<h2>News Timeline</h2>' + sorted.map(a => `
     <div class="article-card" onclick="this.classList.toggle('open')">
       <div class="article-title">${a.title}</div>
-      <div class="article-meta"><span class="source-badge">${a.source}</span>${new Date(a.published).toLocaleString('th-TH')}</div>
+      <div class="article-meta">${_digestBadge(a)}<span class="source-badge">${a.source}</span>${new Date(a.published).toLocaleString('th-TH')}</div>
       <div class="article-summary">${a.summary_th || '<em>Summarizing…</em>'}</div>
       <div style="margin-top:.25rem"><a href="${a.url}" target="_blank" style="color:#3b82f6;font-size:.75rem" onclick="event.stopPropagation()">อ่านต่อ ↗</a></div>
     </div>`).join('');
