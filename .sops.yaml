@@ -1,0 +1,7 @@
+creation_rules:
+  - path_regex: ^secrets/vault\.yaml$
+    age: age19dju3r6yqjrztv5mpht42zk0ayg4h7st6uqqsy0d4pwjzs48dejsu6k56g
+    encrypted_regex: '^(.*)$'
+  - path_regex: ^secrets/test-vault\.yaml$
+    age: age19dju3r6yqjrztv5mpht42zk0ayg4h7st6uqqsy0d4pwjzs48dejsu6k56g
+    encrypted_regex: '^(.*)$'
