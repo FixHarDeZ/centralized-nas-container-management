@@ -16,6 +16,46 @@ class RenderError(Exception):
     """Raised when a manifest references a missing vault path or violates rules."""
 
 
+def compose_quote(value: Any) -> str:
+    """Render a Python value as a docker-compose .env-safe string.
+
+    Rules (matching docker-compose .env parser semantics):
+      - bool/int → 'true'/'false'/str(int) unquoted
+      - str with no special chars and no leading/trailing whitespace → unquoted
+      - str with special chars (space, #, ", \\, $, leading/trailing whitespace)
+        but no literal single quote → wrapped in single quotes
+      - str containing single quote → wrapped in double quotes with \\ and "
+        escaped (the only escapes compose interprets inside double quotes that
+        we need here)
+      - str containing newline → RenderError (multiline values not supported)
+    """
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+
+    s = str(value)
+    if "\n" in s or "\r" in s:
+        raise RenderError(
+            "value contains a newline; docker-compose .env does not support "
+            "multiline values — base64-encode or split into multiple keys"
+        )
+
+    needs_quoting = (
+        s != s.strip()
+        or any(ch in s for ch in (" ", "#", '"', "\\", "$"))
+    )
+    if not needs_quoting:
+        return s
+
+    if "'" not in s:
+        return f"'{s}'"
+
+    # Has a literal single quote — use double quotes; escape \ and ".
+    escaped = s.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
 def lookup(vault: Mapping[str, Any], dotted_path: str) -> Any:
     """Walk a dotted path through nested dicts. Returns None if any segment is missing."""
     node: Any = vault
@@ -46,10 +86,10 @@ def render_stack(vault: Mapping[str, Any], manifest: Mapping[str, Any]) -> str:
                 f"manifest references missing vault path '{vault_path}' "
                 f"for ENV '{env_name}'"
             )
-        lines.append(f"{env_name}={value}")
+        lines.append(f"{env_name}={compose_quote(value)}")
 
     for env_name, value in literals.items():
-        lines.append(f"{env_name}={value}")
+        lines.append(f"{env_name}={compose_quote(value)}")
 
     return "\n".join(lines) + "\n"
 
