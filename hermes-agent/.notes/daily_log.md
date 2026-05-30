@@ -6,19 +6,20 @@
 
 ### Root Cause
 
-- `hermes update --force` was run inside the running container
-- This overwrote `/opt/hermes/docker/` in the container's overlay layer with new upstream s6-overlay-based code
-- The new `stage2-hook.sh` calls `s6-setuidgid` at line 196, but our image uses `gosu` (not s6-overlay) — binary not found → exit 127 → crash loop
+Upstream `NousResearch/hermes-agent` migrated from gosu to **s6-overlay** sometime after `v2026.5.16`.
+The new `main` branch adds `docker/stage2-hook.sh` which calls `s6-setuidgid` — but our Dockerfile installs `gosu` (not s6), so the binary doesn't exist → exit 127 → crash loop on every restart.
+
+Note: `hermes update --force` may have triggered this earlier by pulling new upstream code into the container layer, but rebuild with `HERMES_REF=main` is what confirmed the root cause.
 
 ### Fix
 
-- `docker compose stop hermes-gateway && docker compose rm -f hermes-gateway && docker compose up -d hermes-gateway`
-- Recreating the container discards the modified overlay layer and starts fresh from the clean image
-- Gateway back up and stable; Discord error expected (no token configured)
+Pinned `HERMES_REF: v2026.5.16` in `docker-compose.yml` — last tag that uses gosu-based entrypoint (no `stage2-hook.sh`). Rebuilt and redeployed.
 
-### Warning
+To verify a tag is safe: `docker run --rm --entrypoint sh hermes-agent -c 'ls /opt/hermes/docker/stage2-hook.sh 2>/dev/null && echo EXISTS || echo NOTFOUND'` should print `NOTFOUND`.
 
-**ห้ามรัน `hermes update --force` ใน container** — มันแก้ไข code ใน container layer ทำให้ entrypoint พัง. ถ้าอยากอัพเดต ให้ rebuild image: `docker compose up -d --build hermes-gateway`
+### Upgrade path
+
+When upgrading to a newer tag in the future, check if they've completed the s6-overlay migration and update our Dockerfile accordingly (install s6-overlay, change ENTRYPOINT to `/init`). Tags to watch: `v2026.5.28+`.
 
 ---
 
