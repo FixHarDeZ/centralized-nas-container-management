@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-ENV_FILE="${PROJECT_ROOT}/.env"
+ENV_FILE="${PROJECT_ROOT}/.env.deploy"
 START_TS=$(date +%s)
 
 # ── Colors ───────────────────────────────────────────────────────────────────
@@ -66,7 +66,7 @@ done
 # ── Load config ──────────────────────────────────────────────────────────────
 if [[ ! -f "$ENV_FILE" ]]; then
   err "Config file not found: $ENV_FILE"
-  echo "  Copy .env.example to .env and fill in your NAS details."
+  echo "  Run 'make secrets' to generate it from secrets/vault.sops.yaml"
   exit 1
 fi
 # shellcheck source=.env
@@ -122,6 +122,23 @@ ALL_STACKS=(secretary news-feed torrentwatch my-secretary homepage jellyfin maid
 # UPLOAD
 # ═══════════════════════════════════════════════════════════════════════════════
 if [[ "$RESTART_ONLY" == false ]]; then
+  # Pre-upload: every stack with a manifest must have a rendered .env
+  log "Verifying generated .env files ..."
+  MISSING=()
+  for stack in "${ALL_STACKS[@]}"; do
+    manifest="${PROJECT_ROOT}/${stack}/secrets.manifest.yaml"
+    envfile="${PROJECT_ROOT}/${stack}/.env"
+    if [[ -f "$manifest" && ! -f "$envfile" ]]; then
+      MISSING+=("$stack")
+    fi
+  done
+  if [[ ${#MISSING[@]} -gt 0 ]]; then
+    err "Missing .env for: ${MISSING[*]}"
+    echo "  Run 'make secrets' to regenerate from secrets/vault.sops.yaml"
+    exit 1
+  fi
+  ok "All .env files present"
+
   echo ""
   printf "${C_BOLD}Source :${C_RESET} %s/\n" "${PROJECT_ROOT}"
   printf "${C_BOLD}Target :${C_RESET} %s:%s\n" "${SSH_DEST}" "${NAS_TARGET_PATH}"
