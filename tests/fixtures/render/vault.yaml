@@ -1,0 +1,7 @@
+shared:
+  llm:
+    openrouter_api_key: sk-or-fixture
+    anthropic_api_key: sk-ant-fixture
+stacks:
+  demo:
+    admin_token: admintok-fixture

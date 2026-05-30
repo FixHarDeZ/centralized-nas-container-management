@@ -7,9 +7,12 @@ for the design.
 """
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any, Mapping
+
+import yaml
 
 
 class RenderError(Exception):
@@ -102,6 +105,58 @@ def render_stack(vault: Mapping[str, Any], manifest: Mapping[str, Any]) -> str:
         lines.append(f"{env_name}={compose_quote(value)}")
 
     return "\n".join(lines) + "\n"
+
+
+def find_manifests(repo_root: Path) -> list[Path]:
+    """Return all manifest files: every <stack>/secrets.manifest.yaml plus
+    the root deploy.manifest.yaml if it exists."""
+    result: list[Path] = []
+    deploy = repo_root / "deploy.manifest.yaml"
+    if deploy.exists():
+        result.append(deploy)
+    for child in sorted(repo_root.iterdir()):
+        if not child.is_dir() or child.name.startswith("."):
+            continue
+        manifest = child / "secrets.manifest.yaml"
+        if manifest.exists():
+            result.append(manifest)
+        # secretary/ has sub-stacks (ingest, query); recurse one level
+        if child.is_dir():
+            for sub in sorted(child.iterdir()):
+                if not sub.is_dir():
+                    continue
+                sub_manifest = sub / "secrets.manifest.yaml"
+                if sub_manifest.exists():
+                    result.append(sub_manifest)
+    return result
+
+
+def output_path(manifest_path: Path) -> Path:
+    """Map a manifest file to the .env file it produces."""
+    if manifest_path.name == "deploy.manifest.yaml":
+        return manifest_path.parent / ".env.deploy"
+    return manifest_path.parent / ".env"
+
+
+def load_vault(path: Path) -> dict:
+    """Load a vault file. If it appears to be sops-encrypted (has a 'sops:' key
+    at the top level), shell out to `sops -d`. Otherwise parse as plaintext YAML."""
+    text = path.read_text()
+    if "\nsops:\n" in text or text.startswith("sops:\n"):
+        result = subprocess.run(
+            ["sops", "-d", str(path)],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise RenderError(f"sops decrypt failed for {path}: {result.stderr.strip()}")
+        return yaml.safe_load(result.stdout) or {}
+    return yaml.safe_load(text) or {}
+
+
+def load_manifest(path: Path) -> dict:
+    return yaml.safe_load(path.read_text()) or {}
 
 
 def main(argv: list[str] | None = None) -> int:
