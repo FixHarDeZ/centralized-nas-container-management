@@ -1,0 +1,12 @@
+# Drives generation of ./.env.deploy for scripts/deploy.sh.
+# Read by scripts/render_env.py alongside per-stack manifests.
+env:
+  NAS_USER:          shared.nas.user
+  NAS_HOST:          shared.nas.host
+  NAS_PORT:          shared.nas.port
+  NAS_SSH_KEY:       shared.nas.ssh_key
+  NAS_TARGET_PATH:   shared.nas.target_path
+  NAS_SUDO_PASSWORD: shared.nas.sudo_password
+
+literals:
+  NAS_SSH_ALIAS: nas
