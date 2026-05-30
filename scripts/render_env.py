@@ -160,9 +160,103 @@ def load_manifest(path: Path) -> dict:
 
 
 def main(argv: list[str] | None = None) -> int:
-    # Real CLI comes in Task 8.
-    print("render_env: CLI not yet implemented; see Task 8.", file=sys.stderr)
-    return 1
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Render per-stack .env files from sops vault + manifests"
+    )
+    parser.add_argument(
+        "--root",
+        default=str(Path(__file__).resolve().parent.parent),
+        help="Repo root (default: parent of scripts/)",
+    )
+    parser.add_argument(
+        "--vault",
+        default=None,
+        help="Path to vault file (default: <root>/secrets/vault.sops.yaml)",
+    )
+    parser.add_argument(
+        "--stack",
+        action="append",
+        default=None,
+        help="Render only the named stack (may be repeated). Use the directory "
+        "name (e.g. 'news-feed' or 'secretary/ingest').",
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Validate without writing. Exits non-zero on any error.",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Print rendered output to stdout instead of writing files.",
+    )
+    parser.add_argument(
+        "--suffix",
+        default="",
+        help="Append this suffix to the output filename (e.g. '.new') — used "
+        "for safe side-by-side rendering during migration.",
+    )
+    args = parser.parse_args(argv)
+
+    root = Path(args.root).resolve()
+    vault_path = Path(args.vault) if args.vault else root / "secrets" / "vault.sops.yaml"
+
+    if not vault_path.exists():
+        print(f"error: vault not found at {vault_path}", file=sys.stderr)
+        return 2
+
+    try:
+        vault = load_vault(vault_path)
+    except RenderError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+
+    manifests = find_manifests(root)
+
+    def stack_label(p: Path) -> str:
+        if p.name == "deploy.manifest.yaml":
+            return "deploy"
+        return str(p.parent.relative_to(root))
+
+    if args.stack:
+        wanted: set[str] = set(args.stack)
+        manifests = [m for m in manifests if stack_label(m) in wanted]
+        if not manifests:
+            print(f"error: no manifests matched --stack {args.stack}", file=sys.stderr)
+            return 2
+
+    failures: list[str] = []
+    for manifest_path in manifests:
+        try:
+            manifest = load_manifest(manifest_path)
+            rendered = render_stack(vault, manifest)
+        except RenderError as e:
+            failures.append(f"{manifest_path}: {e}")
+            continue
+        if args.dry_run:
+            print(f"--- {manifest_path} ---")
+            print(rendered)
+            continue
+        if args.check:
+            continue
+        out_path = output_path(manifest_path)
+        if args.suffix:
+            out_path = out_path.with_name(out_path.name + args.suffix)
+        out_path.write_text(rendered)
+        try:
+            rel = out_path.relative_to(root)
+        except ValueError:
+            rel = out_path
+        print(f"  wrote {rel}")
+
+    if failures:
+        print(f"\n{len(failures)} error(s):", file=sys.stderr)
+        for line in failures:
+            print(f"  {line}", file=sys.stderr)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

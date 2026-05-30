@@ -171,3 +171,89 @@ def test_integration_render_using_fixtures(tmp_path: Path) -> None:
     assert "OPENROUTER_API_KEY=sk-or-fixture" in out
     assert "ADMIN_TOKEN=admintok-fixture" in out
     assert "DATA_DIR=/data" in out
+
+
+def test_main_renders_all_manifests_in_repo(tmp_path: Path) -> None:
+    (tmp_path / "vault.yaml").write_text(
+        "shared:\n  k: v1\nstacks:\n  s:\n    a: v2\n"
+    )
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "secrets.manifest.yaml").write_text(
+        "env:\n  FOO: shared.k\n"
+    )
+    (tmp_path / "b").mkdir()
+    (tmp_path / "b" / "secrets.manifest.yaml").write_text(
+        "env:\n  BAR: stacks.s.a\n"
+    )
+    rc = render_env.main(
+        ["--root", str(tmp_path), "--vault", str(tmp_path / "vault.yaml")]
+    )
+    assert rc == 0
+    assert (tmp_path / "a" / ".env").read_text().splitlines()[-1] == "FOO=v1"
+    assert (tmp_path / "b" / ".env").read_text().splitlines()[-1] == "BAR=v2"
+
+
+def test_main_stack_filter_renders_only_named(tmp_path: Path) -> None:
+    (tmp_path / "vault.yaml").write_text("shared:\n  k: v1\n")
+    for name in ("a", "b"):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "secrets.manifest.yaml").write_text(
+            "env:\n  FOO: shared.k\n"
+        )
+    rc = render_env.main(
+        [
+            "--root", str(tmp_path),
+            "--vault", str(tmp_path / "vault.yaml"),
+            "--stack", "a",
+        ]
+    )
+    assert rc == 0
+    assert (tmp_path / "a" / ".env").exists()
+    assert not (tmp_path / "b" / ".env").exists()
+
+
+def test_main_check_does_not_write(tmp_path: Path) -> None:
+    (tmp_path / "vault.yaml").write_text("shared:\n  k: v1\n")
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "secrets.manifest.yaml").write_text(
+        "env:\n  FOO: shared.k\n"
+    )
+    rc = render_env.main(
+        [
+            "--root", str(tmp_path),
+            "--vault", str(tmp_path / "vault.yaml"),
+            "--check",
+        ]
+    )
+    assert rc == 0
+    assert not (tmp_path / "a" / ".env").exists()
+
+
+def test_main_returns_nonzero_on_missing_vault_path(tmp_path: Path) -> None:
+    (tmp_path / "vault.yaml").write_text("shared: {}\n")
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "secrets.manifest.yaml").write_text(
+        "env:\n  FOO: shared.missing\n"
+    )
+    rc = render_env.main(
+        ["--root", str(tmp_path), "--vault", str(tmp_path / "vault.yaml")]
+    )
+    assert rc != 0
+
+
+def test_main_with_suffix_writes_to_alternate_filename(tmp_path: Path) -> None:
+    (tmp_path / "vault.yaml").write_text("shared:\n  k: v1\n")
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "secrets.manifest.yaml").write_text(
+        "env:\n  FOO: shared.k\n"
+    )
+    rc = render_env.main(
+        [
+            "--root", str(tmp_path),
+            "--vault", str(tmp_path / "vault.yaml"),
+            "--suffix", ".new",
+        ]
+    )
+    assert rc == 0
+    assert (tmp_path / "a" / ".env.new").exists()
+    assert not (tmp_path / "a" / ".env").exists()
