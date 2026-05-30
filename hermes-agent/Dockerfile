@@ -23,7 +23,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN pip3 install uv --break-system-packages
 
 # Clone hermes-agent at build time (pin HERMES_REF to a tag for production)
-RUN git clone --depth 1 \
+RUN git clone --depth 1 --branch ${HERMES_REF} \
     https://github.com/NousResearch/hermes-agent.git \
     /opt/hermes
 
