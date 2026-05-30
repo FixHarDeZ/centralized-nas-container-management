@@ -98,3 +98,10 @@
 **Fix:** After LLM answer, parse citation numbers with `re.findall(r"\[(\d+)\]", answer)`, filter `hits` to only cited indices before building `sources` array (`main.py:147-156`).
 
 **Tests:** Updated 3 test mocks to include `[1]` in LLM return values. Pre-existing `test_query_rerank_path` failure (KeyError 'cohere' in app.state) unchanged.
+
+## 2026-05-31
+
+### Phase B: NORUS → NOUS manifest fix
+- **Bug:** `secretary/query/secrets.manifest.yaml` ใช้ `NORUS_API_KEY`, `NORUS_BASE_URL`, `NORUS_MODEL` (มี R) แต่โค้ดจริง (`llm_client.py`, `main.py`) ใช้ `NOUS_MODEL` (ไม่มี R) และใช้ OAuth device code flow ไม่ได้ใช้ API key
+- **Fix:** ลบ `NORUS_API_KEY` และ `NORUS_BASE_URL` จาก manifest `env:` (dead vars), เปลี่ยน `NORUS_MODEL` → `NOUS_MODEL` ใน manifest `literals:`
+- ผล: `make secrets` + `make test` (43 tests) ผ่าน, `secretary/query/.env` ไม่มี NORUS vars อีก, มี `NOUS_MODEL=xxx` ถูกต้อง
