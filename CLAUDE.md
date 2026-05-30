@@ -13,9 +13,11 @@ Guidance for Claude Code (claude.ai/code) on project rules, architecture, and de
 ## 🛠️ Environment & Deployment Gotchas
 
 *   **NAS Environment:** Synology DSM 7.3.2 (Container Manager) บน DS925+ NAS Target Path: `/volume2/docker/`
-*   **Per-Stack .env:** ทุก stack มี `.env` ของตัวเองใน folder ของมัน (เช่น `homepage/.env`) — secrets จำกัดเฉพาะ container ที่ใช้จริง **ห้าม Commit** (gitignore pattern `.env` ครอบคลุมทุก level). Root `.env` ใช้เฉพาะ `deploy.sh` (`NAS_*`) เท่านั้น — containers ไม่เห็น root `.env`
-*   **.env.example:** ทุก stack มี template `.env.example` (commit ได้) — `cp <stack>/.env.example <stack>/.env` แล้วเติมค่า
-*   **Deployment Flow:** ใช้ `scripts/deploy.sh` — tar รวมทั้ง project (รวม `<stack>/.env` ทั้งหมด) ส่งผ่าน SSH เท่านั้น. Root `.env` **ไม่ถูก upload** (excluded จาก tar). Restart ใช้ `docker compose --project-directory <stack>/ -f <stack>/docker-compose.yml up -d --build` เพื่อให้ compose หา `<stack>/.env` เจอเอง
+*   **Secrets Vault:** Secrets ทั้ง project อยู่ใน `secrets/vault.sops.yaml` (sops+age encrypted, commit ลง git ได้). แต่ละ stack มี `secrets.manifest.yaml` ระบุว่าตัวเองใช้ key อะไร mapped จาก vault path ไหน (`env:` = secret จาก vault, `literals:` = ค่า public). Generator `scripts/render_env.py` (เรียกผ่าน `make secrets`) decrypt vault + อ่าน manifest → สร้าง `<stack>/.env` + root `.env.deploy` (gitignored)
+*   **Workflow:** `make edit-vault` (sops transparently decrypt+re-encrypt) → `make secrets` → `./scripts/deploy.sh`
+*   **NAS ไม่ต้องลง sops/age:** decryption เกิดที่ workstation, NAS รับ `<stack>/.env` plaintext แบบเดิมเป๊ะ — ไม่มี runtime decrypt
+*   **Portability:** ไปเครื่องใหม่ → `age-keygen`, เพิ่ม public key ใน `.sops.yaml`, รัน `sops updatekeys secrets/vault.sops.yaml`, commit → เครื่องใหม่ใช้ `make secrets` ได้ (private key อยู่ที่ `~/.config/sops/age/keys.txt` เก็บใน Bitwarden/1Password ก็ได้)
+*   **Deployment Flow:** ใช้ `scripts/deploy.sh` — pre-upload verify ว่าทุก stack มี `.env` ก่อน tar รวมโปรเจคต์ส่งผ่าน SSH. Root `.env.deploy` source ใน deploy.sh เพื่ออ่าน `NAS_*` (ไม่ upload ขึ้น NAS — excluded จาก tar). Restart ใช้ `docker compose --project-directory <stack>/ -f <stack>/docker-compose.yml up -d --build`
 *   **⚠️ ห้ามใช้ `rsync`:** macOS bundled rsync (`openrsync` protocol 29) ไม่ compatible กับ Synology GNU rsync (protocol 31) ส่งผลให้ Transfer ล้มเหลว ให้ใช้ `tar | ssh` แทนเสมอ
 *   **⚠️ SSH Multi-arg Shell Quote:** หากส่งคำสั่งที่มี pipe หรือ sub-shell ผ่าน SSH ต้องห่อเป็น single quoted string เสมอเพื่อป้องกัน remote shell ตีความพลาด: `ssh host "bash -lc \"cmd | pipe\""`
 *   **⚠️ DSM Auto-Block:** Container ที่ยิง DSM API (homepage widget) ถูก auto-block IP ได้ถ้า login fail ซ้ำๆ — error code 407 ที่ homepage display เป็น "Authentication failed. 2FA enabled." จริงๆ คือ Max Tries ของ Auto Block. **Fix:** Control Panel → Security → Protection → Allow List ใส่ private subnets (`10.0.0.0/255.0.0.0`, `172.16.0.0/255.240.0.0`, `192.168.0.0/255.255.0.0`) แล้วลบ Docker IPs ออกจาก Block List
@@ -48,4 +50,5 @@ Guidance for Claude Code (claude.ai/code) on project rules, architecture, and de
 1. **Update Stack README:** แก้ไขฟีเจอร์/สถาปัตยกรรมของ Stack ไหน ให้เข้าไปอัปเดต `README.md` ของโฟลเดอร์นั้นทันที
 2. **Update Root Docs:** หากมีการเปลี่ยนพอร์ต, เพิ่ม Stack ใหม่ หรือเพิ่ม Env Configuration ให้แก้ไข `CLAUDE.md` และ `README.md` ที่ root
 3. **Atomic Commit:** รวมไฟล์เอกสารที่อัปเดตทั้งหมดเข้ากับ Commit ของซอร์สโค้ดหลักในรอบนั้นทันที (ห้ามแยก Commit เอกสารออกจากโค้ด)
-4. **Security Guardrail:** ห้าม Commit `.env` หรือ Hardcode ไอพี/รหัสผ่านจริงลงในโค้ดหรือเอกสาร ให้แทนที่ด้วย Placeholder เช่น `<NAS_HOST>`, `<NAS_USER>`, `<NAS_SUDO_PASSWORD>` ทุกครั้ง
+4. **Security Guardrail:** ห้าม Commit `.env`, `.env.deploy`, `secrets/vault.yaml` (plaintext intermediate) หรือ Hardcode ไอพี/รหัสผ่านจริงลงในโค้ดหรือเอกสาร ให้แทนที่ด้วย Placeholder เช่น `<NAS_HOST>`, `<NAS_USER>`, `<NAS_SUDO_PASSWORD>` ทุกครั้ง — `secrets/vault.sops.yaml` commit ได้เพราะ encrypted แล้ว
+5. **Vault Edits:** ใช้ `make edit-vault` (sops จัดการ encrypt/decrypt ในที่) ห้ามแก้ `vault.sops.yaml` ตรงๆ ใน editor

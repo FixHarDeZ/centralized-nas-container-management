@@ -40,37 +40,51 @@ All stacks except `watchtower` are exposed externally via **Synology Reverse Pro
 
 ## Environment Variables
 
-**Each stack owns its own `.env`** — secrets are scoped to the container that needs them. The root `.env` holds deploy + local-script config only.
+**Secrets live in `secrets/vault.sops.yaml`** — one encrypted YAML (sops+age) committed to git as the single source of truth. Each stack has a `secrets.manifest.yaml` declaring which vault paths it consumes and the ENV name to project them as. A generator (`make secrets`) decrypts the vault, applies each manifest, and writes per-stack `.env` files (gitignored). The NAS never sees sops or age.
 
-```text
-.env                      # deploy.sh only (NAS_*)
-homepage/.env             # HOMEPAGE_VAR_*, NAS_VOLUME_ROOT
-jellyfin/.env             # NAS_VOLUME_ROOT, NAS_MEDIA_ROOT
-secretary/.env            # N8N_BASIC_AUTH_USER/PASSWORD, N8N_WEBHOOK_URL
-secretary/ingest/.env     # SECRETARY_NOTION_TOKEN, QDRANT_URL, NOTION_SOURCE_TYPE
-secretary/query/.env      # LLM_PROVIDER, ANTHROPIC_API_KEY, COHERE_API_KEY
-maid-tracker/.env         # MAID_LINE_*, MONTHLY_REPORT_TIME
-portainer/                # (no .env needed)
-torrentwatch/.env         # TORRENTWATCH_*, NGINX_BASIC_AUTH_*, NAS_TORRENT_PATH
-uptime-kuma/.env          # NAS_VOLUME_ROOT
-watchtower/.env           # WATCHTOWER_LINE_*, WATCHTOWER_TELEGRAM_BOT_TOKEN
-hermes-agent/.env         # OPENROUTER_API_KEY, HERMES_TELEGRAM_BOT_TOKEN, DISCORD_BOT_TOKEN, HERMES_UID/GID
-news-feed/.env            # ANTHROPIC_API_KEY, OPENROUTER_API_KEY, LINE_CHANNEL_ACCESS_TOKEN, LINE_USER_ID, NEWS_FEED_TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, ADMIN_TOKEN, SUMMARIZER_PROVIDER/MODEL
-```
+### Setup
 
 ```bash
-# First time: copy each template and fill in real values
-cp .env.example .env
-for d in homepage jellyfin maid-tracker torrentwatch uptime-kuma watchtower hermes-agent news-feed; do
-  cp "$d/.env.example" "$d/.env"
-done
-# secretary has sub-service envs
-cp secretary/.env.example secretary/.env
-cp secretary/ingest/.env.example secretary/ingest/.env
-cp secretary/query/.env.example secretary/query/.env
+# 1. Install tooling
+brew install sops age
+
+# 2. Import your age private key (one-time per machine)
+mkdir -p ~/.config/sops/age
+# Generate new and ask vault maintainer to add public key + sops updatekeys:
+age-keygen -o ~/.config/sops/age/keys.txt
+# OR paste an existing key (e.g. from Bitwarden / 1Password):
+$EDITOR ~/.config/sops/age/keys.txt
+chmod 600 ~/.config/sops/age/keys.txt
+
+# 3. Generate .env files
+make secrets       # decrypts vault, writes <stack>/.env and .env.deploy
+
+# 4. Deploy
+./scripts/deploy.sh
 ```
 
-All `.env` files are gitignored — never commit them. `.env.example` files are tracked as templates.
+### Daily workflow
+
+```bash
+make edit-vault       # open vault in $EDITOR (sops decrypts on read, re-encrypts on save)
+make secrets          # regenerate all <stack>/.env + .env.deploy
+./scripts/deploy.sh   # tar + ssh + restart
+```
+
+### File map
+
+```text
+.sops.yaml                            # public age recipients (commit)
+secrets/vault.sops.yaml               # encrypted vault (commit)
+secrets/test-vault.sops.yaml          # CI dummy vault (commit)
+secrets/manifest.schema.json          # manifest JSON schema
+deploy.manifest.yaml                  # produces .env.deploy for deploy.sh
+<stack>/secrets.manifest.yaml         # per-stack vault → ENV mapping
+.env.deploy                           # generated, gitignored
+<stack>/.env                          # generated, gitignored
+```
+
+All `.env` files and `secrets/vault.yaml` (transient plaintext during edits) are gitignored. Only `vault.sops.yaml` and manifests are tracked.
 
 ## Uploading to NAS
 
