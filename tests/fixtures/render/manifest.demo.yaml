@@ -1,0 +1,5 @@
+env:
+  OPENROUTER_API_KEY: shared.llm.openrouter_api_key
+  ADMIN_TOKEN: stacks.demo.admin_token
+literals:
+  DATA_DIR: /data

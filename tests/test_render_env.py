@@ -115,3 +115,59 @@ def test_literal_only_with_int_value_renders_unquoted() -> None:
 def test_literal_with_boolean_renders_lowercase() -> None:
     out = render_env.render_stack({}, {"literals": {"DEBUG": True}})
     assert "DEBUG=true" in out
+
+
+def test_find_manifests_picks_up_stack_files(tmp_path: Path) -> None:
+    (tmp_path / "foo").mkdir()
+    (tmp_path / "foo" / "secrets.manifest.yaml").write_text("env: {}\n")
+    (tmp_path / "bar").mkdir()
+    (tmp_path / "bar" / "secrets.manifest.yaml").write_text("env: {}\n")
+    (tmp_path / "skip").mkdir()
+    (tmp_path / "skip" / "other.yaml").write_text("nope\n")
+
+    paths = render_env.find_manifests(tmp_path)
+    names = sorted(p.parent.name for p in paths)
+    assert names == ["bar", "foo"]
+
+
+def test_find_manifests_includes_root_deploy_manifest(tmp_path: Path) -> None:
+    (tmp_path / "deploy.manifest.yaml").write_text("env: {}\n")
+    paths = render_env.find_manifests(tmp_path)
+    assert any(p.name == "deploy.manifest.yaml" for p in paths)
+
+
+def test_find_manifests_recurses_one_level_for_secretary_substacks(tmp_path: Path) -> None:
+    sub = tmp_path / "secretary" / "ingest"
+    sub.mkdir(parents=True)
+    (sub / "secrets.manifest.yaml").write_text("env: {}\n")
+    paths = render_env.find_manifests(tmp_path)
+    rel = [p.relative_to(tmp_path) for p in paths]
+    assert Path("secretary/ingest/secrets.manifest.yaml") in rel
+
+
+def test_load_decrypted_vault_from_plaintext_yaml(tmp_path: Path) -> None:
+    """When vault is plaintext (no sops metadata), parse as YAML directly."""
+    p = tmp_path / "vault.yaml"
+    p.write_text("shared:\n  llm:\n    openrouter_api_key: sk-or-test\n")
+    vault = render_env.load_vault(p)
+    assert vault["shared"]["llm"]["openrouter_api_key"] == "sk-or-test"
+
+
+def test_output_path_for_stack_manifest_is_sibling_env(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "newsfeed" / "secrets.manifest.yaml"
+    assert render_env.output_path(manifest_path) == tmp_path / "newsfeed" / ".env"
+
+
+def test_output_path_for_root_deploy_manifest_is_root_env_deploy(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "deploy.manifest.yaml"
+    assert render_env.output_path(manifest_path) == tmp_path / ".env.deploy"
+
+
+def test_integration_render_using_fixtures(tmp_path: Path) -> None:
+    fixtures = Path(__file__).resolve().parent / "fixtures" / "render"
+    vault = render_env.load_vault(fixtures / "vault.yaml")
+    manifest = render_env.load_manifest(fixtures / "manifest.demo.yaml")
+    out = render_env.render_stack(vault, manifest)
+    assert "OPENROUTER_API_KEY=sk-or-fixture" in out
+    assert "ADMIN_TOKEN=admintok-fixture" in out
+    assert "DATA_DIR=/data" in out
