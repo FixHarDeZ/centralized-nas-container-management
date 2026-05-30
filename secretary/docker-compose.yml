@@ -8,15 +8,6 @@ services:
     volumes:
       - qdrant_storage:/qdrant/storage
 
-  ollama:
-    image: ollama/ollama:latest
-    container_name: secretary-ollama
-    restart: unless-stopped
-    ports:
-      - "11434:11434"      # internal only
-    volumes:
-      - ollama_data:/root/.ollama
-
   n8n:
     image: n8nio/n8n:latest
     container_name: secretary-n8n
@@ -71,13 +62,6 @@ volumes:
       type: none
       o: bind
       device: /volume2/docker/secretary/qdrant_storage
-
-  ollama_data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /volume2/docker/secretary/ollama_data
 
   n8n_data:
     driver: local

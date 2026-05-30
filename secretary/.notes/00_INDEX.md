@@ -18,7 +18,6 @@ n8n (:15678) → Telegram bot
 | Service | Container | Port | Notes |
 |---|---|---|---|
 | qdrant | secretary-qdrant | 6333 (internal) | Collection: `secretary_notes`, named vectors `dense`+`sparse` |
-| ollama | secretary-ollama | 11434 (internal) | Available but not used by default (BGE-M3 via FlagEmbedding) |
 | n8n | secretary-n8n | 15678→5678 | Webhook: `/webhook/telegram`. Basic auth via root `.env` |
 | secretary-query | secretary-query | 15065→5065 | FastAPI RAG. LLM provider switchable via `LLM_PROVIDER` env |
 | secretary-ingest | secretary-ingest | — | `restart: "no"`. Run: `docker compose run --rm secretary-ingest` |
@@ -27,7 +26,6 @@ n8n (:15678) → Telegram bot
 | Volume | Path |
 |---|---|
 | qdrant_storage | `/volume2/docker/secretary/qdrant_storage` |
-| ollama_data | `/volume2/docker/secretary/ollama_data` |
 | n8n_data | `/volume2/docker/secretary/n8n_data` |
 | ingest_state | `/volume2/docker/secretary/ingest_state` |
 | hf_cache | `/volume2/docker/secretary/hf_cache` |
@@ -88,4 +86,3 @@ The `POST /ingest-trigger` endpoint in `secretary-query` runs `ingest.py` as a s
 
 ## Gaps / TODOs
 - n8n workflow JSON not exported/committed yet
-- Ollama service present in compose but no workflow uses it currently

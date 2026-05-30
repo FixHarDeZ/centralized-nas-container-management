@@ -80,6 +80,15 @@
 - Token stored in /data/nous_token.json (atomic write), NOUS_TOKEN_FILE env var for override
 - Setup: deploy → GET /nous/auth → open verification_uri in browser → enter user_code → approve → token auto-saved
 
+## 2026-05-29
+
+### งานที่ทำ
+- ลบ `ollama` service และ `ollama_data` volume ออกจาก `docker-compose.yml` — ไม่เคยมีโค้ดส่วนไหน connect มันเลย ทั้ง ingest ใช้ FlagEmbedding โดยตรง และ query ใช้ external LLM APIs
+- อัปเดต `query/.env.example`: เปลี่ยน default `LLM_PROVIDER=openrouter`, `OPENROUTER_MODEL=google/gemini-2.5-flash`
+- `query/.env` จริง: user เลือกใช้ `deepseek/deepseek-v4-flash` (ถูกกว่า Gemini Flash)
+
+---
+
 ## 2026-05-28 — Fix: filter sources to cited-only
 
 **Problem:** `/query` endpoint returned all top_k_final=6 sources, n8n displayed all as references even when LLM only used 1.
