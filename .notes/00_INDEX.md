@@ -11,17 +11,17 @@ Root-level notes สำหรับ cross-stack changes และ project-wide d
 
 | ไฟล์ | ใช้งาน |
 |---|---|
-| `.env` (root) | deploy.sh (`NAS_*`) + scripts/sync_notion.py (`NOTION_*`) เท่านั้น — containers ไม่เห็น |
+| `.env` (root) | deploy.sh (`NAS_*`) เท่านั้น — containers ไม่เห็น |
 | `auth/.env` | `AUTHELIA_SESSION_SECRET`, `AUTHELIA_STORAGE_ENCRYPTION_KEY`, `AUTHELIA_JWT_SECRET`, `VAULTWARDEN_ADMIN_TOKEN` |
 | `homepage/.env` | `HOMEPAGE_VAR_*`, `NAS_VOLUME_ROOT` (ลบ `NGINX_BASIC_AUTH_*` แล้ว — ใช้ Authelia แทน) |
 | `jellyfin/.env` | `NAS_VOLUME_ROOT`, `NAS_MEDIA_ROOT` |
-| `my-secretary/.env` | `LINE_SECRETARY_*`, `NOTION_TOKEN`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_CHAT_IDS` |
-| `hermes-agent/.env`   | `OPENROUTER_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USERS`, `DISCORD_BOT_TOKEN`, `DISCORD_ALLOWED_GUILDS`, `HERMES_UID`, `HERMES_GID` |
+| `my-secretary/.env` | `LINE_SECRETARY_*`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_CHAT_IDS` |
+| `hermes-agent/.env`   | `OPENROUTER_API_KEY`, `HERMES_TELEGRAM_BOT_TOKEN`, `TELEGRAM_ALLOWED_USERS`, `DISCORD_BOT_TOKEN`, `DISCORD_ALLOWED_GUILDS`, `HERMES_UID`, `HERMES_GID` |
 | `maid-tracker/.env` | `MAID_LINE_*`, `MONTHLY_REPORT_TIME` (ลบ `NGINX_BASIC_AUTH_*` แล้ว — ใช้ Authelia แทน) |
 | `torrentwatch/.env` | `TORRENTWATCH_*`, `NGINX_BASIC_AUTH_*`, `NAS_TORRENT_PATH` |
-| `news-feed/.env` | `ANTHROPIC_API_KEY`, `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_USER_ID`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `ADMIN_TOKEN`, `SUMMARIZER_PROVIDER`, `SUMMARIZER_MODEL`, `OPENROUTER_API_KEY`, `DIGEST_TIMES`, `ENABLED_SOURCES`, `DATA_DIR` |
+| `news-feed/.env` | `ANTHROPIC_API_KEY`, `LINE_CHANNEL_ACCESS_TOKEN`, `LINE_USER_ID`, `NEWS_FEED_TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `ADMIN_TOKEN`, `SUMMARIZER_PROVIDER`, `SUMMARIZER_MODEL`, `OPENROUTER_API_KEY`, `DIGEST_TIMES`, `ENABLED_SOURCES`, `DATA_DIR` |
 | `uptime-kuma/.env` | `NAS_VOLUME_ROOT` |
-| `watchtower/.env` | `WATCHTOWER_LINE_*`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` |
+| `watchtower/.env` | `WATCHTOWER_LINE_*`, `WATCHTOWER_TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` |
 | `portainer/` | ไม่มี .env |
 
 ทุก `.env` gitignored — `.env.example` ทุก stack commit ได้

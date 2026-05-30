@@ -117,7 +117,7 @@
 #### 2. Refactor: per-stack .env (แยก secrets ตาม stack)
 - **สาเหตุ:** root `.env` ไฟล์เดียวทำให้ทุก container เห็น secret ทั้งหมด ยากต่อการ debug
 - **โครงสร้างใหม่:**
-  - Root `.env` → เฉพาะ `NAS_*` (deploy.sh) + `NOTION_*` (sync_notion.py) — containers ไม่เห็น
+  - Root `.env` → เฉพาะ `NAS_*` (deploy.sh) — containers ไม่เห็น
   - `<stack>/.env` → secrets เฉพาะ stack นั้นๆ
   - `<stack>/.env.example` → template (commit ได้)
 - **ไฟล์ที่เปลี่ยน:**

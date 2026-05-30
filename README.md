@@ -43,19 +43,19 @@ All stacks except `watchtower` are exposed externally via **Synology Reverse Pro
 **Each stack owns its own `.env`** — secrets are scoped to the container that needs them. The root `.env` holds deploy + local-script config only.
 
 ```text
-.env                      # deploy.sh + scripts/sync_notion.py (NAS_*, NOTION_*)
+.env                      # deploy.sh only (NAS_*)
 homepage/.env             # HOMEPAGE_VAR_*, NAS_VOLUME_ROOT
 jellyfin/.env             # NAS_VOLUME_ROOT, NAS_MEDIA_ROOT
 secretary/.env            # N8N_BASIC_AUTH_USER/PASSWORD, N8N_WEBHOOK_URL
-secretary/ingest/.env     # NOTION_TOKEN, QDRANT_URL, NOTION_SOURCE_TYPE
+secretary/ingest/.env     # SECRETARY_NOTION_TOKEN, QDRANT_URL, NOTION_SOURCE_TYPE
 secretary/query/.env      # LLM_PROVIDER, ANTHROPIC_API_KEY, COHERE_API_KEY
 maid-tracker/.env         # MAID_LINE_*, MONTHLY_REPORT_TIME
 portainer/                # (no .env needed)
 torrentwatch/.env         # TORRENTWATCH_*, NGINX_BASIC_AUTH_*, NAS_TORRENT_PATH
 uptime-kuma/.env          # NAS_VOLUME_ROOT
-watchtower/.env           # WATCHTOWER_LINE_*
-hermes-agent/.env         # OPENROUTER_API_KEY, TELEGRAM_BOT_TOKEN, DISCORD_BOT_TOKEN, HERMES_UID/GID
-news-feed/.env            # ANTHROPIC_API_KEY, OPENROUTER_API_KEY, LINE_CHANNEL_ACCESS_TOKEN, LINE_USER_ID, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, ADMIN_TOKEN, SUMMARIZER_PROVIDER/MODEL
+watchtower/.env           # WATCHTOWER_LINE_*, WATCHTOWER_TELEGRAM_BOT_TOKEN
+hermes-agent/.env         # OPENROUTER_API_KEY, HERMES_TELEGRAM_BOT_TOKEN, DISCORD_BOT_TOKEN, HERMES_UID/GID
+news-feed/.env            # ANTHROPIC_API_KEY, OPENROUTER_API_KEY, LINE_CHANNEL_ACCESS_TOKEN, LINE_USER_ID, NEWS_FEED_TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, ADMIN_TOKEN, SUMMARIZER_PROVIDER/MODEL
 ```
 
 ```bash
