@@ -96,3 +96,22 @@ def test_numeric_value_serialized_as_string() -> None:
     assert render_env.compose_quote(30) == "30"
     assert render_env.compose_quote(True) == "true"
     assert render_env.compose_quote(False) == "false"
+
+
+def test_duplicate_env_keys_raise() -> None:
+    # env-vs-literal collision in the same manifest is an error.
+    vault = {"shared": {"x": {"a": "1", "b": "2"}}}
+    manifest = {"env": {"FOO": "shared.x.a"}, "literals": {"FOO": "literal"}}
+    with pytest.raises(render_env.RenderError) as exc_info:
+        render_env.render_stack(vault, manifest)
+    assert "FOO" in str(exc_info.value)
+
+
+def test_literal_only_with_int_value_renders_unquoted() -> None:
+    out = render_env.render_stack({}, {"literals": {"RETENTION_DAYS": 30}})
+    assert "RETENTION_DAYS=30" in out
+
+
+def test_literal_with_boolean_renders_lowercase() -> None:
+    out = render_env.render_stack({}, {"literals": {"DEBUG": True}})
+    assert "DEBUG=true" in out

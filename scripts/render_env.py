@@ -79,7 +79,12 @@ def render_stack(vault: Mapping[str, Any], manifest: Mapping[str, Any]) -> str:
     env_map = manifest.get("env") or {}
     literals = manifest.get("literals") or {}
 
+    seen: set[str] = set()
+
     for env_name, vault_path in env_map.items():
+        if env_name in seen:
+            raise RenderError(f"duplicate ENV name '{env_name}' in manifest")
+        seen.add(env_name)
         value = lookup(vault, vault_path)
         if value is None:
             raise RenderError(
@@ -89,6 +94,11 @@ def render_stack(vault: Mapping[str, Any], manifest: Mapping[str, Any]) -> str:
         lines.append(f"{env_name}={compose_quote(value)}")
 
     for env_name, value in literals.items():
+        if env_name in seen:
+            raise RenderError(
+                f"literal '{env_name}' collides with env mapping in same manifest"
+            )
+        seen.add(env_name)
         lines.append(f"{env_name}={compose_quote(value)}")
 
     return "\n".join(lines) + "\n"
