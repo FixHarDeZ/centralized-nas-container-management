@@ -37,7 +37,7 @@ def _send_line(message: str) -> bool:
 
 
 def _send_telegram(message: str) -> bool:
-    token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    token = os.getenv("NEWS_FEED_TELEGRAM_BOT_TOKEN", "")
     chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
     if not token or not chat_id:
         logger.warning("Telegram credentials not set, skipping")

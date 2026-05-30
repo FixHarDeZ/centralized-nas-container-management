@@ -20,7 +20,7 @@ LINE_USER_ID         = os.environ["WATCHTOWER_LINE_USER_ID"]
 WATCHTOWER_CONTAINER = os.environ.get("WATCHTOWER_CONTAINER_NAME", "watchtower")
 DOCKER_SOCKET        = os.environ.get("DOCKER_SOCKET", "/var/run/docker.sock")
 TZ                   = ZoneInfo(os.environ.get("TZ", "Asia/Bangkok"))
-TELEGRAM_BOT_TOKEN   = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_BOT_TOKEN   = os.environ.get("WATCHTOWER_TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID     = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 # ─── Watchtower 1.7.x structured log patterns ──────────────────────────────

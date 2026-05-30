@@ -13,6 +13,7 @@ services:
       - HERMES_UID=${HERMES_UID:-1000}
       - HERMES_GID=${HERMES_GID:-100}
       - HERMES_HOME=/opt/data
+      - TELEGRAM_BOT_TOKEN=${HERMES_TELEGRAM_BOT_TOKEN}
     volumes:
       - hermes_agent_data:/opt/data
     labels:
@@ -31,6 +32,7 @@ services:
       - HERMES_UID=${HERMES_UID:-1000}
       - HERMES_GID=${HERMES_GID:-100}
       - HERMES_HOME=/opt/data
+      - TELEGRAM_BOT_TOKEN=${HERMES_TELEGRAM_BOT_TOKEN}
     expose:
       - "9119"
     volumes:
