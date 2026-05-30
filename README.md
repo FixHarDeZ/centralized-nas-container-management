@@ -42,6 +42,8 @@ All stacks except `watchtower` are exposed externally via **Synology Reverse Pro
 
 **Secrets live in `secrets/vault.sops.yaml`** — one encrypted YAML (sops+age) committed to git as the single source of truth. Each stack has a `secrets.manifest.yaml` declaring which vault paths it consumes and the ENV name to project them as. A generator (`make secrets`) decrypts the vault, applies each manifest, and writes per-stack `.env` files (gitignored). The NAS never sees sops or age.
 
+> **Full docs:** [secrets/README.md](secrets/README.md) — architecture diagrams, step-by-step guides for adding/removing/rotating secrets, new machine setup, and troubleshooting.
+
 ### Setup
 
 ```bash
