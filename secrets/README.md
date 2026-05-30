@@ -1,4 +1,12 @@
+<p align="center">
+  <a href="#english">English</a> · <a href="#ภาษาไทย">ภาษาไทย</a>
+</p>
+
+---
+
 # Secrets Management
+
+<a id="english"></a>
 
 Single source of truth for all secrets across every stack, encrypted at rest with [sops](https://github.com/getsops/sops) + [age](https://github.com/FiloSottile/age).
 
@@ -278,6 +286,294 @@ To add the CI secret (one-time):
 - CI uses `secrets/test-vault.sops.yaml` (different age key from prod)
 
 **Want to preview without writing:**
+```bash
+python scripts/render_env.py --dry-run
+```
+
+---
+
+# การจัดการ Secrets
+
+<a id="ภาษาไทย"></a>
+
+แหล่งข้อมูลเดียว (Single Source of Truth) สำหรับ secrets ทั้งหมดในทุก stack เข้ารหัสไว้ด้วย [sops](https://github.com/getsops/sops) + [age](https://github.com/FiloSottile/age)
+
+## สถาปัตยกรรม
+
+```
+secrets/vault.sops.yaml          ← YAML เข้ารหัส committed ลง git
+    ├── shared/                  ← secrets ใช้ร่วมกันหลาย stack (NAS creds, LLM keys)
+    ├── stacks/                  ← secrets เฉพาะแต่ละ stack
+    └── deploy/                  ← secrets สำหรับ deploy เท่านั้น
+
+<stack>/secrets.manifest.yaml    ← ประกาศว่า stack นี้ใช้ vault path อะไรบ้าง
+scripts/render_env.py            ← ถอดรหัส vault + อ่าน manifest → เขียน .env
+```
+
+**Flow:** `make edit-vault` (แก้ไข YAML เข้ารหัส) → `make secrets` (สร้าง .env files) → `./scripts/deploy.sh` (upload + restart)
+
+## เพิ่ม Secret ใหม่
+
+### Step 1: เพิ่มค่าลงใน vault
+
+```bash
+make edit-vault
+```
+
+คำสั่งนี้จะเปิด `secrets/vault.sops.yaml` ใน `$EDITOR` ของคุณ sops จะถอดรหัสอัตโนมัติเวลาอ่าน และเข้ารหัสใหม่เวลา save
+
+**ใส่ตรงไหน:**
+
+| Scope | Path ใน vault | ใช้เมื่อ |
+|---|---|---|
+| ใช้ร่วมหลาย stack | `shared.<category>.<key>` | API keys ที่ใช้ 2+ stacks (เช่น `shared.llm.openrouter_api_key`) |
+| เฉพาะ stack เดียว | `stacks.<stack_name>.<key>` | Secrets ที่ stack เดียวใช้ (เช่น `stacks.maid_tracker.line.channel_access_token`) |
+
+**Naming conventions:**
+- Vault keys: `snake_case` (เช่น `channel_access_token`, ไม่ใช่ `CHANNEL_ACCESS_TOKEN`)
+- Stack name ใน path: ตรงกับชื่อ directory แต่แทน `-` ด้วย `_` (เช่น `maid-tracker/` → `stacks.maid_tracker`)
+- Nesting ได้: `stacks.watchtower.line.user_id`
+
+**ตัวอย่าง — เพิ่ม shared API key ใหม่:**
+
+```yaml
+shared:
+  llm:
+    openrouter_api_key: sk-or-v1-...    # ที่มีอยู่
+    new_service_api_key: abc123         # ← เพิ่มตรงนี้
+
+stacks:
+  news_feed:
+    telegram:
+      bot_token: 8774745907:AAFz...
+    new_service_api_key: xyz789         # ← หรือแบบ per-stack
+```
+
+Save แล้วปิด editor sops จะเข้ารหัสใหม่อัตโนมัติ
+
+### Step 2: Map ใน manifest ของ stack
+
+แก้ไข `<stack>/secrets.manifest.yaml`:
+
+```yaml
+env:
+  # mappings ที่มีอยู่...
+  OPENROUTER_API_KEY: shared.llm.openrouter_api_key
+
+  # mapping ใหม่: ENV_NAME_IN_DOTENV → vault.dotted.path
+  NEW_SERVICE_API_KEY: shared.llm.new_service_api_key
+
+literals:
+  # ค่า config ที่ไม่ใช่ secret — เขียนลง .env ตรงๆ
+  SOME_PUBLIC_URL: https://api.example.com
+```
+
+**กฎ:**
+- `env:` values ต้องขึ้นต้นด้วย `shared.`, `stacks.` หรือ `deploy.`
+- `env:` keys ต้องเป็น `UPPER_SNAKE_CASE` (validate ด้วย `secrets/manifest.schema.json`)
+- `literals:` สำหรับ config ที่ไม่ใช่ secret (URLs, feature flags, defaults)
+- ห้ามมี ENV name ซ้ำระหว่าง `env:` กับ `literals:`
+
+### Step 3: สร้าง .env files ใหม่
+
+```bash
+make secrets
+```
+
+Output:
+```
+  wrote hermes-agent/.env
+  wrote homepage/.env
+  ...
+  wrote <stack>/.env
+```
+
+ตรวจสอบว่า key ใหม่ปรากฏ:
+```bash
+grep NEW_SERVICE_API_KEY <stack>/.env
+```
+
+### Step 4: ใช้ใน application
+
+**Docker Compose** (`docker-compose.yml`):
+
+```yaml
+services:
+  my-service:
+    env_file: .env                    # โหลดทุก var จาก .env
+    environment:
+      - NEW_SERVICE_API_KEY=${NEW_SERVICE_API_KEY}   # pass-through ชัดเจน (ไม่จำเป็น)
+```
+
+**Python** (FastAPI, scripts, etc.):
+
+```python
+import os
+
+api_key = os.getenv("NEW_SERVICE_API_KEY", "")        # มี default
+api_key = os.environ["NEW_SERVICE_API_KEY"]            # required (crash ถ้าไม่มี)
+```
+
+**JavaScript/Node.js:**
+
+```javascript
+const apiKey = process.env.NEW_SERVICE_API_KEY;
+```
+
+**Shell script:**
+
+```bash
+echo "$NEW_SERVICE_API_KEY"
+# หรือมี default:
+echo "${NEW_SERVICE_API_KEY:-fallback}"
+```
+
+### Step 5: ทดสอบ
+
+```bash
+make check                    # validate manifests กับ vault
+make test                     # รัน pytest (43 tests)
+python scripts/render_env.py --dry-run   # preview output โดยไม่เขียนไฟล์
+```
+
+### Step 6: Commit + Deploy
+
+```bash
+git add <stack>/secrets.manifest.yaml
+git commit -m "feat(<stack>): add NEW_SERVICE_API_KEY"
+make secrets && ./scripts/deploy.sh -s <stack> -y
+```
+
+> `vault.sops.yaml` ถูก track อยู่แล้ว — commit แค่ manifest .env files ที่สร้างเป็น gitignored
+
+## ลบ Secret
+
+1. **ลบจาก manifest** — ลบบรรทัดจาก `<stack>/secrets.manifest.yaml`
+2. **ลบจาก vault** — `make edit-vault`, ลบ key
+3. **ลบจากโค้ด** — ลบ `os.getenv()` / `os.environ[]` ที่เกี่ยวข้อง
+4. **สร้าง .env ใหม่** — `make secrets`
+5. **Commit** — `git add -A && git commit`
+
+## Rotate Secret
+
+1. `make edit-vault` — อัปเดตค่า
+2. `make secrets` — สร้าง .env files ใหม่
+3. `./scripts/deploy.sh -s <stack> -y` — restart stack
+4. (ถ้าค่าเก่าถูกเปิดเผย) revoke ที่ provider
+
+## Setup บนเครื่องใหม่
+
+### Prerequisites
+
+```bash
+# 1. ลง tooling
+brew install sops age        # macOS
+# หรือ: apt install sops age   # Linux
+
+# 2. ขอ age private key (จาก Bitwarden / 1Password / vault maintainer)
+mkdir -p ~/.config/sops/age
+cat > ~/.config/sops/age/keys.txt << 'EOF'
+# created: 2026-05-30T...
+# public key: age19dju...
+AGE-SECRET-KEY-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+EOF
+chmod 600 ~/.config/sops/age/keys.txt
+```
+
+### Clone + สร้าง .env
+
+```bash
+git clone https://github.com/FixHarDeZ/centralized-nas-container-management.git
+cd centralized-nas-container-management
+
+# สร้าง venv + ลง deps (สำหรับ render_env.py)
+python3 -m venv .venv
+.venv/bin/pip install pyyaml
+
+# สร้าง .env files ทั้งหมด
+make secrets
+
+# ตรวจสอบ
+make check
+```
+
+### Deploy
+
+```bash
+# กรอก deploy credentials (NAS host, user, sudo password)
+make edit-vault
+# แก้ section shared.nas.*
+
+# สร้าง + deploy
+make secrets
+./scripts/deploy.sh
+```
+
+### เพิ่ม Age Recipient ใหม่ (Multi-Machine)
+
+ถ้าเครื่องใหม่ต้องถอดรหัส vault:
+
+```bash
+# บนเครื่องใหม่: สร้าง key pair
+age-keygen -o ~/.config/sops/age/keys.txt
+# จด public key: age1...
+
+# บนเครื่องที่มีสิทธิ์อยู่แล้ว: เพิ่ม public key ใหม่ใน .sops.yaml
+# แล้วเข้ารหัสใหม่:
+sops updatekeys secrets/vault.sops.yaml
+
+# Commit .sops.yaml และ vault.sops.yaml ที่อัปเดต
+git add .sops.yaml secrets/vault.sops.yaml
+git commit -m "chore(secrets): add new age recipient"
+```
+
+## CI / GitHub Actions
+
+Workflow `.github/workflows/secrets.yml` validate ทุก PR:
+
+1. ลง sops + age บน `ubuntu-latest`
+2. โหลด `SOPS_AGE_KEY` จาก GitHub Actions secret (CI-only age key)
+3. รัน `pytest tests/ -v` (43 tests)
+4. รัน `python scripts/render_env.py --check --vault secrets/test-vault.sops.yaml`
+
+**`secrets/test-vault.sops.yaml`** เป็น vault แยกเข้ารหัสด้วย CI age key มีค่า dummy ใช้ validate ว่า manifests ถูกต้องเชิงโครงสร้างโดยไม่เปิดเผย secrets จริง
+
+เพิ่ม CI secret (ครั้งเดียว):
+1. ไปที่ GitHub repo → Settings → Secrets and variables → Actions
+2. เพิ่ม `SOPS_AGE_KEY` ด้วยค่า CI private key
+
+## File Reference
+
+| File | Tracked | หน้าที่ |
+|---|---|---|
+| `.sops.yaml` | yes | age public keys สำหรับเข้ารหัส (prod + CI) |
+| `vault.sops.yaml` | yes | Secrets ทั้งหมด, เข้ารหัส |
+| `test-vault.sops.yaml` | yes | CI dummy vault, เข้ารหัสด้วย CI key |
+| `manifest.schema.json` | yes | JSON Schema สำหรับ validate manifests |
+| `<stack>/secrets.manifest.yaml` | yes | Per-stack vault → ENV mapping |
+| `deploy.manifest.yaml` | yes | Root deploy vault → ENV mapping |
+| `<stack>/.env` | **no** (gitignored) | สร้างจาก generator, upload ขึ้น NAS |
+| `.env.deploy` | **no** (gitignored) | สร้างจาก generator, deploy.sh ใช้ locally |
+
+## Troubleshooting
+
+**`sops decrypt failed: no secret keys found`**
+- ตรวจว่า `~/.config/sops/age/keys.txt` มีอยู่และมี private key
+- หรือตั้ง `SOPS_AGE_KEY_FILE` env var ชี้ไปที่ key file
+
+**`manifest references missing vault path`**
+- vault path ใน `secrets.manifest.yaml` ไม่มีใน `vault.sops.yaml`
+- `make edit-vault` เพื่อเพิ่ม key ที่ขาด หรือแก้ path ใน manifest
+
+**`render_env.py` produces empty value**
+- vault key มีอยู่แต่ค่าเป็น empty string `""`
+- ถูกต้อง — .env จะมี `KEY=`
+
+**CI fails with `sops decrypt failed`**
+- `SOPS_AGE_KEY` GitHub Actions secret หายไปหรือใส่ key ผิด
+- CI ใช้ `secrets/test-vault.sops.yaml` (age key คนละตัวกับ prod)
+
+**อยาก preview โดยไม่เขียนไฟล์:**
 ```bash
 python scripts/render_env.py --dry-run
 ```
