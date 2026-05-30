@@ -24,6 +24,66 @@ scripts/render_env.py            ← decrypts vault + reads manifests → writes
 
 **Flow:** `make edit-vault` (edit encrypted YAML) → `make secrets` (generate .env files) → `./scripts/deploy.sh` (upload + restart)
 
+```mermaid
+flowchart LR
+    subgraph Workstation["💻 Workstation"]
+        A["make edit-vault"] -->|sops decrypt| B["vault.sops.yaml\n(encrypted)"]
+        B -->|sops re-encrypt| A
+        B --> C["make secrets"]
+        C -->|render_env.py| D["<stack>/.env\n(generated, gitignored)"]
+        D --> E["./scripts/deploy.sh"]
+    end
+
+    subgraph NAS["🖥️ Synology NAS"]
+        E -->|tar + ssh| F["tar extract"]
+        F --> G["docker compose\nup -d --build"]
+        G --> H["Containers running"]
+    end
+
+    subgraph Git["📦 Git"]
+        B
+        I["<stack>/secrets.manifest.yaml"]
+        J[".sops.yaml\n(age public keys)"]
+    end
+
+    C -.->|reads| I
+    C -.->|decrypts| B
+
+    style A fill:#4CAF50,color:#fff
+    style B fill:#FF9800,color:#fff
+    style C fill:#2196F3,color:#fff
+    style D fill:#9C27B0,color:#fff
+    style E fill:#F44336,color:#fff
+    style H fill:#4CAF50,color:#fff
+```
+
+### Vault Structure
+
+```mermaid
+flowchart TD
+    V["secrets/vault.sops.yaml\n🔒 encrypted"]
+
+    V --> SH["shared/"]
+    V --> ST["stacks/"]
+
+    SH --> SHNAS["nas/\n  user, host, port\n  ssh_key, sudo_password"]
+    SH --> SHLLM["llm/\n  openrouter_api_key\n  cohere_api_key"]
+    SH --> SHNOTION["notion/\n  secretary_token"]
+
+    ST --> STH["homepage/\n  allowed_hosts\n  var_nas_url, var_*"]
+    ST --> STNF["news_feed/\n  admin_token\n  telegram/*"]
+    ST --> STHA["hermes_agent/\n  telegram/*\n  discord/*, xiaomi/*"]
+    ST --> STMT["maid_tracker/\n  line/*"]
+    ST --> STTW["torrentwatch/\n  site/*, line/*\n  telegram/*"]
+    ST --> STWT["watchtower/\n  line/*, telegram/*"]
+    ST --> STSQ["secretary/query/\n  anthropic_api_key\n  openrouter_api_key"]
+    ST --> STSI["secretary/ingest/\n  (uses shared.notion.*)"]
+
+    style V fill:#FF9800,color:#fff
+    style SH fill:#2196F3,color:#fff
+    style ST fill:#9C27B0,color:#fff
+```
+
 ## Adding a New Secret
 
 ### Step 1: Add the value to the vault
@@ -311,6 +371,66 @@ scripts/render_env.py            ← ถอดรหัส vault + อ่าน 
 ```
 
 **Flow:** `make edit-vault` (แก้ไข YAML เข้ารหัส) → `make secrets` (สร้าง .env files) → `./scripts/deploy.sh` (upload + restart)
+
+```mermaid
+flowchart LR
+    subgraph Workstation["💻 เครื่อง Workstation"]
+        A["make edit-vault"] -->|sops ถอดรหัส| B["vault.sops.yaml\n(เข้ารหัส)"]
+        B -->|sops เข้ารหัสใหม่| A
+        B --> C["make secrets"]
+        C -->|render_env.py| D["<stack>/.env\n(สร้างอัตโนมัติ, gitignored)"]
+        D --> E["./scripts/deploy.sh"]
+    end
+
+    subgraph NAS["🖥️ Synology NAS"]
+        E -->|tar + ssh| F["tar extract"]
+        F --> G["docker compose\nup -d --build"]
+        G --> H["Containers ทำงาน"]
+    end
+
+    subgraph Git["📦 Git"]
+        B
+        I["<stack>/secrets.manifest.yaml"]
+        J[".sops.yaml\n(age public keys)"]
+    end
+
+    C -.->|อ่าน| I
+    C -.->|ถอดรหัส| B
+
+    style A fill:#4CAF50,color:#fff
+    style B fill:#FF9800,color:#fff
+    style C fill:#2196F3,color:#fff
+    style D fill:#9C27B0,color:#fff
+    style E fill:#F44336,color:#fff
+    style H fill:#4CAF50,color:#fff
+```
+
+### โครงสร้าง Vault
+
+```mermaid
+flowchart TD
+    V["secrets/vault.sops.yaml\n🔒 เข้ารหัส"]
+
+    V --> SH["shared/"]
+    V --> ST["stacks/"]
+
+    SH --> SHNAS["nas/\n  user, host, port\n  ssh_key, sudo_password"]
+    SH --> SHLLM["llm/\n  openrouter_api_key\n  cohere_api_key"]
+    SH --> SHNOTION["notion/\n  secretary_token"]
+
+    ST --> STH["homepage/\n  allowed_hosts\n  var_nas_url, var_*"]
+    ST --> STNF["news_feed/\n  admin_token\n  telegram/*"]
+    ST --> STHA["hermes_agent/\n  telegram/*\n  discord/*, xiaomi/*"]
+    ST --> STMT["maid_tracker/\n  line/*"]
+    ST --> STTW["torrentwatch/\n  site/*, line/*\n  telegram/*"]
+    ST --> STWT["watchtower/\n  line/*, telegram/*"]
+    ST --> STSQ["secretary/query/\n  anthropic_api_key\n  openrouter_api_key"]
+    ST --> STSI["secretary/ingest/\n  (ใช้ shared.notion.*)"]
+
+    style V fill:#FF9800,color:#fff
+    style SH fill:#2196F3,color:#fff
+    style ST fill:#9C27B0,color:#fff
+```
 
 ## เพิ่ม Secret ใหม่
 
