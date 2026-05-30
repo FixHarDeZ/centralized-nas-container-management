@@ -2,6 +2,26 @@
 
 ---
 
+## 2026-05-30 — Fix gateway crash loop (s6-setuidgid: not found)
+
+### Root Cause
+
+- `hermes update --force` was run inside the running container
+- This overwrote `/opt/hermes/docker/` in the container's overlay layer with new upstream s6-overlay-based code
+- The new `stage2-hook.sh` calls `s6-setuidgid` at line 196, but our image uses `gosu` (not s6-overlay) — binary not found → exit 127 → crash loop
+
+### Fix
+
+- `docker compose stop hermes-gateway && docker compose rm -f hermes-gateway && docker compose up -d hermes-gateway`
+- Recreating the container discards the modified overlay layer and starts fresh from the clean image
+- Gateway back up and stable; Discord error expected (no token configured)
+
+### Warning
+
+**ห้ามรัน `hermes update --force` ใน container** — มันแก้ไข code ใน container layer ทำให้ entrypoint พัง. ถ้าอยากอัพเดต ให้ rebuild image: `docker compose up -d --build hermes-gateway`
+
+---
+
 ## 2026-05-25 — Add Nginx basic-auth sidecar for dashboard
 
 ### งานที่ทำ
