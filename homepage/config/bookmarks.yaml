@@ -1,6 +1,9 @@
 ---
 # ─── Quick Bookmarks ─────────────────────────────────────────────────────────
 - Quick Access:
+    - Telegram:
+        - abbr: TG
+          href: https://web.telegram.org
     - ASUS Router:
         - abbr: AS
           href: https://192.168.50.1:8443
