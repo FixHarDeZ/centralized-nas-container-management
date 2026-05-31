@@ -107,3 +107,20 @@ State DB for `/ingest-trigger`: `query-data` volume (`/volume2/docker/secretary/
 **BGE-M3** (`BAAI/bge-m3`) via FlagEmbedding — CPU-only torch (~200MB, not CUDA ~2.5GB). Hybrid search: 1024d dense (Cosine) + sparse lexical weights, fused with RRF.
 
 First run downloads ~2GB to `hf_cache` volume shared between ingest and query containers.
+
+## n8n Workflow Backup
+
+Export and import n8n workflows via REST API (requires `N8N_API_KEY` in `secretary/.env`).
+
+```bash
+# Export all workflows to JSON files in secretary/n8n-workflows/
+./scripts/n8n_export.sh
+
+# Import all workflows back into n8n (upsert by name)
+./scripts/n8n_import.sh
+
+# Import a specific workflow file
+./scripts/n8n_import.sh secretary/n8n-workflows/Secretary_Bot__syPPm4qxmVNENC9U.json
+```
+
+Workflow JSON files are git-tracked for version control.

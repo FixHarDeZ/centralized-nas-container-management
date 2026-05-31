@@ -84,5 +84,14 @@ The `POST /ingest-trigger` endpoint in `secretary-query` runs `ingest.py` as a s
 ## /query Response — Sources Filtering (2026-05-28)
 `sources` in the response now contains only chunks actually cited by the LLM (`[1]`, `[2]`, etc.), not all top_k_final hits. Regex parse in `main.py:147`. This fixes n8n showing unrelated reference links alongside the answer.
 
+## n8n Workflow Backup
+Manual scripts to export/import n8n workflows via REST API (SSH tunnel to NAS localhost:5678).
+
+**Export:** `./scripts/n8n_export.sh` → saves workflow JSONs to `secretary/n8n-workflows/`
+**Import:** `./scripts/n8n_import.sh [file.json]` → updates existing workflows by name (upsert)
+
+Requires `N8N_API_KEY` in `secretary/.env` (generated from vault via `make secrets`).
+Workflow files are git-tracked for version control.
+
 ## Gaps / TODOs
-- n8n workflow JSON not exported/committed yet
+- (none)
