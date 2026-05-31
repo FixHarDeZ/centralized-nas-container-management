@@ -82,7 +82,7 @@ NAS_SUDO_PASSWORD="${NAS_SUDO_PASSWORD:-}"
 NAS_SSH_ALIAS="${NAS_SSH_ALIAS:-}"
 
 # ── Dependency check ─────────────────────────────────────────────────────────
-for dep in rsync ssh; do
+for dep in ssh; do
   if ! command -v "$dep" &>/dev/null; then
     err "'$dep' is required but not installed."
     exit 1
