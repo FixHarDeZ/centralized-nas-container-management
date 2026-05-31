@@ -71,7 +71,7 @@ flowchart TD
     SH --> SHNOTION["notion/\n  secretary_token"]
 
     ST --> STH["homepage/\n  allowed_hosts\n  var_nas_url, var_*"]
-    ST --> STNF["news_feed/\n  admin_token\n  telegram/*"]
+    ST --> STNF["news_feed/\n  admin_token\n  telegram/*, mimo/*"]
     ST --> STHA["hermes_agent/\n  telegram/*\n  discord/*, xiaomi/*"]
     ST --> STMT["maid_tracker/\n  line/*"]
     ST --> STTW["torrentwatch/\n  site/*, line/*\n  telegram/*"]
@@ -82,6 +82,34 @@ flowchart TD
     style V fill:#FF9800,color:#fff
     style SH fill:#2196F3,color:#fff
     style ST fill:#9C27B0,color:#fff
+```
+
+## User Journey — Adding a Secret
+
+```mermaid
+journey
+    title Developer adds a new secret to a stack
+    section Prepare
+      Decide vault path (shared or stack-private): 5: Developer
+      Get secret value from provider: 3: Developer
+    section Vault
+      Run `make edit-vault`: 5: Developer
+      Add key under correct section: 5: Developer
+      Save & close editor (sops re-encrypts): 5: sops
+    section Manifest
+      Edit `<stack>/secrets.manifest.yaml`: 5: Developer
+      Add ENV_NAME → vault.path mapping: 5: Developer
+    section Generate
+      Run `make secrets`: 5: Developer
+      Verify `grep ENV_NAME <stack>/.env`: 5: Developer
+    section Integrate
+      Use `os.getenv("ENV_NAME")` in code: 5: Developer
+      Reference in `docker-compose.yml`: 5: Developer
+    section Validate & Deploy
+      Run `make check` + `make test`: 5: Developer
+      Commit manifest + vault: 5: Developer
+      Run `./scripts/deploy.sh -s <stack>`: 5: deploy.sh
+      Container restarts with new secret: 5: Docker
 ```
 
 ## Adding a New Secret
@@ -419,7 +447,7 @@ flowchart TD
     SH --> SHNOTION["notion/\n  secretary_token"]
 
     ST --> STH["homepage/\n  allowed_hosts\n  var_nas_url, var_*"]
-    ST --> STNF["news_feed/\n  admin_token\n  telegram/*"]
+    ST --> STNF["news_feed/\n  admin_token\n  telegram/*, mimo/*"]
     ST --> STHA["hermes_agent/\n  telegram/*\n  discord/*, xiaomi/*"]
     ST --> STMT["maid_tracker/\n  line/*"]
     ST --> STTW["torrentwatch/\n  site/*, line/*\n  telegram/*"]
@@ -430,6 +458,34 @@ flowchart TD
     style V fill:#FF9800,color:#fff
     style SH fill:#2196F3,color:#fff
     style ST fill:#9C27B0,color:#fff
+```
+
+## User Journey — การเพิ่ม Secret ใหม่
+
+```mermaid
+journey
+    title Developer เพิ่ม secret ใหม่เข้า stack
+    section เตรียมตัว
+      เลือก vault path (shared หรือ stack-private): 5: Developer
+      รับ secret value จาก provider: 3: Developer
+    section Vault
+      รัน `make edit-vault`: 5: Developer
+      เพิ่ม key ใน section ที่ถูกต้อง: 5: Developer
+      Save & ปิด editor (sops เข้ารหัสใหม่): 5: sops
+    section Manifest
+      แก้ `<stack>/secrets.manifest.yaml`: 5: Developer
+      เพิ่ม ENV_NAME → vault.path mapping: 5: Developer
+    section สร้าง .env
+      รัน `make secrets`: 5: Developer
+      ตรวจ `grep ENV_NAME <stack>/.env`: 5: Developer
+    section ใช้ในโค้ด
+      ใช้ `os.getenv("ENV_NAME")` ใน Python: 5: Developer
+      อ้างอิงใน `docker-compose.yml`: 5: Developer
+    section Validate & Deploy
+      รัน `make check` + `make test`: 5: Developer
+      Commit manifest + vault: 5: Developer
+      รัน `./scripts/deploy.sh -s <stack>`: 5: deploy.sh
+      Container restart พร้อม secret ใหม่: 5: Docker
 ```
 
 ## เพิ่ม Secret ใหม่
