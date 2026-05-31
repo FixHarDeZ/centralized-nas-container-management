@@ -67,9 +67,38 @@ def _summarize_openrouter(title: str, body: str, model: str) -> str:
     return _with_retry(call)
 
 
+def _summarize_mimo(title: str, body: str, model: str) -> str:
+    api_key = os.getenv("MIMO_API_KEY", "")
+    base_url = os.getenv("MIMO_BASE_URL", "https://token-plan-sgp.xiaomimimo.com/v1").rstrip("/")
+
+    def call():
+        resp = httpx.post(
+            f"{base_url}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": model,
+                "max_tokens": 300,
+                "messages": [
+                    {"role": "system", "content": _SYSTEM},
+                    {"role": "user", "content": _user_prompt(title, body)},
+                ],
+            },
+            timeout=30.0,
+        )
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
+
+    return _with_retry(call)
+
+
 def summarize(title: str, body: str, config: dict) -> str:
     provider = config.get("summarizer_provider", "anthropic")
     model = config.get("summarizer_model", "claude-sonnet-4-6")
     if provider == "openrouter":
         return _summarize_openrouter(title, body, model)
+    if provider == "mimo":
+        return _summarize_mimo(title, body, model)
     return _summarize_anthropic(title, body, model)

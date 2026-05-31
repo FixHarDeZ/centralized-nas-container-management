@@ -79,9 +79,11 @@ Two-container stack:
 | TELEGRAM_BOT_TOKEN | Telegram bot |
 | TELEGRAM_CHAT_ID | Telegram chat target |
 | ADMIN_TOKEN | POST /api/digest/trigger |
-| SUMMARIZER_PROVIDER | anthropic / openrouter |
-| SUMMARIZER_MODEL | เช่น claude-sonnet-4-6 / deepseek/deepseek-chat |
+| SUMMARIZER_PROVIDER | anthropic / openrouter / mimo |
+| SUMMARIZER_MODEL | เช่น claude-sonnet-4-6 / deepseek/deepseek-chat / mimo-v2.5-pro |
 | OPENROUTER_API_KEY | ถ้าใช้ openrouter |
+| MIMO_API_KEY | ถ้าใช้ mimo |
+| MIMO_BASE_URL | mimo API endpoint (default: https://token-plan-sgp.xiaomimimo.com/v1) |
 | DIGEST_TIMES | 07:00,12:00,18:00 |
 | ENABLED_SOURCES | comma-separated source keys |
 | RETENTION_DAYS | จำนวนวันที่เก็บข่าว (default 30) — cleanup job ลบที่เก่ากว่านี้ทุก 03:30 |
@@ -132,3 +134,4 @@ Two-container stack:
 | 2026-05-29 | Feature: Top Hit Cheapest/Free cards, leaderboard jump bar + collapsible + watchlist (localStorage), news retention (`RETENTION_DAYS` + cleanup job + `DELETE /api/news` + `POST /api/news/cleanup`), `POST /api/fetch/now`, Xiaomi→CN zone fix, news sort by published date. 56 tests |
 | 2026-05-29 | Mobile layout: bottom nav bar (News/Board/Prices/More), bottom drawer (Digest/Health/Config), responsive Price table (3-col + tap-to-expand), stacked news controls. CSS `@media(max-width:640px)` only — desktop unchanged. |
 | 2026-05-29 | Digest status badge on News Timeline (ส่งแล้ว/รอส่ง/พ้น window); `GET /api/news/sent-ids`; digest window 6h→12h; max 2 articles/source/digest via `select_digest_articles()`. 65 tests. |
+| 2026-05-31 | Feature: เพิ่ม Xiaomi MiMo เป็น summarizer provider ตัวที่ 3 (OpenAI-compatible API); `MIMO_API_KEY` + `MIMO_BASE_URL` ใน vault/manifest; dashboard dropdown เพิ่ม Mimo option |
