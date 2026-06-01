@@ -185,13 +185,17 @@ async def health():
 
 
 @app.post("/ingest-trigger")
-async def ingest_trigger():
+async def ingest_trigger(full: bool = False):
     try:
+        env = os.environ.copy()
+        if full:
+            env["FULL_INGEST"] = "1"
         proc = await asyncio.create_subprocess_exec(
             "python",
             "/ingest/ingest.py",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            env=env,
         )
         stdout, stderr = await proc.communicate()
         combined = (stdout + stderr).decode(errors="replace")
