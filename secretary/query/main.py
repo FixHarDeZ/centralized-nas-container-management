@@ -185,14 +185,16 @@ async def health():
 
 
 @app.post("/ingest-trigger")
-async def ingest_trigger(full: bool = False):
+async def ingest_trigger(full: bool = False, page_id: str = ""):
     try:
         env = os.environ.copy()
         if full:
             env["FULL_INGEST"] = "1"
+        cmd = ["python", "/ingest/ingest.py"]
+        if page_id:
+            cmd.extend(["--page", page_id])
         proc = await asyncio.create_subprocess_exec(
-            "python",
-            "/ingest/ingest.py",
+            *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env=env,
