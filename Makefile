@@ -8,7 +8,7 @@ help:           ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-14s %s\n", $$1, $$2}'
 
 secrets:        ## Render <stack>/.env + .env.deploy from vault + manifests
-	@$(PY) scripts/render_env.py
+	@$(PY) scripts/render_env.py $(ARGS)
 
 check:          ## Validate manifests + vault consistency without writing
 	@$(PY) scripts/render_env.py --check
