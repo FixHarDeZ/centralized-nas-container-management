@@ -19,6 +19,7 @@ secrets/vault.sops.yaml          ← encrypted YAML, committed to git
     └── deploy/                  ← deploy-only secrets (NAS_SUDO_PASSWORD etc.)
 
 <stack>/secrets.manifest.yaml    ← declares which vault paths this stack needs
+scripts/secrets.manifest.yaml    ← local dev tooling (e.g. claude_with_mimo.sh)
 scripts/render_env.py            ← decrypts vault + reads manifests → writes .env
 ```
 
@@ -177,7 +178,18 @@ literals:
 ### Step 3: Regenerate .env files
 
 ```bash
+# Regenerate ALL stacks
 make secrets
+
+# Regenerate a single stack only
+make secrets ARGS="--stack scripts"
+make secrets ARGS="--stack news-feed"
+
+# Preview without writing
+make secrets ARGS="--dry-run"
+
+# Validate without writing
+make check
 ```
 
 Output:
@@ -192,6 +204,9 @@ Verify the new key appears:
 ```bash
 grep NEW_SERVICE_API_KEY <stack>/.env
 ```
+
+> **Note:** Use `ARGS="--stack <name>"` to pass arguments through the Makefile to `render_env.py`.
+> Writing `make secrets --stack scripts` does NOT work — `--stack` is interpreted as a make flag, not a script argument.
 
 ### Step 4: Use it in the application
 
@@ -278,7 +293,15 @@ cat > ~/.config/sops/age/keys.txt << 'EOF'
 AGE-SECRET-KEY-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 EOF
 chmod 600 ~/.config/sops/age/keys.txt
+
+# 3. Tell sops where the key file is (add to ~/.zshrc or ~/.bashrc)
+echo 'export SOPS_AGE_KEY_FILE="$HOME/.config/sops/age/keys.txt"' >> ~/.zshrc
+source ~/.zshrc
 ```
+
+> **Why step 3?** sops does NOT auto-detect `~/.config/sops/age/keys.txt` on all systems.
+> Without `SOPS_AGE_KEY_FILE`, commands like `make edit-vault` and `make secrets` will fail with
+> `no matching creation rules found` or `identity did not match any of the recipients`.
 
 ### Clone + Generate
 
@@ -351,15 +374,28 @@ To add the CI secret (one-time):
 | `test-vault.sops.yaml` | yes | CI dummy vault, encrypted with CI key |
 | `manifest.schema.json` | yes | JSON Schema validating manifests |
 | `<stack>/secrets.manifest.yaml` | yes | Per-stack vault → ENV mapping |
+| `scripts/secrets.manifest.yaml` | yes | Local dev tooling vault → ENV mapping |
 | `deploy.manifest.yaml` | yes | Root deploy vault → ENV mapping |
 | `<stack>/.env` | **no** (gitignored) | Generated, uploaded to NAS |
 | `.env.deploy` | **no** (gitignored) | Generated, used by deploy.sh locally |
 
 ## Troubleshooting
 
-**`sops decrypt failed: no secret keys found`**
-- Check `~/.config/sops/age/keys.txt` exists and has the private key
-- Or set `SOPS_AGE_KEY_FILE` env var to the key file path
+**`sops decrypt failed: identity did not match any of the recipients`**
+- sops can't find the age private key. Most common cause: `SOPS_AGE_KEY_FILE` not set.
+- Fix: `export SOPS_AGE_KEY_FILE="$HOME/.config/sops/age/keys.txt"` (add to `~/.zshrc`)
+- Verify: `echo $SOPS_AGE_KEY_FILE` should print the path
+
+**`error loading config: no matching creation rules found`**
+- The filename regex in `.sops.yaml` doesn't match the actual file.
+- Check `.sops.yaml` `path_regex` matches `secrets/vault.sops.yaml` (not `vault.yaml`).
+- The regex `^secrets/vault\.sops\.yaml$` is correct; `^secrets/vault\.yaml$` is wrong.
+
+**`make secrets --stack scripts` → `unrecognized option '--stack'`**
+- Make interprets `--stack` as its own flag. Use `ARGS` instead:
+  ```bash
+  make secrets ARGS="--stack scripts"
+  ```
 
 **`manifest references missing vault path`**
 - The vault path in `secrets.manifest.yaml` doesn't exist in `vault.sops.yaml`
@@ -375,6 +411,8 @@ To add the CI secret (one-time):
 
 **Want to preview without writing:**
 ```bash
+make secrets ARGS="--dry-run"
+# or directly:
 python scripts/render_env.py --dry-run
 ```
 
@@ -395,6 +433,7 @@ secrets/vault.sops.yaml          ← YAML เข้ารหัส committed ล
     └── deploy/                  ← secrets สำหรับ deploy เท่านั้น
 
 <stack>/secrets.manifest.yaml    ← ประกาศว่า stack นี้ใช้ vault path อะไรบ้าง
+scripts/secrets.manifest.yaml    ← local dev tooling (เช่น claude_with_mimo.sh)
 scripts/render_env.py            ← ถอดรหัส vault + อ่าน manifest → เขียน .env
 ```
 
@@ -553,7 +592,18 @@ literals:
 ### Step 3: สร้าง .env files ใหม่
 
 ```bash
+# สร้างทุก stack
 make secrets
+
+# สร้างเฉพาะ stack เดียว
+make secrets ARGS="--stack scripts"
+make secrets ARGS="--stack news-feed"
+
+# preview โดยไม่เขียนไฟล์
+make secrets ARGS="--dry-run"
+
+# validate อย่างเดียว
+make check
 ```
 
 Output:
@@ -568,6 +618,9 @@ Output:
 ```bash
 grep NEW_SERVICE_API_KEY <stack>/.env
 ```
+
+> **หมายเหตุ:** ใช้ `ARGS="--stack <name>"` เพื่อส่ง argument ผ่าน Makefile ไปให้ render_env.py
+> เขียน `make secrets --stack scripts` ไม่ได้ — `--stack` จะถูก make ตีความเป็น flag ของตัวเอง
 
 ### Step 4: ใช้ใน application
 
@@ -654,7 +707,15 @@ cat > ~/.config/sops/age/keys.txt << 'EOF'
 AGE-SECRET-KEY-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 EOF
 chmod 600 ~/.config/sops/age/keys.txt
+
+# 3. บอก sops ว่า key file อยู่ไหน (เพิ่มใน ~/.zshrc หรือ ~/.bashrc)
+echo 'export SOPS_AGE_KEY_FILE="$HOME/.config/sops/age/keys.txt"' >> ~/.zshrc
+source ~/.zshrc
 ```
+
+> **ทำไมต้องทำ step 3?** sops ไม่ auto-detect `~/.config/sops/age/keys.txt` บนทุกระบบ
+> ถ้าไม่ตั้ง `SOPS_AGE_KEY_FILE` คำสั่ง `make edit-vault` และ `make secrets` จะ fail ด้วย
+> `no matching creation rules found` หรือ `identity did not match any of the recipients`
 
 ### Clone + สร้าง .env
 
@@ -727,15 +788,28 @@ Workflow `.github/workflows/secrets.yml` validate ทุก PR:
 | `test-vault.sops.yaml` | yes | CI dummy vault, เข้ารหัสด้วย CI key |
 | `manifest.schema.json` | yes | JSON Schema สำหรับ validate manifests |
 | `<stack>/secrets.manifest.yaml` | yes | Per-stack vault → ENV mapping |
+| `scripts/secrets.manifest.yaml` | yes | Local dev tooling vault → ENV mapping |
 | `deploy.manifest.yaml` | yes | Root deploy vault → ENV mapping |
 | `<stack>/.env` | **no** (gitignored) | สร้างจาก generator, upload ขึ้น NAS |
 | `.env.deploy` | **no** (gitignored) | สร้างจาก generator, deploy.sh ใช้ locally |
 
 ## Troubleshooting
 
-**`sops decrypt failed: no secret keys found`**
-- ตรวจว่า `~/.config/sops/age/keys.txt` มีอยู่และมี private key
-- หรือตั้ง `SOPS_AGE_KEY_FILE` env var ชี้ไปที่ key file
+**`sops decrypt failed: identity did not match any of the recipients`**
+- sops หา age private key ไม่เจอ สาเหตุหลัก: ไม่ได้ตั้ง `SOPS_AGE_KEY_FILE`
+- แก้: `export SOPS_AGE_KEY_FILE="$HOME/.config/sops/age/keys.txt"` (เพิ่มใน `~/.zshrc`)
+- เช็ค: `echo $SOPS_AGE_KEY_FILE` ต้องแสดง path
+
+**`error loading config: no matching creation rules found`**
+- filename regex ใน `.sops.yaml` ไม่ตรงกับไฟล์จริง
+- เช็ค `.sops.yaml` `path_regex` ต้องตรงกับ `secrets/vault.sops.yaml` (ไม่ใช่ `vault.yaml`)
+- regex `^secrets/vault\.sops\.yaml$` ถูก; `^secrets/vault\.yaml$` ผิด
+
+**`make secrets --stack scripts` → `unrecognized option '--stack'`**
+- Make ตีความ `--stack` เป็น flag ของตัวเอง ต้องใช้ `ARGS` แทน:
+  ```bash
+  make secrets ARGS="--stack scripts"
+  ```
 
 **`manifest references missing vault path`**
 - vault path ใน `secrets.manifest.yaml` ไม่มีใน `vault.sops.yaml`
@@ -751,5 +825,7 @@ Workflow `.github/workflows/secrets.yml` validate ทุก PR:
 
 **อยาก preview โดยไม่เขียนไฟล์:**
 ```bash
+make secrets ARGS="--dry-run"
+# หรือรันตรง:
 python scripts/render_env.py --dry-run
 ```
