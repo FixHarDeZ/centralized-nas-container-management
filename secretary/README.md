@@ -18,13 +18,14 @@ n8n (:5678) → Telegram bot
 
 ## Services
 
-| Service | Container | Port (host→container) | Notes |
-|---|---|---|---|
-| qdrant | secretary-qdrant | 6333→6333 | Collection: `secretary_notes`, named vectors `dense`+`sparse` |
-| ollama | secretary-ollama | 11434→11434 | Present but not used by default |
-| n8n | secretary-n8n | 5678→5678 | Telegram webhook at `/webhook/telegram`. External via Synology RP :15678 |
-| secretary-query | secretary-query | 5065→5065 | FastAPI RAG. LLM provider switchable via `LLM_PROVIDER` env. External via Synology RP :15065 |
-| secretary-ingest | secretary-ingest | — | `restart: "no"`. Run once manually (see below) |
+| Service | Container | Port (host→container) | RAM limit | OMP threads | Notes |
+|---|---|---|---|---|---|
+| qdrant | secretary-qdrant | 6333→6333 | 1.5G | — | Collection: `secretary_notes`, named vectors `dense`+`sparse` |
+| n8n | secretary-n8n | 5678→5678 | 1G | — | Telegram webhook at `/webhook/telegram`. External via Synology RP :15678 |
+| secretary-query | secretary-query | 5065→5065 | 4G | 2 | FastAPI RAG. LLM provider switchable via `LLM_PROVIDER` env. External via Synology RP :15065 |
+| secretary-ingest | secretary-ingest | — | 4G | 3 | `restart: "no"`. Run once manually (see below) |
+
+> **Resource limits:** Synology DSM's kernel ships **without the CFS scheduler**, so docker `cpus:` limits return `NanoCPUs can not be set`. CPU is therefore capped *inside* the BGE-M3 containers via `OMP_NUM_THREADS` / `MKL_NUM_THREADS` (PyTorch + FlagEmbedding obey these). Memory `limits:` work normally and are enforced. Logs are capped to 10 MB × 3 files per service.
 
 ## Quickstart
 
@@ -36,7 +37,7 @@ cp secretary/query/.env.example secretary/query/.env
 # Fill in real values in each .env
 
 # 2. Start persistent services
-docker compose up -d qdrant ollama n8n secretary-query
+docker compose up -d qdrant n8n secretary-query
 
 # 3. First ingest (downloads BGE-M3 ~2GB on first run)
 docker compose run --rm secretary-ingest
