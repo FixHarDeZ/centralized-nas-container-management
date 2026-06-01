@@ -1,8 +1,20 @@
 #!/usr/bin/env bash
 
-# This script is used to run the Claude model with MIMO (Multiple Input Multiple Output) support.
+# Run Claude Code with MIMO proxy.
+# Secrets come from the sops vault via: make secrets --stack scripts
+# Requires ANTHROPIC_API_KEY in vault at shared.mimo.anthropic_api_key
 
-export ANTHROPIC_BASE_URL="https://token-plan-sgp.xiaomimimo.com/anthropic"
-export ANTHROPIC_API_KEY="tp-s8sz9z051urfzjlpamj2fwjy7k81rh05acqto1hg0ihpjvey"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ENV_FILE="$SCRIPT_DIR/.env"
 
-cd .. && claude --model mimo-v2.5-pro
+if [[ ! -f "$ENV_FILE" ]]; then
+  echo "Error: $ENV_FILE not found."
+  echo "Run 'make secrets --stack scripts' to generate it from the vault."
+  exit 1
+fi
+
+set -a
+source "$ENV_FILE"
+set +a
+
+cd "$SCRIPT_DIR/.." && claude --model mimo-v2.5-pro
