@@ -190,7 +190,6 @@ async def ingest_trigger(full: bool = False):
         env = os.environ.copy()
         if full:
             env["FULL_INGEST"] = "1"
-        # Run ingest in background to avoid timeout
         proc = await asyncio.create_subprocess_exec(
             "python",
             "/ingest/ingest.py",
@@ -198,8 +197,11 @@ async def ingest_trigger(full: bool = False):
             stderr=asyncio.subprocess.PIPE,
             env=env,
         )
-        # Don't wait for completion - return immediately
-        return {"status": "started", "pid": proc.pid, "full": full}
+        stdout, stderr = await proc.communicate()
+        combined = (stdout + stderr).decode(errors="replace")
+        if proc.returncode == 0:
+            return {"status": "done", "summary": combined}
+        return JSONResponse(status_code=500, content={"status": "error", "summary": combined})
     except Exception as exc:
         return JSONResponse(status_code=500, content={"status": "error", "summary": str(exc)})
 
