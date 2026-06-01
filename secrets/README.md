@@ -357,9 +357,12 @@ The workflow `.github/workflows/secrets.yml` validates on every PR:
 1. Installs sops + age on `ubuntu-latest`
 2. Loads `SOPS_AGE_KEY` from GitHub Actions secret (CI-only age key)
 3. Runs `pytest tests/ -v` (43 tests)
-4. Runs `python scripts/render_env.py --check --vault secrets/test-vault.sops.yaml`
+4. Runs `python scripts/render_env.py --check --vault secrets/test-vault.sops.yaml --exclude scripts`
 
 **`secrets/test-vault.sops.yaml`** is a separate vault encrypted with the CI age key, containing dummy values. It validates that manifests are structurally correct without exposing real secrets.
+
+> The `--exclude scripts` flag skips `scripts/secrets.manifest.yaml` because it's local dev tooling
+> (not a deployed stack) and the test vault doesn't contain its required keys.
 
 To add the CI secret (one-time):
 1. Go to GitHub repo → Settings → Secrets and variables → Actions
@@ -771,9 +774,12 @@ Workflow `.github/workflows/secrets.yml` validate ทุก PR:
 1. ลง sops + age บน `ubuntu-latest`
 2. โหลด `SOPS_AGE_KEY` จาก GitHub Actions secret (CI-only age key)
 3. รัน `pytest tests/ -v` (43 tests)
-4. รัน `python scripts/render_env.py --check --vault secrets/test-vault.sops.yaml`
+4. รัน `python scripts/render_env.py --check --vault secrets/test-vault.sops.yaml --exclude scripts`
 
 **`secrets/test-vault.sops.yaml`** เป็น vault แยกเข้ารหัสด้วย CI age key มีค่า dummy ใช้ validate ว่า manifests ถูกต้องเชิงโครงสร้างโดยไม่เปิดเผย secrets จริง
+
+> flag `--exclude scripts` ข้าม `scripts/secrets.manifest.yaml` เพราะเป็น local dev tooling
+> (ไม่ใช่ deployed stack) และ test vault ไม่มี key ที่ manifest นี้ต้องใช้
 
 เพิ่ม CI secret (ครั้งเดียว):
 1. ไปที่ GitHub repo → Settings → Secrets and variables → Actions
