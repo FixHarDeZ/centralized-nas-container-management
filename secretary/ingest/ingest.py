@@ -409,8 +409,107 @@ def _first_h3(text: str) -> str:
     return m.group(1).strip() if m else ""
 
 
+def _is_table_section(text: str) -> bool:
+    """Check if section contains a markdown table."""
+    return bool(re.search(r"^\|.+\|$", text, re.MULTILINE))
+
+
+def _extract_keywords(*texts: str) -> list[str]:
+    """Extract searchable keywords from text strings."""
+    import re
+    keywords = set()
+    for text in texts:
+        if not text:
+            continue
+        # Split by common separators and lowercase
+        words = re.split(r"[\s\-_()@.+,/]+", text.lower())
+        keywords.update(w for w in words if len(w) > 1)
+    return sorted(keywords)
+
+
+def _split_table_to_rows(section_text: str, heading: str, title: str) -> list[dict]:
+    """Split a table section into per-row chunks for better retrieval."""
+    import re
+    
+    lines = section_text.strip().split("\n")
+    header = None
+    separator_seen = False
+    rows = []
+    preamble_lines = []
+    
+    for line in lines:
+        if not line.startswith("|"):
+            if header is None:
+                preamble_lines.append(line)
+            continue
+        
+        cells = [c.strip() for c in line.split("|")[1:-1]]
+        
+        # Skip separator line
+        if all(c.replace("-", "").strip() == "" for c in cells):
+            separator_seen = True
+            continue
+        
+        if header is None:
+            header = cells
+        else:
+            rows.append(cells)
+    
+    if not header or not rows:
+        return []
+    
+    # Get category from heading (e.g., "Application", "Website")
+    category = heading.lower() if heading else ""
+    
+    chunks = []
+    preamble = "\n".join(preamble_lines).strip()
+    
+    for row in rows:
+        # Build rich text for each row
+        row_parts = []
+        primary_name = ""
+        for i, (h, v) in enumerate(zip(header, row)):
+            if v:
+                row_parts.append(f"{h}: {v}")
+                if i == 0:
+                    primary_name = v
+        
+        if not row_parts:
+            continue
+       
+        row_text = "\n".join(row_parts)
+        
+        # Add preamble context if exists
+        if preamble:
+            row_text = f"{preamble}\n{row_text}"
+        
+        # Build breadcrumb: Title > Section > Entry Name
+        breadcrumb_parts = [title]
+        if heading:
+            breadcrumb_parts.append(heading)
+        if primary_name:
+            breadcrumb_parts.append(primary_name)
+        breadcrumb = " > ".join(breadcrumb_parts)
+        
+        # Extract keywords for better retrieval
+        keywords = _extract_keywords(primary_name, *[v for v in row if v])
+        
+        chunks.append({
+            "text": row_text,
+            "breadcrumb": breadcrumb,
+            "keywords": keywords,
+            "category": category,
+            "is_table_row": True,
+        })
+    
+    return chunks
+
+
 def chunk_document(title: str, markdown: str) -> list[dict]:
-    """Split by ## headings, then by paragraph if oversized, then merge tiny sections."""
+    """Split by ## headings, then by paragraph if oversized, then merge tiny sections.
+    
+    For sections containing tables, split into per-row chunks for better retrieval.
+    """
     import re
 
     sections = re.split(r"(?=^## )", markdown, flags=re.MULTILINE)
@@ -424,8 +523,17 @@ def chunk_document(title: str, markdown: str) -> list[dict]:
         body = "\n".join(lines[1:]).strip() if heading else sec
         raw_sections.append({"heading": heading, "body": body, "text": sec})
 
+    # Process sections: split tables into per-row chunks, keep others as-is
     expanded = []
     for sec in raw_sections:
+        # Check if section contains a table
+        if _is_table_section(sec["text"]):
+            table_chunks = _split_table_to_rows(sec["text"], sec["heading"], title)
+            if table_chunks:
+                expanded.extend(table_chunks)
+                continue
+        
+        # Non-table sections: use original logic
         tok = _count_tokens(sec["text"])
         if tok > 500:
             sub_chunks = _split_by_paragraph(sec["body"], max_tokens=500)
@@ -456,20 +564,30 @@ def chunk_document(title: str, markdown: str) -> list[dict]:
         if sec["heading"]:
             current_h2 = sec["heading"]
 
-        # 3-level breadcrumb: Title > H2 > H3 (H3 extracted from chunk body)
-        h3 = _first_h3(sec["text"])
-        breadcrumb_parts = [title]
-        if current_h2:
-            breadcrumb_parts.append(current_h2)
-        if h3 and h3 != current_h2:
-            breadcrumb_parts.append(h3)
-        breadcrumb = " > ".join(breadcrumb_parts)
-
-        chunks.append({
-            "text": sec["text"],
-            "breadcrumb": breadcrumb,
-            "chunk_index": idx,
-        })
+        # Table row chunks already have breadcrumb and keywords
+        if sec.get("is_table_row"):
+            chunks.append({
+                "text": sec["text"],
+                "breadcrumb": sec["breadcrumb"],
+                "chunk_index": idx,
+                "keywords": sec.get("keywords", []),
+                "category": sec.get("category", ""),
+            })
+        else:
+            # Regular chunks: 3-level breadcrumb (Title > H2 > H3)
+            h3 = _first_h3(sec["text"])
+            breadcrumb_parts = [title]
+            if current_h2:
+                breadcrumb_parts.append(current_h2)
+            if h3 and h3 != current_h2:
+                breadcrumb_parts.append(h3)
+            breadcrumb = " > ".join(breadcrumb_parts)
+            
+            chunks.append({
+                "text": sec["text"],
+                "breadcrumb": breadcrumb,
+                "chunk_index": idx,
+            })
 
     return chunks
 
@@ -536,6 +654,8 @@ def upsert_chunks(page: dict, chunks: list[dict]) -> None:
                     "chunk_index": chunk["chunk_index"],
                     "last_edited_time": last_edited,
                     "tags": tags,
+                    "keywords": chunk.get("keywords", []),
+                    "category": chunk.get("category", ""),
                 },
             )
         )
