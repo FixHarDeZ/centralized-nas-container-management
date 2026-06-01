@@ -1,6 +1,7 @@
 import argparse
 import logging
 import os
+import re
 import sqlite3
 import time
 import uuid
@@ -404,7 +405,6 @@ def _split_by_paragraph(text: str, max_tokens: int = 500) -> list[str]:
 
 def _first_h3(text: str) -> str:
     """Extract the first ### heading from text, if any."""
-    import re
     m = re.search(r"^### (.+)$", text, re.MULTILINE)
     return m.group(1).strip() if m else ""
 
@@ -416,7 +416,6 @@ def _is_table_section(text: str) -> bool:
 
 def _extract_keywords(*texts: str) -> list[str]:
     """Extract searchable keywords from text strings."""
-    import re
     keywords = set()
     for text in texts:
         if not text:
@@ -429,7 +428,6 @@ def _extract_keywords(*texts: str) -> list[str]:
 
 def _split_table_to_rows(section_text: str, heading: str, title: str) -> list[dict]:
     """Split a table section into per-row chunks for better retrieval."""
-    import re
     
     lines = section_text.strip().split("\n")
     header = None
@@ -510,7 +508,6 @@ def chunk_document(title: str, markdown: str) -> list[dict]:
     
     For sections containing tables, split into per-row chunks for better retrieval.
     """
-    import re
 
     sections = re.split(r"(?=^## )", markdown, flags=re.MULTILINE)
     raw_sections = []
