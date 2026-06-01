@@ -183,6 +183,13 @@ def main(argv: list[str] | None = None) -> int:
         "name (e.g. 'news-feed' or 'secretary/ingest').",
     )
     parser.add_argument(
+        "--exclude",
+        action="append",
+        default=None,
+        help="Exclude a stack from rendering (may be repeated). Use the directory "
+        "name (e.g. 'scripts').",
+    )
+    parser.add_argument(
         "--check",
         action="store_true",
         help="Validate without writing. Exits non-zero on any error.",
@@ -226,6 +233,10 @@ def main(argv: list[str] | None = None) -> int:
         if not manifests:
             print(f"error: no manifests matched --stack {args.stack}", file=sys.stderr)
             return 2
+
+    if args.exclude:
+        excluded: set[str] = set(args.exclude)
+        manifests = [m for m in manifests if stack_label(m) not in excluded]
 
     failures: list[str] = []
     for manifest_path in manifests:
