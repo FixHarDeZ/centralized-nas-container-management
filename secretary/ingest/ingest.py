@@ -493,6 +493,7 @@ def _split_table_to_rows(section_text: str, heading: str, title: str) -> list[di
         keywords = _extract_keywords(primary_name, *[v for v in row if v])
         
         chunks.append({
+            "heading": heading,
             "text": row_text,
             "breadcrumb": breadcrumb,
             "keywords": keywords,
@@ -540,11 +541,15 @@ def chunk_document(title: str, markdown: str) -> list[dict]:
             expanded.append({"heading": sec["heading"], "text": sec["text"]})
 
     # Merge tiny sections (<50 tokens) with the next sibling
+    # Skip merging for table row chunks — they should stay individual
     merged = []
     i = 0
     while i < len(expanded):
         sec = expanded[i]
-        if _count_tokens(sec["text"]) < 50 and i + 1 < len(expanded):
+        if sec.get("is_table_row"):
+            merged.append(sec)
+            i += 1
+        elif _count_tokens(sec["text"]) < 50 and i + 1 < len(expanded):
             next_sec = expanded[i + 1]
             merged.append({
                 "heading": sec["heading"] or next_sec["heading"],
