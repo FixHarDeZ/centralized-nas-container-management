@@ -15,12 +15,25 @@ n8n (:15678) → Telegram bot
 ```
 
 ## Services
-| Service | Container | Port | Notes |
-|---|---|---|---|
-| qdrant | secretary-qdrant | 6333 (internal) | Collection: `secretary_notes`, named vectors `dense`+`sparse` |
-| n8n | secretary-n8n | 15678→5678 | Webhook: `/webhook/telegram`. Basic auth via root `.env` |
-| secretary-query | secretary-query | 15065→5065 | FastAPI RAG. LLM provider switchable via `LLM_PROVIDER` env |
-| secretary-ingest | secretary-ingest | — | `restart: "no"`. Run: `docker compose run --rm secretary-ingest` |
+| Service | Container | Port | RAM / OMP | Notes |
+|---|---|---|---|---|
+| qdrant | secretary-qdrant | 6333 (internal) | 1.5G | Collection: `secretary_notes`, named vectors `dense`+`sparse` |
+| n8n | secretary-n8n | 15678→5678 | 1G | Webhook: `/webhook/telegram`. Basic auth via root `.env` |
+| secretary-query | secretary-query | 15065→5065 | 4G / OMP=2 | FastAPI RAG. LLM provider switchable via `LLM_PROVIDER` env. **`/ingest-trigger` spawns ingest.py subprocess inside this container** — OOM-prone on table-heavy pages (see below) |
+| secretary-ingest | secretary-ingest | — | 6G / OMP=3 | `restart: "no"`. Run: `docker compose run --rm secretary-ingest`. **Use this path for table-heavy re-ingests** |
+
+## Resource Limits Rationale
+- NAS DS925+ has 8 CPU threads / 12 GB RAM. Swap thrashes when memory pressure goes past ~9 GB.
+- **Synology DSM kernel lacks CFS scheduler** — `docker run --cpus=N` returns `NanoCPUs can not be set, as your kernel does not support CPU CFS scheduler`. So docker-level CPU limits are unavailable. We cap CPU at the **application layer** via `OMP_NUM_THREADS` / `MKL_NUM_THREADS` env vars (BGE-M3 + PyTorch + FlagEmbedding obey these). Without it PyTorch reads `/proc/cpuinfo`=8 and spawns 8 OpenMP workers, saturating the NAS.
+- Memory `limits` work normally on Synology and are enforced via cgroup.
+- secretary-ingest gets 6 GB (not 4 GB) because FlagEmbedding's batched encode of 20–50 chunks spikes RAM transiently past the resident ~2 GB model footprint — 4 GB was confirmed too tight by OOM kill on the User-Password page (29 chunks).
+- secretary-query stays at 4 GB so it doesn't dominate NAS memory between queries. But this also means `/ingest-trigger` will OOM on any page that produces enough chunks for the subprocess's BGE-M3 to push the container past 4 GB.
+
+## `/ingest-trigger` vs standalone ingest — Known Limitation
+| | Memory budget | Notes |
+|---|---|---|
+| `POST /ingest-trigger?page_id=…&full=true` (subprocess inside query) | 4 GB shared with the running BGE-M3 in the parent | OK for tiny pages. OOMs on table-heavy pages. n8n auto-sync workflow uses this path — beware. |
+| `docker compose run --rm secretary-ingest python ingest.py --page <ID>` | 6 GB dedicated | Slower per-page (BGE-M3 cold load each run, ~30 s), but reliable. **Use this for User-Password and any page with multi-row tables.** |
 
 ## Volumes (NAS paths)
 | Volume | Path |

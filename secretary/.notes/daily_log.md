@@ -1,5 +1,60 @@
 # Secretary Stack — Daily Log
 
+## 2026-06-01
+
+### Code Review of today's table-row chunking PR (commits 0555985…001e52f)
+Reviewed 9 commits where hermes-agent (Mimo 2.5 Pro backend) rewrote `chunk_document()` to split Notion markdown tables into per-row chunks for better RAG retrieval. Verified findings (recall mode, 5 angles + verifier):
+
+**CONFIRMED bugs (acceptable for now but worth tracking):**
+- **Giant table row >500 tokens bypasses chunk size cap** (`ingest.py` ~528) — table branch in `chunk_document` skips the `_split_by_paragraph` 500-token guard. Single-row chunks with long Notes columns are not split. Low impact for credentials tables (short cells).
+- **`keywords` and `category` payload fields are dead data** — `_extract_keywords` writes them in `upsert_chunks`, but `query/main.py` never filters on them. No payload index created in `ensure_collection()` either. Either drop them or actually use them in the query pipeline.
+- **Pipe-in-cell breaks `_table_to_md` serializer** (`ingest.py:359-370`) — cells containing literal `|` are emitted unescaped, corrupting the markdown table downstream of the Notion serializer.
+- **No timeout on `/ingest-trigger` subprocess** (`query/main.py:202` — `await proc.communicate()`) — this is the cause of the 150-second hang the user saw via the Hermes screenshot.
+- **No SQLite write lock on `/ingest-trigger`** — concurrent requests race the state DB.
+- **Degenerate breadcrumb when first table column is blank** — `primary_name` stays `""`, breadcrumb falls back to `Title > Heading` only.
+
+**REFUTED candidates** (the change is actually safe):
+- Merge-tiny-sections loop accidentally swallowing table rows — guarded by `is_table_row` check first.
+- Stale Qdrant points after re-ingest — `delete_page_points(page_id)` is called before upsert.
+- Mixed breadcrumb formats (table vs non-table) — breadcrumb is cosmetic, never parsed downstream.
+- `subprocess env` losing PATH — `os.environ.copy()` preserves it.
+
+**Suggestions for follow-up commits:**
+1. Add `asyncio.wait_for(proc.communicate(), timeout=600)` to `/ingest-trigger` so the request returns a 504 instead of hanging forever.
+2. Drop `keywords`/`category` writes OR wire them into the query filter to make them earn their storage cost.
+3. Escape `|` → `\|` in `_table_to_md` cell text.
+4. Add a single-row-too-large fallback inside `_split_table_to_rows` (paragraph-split the row if `_count_tokens(row_text) > 500`).
+
+### Resource limits on docker-compose.yml
+NAS hit 100% CPU during ingest, DSM became unreachable, 15-min load avg was 85. `secretary-query` was holding 5.5 GB at idle (model + leftover ingest subprocess).
+
+First attempt added `cpus: N.M` to all 4 services. **Deploy failed with `NanoCPUs can not be set, as your kernel does not support CPU CFS scheduler`** — Synology DSM kernel ships without CFS quota support, so docker-level CPU limits are simply unavailable on this NAS. Removed all `cpus:` keys.
+
+Working config:
+- `deploy.resources.limits.memory` on every service — cgroup-enforced.
+- `OMP_NUM_THREADS` / `MKL_NUM_THREADS` / `TOKENIZERS_PARALLELISM=false` on `secretary-query` (=2) and `secretary-ingest` (=3) — PyTorch + FlagEmbedding obey these, so even without docker cpus the model uses at most N threads.
+- `logging.options.max-size=10m max-file=3` for all services (was unbounded).
+
+Memory allotment (NAS = 12 GB total):
+- qdrant: 1.5 GB
+- n8n: 1 GB
+- secretary-query: 4 GB
+- secretary-ingest: 6 GB *(bumped from 4 GB after OOM kill on the User-Password page — FlagEmbedding's batch encode of 20–50 chunks spikes RAM transiently past the resident ~2 GB model footprint.)*
+
+### Known limitation — `/ingest-trigger` OOMs on table-heavy pages
+The `/ingest-trigger` endpoint in `secretary-query` spawns `ingest.py` as a subprocess **inside the query container**. The subprocess loads its own BGE-M3 (~2 GB) on top of the parent's already-resident BGE-M3 (~2 GB), so the query container's 4 GB ceiling is exhausted before chunking even starts on a page with many table rows. **Workaround:** run page-targeted re-ingests in the dedicated container instead:
+```bash
+docker compose run --rm secretary-ingest python ingest.py --page <NOTION_PAGE_ID>
+```
+This was the path used to backfill the User-Password page. The standalone container has its own 6 GB budget and doesn't compete with secretary-query's resident model.
+
+### End-to-end verification
+- Bumped local main to origin/main (was 10 commits behind — first deploy uploaded the OLD `query/main.py` without the `page_id` parameter, which is why `/ingest-trigger?page_id=…` seemed to "ignore" the filter and silently ran a full incremental skip across all 155 pages).
+- Removed orphan `secretary-ollama` container (compose dropped the service 2026-05-29 but the container was never `docker rm`'d).
+- `docker compose run --rm secretary-ingest python ingest.py --page 5edc5884-7666-4bdd-b758-86cc24c95f0a` → `Updated: User-Password (29 chunks)` in 379 s.
+- Qdrant point count for that `page_id`: **29** (was 0 after my earlier failed runs left the page deleted-but-not-upserted).
+- `POST /query {"question": "ขอ user pass discord"}` → returns `User: fixkychicky@gmail.com, Password: Fix@26021989@1` with breadcrumb `User-Password > Website > Discord`. The per-row chunking is working as intended — Hermes's diagnosis was correct, just never successfully applied because every previous re-ingest attempt died on memory or timeout.
+
 ## 2026-05-28 (session 2)
 
 ### งานที่ทำ

@@ -7,6 +7,17 @@ services:
       - "6333:6333"        # internal only ไม่ expose ออกนอก
     volumes:
       - qdrant_storage:/qdrant/storage
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+        reservations:
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   n8n:
     image: n8nio/n8n:latest
@@ -23,6 +34,17 @@ services:
       - TZ=Asia/Bangkok
     volumes:
       - n8n_data:/home/node/.n8n
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   secretary-query:
     build:
@@ -35,12 +57,36 @@ services:
     env_file:
       - ./query/.env
       - ./ingest/.env
+    environment:
+      # Cap BGE-M3 / PyTorch thread count so it respects the cpus limit below.
+      # Without this, torch reads /proc/cpuinfo (8) and spawns 8 OpenMP threads
+      # → CPU saturation on the NAS even though cgroups would throttle anyway.
+      - OMP_NUM_THREADS=2
+      - MKL_NUM_THREADS=2
+      - TOKENIZERS_PARALLELISM=false
     volumes:
       - hf_cache:/root/.cache/huggingface
       - /volume2/docker/secretary/query-data:/data
       - ./ingest/ingest.py:/ingest/ingest.py:ro
     depends_on:
       - qdrant
+    deploy:
+      resources:
+        limits:
+          # Query is mostly idle, but /ingest-trigger spawns ingest.py as a
+          # subprocess in this container (bind mount above), which doubles up
+          # on BGE-M3 model load during ingest — hence the 4 GB ceiling.
+          # CPU is controlled at app level via OMP_NUM_THREADS=2 above;
+          # Synology DSM kernel lacks CFS scheduler so docker cpus: limits
+          # can't be applied.
+          memory: 4G
+        reservations:
+          memory: 1G
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   secretary-ingest:
     build:
@@ -49,11 +95,28 @@ services:
     container_name: secretary-ingest
     restart: "no"
     env_file: ./ingest/.env
+    environment:
+      - OMP_NUM_THREADS=3
+      - MKL_NUM_THREADS=3
+      - TOKENIZERS_PARALLELISM=false
     volumes:
       - ingest_state:/data
       - hf_cache:/root/.cache/huggingface
     depends_on:
       - qdrant
+    deploy:
+      resources:
+        limits:
+          # 6 GB: BGE-M3 + FlagEmbedding holds ~2 GB resident, but encoding a
+          # batch of 20–50 chunks (dense + sparse + colbert outputs together)
+          # transiently spikes past 4 GB. Confirmed by OOM kill on 2026-06-01
+          # while ingesting the User-Password page at the 4 GB ceiling.
+          memory: 6G
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   qdrant_storage:
