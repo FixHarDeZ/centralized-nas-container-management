@@ -673,7 +673,9 @@ def ingest_page(page: dict, conn: sqlite3.Connection, dry_run: bool, full: bool)
     last_edited = page.get("last_edited_time", "")
 
     stored = get_stored_state(conn, page_id)
-    if not full and stored and stored[0] == last_edited:
+    # Support FULL_INGEST env var for ingest-trigger endpoint
+    force_full = os.environ.get("FULL_INGEST", "").lower() in ("1", "true", "yes")
+    if not full and not force_full and stored and stored[0] == last_edited:
         log.info("↷ Skipped: %s", page_title)
         return {"status": "skipped"}
 
