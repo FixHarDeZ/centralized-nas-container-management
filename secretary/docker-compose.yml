@@ -73,13 +73,16 @@ services:
     deploy:
       resources:
         limits:
-          # Query is mostly idle, but /ingest-trigger spawns ingest.py as a
-          # subprocess in this container (bind mount above), which doubles up
-          # on BGE-M3 model load during ingest — hence the 4 GB ceiling.
+          # 6 GB: /ingest-trigger spawns ingest.py as a subprocess in this
+          # container (bind mount above), and that subprocess loads its OWN
+          # BGE-M3 (~2 GB) on top of the parent's already-resident BGE-M3.
+          # At 4 GB the cgroup OOM-killed the subprocess every n8n auto-sync
+          # tick (anon-rss ~3.1 GB just for the subprocess, parent ~1-2 GB
+          # on top — confirmed via dmesg 2026-06-02 20:01/21:01/22:01/23:02).
           # CPU is controlled at app level via OMP_NUM_THREADS=2 above;
           # Synology DSM kernel lacks CFS scheduler so docker cpus: limits
           # can't be applied.
-          memory: 4G
+          memory: 6G
         reservations:
           memory: 1G
     logging:
