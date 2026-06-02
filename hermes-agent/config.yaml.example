@@ -19,6 +19,35 @@ discord:
   require_mention: true   # must @hermes in servers; DMs work without mention
   auto_thread: true        # auto-create thread per conversation in channels
 
-# ─── Session ────────────────────────────────────────────────────────────────
-session:
-  reset_on_idle_minutes: 60  # clear context after 60 min silence
+# ─── Session reset ──────────────────────────────────────────────────────────
+# Real key is `session_reset.idle_minutes` (not `session.reset_on_idle_minutes`).
+# Default in v2026.5.16 is 1440 min (24h) — sessions stay warm for a full day
+# unless tightened here. 15 min cuts zombie sessions that destabilize the
+# upstream prefix cache.
+session_reset:
+  mode: both          # daily | idle | both | none
+  idle_minutes: 15
+  at_hour: 4          # daily reset hour (0-23, local time)
+
+# ─── Agent ──────────────────────────────────────────────────────────────────
+agent:
+  max_turns: 20             # cap iteration runaway (default 90; observed 60 in live)
+  api_max_retries: 1        # faster failover on flaky provider calls (default 3)
+  image_input_mode: text    # pre-analyze user images as text instead of sending pixels;
+                            # default "auto". Vision tokens are uncacheable + expensive.
+
+# ─── Memory ─────────────────────────────────────────────────────────────────
+# memory.memory_enabled + memory.user_profile_enabled inject mutable content
+# (~1300 tokens combined) into the system prompt every turn, which breaks
+# upstream prefix caching. Disabled here for stability; revisit if you rely on
+# cross-session persona / preference recall.
+memory:
+  memory_enabled: false
+  user_profile_enabled: false
+
+# ─── Compression ────────────────────────────────────────────────────────────
+# Compression rewrites the conversation prefix, invalidating cache. Raise the
+# threshold so compression fires later in the session; leaving enabled=true
+# avoids OOM risk on genuinely long contexts.
+compression:
+  threshold: 0.80     # default 0.50
