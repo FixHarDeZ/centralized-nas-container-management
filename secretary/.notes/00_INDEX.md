@@ -19,7 +19,7 @@ n8n (:15678) → Telegram bot
 |---|---|---|---|---|
 | qdrant | secretary-qdrant | 6333 (internal) | 1.5G | Collection: `secretary_notes`, named vectors `dense`+`sparse` |
 | n8n | secretary-n8n | 15678→5678 | 1G | Webhook: `/webhook/telegram`. Basic auth via root `.env` |
-| secretary-query | secretary-query | 15065→5065 | 4G / OMP=2 | FastAPI RAG. LLM provider switchable via `LLM_PROVIDER` env. **`/ingest-trigger` spawns ingest.py subprocess inside this container** — OOM-prone on table-heavy pages (see below) |
+| secretary-query | secretary-query | 15065→5065 | 6G / OMP=2 | FastAPI RAG. LLM provider switchable via `LLM_PROVIDER` env. **`/ingest-trigger` spawns ingest.py subprocess inside this container** — needed 6G headroom because subprocess loads its own BGE-M3 on top of parent's resident BGE-M3 (see below) |
 | secretary-ingest | secretary-ingest | — | 6G / OMP=3 | `restart: "no"`. Run: `docker compose run --rm secretary-ingest`. **Use this path for table-heavy re-ingests** |
 
 ## Resource Limits Rationale
@@ -27,12 +27,12 @@ n8n (:15678) → Telegram bot
 - **Synology DSM kernel lacks CFS scheduler** — `docker run --cpus=N` returns `NanoCPUs can not be set, as your kernel does not support CPU CFS scheduler`. So docker-level CPU limits are unavailable. We cap CPU at the **application layer** via `OMP_NUM_THREADS` / `MKL_NUM_THREADS` env vars (BGE-M3 + PyTorch + FlagEmbedding obey these). Without it PyTorch reads `/proc/cpuinfo`=8 and spawns 8 OpenMP workers, saturating the NAS.
 - Memory `limits` work normally on Synology and are enforced via cgroup.
 - secretary-ingest gets 6 GB (not 4 GB) because FlagEmbedding's batched encode of 20–50 chunks spikes RAM transiently past the resident ~2 GB model footprint — 4 GB was confirmed too tight by OOM kill on the User-Password page (29 chunks).
-- secretary-query stays at 4 GB so it doesn't dominate NAS memory between queries. But this also means `/ingest-trigger` will OOM on any page that produces enough chunks for the subprocess's BGE-M3 to push the container past 4 GB.
+- secretary-query bumped to 6 GB on 2026-06-02 (evening) after every-hour OOM kills of the `/ingest-trigger` subprocess (dmesg: anon-rss ~3.1 GB on the subprocess alone, plus ~1-2 GB parent footprint, exceeded the 4 GB ceiling). An earlier "fix" commit on the same day failed silently because of a YAML duplicate-`deploy:` key bug — see daily_log 2026-06-02. **Heads up:** this still relies on headroom, not architectural isolation — see `/ingest-trigger` row below.
 
 ## `/ingest-trigger` vs standalone ingest — Known Limitation
 | | Memory budget | Notes |
 |---|---|---|
-| `POST /ingest-trigger?page_id=…&full=true` (subprocess inside query) | 4 GB shared with the running BGE-M3 in the parent | OK for tiny pages. OOMs on table-heavy pages. n8n auto-sync workflow uses this path — beware. |
+| `POST /ingest-trigger?page_id=…&full=true` (subprocess inside query) | 6 GB shared with the running BGE-M3 in the parent | n8n auto-sync workflow uses this path. As of 2026-06-02 evening fix, incremental sync (~155 pages, ~2 updated) completes in ~115 s without OOM. Single very-large pages may still pressure the ceiling — `secretary-ingest` is the safer path for those. |
 | `docker compose run --rm secretary-ingest python ingest.py --page <ID>` | 6 GB dedicated | Slower per-page (BGE-M3 cold load each run, ~30 s), but reliable. **Use this for User-Password and any page with multi-row tables.** |
 
 ## Volumes (NAS paths)
@@ -107,4 +107,5 @@ Requires `N8N_API_KEY` in `secretary/.env` (generated from vault via `make secre
 Workflow files are git-tracked for version control.
 
 ## Gaps / TODOs
-- (none)
+- **Architectural improvement (optional):** `/ingest-trigger` currently loads BGE-M3 in a subprocess inside `secretary-query` (which already has BGE-M3 resident). This works at 6 GB but is structurally OOM-prone. Proper fix: refactor `/ingest-trigger` to launch a one-shot `secretary-ingest` container via Docker socket so the ingest workload runs in its own 6 GB cgroup. Requires mounting docker.sock into secretary-query — security trade-off worth weighing.
+- **Schedule frequency:** n8n "Secretary Auto Sync" runs hourly. Most ticks update 0-2 pages. Consider dropping to every 4-6 h to amortise the BGE-M3 cold-load + Notion-poll cost. One-line workflow JSON change.

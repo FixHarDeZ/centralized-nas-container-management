@@ -1,13 +1,37 @@
 # Secretary Stack — Daily Log
 
-## 2026-06-02
+## 2026-06-02 (evening) — Real fix for secretary-query OOM
 
-### Fix: secretary-query OOM crash loop (memory limit 4GB → 6GB)
-- **Problem:** Container ถูก kernel OOM killer ฆ่าซ้ำ ๆ — dmesg shows uvicorn process RSS ~2.8-4.2GB exceeds 4GB container memory limit
-- **Root cause:** BGE-M3 model + CPU torch + Python overhead ใช้ RAM เกิน 4GB limit — แม้ 2026-06-01 จะเพิ่ม memory limits แล้ว แต่ secretary-query ยังตั้งไว้ 4GB ซึ่งไม่พอ
-- **Symptoms:** NAS notifications "Container secretary-query stopped unexpectedly" ทุก 2-3 นาที, crash loop ต่อเนื่อง
-- **Fix:** เพิ่ม `deploy.resources.limits.memory: 6g` ใน `docker-compose.yml` สำหรับ secretary-query service
-- **Verified:** container restart count = 2, swap usage 85% (1.7/2.0GB), container RAM 1.5GB steady-state
+### Symptoms
+- n8n "Secretary Auto Sync" workflow ส่ง Telegram alert ทุกชั่วโมง:
+  `500 - {"status":"error","summary":"...Loading weights: 100%|██████████| 391/391..."}`
+- Subprocess `/ingest-trigger` ตายเงียบ (ไม่มี Python traceback) หลัง `qdrant points/delete` สำเร็จ
+
+### Root cause (two layers)
+1. **OOM kill ของ subprocess ใน secretary-query container** — dmesg ยืนยัน:
+   `Memory cgroup out of memory: Killed process … (python) … anon-rss:3157172kB` ทุก ~1 ชม. ตรงกับ n8n Schedule Trigger
+2. **The "fix" commit `bbbe6ac` (2026-06-02 บ่าย) เป็น no-op** — diff แทรก `deploy:` block ที่สอง **ก่อน** `depends_on:` ทำให้มี `deploy:` ซ้ำสองตัวที่ระดับเดียวกัน YAML กิน ตัวสุดท้าย (4G) ทับ. ต่อมา commit `b5405d4 update` มา "ล้าง" duplicate ด้วยการลบ block 6g ที่เพิ่งใส่เข้าไป — กลับสู่ 4G เหมือนเดิม. **secretary-query container ตอน OOM ยังเป็น container เดิมที่ถูกสร้าง 2026-06-01 23:14 + memory limit 4G** (`docker inspect ... HostConfig.Memory` = `4294967296`)
+   - Daily log entry ก่อนหน้านี้เขียนว่า "container restart count = 2, RAM 1.5GB steady-state" — ที่จริงนั่นคือสภาพ **ระหว่าง crash loop เอง** ไม่ใช่ผลของ fix; verification อ่านผิด
+
+### Real fix (this session)
+- `secretary/docker-compose.yml:73-84` แก้ `memory: 4G` → `memory: 6G` (block เดียว ไม่มี duplicate)
+- Deploy: `bash scripts/deploy.sh -s secretary -y`
+- Verified post-deploy:
+  - `docker inspect secretary-query --format '{{.HostConfig.Memory}}'` = `6442450944` (6 GiB ✓)
+  - `POST /ingest-trigger` (ภายใน container) → `{"status":"done", ..., "Summary — pages: 155 | updated: 2 | skipped: 153 | chunks: 19 | errors: 0 | time: 115.3s"}` ใช้เวลา ~2 นาที ไม่ OOM, n8n auto-sync จะไม่ alert อีก
+
+### Architecture note (load-bearing on 6G headroom)
+`/ingest-trigger` ยังโหลด BGE-M3 ใน subprocess บน container ที่มี BGE-M3 resident อยู่แล้ว — ปลอดภัยเพราะ 6G ไม่ใช่เพราะ architecture ดี. Daily log 2026-06-01 ระบุชัดว่าเส้นทาง subprocess-in-query เป็น known limitation. ถ้าจะ refactor proper ในอนาคต: ให้ n8n เรียก `secretary-ingest` ผ่าน docker socket (one-shot container 6G dedicated) แทน
+
+### Schedule observation (worth considering)
+n8n auto-sync รันทุก 1 ชม. → จ่าย BGE-M3 cold load + Notion polling ทุกชั่วโมง สำหรับ updated pages 0–2 หน้า. ลดเป็น 4–6 ชม. ครั้งจะลด OOM exposure + CPU/network เกือบหมด
+
+## 2026-06-02 (earlier — superseded by entry above)
+
+### Attempted fix that landed as a no-op (kept for traceability)
+- Commit `bbbe6ac` ตั้งใจเพิ่ม `deploy.resources.limits.memory: 6g` ใน secretary-query แต่ YAML duplicate-key bug ทำให้ไม่มีผล
+- Commit `b5405d4 update` ตามมา ลบ block 6g ที่ duplicate ออก (แต่ลบผิดตัว) — กลับสู่ 4G
+- Container ไม่เคยถูก recreate ด้วย 6G; OOM crash loop ดำเนินต่อจนกระทั่ง fix จริงด้านบน
 
 ## 2026-06-01
 
