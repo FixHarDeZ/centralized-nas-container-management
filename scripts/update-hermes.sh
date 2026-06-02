@@ -33,18 +33,17 @@ if ! gh api "repos/${UPSTREAM_REPO}/git/ref/tags/${TARGET_TAG}" --jq '.ref' &>/d
 fi
 echo "    ✔ Tag exists"
 
-echo "==> Checking for s6-overlay migration in '${TARGET_TAG}' ..."
+echo "==> Checking for s6-overlay in '${TARGET_TAG}' ..."
 HTTP_STATUS=$(gh api "repos/${UPSTREAM_REPO}/contents/docker/stage2-hook.sh?ref=${TARGET_TAG}" \
     --jq '.name' 2>&1) || true
 
 if echo "$HTTP_STATUS" | grep -q "Not Found"; then
-    echo "    ✔ stage2-hook.sh absent — safe to use (gosu-based entrypoint)"
-else
-    echo "ERROR: '${TARGET_TAG}' contains docker/stage2-hook.sh."
-    echo "       This tag uses s6-overlay which our Dockerfile does not support."
-    echo "       Either pick an earlier tag or update the Dockerfile to install s6-overlay."
+    echo "ERROR: '${TARGET_TAG}' does not contain docker/stage2-hook.sh."
+    echo "       This tag predates the s6-overlay migration. Our Dockerfile requires"
+    echo "       s6-overlay (tags >= v2026.5.29.2). Use a newer tag."
     exit 1
 fi
+echo "    ✔ s6-overlay present — safe to use"
 
 CURRENT_TAG=$(grep 'HERMES_REF:' "$COMPOSE_FILE" | awk '{print $2}')
 echo "==> Updating HERMES_REF: ${CURRENT_TAG} -> ${TARGET_TAG} in ${COMPOSE_FILE}"

@@ -3,7 +3,7 @@ services:
     build:
       context: .
       args:
-        HERMES_REF: v2026.5.16
+        HERMES_REF: v2026.5.29.2
     image: hermes-agent
     container_name: hermes-gateway
     restart: unless-stopped
