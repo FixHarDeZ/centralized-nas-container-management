@@ -68,6 +68,10 @@ services:
       - hf_cache:/root/.cache/huggingface
       - /volume2/docker/secretary/query-data:/data
       - ./ingest/ingest.py:/ingest/ingest.py:ro
+    deploy:
+      resources:
+        limits:
+          memory: 6g
     depends_on:
       - qdrant
     deploy:
