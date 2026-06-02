@@ -1,5 +1,14 @@
 # Secretary Stack — Daily Log
 
+## 2026-06-02
+
+### Fix: secretary-query OOM crash loop (memory limit 4GB → 6GB)
+- **Problem:** Container ถูก kernel OOM killer ฆ่าซ้ำ ๆ — dmesg shows uvicorn process RSS ~2.8-4.2GB exceeds 4GB container memory limit
+- **Root cause:** BGE-M3 model + CPU torch + Python overhead ใช้ RAM เกิน 4GB limit — แม้ 2026-06-01 จะเพิ่ม memory limits แล้ว แต่ secretary-query ยังตั้งไว้ 4GB ซึ่งไม่พอ
+- **Symptoms:** NAS notifications "Container secretary-query stopped unexpectedly" ทุก 2-3 นาที, crash loop ต่อเนื่อง
+- **Fix:** เพิ่ม `deploy.resources.limits.memory: 6g` ใน `docker-compose.yml` สำหรับ secretary-query service
+- **Verified:** container restart count = 2, swap usage 85% (1.7/2.0GB), container RAM 1.5GB steady-state
+
 ## 2026-06-01
 
 ### Code Review of today's table-row chunking PR (commits 0555985…001e52f)
@@ -38,7 +47,7 @@ Working config:
 Memory allotment (NAS = 12 GB total):
 - qdrant: 1.5 GB
 - n8n: 1 GB
-- secretary-query: 4 GB
+- secretary-query: **6 GB** *(bumped from 4 GB on 2026-06-02 after repeated OOM kills)*
 - secretary-ingest: 6 GB *(bumped from 4 GB after OOM kill on the User-Password page — FlagEmbedding's batch encode of 20–50 chunks spikes RAM transiently past the resident ~2 GB model footprint.)*
 
 ### Known limitation — `/ingest-trigger` OOMs on table-heavy pages
