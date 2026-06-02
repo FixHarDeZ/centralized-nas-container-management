@@ -1,6 +1,8 @@
-# hermes v2026.5.16 — config schema verification
+# hermes config schema verification
 
 **Verified:** 2026-06-02
+**Running version at verification:** `HERMES_REF=v2026.5.29.2` (post-s6-overlay migration — see daily_log entry of same date for the migration context).
+**Filename retained as `hermes-v2026.5.16-schema.md`** for stability with spec + plan references. The schema verification covers the live running container at the moment of verification; most keys here have been stable across recent hermes versions.
 **Method:** Read `/opt/hermes/gateway/config.py` (1874 lines) + `/opt/hermes/hermes_cli/config.py` `DEFAULT_CONFIG` block on running container
 
 ## Key revelation: the spec's key names were wrong

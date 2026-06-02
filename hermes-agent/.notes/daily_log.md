@@ -2,6 +2,57 @@
 
 ---
 
+## 2026-06-02 — Approach A token tune (config diet)
+
+### Trigger
+
+mimo provider dashboard for 2026-06-02 showed 35.6M total tokens with cache hit ratio collapsed to **4%** (vs **80%** on 2026-06-01). The 35.6M spend covered what amounted to a small `docker-compose.yml` edit plus a daily-log update plus a git rebase conflict — clearly disproportionate.
+
+### Root-cause discovery (schema verification)
+
+Read `/opt/hermes/gateway/config.py` and `/opt/hermes/hermes_cli/config.py` `DEFAULT_CONFIG` on the running container (post-s6 migration, `HERMES_REF=v2026.5.29.2`). Findings:
+
+- The repo template and these notes had documented `session.reset_on_idle_minutes: 60` as the idle-reset knob. **That key has never been honored.** Hermes uses `session_reset.idle_minutes` with default `1440` (24h). Live sessions have effectively never been idle-reset.
+- `memory.memory_enabled` and `memory.user_profile_enabled` default to `true`, injecting ~1300 tokens of mutable content into the system prompt every turn — the primary cache-miss driver on a stable-prefix-based provider like mimo.
+- `agent.image_input_mode: "text"` exists as a bonus lever to route screenshots through `vision_analyze` as text instead of sending pixels (vision tokens are uncacheable and expensive on mimo).
+- Spec-guessed Tier 2 keys (`session.max_iterations`, `memory.enabled`, `tools` whitelist) do not exist under those names; renamed real keys (`agent.max_turns`, `memory.memory_enabled`) do.
+
+Full schema map: `hermes-agent/.notes/hermes-v2026.5.16-schema.md`.
+
+### Change
+
+Applied seven targeted edits to `/opt/data/config.yaml` via `sed -i` (inside the `hermes_agent_data` volume; live config is a hermes-generated full dump, not a hand-written template — wholesale replacement would have lost the personalities, plugins, sessions, etc. blocks):
+
+| Key | Before | After |
+|---|---|---|
+| `session_reset.idle_minutes` | 1440 | 15 |
+| `agent.max_turns` | 60 | 20 |
+| `agent.api_max_retries` | 3 | 1 |
+| `agent.image_input_mode` | auto | text |
+| `memory.memory_enabled` | true | false |
+| `memory.user_profile_enabled` | true | false |
+| `compression.threshold` | 0.5 | 0.80 |
+
+Live backup at `/opt/data/config.yaml.bak-20260602` (volume-persistent).
+
+### Deploy + verify
+
+Repo template `hermes-agent/config.yaml.example` updated to match. Container restart via `docker compose restart hermes-gateway` initially hit an orphan s6-log lock (`Resource busy`) — fix was a full stack `down` + `up -d` which released the lock on the shared volume. After clean restart, all three containers (`hermes-gateway`, `hermes-dashboard`, `hermes-nginx`) came up healthy. YAML validated inside the container.
+
+### Verification window
+
+- Opens: 2026-06-02
+- +24h check: 2026-06-03
+- Closes: 2026-06-05
+
+Tracker: `docs/superpowers/specs/2026-06-02-hermes-token-tuning-verification.md`.
+
+### Escalation if targets missed
+
+Re-enter brainstorming for Approach B (persona / prompt discipline). Do not silently tune config further beyond what is in the design spec.
+
+---
+
 ## 2026-06-02 — Migrate Dockerfile to s6-overlay (Approach B — full upstream parity)
 
 ### งานที่ทำ
