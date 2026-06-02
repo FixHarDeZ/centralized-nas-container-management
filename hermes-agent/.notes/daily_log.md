@@ -2,6 +2,35 @@
 
 ---
 
+## 2026-06-02 — Migrate Dockerfile to s6-overlay (Approach B — full upstream parity)
+
+### งานที่ทำ
+
+- อัปเดต `hermes-agent/Dockerfile` ให้ support s6-overlay ตาม upstream `v2026.5.29.2`:
+  - Base image: `debian:bookworm-slim` → `debian:13.4` (trixie)
+  - Multi-stage build: เพิ่ม `ghcr.io/astral-sh/uv:0.11.6-python3.13-trixie` และ `node:22-bookworm-slim` เป็น source stages
+  - ลบ `tini` / `gosu` ออก
+  - ติดตั้ง s6-overlay 3.2.3.0 พร้อม SHA256 checksum verify + multi-arch (amd64/arm64)
+  - Wire `s6-rc.d/` + `cont-init.d/` จาก cloned repo
+  - ติดตั้ง exec shim (`/opt/hermes/bin/hermes`) สำหรับ `docker exec` privilege drop
+  - เพิ่ม `ui-tui` build + Playwright Chromium install
+  - ENTRYPOINT: `["/init", "/opt/hermes/docker/main-wrapper.sh"]`, CMD: `[]`
+- Bump `HERMES_REF: v2026.5.16` → `v2026.5.29.2` ใน `docker-compose.yml`
+- แก้ `scripts/update-hermes.sh`: ลบ guard เดิมที่ block s6-overlay tags → กลับเป็น block pre-s6 tags แทน
+
+### Architecture เปลี่ยนอย่างไร
+
+- เดิม: `tini` (PID 1) → `entrypoint.sh` (gosu UID remap → exec hermes)
+- ใหม่: `/init` (s6-overlay PID 1) → `cont-init.d/01-hermes-setup` (= `stage2-hook.sh` UID remap) → `main-wrapper.sh` routes CMD args → `hermes gateway run` / `hermes dashboard ...`
+- Compose setup (2 containers: gateway + dashboard) ยังเหมือนเดิม — CMD args ผ่าน `main-wrapper.sh` routing เหมือนกัน
+
+### Deploy result
+
+- Build time: ~258s บน NAS (debian:13.4 pull + playwright chromium + web + ui-tui build)
+- containers: `hermes-gateway`, `hermes-dashboard`, `hermes-nginx` ✅ Started
+
+---
+
 ## 2026-05-30 — Fix gateway crash loop (s6-setuidgid: not found)
 
 ### Root Cause
