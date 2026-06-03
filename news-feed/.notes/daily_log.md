@@ -2,6 +2,66 @@
 
 ---
 
+## 2026-06-03 — Debug: Mimo API key invalid (silent fail recurrence #2)
+
+### Symptoms (user-reported)
+1. News timeline badges (ส่งแล้ว / รอส่ง / พ้น window) ไม่แสดงเลย
+2. ปุ่ม Test Digest ตอบ "no articles for digest, skipping" ทุกครั้ง
+3. ไม่มี past digest ของเดือนมิถุนายน 2026 เลยสักรายการ — รายการล่าสุดคือ `2026-05-31T05:00Z` (id=15)
+
+### Root cause
+- `schedule.json` บน NAS ระบุ provider `mimo` + model `xiaomi/mimo-v2.5` (ตั้งโดย dashboard เมื่อ 2026-05-31; .env เป็น openrouter+deepseek-v4-pro แต่ schedule.json override)
+- `MIMO_API_KEY` ใน vault คืน HTTP **401 Invalid API Key** (verified จาก `POST {base}/chat/completions`)
+- ทุก `summarize()` call retry 3 รอบแล้ว raise — fetcher catch แล้ว `logger.error("summarize failed ...")` แต่ container restart 2026-06-03T07:20Z ลบ log เดิมไปหมด เลยไม่เห็น error history
+- ผล: articles 34+ ตัว (May 31 – June 2) มี `summary_th = NULL` → `select_digest_articles()` returns 0 → digest skip → 3 วันไม่มีข่าวเข้า Telegram
+- บั๊ก badge เป็นอาการปลายทาง: `_digestBadge(a)` ต้องการ `_sentIds.has(a.id)` (green) หรือ `summary_th != null` (yellow/gray); เมื่อทุกข่าวมี `summary_th = NULL` และไม่อยู่ใน digest_log → ไม่มี badge เลย
+
+### Fix
+1. **Switch provider** — `POST` schedule.json: `summarizer_provider=openrouter`, `summarizer_model=deepseek/deepseek-v4-pro` (verified 200 OK ก่อน switch). อัปเดต schedule.json โดยตรงผ่าน `docker exec python` ไม่ต้อง restart (next `get_config()` อ่านใหม่)
+2. **Backfill NULL summaries** — `docker exec python` วน `SELECT WHERE summary_th IS NULL` แล้วเรียก `summarize(title, "", cfg)` (body ไม่ได้เก็บใน DB; ใช้ title อย่างเดียวเพียงพอสำหรับการสรุป 2-3 ประโยค)
+   - รอบ 1: 37 articles → ok=37 (แต่เหลือ 11 NULL — น่าจะ snapshot race เพราะ scheduled fetch ไหลเข้าระหว่างรัน)
+   - รอบ 2: 11 articles → ok=6, EMPTY=5 (deepseek-v4-pro คืน empty string สำหรับ title ที่มี smart quotes / special chars)
+   - รอบ 3 บน 5 ที่เหลือ: ok=1, EMPTY=4 — ปล่อยให้ค้างไว้ (4 ตัว, fetched_at June 1–2, ไม่กระทบ digest 12h window)
+3. **Trigger digest** — `POST /api/digest/test` → `sent_to=["telegram"]`, `article_count=4`, `available_12h=21`. ใหม่ digest_log row id=16 sent_at `2026-06-03T10:24:54Z` ✅ มิถุนายนมีรายการแรกแล้ว
+
+### Verification
+- `/api/news/sent-ids`: 51 → 55 (+4 new) ✓
+- 12h window: 23 articles total, 20 มี summary, 3 NULL ✓ (badge จะแสดง green/yellow ให้ 20+ ตัว)
+- Telegram digest ออกที่ chat ตามคาด
+
+### Note for next time (recurrence #2)
+- 2026-05-29 ก็เคยเกิด: OpenRouter rate-limit free model → silent fail → 40+ ชม. ไม่มี digest
+- ครั้งนี้: Mimo API key expired/invalid → ผลเดียวกัน
+- **Pattern**: ถ้า `available_12h=0` ที่ `POST /api/digest/test` ทั้งที่ timeline มีข่าวสด ให้สงสัย summarizer ก่อนเสมอ — เช็ค provider ใน `schedule.json` (override .env) แล้ว curl test ตรง
+- TODO ไม่ทำตอนนี้ (user รายงานบั๊ก ไม่ได้ขอ instrumentation): พิจารณาเพิ่ม `summary_error` column หรือ Telegram alert เมื่อ N รอบติด null
+
+### หาก user อยากกลับมาใช้ Mimo
+1. ขอ/ออก key ใหม่จาก Xiaomi MiMo console (`MIMO_BASE_URL=https://token-plan-sgp.xiaomimimo.com/v1`)
+2. `make edit-vault` → อัปเดต `MIMO_API_KEY` → `make secrets` → `./scripts/deploy.sh -s news-feed`
+3. Dashboard Schedule Config → เลือก Provider = Mimo, Model = `xiaomi/mimo-v2.5` → Save (เขียนกลับลง `schedule.json`)
+
+---
+
+## 2026-06-03 (2) — Fix: Mimo `max_tokens` ต่ำเกินไปสำหรับ reasoning model
+
+### เกิดอะไรขึ้นต่อ
+หลัง user อัปเดต `MIMO_API_KEY` ใหม่ผ่าน vault flow แล้ว ปรากฏว่า Mimo ยังคงไม่ทำงาน
+1. **Stale container env** — `.env` บน NAS อัปเดต mtime 17:04 BKK แต่ container ยัง running ตั้งแต่ 14:20 BKK ด้วย key เก่า (HTTP 401). `deploy.sh -s news-feed` ครั้งล่าสุดของ user upload `.env` แต่ดูเหมือนไม่ recreate compose. Fix: `docker compose up -d` recreate container เพื่อโหลด env ใหม่ — ขณะ rebuild ครั้งถัดไปจะถูกต้องเองอยู่แล้ว
+2. **Reasoning model token starvation** — key ใหม่ใช้งานได้ (200 OK) แต่ Mimo v2.5 เป็น reasoning model ใช้ token ใน `reasoning_content` ก่อนค่อย generate `content`. `max_tokens=300` (default ใน `_summarize_mimo`) ทำให้ `finish_reason=length` กับ `content=""` (empty) — ผลคือ summarize เงียบๆ คืนว่าง แล้ว fetcher commit summary_th="" ค้าง (จริงๆ branch null-check ใน backfill script catch แต่ใน fetcher.py ไม่ check)
+
+### Fix
+- `app/summarizer.py:_summarize_mimo`: `max_tokens 300 → 1500`, `timeout 30 → 60` (Mimo คิดเลขนานกว่า non-reasoning)
+- Verified ก่อนแก้: ทดสอบ max_tokens 500/1500/3000 — ทุก case `finish=stop`, `content_len ≈ 280–340`, `reasoning_tokens 14–24` → 1500 เผื่อพอ
+- `pytest tests/` 65/65 ผ่าน ✅
+- `bash scripts/deploy.sh -s news-feed -y` build+restart 9s ✓
+- Switch `schedule.json` กลับเป็น `mimo` + `xiaomi/mimo-v2.5`
+- Backfill 4 articles ที่ deepseek เคยคืน empty → Mimo ทำได้ครบ 4/4, **NULL remaining: 0** ✓
+
+### Note
+- `select_digest_articles` กรอง `WHERE summary_th IS NOT NULL` ใน `get_recent_articles_for_digest` (models.py) — ดังนั้นข่าวที่ `summary_th=""` (empty string) จะหลุดเข้า digest ได้เป็น item เปล่าๆ บั๊กเงียบที่อาจกระทบในอนาคต. **TODO ถ้าเจอ regression**: ทั้ง fetcher และ models.py ควร reject empty summary และ raise/log แทน
+
+---
+
 ## 2026-05-29 — Feature: Mobile-Responsive Dashboard Layout
 
 ### การเปลี่ยนแปลง
