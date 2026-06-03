@@ -80,13 +80,13 @@ def _summarize_mimo(title: str, body: str, model: str) -> str:
             },
             json={
                 "model": model,
-                "max_tokens": 300,
+                "max_tokens": 1500,
                 "messages": [
                     {"role": "system", "content": _SYSTEM},
                     {"role": "user", "content": _user_prompt(title, body)},
                 ],
             },
-            timeout=30.0,
+            timeout=60.0,
         )
         resp.raise_for_status()
         return resp.json()["choices"][0]["message"]["content"]
