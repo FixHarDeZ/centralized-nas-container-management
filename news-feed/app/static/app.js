@@ -8,6 +8,31 @@ let _freeModels = [];
 let _lbPrices = [];
 let _watchlist = new Set(JSON.parse(localStorage.getItem('nf_watchlist') || '[]'));
 
+async function _syncWatchlistFromServer() {
+  try {
+    const data = await api('/api/watchlist');
+    const serverIds = data.model_ids || [];
+    if (serverIds.length > 0) {
+      _watchlist = new Set(serverIds);
+      localStorage.setItem('nf_watchlist', JSON.stringify(serverIds));
+    } else {
+      const localIds = [..._watchlist];
+      if (localIds.length > 0) {
+        await fetch('/api/watchlist', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({model_ids: localIds}),
+        });
+      }
+    }
+    renderLeaderboard();
+    renderPriceWatchlist();
+  } catch (_) {}
+}
+_syncWatchlistFromServer();
+let _customSources = []; // [{key, name, url}]
+let _priceCharts = {}; // idx → Chart instance
+
 const PROVIDER_ZONES = {
   'openai':       { zone: 'US', flag: '🇺🇸', label: 'US' },
   'anthropic':    { zone: 'US', flag: '🇺🇸', label: 'US' },
@@ -139,7 +164,18 @@ function toggleBookmark(modelId) {
   if (_watchlist.has(modelId)) _watchlist.delete(modelId);
   else _watchlist.add(modelId);
   localStorage.setItem('nf_watchlist', JSON.stringify([..._watchlist]));
+  fetch(`/api/watchlist/${encodeURIComponent(modelId)}`, {method: 'PATCH'}).catch(() => {});
+  // Update star buttons in price table in-place (not re-rendered by renderLeaderboard)
+  document.querySelectorAll('#price-table .star-btn').forEach(btn => {
+    if (btn.dataset.model === modelId) {
+      const on = _watchlist.has(modelId);
+      btn.classList.toggle('on', on);
+      btn.textContent = on ? '★' : '☆';
+      btn.title = on ? 'นำออกจาก watchlist' : 'เก็บเข้า watchlist';
+    }
+  });
   renderLeaderboard();
+  renderPriceWatchlist();
 }
 
 function getZone(modelId) {
@@ -296,10 +332,65 @@ function filterNews() {
 
 function togglePriceExpand(idx) {
   const row = document.getElementById(`price-expand-${idx}`);
-  if (row) row.classList.toggle('open');
+  if (!row) return;
+  row.classList.toggle('open');
+  if (row.classList.contains('open') && !_priceCharts[idx]) {
+    const model = _shownPrices[idx];
+    if (model) _loadPriceChart(idx, model.model_id);
+  }
+}
+
+async function _loadPriceChart(idx, modelId) {
+  const wrap = document.getElementById(`price-hist-wrap-${idx}`);
+  const canvas = document.getElementById(`price-hist-${idx}`);
+  if (!wrap || !canvas) return;
+  try {
+    const history = await api(`/api/prices/${encodeURIComponent(modelId)}/history?days=30`);
+    if (!history.length) {
+      wrap.innerHTML = '<p style="color:#64748b;font-size:.74rem;margin:.2rem 0">ยังไม่มีข้อมูลประวัติราคา — จะเริ่มเก็บหลัง price job รอบถัดไป</p>';
+      return;
+    }
+    const labels = history.map(h => h.date.slice(5)); // MM-DD
+    const combined = history.map(h => +((( h.prompt_price||0) + (h.complete_price||0)).toFixed(4)));
+    const isFree = combined.every(v => v === 0);
+    if (isFree) {
+      wrap.innerHTML = '<p style="color:#22c55e;font-size:.74rem;margin:.2rem 0">FREE — ไม่มีประวัติราคา</p>';
+      return;
+    }
+    _priceCharts[idx] = new Chart(canvas, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Combined $/1M',
+          data: combined,
+          borderColor: '#3b82f6',
+          backgroundColor: 'rgba(59,130,246,.08)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: combined.length <= 7 ? 3 : 1,
+          pointHoverRadius: 4,
+        }],
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { display: false }, tooltip: { callbacks: {
+          label: ctx => `$${ctx.parsed.y.toFixed(4)}/1M`,
+        }}},
+        scales: {
+          x: { ticks: { color: '#94a3b8', font: { size: 10 }, maxTicksLimit: 10 }, grid: { color: 'rgba(148,163,184,.1)' } },
+          y: { ticks: { color: '#94a3b8', font: { size: 10 } }, beginAtZero: true, grid: { color: 'rgba(148,163,184,.1)' } },
+        },
+      },
+    });
+  } catch(_) {
+    wrap.innerHTML = '<p style="color:#64748b;font-size:.74rem;margin:.2rem 0">ไม่สามารถโหลดประวัติราคา</p>';
+  }
 }
 
 function renderPriceTable(prices) {
+  Object.values(_priceCharts).forEach(c => { try { c.destroy(); } catch(_) {} });
+  _priceCharts = {};
   _shownPrices = prices;
   const tbody = document.querySelector('#price-table tbody');
   tbody.innerHTML = prices.map((p, i) => {
@@ -307,6 +398,7 @@ function renderPriceTable(prices) {
     const ctx = p.context_length ? p.context_length.toLocaleString() + ' tokens' : '–';
     const updated = p.updated_at ? new Date(p.updated_at).toLocaleString('th-TH') : '–';
     return `<tr onclick="togglePriceExpand(${i})">
+    <td style="padding:.4rem .3rem;width:2rem;text-align:center">${_starBtn(p.model_id)}</td>
     <td>
       ${escapeHtml(p.name)} <span class="zone-badge">${z.flag} ${z.label}</span>
       <span class="price-cell-provider">${escapeHtml(p.provider)}</span>
@@ -319,11 +411,14 @@ function renderPriceTable(prices) {
     <td>${p.updated_at ? new Date(p.updated_at).toLocaleString('th-TH') : '–'}</td>
   </tr>
   <tr class="price-expand-row" id="price-expand-${i}">
-    <td colspan="7">
+    <td colspan="8">
       <div class="price-expand-detail">
         <div><span class="lbl">Model ID</span><code>${escapeHtml(p.model_id)}</code></div>
         <div><span class="lbl">Context</span><span>${ctx}</span></div>
         <div><span class="lbl">Updated</span><span>${updated}</span></div>
+      </div>
+      <div id="price-hist-wrap-${i}" style="margin-top:.5rem;min-height:1.5rem">
+        <canvas id="price-hist-${i}" height="70"></canvas>
       </div>
     </td>
   </tr>`;
@@ -354,6 +449,18 @@ async function loadPrices() {
     sel.innerHTML = '<option value="">All providers</option>' + providers.map(p=>`<option value="${p}">${p}</option>`).join('');
   }
   renderPriceTable(allPrices);
+  renderPriceWatchlist();
+}
+
+function renderPriceWatchlist() {
+  const el = document.getElementById('pt-watchlist-body');
+  if (!el) return;
+  const countEl = document.getElementById('pt-watchlist-count');
+  const watch = allPrices.filter(p => _watchlist.has(p.model_id));
+  if (countEl) countEl.textContent = watch.length ? `(${watch.length})` : '';
+  el.innerHTML = watch.length
+    ? watch.map(p => _rankRow(p, null, _priceHtml(p))).join('')
+    : '<p style="color:#64748b;font-size:.85rem">ยังไม่มีโมเดลใน watchlist — กด ☆ ที่แถวโมเดลใดก็ได้เพื่อเก็บ</p>';
 }
 
 function filterPrices() {
@@ -510,33 +617,161 @@ async function testDigest() {
   }
 }
 
+function _renderDigestTimeInputs(times) {
+  const timesEl = document.getElementById('digest-times-inputs');
+  timesEl.innerHTML = times.map((t, i) =>
+    `<span style="display:inline-flex;align-items:center;gap:.3rem;margin:0 .75rem .4rem 0">
+      <label>Digest ${i+1}: <input type="time" value="${t}" data-idx="${i}" class="digest-time-input"></label>
+      ${times.length > 1 ? `<button type="button" class="btn btn-sm" onclick="removeDigestTime(${i})" title="ลบเวลานี้" style="padding:.15rem .45rem;line-height:1.2">×</button>` : ''}
+    </span>`
+  ).join('') +
+  `<span style="display:inline-flex;align-items:center;margin:.4rem 0">
+    <button type="button" class="btn btn-sm" onclick="addDigestTime()">+ Add Time</button>
+  </span>`;
+}
+
+function _renderFallbackChain(fallbacks) {
+  const el = document.getElementById('fallback-chain-inputs');
+  if (!el) return;
+  const providerOpts = ['anthropic','openrouter','mimo'].map(p => `<option value="${p}">${p}</option>`).join('');
+  el.innerHTML = (fallbacks.length ? fallbacks : []).map((fb, i) =>
+    `<span style="display:flex;align-items:center;gap:.4rem;margin-bottom:.4rem">
+      <span style="color:#64748b;font-size:.78rem;min-width:.8rem">${i+1}.</span>
+      <select class="fallback-provider" data-idx="${i}">${providerOpts.replace(`value="${fb.provider}"`, `value="${fb.provider}" selected`)}</select>
+      <input type="text" class="fallback-model" data-idx="${i}" value="${escapeAttr(fb.model)}" placeholder="model id" style="width:200px">
+      <button type="button" class="btn btn-sm" onclick="removeFallback(${i})" style="padding:.15rem .45rem;line-height:1.2">×</button>
+    </span>`
+  ).join('') +
+  `<div style="margin-top:.3rem"><button type="button" class="btn btn-sm" onclick="addFallback()">+ Add Fallback</button></div>`;
+}
+
+function addFallback() {
+  const current = _readFallbackChain();
+  current.push({provider: 'openrouter', model: ''});
+  _renderFallbackChain(current);
+}
+
+function removeFallback(idx) {
+  const current = _readFallbackChain();
+  current.splice(idx, 1);
+  _renderFallbackChain(current);
+}
+
+function _readFallbackChain() {
+  const providers = [...document.querySelectorAll('.fallback-provider')].map(el => el.value);
+  const models = [...document.querySelectorAll('.fallback-model')].map(el => el.value);
+  return providers.map((p, i) => ({provider: p, model: models[i] || ''}));
+}
+
+function addDigestTime() {
+  const times = [...document.querySelectorAll('.digest-time-input')].map(el => el.value || '09:00');
+  times.push('09:00');
+  _renderDigestTimeInputs(times);
+}
+
+function removeDigestTime(idx) {
+  const times = [...document.querySelectorAll('.digest-time-input')].map(el => el.value);
+  times.splice(idx, 1);
+  _renderDigestTimeInputs(times);
+}
+
+function _slugify(name) {
+  return 'custom_' + name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '').substring(0, 24);
+}
+
+function _renderCustomSources(enabledKeys) {
+  const el = document.getElementById('custom-sources-list');
+  if (!el) return;
+  if (!_customSources.length) {
+    el.innerHTML = '<p style="color:#64748b;font-size:.82rem;margin:.2rem 0 .4rem">ยังไม่มี custom source</p>';
+    return;
+  }
+  el.innerHTML = _customSources.map((s, i) =>
+    `<div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.3rem">
+      <input type="checkbox" value="${escapeAttr(s.key)}" class="custom-src-check" ${enabledKeys.includes(s.key) ? 'checked' : ''}>
+      <span style="font-weight:600;font-size:.88rem">${escapeHtml(s.name)}</span>
+      <span style="color:#64748b;font-size:.75rem;word-break:break-all;flex:1;min-width:0">${escapeHtml(s.url)}</span>
+      <button type="button" class="btn btn-sm" onclick="removeCustomSource(${i})" style="padding:.15rem .45rem;line-height:1.2;flex-shrink:0">×</button>
+    </div>`
+  ).join('');
+}
+
+function addCustomSource() {
+  const nameEl = document.getElementById('new-source-name');
+  const urlEl = document.getElementById('new-source-url');
+  const errEl = document.getElementById('add-source-error');
+  const name = nameEl.value.trim();
+  const url = urlEl.value.trim();
+  errEl.textContent = '';
+  if (!name) { errEl.textContent = 'ต้องกรอก Name'; return; }
+  if (!url.startsWith('http')) { errEl.textContent = 'URL ต้องขึ้นต้นด้วย http'; return; }
+  const key = _slugify(name);
+  if (_customSources.find(s => s.key === key)) { errEl.textContent = `Key "${key}" ซ้ำ — เปลี่ยนชื่อ`; return; }
+  // Read current enabled state before mutating
+  const enabledKeys = [
+    ...[...document.querySelectorAll('#source-toggles input[type=checkbox]:checked')].map(i => i.value),
+    ...[...document.querySelectorAll('.custom-src-check:checked')].map(i => i.value),
+    key, // new source auto-enabled
+  ];
+  _customSources.push({key, name, url});
+  _renderCustomSources(enabledKeys);
+  nameEl.value = '';
+  urlEl.value = '';
+}
+
+function removeCustomSource(idx) {
+  const enabledKeys = [...document.querySelectorAll('.custom-src-check:checked')].map(i => i.value);
+  _customSources.splice(idx, 1);
+  _renderCustomSources(enabledKeys);
+}
+
+const SOURCE_META = {
+  techcrunch_ai:     { name: 'TechCrunch AI',       desc: 'AI startup, funding, product launch — Silicon Valley focus' },
+  venturebeat:       { name: 'VentureBeat',          desc: 'AI enterprise & business applications, research breakthroughs' },
+  theverge:          { name: 'The Verge',            desc: 'Consumer tech, gadgets, big tech (Apple / Google / Meta)' },
+  arstechnica:       { name: 'Ars Technica',         desc: 'เชิงลึก: security, hardware, science — วิเคราะห์มากกว่ารายงาน' },
+  gsmarena:          { name: 'GSMArena',             desc: 'Smartphone spec, review, launch ทุกแบรนด์ทั่วโลก' },
+  '9to5mac':         { name: '9to5Mac',              desc: 'Apple ecosystem เฉพาะทาง (iPhone / Mac / iOS / watchOS)' },
+  android_authority: { name: 'Android Authority',   desc: 'Android ecosystem, Google, Samsung, mid-range phones' },
+};
+
 async function loadScheduleConfig() {
   const cfg = await api('/api/schedule');
-  const timesEl = document.getElementById('digest-times-inputs');
-  timesEl.innerHTML = (cfg.digest_times||[]).map((t,i) =>
-    `<label style="margin-right:.75rem">Digest ${i+1}: <input type="time" value="${t}" data-idx="${i}" class="digest-time-input"></label>`
-  ).join('');
-  const allSources = ['techcrunch_ai','venturebeat','theverge','arstechnica','gsmarena','9to5mac','android_authority'];
-  document.getElementById('source-toggles').innerHTML = allSources.map(s =>
-    `<label style="display:inline-block;margin:.25rem .5rem">
-      <input type="checkbox" value="${s}" ${(cfg.enabled_sources||[]).includes(s)?'checked':''}> ${s}
-    </label>`).join('');
+  _renderDigestTimeInputs(cfg.digest_times || ['07:00', '12:00', '18:00']);
+  const allSources = Object.keys(SOURCE_META);
+  document.getElementById('source-toggles').innerHTML = allSources.map(s => {
+    const m = SOURCE_META[s];
+    return `<label style="display:flex;align-items:flex-start;gap:.5rem;margin:.3rem 0;cursor:pointer">
+      <input type="checkbox" value="${s}" ${(cfg.enabled_sources||[]).includes(s)?'checked':''} style="margin-top:.15rem;flex-shrink:0">
+      <span>
+        <span style="font-weight:600">${escapeHtml(m.name)}</span>
+        <span style="color:#64748b;font-size:.78rem;display:block;margin-top:.1rem">${escapeHtml(m.desc)}</span>
+      </span>
+    </label>`;
+  }).join('');
   document.getElementById('cfg-provider').value = cfg.summarizer_provider || 'anthropic';
   document.getElementById('cfg-model').value = cfg.summarizer_model || '';
   document.getElementById('cfg-retention').value = cfg.retention_days || 30;
+  _renderFallbackChain(cfg.summarizer_fallback || []);
+  _customSources = (cfg.custom_sources || []).map(s => ({key: s.key, name: s.name, url: s.url}));
+  _renderCustomSources(cfg.enabled_sources || []);
 }
 
 async function saveSchedule() {
   const times = [...document.querySelectorAll('.digest-time-input')].map(i=>i.value).filter(Boolean);
-  const sources = [...document.querySelectorAll('#source-toggles input:checked')].map(i=>i.value);
+  const sources = [
+    ...[...document.querySelectorAll('#source-toggles input[type=checkbox]:checked')].map(i => i.value),
+    ...[...document.querySelectorAll('.custom-src-check:checked')].map(i => i.value),
+  ];
   const provider = document.getElementById('cfg-provider').value;
   const model = document.getElementById('cfg-model').value;
   const retention = parseInt(document.getElementById('cfg-retention').value, 10) || 30;
+  const fallback = _readFallbackChain().filter(fb => fb.model.trim());
   try {
     const r = await fetch('/api/schedule', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ digest_times: times, enabled_sources: sources, summarizer_provider: provider, summarizer_model: model, retention_days: retention }),
+      body: JSON.stringify({ digest_times: times, enabled_sources: sources, summarizer_provider: provider, summarizer_model: model, retention_days: retention, summarizer_fallback: fallback, custom_sources: _customSources }),
     });
     if (!r.ok) throw new Error(r.status);
     document.getElementById('save-status').textContent = '✓ Saved';
@@ -630,6 +865,8 @@ document.addEventListener('click', e => {
 document.addEventListener('click', e => {
   const btn = e.target.closest('.star-btn');
   if (!btn) return;
+  // Prevent row expand when clicking star in price table
+  if (btn.closest('#price-table')) e.stopPropagation();
   const id = btn.dataset.model;
   if (id) toggleBookmark(id);
 });

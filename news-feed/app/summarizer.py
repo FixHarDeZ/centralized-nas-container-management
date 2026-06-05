@@ -94,11 +94,30 @@ def _summarize_mimo(title: str, body: str, model: str) -> str:
     return _with_retry(call)
 
 
-def summarize(title: str, body: str, config: dict) -> str:
-    provider = config.get("summarizer_provider", "anthropic")
-    model = config.get("summarizer_model", "claude-sonnet-4-6")
+def _dispatch(provider: str, title: str, body: str, model: str) -> str:
     if provider == "openrouter":
         return _summarize_openrouter(title, body, model)
     if provider == "mimo":
         return _summarize_mimo(title, body, model)
     return _summarize_anthropic(title, body, model)
+
+
+def summarize(title: str, body: str, config: dict) -> str:
+    primary = {"provider": config.get("summarizer_provider", "anthropic"), "model": config.get("summarizer_model", "claude-sonnet-4-6")}
+    chain = [primary] + list(config.get("summarizer_fallback", []))
+
+    last_exc: Exception | None = None
+    for slot in chain:
+        provider = slot.get("provider", "anthropic")
+        model = slot.get("model", "claude-sonnet-4-6")
+        try:
+            result = _dispatch(provider, title, body, model)
+            if last_exc is not None:
+                logger.warning("summarize fallback succeeded with provider=%s model=%s", provider, model)
+            return result
+        except Exception as exc:
+            logger.warning("summarize failed provider=%s: %s", provider, exc)
+            last_exc = exc
+
+    assert last_exc is not None
+    raise last_exc

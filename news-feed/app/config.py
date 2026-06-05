@@ -27,7 +27,20 @@ def _env_defaults() -> dict:
         "summarizer_provider": os.getenv("SUMMARIZER_PROVIDER", "anthropic"),
         "summarizer_model": os.getenv("SUMMARIZER_MODEL", "claude-sonnet-4-6"),
         "retention_days": int(os.getenv("RETENTION_DAYS", "30")),
+        "summarizer_fallback": [],
+        "custom_sources": [],
     }
+
+
+def get_all_sources(config: dict) -> dict[str, str]:
+    """Return merged dict of built-in SOURCES + custom_sources from config."""
+    merged = dict(SOURCES)
+    for cs in config.get("custom_sources", []):
+        key = cs.get("key", "").strip()
+        url = cs.get("url", "").strip()
+        if key and url:
+            merged[key] = url
+    return merged
 
 
 def get_config() -> dict:

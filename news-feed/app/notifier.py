@@ -55,6 +55,24 @@ def _send_telegram(message: str) -> bool:
         return False
 
 
+def send_summarizer_alert(config: dict) -> list[str]:
+    message = (
+        "⚠️ <b>News Feed: Summarizer Alert</b>\n\n"
+        "Digest 2 รอบติดกันไม่มีบทความที่ส่งได้ ทั้งที่มีข่าวในระบบ\n"
+        "Summarizer น่าจะมีปัญหา\n\n"
+        "<b>วิธีตรวจสอบ:</b>\n"
+        "1. ดู provider ใน Schedule Config (อาจ override .env)\n"
+        "2. ทดสอบ API key ตรงๆ\n"
+        "3. POST /api/digest/test → ดู available_12h"
+    )
+    sent = []
+    if _send_line(message):
+        sent.append("line")
+    if _send_telegram(message):
+        sent.append("telegram")
+    return sent
+
+
 def send_digest(articles: list[dict], config: dict) -> list[str]:
     if not articles:
         logger.info("no articles for digest, skipping")

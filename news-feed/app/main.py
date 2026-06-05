@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from app.api import digest, fetch, health, news, prices, schedule
+from app.api import digest, fetch, health, news, prices, schedule, watchlist
 from app.config import DB_PATH, DATA_DIR
 from app.models import get_conn, init_db
 from app.scheduler import setup_scheduler
@@ -44,6 +44,7 @@ app.include_router(schedule.router)
 app.include_router(digest.router)
 app.include_router(fetch.router)
 app.include_router(health.router)
+app.include_router(watchlist.router)
 
 # Routers must be registered BEFORE the catch-all static mount
 _static = Path(__file__).parent / "static"

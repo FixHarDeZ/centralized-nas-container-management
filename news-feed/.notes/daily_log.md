@@ -2,6 +2,140 @@
 
 ---
 
+## 2026-06-05 (6) — Feature: Price History Chart
+
+### งานที่ทำ
+Daily price snapshot → sparkline chart ใน Price Tracker expand row
+
+**Backend:**
+- `models.py`: `price_history` table (`model_id, prompt_price, complete_price, snapshot_date`, UNIQUE per model/day); `snapshot_all_prices(conn, date)` — snapshot ทุก model ใน prices table (INSERT OR REPLACE); `get_price_history(conn, model_id, days=30)`
+- `scheduler.py`: `_price_job` snapshot หลัง fetch prices ทุกครั้ง (ทุก 6h)
+- `api/prices.py`: `GET /api/prices/{model_id:path}/history?days=30`
+
+**Frontend:**
+- `app.js`: `_priceCharts {}` cache; cleanup ใน `renderPriceTable` (prevent canvas reuse error); `togglePriceExpand` load chart ครั้งแรกที่ expand; `_loadPriceChart(idx, modelId)` — fetch history → Chart.js line chart (combined $/1M over time, MM-DD labels); ถ้าไม่มีข้อมูล/free → text fallback
+- Canvas `<div id="price-hist-wrap-${i}">` + `<canvas id="price-hist-${i}">` ใน expand row
+
+**Note:** ข้อมูลจะเริ่มสะสมหลัง price job รอบถัดไป (ทุก 6h) — ครั้งแรก expand row จะแสดง "ยังไม่มีข้อมูลประวัติราคา"
+
+### Tests
+101/101 pass ✅ (8 tests ใหม่ใน test_price_history.py: model layer + API)
+
+---
+
+## 2026-06-05 (5) — Feature: Watchlist Sync Backend
+
+### งานที่ทำ
+Watchlist sync ข้าม browser/device ผ่าน backend DB — ไม่ใช่ localStorage อีกต่อไป
+
+**Backend:**
+- `models.py`: เพิ่ม `watchlist` table (model_id PK, added_at) ใน `init_db`; `get_watchlist`, `toggle_watchlist`, `set_watchlist`
+- `app/api/watchlist.py` (ใหม่): `GET /api/watchlist`, `POST /api/watchlist`, `PATCH /api/watchlist/{model_id:path}`
+- `main.py`: register watchlist router
+
+**Frontend:**
+- Page load: `_syncWatchlistFromServer()` — ดึง `GET /api/watchlist`; ถ้า server มีข้อมูล → override `_watchlist` + localStorage. ถ้า server ว่าง + localStorage มี → POST migrate ขึ้น server (one-time migration)
+- `toggleBookmark()`: optimistic update local + fire `PATCH /api/watchlist/{model_id}` background (silent fail → localStorage fallback ยังใช้งานได้)
+
+**Migration:** ครั้งแรกที่ load page หลัง deploy → localStorage watchlist ถูก POST ขึ้น server อัตโนมัติ
+
+**Tests:**
+- ย้าย `client` fixture จาก `test_api.py` → `conftest.py` (share กับทุก test file)
+- `tests/test_watchlist.py`: 5 model tests + 6 API tests
+
+93/93 pass ✅
+
+---
+
+## 2026-06-05 (4) — Feature: Dynamic RSS Source Add/Remove
+
+### งานที่ทำ
+เพิ่ม/ลบ RSS source ได้จาก dashboard โดยไม่ต้อง redeploy
+
+**Backend:**
+- `config.py`: `get_all_sources(config)` — merge built-in `SOURCES` + `custom_sources` จาก schedule config. `_env_defaults()` เพิ่ม `custom_sources: []`
+- `fetcher.py`: เปลี่ยน `SOURCES.get(source_key)` → `get_all_sources(config).get(source_key)` — รองรับ custom source ทันที
+- `api/schedule.py`: เพิ่ม `custom_sources` ใน allowed_keys + validation (ต้อง list, url ขึ้นต้น `http`, key + url ต้องไม่ว่าง)
+
+**Frontend:**
+- `app.js`: `_customSources []` module-level state; `_slugify(name)` auto-generate key; `_renderCustomSources(enabledKeys)`; `addCustomSource()` (validate name+url+dup key, auto-enable ใหม่); `removeCustomSource(idx)`
+- `saveSchedule()`: collect checked keys จาก `.custom-src-check` + ส่ง `_customSources` เป็น `custom_sources`
+- `index.html`: Enabled Sources card เพิ่ม Custom Sources section + Add form
+
+**วิธีใช้งาน:**
+Schedule Config → Enabled Sources → Custom Sources → กรอก Name + RSS URL → `+ Add` → กด Save Config
+
+Key auto-generate จากชื่อ เช่น "The Register" → `custom_the_register`
+
+### Tests
+82/82 pass ✅ (4 tests ใหม่ใน test_config.py + 3 ใน test_api.py)
+
+---
+
+## 2026-06-05 (3) — Feature: Summarizer Fallback Chain
+
+### งานที่ทำ
+Primary summarizer fail → auto-try fallback providers ตาม chain ที่ตั้งไว้ใน config. ไม่ต้องมาเปลี่ยน manual อีกต่อไป
+
+**Backend:**
+- `summarizer.py`: แยก `_dispatch(provider, title, body, model)` helper; `summarize()` ใหม่ iterate `[primary] + fallback_chain` → log warning เมื่อ fallback succeed; raise last exception ถ้าทุกตัว fail
+- `config.py`: เพิ่ม `summarizer_fallback: []` ใน `_env_defaults()` (backward compat — schedule.json เก่าไม่ต้องแตะ)
+- `api/schedule.py`: เพิ่ม `summarizer_fallback` ใน `allowed_keys` + validation (ต้อง list ของ `{provider, model}`, provider ต้องอยู่ใน `{anthropic, openrouter, mimo}`)
+
+**Frontend:**
+- `index.html`: card "Summarizer Fallback Chain" ระหว่าง Primary Model กับ Retention
+- `app.js`: `_renderFallbackChain()`, `addFallback()`, `removeFallback(idx)`, `_readFallbackChain()`; `loadScheduleConfig` โหลด + render; `saveSchedule` ส่ง `summarizer_fallback` (กรอง entry ที่ model ว่าง)
+
+**วิธีตั้ง fallback ผ่าน Dashboard:**
+Schedule Config → Summarizer Fallback Chain → `+ Add Fallback` → เลือก provider + ใส่ model ID → Save Config
+
+**ตัวอย่าง config ที่แนะนำ (mimo primary):**
+```
+Primary: mimo / xiaomi/mimo-v2.5
+Fallback 1: openrouter / deepseek/deepseek-chat
+Fallback 2: anthropic / claude-haiku-4-5-20251001
+```
+
+### Tests
+75/75 pass ✅ (4 tests ใหม่: fallback succeed, all fail raise, no fallback raise, retry still works)
+
+---
+
+## 2026-06-05 (2) — Feature: Summarizer Fail Alert + Source Descriptions
+
+### งานที่ทำ
+1. **Summarizer Fail Alert** — ถ้า digest 2 รอบติดกันมี candidates แต่ส่ง 0 บทความ → ส่ง LINE+Telegram alert พร้อมวิธีตรวจสอบ. State เก็บใน `/data/summarizer_state.json` (`consecutive_empty`, `last_alert_at`). Cooldown 6h กัน spam. Reset counter หลัง alert ส่งแล้ว
+2. **Source Descriptions** — เพิ่ม `SOURCE_META` dict ใน `app.js` ระบุชื่อ + คำอธิบายสั้นของแต่ละ source. Schedule Config แสดงเป็น list แทน inline-block เดิม
+
+### Files changed
+- `app/notifier.py` — `send_summarizer_alert(config)`
+- `app/scheduler.py` — `_load_summarizer_state`, `_save_summarizer_state`, `_ALERT_THRESHOLD=2`, `_ALERT_COOLDOWN_HOURS=6`; `_digest_job` tracks consecutive_empty + fires alert
+- `app/static/app.js` — `SOURCE_META` dict + updated `loadScheduleConfig` source render
+- `tests/test_notifier.py` — 2 tests for `send_summarizer_alert`
+- `tests/test_scheduler_alert.py` — 5 tests for state load/save/corrupt
+
+### Tests
+72/72 pass ✅
+
+---
+
+## 2026-06-05 — Feature: Digest Times Add/Remove + Price Tracker My Watchlist
+
+### งานที่ทำ
+1. **Schedule Config: Add/Remove Digest Time buttons** — แยก render logic ออกเป็น `_renderDigestTimeInputs(times)` helper; เพิ่มปุ่ม `+ Add Time` กดได้เพื่อเพิ่ม time slot ใหม่ (default 09:00) และปุ่ม `×` ต่อ row เพื่อลบ (ปิด disable เมื่อเหลือ 1 อัน). ทำงาน purely client-side ก่อนกด Save Config
+2. **Price Tracker: My Watchlist card** — เพิ่ม collapsible card `#pt-watchlist-card` ด้านบนตาราง (ใช้ `lb-card` / `lb-head` CSS เดิม). แสดง rank-row สำหรับทุก model ใน `_watchlist` กรองจาก `allPrices`; อัปเดตทันทีเมื่อกด star ในตาราง
+3. **Star buttons ในตาราง Price Tracker** — เพิ่ม column ☆/★ (col 1) ใน `renderPriceTable()`; ใช้ `_starBtn()` + event delegation ที่มีอยู่แล้ว; เพิ่ม `e.stopPropagation()` กันไม่ให้ expand row ถูก trigger พร้อมกัน
+4. **Fix mobile nth-child** — colspan เดิมเป็น 7 เปลี่ยนเป็น 8; hidden columns ใน `@media(max-width:640px)` เปลี่ยนจาก 2,3,6,7 → 3,4,7,8 ให้ถูก column ใหม่
+
+### Files changed
+- `app/static/app.js` — `_renderDigestTimeInputs`, `addDigestTime`, `removeDigestTime`, `renderPriceWatchlist`, `toggleBookmark` (call `renderPriceWatchlist` + in-place star update), star `e.stopPropagation`, `renderPriceTable` (star col), colspan 7→8, `loadPrices` calls `renderPriceWatchlist`
+- `app/static/index.html` — price-tracker watchlist card HTML, table `<th>` เพิ่ม star column, mobile nth-child fix
+
+### Tests
+65/65 pass ✅ (JS changes เป็น frontend only ไม่กระทบ Python tests)
+
+---
+
 ## 2026-06-03 — Debug: Mimo API key invalid (silent fail recurrence #2)
 
 ### Symptoms (user-reported)

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from app.deps import get_db
-from app.models import get_price_updated_at, get_prices, set_free_expiry
+from app.models import get_price_history, get_price_updated_at, get_prices, set_free_expiry
 
 router = APIRouter(prefix="/api/prices", tags=["prices"])
 
@@ -26,6 +26,15 @@ def list_prices(
 
 class ExpiryUpdate(BaseModel):
     expires_at: Optional[str] = None
+
+
+@router.get("/{model_id:path}/history")
+def price_history(
+    model_id: str,
+    db: Annotated[sqlite3.Connection, Depends(get_db)],
+    days: int = Query(30, ge=1, le=365),
+):
+    return get_price_history(db, model_id, days)
 
 
 @router.patch("/{model_id:path}/expiry")
