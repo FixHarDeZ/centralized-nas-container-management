@@ -135,7 +135,7 @@ minimal = {
     'name': d['name'],
     'nodes': d['nodes'],
     'connections': d['connections'],
-    'settings': d.get('settings', {}),
+    'settings': {'executionOrder': d.get('settings', {}).get('executionOrder', 'v1')},
 }
 if 'pinData' in d:
     minimal['pinData'] = d['pinData']
