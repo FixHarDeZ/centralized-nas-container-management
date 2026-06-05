@@ -126,15 +126,20 @@ json.dump(minimal, open('${PAYLOAD_FILE}','w'), ensure_ascii=False)
       ((FAILED++)) || true
     fi
   else
-    # Create new (strip id/timestamps)
+    # Create new — only send fields accepted by POST /api/v1/workflows
     PAYLOAD_FILE=$(mktemp /tmp/n8n_import_XXXXXX.json)
     python3 -c "
 import json, sys
 d = json.load(open('${workflow_file}'))
-d.pop('id', None)
-d.pop('createdAt', None)
-d.pop('updatedAt', None)
-json.dump(d, open('${PAYLOAD_FILE}','w'), ensure_ascii=False)
+minimal = {
+    'name': d['name'],
+    'nodes': d['nodes'],
+    'connections': d['connections'],
+    'settings': d.get('settings', {}),
+}
+if 'pinData' in d:
+    minimal['pinData'] = d['pinData']
+json.dump(minimal, open('${PAYLOAD_FILE}','w'), ensure_ascii=False)
 "
     log "  Creating: ${filename}"
     RESULT=$(remote_api "POST" "/workflows" "${PAYLOAD_FILE}" 2>&1) || true
