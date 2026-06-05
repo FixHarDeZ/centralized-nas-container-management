@@ -213,3 +213,15 @@ This was the path used to backfill the User-Password page. The standalone contai
 - **Bug:** `secretary/query/secrets.manifest.yaml` ใช้ `NORUS_API_KEY`, `NORUS_BASE_URL`, `NORUS_MODEL` (มี R) แต่โค้ดจริง (`llm_client.py`, `main.py`) ใช้ `NOUS_MODEL` (ไม่มี R) และใช้ OAuth device code flow ไม่ได้ใช้ API key
 - **Fix:** ลบ `NORUS_API_KEY` และ `NORUS_BASE_URL` จาก manifest `env:` (dead vars), เปลี่ยน `NORUS_MODEL` → `NOUS_MODEL` ใน manifest `literals:`
 - ผล: `make secrets` + `make test` (43 tests) ผ่าน, `secretary/query/.env` ไม่มี NORUS vars อีก, มี `NOUS_MODEL=xxx` ถูกต้อง
+
+## 2026-06-05
+
+### งานที่ทำ
+- สร้าง n8n workflow `Secretary Error Alerter` — Error Trigger → Telegram alert ที่ chat `8663614341`
+- Set เป็น global Error Workflow ใน n8n Settings → General → Error Workflow
+- ทดสอบด้วย `_Test Error` workflow → ได้รับ alert ใน Telegram ✅
+- Fix `scripts/n8n_import.sh`: create-path ส่งเฉพาะ minimal fields ที่ POST API ยอมรับ (ไม่ส่ง read-only fields เช่น `active`, `meta`)
+
+### Architecture Change
+- n8n Error Workflow ครอบทุก workflow อัตโนมัติ (Secretary Auto Sync, Secretary Bot, และ future workflows)
+- Credential ใช้ "Secretary Bot" telegramApi ตัวเดิม (id: QiUZ8rINLwwPL1qu)
