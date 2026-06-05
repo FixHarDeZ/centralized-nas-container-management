@@ -5,26 +5,6 @@ from app.main import app
 from app.models import get_conn, init_db, insert_article, update_article_summary, insert_digest_log
 
 
-@pytest.fixture
-def client(tmp_path, monkeypatch):
-    db_path = str(tmp_path / "test_api.db")
-    app.state.db_path = db_path
-    conn = get_conn(db_path)
-    init_db(conn)
-    insert_article(conn, {
-        "id": "test01",
-        "source": "techcrunch_ai",
-        "title": "Test Article",
-        "url": "https://example.com/test",
-        "published": "2026-05-23T07:00:00",
-        "fetched_at": "2026-05-23T07:01:00",
-    })
-    update_article_summary(conn, "test01", "สรุปทดสอบ")
-    conn.close()
-    with TestClient(app) as c:
-        yield c
-
-
 def test_health(client):
     r = client.get("/api/health")
     assert r.status_code == 200
@@ -195,3 +175,35 @@ def test_post_schedule_retention_invalid_dropped(client, tmp_path, monkeypatch):
     r = client.post("/api/schedule", json={"retention_days": "abc"})
     assert r.status_code == 200
     assert r.json()["retention_days"] == 30  # invalid value dropped, default kept
+
+
+def test_post_schedule_custom_sources_saved(client, tmp_path, monkeypatch):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    payload = {"custom_sources": [{"key": "custom_reg", "name": "The Register", "url": "https://reg.com/feed"}]}
+    r = client.post("/api/schedule", json=payload)
+    assert r.status_code == 200
+    cs = r.json()["custom_sources"]
+    assert len(cs) == 1
+    assert cs[0]["key"] == "custom_reg"
+    assert cs[0]["url"] == "https://reg.com/feed"
+
+
+def test_post_schedule_custom_sources_invalid_url_dropped(client, tmp_path, monkeypatch):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    payload = {"custom_sources": [
+        {"key": "custom_bad", "name": "Bad", "url": "ftp://bad.com"},  # not http
+        {"key": "custom_ok", "name": "OK", "url": "https://ok.com/feed"},
+    ]}
+    r = client.post("/api/schedule", json=payload)
+    assert r.status_code == 200
+    keys = [c["key"] for c in r.json()["custom_sources"]]
+    assert "custom_ok" in keys
+    assert "custom_bad" not in keys
+
+
+def test_post_schedule_custom_sources_not_list_dropped(client, tmp_path, monkeypatch):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    r = client.post("/api/schedule", json={"custom_sources": "not-a-list"})
+    assert r.status_code == 200
+    # invalid type silently dropped — existing value preserved (empty list from env default)
+    assert isinstance(r.json().get("custom_sources", []), list)

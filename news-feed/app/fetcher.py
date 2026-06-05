@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import feedparser
 from bs4 import BeautifulSoup
 
-from app.config import SOURCES
+from app.config import get_all_sources
 from app.models import article_exists, get_conn, insert_article, update_article_summary
 from app.summarizer import summarize
 
@@ -42,8 +42,9 @@ def fetch_all(db_path: str, config: dict) -> list[str]:
     conn = get_conn(db_path)
     new_ids: list[str] = []
     try:
+        all_sources = get_all_sources(config)
         for source_key in config.get("enabled_sources", []):
-            url = SOURCES.get(source_key)
+            url = all_sources.get(source_key)
             if not url:
                 continue
             try:

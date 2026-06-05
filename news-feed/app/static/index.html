@@ -573,10 +573,10 @@
 
     /* Price table: hide Model ID(2), Provider(3), Context(6), Updated(7) */
     /* Remaining visible: Model(1) | Prompt/1M(4) | Completion/1M(5) */
-    #price-table th:nth-child(2), #price-table td:nth-child(2),
     #price-table th:nth-child(3), #price-table td:nth-child(3),
-    #price-table th:nth-child(6), #price-table td:nth-child(6),
-    #price-table th:nth-child(7), #price-table td:nth-child(7) { display: none; }
+    #price-table th:nth-child(4), #price-table td:nth-child(4),
+    #price-table th:nth-child(7), #price-table td:nth-child(7),
+    #price-table th:nth-child(8), #price-table td:nth-child(8) { display: none; }
 
     /* Show provider under model name + make row tappable */
     .price-cell-provider { display: block; }
@@ -643,7 +643,11 @@
       <button class="zone-btn" data-zone="EU" onclick="setZoneFilter('EU')">🇪🇺 EU</button>
       <button class="zone-btn" data-zone="Others" onclick="setZoneFilter('Others')">🌍 Others</button>
     </div>
-    <div class="card"><table id="price-table"><thead><tr><th>Model</th><th>Model ID</th><th>Provider</th><th>Prompt/1M</th><th>Completion/1M</th><th>Context</th><th>Updated</th></tr></thead><tbody></tbody></table></div>
+    <div class="card lb-card" id="pt-watchlist-card">
+      <h2 class="lb-head" onclick="toggleLbCard('pt-watchlist-card')"><span class="lb-caret">▾</span>⭐ My Watchlist <small id="pt-watchlist-count" style="color:#475569;font-size:.7rem"></small></h2>
+      <div class="lb-body" id="pt-watchlist-body"><p style="color:#64748b;font-size:.85rem">ยังไม่มีโมเดลใน watchlist — กด ☆ ที่แถวโมเดลใดก็ได้เพื่อเก็บ</p></div>
+    </div>
+    <div class="card"><table id="price-table"><thead><tr><th></th><th>Model</th><th>Model ID</th><th>Provider</th><th>Prompt/1M</th><th>Completion/1M</th><th>Context</th><th>Updated</th></tr></thead><tbody></tbody></table></div>
   </div>
   <div id="ai-leaderboard" class="section">
     <div id="leaderboard-updated" style="color:#64748b;font-size:.8rem;margin-bottom:.6rem"></div>
@@ -710,11 +714,26 @@
     <div class="card">
       <h2>Enabled Sources</h2>
       <div id="source-toggles"></div>
+      <div style="margin-top:1rem;border-top:1px solid var(--border);padding-top:.75rem">
+        <div style="font-weight:600;font-size:.88rem;margin-bottom:.4rem">Custom Sources</div>
+        <div id="custom-sources-list"></div>
+        <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end;margin-top:.5rem">
+          <label style="display:flex;flex-direction:column;gap:.2rem;font-size:.82rem">Name<input type="text" id="new-source-name" placeholder="The Register" style="width:140px"></label>
+          <label style="display:flex;flex-direction:column;gap:.2rem;font-size:.82rem">RSS URL<input type="url" id="new-source-url" placeholder="https://…/feed" style="width:240px"></label>
+          <button type="button" class="btn btn-sm" onclick="addCustomSource()" style="margin-bottom:.05rem">+ Add</button>
+          <span id="add-source-error" style="color:var(--danger);font-size:.78rem;align-self:center"></span>
+        </div>
+      </div>
     </div>
     <div class="card">
-      <h2>Summarizer Model</h2>
+      <h2>Summarizer Model (Primary)</h2>
       <label>Provider: <select id="cfg-provider"><option value="anthropic">Anthropic</option><option value="openrouter">OpenRouter</option><option value="mimo">Mimo</option></select></label>&nbsp;
       <label>Model: <input type="text" id="cfg-model" style="width:220px"></label>
+    </div>
+    <div class="card">
+      <h2>Summarizer Fallback Chain</h2>
+      <small style="color:#64748b;display:block;margin-bottom:.75rem">ถ้า primary fail → ลองตาม order นี้อัตโนมัติ (ไม่มีต้องตั้งก็ได้)</small>
+      <div id="fallback-chain-inputs"></div>
     </div>
     <div class="card">
       <h2>News Retention</h2>

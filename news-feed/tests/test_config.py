@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 import pytest
+from app.config import get_all_sources, SOURCES
 
 
 def test_get_config_returns_env_defaults_when_no_file(tmp_path, monkeypatch):
@@ -54,3 +55,35 @@ def test_update_config_partial_merge(tmp_path):
     assert data["summarizer_provider"] == "openrouter"
     assert data["digest_times"] == ["07:00"]          # preserved
     assert data["enabled_sources"] == ["venturebeat"]  # preserved
+
+
+def test_get_all_sources_returns_builtin(base_config):
+    result = get_all_sources(base_config)
+    assert "techcrunch_ai" in result
+    assert result["techcrunch_ai"] == SOURCES["techcrunch_ai"]
+
+
+def test_get_all_sources_merges_custom(base_config):
+    config = {**base_config, "custom_sources": [{"key": "custom_foo", "name": "Foo", "url": "https://foo.com/feed"}]}
+    result = get_all_sources(config)
+    assert "custom_foo" in result
+    assert result["custom_foo"] == "https://foo.com/feed"
+    assert "techcrunch_ai" in result  # built-ins still present
+
+
+def test_get_all_sources_skips_invalid_custom(base_config):
+    config = {**base_config, "custom_sources": [
+        {"key": "", "name": "Empty key", "url": "https://x.com"},
+        {"key": "custom_x", "name": "X", "url": ""},
+        {"key": "custom_ok", "name": "OK", "url": "https://ok.com/feed"},
+    ]}
+    result = get_all_sources(config)
+    assert "custom_ok" in result
+    assert "" not in result
+    assert "custom_x" not in result
+
+
+def test_get_all_sources_empty_custom(base_config):
+    config = {**base_config, "custom_sources": []}
+    result = get_all_sources(config)
+    assert set(result.keys()) == set(SOURCES.keys())

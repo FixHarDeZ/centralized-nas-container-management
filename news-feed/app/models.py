@@ -37,6 +37,18 @@ def init_db(conn: sqlite3.Connection) -> None:
             article_ids TEXT NOT NULL,
             channels    TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS watchlist (
+            model_id    TEXT PRIMARY KEY,
+            added_at    TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS price_history (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            model_id        TEXT NOT NULL,
+            prompt_price    REAL,
+            complete_price  REAL,
+            snapshot_date   TEXT NOT NULL,
+            UNIQUE(model_id, snapshot_date)
+        );
     """)
     conn.commit()
     # Migration: add free_expires_at column if not present (manually set, NOT from OpenRouter)
@@ -230,3 +242,61 @@ def get_digest_history(conn: sqlite3.Connection, limit: int = 30) -> list[dict]:
         d["article_ids"] = json.loads(d["article_ids"])
         result.append(d)
     return result
+
+
+# ── Watchlist ────────────────────────────────────────────────────────────────
+
+def get_watchlist(conn: sqlite3.Connection) -> list[str]:
+    rows = conn.execute("SELECT model_id FROM watchlist ORDER BY added_at").fetchall()
+    return [r[0] for r in rows]
+
+
+def toggle_watchlist(conn: sqlite3.Connection, model_id: str, now: str) -> bool:
+    """Add if absent, remove if present. Returns True if now in watchlist."""
+    existing = conn.execute("SELECT 1 FROM watchlist WHERE model_id = ?", (model_id,)).fetchone()
+    if existing:
+        conn.execute("DELETE FROM watchlist WHERE model_id = ?", (model_id,))
+        conn.commit()
+        return False
+    conn.execute("INSERT INTO watchlist (model_id, added_at) VALUES (?, ?)", (model_id, now))
+    conn.commit()
+    return True
+
+
+def set_watchlist(conn: sqlite3.Connection, model_ids: list[str], now: str) -> None:
+    """Replace entire watchlist."""
+    conn.execute("DELETE FROM watchlist")
+    for mid in model_ids:
+        conn.execute("INSERT OR IGNORE INTO watchlist (model_id, added_at) VALUES (?, ?)", (mid, now))
+    conn.commit()
+
+
+# ── Price History ────────────────────────────────────────────────────────────
+
+def snapshot_all_prices(conn: sqlite3.Connection, snapshot_date: str) -> int:
+    """Snapshot current prices table into price_history for snapshot_date. Returns row count."""
+    rows = conn.execute("SELECT model_id, prompt_price, complete_price FROM prices").fetchall()
+    count = 0
+    for r in rows:
+        conn.execute(
+            "INSERT OR REPLACE INTO price_history (model_id, prompt_price, complete_price, snapshot_date) VALUES (?, ?, ?, ?)",
+            (r[0], r[1], r[2], snapshot_date),
+        )
+        count += 1
+    conn.commit()
+    return count
+
+
+def get_price_history(conn: sqlite3.Connection, model_id: str, days: int = 30) -> list[dict]:
+    rows = conn.execute(
+        """SELECT snapshot_date, prompt_price, complete_price
+           FROM price_history
+           WHERE model_id = ?
+           ORDER BY snapshot_date DESC
+           LIMIT ?""",
+        (model_id, days),
+    ).fetchall()
+    return [
+        {"date": r[0], "prompt_price": r[1], "complete_price": r[2]}
+        for r in reversed(rows)  # chronological order
+    ]
