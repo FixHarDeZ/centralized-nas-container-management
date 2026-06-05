@@ -1,5 +1,25 @@
 # Secretary Stack — Daily Log
 
+## 2026-06-05 — Fix If2 type error in Secretary Bot workflow
+
+### Problem
+n8n execution 180 failed at **If2** node:
+`Wrong type: 'AxiosError: timeout of 60000ms exceeded' is an object but was expecting a string [condition 0, item 0]`
+
+### Root Cause
+`HTTP Request1` (POST /query, `onError: "continueRegularOutput"`) puts `AxiosError` **object** into `$json.error` on timeout/failure.
+If2 checked `$json.error` with operator `type: "string", operation: "notEmpty"`.
+Even with `typeValidation: "loose"`, n8n v3 conditions cannot coerce an AxiosError object to string for notEmpty check → crash.
+
+### Fix
+Changed If2 `leftValue` from `={{ $json.error }}` → `={{ $json.error ? 'error' : '' }}`
+Coerces any truthy value (object/string) to `'error'` before notEmpty string check. Works correctly for both normal responses (no error field) and error objects.
+
+### Deployed
+`./scripts/n8n_import.sh` → updated workflow id `syPPm4qxmVNENC9U`
+
+---
+
 ## 2026-06-02 (evening) — Real fix for secretary-query OOM
 
 ### Symptoms
