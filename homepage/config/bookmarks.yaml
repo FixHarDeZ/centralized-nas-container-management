@@ -1,26 +1,66 @@
 ---
-# ─── Quick Bookmarks ─────────────────────────────────────────────────────────
+# ─── Quick Access ────────────────────────────────────────────────────────────
 - Quick Access:
     - Telegram:
         - abbr: TG
           href: https://web.telegram.org
-    - ASUS Router:
-        - abbr: AS
-          href: https://192.168.50.1:8443
     - GitHub:
         - abbr: GH
           href: https://github.com
-    - Docker Hub:
-        - abbr: DH
-          href: https://hub.docker.com
+    - Anthropic Console:
+        - abbr: AN
+          href: https://console.anthropic.com
+    - OpenRouter:
+        - abbr: OR
+          href: https://openrouter.ai
+
+# ─── NAS Admin ───────────────────────────────────────────────────────────────
+- NAS Admin:
+    - Synology DSM:
+        - abbr: DSM
+          href: "{{HOMEPAGE_VAR_NAS_URL}}"
+    - Container Manager:
+        - abbr: CM
+          href: "{{HOMEPAGE_VAR_NAS_URL}}/?launchApp=SYNO.SDS.Docker.Application"
     - Synology Download Center:
         - abbr: DL
           href: https://www.synology.com/en-global/support/download
 
-- Monitoring:
-    - OpenWeatherMap:
-        - abbr: OW
-          href: https://openweathermap.org
+# ─── Network ─────────────────────────────────────────────────────────────────
+- Network:
+    - ASUS Router:
+        - abbr: AS
+          href: https://192.168.50.1:8443
     - Speedtest:
         - abbr: ST
           href: https://www.speedtest.net
+    - DNS Leak Test:
+        - abbr: DN
+          href: https://www.dnsleaktest.com
+
+# ─── Dev Tools ───────────────────────────────────────────────────────────────
+- Dev Tools:
+    - Docker Hub:
+        - abbr: DH
+          href: https://hub.docker.com
+    - GHCR:
+        - abbr: GC
+          href: https://github.com/orgs/community/packages
+    - regex101:
+        - abbr: RE
+          href: https://regex101.com
+    - JSON Crack:
+        - abbr: JC
+          href: https://jsoncrack.com/editor
+
+# ─── Reference ───────────────────────────────────────────────────────────────
+- Reference:
+    - OpenWeatherMap:
+        - abbr: OW
+          href: https://openweathermap.org
+    - Homepage Docs:
+        - abbr: HP
+          href: https://gethomepage.dev/
+    - Jellyfin Docs:
+        - abbr: JF
+          href: https://jellyfin.org/docs/

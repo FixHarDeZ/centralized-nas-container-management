@@ -2,6 +2,33 @@
 
 ---
 
+## 2026-06-06 — Phase 1+2 enhance: Glances + bookmark reorg
+
+### งานที่ทำ
+
+**Phase 1 — Glances system monitor**
+- เพิ่ม `glances` service ใน `docker-compose.yml` (image `nicolargo/glances:latest-full`, expose 61208, `pid: host`, `privileged: true`, NVIDIA env mirror Jellyfin)
+- `widgets.yaml`: เพิ่ม 2 glances top-bar widgets — `metric: gpu:0` + `metric: process` (API v4)
+- `services.yaml`: เพิ่ม Glances tile ใน `📥 Downloads & Monitoring` (type: glances, metric: info)
+
+**Phase 2 — Bookmark reorganization**
+- `bookmarks.yaml` rewrite — 5 groups: Quick Access / NAS Admin / Network / Dev Tools / Reference
+- เพิ่ม shortcut: Anthropic Console, OpenRouter, Synology DSM/Container Manager direct link, regex101, JSON Crack, Homepage Docs, Jellyfin Docs
+
+**ไฟล์ที่เปลี่ยน:**
+- `homepage/docker-compose.yml` — เพิ่ม glances service
+- `homepage/config/widgets.yaml` — rewrite ใส่ glances blocks
+- `homepage/config/services.yaml` — เพิ่ม Glances tile
+- `homepage/config/bookmarks.yaml` — rewrite 5 groups
+- `homepage/README.md` — อัปเดต file map + Glances section
+
+**Next:**
+- Deploy: `make secrets && ./scripts/deploy.sh` แล้ว restart homepage stack ใน Container Manager
+- Verify: เปิด dashboard, ดู GPU widget แสดง NVIDIA stats (ต้องมี Jellyfin transcoding active เพื่อเห็น %)
+- ถ้า glances UI ไม่ขึ้น: check container log `docker logs glances` — Synology อาจไม่ allow `pid: host` หรือ `privileged: true` ตาม security policy
+
+---
+
 ## 2026-05-28 — เพิ่ม n8n widget
 
 ### งานที่ทำ
