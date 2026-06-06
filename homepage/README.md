@@ -11,13 +11,13 @@ Dashboard UI for the home lab, powered by [gethomepage/homepage](https://gethome
 
 ```
 homepage/
-├── docker-compose.yml    ← homepage + nginx + glances services
+├── docker-compose.yml    ← homepage + nginx services
 ├── nginx/
 │   └── nginx.conf        ← Nginx reverse proxy + Authelia forward-auth config
 └── config/
     ├── settings.yaml     ← theme, layout
-    ├── widgets.yaml      ← top bar: datetime, search, resources, glances GPU/process
-    ├── services.yaml     ← service cards (Glances tile in Downloads & Monitoring)
+    ├── widgets.yaml      ← top bar: datetime, search, resources
+    ├── services.yaml     ← service cards
     ├── bookmarks.yaml    ← bookmark links (Quick Access / NAS Admin / Network / Dev Tools / Reference)
     └── docker.yaml       ← docker socket config
 ```
@@ -90,21 +90,8 @@ All config files in `config/` are hot-reloaded — no container restart needed a
 | File | Purpose |
 |---|---|
 | `settings.yaml` | Theme, layout, title |
-| `widgets.yaml` | Top bar widgets (clock, search, system resources, Glances GPU/process) |
+| `widgets.yaml` | Top bar widgets (clock, search, system resources) |
 | `services.yaml` | Service cards with API widgets |
 | `bookmarks.yaml` | Quick-access links |
 | `docker.yaml` | Docker socket connection for container status widgets |
 
-## Glances (System Monitor)
-
-Sidecar service in `docker-compose.yml`. Provides CPU, memory, disk, network, GPU stats consumed by the Homepage `glances` widget (API v4).
-
-- Container: `glances` (image `nicolargo/glances:latest-full`)
-- Internal port: `61208` (web UI + REST API)
-- Access: homepage container reaches it via Docker DNS `http://glances:61208`
-- Privileged + `pid: host` — needed for full host metrics
-- NVIDIA env vars passed for GPU stats (mirrors Jellyfin pattern)
-
-The Glances widget appears:
-- Top bar — GPU (`metric: gpu:0`) and process count (`metric: process`)
-- Service tile — under `📥 Downloads & Monitoring` group, links to internal web UI

@@ -2,6 +2,19 @@
 
 ---
 
+## 2026-06-07 — ลบ Glances sidecar ออกจาก stack
+
+ผู้ใช้ตัดสินใจไม่ใช้ Glances แล้ว ลบออกทั้งหมด:
+
+**ไฟล์ที่แก้:**
+- `docker-compose.yml` — ลบ `glances` service block ทั้งหมด (nicolargo/glances:latest-full)
+- `config/widgets.yaml` — ลบ 2 glances top-bar widget blocks (gpu:0 + process)
+- `README.md` — อัปเดต file structure + ลบ Glances section
+- `CLAUDE.md` (root) — อัปเดต homepage row ลบ glances port + note
+- `.notes/00_INDEX.md` — อัปเดต file map + change log
+
+---
+
 ## 2026-06-06 — Phase 1+2 enhance: Glances + bookmark reorg
 
 ### งานที่ทำ
