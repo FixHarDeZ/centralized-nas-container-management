@@ -18,7 +18,7 @@ Basic auth ใช้ `.htpasswd` file mount (APR1 hash) — ไม่ใช้ A
 
 | File | Responsibility |
 |------|---------------|
-| `docker-compose.yml` | 2 services, network bridge เดียว (ลบ auth_net แล้ว) |
+| `docker-compose.yml` | 2 services (homepage + nginx), network bridge เดียว — glances ลบออกแล้ว |
 | `nginx/nginx.conf` | basic auth + proxy_pass ไปที่ homepage:3000 |
 | `nginx/.htpasswd` | APR1 password hash (ไม่ commit, ต้องสร้างก่อน deploy) |
 | `config/` | homepage configuration YAML files |
@@ -53,5 +53,6 @@ Basic auth ผ่าน nginx:
 
 ## Change Log
 
+- **2026-06-07** — ลบ glances sidecar ออกจาก stack + widgets.yaml ทั้งหมด
 - **2026-05-24** — ย้ายกลับ basic auth; ลบ Authelia forward-auth + auth_net dependency ทั้งหมด
 - **2026-05-23** — migrate ไป Authelia forward-auth (auth stack session)

@@ -11,22 +11,6 @@
       - "{{HOMEPAGE_VAR_VOLUME_ROOT}}"
     cacheInterval: 5000
 
-# Glances GPU stats (NVIDIA via Jellyfin transcoding)
-- glances:
-    url: http://glances:61208
-    version: 4
-    metric: gpu:0
-    chart: false
-    refreshInterval: 5000
-
-# Glances system load (avg + processes)
-- glances:
-    url: http://glances:61208
-    version: 4
-    metric: process
-    chart: false
-    refreshInterval: 5000
-
 - datetime:
     text_size: xl
     format:

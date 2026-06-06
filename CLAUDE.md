@@ -28,7 +28,7 @@ Guidance for Claude Code (claude.ai/code) on project rules, architecture, and de
 
 | Directory | Purpose | Port (Internal / Proxy) | Critical Gotchas / Architecture |
 | :--- | :--- | :--- | :--- |
-| `homepage/` | Dashboard UI + Glances sidecar | 3000 / 443 · glances 61208 (internal) | ต่อหลัง Nginx Proxy + Basic Auth. ดึง SSL จาก NAS `/usr/syno/etc/certificate/system/default/`. **Widget ห้ามใช้ HTTPS/Domain** ให้ยิงตรงไปที่ DSM HTTP `http://192.168.x.x:5000` เพื่อเลี่ยง Cert Mismatch. Glances มี `pid: host` + `privileged: true` สำหรับ CPU/RAM/GPU stats |
+| `homepage/` | Dashboard UI | 3000 / 443 | ต่อหลัง Nginx Proxy + Basic Auth. ดึง SSL จาก NAS `/usr/syno/etc/certificate/system/default/`. **Widget ห้ามใช้ HTTPS/Domain** ให้ยิงตรงไปที่ DSM HTTP `http://192.168.x.x:5000` เพื่อเลี่ยง Cert Mismatch |
 | `jellyfin/` | Media Server | 8096 / — | รองรับ NVIDIA GPU Transcoding |
 | `maid-tracker/` | ระบบเวลา/เงินเดือนแม่บ้าน | 5055 / — | FastAPI + SQLite (Volume `/data`). คำนวณเงินเดือน จ-ส: `เงินเดือน ÷ จำนวนวันทำงานจริงเดือนนั้น`. ลา/ชดเชยบันทึกทศนิยมได้ (`half_day`) แจ้งเตือนผ่าน LINE. **Daily SQLite backup ผ่าน APScheduler 03:00** → `/data/backups/maid-*.db.gz` retention 30 วัน. **Payslip CSV** ที่ `/api/employees/{id}/payslip/{year}/{month}` |
 | `portainer/` | Docker Management | 9000 / — | UI สำหรับจัดการคอนเทนเนอร์ในระบบ |
