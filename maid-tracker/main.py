@@ -18,6 +18,9 @@ import time
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 import calendar
+import gzip
+import glob
+import shutil
 import line_notify
 from keywords import (
     LEAVE_KEYWORDS, COMP_KEYWORDS, HALF_DAY_KEYWORDS, BALANCE_KEYWORDS,
@@ -41,6 +44,50 @@ _TZ = ZoneInfo(os.environ.get("TZ", "Asia/Bangkok"))
 _MONTHLY_REPORT_TIME = os.environ.get("MONTHLY_REPORT_TIME", "20:00")
 _report_h, _report_m = _MONTHLY_REPORT_TIME.split(":")
 
+_BACKUP_DIR = os.environ.get("MAID_BACKUP_DIR", "/data/backups")
+_BACKUP_RETENTION_DAYS = int(os.environ.get("MAID_BACKUP_RETENTION_DAYS", "30"))
+
+
+def _backup_db() -> Optional[str]:
+    """Daily SQLite backup via Online Backup API + gzip. Returns path written.
+
+    Uses sqlite3.Connection.backup() for a consistent snapshot even while writes
+    occur. Prunes files older than MAID_BACKUP_RETENTION_DAYS afterwards.
+    """
+    try:
+        os.makedirs(_BACKUP_DIR, exist_ok=True)
+        stamp = datetime.now(_TZ).strftime("%Y%m%d-%H%M%S")
+        plain_path = os.path.join(_BACKUP_DIR, f"maid-{stamp}.db")
+        gz_path = plain_path + ".gz"
+
+        src = sqlite3.connect(DB_PATH)
+        try:
+            dst = sqlite3.connect(plain_path)
+            try:
+                src.backup(dst)
+            finally:
+                dst.close()
+        finally:
+            src.close()
+
+        with open(plain_path, "rb") as fin, gzip.open(gz_path, "wb", compresslevel=6) as fout:
+            shutil.copyfileobj(fin, fout)
+        os.remove(plain_path)
+
+        cutoff = time.time() - _BACKUP_RETENTION_DAYS * 86400
+        for f in glob.glob(os.path.join(_BACKUP_DIR, "maid-*.db.gz")):
+            try:
+                if os.path.getmtime(f) < cutoff:
+                    os.remove(f)
+            except OSError:
+                pass
+
+        return gz_path
+    except Exception as e:
+        print(f"[backup] failed: {e}", flush=True)
+        return None
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Fire every minute so each reminder's send_time can be matched exactly
@@ -51,6 +98,8 @@ async def lifespan(app: FastAPI):
         CronTrigger(day="last", hour=int(_report_h), minute=int(_report_m)),
         id="monthly_report",
     )
+    # Daily SQLite backup at 03:00 local time
+    _scheduler.add_job(_backup_db, CronTrigger(hour=3, minute=0), id="daily_backup")
     _scheduler.start()
     yield
     _scheduler.shutdown(wait=False)
@@ -1498,6 +1547,84 @@ def export_attendance(emp_id: int):
         media_type="text/csv; charset=utf-8-sig",
         headers={"Content-Disposition": f"attachment; filename=\"attendance.csv\"; filename*=UTF-8''{encoded}"},
     )
+
+
+@app.get("/api/employees/{emp_id}/payslip/{year}/{month}")
+def export_payslip(emp_id: int, year: int, month: int):
+    """Return a Thai-language payslip CSV for the given employee/month.
+
+    Reuses get_summary() so the figures match the dashboard exactly.
+    """
+    s = get_summary(emp_id, year, month)
+
+    thai_months = [
+        "", "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
+        "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม",
+    ]
+
+    output = io.StringIO()
+    w = csv.writer(output)
+    w.writerow(["ใบรับเงินเดือน (Payslip)"])
+    w.writerow([])
+    w.writerow(["ลูกจ้าง", s["employee_name"]])
+    w.writerow(["เดือน", f"{thai_months[month]} {year + 543}"])
+    w.writerow(["โหมดวันหยุด", s["holiday_mode"]])
+    w.writerow([])
+    w.writerow(["รายการ", "จำนวน"])
+    w.writerow(["เงินเดือนต่อเดือน (บาท)", f'{s["monthly_salary"]:.2f}'])
+    w.writerow(["จำนวนวันทำงานในเดือน", s["working_days_in_month"]])
+    w.writerow(["อัตราต่อวัน (บาท)", f'{s["daily_rate"]:.2f}'])
+    w.writerow(["เงินเดือนพื้นฐาน (บาท)", f'{s["base_salary"]:.2f}'])
+    w.writerow([])
+    w.writerow(["วันทำงานจริง", s["work_days"]])
+    w.writerow(["วันลา", s["leave_days"]])
+    if s["holiday_mode"] == "sunday":
+        w.writerow(["วันหยุดประจำสัปดาห์", s["holiday_days"]])
+        w.writerow(["วันชดเชย (ทำงานวันหยุด)", s["compensatory_days"]])
+    w.writerow([])
+    w.writerow(["ยอดวันลาคงเหลือเดือนนี้", s.get("balance", 0)])
+    w.writerow(["ยอดสะสมยกมา", s.get("carryover_balance", 0)])
+    w.writerow(["ยอดสะสมรวม", s.get("cumulative_balance", 0)])
+    w.writerow([])
+    w.writerow(["หักลา (จำนวนวัน)", s["leave_deduction_days"]])
+    w.writerow(["หักลา (บาท)", f'{s["deduction_amount"]:.2f}'])
+    w.writerow([])
+    w.writerow(["เงินสุทธิที่ได้รับ (บาท)", f'{s["actual_pay"]:.2f}'])
+
+    filename = f"payslip_{s['employee_name']}_{year}-{month:02d}.csv"
+    encoded = quote(filename, safe="")
+    return StreamingResponse(
+        iter([output.getvalue().encode("utf-8-sig")]),
+        media_type="text/csv; charset=utf-8-sig",
+        headers={"Content-Disposition": f"attachment; filename=\"payslip.csv\"; filename*=UTF-8''{encoded}"},
+    )
+
+
+@app.post("/api/admin/backup")
+def trigger_backup():
+    """Manual on-demand backup trigger. Returns the path of the new gz file."""
+    path = _backup_db()
+    if not path:
+        raise HTTPException(500, "Backup failed; check container logs")
+    return {"path": path, "size_bytes": os.path.getsize(path)}
+
+
+@app.get("/api/admin/backups")
+def list_backups():
+    """List available backup files with size + mtime."""
+    if not os.path.isdir(_BACKUP_DIR):
+        return {"backups": []}
+    items = []
+    for f in sorted(glob.glob(os.path.join(_BACKUP_DIR, "maid-*.db.gz"))):
+        try:
+            items.append({
+                "filename": os.path.basename(f),
+                "size_bytes": os.path.getsize(f),
+                "mtime": datetime.fromtimestamp(os.path.getmtime(f), _TZ).isoformat(),
+            })
+        except OSError:
+            pass
+    return {"backups": items, "retention_days": _BACKUP_RETENTION_DAYS}
 
 
 # ---------- Static + SPA fallback ----------

@@ -2,6 +2,49 @@
 
 ---
 
+## 2026-06-06 — Phase 1+2 enhance: backup + payslip
+
+### งานที่ทำ
+
+**Phase 1 — Daily SQLite backup**
+- เพิ่ม `_backup_db()` ใน `main.py` ใช้ `sqlite3.Connection.backup()` (Online Backup API) + gzip
+- เขียนไฟล์ `/data/backups/maid-{YYYYMMDD-HHMMSS}.db.gz`
+- Prune backup เก่ากว่า `MAID_BACKUP_RETENTION_DAYS` (default 30 วัน)
+- Schedule daily 03:00 ผ่าน APScheduler CronTrigger
+- Env vars ใหม่: `MAID_BACKUP_DIR` (default `/data/backups`), `MAID_BACKUP_RETENTION_DAYS` (default 30)
+- Manual trigger endpoint: `POST /api/admin/backup`
+- List endpoint: `GET /api/admin/backups`
+
+**Phase 2 — Payslip CSV**
+- เพิ่ม endpoint `GET /api/employees/{emp_id}/payslip/{year}/{month}`
+- Reuse `get_summary()` data — ตัวเลขตรงกับ dashboard
+- Output UTF-8 BOM CSV ภาษาไทย + ปี พ.ศ. (year + 543)
+- Filename pattern: `payslip_<name>_<YYYY>-<MM>.csv`
+
+**ไฟล์ที่เปลี่ยน:**
+- `maid-tracker/main.py`:
+  - import เพิ่ม `gzip`, `glob`, `shutil`
+  - เพิ่ม `_BACKUP_DIR`, `_BACKUP_RETENTION_DAYS`, `_backup_db()`
+  - เพิ่ม `daily_backup` job ใน `lifespan`
+  - เพิ่ม endpoints: `export_payslip`, `trigger_backup`, `list_backups`
+
+**Pre-deploy checklist:**
+- ไม่ต้องเพิ่ม dependency (built-in `sqlite3.backup` + `gzip`)
+- DB volume `maid_tracker_data` เดิม — backups เก็บใน `/data/backups` subdir ของ volume เดียวกัน
+- ถ้าต้องการ off-NAS backup: mount volume แล้ว rsync `backups/` ไปที่อื่นอีกที (ภายหลัง)
+
+**Post-deploy verify:**
+1. `docker exec maid-tracker ls -la /data/backups/` (อาจว่างถ้ายังไม่ถึง 03:00)
+2. Manual trigger: `curl -X POST http://<NAS>:5055/api/admin/backup -u <user>:<pass>`
+3. Test payslip download: เปิด `https://<NAS>:15055/api/employees/1/payslip/2026/6` ใน browser
+
+**Next (Phase 3 — defer):**
+- Multi-worker schema (breaking — แยก PR + brainstorm ก่อน)
+- LINE Rich Menu
+- PDF version of payslip (เพิ่ม `reportlab` dep)
+
+---
+
 ## 2026-05-24 — ย้ายกลับ basic auth (ลบ Authelia)
 
 ### งานที่ทำ

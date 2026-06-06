@@ -36,6 +36,24 @@ services:
     networks:
       - default
 
+  glances:
+    image: nicolargo/glances:latest-full
+    container_name: glances
+    restart: unless-stopped
+    pid: host
+    privileged: true
+    expose:
+      - "61208"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - TZ=Asia/Bangkok
+      - GLANCES_OPT=-w
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    networks:
+      - default
+
 networks:
   default:
     driver: bridge

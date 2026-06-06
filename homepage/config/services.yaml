@@ -62,7 +62,7 @@
           type: docker
           server: my-docker
           container: watchtower
-          
+
 # ─── 📝 Tools & Notes ─────────────────────────────────────────────────────────
 - 📝 Tools & Notes:
     - News Feed:

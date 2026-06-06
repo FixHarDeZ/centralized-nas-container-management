@@ -329,6 +329,33 @@ SQLite database is stored in named volume `maid_tracker_data` at `/data/maid_tra
 
 The volume is not removed on stack restart — data is safe.
 
+## Automated Backups
+
+Daily SQLite backup at **03:00 local time** via APScheduler. Uses the SQLite Online Backup API for a consistent snapshot even while writes occur, then gzips the result.
+
+| Item | Default | Env var |
+|---|---|---|
+| Backup directory | `/data/backups` (inside the same volume) | `MAID_BACKUP_DIR` |
+| Retention | 30 days (older files pruned each run) | `MAID_BACKUP_RETENTION_DAYS` |
+| Filename | `maid-YYYYMMDD-HHMMSS.db.gz` | — |
+
+### Admin endpoints
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/api/admin/backup` | Trigger backup on demand |
+| `GET` | `/api/admin/backups` | List available backup files (filename, size, mtime) |
+
+> For off-NAS protection, mount the `maid_tracker_data` volume and rsync `/data/backups/` to an external target on a separate schedule.
+
+## Payslip Export
+
+```
+GET /api/employees/{emp_id}/payslip/{year}/{month}
+```
+
+Returns a Thai-language CSV (UTF-8 BOM, year displayed in พ.ศ.) with the same figures as the dashboard `/api/employees/{emp_id}/summary` (base salary, work days, leave, deductions, net pay). Filename pattern: `payslip_<name>_<YYYY>-<MM>.csv`.
+
 ## DB Schema
 
 ```sql

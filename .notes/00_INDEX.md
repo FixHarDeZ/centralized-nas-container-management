@@ -51,3 +51,4 @@ Homepage widgets ที่ยิง DSM API จะถูก auto-block IP ถ้
 | 2026-05-23 | เพิ่ม hermes-agent stack (Telegram + Discord, port 5063). ย้าย Telegram ออกจาก my-secretary |
 | 2026-05-23 | สร้าง auth/ stack (Authelia SSO port 9091 + Vaultwarden port 8222). Migrate homepage + maid-tracker จาก basic auth → Authelia forward-auth |
 | 2026-05-23 | สร้าง news-feed/ stack (FastAPI + APScheduler + SQLite, port 5064). RSS 7 แหล่ง, สรุปภาษาไทย Anthropic/OpenRouter switchable, digest → LINE + Telegram |
+| 2026-06-06 | Enhance homepage (Glances + GPU widget + bookmark reorg), maid-tracker (daily SQLite backup 03:00 + payslip CSV). Jellyfin/Jellyseerr/Jellystat + paperless-ngx + immich + mealie ทำไปแล้ว revert ทั้งหมด ตามการตัดสินใจของ user — ไม่มี stack ใหม่ในรอบนี้ |
