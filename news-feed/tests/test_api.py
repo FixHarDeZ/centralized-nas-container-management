@@ -246,7 +246,24 @@ def test_schedule_post_rejects_max_less_than_base(client, tmp_path, monkeypatch)
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     # Setting base=8 alone is fine
     r = client.post("/api/schedule", json={"digest_size_base": 8})
+    assert r.status_code == 200
     assert r.json()["digest_size_base"] == 8
     # But setting max=3 while base=8 is invalid → max should be ignored
     r = client.post("/api/schedule", json={"digest_size_max": 3})
+    assert r.status_code == 200
     assert r.json()["digest_size_max"] == 10  # unchanged from default
+
+
+def test_schedule_post_rejects_bool_for_int_keys(client, tmp_path, monkeypatch):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    r = client.post("/api/schedule", json={
+        "digest_size_base": True,
+        "digest_max_per_source": False,
+        "digest_window_buffer_hours": True,
+    })
+    assert r.status_code == 200
+    cfg = r.json()
+    # All defaults preserved — bool was rejected
+    assert cfg["digest_size_base"] == 5
+    assert cfg["digest_max_per_source"] == 2
+    assert cfg["digest_window_buffer_hours"] == 1.0
