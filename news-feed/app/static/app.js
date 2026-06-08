@@ -606,7 +606,7 @@ async function testDigest() {
       statusEl.textContent = `✓ ส่งสำเร็จ → ${data.sent_to.join(', ')} (${data.article_count} บทความ, window: ${data.window_computed_hours}h, candidates: ${data.candidates_in_window})`;
       statusEl.style.color = 'var(--success)';
     } else {
-      statusEl.textContent = `⚠ ไม่มีบทความใหม่ (6h: ${data.available_6h}, 24h: ${data.available_24h}, sent already: ${data.already_sent_ids})`;
+      statusEl.textContent = `⚠ ไม่มีบทความใหม่ (window: ${data.window_computed_hours}h, candidates: ${data.candidates_in_window}, sent already: ${data.already_sent_ids})`;
       statusEl.style.color = 'var(--warn)';
     }
     loadDigestHistory();
