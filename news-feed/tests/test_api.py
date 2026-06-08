@@ -267,3 +267,17 @@ def test_schedule_post_rejects_bool_for_int_keys(client, tmp_path, monkeypatch):
     assert cfg["digest_size_base"] == 5
     assert cfg["digest_max_per_source"] == 2
     assert cfg["digest_window_buffer_hours"] == 1.0
+
+
+def test_digest_test_returns_new_shape(client, monkeypatch):
+    monkeypatch.setattr("app.api.digest.send_digest", lambda articles, cfg: ["line"])
+    r = client.post("/api/digest/test")
+    assert r.status_code == 200
+    body = r.json()
+    assert "window_computed_hours" in body
+    assert "candidates_in_window" in body
+    assert "config" in body
+    assert set(body["config"].keys()) == {"size_base", "size_max", "max_per_source"}
+    # Old fields are gone
+    assert "available_12h" not in body
+    assert "window_used" not in body
