@@ -125,3 +125,45 @@ def test_parse_times_rejects_whitespace_only():
 
 def test_parse_times_empty_list():
     assert _parse_digest_times([]) == []
+
+
+def test_digest_job_uses_adaptive_window_and_dynamic_size(tmp_path, monkeypatch):
+    """Smoke test: 15 fresh articles across 5 sources → 10 sent (5 sources × 2/source cap)."""
+    from datetime import datetime, timezone
+    from app.config import update_config
+    from app.models import get_conn, init_db, insert_article, update_article_summary
+    from app.scheduler import setup_scheduler
+
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    db_path = str(tmp_path / "news.db")
+    conn = get_conn(db_path)
+    init_db(conn)
+
+    now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    for src in ["a", "b", "c", "d", "e"]:
+        for i in range(3):
+            aid = f"{src}{i}"
+            insert_article(conn, {
+                "id": aid, "source": src,
+                "title": f"t-{aid}", "url": f"https://x/{aid}",
+                "published": "2026-06-08T06:00:00",
+                "fetched_at": now_iso,
+            })
+            update_article_summary(conn, aid, "สรุป")
+    conn.close()
+
+    update_config({
+        "digest_size_base": 5, "digest_size_max": 10, "digest_max_per_source": 2,
+        "digest_window_buffer_hours": 1.0,
+        "digest_times": ["07:00", "12:00", "18:00"],
+    })
+
+    sent = []
+    monkeypatch.setattr("app.scheduler.send_digest", lambda articles, cfg: sent.append(list(articles)) or ["line"])
+
+    sched = setup_scheduler(db_path)
+    job = next(j for j in sched.get_jobs() if j.id.startswith("digest_"))
+    job.func()  # invoke once
+
+    assert len(sent) == 1
+    assert len(sent[0]) == 10  # 5 sources × 2 per source = 10
