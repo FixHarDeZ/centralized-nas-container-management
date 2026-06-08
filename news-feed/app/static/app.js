@@ -754,6 +754,10 @@ async function loadScheduleConfig() {
   document.getElementById('cfg-provider').value = cfg.summarizer_provider || 'anthropic';
   document.getElementById('cfg-model').value = cfg.summarizer_model || '';
   document.getElementById('cfg-retention').value = cfg.retention_days || 30;
+  document.getElementById('cfg-window-buffer').value = cfg.digest_window_buffer_hours ?? 1.0;
+  document.getElementById('cfg-size-base').value = cfg.digest_size_base ?? 5;
+  document.getElementById('cfg-size-max').value = cfg.digest_size_max ?? 10;
+  document.getElementById('cfg-max-per-source').value = cfg.digest_max_per_source ?? 2;
   _renderFallbackChain(cfg.summarizer_fallback || []);
   _customSources = (cfg.custom_sources || []).map(s => ({key: s.key, name: s.name, url: s.url}));
   _renderCustomSources(cfg.enabled_sources || []);
@@ -773,7 +777,7 @@ async function saveSchedule() {
     const r = await fetch('/api/schedule', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ digest_times: times, enabled_sources: sources, summarizer_provider: provider, summarizer_model: model, retention_days: retention, summarizer_fallback: fallback, custom_sources: _customSources }),
+      body: JSON.stringify({ digest_times: times, enabled_sources: sources, summarizer_provider: provider, summarizer_model: model, retention_days: retention, summarizer_fallback: fallback, custom_sources: _customSources, digest_window_buffer_hours: parseFloat(document.getElementById('cfg-window-buffer').value), digest_size_base: parseInt(document.getElementById('cfg-size-base').value, 10), digest_size_max: parseInt(document.getElementById('cfg-size-max').value, 10), digest_max_per_source: parseInt(document.getElementById('cfg-max-per-source').value, 10) }),
     });
     if (!r.ok) throw new Error(r.status);
     document.getElementById('save-status').textContent = '✓ Saved';

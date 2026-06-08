@@ -740,6 +740,24 @@
       <label>เก็บข่าวไว้ <input type="number" id="cfg-retention" min="1" max="365" style="width:80px"> วัน</label>
       <small style="color:#64748b;display:block;margin-top:.5rem">ข่าวที่เก่ากว่านี้จะถูกลบอัตโนมัติทุกวันเวลา 03:30 (Bangkok)</small>
     </div>
+    <div class="card">
+      <h2>Digest Tuning</h2>
+      <div style="display:flex;gap:1rem;flex-wrap:wrap">
+        <label style="display:flex;flex-direction:column;gap:.2rem;font-size:.85rem">Window buffer (hours)
+          <input type="number" id="cfg-window-buffer" step="0.5" min="0" max="6" style="width:100px">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:.2rem;font-size:.85rem">Base size
+          <input type="number" id="cfg-size-base" step="1" min="1" max="20" style="width:80px">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:.2rem;font-size:.85rem">Max size
+          <input type="number" id="cfg-size-max" step="1" min="1" max="20" style="width:80px">
+        </label>
+        <label style="display:flex;flex-direction:column;gap:.2rem;font-size:.85rem">Max per source
+          <input type="number" id="cfg-max-per-source" step="1" min="1" max="5" style="width:80px">
+        </label>
+      </div>
+      <small style="color:#64748b;display:block;margin-top:.5rem">Adaptive lookback adds buffer to the gap between digest ticks (clamped 4–36h). Dynamic size grows from base up to max when many candidates exist.</small>
+    </div>
     <br>
     <button class="btn" onclick="saveSchedule()">Save Config</button>
     <span id="save-status" style="margin-left:.75rem;font-size:.85rem;color:#22c55e"></span>
