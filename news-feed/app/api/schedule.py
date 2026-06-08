@@ -5,6 +5,42 @@ from app.config import get_config, update_config
 router = APIRouter(prefix="/api/schedule", tags=["schedule"])
 
 
+def _clamp_int(filtered: dict, key: str, lo: int, hi: int) -> None:
+    """If key in filtered, validate as int in [lo, hi]; drop if invalid/out-of-range. Bool rejected."""
+    if key not in filtered:
+        return
+    if isinstance(filtered[key], bool):
+        del filtered[key]
+        return
+    try:
+        v = int(filtered[key])
+    except (TypeError, ValueError):
+        del filtered[key]
+        return
+    if v < lo or v > hi:
+        del filtered[key]
+    else:
+        filtered[key] = v
+
+
+def _clamp_float(filtered: dict, key: str, lo: float, hi: float) -> None:
+    """If key in filtered, validate as float in [lo, hi]; drop if invalid/out-of-range. Bool rejected."""
+    if key not in filtered:
+        return
+    if isinstance(filtered[key], bool):
+        del filtered[key]
+        return
+    try:
+        v = float(filtered[key])
+    except (TypeError, ValueError):
+        del filtered[key]
+        return
+    if v < lo or v > hi:
+        del filtered[key]
+    else:
+        filtered[key] = v
+
+
 @router.get("")
 def get_schedule():
     return get_config()
@@ -49,36 +85,10 @@ def post_schedule(body: dict):
             del filtered["custom_sources"]
 
     # Range validation for the four new tuning keys.
-    def _clamp_int(key: str, lo: int, hi: int) -> None:
-        if key not in filtered:
-            return
-        try:
-            v = int(filtered[key])
-        except (TypeError, ValueError):
-            del filtered[key]
-            return
-        if v < lo or v > hi:
-            del filtered[key]
-        else:
-            filtered[key] = v
-
-    def _clamp_float(key: str, lo: float, hi: float) -> None:
-        if key not in filtered:
-            return
-        try:
-            v = float(filtered[key])
-        except (TypeError, ValueError):
-            del filtered[key]
-            return
-        if v < lo or v > hi:
-            del filtered[key]
-        else:
-            filtered[key] = v
-
-    _clamp_float("digest_window_buffer_hours", 0.0, 6.0)
-    _clamp_int("digest_size_base", 1, 20)
-    _clamp_int("digest_size_max", 1, 20)
-    _clamp_int("digest_max_per_source", 1, 5)
+    _clamp_float(filtered, "digest_window_buffer_hours", 0.0, 6.0)
+    _clamp_int(filtered, "digest_size_base", 1, 20)
+    _clamp_int(filtered, "digest_size_max", 1, 20)
+    _clamp_int(filtered, "digest_max_per_source", 1, 5)
 
     # Cross-field: max must be ≥ base. Compare against the merged result so a partial update
     # (only max sent, base from existing config) is validated correctly.
