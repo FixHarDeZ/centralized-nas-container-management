@@ -2,6 +2,28 @@
 
 ---
 
+## 2026-06-08 — Adaptive Digest Window + Dynamic Size
+
+### งานที่ทำ
+แก้ปัญหา "พ้น window" — fixed 12h ไม่ครอบคลุม overnight gap 13h + cap 5 articles ไม่พอ flush backlog
+
+**Backend:**
+- `app/scheduler.py`: `_compute_digest_window(now, digest_times, buffer=1.0)` คำนวณ lookback จาก gap (clamp 4–36h); `_digest_job` ใช้ helper + config keys ใหม่; alert gate เปลี่ยนเป็น `unsent_candidates` (กัน false-positive เมื่อทุก candidate ใน window เคยส่งแล้ว)
+- `app/models.py`: `select_digest_articles(base=5, extra_max=0, max_per_source=2)` แทน `total=` (T6/T7 ส่ง `extra_max` explicit จาก config); `get_recent_articles_for_digest(hours: float)` รองรับเศษส่วน
+- `app/config.py`: 4 defaults ใหม่ (`digest_window_buffer_hours`, `digest_size_base`, `digest_size_max`, `digest_max_per_source`)
+- `app/api/schedule.py`: hoisted `_clamp_int`/`_clamp_float` ที่ module level พร้อม bool guard; cross-field check `digest_size_max ≥ digest_size_base`
+- `app/api/digest.py`: `/test` + `/trigger` แชร์ `_run_digest()`; response shape ใหม่ (`window_computed_hours`, `candidates_in_window`, `config{}`); ลบ `available_12h`/`available_24h`/`window_used`
+- `app/notifier.py`: summarizer alert message ใช้ field ใหม่ (`candidates_in_window`)
+
+**Frontend:**
+- `app.js`: badge threshold 12h→36h; `runTestDigest` status แสดง window + candidates; load/save 4 inputs ใหม่ (NaN guard `|| default`)
+- `index.html`: Digest Tuning card (4 inputs) ใน Schedule Config
+
+### Tests
+132 pass (เพิ่ม 18 tests: `_compute_digest_window` 10 + `_parse_digest_times` 9 + `select_digest_articles` 3 + `_digest_job` smoke 1 + config defaults 1 + schedule validation 4 + digest test shape 1)
+
+---
+
 ## 2026-06-05 (6) — Feature: Price History Chart
 
 ### งานที่ทำ

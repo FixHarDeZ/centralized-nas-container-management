@@ -38,3 +38,18 @@ curl -u <BASIC_AUTH_USER>:<BASIC_AUTH_PASSWORD> -X POST http://<NAS_HOST>:5064/a
 curl -u <BASIC_AUTH_USER>:<BASIC_AUTH_PASSWORD> -X POST http://<NAS_HOST>:5064/api/digest/trigger \
   -H "X-Admin-Token: <ADMIN_TOKEN>"
 ```
+
+### Digest Tuning (schedule.json / dashboard)
+
+Adaptive lookback + dynamic size replaces the old fixed 12h/5-article model.
+
+| Key                          | Default | Range   | Purpose |
+|------------------------------|---------|---------|---------|
+| `digest_window_buffer_hours` | `1.0`   | 0–6     | Added to the gap between consecutive digest ticks; clamped to [4, 36] |
+| `digest_size_base`           | `5`     | 1–20    | Base articles per digest |
+| `digest_size_max`            | `10`    | 1–20    | Hard ceiling (must be ≥ base) |
+| `digest_max_per_source`      | `2`     | 1–5     | Per-source diversity cap |
+
+Window is computed at each tick as `(now - prev_tick) + buffer`, so the overnight
+07:00 digest sees ~14h while the 12:00 digest sees ~6h. Articles never fall off
+between fetch and the next eligible digest under normal cadence.
