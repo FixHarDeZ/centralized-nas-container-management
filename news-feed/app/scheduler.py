@@ -1,6 +1,7 @@
 import json
 import logging
 from datetime import datetime, timezone, timedelta
+from datetime import time as _time
 from pathlib import Path
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -23,6 +24,60 @@ from app.pricer import fetch_prices
 
 _ALERT_THRESHOLD = 2  # consecutive empty digests before alerting
 _ALERT_COOLDOWN_HOURS = 6  # minimum hours between repeated alerts
+
+_MIN_WINDOW_HOURS = 4.0
+_MAX_WINDOW_HOURS = 36.0
+_FALLBACK_WINDOW_HOURS = 12.0
+
+
+def _parse_digest_times(raw: list[str]) -> list[_time]:
+    """Parse 'HH:MM' strings → sorted unique time objects. Invalid entries silently dropped."""
+    seen: set[tuple[int, int]] = set()
+    out: list[_time] = []
+    for s in raw:
+        try:
+            h, m = s.strip().split(":")
+            t = _time(int(h), int(m))
+        except (ValueError, AttributeError):
+            continue
+        key = (t.hour, t.minute)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(t)
+    out.sort()
+    return out
+
+
+def _compute_digest_window(
+    now: datetime,
+    digest_times: list[str],
+    buffer_hours: float = 1.0,
+) -> float:
+    """Lookback hours = (now - previous digest tick) + buffer, clamped to [4, 36].
+
+    If `digest_times` is empty or all invalid, returns 12.0 (legacy default).
+    `now` MUST be timezone-aware; the prev-tick calculation uses its date and tzinfo.
+    """
+    times = _parse_digest_times(digest_times)
+    if not times:
+        return _FALLBACK_WINDOW_HOURS
+
+    today = now.date()
+    candidates_today = [
+        datetime.combine(today, t, tzinfo=now.tzinfo) for t in times
+    ]
+    prev_ticks = [d for d in candidates_today if d < now]
+    if prev_ticks:
+        prev = max(prev_ticks)
+    else:
+        # Wrap to yesterday's last tick
+        yesterday = today - timedelta(days=1)
+        prev = datetime.combine(yesterday, times[-1], tzinfo=now.tzinfo)
+
+    gap_hours = (now - prev).total_seconds() / 3600.0
+    window = gap_hours + buffer_hours
+    return max(_MIN_WINDOW_HOURS, min(_MAX_WINDOW_HOURS, window))
 
 
 def _load_summarizer_state(data_dir: Path) -> dict:
