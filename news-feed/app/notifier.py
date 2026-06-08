@@ -63,7 +63,7 @@ def send_summarizer_alert(config: dict) -> list[str]:
         "<b>วิธีตรวจสอบ:</b>\n"
         "1. ดู provider ใน Schedule Config (อาจ override .env)\n"
         "2. ทดสอบ API key ตรงๆ\n"
-        "3. POST /api/digest/test → ดู available_12h"
+        "3. POST /api/digest/test → ดู candidates_in_window"
     )
     sent = []
     if _send_line(message):
