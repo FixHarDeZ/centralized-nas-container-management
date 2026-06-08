@@ -12,7 +12,12 @@ def get_schedule():
 
 @router.post("")
 def post_schedule(body: dict):
-    allowed_keys = {"digest_times", "enabled_sources", "summarizer_provider", "summarizer_model", "retention_days", "summarizer_fallback", "custom_sources"}
+    allowed_keys = {
+        "digest_times", "enabled_sources", "summarizer_provider", "summarizer_model",
+        "retention_days", "summarizer_fallback", "custom_sources",
+        "digest_window_buffer_hours", "digest_size_base", "digest_size_max",
+        "digest_max_per_source",
+    }
     filtered = {k: v for k, v in body.items() if k in allowed_keys}
     if "retention_days" in filtered:
         try:
@@ -42,4 +47,45 @@ def post_schedule(body: dict):
             ]
         else:
             del filtered["custom_sources"]
+
+    # Range validation for the four new tuning keys.
+    def _clamp_int(key: str, lo: int, hi: int) -> None:
+        if key not in filtered:
+            return
+        try:
+            v = int(filtered[key])
+        except (TypeError, ValueError):
+            del filtered[key]
+            return
+        if v < lo or v > hi:
+            del filtered[key]
+        else:
+            filtered[key] = v
+
+    def _clamp_float(key: str, lo: float, hi: float) -> None:
+        if key not in filtered:
+            return
+        try:
+            v = float(filtered[key])
+        except (TypeError, ValueError):
+            del filtered[key]
+            return
+        if v < lo or v > hi:
+            del filtered[key]
+        else:
+            filtered[key] = v
+
+    _clamp_float("digest_window_buffer_hours", 0.0, 6.0)
+    _clamp_int("digest_size_base", 1, 20)
+    _clamp_int("digest_size_max", 1, 20)
+    _clamp_int("digest_max_per_source", 1, 5)
+
+    # Cross-field: max must be ≥ base. Compare against the merged result so a partial update
+    # (only max sent, base from existing config) is validated correctly.
+    if "digest_size_max" in filtered:
+        existing = get_config()
+        prospective_base = filtered.get("digest_size_base", existing.get("digest_size_base", 5))
+        if filtered["digest_size_max"] < int(prospective_base):
+            del filtered["digest_size_max"]
+
     return update_config(filtered)

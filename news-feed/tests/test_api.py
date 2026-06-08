@@ -207,3 +207,46 @@ def test_post_schedule_custom_sources_not_list_dropped(client, tmp_path, monkeyp
     assert r.status_code == 200
     # invalid type silently dropped — existing value preserved (empty list from env default)
     assert isinstance(r.json().get("custom_sources", []), list)
+
+
+def test_schedule_post_accepts_tuning_keys(client, tmp_path, monkeypatch):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    r = client.post("/api/schedule", json={
+        "digest_window_buffer_hours": 2.0,
+        "digest_size_base": 3,
+        "digest_size_max": 8,
+        "digest_max_per_source": 3,
+    })
+    assert r.status_code == 200
+    cfg = r.json()
+    assert cfg["digest_window_buffer_hours"] == 2.0
+    assert cfg["digest_size_base"] == 3
+    assert cfg["digest_size_max"] == 8
+    assert cfg["digest_max_per_source"] == 3
+
+
+def test_schedule_post_rejects_out_of_range(client, tmp_path, monkeypatch):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    r = client.post("/api/schedule", json={
+        "digest_size_base": 999,        # > 20, ignored
+        "digest_size_max": -5,          # < 1, ignored
+        "digest_max_per_source": 0,     # < 1, ignored
+        "digest_window_buffer_hours": 100.0,  # > 6, ignored
+    })
+    assert r.status_code == 200
+    cfg = r.json()
+    # All four keys should retain defaults because each value was rejected
+    assert cfg["digest_size_base"] == 5
+    assert cfg["digest_size_max"] == 10
+    assert cfg["digest_max_per_source"] == 2
+    assert cfg["digest_window_buffer_hours"] == 1.0
+
+
+def test_schedule_post_rejects_max_less_than_base(client, tmp_path, monkeypatch):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    # Setting base=8 alone is fine
+    r = client.post("/api/schedule", json={"digest_size_base": 8})
+    assert r.json()["digest_size_base"] == 8
+    # But setting max=3 while base=8 is invalid → max should be ignored
+    r = client.post("/api/schedule", json={"digest_size_max": 3})
+    assert r.json()["digest_size_max"] == 10  # unchanged from default
