@@ -147,14 +147,15 @@ def setup_scheduler(db_path: str) -> BackgroundScheduler:
             history = get_digest_history(conn, limit=20)
             sent_ids = {aid for entry in history for aid in entry["article_ids"]}
             candidates = get_recent_articles_for_digest(conn, hours=window_hours, limit=100)
-            base = int(config.get("digest_size_base", 5))
-            size_max = int(config.get("digest_size_max", 10))
+            unsent_candidates = [c for c in candidates if c["id"] not in sent_ids]
+            base = int(float(config.get("digest_size_base", 5)))
+            size_max = int(float(config.get("digest_size_max", 10)))
             extra_max = max(0, size_max - base)
             articles = select_digest_articles(
                 candidates, sent_ids,
                 base=base,
                 extra_max=extra_max,
-                max_per_source=int(config.get("digest_max_per_source", 2)),
+                max_per_source=int(float(config.get("digest_max_per_source", 2))),
             )
             sent = send_digest(articles, config)
             if sent and articles:
@@ -171,7 +172,7 @@ def setup_scheduler(db_path: str) -> BackgroundScheduler:
 
             # Alert if summarizer appears broken (candidates exist but none have summaries)
             state = _load_summarizer_state(data_dir)
-            if candidates and not articles:
+            if unsent_candidates and not articles:
                 state["consecutive_empty"] = state.get("consecutive_empty", 0) + 1
                 logger.warning(
                     "digest_job: %d candidates but 0 articles sent (consecutive_empty=%d)",

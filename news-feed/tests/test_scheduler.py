@@ -128,7 +128,7 @@ def test_parse_times_empty_list():
 
 
 def test_digest_job_uses_adaptive_window_and_dynamic_size(tmp_path, monkeypatch):
-    """Smoke test: 15 fresh articles across 5 sources → 10 sent (5 sources × 2/source cap)."""
+    """Smoke: 15 fresh articles across 5 sources → 10 sent (per-source cap 2 binds before size cap)."""
     from datetime import datetime, timezone
     from app.config import update_config
     from app.models import get_conn, init_db, insert_article, update_article_summary
@@ -162,8 +162,12 @@ def test_digest_job_uses_adaptive_window_and_dynamic_size(tmp_path, monkeypatch)
     monkeypatch.setattr("app.scheduler.send_digest", lambda articles, cfg: sent.append(list(articles)) or ["line"])
 
     sched = setup_scheduler(db_path)
-    job = next(j for j in sched.get_jobs() if j.id.startswith("digest_"))
-    job.func()  # invoke once
+    try:
+        job = next(j for j in sched.get_jobs() if j.id.startswith("digest_"))
+        job.func()  # invoke once
 
-    assert len(sent) == 1
-    assert len(sent[0]) == 10  # 5 sources × 2 per source = 10
+        assert len(sent) == 1
+        assert len(sent[0]) == 10  # 5 sources × 2 per source = 10
+    finally:
+        if sched.running:
+            sched.shutdown(wait=False)
