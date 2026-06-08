@@ -3,6 +3,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 from datetime import time as _time
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -136,10 +137,25 @@ def setup_scheduler(db_path: str) -> BackgroundScheduler:
         conn = get_conn(db_path)
         data_dir = Path(db_path).parent
         try:
+            bkk = ZoneInfo("Asia/Bangkok")
+            now_local = datetime.now(bkk)
+            window_hours = _compute_digest_window(
+                now_local,
+                config.get("digest_times", ["07:00", "12:00", "18:00"]),
+                buffer_hours=float(config.get("digest_window_buffer_hours", 1.0)),
+            )
             history = get_digest_history(conn, limit=20)
             sent_ids = {aid for entry in history for aid in entry["article_ids"]}
-            candidates = get_recent_articles_for_digest(conn, hours=12, limit=50)
-            articles = select_digest_articles(candidates, sent_ids)
+            candidates = get_recent_articles_for_digest(conn, hours=window_hours, limit=100)
+            base = int(config.get("digest_size_base", 5))
+            size_max = int(config.get("digest_size_max", 10))
+            extra_max = max(0, size_max - base)
+            articles = select_digest_articles(
+                candidates, sent_ids,
+                base=base,
+                extra_max=extra_max,
+                max_per_source=int(config.get("digest_max_per_source", 2)),
+            )
             sent = send_digest(articles, config)
             if sent and articles:
                 insert_digest_log(
@@ -148,7 +164,10 @@ def setup_scheduler(db_path: str) -> BackgroundScheduler:
                     [a["id"] for a in articles],
                     ",".join(sent),
                 )
-            logger.info("digest_job sent to: %s", sent)
+            logger.info(
+                "digest_job sent to: %s (window=%.1fh, candidates=%d, selected=%d)",
+                sent, window_hours, len(candidates), len(articles),
+            )
 
             # Alert if summarizer appears broken (candidates exist but none have summaries)
             state = _load_summarizer_state(data_dir)
