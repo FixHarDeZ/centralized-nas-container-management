@@ -303,7 +303,9 @@ function toggleNewsSort() {
 function _digestBadge(a) {
   if (_sentIds.has(a.id)) return '<span class="digest-badge badge-sent">ส่งแล้ว</span>';
   if (!a.summary_th) return '';
-  const inWindow = new Date(a.fetched_at) >= new Date(Date.now() - 12 * 60 * 60 * 1000);
+  // 36h is the outer bound of the adaptive digest window. Beyond that, an article
+  // very likely missed its slot and won't be picked up.
+  const inWindow = new Date(a.fetched_at) >= new Date(Date.now() - 36 * 60 * 60 * 1000);
   if (inWindow) return '<span class="digest-badge badge-pending">รอส่ง</span>';
   return '<span class="digest-badge badge-expired">พ้น window</span>';
 }
@@ -601,7 +603,7 @@ async function testDigest() {
     const data = await r.json();
     if (!r.ok) throw new Error(data.detail || r.status);
     if (data.sent_to && data.sent_to.length > 0) {
-      statusEl.textContent = `✓ ส่งสำเร็จ → ${data.sent_to.join(', ')} (${data.article_count} บทความ, window: ${data.window_used})`;
+      statusEl.textContent = `✓ ส่งสำเร็จ → ${data.sent_to.join(', ')} (${data.article_count} บทความ, window: ${data.window_computed_hours}h, candidates: ${data.candidates_in_window})`;
       statusEl.style.color = 'var(--success)';
     } else {
       statusEl.textContent = `⚠ ไม่มีบทความใหม่ (6h: ${data.available_6h}, 24h: ${data.available_24h}, sent already: ${data.already_sent_ids})`;
