@@ -57,8 +57,12 @@ def _compute_digest_window(
     """Lookback hours = (now - previous digest tick) + buffer, clamped to [4, 36].
 
     If `digest_times` is empty or all invalid, returns 12.0 (legacy default).
-    `now` MUST be timezone-aware; the prev-tick calculation uses its date and tzinfo.
+
+    Raises:
+        ValueError: if `now` is naive (no tzinfo).
     """
+    if now.tzinfo is None:
+        raise ValueError("_compute_digest_window: 'now' must be timezone-aware")
     times = _parse_digest_times(digest_times)
     if not times:
         return _FALLBACK_WINDOW_HOURS

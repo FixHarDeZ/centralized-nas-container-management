@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from app.scheduler import _compute_digest_window
+from app.scheduler import _compute_digest_window, _parse_digest_times
 
 BKK = ZoneInfo("Asia/Bangkok")
 
@@ -70,3 +70,58 @@ def test_invalid_time_string_ignored():
     # "bogus" rejected; valid times still used
     w = _compute_digest_window(_at(2026, 6, 8, 7, 0), ["07:00", "bogus", "18:00"])
     assert w == pytest.approx(14.0)
+
+
+def test_naive_datetime_raises():
+    with pytest.raises(ValueError, match="timezone-aware"):
+        _compute_digest_window(datetime(2026, 6, 8, 7, 0), ["07:00"])
+
+
+# --- Direct tests for _parse_digest_times ---
+
+
+def test_parse_times_basic():
+    result = _parse_digest_times(["07:00", "12:00", "18:00"])
+    assert [(t.hour, t.minute) for t in result] == [(7, 0), (12, 0), (18, 0)]
+
+
+def test_parse_times_strips_whitespace():
+    result = _parse_digest_times(["  07:00  ", "12:00"])
+    assert [(t.hour, t.minute) for t in result] == [(7, 0), (12, 0)]
+
+
+def test_parse_times_dedupes():
+    result = _parse_digest_times(["07:00", "07:00", "12:00"])
+    assert [(t.hour, t.minute) for t in result] == [(7, 0), (12, 0)]
+
+
+def test_parse_times_sorts():
+    result = _parse_digest_times(["18:00", "07:00", "12:00"])
+    assert [(t.hour, t.minute) for t in result] == [(7, 0), (12, 0), (18, 0)]
+
+
+def test_parse_times_single_digit_accepted():
+    # "7:0" → time(7, 0) is valid per Python int() parsing
+    result = _parse_digest_times(["7:0"])
+    assert [(t.hour, t.minute) for t in result] == [(7, 0)]
+
+
+def test_parse_times_rejects_hhmmss():
+    # "07:00:00" fails split → 3 parts, can't unpack into h, m
+    result = _parse_digest_times(["07:00:00"])
+    assert result == []
+
+
+def test_parse_times_rejects_24h():
+    # hour=24 fails time() constructor (max 23)
+    result = _parse_digest_times(["24:00"])
+    assert result == []
+
+
+def test_parse_times_rejects_whitespace_only():
+    result = _parse_digest_times(["   "])
+    assert result == []
+
+
+def test_parse_times_empty_list():
+    assert _parse_digest_times([]) == []
