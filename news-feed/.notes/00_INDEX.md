@@ -114,6 +114,8 @@ Two-container stack:
 - **Mobile bottom nav**: แสดงเฉพาะ `@media (max-width:640px)` — desktop nav ซ่อนใน media query. `showTab()` sync active state ผ่าน `mobTabMap` (3 primary tabs เท่านั้น; drawer tabs ไม่มี bottom nav button)
 - **Price table expand row**: `togglePriceExpand(idx)` ใช้ `_shownPrices[idx]` (ไม่ใช่ `allPrices`) — copy button ต้อง `e.stopPropagation()` เพื่อกัน row expand ขึ้นมาพร้อมกัน
 - **Provider badge บน mobile**: `.price-cell-provider` span inject ใน `renderPriceTable()` มี `display:none` ใน base CSS, `display:block` ใน media query เท่านั้น — col 3 (Provider) ซ่อนบน mobile แต่ยังอยู่ใน DOM
+- **Adaptive digest window**: `_compute_digest_window(now, digest_times, buffer)` ใน `app/scheduler.py` คำนวณ lookback จาก gap ระหว่าง digest ticks (clamp 4–36h). ห้าม hardcode 12h ที่ฝั่ง consumer ใหม่ — อ่านจาก helper เสมอ. Frontend `_digestBadge` ใช้ 36h outer bound (heuristic, ไม่ใช่ค่า window จริง).
+- **`digest_size_max` < `digest_size_base` reject**: `/api/schedule` ตรวจ cross-field validation; max ที่ส่งมาน้อยกว่า base ปัจจุบัน → ไม่บันทึก (ค่าเดิมคงอยู่). ส่ง `digest_size_base` กับ `digest_size_max` พร้อมกันถ้าจะลด max
 
 ---
 
@@ -145,3 +147,4 @@ Two-container stack:
 | 2026-06-05 | Feature: Price History Chart — `price_history` table; `snapshot_all_prices` after each price job; `GET /api/prices/{id}/history`; Chart.js sparkline in expand row; `_priceCharts` cache + cleanup |
 | 2026-06-03 | Debug: Mimo API key invalid (401) → summarize silent fail → 3 วันไม่มี digest. Switch openrouter+deepseek ชั่วคราว + backfill 44/48 articles |
 | 2026-06-03 | Fix: Mimo v2.5 เป็น reasoning model — `max_tokens 300→1500` + `timeout 30→60` ใน `_summarize_mimo`; ต้อง recreate container เพื่อโหลด `.env` ใหม่ (deploy ปกติทำให้แล้ว); switch กลับเป็น Mimo, backfill 4 ตัวที่ deepseek คืน empty → ครบ 0 NULL |
+| 2026-06-08 | Feature: Adaptive digest window + dynamic size — `_compute_digest_window` helper, `select_digest_articles(base, extra_max, max_per_source)`, 4 config keys (`digest_window_buffer_hours`, `digest_size_base`, `digest_size_max`, `digest_max_per_source`), badge threshold 12h→36h, `/api/digest/test` response shape updated |
