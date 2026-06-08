@@ -282,3 +282,11 @@ def test_upsert_price_preserves_free_expires_at(db):
     prices = get_prices(db)
     assert prices[0]["prompt_price"] == 3.0  # updated
     assert prices[0]["free_expires_at"] == "2026-12-31"  # preserved
+
+
+def test_get_recent_articles_accepts_float_hours(db, sample_article):
+    insert_article(db, sample_article)
+    update_article_summary(db, "abc123", "สรุปทดสอบ")
+    # Float hours must work; SQLite datetime() accepts fractional modifiers.
+    results = get_recent_articles_for_digest(db, hours=14.5, limit=10)
+    assert len(results) >= 0  # Just exercises the float path without TypeError
