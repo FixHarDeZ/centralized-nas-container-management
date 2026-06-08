@@ -1,3 +1,5 @@
+from collections import Counter
+
 from app.models import (
     article_exists, insert_article, update_article_summary,
     get_articles, get_article, get_article_count, get_last_fetch_time,
@@ -164,7 +166,6 @@ def test_select_digest_articles_dynamic_size():
     )
     assert len(result) == 10
     # Verify per-source cap held throughout the extras
-    from collections import Counter
     counts = Counter(a["source"] for a in result)
     assert all(c <= 2 for c in counts.values())
 
@@ -174,6 +175,11 @@ def test_select_digest_articles_supply_below_base():
     result = select_digest_articles(candidates, sent_ids=set(), base=5, extra_max=5)
     assert len(result) == 2
 
+
+def test_select_digest_articles_cap_zero_returns_empty():
+    candidates = [_make_article("a1", "x")]
+    result = select_digest_articles(candidates, sent_ids=set(), base=0, extra_max=0)
+    assert result == []
 
 
 def test_get_recent_articles_no_summary(db, sample_article):
