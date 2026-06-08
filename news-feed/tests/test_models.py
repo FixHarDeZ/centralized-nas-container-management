@@ -129,7 +129,7 @@ def test_select_digest_articles_skips_sent():
 
 def test_select_digest_articles_quota_per_source():
     candidates = [_make_article(f"tc{i}", "techcrunch") for i in range(5)]
-    result = select_digest_articles(candidates, sent_ids=set(), max_per_source=2, total=5)
+    result = select_digest_articles(candidates, sent_ids=set(), max_per_source=2)
     assert len(result) == 2
     assert all(a["source"] == "techcrunch" for a in result)
 
@@ -139,15 +139,40 @@ def test_select_digest_articles_quota_mixed():
         [_make_article(f"tc{i}", "techcrunch") for i in range(3)] +
         [_make_article(f"vb{i}", "venturebeat") for i in range(3)]
     )
-    result = select_digest_articles(candidates, sent_ids=set(), max_per_source=2, total=5)
+    result = select_digest_articles(
+        candidates, sent_ids=set(), base=5, extra_max=0, max_per_source=2
+    )
     ids = [a["id"] for a in result]
     assert ids == ["tc0", "tc1", "vb0", "vb1"]
 
 
-def test_select_digest_articles_respects_total():
+def test_select_digest_articles_base_only():
     candidates = [_make_article(f"a{i}", f"src{i}") for i in range(10)]
-    result = select_digest_articles(candidates, sent_ids=set(), total=3)
+    result = select_digest_articles(candidates, sent_ids=set(), base=3, extra_max=0)
     assert len(result) == 3
+
+
+def test_select_digest_articles_dynamic_size():
+    # 15 candidates across 5 sources, base=5, extra_max=5, cap 2/source
+    # Expected: 10 articles (5 sources × 2 each)
+    candidates = []
+    for src in ["a", "b", "c", "d", "e"]:
+        for i in range(3):
+            candidates.append(_make_article(f"{src}{i}", src))
+    result = select_digest_articles(
+        candidates, sent_ids=set(), base=5, extra_max=5, max_per_source=2
+    )
+    assert len(result) == 10
+    # Verify per-source cap held throughout the extras
+    from collections import Counter
+    counts = Counter(a["source"] for a in result)
+    assert all(c <= 2 for c in counts.values())
+
+
+def test_select_digest_articles_supply_below_base():
+    candidates = [_make_article("a1", "x"), _make_article("a2", "y")]
+    result = select_digest_articles(candidates, sent_ids=set(), base=5, extra_max=5)
+    assert len(result) == 2
 
 
 

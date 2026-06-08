@@ -206,12 +206,14 @@ def insert_digest_log(conn: sqlite3.Connection, sent_at: str,
 def select_digest_articles(
     candidates: list[dict],
     sent_ids: set[str],
+    base: int = 5,
+    extra_max: int = 5,
     max_per_source: int = 2,
-    total: int = 5,
 ) -> list[dict]:
-    """Pick up to `total` articles from candidates, max `max_per_source` per source, skipping sent_ids."""
+    """Pick up to `base + extra_max` articles, max `max_per_source` per source, skipping sent_ids."""
+    cap = max(0, int(base)) + max(0, int(extra_max))
     source_counts: dict[str, int] = {}
-    selected = []
+    selected: list[dict] = []
     for a in candidates:
         if a["id"] in sent_ids:
             continue
@@ -219,7 +221,7 @@ def select_digest_articles(
             continue
         selected.append(a)
         source_counts[a["source"]] = source_counts.get(a["source"], 0) + 1
-        if len(selected) == total:
+        if len(selected) >= cap:
             break
     return selected
 
