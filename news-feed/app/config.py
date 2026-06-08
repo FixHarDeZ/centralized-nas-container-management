@@ -29,6 +29,10 @@ def _env_defaults() -> dict:
         "retention_days": int(os.getenv("RETENTION_DAYS", "30")),
         "summarizer_fallback": [],
         "custom_sources": [],
+        "digest_window_buffer_hours": 1.0,
+        "digest_size_base": 5,
+        "digest_size_max": 10,
+        "digest_max_per_source": 2,
     }
 
 

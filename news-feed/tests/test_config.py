@@ -87,3 +87,13 @@ def test_get_all_sources_empty_custom(base_config):
     config = {**base_config, "custom_sources": []}
     result = get_all_sources(config)
     assert set(result.keys()) == set(SOURCES.keys())
+
+
+def test_env_defaults_includes_digest_tuning_keys(monkeypatch):
+    monkeypatch.delenv("DIGEST_TIMES", raising=False)
+    from app.config import _env_defaults
+    d = _env_defaults()
+    assert d["digest_window_buffer_hours"] == 1.0
+    assert d["digest_size_base"] == 5
+    assert d["digest_size_max"] == 10
+    assert d["digest_max_per_source"] == 2
