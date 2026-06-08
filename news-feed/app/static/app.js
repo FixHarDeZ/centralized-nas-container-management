@@ -777,7 +777,7 @@ async function saveSchedule() {
     const r = await fetch('/api/schedule', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ digest_times: times, enabled_sources: sources, summarizer_provider: provider, summarizer_model: model, retention_days: retention, summarizer_fallback: fallback, custom_sources: _customSources, digest_window_buffer_hours: parseFloat(document.getElementById('cfg-window-buffer').value), digest_size_base: parseInt(document.getElementById('cfg-size-base').value, 10), digest_size_max: parseInt(document.getElementById('cfg-size-max').value, 10), digest_max_per_source: parseInt(document.getElementById('cfg-max-per-source').value, 10) }),
+      body: JSON.stringify({ digest_times: times, enabled_sources: sources, summarizer_provider: provider, summarizer_model: model, retention_days: retention, summarizer_fallback: fallback, custom_sources: _customSources, digest_window_buffer_hours: parseFloat(document.getElementById('cfg-window-buffer').value) || 1.0, digest_size_base: parseInt(document.getElementById('cfg-size-base').value, 10) || 5, digest_size_max: parseInt(document.getElementById('cfg-size-max').value, 10) || 10, digest_max_per_source: parseInt(document.getElementById('cfg-max-per-source').value, 10) || 2 }),
     });
     if (!r.ok) throw new Error(r.status);
     document.getElementById('save-status').textContent = '✓ Saved';
