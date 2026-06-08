@@ -99,7 +99,7 @@ def get_article(conn: sqlite3.Connection, article_id: str) -> Optional[dict]:
     return dict(row) if row else None
 
 
-def get_recent_articles_for_digest(conn: sqlite3.Connection, hours: int = 6, limit: int = 5) -> list[dict]:
+def get_recent_articles_for_digest(conn: sqlite3.Connection, hours: float = 6, limit: int = 5) -> list[dict]:
     rows = conn.execute(
         "SELECT * FROM articles WHERE summary_th IS NOT NULL "
         "AND fetched_at >= datetime('now', ?) "
