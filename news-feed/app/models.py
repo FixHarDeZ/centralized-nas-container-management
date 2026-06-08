@@ -207,11 +207,13 @@ def select_digest_articles(
     candidates: list[dict],
     sent_ids: set[str],
     base: int = 5,
-    extra_max: int = 5,
+    extra_max: int = 0,
     max_per_source: int = 2,
 ) -> list[dict]:
     """Pick up to `base + extra_max` articles, max `max_per_source` per source, skipping sent_ids."""
     cap = max(0, int(base)) + max(0, int(extra_max))
+    if cap <= 0:
+        return []
     source_counts: dict[str, int] = {}
     selected: list[dict] = []
     for a in candidates:
