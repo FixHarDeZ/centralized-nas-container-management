@@ -6,7 +6,7 @@ Fixed auto-scrape schedule (Asia/Bangkok):
   01:00–06:00  paused
   06:00–19:00  every 60 minutes  (minute 0; hour 6-18)
 
-Weekly cleanup runs Sunday 03:00.
+Daily cleanup runs 03:00 (and once at startup to enforce retention after restarts).
 """
 
 import asyncio
@@ -232,12 +232,17 @@ def start():
     reload_scrape_job()
     _scheduler.add_job(
         _cleanup_job,
-        CronTrigger(day_of_week="sun", hour=3, timezone=config.TZ),
+        CronTrigger(hour=3, minute=0, timezone=config.TZ),
         id="cleanup",
         replace_existing=True,
     )
     _scheduler.start()
     _update_next()
+    # Enforce retention immediately on startup — restarts can otherwise skip the daily 03:00 slot.
+    try:
+        _cleanup_job()
+    except Exception as e:
+        print(f"[scheduler] startup cleanup error: {e}")
     print("[scheduler] started")
 
 

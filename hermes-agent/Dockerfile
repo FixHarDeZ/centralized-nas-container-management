@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates curl git \
         python3 python-is-python3 \
         ripgrep ffmpeg \
-        gcc python3-dev libffi-dev \
+        gcc g++ make python3-dev libffi-dev \
         procps openssh-client xz-utils \
     && rm -rf /var/lib/apt/lists/*
 

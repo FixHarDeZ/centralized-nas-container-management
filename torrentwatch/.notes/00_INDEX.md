@@ -189,7 +189,7 @@ Bug fix 2026-05-20: viewno18sbx.php ใช้ text "Auto Sticky:" แทน imag
 |---|---|---|
 | `scrape_night` | 19:00–01:00 ทุก 30 นาที | scrape รอบกลางคืน (เวลา active) |
 | `scrape_day` | 06:00–19:00 ทุก 60 นาที | scrape รอบกลางวัน |
-| `cleanup` | Sunday 03:00 | ลบ records > 7 วัน |
+| `cleanup` | ทุกวัน 03:00 + ตอน startup | ลบ records > `retention_days` วัน (default 7) |
 
 ตารางเวลา **ไม่ configurable** ผ่าน UI (hardcoded)
 
