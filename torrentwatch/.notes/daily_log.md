@@ -3,6 +3,26 @@
 ---
 
 ### Session Log Entry
+**Timestamp:** 2026-06-08
+**Title:** fix — retention cleanup ไม่รัน หลัง restart
+
+**Issue:** เก็บประวัติ > 7 วัน (พบ records 2026-05-31 ในขณะที่วันนี้ 2026-06-08)
+
+**Root cause:** `_cleanup_job` schedule = `CronTrigger(day_of_week="sun", hour=3)` — รัน weekly Sun 03:00 เท่านั้น. Container restart วันนี้ 04:50 → ข้าม slot Sun 06-07 ไปแล้ว, ต้องรออีกถึง Sun 06-14.
+
+**Fix (`scheduler.py`):**
+1. เปลี่ยน cleanup cron จาก weekly → daily 03:00
+2. รัน `_cleanup_job()` ทันทีหลัง `_scheduler.start()` ครอบ try/except — กัน restart ทำให้พลาด slot
+
+**Verify:**
+- DB หลัง restart: ไม่มี records < 2026-06-01 แล้ว (273 entries ของ 2026-05-31 ถูกลบ)
+- ขอบเขต: keep 7 วันล่าสุด (2026-06-01 ถึง 2026-06-08)
+
+**Docs sync:** `CLAUDE.md` + `.notes/00_INDEX.md` ปรับ schedule description (Sunday → ทุกวัน + startup)
+
+---
+
+### Session Log Entry
 **Timestamp:** 2026-05-27
 **Title:** fix — Local Download + NAS filename + dropdown font
 

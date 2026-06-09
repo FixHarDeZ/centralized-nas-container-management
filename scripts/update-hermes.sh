@@ -14,7 +14,7 @@
 
 set -euo pipefail
 
-COMPOSE_FILE="hermes-agent/docker-compose.yml"
+COMPOSE_FILE="../hermes-agent/docker-compose.yml"
 UPSTREAM_REPO="NousResearch/hermes-agent"
 
 usage() {
@@ -51,7 +51,7 @@ sed -i.bak "s/HERMES_REF: .*/HERMES_REF: ${TARGET_TAG}/" "$COMPOSE_FILE" && rm -
 
 echo ""
 echo "==> Running deploy ..."
-bash scripts/deploy.sh -s hermes-agent -y
+bash deploy.sh -s hermes-agent -y
 
 echo ""
 echo "==> Update complete. New ref: ${TARGET_TAG}"
