@@ -2,6 +2,27 @@
 
 ---
 
+## 2026-06-09 — Hotfix: Digest window stuck at 4h min clamp
+
+### บั๊กที่เจอ
+Production log 07:00 digest แสดง `window=4.0h` แทนที่จะเป็น 9h (prev tick 23:00 → gap 8h + buffer 1h).
+
+### Root cause
+APScheduler fire cron job ที่ `HH:MM:00.xxxxxx` (มี microseconds). ใน `_compute_digest_window` เปรียบเทียบ `today 07:00:00.000000 < now=07:00:00.001234` → True → prev tick = ตัวเอง (07:00 today) → gap ≈ 1ms → clamp ขึ้นไป 4h (min).
+
+Unit tests ผ่านเพราะใช้ datetime ที่เป็น `:00.000000` พอดี ไม่มี microseconds.
+
+### Fix
+`app/scheduler.py` `_compute_digest_window`: floor `now` เหลือ minute ก่อน compare (`now_minute = now.replace(second=0, microsecond=0)`). prev tick = today's 07:00 จะไม่ strictly less than now_minute (ค่าเท่ากัน) → wrap ไป yesterday's 23:00 ตามที่ต้องการ.
+
+### Tests
+- เพิ่ม `test_tick_fired_late_uses_previous_tick_not_itself` — now มี microseconds 1234, ใช้ 5 ticks/day → window=9h
+- เพิ่ม `test_tick_fired_late_morning_canonical` — same as canonical 14h test แต่ now มี microseconds
+
+134 pass (เดิม 132 + hotfix 2 tests)
+
+---
+
 ## 2026-06-08 — Adaptive Digest Window + Dynamic Size
 
 ### งานที่ทำ

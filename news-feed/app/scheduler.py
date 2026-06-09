@@ -68,11 +68,15 @@ def _compute_digest_window(
     if not times:
         return _FALLBACK_WINDOW_HOURS
 
+    # Floor `now` to the minute so a digest tick that fired a few microseconds late
+    # (APScheduler fires at HH:MM:00.xxxxxx) doesn't treat the current tick as its
+    # own previous tick — wrap to the prior tick / yesterday instead.
+    now_minute = now.replace(second=0, microsecond=0)
     today = now.date()
     candidates_today = [
         datetime.combine(today, t, tzinfo=now.tzinfo) for t in times
     ]
-    prev_ticks = [d for d in candidates_today if d < now]
+    prev_ticks = [d for d in candidates_today if d < now_minute]
     if prev_ticks:
         prev = max(prev_ticks)
     else:
