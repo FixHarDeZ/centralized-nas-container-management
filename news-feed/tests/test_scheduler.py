@@ -77,6 +77,23 @@ def test_naive_datetime_raises():
         _compute_digest_window(datetime(2026, 6, 8, 7, 0), ["07:00"])
 
 
+def test_tick_fired_late_uses_previous_tick_not_itself():
+    # APScheduler fires at HH:MM:00.xxxxxx — without flooring, the helper would
+    # treat the current tick as its own previous tick (gap ≈ 1ms → clamp to 4h min).
+    # With minute-floor, the 07:00 tick correctly wraps to yesterday's 23:00 prev.
+    now = datetime(2026, 6, 8, 7, 0, 0, 1234, tzinfo=BKK)
+    w = _compute_digest_window(now, ["07:00", "12:00", "17:00", "20:00", "23:00"])
+    # prev = yesterday 23:00 → gap = 8h + 1h buffer = 9h
+    assert w == pytest.approx(9.0)
+
+
+def test_tick_fired_late_morning_canonical():
+    # Same as test_morning_digest_uses_overnight_gap but with microseconds.
+    now = datetime(2026, 6, 8, 7, 0, 0, 9999, tzinfo=BKK)
+    w = _compute_digest_window(now, ["07:00", "12:00", "18:00"])
+    assert w == pytest.approx(14.0)
+
+
 # --- Direct tests for _parse_digest_times ---
 
 
