@@ -112,12 +112,13 @@ reminders (
 ### อัตราค่าจ้างรายวัน
 ```
 daily_rate = monthly_salary / working_days_in_month
-working_days_in_month = วันจันทร์–เสาร์ทั้งหมดในเดือน (ไม่นับอาทิตย์)
+working_days_in_month = จำนวนวัน "ทั้งเดือน" (รวมวันอาทิตย์/วันหยุด) — calendar.monthrange()[1]
 ```
+**เหตุผล:** วันหยุดเราให้หยุดแต่จ่ายเงินเดือนให้ด้วย → วันหยุดต้องอยู่ใน denominator. ⚠️ ชื่อ fn `working_days_in_month` ยังคงเดิม (API/JSON-key stability) แต่ตอนนี้นับ "ทุกวัน" ไม่ใช่แค่ จ-ส. **Invariant:** full month → จ่ายเต็มเสมอ (dr × วันทั้งเดือน = salary) เพราะ billable ทุกจุดนับทุกวันเช่นกัน (ลบ filter `weekday()!=6` ออก 5 จุด: calc divisor+resign, get_payments, summary, pass-probation transition). หัก excess-leave ใช้ dr ใหม่ (ต่อวันน้อยลง = salary/30 แทน salary/26). ใช้กับ **ทั้งสอง holiday_mode**. วันอาทิตย์ยัง = holiday ในปฏิทิน/attendance เหมือนเดิม (เปลี่ยนแค่ money math ไม่แตะ default_status/Sunday rules).
 
 ### เงินเดือนรายเดือน (พื้นฐาน)
 - จ่าย **2 รอบ**: Period 1 วันที่ 15 = `salary / 2`, Period 2 สิ้นเดือน = `salary / 2`
-- เดือนแรกที่เริ่มงาน (partial month) → pro-rate เฉพาะวัน Mon–Sat ตั้งแต่ **anchor** ถึงสิ้นเดือน
+- เดือนแรกที่เริ่มงาน (partial month) → pro-rate **ทุกวัน** (รวมวันหยุด) ตั้งแต่ **anchor** ถึงสิ้นเดือน
 
 ### Probation mode (จ่ายรายวัน — axis `employment_status`)
 - **`employment_status='probation'`**: จ่ายรายวัน, **ลา/ชดเชย/holiday ปิด** (attendance default = `unmarked`, POST + LINE webhook reject leave). `get_payments` คืน `[]` (ไม่มีงวดเดือน).

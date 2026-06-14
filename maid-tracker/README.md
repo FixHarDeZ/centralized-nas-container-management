@@ -49,8 +49,8 @@ TLS is terminated by Synology Reverse Proxy — the nginx sidecar handles Authel
 
 ### 📊 Monthly Summary
 - Count Work / Leave / Day Off / Compensatory days
-- Calculate daily rate (salary ÷ Mon–Sat working days in the month)
-- Base salary (pro-rated for the first partial month)
+- Calculate daily rate (**salary ÷ all calendar days in the month, holidays included** — days off are still paid, so they belong in the divisor; a full month always pays the full salary)
+- Base salary (pro-rated over **calendar days** for the first partial month)
 - Show cumulative leave/comp balance + carry-over from previous month
 - **Leave cap deduction row** appears when max leave carry is configured and exceeded
 
@@ -66,7 +66,7 @@ TLS is terminated by Synology Reverse Proxy — the nginx sidecar handles Authel
 - During probation: **leave / compensatory / holiday are disabled** (calendar shows unmarked days; API + LINE webhook reject leave); only explicitly-marked `work` days count
 - Pay tracked per work day in the **Daily Pay** view — toggle each day paid (amount snapshot at the daily rate)
 - **Pass probation** button → set the pass date → employee switches to monthly salary mode **immediately**; leave + monthly periods turn on
-- The **transition month** is split at the pass date: days before = daily pay, days from the pass date on = monthly salary **pro-rated** (`monthly_salary ÷ Mon–Sat days × billable days from pass date`). No double-pay, no gap
+- The **transition month** is split at the pass date: days before = daily pay, days from the pass date on = monthly salary **pro-rated** (`monthly_salary ÷ calendar days × calendar days from pass date`). No double-pay, no gap
 - Monthly logic anchors on `monthly_start_date or start_date`, so leave accrual and proration begin at the pass date — not the original start date. Existing (non-probation) employees are unaffected
 - Resign during probation settles only **unpaid** work days × daily rate (no monthly base)
 

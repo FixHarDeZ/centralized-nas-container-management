@@ -60,7 +60,7 @@ const TRANSLATIONS = {
     rowLeaveBalance: "คงเหลือ",
     summaryPolicyNoteMonthly: (n, max) => `แม่บ้านได้วันหยุด ${n} วัน/เดือน · สะสมสูงสุด ${max !== null ? max + " วัน" : "ไม่จำกัด"} · ส่วนเกินชำระวันลาออก`,
     nationalityOptions: ["ไทย","เมียนมา","กัมพูชา","ลาว","เวียดนาม","อื่นๆ"],
-    salaryPreview: (dr) => `อัตราค่าจ้างรายวัน ≈ <strong>${dr} บาท/วัน</strong> (คิดจาก 26 วันทำงาน/เดือน)`,
+    salaryPreview: (dr) => `อัตราค่าจ้างรายวัน ≈ <strong>${dr} บาท/วัน</strong> (เฉลี่ย 30 วัน/เดือน รวมวันหยุด)`,
     // Probation / payment method / documents
     fieldProbation: "เริ่มแบบทดลองงาน (จ่ายรายวัน)",
     fieldProbationDailyRate: "ค่าจ้างรายวัน (บาท)",
@@ -253,7 +253,7 @@ const TRANSLATIONS = {
     rowLeaveBalance: "Leave balance",
     summaryPolicyNoteMonthly: (n, max) => `Staff gets ${n} leave day(s)/month · Max accumulated: ${max !== null ? max + " day(s)" : "unlimited"} · Excess settled on resignation`,
     nationalityOptions: ["Thai","Myanmar","Cambodian","Lao","Vietnamese","Other"],
-    salaryPreview: (dr) => `Daily rate ≈ <strong>${dr} Baht/day</strong> (based on 26 working days/month)`,
+    salaryPreview: (dr) => `Daily rate ≈ <strong>${dr} Baht/day</strong> (avg 30 days/month, holidays included)`,
     // Probation / payment method / documents
     fieldProbation: "Start as probation (daily pay)",
     fieldProbationDailyRate: "Daily rate (Baht)",
@@ -806,7 +806,7 @@ async function viewEmployeeForm(id) {
   function updatePreview() {
     const sal = parseFloat(salInput.value);
     if (sal > 0) {
-      const dr = sal / 26;
+      const dr = sal / 30;
       preview.classList.remove("d-none");
       preview.innerHTML = `<i class="bi bi-info-circle me-1"></i>${t("salaryPreview", fmtMoney(dr))}`;
     } else {
