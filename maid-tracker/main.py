@@ -582,8 +582,29 @@ def undo_pass_probation(emp_id: int):
 @app.delete("/api/employees/{emp_id}")
 def delete_employee(emp_id: int):
     conn = get_db()
+
+    # Remove uploaded files from disk before deleting DB rows.
+    for row in conn.execute(
+        "SELECT file_path FROM employee_documents WHERE employee_id=?", (emp_id,)
+    ).fetchall():
+        if row["file_path"]:
+            fpath = os.path.join(_DOC_DIR, os.path.basename(row["file_path"]))
+            if os.path.exists(fpath):
+                os.remove(fpath)
+    for table in ("daily_payments", "salary_payments"):
+        for row in conn.execute(
+            f"SELECT slip_path FROM {table} WHERE employee_id=? AND slip_path IS NOT NULL",
+            (emp_id,),
+        ).fetchall():
+            if row["slip_path"]:
+                fpath = os.path.join(_SLIP_DIR, os.path.basename(row["slip_path"]))
+                if os.path.exists(fpath):
+                    os.remove(fpath)
+
     conn.execute("DELETE FROM attendance WHERE employee_id=?", (emp_id,))
     conn.execute("DELETE FROM salary_payments WHERE employee_id=?", (emp_id,))
+    conn.execute("DELETE FROM daily_payments WHERE employee_id=?", (emp_id,))
+    conn.execute("DELETE FROM employee_documents WHERE employee_id=?", (emp_id,))
     conn.execute("DELETE FROM employees WHERE id=?", (emp_id,))
     conn.commit()
     conn.close()
@@ -979,6 +1000,49 @@ def upload_daily_slip(emp_id: int, work_date: str, file: UploadFile = File(...))
         )
     conn.commit(); conn.close()
     return {"slip_path": fname}
+
+
+@app.post("/api/employees/{emp_id}/documents")
+def upload_documents(emp_id: int, doc_type: str = Form(...), files: list[UploadFile] = File(...)):
+    if doc_type not in ("id_card", "passport"):
+        raise HTTPException(400, "Invalid doc_type")
+    conn = get_db()
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    saved = []
+    for i, file in enumerate(files):
+        fname = _save_upload(file, _DOC_DIR, f"doc_{emp_id}_{doc_type}_{int(datetime.now().timestamp())}_{i}")
+        conn.execute(
+            "INSERT INTO employee_documents (employee_id, doc_type, file_path, uploaded_at) VALUES (?,?,?,?)",
+            (emp_id, doc_type, fname, now),
+        )
+        saved.append(fname)
+    conn.commit(); conn.close()
+    return {"saved": saved}
+
+
+@app.get("/api/employees/{emp_id}/documents")
+def list_documents(emp_id: int):
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT id, doc_type, file_path, uploaded_at FROM employee_documents WHERE employee_id=? ORDER BY uploaded_at",
+        (emp_id,),
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+@app.delete("/api/employees/{emp_id}/documents/{doc_id}")
+def delete_document(emp_id: int, doc_id: int):
+    conn = get_db()
+    row = conn.execute("SELECT file_path FROM employee_documents WHERE id=? AND employee_id=?", (doc_id, emp_id)).fetchone()
+    if row:
+        fpath = os.path.join(_DOC_DIR, os.path.basename(row["file_path"]))
+        if os.path.exists(fpath):
+            os.remove(fpath)
+        conn.execute("DELETE FROM employee_documents WHERE id=?", (doc_id,))
+        conn.commit()
+    conn.close()
+    return {"message": "deleted"}
 
 
 @app.post("/api/employees/{emp_id}/payments/{period}/toggle")
