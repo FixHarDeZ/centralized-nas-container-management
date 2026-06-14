@@ -61,6 +61,22 @@ const TRANSLATIONS = {
     summaryPolicyNoteMonthly: (n, max) => `แม่บ้านได้วันหยุด ${n} วัน/เดือน · สะสมสูงสุด ${max !== null ? max + " วัน" : "ไม่จำกัด"} · ส่วนเกินชำระวันลาออก`,
     nationalityOptions: ["ไทย","เมียนมา","กัมพูชา","ลาว","เวียดนาม","อื่นๆ"],
     salaryPreview: (dr) => `อัตราค่าจ้างรายวัน ≈ <strong>${dr} บาท/วัน</strong> (คิดจาก 26 วันทำงาน/เดือน)`,
+    // Probation / payment method / documents
+    fieldProbation: "เริ่มแบบทดลองงาน (จ่ายรายวัน)",
+    fieldProbationDailyRate: "ค่าจ้างรายวัน (บาท)",
+    fieldPaymentMethod: "วิธีการจ่ายเงิน",
+    paymentMethodCash: "เงินสด",
+    paymentMethodTransfer: "เงินโอน",
+    probationLockedNote: "สถานะการจ้างถูกกำหนดโดยระบบหลังสร้างแล้ว (แก้ไขผ่านปุ่ม \"ผ่านโปร\")",
+    docsTitle: "เอกสาร",
+    docTypeIdCard: "บัตรประชาชน",
+    docTypePassport: "พาสปอร์ต",
+    docFieldType: "ประเภทเอกสาร",
+    docFieldFiles: "เลือกไฟล์ (เลือกได้หลายไฟล์)",
+    docUploadBtn: "อัปโหลด",
+    docEmpty: "ยังไม่มีเอกสาร",
+    docDeleteConfirm: "ลบเอกสารนี้?",
+    docUploadFirst: "กรุณาเลือกไฟล์ก่อน",
     btnSaveEdit: "บันทึกการแก้ไข", btnAddNew: "เพิ่มแม่บ้าน",
     // Employee detail
     detailDuration: "ระยะเวลาทำงาน", detailWorkDays: "วันที่ทำงาน",
@@ -71,6 +87,11 @@ const TRANSLATIONS = {
     overallNote: "ยอดนี้จะชำระเมื่อลาออก",
     labelStartedOn: "เริ่มงาน", labelSalaryPerMonth: "บาท/เดือน",
     btnCalendar: "ปฏิทินการทำงาน", btnMonthlySummary: "สรุปรายเดือน", btnPayment: "จ่ายเงินเดือน",
+    // Probation (detail)
+    probationBadge: "ทดลองงาน",
+    btnPassProbation: "ผ่านโปร",
+    passProbationPrompt: (n) => `วันที่ ${n} ผ่านทดลองงาน (YYYY-MM-DD):`,
+    passProbationConfirm: (n, d) => `ยืนยันให้ "${n}" ผ่านทดลองงานวันที่ ${d}?`,
     btnResign: "แจ้งลาออก", btnCancelResign: "ยกเลิกลาออก",
     resignSummaryTitle: (d) => `สรุปการลาออก — ${d}`,
     resignLastMonth: "เงินเดือนเดือนสุดท้าย",
@@ -115,6 +136,16 @@ const TRANSLATIONS = {
     alertPending: (n, a) => `ยังค้างจ่าย ${n} รอบ — รวม ${fmtMoney(a)} บาท`,
     noPaymentMonth: "ไม่มีรายการจ่ายในเดือนนี้",
     paymentNote: "รอบแรกจ่ายครึ่งเดือน · รอบสองจ่ายครึ่งที่เหลือ (หักวันลาเกินสะสมถ้ามีการตั้งค่าไว้)",
+    // Daily pay (probation) + slip upload
+    dailyPayTitle: "จ่ายรายวัน (ทดลองงาน)",
+    dailyPayDate: "วันที่",
+    dailyPayFraction: "สัดส่วน",
+    dailyPayAmount: "จำนวนเงิน",
+    dailyPayTotal: "รวมจ่ายรายวัน",
+    slipUploadBtn: "แนบสลิป",
+    slipViewBtn: "ดูสลิป",
+    slipUploadOk: "แนบสลิปแล้ว",
+    slipPickFirst: "กรุณาเลือกไฟล์สลิปก่อน",
     // Confirmations
     confirmLeave: (d) => `บันทึก "ลา" วันที่ ${d}?`,
     confirmComp: (d) => `บันทึก "ชดเชย" (ทำวันอาทิตย์) วันที่ ${d}?`,
@@ -209,6 +240,22 @@ const TRANSLATIONS = {
     summaryPolicyNoteMonthly: (n, max) => `Staff gets ${n} leave day(s)/month · Max accumulated: ${max !== null ? max + " day(s)" : "unlimited"} · Excess settled on resignation`,
     nationalityOptions: ["Thai","Myanmar","Cambodian","Lao","Vietnamese","Other"],
     salaryPreview: (dr) => `Daily rate ≈ <strong>${dr} Baht/day</strong> (based on 26 working days/month)`,
+    // Probation / payment method / documents
+    fieldProbation: "Start as probation (daily pay)",
+    fieldProbationDailyRate: "Daily rate (Baht)",
+    fieldPaymentMethod: "Payment method",
+    paymentMethodCash: "Cash",
+    paymentMethodTransfer: "Transfer",
+    probationLockedNote: "Employment status is system-managed after creation (change it via the \"Pass probation\" button)",
+    docsTitle: "Documents",
+    docTypeIdCard: "ID Card",
+    docTypePassport: "Passport",
+    docFieldType: "Document type",
+    docFieldFiles: "Choose files (multiple allowed)",
+    docUploadBtn: "Upload",
+    docEmpty: "No documents yet",
+    docDeleteConfirm: "Delete this document?",
+    docUploadFirst: "Please choose a file first",
     btnSaveEdit: "Save Changes", btnAddNew: "Add Staff",
     // Employee detail
     detailDuration: "Duration", detailWorkDays: "Work Days",
@@ -219,6 +266,11 @@ const TRANSLATIONS = {
     overallNote: "Settled on resignation",
     labelStartedOn: "Started", labelSalaryPerMonth: "Baht/month",
     btnCalendar: "Work Calendar", btnMonthlySummary: "Monthly Summary", btnPayment: "Pay Salary",
+    // Probation (detail)
+    probationBadge: "Probation",
+    btnPassProbation: "Pass probation",
+    passProbationPrompt: (n) => `Pass-probation date for ${n} (YYYY-MM-DD):`,
+    passProbationConfirm: (n, d) => `Confirm "${n}" passes probation on ${d}?`,
     btnResign: "Record Resignation", btnCancelResign: "Cancel Resignation",
     resignSummaryTitle: (d) => `Resignation Summary — ${d}`,
     resignLastMonth: "Last Month Salary",
@@ -263,6 +315,16 @@ const TRANSLATIONS = {
     alertPending: (n, a) => `${n} payment(s) pending — Total ${fmtMoney(a)} Baht`,
     noPaymentMonth: "No payments for this month",
     paymentNote: "Period 1 = half salary · Period 2 = remaining half (leave cap deducted if configured)",
+    // Daily pay (probation) + slip upload
+    dailyPayTitle: "Daily pay (probation)",
+    dailyPayDate: "Date",
+    dailyPayFraction: "Fraction",
+    dailyPayAmount: "Amount",
+    dailyPayTotal: "Daily pay total",
+    slipUploadBtn: "Attach slip",
+    slipViewBtn: "View slip",
+    slipUploadOk: "Slip attached",
+    slipPickFirst: "Please choose a slip file first",
     // Confirmations
     confirmLeave: (d) => `Mark as "Leave" on ${d}?`,
     confirmComp: (d) => `Mark as "Compensatory" (worked Sunday) on ${d}?`,
@@ -571,6 +633,30 @@ async function viewEmployeeForm(id) {
               <input type="number" class="form-control" name="monthly_salary" required min="1" step="1"
                      value="${emp?.monthly_salary || ""}" placeholder="13000" />
             </div>
+            <!-- Payment method -->
+            <div class="col-6">
+              <label class="form-label fw-semibold">${t("fieldPaymentMethod")}</label>
+              <select class="form-select" name="payment_method">
+                <option value="cash" ${(emp?.payment_method || "cash") === "cash" ? "selected" : ""}>${t("paymentMethodCash")}</option>
+                <option value="transfer" ${emp?.payment_method === "transfer" ? "selected" : ""}>${t("paymentMethodTransfer")}</option>
+              </select>
+            </div>
+            <!-- Probation -->
+            <div class="col-12">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="is_probation" id="isProbation"
+                       ${emp?.employment_status === "probation" ? "checked" : ""} ${isEdit ? "disabled" : ""} />
+                <label class="form-check-label fw-semibold" for="isProbation">
+                  <i class="bi bi-hourglass-split me-1 text-warning"></i>${t("fieldProbation")}
+                </label>
+              </div>
+              ${isEdit ? `<div class="form-text text-muted">${t("probationLockedNote")}</div>` : ""}
+            </div>
+            <div class="col-6" id="probationRateSection" style="display:none">
+              <label class="form-label fw-semibold">${t("fieldProbationDailyRate")}</label>
+              <input type="number" class="form-control" name="probation_daily_rate" min="0" step="1"
+                     value="${emp?.probation_daily_rate ?? ""}" placeholder="500" />
+            </div>
             <!-- Holiday mode -->
             <div class="col-12">
               <label class="form-label fw-semibold">${t("fieldHolidayMode")}</label>
@@ -615,7 +701,32 @@ async function viewEmployeeForm(id) {
           </div>
         </form>
       </div>
-    </div>`;
+    </div>
+    ${isEdit ? `
+    <div class="card border-0 shadow-sm mt-3" style="max-width:640px">
+      <div class="card-body p-4">
+        <h6 class="fw-bold mb-3"><i class="bi bi-folder2-open me-2 text-primary"></i>${t("docsTitle")}</h6>
+        <div class="row g-2 align-items-end mb-3">
+          <div class="col-12 col-sm-4">
+            <label class="form-label small fw-semibold mb-1">${t("docFieldType")}</label>
+            <select class="form-select form-select-sm" id="docType">
+              <option value="id_card">${t("docTypeIdCard")}</option>
+              <option value="passport">${t("docTypePassport")}</option>
+            </select>
+          </div>
+          <div class="col-12 col-sm-5">
+            <label class="form-label small fw-semibold mb-1">${t("docFieldFiles")}</label>
+            <input type="file" class="form-control form-control-sm" id="docFiles" multiple />
+          </div>
+          <div class="col-12 col-sm-3">
+            <button type="button" class="btn btn-sm btn-primary w-100" id="docUploadBtn">
+              <i class="bi bi-upload me-1"></i>${t("docUploadBtn")}
+            </button>
+          </div>
+        </div>
+        <div id="docList"><div class="spinner-border spinner-border-sm text-secondary"></div></div>
+      </div>
+    </div>` : ""}`;
 
   // Holiday mode toggle
   const monthlySection   = document.getElementById("monthlyLeaveSection");
@@ -635,6 +746,15 @@ async function viewEmployeeForm(id) {
   }
   document.querySelectorAll("[name='holiday_mode']").forEach(r => r.addEventListener("change", updateHolidayMode));
   updateHolidayMode();
+
+  // Probation toggle → reveal daily rate
+  const probationChk  = document.getElementById("isProbation");
+  const probationRate = document.getElementById("probationRateSection");
+  function updateProbation() {
+    probationRate.style.display = probationChk.checked ? "" : "none";
+  }
+  probationChk.addEventListener("change", updateProbation);
+  updateProbation();
 
   // Live salary preview
   const salInput = document.querySelector("[name='monthly_salary']");
@@ -668,7 +788,14 @@ async function viewEmployeeForm(id) {
       max_leave_carry:    fd.get("max_leave_carry") !== "" ? +fd.get("max_leave_carry") : null,
       holiday_mode:       mode,
       monthly_leave_days: mode === "monthly" ? +(fd.get("monthly_leave_days") || 0) : 0,
+      payment_method:     fd.get("payment_method") || "cash",
+      probation_daily_rate: fd.get("probation_daily_rate") !== "" && fd.get("probation_daily_rate") != null
+                              ? +fd.get("probation_daily_rate") : null,
     };
+    // employment_status is set only at creation (server-managed on edit).
+    if (!isEdit) {
+      body.employment_status = fd.get("is_probation") ? "probation" : "active";
+    }
     const btn = e.target.querySelector("[type=submit]");
     btn.disabled = true;
     try {
@@ -684,6 +811,76 @@ async function viewEmployeeForm(id) {
       btn.disabled = false;
     }
   });
+
+  // ─── Documents (edit only) ───────────────────────────────
+  // Re-injects only the #docList div so unsaved form edits are never lost.
+  if (isEdit) {
+    async function refreshDocs() {
+      const listEl = document.getElementById("docList");
+      if (!listEl) return;
+      try {
+        const docs = await api.get(`/api/employees/${id}/documents`);
+        if (docs.length === 0) {
+          listEl.innerHTML = `<div class="text-muted small">${t("docEmpty")}</div>`;
+          return;
+        }
+        listEl.innerHTML = docs.map(d => {
+          const url       = `/api/documents/${d.file_path}`;
+          const typeLabel = d.doc_type === "passport" ? t("docTypePassport") : t("docTypeIdCard");
+          const isImg     = /\.(png|jpe?g|gif|webp|bmp)$/i.test(d.file_path);
+          const thumb     = isImg
+            ? `<img src="${escHtml(url)}" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:6px">`
+            : `<i class="bi bi-file-earmark-text fs-3 text-secondary"></i>`;
+          return `
+            <div class="d-flex align-items-center gap-2 border rounded p-2 mb-2">
+              <a href="${escHtml(url)}" target="_blank" rel="noopener">${thumb}</a>
+              <div class="flex-grow-1 overflow-hidden">
+                <a href="${escHtml(url)}" target="_blank" rel="noopener" class="text-truncate d-block small fw-semibold">${typeLabel}</a>
+                <div class="text-muted" style="font-size:.72rem">${escHtml(d.uploaded_at || "")}</div>
+              </div>
+              <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteDocument(${id}, ${d.id})">
+                <i class="bi bi-trash"></i>
+              </button>
+            </div>`;
+        }).join("");
+      } catch (e) {
+        listEl.innerHTML = `<div class="text-danger small">${escHtml(e.message)}</div>`;
+      }
+    }
+    // Expose for inline delete handler; re-render only the list.
+    window.__refreshDocs = refreshDocs;
+    window.deleteDocument = async function (empId, docId) {
+      if (!confirm(t("docDeleteConfirm"))) return;
+      try {
+        await api.del(`/api/employees/${empId}/documents/${docId}`);
+        await refreshDocs();
+      } catch (e) {
+        alert(t("errDelete") + e.message);
+      }
+    };
+    document.getElementById("docUploadBtn").addEventListener("click", async () => {
+      const filesInput = document.getElementById("docFiles");
+      const files = filesInput.files;
+      if (!files || files.length === 0) { alert(t("docUploadFirst")); return; }
+      const fd = new FormData();
+      fd.append("doc_type", document.getElementById("docType").value);
+      for (const f of files) fd.append("files", f);
+      const btn = document.getElementById("docUploadBtn");
+      btn.disabled = true;
+      try {
+        // Multipart: no Content-Type header — browser sets the boundary.
+        const r = await fetch(`/api/employees/${id}/documents`, { method: "POST", body: fd });
+        if (!r.ok) throw new Error(await r.text());
+        filesInput.value = "";
+        await refreshDocs();
+      } catch (e) {
+        alert(t("errSave") + e.message);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+    refreshDocs();
+  }
 }
 
 // ─── View: Employee Detail ───────────────────────────────────
