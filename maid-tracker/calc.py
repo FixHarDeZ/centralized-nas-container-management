@@ -48,6 +48,35 @@ def probation_up_to(monthly_start_date: date | None, today: date) -> date:
     return min(today, monthly_start_date - timedelta(days=1))
 
 
+def compute_probation_tally(
+    emp_id: int,
+    start_date: date,
+    probation_daily_rate: float,
+    up_to: date | None = None,
+) -> dict:
+    """
+    Probation pay = sum of attendance rows status='work' (full=1.0, half=0.5)
+    in [start_date, up_to] × probation_daily_rate.
+    No default fill — only explicitly marked work days count. Leave/comp ignored.
+    """
+    end = up_to or date.today()
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT work_date, status, half_day FROM attendance "
+        "WHERE employee_id=? AND status='work' AND work_date >= ? AND work_date <= ?",
+        (emp_id, start_date.isoformat(), end.isoformat()),
+    ).fetchall()
+    conn.close()
+    total = 0.0
+    for r in rows:
+        total += 0.5 if r["half_day"] else 1.0
+    return {
+        "total_days": round(total, 2),
+        "amount": round(total * probation_daily_rate, 2),
+    }
+
+
 # ── Monthly-mode leave balance ────────────────────────────────
 
 def compute_monthly_leave_balance(
