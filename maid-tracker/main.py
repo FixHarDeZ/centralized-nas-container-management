@@ -259,6 +259,43 @@ def init_db():
         c.execute("ALTER TABLE employees ADD COLUMN monthly_leave_days REAL DEFAULT 0")
     except Exception:
         pass
+    # Probation mode migration
+    for col, definition in [
+        ("employment_status", "TEXT DEFAULT 'active'"),
+        ("probation_daily_rate", "REAL"),
+        ("monthly_start_date", "TEXT"),
+        ("payment_method", "TEXT DEFAULT 'cash'"),
+    ]:
+        try:
+            c.execute(f"ALTER TABLE employees ADD COLUMN {col} {definition}")
+        except Exception:
+            pass
+    # Slip path on monthly payments
+    try:
+        c.execute("ALTER TABLE salary_payments ADD COLUMN slip_path TEXT")
+    except Exception:
+        pass
+    # New tables
+    c.executescript("""
+        CREATE TABLE IF NOT EXISTS daily_payments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            employee_id INTEGER NOT NULL,
+            work_date TEXT NOT NULL,
+            amount REAL NOT NULL,
+            paid_at TEXT,
+            slip_path TEXT,
+            UNIQUE(employee_id, work_date),
+            FOREIGN KEY(employee_id) REFERENCES employees(id)
+        );
+        CREATE TABLE IF NOT EXISTS employee_documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            employee_id INTEGER NOT NULL,
+            doc_type TEXT NOT NULL,
+            file_path TEXT NOT NULL,
+            uploaded_at TEXT NOT NULL,
+            FOREIGN KEY(employee_id) REFERENCES employees(id)
+        );
+    """)
     conn.commit()
     conn.close()
 
