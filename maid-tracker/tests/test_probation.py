@@ -40,3 +40,13 @@ def test_probation_tally_stops_before_pass_date(db, monkeypatch):
     r = calc.compute_probation_tally(eid, date(2026, 6, 1), 400.0, up_to=date(2026, 6, 19))
     assert r["total_days"] == 1.0
     assert r["amount"] == 400.0
+
+
+def test_resign_uses_anchor_for_first_month_prorate(db, monkeypatch):
+    calc = _calc(monkeypatch)
+    eid = add_emp(db, name="C", start_date="2026-05-01", monthly_salary=15600,
+                  employment_status="active", monthly_start_date="2026-06-20")
+    anchor = date(2026, 6, 20)
+    r = calc.compute_resign_summary(eid, anchor, date(2026, 6, 30), 15600.0, holiday_mode="sunday")
+    assert r["daily_rate"] == 600.0
+    assert r["base_salary"] == 5400.0
