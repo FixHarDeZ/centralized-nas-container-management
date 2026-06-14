@@ -33,6 +33,7 @@ from calc import (
     compute_overall_balance,
     compute_resign_summary,
     compute_probation_resign,
+    compute_probation_tally,
     compute_leave_deduction,
     compute_monthly_leave_balance,
 )
@@ -1207,6 +1208,42 @@ def get_summary(emp_id: int, year: int, month: int):
     holiday_mode = emp.get("holiday_mode") or "sunday"
     today        = date.today()
 
+    # ── Probation: daily pay only — no holiday/leave/monthly salary ──
+    if emp.get("employment_status") == "probation":
+        rate = emp.get("probation_daily_rate") or 0.0
+        _, n_p = calendar.monthrange(year, month)
+        m_start = max(date(year, month, 1), start_date)
+        m_end   = min(date(year, month, n_p), today)
+        tally = (compute_probation_tally(emp_id, m_start, rate, up_to=m_end)
+                 if m_end >= m_start else {"total_days": 0.0, "amount": 0.0})
+        paid_rows = conn.execute(
+            "SELECT amount FROM daily_payments "
+            "WHERE employee_id=? AND work_date LIKE ? AND paid_at IS NOT NULL",
+            (emp_id, f"{year}-{month:02d}-%"),
+        ).fetchall()
+        conn.close()
+        paid_amount = round(sum(r["amount"] for r in paid_rows), 2)
+        return {
+            "year": year, "month": month,
+            "employee_name": emp["name"],
+            "employment_status": "probation",
+            "holiday_mode": holiday_mode,
+            "monthly_salary": emp["monthly_salary"],
+            "probation_daily_rate": round(rate, 2),
+            "working_days_in_month": working_days_in_month(year, month),
+            "daily_rate": round(rate, 2),
+            "base_salary": tally["amount"],
+            "work_days": tally["total_days"],
+            "leave_days": 0, "holiday_days": 0, "compensatory_days": 0,
+            "balance": 0, "carryover_balance": 0, "cumulative_balance": 0,
+            "leave_deduction_days": 0.0, "deduction_amount": 0.0,
+            "money_owed": 0, "money_credit": 0,
+            "actual_pay": tally["amount"],
+            "total_earned": tally["amount"],
+            "total_paid": paid_amount,
+            "total_unpaid": round(tally["amount"] - paid_amount, 2),
+        }
+
     all_rows = conn.execute(
         "SELECT work_date, status, half_day FROM attendance WHERE employee_id=? AND work_date <= ?",
         (emp_id, f"{year}-{month:02d}-31"),
@@ -1359,6 +1396,34 @@ def get_overall(emp_id: int):
     anchor = date.fromisoformat(emp["monthly_start_date"]) if emp.get("monthly_start_date") else start_date
     today = date.today()
     end = date.fromisoformat(emp["end_date"]) if emp.get("end_date") else today
+
+    # ── Probation: daily pay only — no holiday/leave/monthly salary ──
+    if emp.get("employment_status") == "probation":
+        rate = emp.get("probation_daily_rate") or 0.0
+        tally = compute_probation_tally(emp_id, start_date, rate, up_to=end)
+        paid_rows = conn.execute(
+            "SELECT amount FROM daily_payments WHERE employee_id=? AND paid_at IS NOT NULL",
+            (emp_id,),
+        ).fetchall()
+        conn.close()
+        paid_amount = round(sum(r["amount"] for r in paid_rows), 2)
+        return {
+            "start_date": emp["start_date"],
+            "employment_status": "probation",
+            "holiday_mode": emp.get("holiday_mode") or "sunday",
+            "probation_daily_rate": round(rate, 2),
+            "total_days_employed": (end - start_date).days + 1,
+            "total_work_days": tally["total_days"],
+            "total_leave_days": 0,
+            "total_holiday_days": 0,
+            "total_compensatory_days": 0,
+            "overall_balance": 0,
+            "daily_rate": round(rate, 2),
+            "balance_amount": 0,
+            "total_earned": tally["amount"],
+            "total_paid": paid_amount,
+            "total_unpaid": round(tally["amount"] - paid_amount, 2),
+        }
 
     rows = conn.execute(
         "SELECT work_date, status, half_day FROM attendance WHERE employee_id=?", (emp_id,)
@@ -1907,6 +1972,30 @@ def export_payslip(emp_id: int, year: int, month: int):
         "", "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
         "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม",
     ]
+
+    # ── Probation: daily-pay payslip (no monthly salary framing) ──
+    if s.get("employment_status") == "probation":
+        output = io.StringIO()
+        w = csv.writer(output)
+        w.writerow(["ใบรับเงินรายวัน (ทดลองงาน)"])
+        w.writerow([])
+        w.writerow(["ลูกจ้าง", s["employee_name"]])
+        w.writerow(["เดือน", f"{thai_months[month]} {year + 543}"])
+        w.writerow(["สถานะ", "ทดลองงาน (จ่ายรายวัน)"])
+        w.writerow([])
+        w.writerow(["รายการ", "จำนวน"])
+        w.writerow(["อัตราต่อวัน (บาท)", f'{s["daily_rate"]:.2f}'])
+        w.writerow(["วันทำงานจริง", s["work_days"]])
+        w.writerow(["ยอดสะสมทั้งเดือน (บาท)", f'{s["total_earned"]:.2f}'])
+        w.writerow(["จ่ายแล้ว (บาท)", f'{s["total_paid"]:.2f}'])
+        w.writerow(["ค้างจ่าย (บาท)", f'{s["total_unpaid"]:.2f}'])
+        filename = f"payslip_{s['employee_name']}_{year}-{month:02d}.csv"
+        encoded = quote(filename, safe="")
+        return StreamingResponse(
+            iter([output.getvalue().encode("utf-8-sig")]),
+            media_type="text/csv; charset=utf-8-sig",
+            headers={"Content-Disposition": f"attachment; filename=\"payslip.csv\"; filename*=UTF-8''{encoded}"},
+        )
 
     output = io.StringIO()
     w = csv.writer(output)
