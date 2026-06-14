@@ -638,6 +638,16 @@ hr { border-color: var(--border); opacity: 1; }
 .status-before_start .status-label,
 .status-future .status-label { background: transparent; color: var(--st-empty-fg); }
 
+/* Probation: unmarked day (must be clicked to mark as worked) */
+.status-unmarked {
+  background: var(--st-empty-bg);
+  border-style: dashed;
+  border-color: var(--st-empty-bd);
+  color: var(--st-empty-fg);
+}
+.status-unmarked .day-num    { color: var(--st-empty-fg); }
+.status-unmarked .status-label { background: transparent; color: var(--st-empty-fg); }
+
 /* ===== Month navigation ===== */
 .month-nav {
   display: flex;

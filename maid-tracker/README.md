@@ -61,6 +61,25 @@ TLS is terminated by Synology Reverse Proxy — the nginx sidecar handles Authel
 - Mark paid / unmark with timestamp
 - Alert showing pending unpaid periods
 
+### 🧪 Probation Mode *(daily pay for new staff)*
+- Start a new employee in **probation** (`employment_status='probation'`) — pay is **daily** at a fixed `probation_daily_rate` set at creation
+- During probation: **leave / compensatory / holiday are disabled** (calendar shows unmarked days; API + LINE webhook reject leave); only explicitly-marked `work` days count
+- Pay tracked per work day in the **Daily Pay** view — toggle each day paid (amount snapshot at the daily rate)
+- **Pass probation** button → set the pass date → employee switches to monthly salary mode **immediately**; leave + monthly periods turn on
+- The **transition month** is split at the pass date: days before = daily pay, days from the pass date on = monthly salary **pro-rated** (`monthly_salary ÷ Mon–Sat days × billable days from pass date`). No double-pay, no gap
+- Monthly logic anchors on `monthly_start_date or start_date`, so leave accrual and proration begin at the pass date — not the original start date. Existing (non-probation) employees are unaffected
+- Resign during probation settles only **unpaid** work days × daily rate (no monthly base)
+
+### 💳 Payment Method & Slips
+- Each employee has a **payment method**: `cash` or `transfer`
+- For `transfer`, an **attach-slip** button appears on every payment (daily probation days + monthly periods) — uploads an image/PDF stored under `/data/slips`
+- Slips are served behind the stack's basic auth
+
+### 🪪 ID / Passport Documents
+- Upload **multiple** ID-card / passport images per employee (added at edit time), stored under `/data/documents`
+- List, view, and delete documents from the employee form
+- **Note:** `/data/slips` and `/data/documents` are **not** included in the SQLite auto-backup
+
 ### 🚦 Max Leave Carry Cap *(optional per employee)*
 - Set a **max leave carry** (days) on each employee — leave the field blank for unlimited accumulation (default behaviour)
 - At the end of each month (Period 2), the system checks the employee's cumulative leave debt after accounting for all previous months' caps

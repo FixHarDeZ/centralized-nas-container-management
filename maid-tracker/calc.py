@@ -34,6 +34,49 @@ def daily_rate(monthly_salary: float, year: int, month: int) -> float:
     return monthly_salary / wd if wd else 0.0
 
 
+# ── Probation / monthly day boundary ──────────────────────────
+
+def is_probation_day(d: date, monthly_start_date: date | None) -> bool:
+    """A day is a probation (daily-pay) day iff not yet passed, or strictly before pass date."""
+    return monthly_start_date is None or d < monthly_start_date
+
+
+def probation_up_to(monthly_start_date: date | None, today: date) -> date:
+    """Upper bound (inclusive) for probation tally: day before pass date, else today."""
+    if monthly_start_date is None:
+        return today
+    return min(today, monthly_start_date - timedelta(days=1))
+
+
+def compute_probation_tally(
+    emp_id: int,
+    start_date: date,
+    probation_daily_rate: float,
+    up_to: date | None = None,
+) -> dict:
+    """
+    Probation pay = sum of attendance rows status='work' (full=1.0, half=0.5)
+    in [start_date, up_to] × probation_daily_rate.
+    No default fill — only explicitly marked work days count. Leave/comp ignored.
+    """
+    end = up_to or date.today()
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT work_date, status, half_day FROM attendance "
+        "WHERE employee_id=? AND status='work' AND work_date >= ? AND work_date <= ?",
+        (emp_id, start_date.isoformat(), end.isoformat()),
+    ).fetchall()
+    conn.close()
+    total = 0.0
+    for r in rows:
+        total += 0.5 if r["half_day"] else 1.0
+    return {
+        "total_days": round(total, 2),
+        "amount": round(total * probation_daily_rate, 2),
+    }
+
+
 # ── Monthly-mode leave balance ────────────────────────────────
 
 def compute_monthly_leave_balance(
@@ -252,6 +295,33 @@ def compute_leave_deduction(
         "deduction_days":    round(deduction_days, 2),
         "deduction_amount":  deduction_amount,
         "effective_balance": round(effective_balance, 2),
+    }
+
+
+def compute_probation_resign(emp_id, start_date, end_date, probation_daily_rate) -> dict:
+    """
+    Resign while still in probation: settle only UNPAID marked work days × daily rate
+    (days already toggled paid in daily_payments are excluded). No monthly base.
+    """
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT a.work_date, a.half_day FROM attendance a "
+        "LEFT JOIN daily_payments dp "
+        "  ON dp.employee_id = a.employee_id AND dp.work_date = a.work_date AND dp.paid_at IS NOT NULL "
+        "WHERE a.employee_id=? AND a.status='work' "
+        "  AND a.work_date >= ? AND a.work_date <= ? AND dp.id IS NULL",
+        (emp_id, start_date.isoformat(), end_date.isoformat()),
+    ).fetchall()
+    conn.close()
+    total = sum(0.5 if r["half_day"] else 1.0 for r in rows)
+    return {
+        "total_days":     round(total, 2),
+        "daily_rate":     round(probation_daily_rate, 2),
+        "base_salary":    0.0,
+        "balance_amount": 0.0,
+        "final_amount":   round(total * probation_daily_rate, 2),
+        "probation":      True,
     }
 
 
