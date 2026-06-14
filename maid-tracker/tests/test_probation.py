@@ -17,3 +17,26 @@ def test_probation_day_boundary(db, monkeypatch):
     assert calc.is_probation_day(date(2026, 6, 19), date(2026, 6, 20)) is True
     assert calc.is_probation_day(date(2026, 6, 20), date(2026, 6, 20)) is False
     assert calc.is_probation_day(date(2026, 6, 21), date(2026, 6, 20)) is False
+
+
+def test_probation_tally_counts_marked_work_only(db, monkeypatch):
+    calc = _calc(monkeypatch)
+    eid = add_emp(db, name="A", start_date="2026-06-01", monthly_salary=15000,
+                  employment_status="probation", probation_daily_rate=400)
+    add_att(db, eid, "2026-06-01", "work")
+    add_att(db, eid, "2026-06-02", "work", half_day=1)
+    add_att(db, eid, "2026-06-04", "leave")
+    r = calc.compute_probation_tally(eid, date(2026, 6, 1), 400.0, up_to=date(2026, 6, 30))
+    assert r["total_days"] == 1.5
+    assert r["amount"] == 600.0
+
+
+def test_probation_tally_stops_before_pass_date(db, monkeypatch):
+    calc = _calc(monkeypatch)
+    eid = add_emp(db, name="B", start_date="2026-06-01", monthly_salary=15000,
+                  employment_status="probation", probation_daily_rate=400)
+    add_att(db, eid, "2026-06-18", "work")
+    add_att(db, eid, "2026-06-20", "work")
+    r = calc.compute_probation_tally(eid, date(2026, 6, 1), 400.0, up_to=date(2026, 6, 19))
+    assert r["total_days"] == 1.0
+    assert r["amount"] == 400.0
