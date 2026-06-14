@@ -144,7 +144,6 @@ const TRANSLATIONS = {
     dailyPayTotal: "รวมจ่ายรายวัน",
     slipUploadBtn: "แนบสลิป",
     slipViewBtn: "ดูสลิป",
-    slipUploadOk: "แนบสลิปแล้ว",
     slipPickFirst: "กรุณาเลือกไฟล์สลิปก่อน",
     // Confirmations
     confirmLeave: (d) => `บันทึก "ลา" วันที่ ${d}?`,
@@ -323,7 +322,6 @@ const TRANSLATIONS = {
     dailyPayTotal: "Daily pay total",
     slipUploadBtn: "Attach slip",
     slipViewBtn: "View slip",
-    slipUploadOk: "Slip attached",
     slipPickFirst: "Please choose a slip file first",
     // Confirmations
     confirmLeave: (d) => `Mark as "Leave" on ${d}?`,
@@ -848,7 +846,6 @@ async function viewEmployeeForm(id) {
       }
     }
     // Expose for inline delete handler; re-render only the list.
-    window.__refreshDocs = refreshDocs;
     window.deleteDocument = async function (empId, docId) {
       if (!confirm(t("docDeleteConfirm"))) return;
       try {
@@ -1685,10 +1682,82 @@ async function viewPayments(id) {
   let year  = +(params.get("y") || today.getFullYear());
   let month = +(params.get("m") || today.getMonth() + 1);
 
-  const [emp, payments] = await Promise.all([
+  const [emp, payments, dailyPayments] = await Promise.all([
     api.get(`/api/employees/${id}`),
     api.get(`/api/employees/${id}/payments?year=${year}&month=${month}`),
+    api.get(`/api/employees/${id}/daily-payments?year=${year}&month=${month}`).catch(() => []),
   ]);
+
+  const isTransfer = emp.payment_method === "transfer";
+
+  // Slip thumbnail/link for a given slip_path (served at /api/slips/{slip_path})
+  function slipLink(slipPath) {
+    if (!slipPath) return "";
+    const url   = `/api/slips/${slipPath}`;
+    const isImg = /\.(png|jpe?g|gif|webp|bmp)$/i.test(slipPath);
+    const thumb = isImg
+      ? `<img src="${escHtml(url)}" alt="" style="width:36px;height:36px;object-fit:cover;border-radius:5px">`
+      : `<i class="bi bi-receipt fs-5 text-secondary"></i>`;
+    return `<a href="${escHtml(url)}" target="_blank" rel="noopener" class="d-inline-flex align-items-center gap-1 ms-1" title="${t("slipViewBtn")}">${thumb}</a>`;
+  }
+
+  // ─── Daily-payment row (probation) ───────────────────────
+  function dailyRow(d) {
+    const isPaid = d.paid;
+    const slipBtn = isTransfer ? `
+      <input type="file" class="d-none" id="dslip_${d.work_date}" onchange="uploadDailySlip(${id}, '${d.work_date}', this)">
+      <button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('dslip_${d.work_date}').click()">
+        <i class="bi bi-paperclip me-1"></i>${t("slipUploadBtn")}
+      </button>
+      ${slipLink(d.slip_path)}` : "";
+    return `
+      <tr>
+        <td class="ps-3">${formatDate(d.work_date)}</td>
+        <td class="text-center">${d.fraction}</td>
+        <td class="text-end fw-semibold">${fmtMoney(d.amount)} ${t("baht")}</td>
+        <td class="text-center">
+          <span class="badge ${isPaid ? "bg-success" : "bg-warning text-dark"}">${isPaid ? t("badgePaid") : t("badgePending")}</span>
+        </td>
+        <td class="text-end pe-3">
+          <div class="d-flex justify-content-end align-items-center gap-2 flex-wrap">
+            <button class="btn btn-sm ${isPaid ? "btn-outline-secondary" : "btn-primary"}"
+                    onclick="toggleDailyPayment(${id}, '${d.work_date}', this)">
+              <i class="bi ${isPaid ? "bi-x-circle" : "bi-check-circle"} me-1"></i>${isPaid ? t("btnUnmarkPaid") : t("btnMarkPaid")}
+            </button>
+            ${slipBtn}
+          </div>
+        </td>
+      </tr>`;
+  }
+
+  const dailyTotal = dailyPayments.reduce((s, d) => s + d.amount, 0);
+  const dailySection = dailyPayments.length === 0 ? "" : `
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-warning bg-opacity-25 fw-bold py-2 d-flex align-items-center gap-2">
+        <i class="bi bi-hourglass-split text-warning"></i>${t("dailyPayTitle")}
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-sm mb-0 align-middle">
+          <thead class="table-light">
+            <tr>
+              <th class="ps-3">${t("dailyPayDate")}</th>
+              <th class="text-center">${t("dailyPayFraction")}</th>
+              <th class="text-end">${t("dailyPayAmount")}</th>
+              <th class="text-center"></th>
+              <th class="text-end pe-3"></th>
+            </tr>
+          </thead>
+          <tbody>${dailyPayments.map(dailyRow).join("")}</tbody>
+          <tfoot class="table-light fw-bold">
+            <tr>
+              <td class="ps-3" colspan="2">${t("dailyPayTotal")}</td>
+              <td class="text-end">${fmtMoney(dailyTotal)} ${t("baht")}</td>
+              <td colspan="2"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>`;
 
   function periodCard(p) {
     const isPaid    = p.paid;
@@ -1732,15 +1801,26 @@ async function viewPayments(id) {
                       onclick="togglePayment(${id}, ${year}, ${month}, ${p.period}, this)">
                 <i class="bi ${isPaid ? "bi-x-circle" : "bi-check-circle"} me-1"></i>${isPaid ? t("btnUnmarkPaid") : t("btnMarkPaid")}
               </button>
+              ${isTransfer ? `
+              <div class="mt-2 d-flex justify-content-end align-items-center gap-1 flex-wrap">
+                <input type="file" class="d-none" id="pslip_${p.period}" onchange="uploadPeriodSlip(${id}, ${p.period}, ${year}, ${month}, this)">
+                <button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('pslip_${p.period}').click()">
+                  <i class="bi bi-paperclip me-1"></i>${t("slipUploadBtn")}
+                </button>
+                ${slipLink(p.slip_path)}
+              </div>` : ""}
             </div>
           </div>
         </div>
       </div>`;
   }
 
-  const cards = payments.length === 0
+  // Monthly period cards (empty when probation). Empty-state shown only when
+  // BOTH daily-payments AND periods are empty for this month.
+  const periodCards = payments.map(periodCard).join("");
+  const emptyState = (payments.length === 0 && dailyPayments.length === 0)
     ? `<div class="text-center text-muted py-5"><i class="bi bi-calendar-x fs-1 d-block mb-2"></i>${t("noPaymentMonth")}</div>`
-    : payments.map(periodCard).join("");
+    : "";
 
   const allPaid = payments.length > 0 && payments.every(p => p.paid);
   const pending = payments.filter(p => !p.paid);
@@ -1767,10 +1847,13 @@ async function viewPayments(id) {
       </div>
     </div>
 
+    ${dailySection}
+
     ${allPaid ? `<div class="alert alert-success d-flex align-items-center gap-2 mb-3"><i class="bi bi-check-circle-fill fs-5"></i> ${t("alertAllPaid")}</div>` : ""}
     ${pending.length > 0 ? `<div class="alert alert-warning d-flex align-items-center gap-2 mb-3"><i class="bi bi-clock fs-5"></i> ${t("alertPending", pending.length, pending.reduce((s, p) => s + p.amount, 0))}</div>` : ""}
 
-    ${cards}
+    ${periodCards}
+    ${emptyState}
 
     <div class="text-muted small mt-2">
       <i class="bi bi-info-circle me-1"></i>
@@ -1794,6 +1877,48 @@ async function togglePayment(empId, year, month, period, btn) {
   } catch (e) {
     alert(t("errSave") + e.message);
     btn.disabled = false;
+  }
+}
+
+// ─── Daily payments (probation) ──────────────────────────────
+
+async function toggleDailyPayment(empId, workDate, btn) {
+  btn.disabled = true;
+  try {
+    await api.post(`/api/employees/${empId}/daily-payments/${workDate}/toggle`, {});
+    await viewPayments(empId);
+  } catch (e) {
+    alert(t("errSave") + e.message);
+    btn.disabled = false;
+  }
+}
+
+// Multipart slip upload: no Content-Type header — browser sets the boundary.
+async function uploadDailySlip(empId, workDate, input) {
+  const file = input.files && input.files[0];
+  if (!file) { alert(t("slipPickFirst")); return; }
+  const fd = new FormData();
+  fd.append("file", file);
+  try {
+    const r = await fetch(`/api/employees/${empId}/daily-payments/${workDate}/slip`, { method: "POST", body: fd });
+    if (!r.ok) throw new Error(await r.text());
+    await viewPayments(empId);
+  } catch (e) {
+    alert(t("errSave") + e.message);
+  }
+}
+
+async function uploadPeriodSlip(empId, period, year, month, input) {
+  const file = input.files && input.files[0];
+  if (!file) { alert(t("slipPickFirst")); return; }
+  const fd = new FormData();
+  fd.append("file", file);
+  try {
+    const r = await fetch(`/api/employees/${empId}/payments/${period}/slip?year=${year}&month=${month}`, { method: "POST", body: fd });
+    if (!r.ok) throw new Error(await r.text());
+    await viewPayments(empId);
+  } catch (e) {
+    alert(t("errSave") + e.message);
   }
 }
 
