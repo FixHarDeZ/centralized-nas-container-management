@@ -34,6 +34,7 @@ from calc import (
     compute_resign_summary,
     compute_probation_resign,
     compute_probation_tally,
+    probation_worked_fraction,
     compute_leave_deduction,
     compute_monthly_leave_balance,
 )
@@ -756,7 +757,8 @@ def get_attendance(emp_id: int, year: int, month: int):
             r = saved[ds]
             result.append({"date": ds, "status": r["status"], "note": r["note"], "half_day": bool(r["half_day"]), "is_future": is_future})
         else:
-            default = "unmarked" if is_probation else default_status(d, holiday_mode)
+            # Probation: every day present by default (paid daily); mark absences only.
+            default = "work" if is_probation else default_status(d, holiday_mode)
             result.append({"date": ds, "status": default, "note": None, "half_day": False, "is_future": is_future})
     return result
 
@@ -771,9 +773,10 @@ def upsert_attendance(emp_id: int, att: AttendanceUpdate):
         conn.close()
         raise HTTPException(404, "Employee not found")
     emp = dict(emp)
-    if emp.get("employment_status") == "probation" and att.status in ("leave", "compensatory", "holiday"):
+    # Probation: 'leave' is repurposed as "ขาด/absent" (unpaid that day). Comp/holiday N/A.
+    if emp.get("employment_status") == "probation" and att.status in ("compensatory", "holiday"):
         conn.close()
-        raise HTTPException(400, "Leave disabled during probation")
+        raise HTTPException(400, "Compensatory/holiday not applicable during probation")
     holiday_mode = (emp["holiday_mode"] or "sunday")
     # Monthly mode: reject compensatory / holiday — those concepts don't apply
     if holiday_mode == "monthly" and att.status in ("compensatory", "holiday"):
@@ -798,6 +801,10 @@ def upsert_attendance(emp_id: int, att: AttendanceUpdate):
 
     start_date     = date.fromisoformat(emp["start_date"])
     monthly_salary = emp["monthly_salary"]
+
+    # Probation uses daily pay — skip monthly-framed LINE leave/cancel notifications.
+    if emp.get("employment_status") == "probation":
+        return {"message": "saved"}
 
     if att.status in ("leave", "compensatory"):
         # New leave/comp recorded
@@ -1126,32 +1133,40 @@ def get_daily_payments(emp_id: int, year: int, month: int):
         conn.close(); raise HTTPException(404, "Employee not found")
     emp = dict(emp)
     rate = emp.get("probation_daily_rate") or 0
+    start_date = date.fromisoformat(emp["start_date"])
+    today = date.today()
+    _, n = calendar.monthrange(year, month)
+    win_start = max(date(year, month, 1), start_date)
+    win_end   = min(date(year, month, n), today)
     # cap: probation days only — strictly before monthly_start_date (if passed)
-    cap = emp.get("monthly_start_date")  # ISO str or None
-    cap_clause = " AND work_date < ?" if cap else ""
-    params = [emp_id, f"{year}-{month:02d}-%"] + ([cap] if cap else [])
-    att = conn.execute(
-        "SELECT work_date, half_day FROM attendance "
-        "WHERE employee_id=? AND status='work' AND work_date LIKE ?" + cap_clause + " ORDER BY work_date",
-        tuple(params),
-    ).fetchall()
+    cap = emp.get("monthly_start_date")
+    if cap:
+        win_end = min(win_end, date.fromisoformat(cap) - timedelta(days=1))
+    att = {r["work_date"]: {"status": r["status"], "half_day": bool(r["half_day"])}
+           for r in conn.execute(
+               "SELECT work_date, status, half_day FROM attendance WHERE employee_id=? AND work_date LIKE ?",
+               (emp_id, f"{year}-{month:02d}-%")).fetchall()}
     paid = {r["work_date"]: dict(r) for r in conn.execute(
         "SELECT work_date, amount, paid_at, slip_path FROM daily_payments WHERE employee_id=? AND work_date LIKE ?",
         (emp_id, f"{year}-{month:02d}-%"),
     ).fetchall()}
     conn.close()
     out = []
-    for a in att:
-        frac = 0.5 if a["half_day"] else 1.0
-        p = paid.get(a["work_date"])
-        out.append({
-            "work_date": a["work_date"],
-            "fraction": frac,
-            "amount": round((p["amount"] if (p and p["paid_at"]) else rate * frac), 2),
-            "paid": bool(p and p["paid_at"]),
-            "paid_at": p["paid_at"] if p else None,
-            "slip_path": p["slip_path"] if p else None,
-        })
+    d = win_start
+    while d <= win_end:
+        ds = d.isoformat()
+        frac = probation_worked_fraction(att.get(ds))   # default present; 'leave' = absent
+        if frac > 0:
+            p = paid.get(ds)
+            out.append({
+                "work_date": ds,
+                "fraction": frac,
+                "amount": round((p["amount"] if (p and p["paid_at"]) else rate * frac), 2),
+                "paid": bool(p and p["paid_at"]),
+                "paid_at": p["paid_at"] if p else None,
+                "slip_path": p["slip_path"] if p else None,
+            })
+        d += timedelta(days=1)
     return out
 
 
@@ -1166,12 +1181,14 @@ def toggle_daily_payment(emp_id: int, work_date: str):
     cap = emp.get("monthly_start_date")
     if cap and work_date >= cap:
         conn.close(); raise HTTPException(400, "Date is in monthly-salary period, not probation")
-    att = conn.execute(
-        "SELECT half_day FROM attendance WHERE employee_id=? AND work_date=? AND status='work'",
+    # Default model: every day present unless marked absent ('leave').
+    arow = conn.execute(
+        "SELECT status, half_day FROM attendance WHERE employee_id=? AND work_date=?",
         (emp_id, work_date),
     ).fetchone()
-    if not att:
-        conn.close(); raise HTTPException(400, "No marked work day on that date")
+    frac = probation_worked_fraction(dict(arow) if arow else None)
+    if frac <= 0:
+        conn.close(); raise HTTPException(400, "Day is marked absent")
     existing = conn.execute(
         "SELECT id, paid_at FROM daily_payments WHERE employee_id=? AND work_date=?",
         (emp_id, work_date),
@@ -1180,7 +1197,6 @@ def toggle_daily_payment(emp_id: int, work_date: str):
         conn.execute("UPDATE daily_payments SET paid_at=NULL WHERE id=?", (existing["id"],))
         paid_at = None
     else:
-        frac = 0.5 if att["half_day"] else 1.0
         amount = round((emp.get("probation_daily_rate") or 0) * frac, 2)
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
         conn.execute(

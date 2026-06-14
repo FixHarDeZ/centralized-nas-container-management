@@ -2,6 +2,21 @@
 
 ---
 
+## 2026-06-14 (เพิ่มเติม) — Probation: default-present model + summary fix
+
+### 2 ฟีดแบ็คจาก user (เทสต์ live)
+1. **วันหยุดต้องไม่ได้รับช่วงโปร:** `get_summary`/`get_overall` เดิมใช้ `default_status` (sunday) → probation ได้ holiday + เงินเดือนเต็มผิด. แก้: probation branch (นับเฉพาะ daily, ไม่มี holiday/monthly), `export_payslip` ออก CSV รายวัน, frontend detail/summary/list/payments render daily framing.
+2. **เปลี่ยน model เป็น default-present:** user ขอให้ทุกวัน default = work (มาทุกวันรวมอาทิตย์), mark เฉพาะวัน **ขาด**. 
+   - `compute_probation_tally` rewrite: ทุกวันใน window = 1.0, ลบวันขาด (`probation_worked_fraction`: leave full→0, half→0.5)
+   - วันขาด = attendance `leave` (repurpose ช่วงโปร). `upsert_attendance` ยอม leave, reject comp/holiday. skip LINE notify ช่วงโปร
+   - `get_attendance` default = work ทุกวัน ≤ วันนี้. cycleDay UI: work↔ขาด (full/half), คลิกกลับ = DELETE row
+   - `get_daily_payments`: iterate วัน default-present. `toggle_daily_payment` จ่ายวัน default ได้ (ไม่ต้องมี row), จ่ายวันขาดไม่ได้
+   - `compute_probation_resign`: unpaid worked days (default-present − ขาด − paid)
+
+### Verify
+- pytest 9 passed (tally default-present, resign, summary/overall/payslip views)
+- E2E: default 31 วัน → mark ขาด → 30, จ่ายวัน default ได้, จ่ายวันขาด 400, summary work_days=30 earned=15000 holiday=0
+
 ## 2026-06-14 — Probation mode + slip/document upload
 
 ### งานที่ทำ (brainstorm → spec → plan → subagent-driven impl)
