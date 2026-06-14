@@ -92,6 +92,13 @@ const TRANSLATIONS = {
     btnPassProbation: "ผ่านโปร",
     btnMarkAttendance: "ลงเวลาทำงาน",
     statusUnmarked: "ยังไม่ลง",
+    btnDailyPay: "จ่ายเงินรายวัน",
+    detailEarned: "ยอดสะสม", detailUnpaid: "ค้างจ่าย", detailPaid: "จ่ายแล้ว",
+    labelRatePerDay: "บาท/วัน",
+    probBannerTitle: "โหมดทดลองงาน — จ่ายรายวัน",
+    probBannerNote: (paid, unpaid) => `จ่ายแล้ว ${fmtMoney(paid)} บาท · ค้างจ่าย ${fmtMoney(unpaid)} บาท`,
+    probSummaryTitle: "สรุปรายวัน (ทดลองงาน)",
+    dailyPayHint: "ยังไม่มีวันทำงาน — ไปที่ปฏิทินเพื่อลงเวลาทำงานก่อน",
     passProbationPrompt: (n) => `วันที่ ${n} ผ่านทดลองงาน (YYYY-MM-DD):`,
     passProbationConfirm: (n, d) => `ยืนยันให้ "${n}" ผ่านทดลองงานวันที่ ${d}?`,
     btnResign: "แจ้งลาออก", btnCancelResign: "ยกเลิกลาออก",
@@ -272,6 +279,13 @@ const TRANSLATIONS = {
     btnPassProbation: "Pass probation",
     btnMarkAttendance: "Mark attendance",
     statusUnmarked: "Unmarked",
+    btnDailyPay: "Daily pay",
+    detailEarned: "Earned", detailUnpaid: "Unpaid", detailPaid: "Paid",
+    labelRatePerDay: "Baht/day",
+    probBannerTitle: "Probation — daily pay",
+    probBannerNote: (paid, unpaid) => `Paid ${fmtMoney(paid)} · Unpaid ${fmtMoney(unpaid)}`,
+    probSummaryTitle: "Daily summary (probation)",
+    dailyPayHint: "No work days yet — open the calendar to mark attendance first",
     passProbationPrompt: (n) => `Pass-probation date for ${n} (YYYY-MM-DD):`,
     passProbationConfirm: (n, d) => `Confirm "${n}" passes probation on ${d}?`,
     btnResign: "Record Resignation", btnCancelResign: "Cancel Resignation",
@@ -545,6 +559,7 @@ async function viewList() {
               <div class="flex-grow-1 overflow-hidden">
                 <div class="fw-bold fs-5 text-truncate" style="color:var(--text)">
                   ${e.name}
+                  ${e.employment_status === "probation" ? `<span class="badge ms-1" style="font-size:0.62rem;background:#fef3c7;color:#b45309">${t("probationBadge")}</span>` : ""}
                   ${resigned ? `<span class="badge ms-1" style="font-size:0.62rem;background:#e2e8f0;color:#64748b">${t("resignedBadge")}</span>` : ""}
                 </div>
                 <div class="small" style="color:var(--text-muted)">${dispNat(e.nationality)}${e.age ? " · " + e.age + (currentLang === "th" ? " ปี" : " yrs") : ""}</div>
@@ -559,7 +574,9 @@ async function viewList() {
             </div>
             <div class="d-flex justify-content-between small mt-1">
               <span style="color:var(--text-muted)">${t("labelSalary")}</span>
-              <span class="fw-bold" style="color:var(--text)">${fmtMoney(e.monthly_salary)} ${t("baht")}</span>
+              ${e.employment_status === "probation"
+                ? `<span class="fw-bold" style="color:var(--text)">${fmtMoney(e.probation_daily_rate || 0)} ${t("labelRatePerDay")}</span>`
+                : `<span class="fw-bold" style="color:var(--text)">${fmtMoney(e.monthly_salary)} ${t("baht")}</span>`}
             </div>
           </div>
         </div>`;
@@ -899,6 +916,7 @@ async function viewEmployeeDetail(id) {
   const mo = today.getMonth() + 1;
   const resigned = !!emp.end_date;
 
+  const isProb   = emp.employment_status === "probation";
   const balClass = overall.overall_balance >= 0 ? "text-success" : "text-danger";
   const balIcon  = overall.overall_balance >= 0 ? "bi-piggy-bank-fill" : "bi-exclamation-triangle-fill";
 
@@ -958,6 +976,33 @@ async function viewEmployeeDetail(id) {
     </div>
 
     <!-- Stats row -->
+    ${isProb ? `
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-md-3">
+        <div class="stat-card">
+          <div class="stat-num" style="color:var(--primary)">${fmtDuration(overall.total_days_employed)}</div>
+          <div class="stat-label">${t("detailDuration")}</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="stat-card">
+          <div class="stat-num" style="color:var(--success)">${overall.total_work_days}</div>
+          <div class="stat-label">${t("detailWorkDays")}</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="stat-card">
+          <div class="stat-num" style="color:#0284c7">${fmtMoney(overall.total_earned)}</div>
+          <div class="stat-label">${t("detailEarned")}</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="stat-card">
+          <div class="stat-num" style="color:${overall.total_unpaid > 0 ? "var(--danger)" : "var(--success)"}">${fmtMoney(overall.total_unpaid)}</div>
+          <div class="stat-label">${t("detailUnpaid")}</div>
+        </div>
+      </div>
+    </div>` : `
     <div class="row g-3 mb-4">
       <div class="col-6 col-md-3">
         <div class="stat-card">
@@ -990,8 +1035,23 @@ async function viewEmployeeDetail(id) {
           <div class="stat-label">${t("detailCompDays")}</div>
         </div>
       </div>`}
-    </div>
+    </div>`}
 
+    <!-- Overall balance -->
+    ${isProb ? `
+    <div class="finance-banner mb-4">
+      <div class="d-flex align-items-center gap-3 flex-wrap">
+        <i class="bi bi-hourglass-split fs-2 text-warning"></i>
+        <div class="flex-grow-1">
+          <div class="fw-bold fs-5">${t("probBannerTitle")}</div>
+          <div class="text-muted small">${t("probBannerNote", overall.total_paid, overall.total_unpaid)}</div>
+        </div>
+        <div class="text-end">
+          <div class="fw-bold fs-4">${fmtMoney(overall.daily_rate)} ${t("labelRatePerDay")}</div>
+          <div class="text-muted small">${t("labelStartedOn")} ${formatDate(emp.start_date)}</div>
+        </div>
+      </div>
+    </div>` : `
     <!-- Overall balance -->
     <div class="finance-banner mb-4">
       <div class="d-flex align-items-center gap-3 flex-wrap">
@@ -1017,7 +1077,7 @@ async function viewEmployeeDetail(id) {
           <div class="text-muted small">${t("labelStartedOn")} ${formatDate(emp.start_date)}</div>
         </div>
       </div>
-    </div>
+    </div>`}
 
     <!-- Resign summary (shown only when resigned) -->
     ${resignSummary ? `
@@ -1081,14 +1141,14 @@ async function viewEmployeeDetail(id) {
       <div class="col-6 col-md-3">
         <button class="action-btn" onclick="navigate('/employee/${id}/summary?y=${yr}&m=${mo}')">
           <i class="bi bi-bar-chart-line action-btn-icon" style="color:var(--primary)"></i>
-          <span class="action-btn-label">${t("btnMonthlySummary")}</span>
+          <span class="action-btn-label">${isProb ? t("probSummaryTitle") : t("btnMonthlySummary")}</span>
           <span class="action-btn-sub">${monthLabel}</span>
         </button>
       </div>
       <div class="col-6 col-md-3">
         <button class="action-btn" onclick="navigate('/employee/${id}/payments?y=${yr}&m=${mo}')">
           <i class="bi bi-cash-coin action-btn-icon" style="color:var(--success)"></i>
-          <span class="action-btn-label">${t("btnPayment")}</span>
+          <span class="action-btn-label">${isProb ? t("btnDailyPay") : t("btnPayment")}</span>
           <span class="action-btn-sub">${monthLabel}</span>
         </button>
       </div>
@@ -1277,6 +1337,37 @@ async function viewSummary(id) {
   ]);
 
   const s = summary;
+
+  // ── Probation: daily-pay summary (no monthly salary / holiday) ──
+  if (s.employment_status === "probation") {
+    ROOT.innerHTML = `
+      <div class="page-breadcrumb mb-2">
+        <a href="#/" onclick="navigate('/')">${t("home")}</a> ›
+        <a href="#/employee/${id}" onclick="navigate('/employee/${id}')">${emp.name}</a> ›
+        ${t("probSummaryTitle")}
+      </div>
+      <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <h5 class="fw-bold mb-0"><i class="bi bi-hourglass-split me-2 text-warning"></i>${t("probSummaryTitle")} — ${t("months")[month]} ${year + t("yearOffset")}</h5>
+        <div class="month-nav">
+          <button class="btn btn-sm btn-outline-secondary" onclick="shiftSummary(${id}, ${year}, ${month}, -1)"><i class="bi bi-chevron-left"></i></button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="shiftSummary(${id}, ${year}, ${month}, 1)"><i class="bi bi-chevron-right"></i></button>
+          <button class="btn btn-sm btn-outline-success" onclick="navigate('/employee/${id}/attendance?y=${year}&m=${month}')"><i class="bi bi-calendar3 me-1"></i>${t("btnViewCalendar")}</button>
+        </div>
+      </div>
+      <div class="row g-3 mb-3">
+        <div class="col-6 col-md-3"><div class="stat-card bg-white"><div class="stat-num">${s.work_days}</div><div class="stat-label">${t("detailWorkDays")}</div></div></div>
+        <div class="col-6 col-md-3"><div class="stat-card bg-white"><div class="stat-num">${fmtMoney(s.daily_rate)}</div><div class="stat-label">${t("labelRatePerDay")}</div></div></div>
+        <div class="col-6 col-md-3"><div class="stat-card bg-white"><div class="stat-num" style="color:#0284c7">${fmtMoney(s.total_earned)}</div><div class="stat-label">${t("detailEarned")}</div></div></div>
+        <div class="col-6 col-md-3"><div class="stat-card bg-white"><div class="stat-num" style="color:${s.total_unpaid > 0 ? "var(--danger)" : "var(--success)"}">${fmtMoney(s.total_unpaid)}</div><div class="stat-label">${t("detailUnpaid")}</div></div></div>
+      </div>
+      <div class="finance-banner"><div class="d-flex align-items-center gap-3 flex-wrap">
+        <i class="bi bi-cash-coin fs-2 text-success"></i>
+        <div class="flex-grow-1"><div class="fw-bold fs-5">${t("probBannerTitle")}</div><div class="text-muted small">${t("probBannerNote", s.total_paid, s.total_unpaid)}</div></div>
+        <div class="text-end"><button class="btn btn-sm btn-primary" onclick="navigate('/employee/${id}/payments?y=${year}&m=${month}')"><i class="bi bi-cash-coin me-1"></i>${t("btnDailyPay")}</button></div>
+      </div></div>`;
+    return;
+  }
+
   const isCredit  = s.balance >= 0;
   const finClass  = isCredit ? "bg-success text-white" : "bg-danger text-white";
   ROOT.innerHTML = `
@@ -1761,13 +1852,17 @@ async function viewPayments(id) {
       </tr>`;
   }
 
+  const isProb = emp.employment_status === "probation";
   const dailyTotal = dailyPayments.reduce((s, d) => s + d.amount, 0);
-  const dailySection = dailyPayments.length === 0 ? "" : `
+  // Show the daily-pay section whenever there are rows OR the employee is in probation
+  // (so the daily-pay system is clearly present even before any day is marked).
+  const dailySection = (dailyPayments.length === 0 && !isProb) ? "" : `
     <div class="card border-0 shadow-sm mb-4">
       <div class="card-header bg-warning bg-opacity-25 fw-bold py-2 d-flex align-items-center gap-2">
         <i class="bi bi-hourglass-split text-warning"></i>${t("dailyPayTitle")}
       </div>
       <div class="card-body p-0">
+        ${dailyPayments.length === 0 ? `<div class="text-muted small p-3"><i class="bi bi-info-circle me-1"></i>${t("dailyPayHint")}</div>` : `
         <table class="table table-sm mb-0 align-middle">
           <thead class="table-light">
             <tr>
@@ -1786,7 +1881,7 @@ async function viewPayments(id) {
               <td colspan="2"></td>
             </tr>
           </tfoot>
-        </table>
+        </table>`}
       </div>
     </div>`;
 
