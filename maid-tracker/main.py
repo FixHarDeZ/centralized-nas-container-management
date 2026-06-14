@@ -612,11 +612,12 @@ def get_resign_summary(emp_id: int):
         raise HTTPException(400, "ยังไม่ได้แจ้งลาออก")
 
     start_date = date.fromisoformat(emp["start_date"])
+    anchor = date.fromisoformat(emp["monthly_start_date"]) if emp.get("monthly_start_date") else start_date
     end_date   = date.fromisoformat(emp["end_date"])
     conn.close()
 
     s = compute_resign_summary(
-        emp_id, start_date, end_date, emp["monthly_salary"],
+        emp_id, anchor, end_date, emp["monthly_salary"],
         holiday_mode=emp.get("holiday_mode", "sunday"),
         monthly_leave_days=emp.get("monthly_leave_days") or 0.0,
         max_leave_carry=emp.get("max_leave_carry"),
@@ -751,8 +752,9 @@ def get_leave_balance(emp_id: int):
     if (emp.get("holiday_mode") or "sunday") != "monthly":
         raise HTTPException(400, "leave-balance only applies to monthly holiday mode")
     start_date = date.fromisoformat(emp["start_date"])
+    anchor = date.fromisoformat(emp["monthly_start_date"]) if emp.get("monthly_start_date") else start_date
     lb = compute_monthly_leave_balance(
-        emp_id, start_date,
+        emp_id, anchor,
         emp.get("monthly_leave_days") or 0.0,
         emp.get("max_leave_carry"),
     )
@@ -948,6 +950,7 @@ def get_summary(emp_id: int, year: int, month: int):
         raise HTTPException(404, "Employee not found")
     emp = dict(emp)
     start_date   = date.fromisoformat(emp["start_date"])
+    anchor = date.fromisoformat(emp["monthly_start_date"]) if emp.get("monthly_start_date") else start_date
     holiday_mode = emp.get("holiday_mode") or "sunday"
     today        = date.today()
 
@@ -976,9 +979,9 @@ def get_summary(emp_id: int, year: int, month: int):
     dr = emp["monthly_salary"] / wd_month if wd_month else 0
 
     # Prorated salary for first partial month
-    if start_date.year == year and start_date.month == month:
+    if anchor.year == year and anchor.month == month:
         billable = sum(
-            1 for day in range(start_date.day, n + 1)
+            1 for day in range(anchor.day, n + 1)
             if date(year, month, day).weekday() != 6
         )
         base_salary = dr * billable
@@ -993,19 +996,19 @@ def get_summary(emp_id: int, year: int, month: int):
         # Balance up through end of this month (or today, whichever earlier)
         up_to_date = min(date(year, month, n), today)
         lb = compute_monthly_leave_balance(
-            emp_id, start_date, monthly_leave_days, max_leave_carry=max_carry, up_to=up_to_date
+            emp_id, anchor, monthly_leave_days, max_leave_carry=max_carry, up_to=up_to_date
         )
         # Balance at start of this month (for carryover display)
         prev_end = date(year, month, 1) - timedelta(days=1)
-        if prev_end >= start_date:
+        if prev_end >= anchor:
             lb_prev = compute_monthly_leave_balance(
-                emp_id, start_date, monthly_leave_days, max_leave_carry=max_carry, up_to=prev_end
+                emp_id, anchor, monthly_leave_days, max_leave_carry=max_carry, up_to=prev_end
             )
             carryover_balance = lb_prev["balance"]
         else:
             carryover_balance = 0.0
 
-        accrued_this_month = lb["total_accrued"] - (lb_prev["total_accrued"] if prev_end >= start_date else 0.0)
+        accrued_this_month = lb["total_accrued"] - (lb_prev["total_accrued"] if prev_end >= anchor else 0.0)
         leave_balance = lb["balance"]
         deduction_days = abs(leave_balance) if leave_balance < 0 else 0.0
         deduction_amount = round(deduction_days * dr, 2)
@@ -1041,9 +1044,9 @@ def get_summary(emp_id: int, year: int, month: int):
     # ── Sunday mode ───────────────────────────────────────────
     # Carryover: cumulative balance from months before this one
     carryover_balance = 0.0
-    if start_date < date(year, month, 1):
+    if anchor < date(year, month, 1):
         c_comp = c_leave = 0.0
-        d = start_date
+        d = anchor
         cutoff = date(year, month, 1)
         while d < cutoff and d <= today:
             rec = saved_all.get(d.isoformat(), {"status": default_status(d, "sunday"), "half_day": False})
@@ -1061,7 +1064,7 @@ def get_summary(emp_id: int, year: int, month: int):
     deduction_days   = 0.0
     deduction_amount = 0.0
     if max_carry is not None and max_carry >= 0:
-        ded = compute_leave_deduction(emp_id, year, month, max_carry, emp["monthly_salary"], start_date)
+        ded = compute_leave_deduction(emp_id, year, month, max_carry, emp["monthly_salary"], anchor)
         deduction_days   = ded["deduction_days"]
         deduction_amount = ded["deduction_amount"]
 
@@ -1100,6 +1103,7 @@ def get_overall(emp_id: int):
         raise HTTPException(404, "Employee not found")
     emp = dict(emp)
     start_date = date.fromisoformat(emp["start_date"])
+    anchor = date.fromisoformat(emp["monthly_start_date"]) if emp.get("monthly_start_date") else start_date
     today = date.today()
     end = date.fromisoformat(emp["end_date"]) if emp.get("end_date") else today
 
@@ -1128,7 +1132,7 @@ def get_overall(emp_id: int):
 
     if holiday_mode == "monthly":
         lb = compute_monthly_leave_balance(
-            emp_id, start_date,
+            emp_id, anchor,
             emp.get("monthly_leave_days") or 0.0,
             emp.get("max_leave_carry"),
             up_to=end,
