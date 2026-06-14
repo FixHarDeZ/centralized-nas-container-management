@@ -866,10 +866,11 @@ def get_payments(emp_id: int, year: int, month: int):
 
     # Paid status for this month
     paid_rows = conn.execute(
-        "SELECT period, paid_at FROM salary_payments WHERE employee_id=? AND year=? AND month=?",
+        "SELECT period, paid_at, slip_path FROM salary_payments WHERE employee_id=? AND year=? AND month=?",
         (emp_id, year, month),
     ).fetchall()
     paid_map = {r["period"]: r["paid_at"] for r in paid_rows}
+    slip_map = {r["period"]: r["slip_path"] for r in paid_rows}
 
     # Attendance for this month (to calculate actual_pay for period 2)
     att_rows = conn.execute(
@@ -925,6 +926,7 @@ def get_payments(emp_id: int, year: int, month: int):
             "deduction_amount": 0.0,
             "paid": bool(paid_map.get(1)),
             "paid_at": paid_map.get(1),
+            "slip_path": slip_map.get(1),
         })
 
     # Period 2 (last day or resignation date if resigned this month)
@@ -941,9 +943,42 @@ def get_payments(emp_id: int, year: int, month: int):
             "deduction_amount": round(p2_deduction_amount, 2),
             "paid": bool(paid_map.get(2)),
             "paid_at": paid_map.get(2),
+            "slip_path": slip_map.get(2),
         })
 
     return result
+
+
+@app.post("/api/employees/{emp_id}/payments/{period}/slip")
+def upload_period_slip(emp_id: int, period: int, year: int, month: int, file: UploadFile = File(...)):
+    if period not in (1, 2):
+        raise HTTPException(400, "Invalid period")
+    fname = _save_upload(file, _SLIP_DIR, f"slip_{emp_id}_{year}{month:02d}_p{period}")
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO salary_payments (employee_id, year, month, period, slip_path) VALUES (?,?,?,?,?) "
+        "ON CONFLICT(employee_id, year, month, period) DO UPDATE SET slip_path=excluded.slip_path",
+        (emp_id, year, month, period, fname),
+    )
+    conn.commit(); conn.close()
+    return {"slip_path": fname}
+
+
+@app.post("/api/employees/{emp_id}/daily-payments/{work_date}/slip")
+def upload_daily_slip(emp_id: int, work_date: str, file: UploadFile = File(...)):
+    fname = _save_upload(file, _SLIP_DIR, f"slip_{emp_id}_daily_{work_date}")
+    conn = get_db()
+    cur = conn.execute(
+        "UPDATE daily_payments SET slip_path=? WHERE employee_id=? AND work_date=?",
+        (fname, emp_id, work_date),
+    )
+    if cur.rowcount == 0:
+        conn.execute(
+            "INSERT INTO daily_payments (employee_id, work_date, amount, slip_path) VALUES (?,?,0,?)",
+            (emp_id, work_date, fname),
+        )
+    conn.commit(); conn.close()
+    return {"slip_path": fname}
 
 
 @app.post("/api/employees/{emp_id}/payments/{period}/toggle")
