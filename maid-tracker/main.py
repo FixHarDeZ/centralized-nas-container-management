@@ -672,6 +672,7 @@ def get_attendance(emp_id: int, year: int, month: int):
     emp          = dict(row)
     start_date   = date.fromisoformat(emp["start_date"])
     holiday_mode = emp.get("holiday_mode") or "sunday"
+    is_probation = emp.get("employment_status") == "probation"
     today        = date.today()
 
     rows = conn.execute(
@@ -695,7 +696,8 @@ def get_attendance(emp_id: int, year: int, month: int):
             r = saved[ds]
             result.append({"date": ds, "status": r["status"], "note": r["note"], "half_day": bool(r["half_day"]), "is_future": is_future})
         else:
-            result.append({"date": ds, "status": default_status(d, holiday_mode), "note": None, "half_day": False, "is_future": is_future})
+            default = "unmarked" if is_probation else default_status(d, holiday_mode)
+            result.append({"date": ds, "status": default, "note": None, "half_day": False, "is_future": is_future})
     return result
 
 
@@ -709,6 +711,9 @@ def upsert_attendance(emp_id: int, att: AttendanceUpdate):
         conn.close()
         raise HTTPException(404, "Employee not found")
     emp = dict(emp)
+    if emp.get("employment_status") == "probation" and att.status in ("leave", "compensatory", "holiday"):
+        conn.close()
+        raise HTTPException(400, "Leave disabled during probation")
     holiday_mode = (emp["holiday_mode"] or "sunday")
     # Monthly mode: reject compensatory / holiday — those concepts don't apply
     if holiday_mode == "monthly" and att.status in ("compensatory", "holiday"):
@@ -1602,6 +1607,13 @@ async def line_webhook(request: Request):
         target_date_str = target_date.isoformat()
         is_yesterday = target_date < today
         date_label = f"วันที่ {target_date_str}" if is_yesterday else "วันนี้"
+
+        if emp.get("employment_status") == "probation":
+            line_notify.send_line(
+                f"⏳ {emp['name']} ยังอยู่ช่วงทดลองงาน (probation) นะคะ\n"
+                f"ยังเปิดใช้การลา/ชดเชยไม่ได้ค่ะ"
+            )
+            continue
 
         emp_holiday_mode = emp.get("holiday_mode") or "sunday"
 
