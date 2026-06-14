@@ -408,6 +408,9 @@ class EmployeeCreate(BaseModel):
     max_leave_carry: Optional[float] = None  # max leave-debt days (sunday) / max accumulated days (monthly)
     holiday_mode: str = "sunday"             # 'sunday' | 'monthly'
     monthly_leave_days: float = 0.0          # leave days credited per month (monthly mode only)
+    employment_status: str = "active"        # 'probation' | 'active'
+    probation_daily_rate: Optional[float] = None
+    payment_method: str = "cash"             # 'cash' | 'transfer'
 
 
 class AttendanceUpdate(BaseModel):
@@ -455,11 +458,12 @@ def create_employee(emp: EmployeeCreate):
     c = conn.cursor()
     c.execute(
         "INSERT INTO employees (name,age,nationality,phone,line_id,facebook,start_date,monthly_salary,"
-        "max_leave_carry,holiday_mode,monthly_leave_days) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        "max_leave_carry,holiday_mode,monthly_leave_days,employment_status,probation_daily_rate,payment_method) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (emp.name, emp.age, emp.nationality, emp.phone, emp.line_id, emp.facebook,
          emp.start_date, emp.monthly_salary, emp.max_leave_carry,
-         emp.holiday_mode, emp.monthly_leave_days),
+         emp.holiday_mode, emp.monthly_leave_days,
+         emp.employment_status, emp.probation_daily_rate, emp.payment_method),
     )
     new_id = c.lastrowid
     conn.commit()
@@ -488,10 +492,11 @@ def update_employee(emp_id: int, emp: EmployeeCreate):
     c = conn.cursor()
     c.execute(
         "UPDATE employees SET name=?,age=?,nationality=?,phone=?,line_id=?,facebook=?,start_date=?,monthly_salary=?,"
-        "max_leave_carry=?,holiday_mode=?,monthly_leave_days=? WHERE id=?",
+        "max_leave_carry=?,holiday_mode=?,monthly_leave_days=?,probation_daily_rate=?,payment_method=? WHERE id=?",
         (emp.name, emp.age, emp.nationality, emp.phone, emp.line_id, emp.facebook,
          emp.start_date, emp.monthly_salary, emp.max_leave_carry,
-         emp.holiday_mode, emp.monthly_leave_days, emp_id),
+         emp.holiday_mode, emp.monthly_leave_days,
+         emp.probation_daily_rate, emp.payment_method, emp_id),
     )
     if c.rowcount == 0:
         conn.close()
@@ -499,6 +504,40 @@ def update_employee(emp_id: int, emp: EmployeeCreate):
     conn.commit()
     conn.close()
     return {"message": "updated"}
+
+
+class PassProbationRequest(BaseModel):
+    pass_date: str   # YYYY-MM-DD
+
+
+@app.post("/api/employees/{emp_id}/pass-probation")
+def pass_probation(emp_id: int, req: PassProbationRequest):
+    conn = get_db()
+    emp = conn.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
+    if not emp:
+        conn.close(); raise HTTPException(404, "Employee not found")
+    if emp["employment_status"] != "probation":
+        conn.close(); raise HTTPException(400, "Employee is not in probation")
+    # validate pass_date: not before start_date
+    if req.pass_date < emp["start_date"]:
+        conn.close(); raise HTTPException(400, "pass_date before start_date")
+    conn.execute(
+        "UPDATE employees SET employment_status='active', monthly_start_date=? WHERE id=?",
+        (req.pass_date, emp_id),
+    )
+    conn.commit(); conn.close()
+    return {"message": "passed", "monthly_start_date": req.pass_date}
+
+
+@app.delete("/api/employees/{emp_id}/pass-probation")
+def undo_pass_probation(emp_id: int):
+    conn = get_db()
+    conn.execute(
+        "UPDATE employees SET employment_status='probation', monthly_start_date=NULL WHERE id=?",
+        (emp_id,),
+    )
+    conn.commit(); conn.close()
+    return {"message": "reverted"}
 
 
 @app.delete("/api/employees/{emp_id}")
