@@ -824,6 +824,21 @@ def upsert_attendance(emp_id: int, att: AttendanceUpdate):
     return {"message": "saved"}
 
 
+@app.delete("/api/employees/{emp_id}/attendance/{work_date}")
+def delete_attendance(emp_id: int, work_date: str):
+    """Remove an attendance record (used to un-mark a probation work day)."""
+    conn = get_db()
+    conn.execute("DELETE FROM attendance WHERE employee_id=? AND work_date=?", (emp_id, work_date))
+    # Drop any unpaid daily-payment placeholder for that day; keep paid rows for the record
+    conn.execute(
+        "DELETE FROM daily_payments WHERE employee_id=? AND work_date=? AND paid_at IS NULL",
+        (emp_id, work_date),
+    )
+    conn.commit()
+    conn.close()
+    return {"message": "deleted"}
+
+
 @app.get("/api/employees/{emp_id}/leave-balance")
 def get_leave_balance(emp_id: int):
     """Monthly-mode: return current accumulated leave balance."""
@@ -1131,7 +1146,7 @@ def get_daily_payments(emp_id: int, year: int, month: int):
         out.append({
             "work_date": a["work_date"],
             "fraction": frac,
-            "amount": round((p["amount"] if p else rate * frac), 2),
+            "amount": round((p["amount"] if (p and p["paid_at"]) else rate * frac), 2),
             "paid": bool(p and p["paid_at"]),
             "paid_at": p["paid_at"] if p else None,
             "slip_path": p["slip_path"] if p else None,
