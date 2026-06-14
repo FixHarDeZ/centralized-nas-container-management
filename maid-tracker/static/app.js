@@ -61,6 +61,22 @@ const TRANSLATIONS = {
     summaryPolicyNoteMonthly: (n, max) => `แม่บ้านได้วันหยุด ${n} วัน/เดือน · สะสมสูงสุด ${max !== null ? max + " วัน" : "ไม่จำกัด"} · ส่วนเกินชำระวันลาออก`,
     nationalityOptions: ["ไทย","เมียนมา","กัมพูชา","ลาว","เวียดนาม","อื่นๆ"],
     salaryPreview: (dr) => `อัตราค่าจ้างรายวัน ≈ <strong>${dr} บาท/วัน</strong> (คิดจาก 26 วันทำงาน/เดือน)`,
+    // Probation / payment method / documents
+    fieldProbation: "เริ่มแบบทดลองงาน (จ่ายรายวัน)",
+    fieldProbationDailyRate: "ค่าจ้างรายวัน (บาท)",
+    fieldPaymentMethod: "วิธีการจ่ายเงิน",
+    paymentMethodCash: "เงินสด",
+    paymentMethodTransfer: "เงินโอน",
+    probationLockedNote: "สถานะการจ้างถูกกำหนดโดยระบบหลังสร้างแล้ว (แก้ไขผ่านปุ่ม \"ผ่านโปร\")",
+    docsTitle: "เอกสาร",
+    docTypeIdCard: "บัตรประชาชน",
+    docTypePassport: "พาสปอร์ต",
+    docFieldType: "ประเภทเอกสาร",
+    docFieldFiles: "เลือกไฟล์ (เลือกได้หลายไฟล์)",
+    docUploadBtn: "อัปโหลด",
+    docEmpty: "ยังไม่มีเอกสาร",
+    docDeleteConfirm: "ลบเอกสารนี้?",
+    docUploadFirst: "กรุณาเลือกไฟล์ก่อน",
     btnSaveEdit: "บันทึกการแก้ไข", btnAddNew: "เพิ่มแม่บ้าน",
     // Employee detail
     detailDuration: "ระยะเวลาทำงาน", detailWorkDays: "วันที่ทำงาน",
@@ -71,6 +87,13 @@ const TRANSLATIONS = {
     overallNote: "ยอดนี้จะชำระเมื่อลาออก",
     labelStartedOn: "เริ่มงาน", labelSalaryPerMonth: "บาท/เดือน",
     btnCalendar: "ปฏิทินการทำงาน", btnMonthlySummary: "สรุปรายเดือน", btnPayment: "จ่ายเงินเดือน",
+    // Probation (detail)
+    probationBadge: "ทดลองงาน",
+    btnPassProbation: "ผ่านโปร",
+    btnMarkAttendance: "ลงเวลาทำงาน",
+    statusUnmarked: "ยังไม่ลง",
+    passProbationPrompt: (n) => `วันที่ ${n} ผ่านทดลองงาน (YYYY-MM-DD):`,
+    passProbationConfirm: (n, d) => `ยืนยันให้ "${n}" ผ่านทดลองงานวันที่ ${d}?`,
     btnResign: "แจ้งลาออก", btnCancelResign: "ยกเลิกลาออก",
     resignSummaryTitle: (d) => `สรุปการลาออก — ${d}`,
     resignLastMonth: "เงินเดือนเดือนสุดท้าย",
@@ -115,6 +138,15 @@ const TRANSLATIONS = {
     alertPending: (n, a) => `ยังค้างจ่าย ${n} รอบ — รวม ${fmtMoney(a)} บาท`,
     noPaymentMonth: "ไม่มีรายการจ่ายในเดือนนี้",
     paymentNote: "รอบแรกจ่ายครึ่งเดือน · รอบสองจ่ายครึ่งที่เหลือ (หักวันลาเกินสะสมถ้ามีการตั้งค่าไว้)",
+    // Daily pay (probation) + slip upload
+    dailyPayTitle: "จ่ายรายวัน (ทดลองงาน)",
+    dailyPayDate: "วันที่",
+    dailyPayFraction: "สัดส่วน",
+    dailyPayAmount: "จำนวนเงิน",
+    dailyPayTotal: "รวมจ่ายรายวัน",
+    slipUploadBtn: "แนบสลิป",
+    slipViewBtn: "ดูสลิป",
+    slipPickFirst: "กรุณาเลือกไฟล์สลิปก่อน",
     // Confirmations
     confirmLeave: (d) => `บันทึก "ลา" วันที่ ${d}?`,
     confirmComp: (d) => `บันทึก "ชดเชย" (ทำวันอาทิตย์) วันที่ ${d}?`,
@@ -209,6 +241,22 @@ const TRANSLATIONS = {
     summaryPolicyNoteMonthly: (n, max) => `Staff gets ${n} leave day(s)/month · Max accumulated: ${max !== null ? max + " day(s)" : "unlimited"} · Excess settled on resignation`,
     nationalityOptions: ["Thai","Myanmar","Cambodian","Lao","Vietnamese","Other"],
     salaryPreview: (dr) => `Daily rate ≈ <strong>${dr} Baht/day</strong> (based on 26 working days/month)`,
+    // Probation / payment method / documents
+    fieldProbation: "Start as probation (daily pay)",
+    fieldProbationDailyRate: "Daily rate (Baht)",
+    fieldPaymentMethod: "Payment method",
+    paymentMethodCash: "Cash",
+    paymentMethodTransfer: "Transfer",
+    probationLockedNote: "Employment status is system-managed after creation (change it via the \"Pass probation\" button)",
+    docsTitle: "Documents",
+    docTypeIdCard: "ID Card",
+    docTypePassport: "Passport",
+    docFieldType: "Document type",
+    docFieldFiles: "Choose files (multiple allowed)",
+    docUploadBtn: "Upload",
+    docEmpty: "No documents yet",
+    docDeleteConfirm: "Delete this document?",
+    docUploadFirst: "Please choose a file first",
     btnSaveEdit: "Save Changes", btnAddNew: "Add Staff",
     // Employee detail
     detailDuration: "Duration", detailWorkDays: "Work Days",
@@ -219,6 +267,13 @@ const TRANSLATIONS = {
     overallNote: "Settled on resignation",
     labelStartedOn: "Started", labelSalaryPerMonth: "Baht/month",
     btnCalendar: "Work Calendar", btnMonthlySummary: "Monthly Summary", btnPayment: "Pay Salary",
+    // Probation (detail)
+    probationBadge: "Probation",
+    btnPassProbation: "Pass probation",
+    btnMarkAttendance: "Mark attendance",
+    statusUnmarked: "Unmarked",
+    passProbationPrompt: (n) => `Pass-probation date for ${n} (YYYY-MM-DD):`,
+    passProbationConfirm: (n, d) => `Confirm "${n}" passes probation on ${d}?`,
     btnResign: "Record Resignation", btnCancelResign: "Cancel Resignation",
     resignSummaryTitle: (d) => `Resignation Summary — ${d}`,
     resignLastMonth: "Last Month Salary",
@@ -263,6 +318,15 @@ const TRANSLATIONS = {
     alertPending: (n, a) => `${n} payment(s) pending — Total ${fmtMoney(a)} Baht`,
     noPaymentMonth: "No payments for this month",
     paymentNote: "Period 1 = half salary · Period 2 = remaining half (leave cap deducted if configured)",
+    // Daily pay (probation) + slip upload
+    dailyPayTitle: "Daily pay (probation)",
+    dailyPayDate: "Date",
+    dailyPayFraction: "Fraction",
+    dailyPayAmount: "Amount",
+    dailyPayTotal: "Daily pay total",
+    slipUploadBtn: "Attach slip",
+    slipViewBtn: "View slip",
+    slipPickFirst: "Please choose a slip file first",
     // Confirmations
     confirmLeave: (d) => `Mark as "Leave" on ${d}?`,
     confirmComp: (d) => `Mark as "Compensatory" (worked Sunday) on ${d}?`,
@@ -320,7 +384,7 @@ function sl(status) {
   const map = {
     work: t("statusWork"), leave: t("statusLeave"),
     holiday: t("statusHoliday"), compensatory: t("statusCompensatory"),
-    before_start: "—",
+    before_start: "—", unmarked: t("statusUnmarked"),
   };
   return map[status] || status;
 }
@@ -364,6 +428,7 @@ const STATUS_CSS = {
   holiday: "status-holiday",
   compensatory: "status-compensatory",
   before_start: "status-before_start",
+  unmarked: "status-unmarked",
 };
 
 // Weekday names indexed by Python weekday() value: 0=Mon … 6=Sun
@@ -571,6 +636,30 @@ async function viewEmployeeForm(id) {
               <input type="number" class="form-control" name="monthly_salary" required min="1" step="1"
                      value="${emp?.monthly_salary || ""}" placeholder="13000" />
             </div>
+            <!-- Payment method -->
+            <div class="col-6">
+              <label class="form-label fw-semibold">${t("fieldPaymentMethod")}</label>
+              <select class="form-select" name="payment_method">
+                <option value="cash" ${(emp?.payment_method || "cash") === "cash" ? "selected" : ""}>${t("paymentMethodCash")}</option>
+                <option value="transfer" ${emp?.payment_method === "transfer" ? "selected" : ""}>${t("paymentMethodTransfer")}</option>
+              </select>
+            </div>
+            <!-- Probation -->
+            <div class="col-12">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="is_probation" id="isProbation"
+                       ${emp?.employment_status === "probation" ? "checked" : ""} ${isEdit ? "disabled" : ""} />
+                <label class="form-check-label fw-semibold" for="isProbation">
+                  <i class="bi bi-hourglass-split me-1 text-warning"></i>${t("fieldProbation")}
+                </label>
+              </div>
+              ${isEdit ? `<div class="form-text text-muted">${t("probationLockedNote")}</div>` : ""}
+            </div>
+            <div class="col-6" id="probationRateSection" style="display:none">
+              <label class="form-label fw-semibold">${t("fieldProbationDailyRate")}</label>
+              <input type="number" class="form-control" name="probation_daily_rate" min="0" step="1"
+                     value="${emp?.probation_daily_rate ?? ""}" placeholder="500" />
+            </div>
             <!-- Holiday mode -->
             <div class="col-12">
               <label class="form-label fw-semibold">${t("fieldHolidayMode")}</label>
@@ -615,7 +704,32 @@ async function viewEmployeeForm(id) {
           </div>
         </form>
       </div>
-    </div>`;
+    </div>
+    ${isEdit ? `
+    <div class="card border-0 shadow-sm mt-3" style="max-width:640px">
+      <div class="card-body p-4">
+        <h6 class="fw-bold mb-3"><i class="bi bi-folder2-open me-2 text-primary"></i>${t("docsTitle")}</h6>
+        <div class="row g-2 align-items-end mb-3">
+          <div class="col-12 col-sm-4">
+            <label class="form-label small fw-semibold mb-1">${t("docFieldType")}</label>
+            <select class="form-select form-select-sm" id="docType">
+              <option value="id_card">${t("docTypeIdCard")}</option>
+              <option value="passport">${t("docTypePassport")}</option>
+            </select>
+          </div>
+          <div class="col-12 col-sm-5">
+            <label class="form-label small fw-semibold mb-1">${t("docFieldFiles")}</label>
+            <input type="file" class="form-control form-control-sm" id="docFiles" multiple />
+          </div>
+          <div class="col-12 col-sm-3">
+            <button type="button" class="btn btn-sm btn-primary w-100" id="docUploadBtn">
+              <i class="bi bi-upload me-1"></i>${t("docUploadBtn")}
+            </button>
+          </div>
+        </div>
+        <div id="docList"><div class="spinner-border spinner-border-sm text-secondary"></div></div>
+      </div>
+    </div>` : ""}`;
 
   // Holiday mode toggle
   const monthlySection   = document.getElementById("monthlyLeaveSection");
@@ -635,6 +749,15 @@ async function viewEmployeeForm(id) {
   }
   document.querySelectorAll("[name='holiday_mode']").forEach(r => r.addEventListener("change", updateHolidayMode));
   updateHolidayMode();
+
+  // Probation toggle → reveal daily rate
+  const probationChk  = document.getElementById("isProbation");
+  const probationRate = document.getElementById("probationRateSection");
+  function updateProbation() {
+    probationRate.style.display = probationChk.checked ? "" : "none";
+  }
+  probationChk.addEventListener("change", updateProbation);
+  updateProbation();
 
   // Live salary preview
   const salInput = document.querySelector("[name='monthly_salary']");
@@ -668,7 +791,14 @@ async function viewEmployeeForm(id) {
       max_leave_carry:    fd.get("max_leave_carry") !== "" ? +fd.get("max_leave_carry") : null,
       holiday_mode:       mode,
       monthly_leave_days: mode === "monthly" ? +(fd.get("monthly_leave_days") || 0) : 0,
+      payment_method:     fd.get("payment_method") || "cash",
+      probation_daily_rate: fd.get("probation_daily_rate") !== "" && fd.get("probation_daily_rate") != null
+                              ? +fd.get("probation_daily_rate") : null,
     };
+    // employment_status is set only at creation (server-managed on edit).
+    if (!isEdit) {
+      body.employment_status = fd.get("is_probation") ? "probation" : "active";
+    }
     const btn = e.target.querySelector("[type=submit]");
     btn.disabled = true;
     try {
@@ -684,6 +814,75 @@ async function viewEmployeeForm(id) {
       btn.disabled = false;
     }
   });
+
+  // ─── Documents (edit only) ───────────────────────────────
+  // Re-injects only the #docList div so unsaved form edits are never lost.
+  if (isEdit) {
+    async function refreshDocs() {
+      const listEl = document.getElementById("docList");
+      if (!listEl) return;
+      try {
+        const docs = await api.get(`/api/employees/${id}/documents`);
+        if (docs.length === 0) {
+          listEl.innerHTML = `<div class="text-muted small">${t("docEmpty")}</div>`;
+          return;
+        }
+        listEl.innerHTML = docs.map(d => {
+          const url       = `/api/documents/${d.file_path}`;
+          const typeLabel = d.doc_type === "passport" ? t("docTypePassport") : t("docTypeIdCard");
+          const isImg     = /\.(png|jpe?g|gif|webp|bmp)$/i.test(d.file_path);
+          const thumb     = isImg
+            ? `<img src="${escHtml(url)}" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:6px">`
+            : `<i class="bi bi-file-earmark-text fs-3 text-secondary"></i>`;
+          return `
+            <div class="d-flex align-items-center gap-2 border rounded p-2 mb-2">
+              <a href="${escHtml(url)}" target="_blank" rel="noopener">${thumb}</a>
+              <div class="flex-grow-1 overflow-hidden">
+                <a href="${escHtml(url)}" target="_blank" rel="noopener" class="text-truncate d-block small fw-semibold">${typeLabel}</a>
+                <div class="text-muted" style="font-size:.72rem">${escHtml(d.uploaded_at || "")}</div>
+              </div>
+              <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteDocument(${id}, ${d.id})">
+                <i class="bi bi-trash"></i>
+              </button>
+            </div>`;
+        }).join("");
+      } catch (e) {
+        listEl.innerHTML = `<div class="text-danger small">${escHtml(e.message)}</div>`;
+      }
+    }
+    // Expose for inline delete handler; re-render only the list.
+    window.deleteDocument = async function (empId, docId) {
+      if (!confirm(t("docDeleteConfirm"))) return;
+      try {
+        await api.del(`/api/employees/${empId}/documents/${docId}`);
+        await refreshDocs();
+      } catch (e) {
+        alert(t("errDelete") + e.message);
+      }
+    };
+    document.getElementById("docUploadBtn").addEventListener("click", async () => {
+      const filesInput = document.getElementById("docFiles");
+      const files = filesInput.files;
+      if (!files || files.length === 0) { alert(t("docUploadFirst")); return; }
+      const fd = new FormData();
+      fd.append("doc_type", document.getElementById("docType").value);
+      for (const f of files) fd.append("files", f);
+      const btn = document.getElementById("docUploadBtn");
+      btn.disabled = true;
+      try {
+        // Multipart: no Content-Type header — browser sets the boundary.
+        const r = await fetch(`/api/employees/${id}/documents`, { method: "POST", body: fd });
+        if (!r.ok) throw new Error(await r.text());
+        filesInput.value = "";
+        await refreshDocs();
+      } catch (e) {
+        alert(t("errSave") + e.message);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+    refreshDocs();
+  }
 }
 
 // ─── View: Employee Detail ───────────────────────────────────
@@ -721,6 +920,7 @@ async function viewEmployeeDetail(id) {
           </div>
           <div class="flex-grow-1">
             <h4 class="fw-bold mb-1" style="letter-spacing:-.02em">${emp.name}
+              ${emp.employment_status === "probation" ? `<span class="badge ms-2" style="font-size:.65rem;background:#fef3c7;color:#b45309;border-radius:6px"><i class="bi bi-hourglass-split me-1"></i>${t("probationBadge")}</span>` : ""}
               ${resigned ? `<span class="badge ms-2" style="font-size:.65rem;background:#e2e8f0;color:#64748b;border-radius:6px">${t("resignedBadge")}</span>` : ""}
             </h4>
             <div class="mb-2" style="color:var(--text-muted)">${dispNat(emp.nationality)}${emp.age ? " · " + emp.age + (currentLang === "th" ? " ปี" : " yrs") : ""}</div>
@@ -734,6 +934,11 @@ async function viewEmployeeDetail(id) {
             <button class="btn btn-sm btn-outline-primary" style="border-radius:8px" onclick="navigate('/employee/${id}/edit')">
               <i class="bi bi-pencil me-1"></i>${t("edit")}
             </button>
+            ${emp.employment_status === "probation" && !resigned
+              ? `<button class="btn btn-sm btn-outline-success" style="border-radius:8px" onclick="passProbation(${id}, '${escHtml(emp.name)}')">
+                   <i class="bi bi-check2-circle me-1"></i>${t("btnPassProbation")}
+                 </button>`
+              : ""}
             ${resigned
               ? `<button class="btn btn-sm btn-outline-secondary" style="border-radius:8px" onclick="cancelResign(${id}, '${emp.name}')">
                    <i class="bi bi-arrow-counterclockwise me-1"></i>${t("btnCancelResign")}
@@ -858,13 +1063,21 @@ async function viewEmployeeDetail(id) {
 
     <!-- Quick action buttons -->
     <div class="row g-3">
+      ${emp.employment_status === "probation" ? `
+      <div class="col-6 col-md-3">
+        <button class="action-btn primary-action" onclick="navigate('/employee/${id}/attendance?y=${yr}&m=${mo}')">
+          <i class="bi bi-calendar-check action-btn-icon"></i>
+          <span class="action-btn-label">${t("btnMarkAttendance")}</span>
+          <span class="action-btn-sub">${monthLabel}</span>
+        </button>
+      </div>` : `
       <div class="col-6 col-md-3">
         <button class="action-btn primary-action" onclick="navigate('/employee/${id}/leaves?y=${yr}&m=${mo}')">
           <i class="bi bi-calendar3 action-btn-icon"></i>
           <span class="action-btn-label">${t("btnCalendar")}</span>
           <span class="action-btn-sub">${monthLabel}</span>
         </button>
-      </div>
+      </div>`}
       <div class="col-6 col-md-3">
         <button class="action-btn" onclick="navigate('/employee/${id}/summary?y=${yr}&m=${mo}')">
           <i class="bi bi-bar-chart-line action-btn-icon" style="color:var(--primary)"></i>
@@ -895,8 +1108,9 @@ async function viewAttendance(id) {
     api.get(`/api/employees/${id}/attendance?year=${year}&month=${month}`),
   ]);
 
-  const cells = buildCalendarCells(id, days);
-  const legend = buildLegend();
+  const isProbation = emp.employment_status === "probation";
+  const cells = buildCalendarCells(id, days, emp.holiday_mode, isProbation);
+  const legend = buildLegend(emp.holiday_mode, isProbation);
 
   ROOT.innerHTML = `
     <div class="page-breadcrumb mb-2">
@@ -992,30 +1206,34 @@ function askHalfDay(dateStr, type) {
   });
 }
 
-async function cycleDay(empId, dateStr, currentStatus, el, holidayMode) {
+async function cycleDay(empId, dateStr, currentStatus, el, holidayMode, isProbation) {
   const mode = holidayMode || "sunday";
   // Cycle logic
   let nextStatus;
-  const dow = new Date(dateStr).getDay(); // 0=Sun
-
-  if (mode === "monthly") {
-    // Monthly mode: every day is simply work ↔ leave
-    nextStatus = currentStatus === "work" ? "leave" : "work";
-  } else {
-    // Sunday mode
-    if (dow === 0) {
-      nextStatus = currentStatus === "holiday" ? "compensatory" : "holiday";
-    } else {
-      nextStatus = currentStatus === "work" ? "leave" : "work";
-    }
-  }
-
-  // For leave / compensatory: ask full day or half day via modal
   let halfDay = false;
-  if (nextStatus === "leave" || nextStatus === "compensatory") {
-    const choice = await askHalfDay(dateStr, nextStatus === "leave" ? "leave" : "comp");
-    if (!choice) return; // user cancelled
-    halfDay = choice === "half";
+
+  if (isProbation) {
+    // Probation: leave/comp/holiday disabled — only toggle work ↔ unmarked
+    nextStatus = currentStatus === "work" ? "unmarked" : "work";
+  } else {
+    const dow = new Date(dateStr).getDay(); // 0=Sun
+    if (mode === "monthly") {
+      // Monthly mode: every day is simply work ↔ leave
+      nextStatus = currentStatus === "work" ? "leave" : "work";
+    } else {
+      // Sunday mode
+      if (dow === 0) {
+        nextStatus = currentStatus === "holiday" ? "compensatory" : "holiday";
+      } else {
+        nextStatus = currentStatus === "work" ? "leave" : "work";
+      }
+    }
+    // For leave / compensatory: ask full day or half day via modal
+    if (nextStatus === "leave" || nextStatus === "compensatory") {
+      const choice = await askHalfDay(dateStr, nextStatus === "leave" ? "leave" : "comp");
+      if (!choice) return; // user cancelled
+      halfDay = choice === "half";
+    }
   }
 
   // Optimistic UI update
@@ -1026,14 +1244,19 @@ async function cycleDay(empId, dateStr, currentStatus, el, holidayMode) {
   el.querySelector(".status-label").textContent = slLabel(nextStatus, halfDay);
   el.dataset.status = nextStatus;
   el.dataset.halfDay = halfDay ? "1" : "0";
-  el.setAttribute("onclick", `cycleDay(${empId},'${dateStr}','${nextStatus}',this,'${mode}')`);
+  el.setAttribute("onclick", `cycleDay(${empId},'${dateStr}','${nextStatus}',this,'${mode}',${isProbation ? "true" : "false"})`);
 
   try {
-    await api.post(`/api/employees/${empId}/attendance`, {
-      work_date: dateStr,
-      status: nextStatus,
-      half_day: halfDay,
-    });
+    if (nextStatus === "unmarked") {
+      // Un-mark a probation work day → delete the attendance row
+      await api.del(`/api/employees/${empId}/attendance/${dateStr}`);
+    } else {
+      await api.post(`/api/employees/${empId}/attendance`, {
+        work_date: dateStr,
+        status: nextStatus,
+        half_day: halfDay,
+      });
+    }
     if (window.__refreshLeaveList) await window.__refreshLeaveList();
   } catch (e) {
     alert(t("errSave") + e.message);
@@ -1365,8 +1588,9 @@ async function viewLeaveLog(id) {
   };
 }
 
-function buildCalendarCells(id, days, holidayMode) {
+function buildCalendarCells(id, days, holidayMode, isProbation) {
   const mode = holidayMode || "sunday";
+  const probArg = isProbation ? "true" : "false";
   const firstDate = days[0]?.date;
   if (!firstDate) return "";
   const firstDow = new Date(firstDate).getDay();
@@ -1384,7 +1608,7 @@ function buildCalendarCells(id, days, holidayMode) {
       : "";
     html += `
       <div class="cal-day ${statusCss}${disabled ? " cal-disabled" : ""}${isFuture ? " cal-future" : ""}"
-           ${!disabled ? `onclick="cycleDay(${id},'${d.date}','${d.status}',this,'${mode}')"` : ""}
+           ${!disabled ? `onclick="cycleDay(${id},'${d.date}','${d.status}',this,'${mode}',${probArg})"` : ""}
            data-date="${d.date}" data-status="${d.status}" data-half-day="${d.half_day ? 1 : 0}">
         <span class="day-num">${+dayNum}</span>
         <span class="status-label">${label}</span>
@@ -1394,8 +1618,16 @@ function buildCalendarCells(id, days, holidayMode) {
   return html;
 }
 
-function buildLegend(holidayMode) {
+function buildLegend(holidayMode, isProbation) {
   const mode = holidayMode || "sunday";
+  if (isProbation) {
+    return [
+      { css: "status-work",     key: "statusWork",     suffix: "" },
+      { css: "status-unmarked", key: "statusUnmarked", suffix: "" },
+    ].map(l =>
+      `<span class="cal-day ${l.css} px-2 py-1" style="min-height:0;border-radius:8px;cursor:default;font-size:0.75rem">${t(l.key)}${l.suffix}</span>`
+    ).join("");
+  }
   if (mode === "monthly") {
     return [
       { css: "status-work",  key: "statusWork",  suffix: "" },
@@ -1481,10 +1713,82 @@ async function viewPayments(id) {
   let year  = +(params.get("y") || today.getFullYear());
   let month = +(params.get("m") || today.getMonth() + 1);
 
-  const [emp, payments] = await Promise.all([
+  const [emp, payments, dailyPayments] = await Promise.all([
     api.get(`/api/employees/${id}`),
     api.get(`/api/employees/${id}/payments?year=${year}&month=${month}`),
+    api.get(`/api/employees/${id}/daily-payments?year=${year}&month=${month}`).catch(() => []),
   ]);
+
+  const isTransfer = emp.payment_method === "transfer";
+
+  // Slip thumbnail/link for a given slip_path (served at /api/slips/{slip_path})
+  function slipLink(slipPath) {
+    if (!slipPath) return "";
+    const url   = `/api/slips/${slipPath}`;
+    const isImg = /\.(png|jpe?g|gif|webp|bmp)$/i.test(slipPath);
+    const thumb = isImg
+      ? `<img src="${escHtml(url)}" alt="" style="width:36px;height:36px;object-fit:cover;border-radius:5px">`
+      : `<i class="bi bi-receipt fs-5 text-secondary"></i>`;
+    return `<a href="${escHtml(url)}" target="_blank" rel="noopener" class="d-inline-flex align-items-center gap-1 ms-1" title="${t("slipViewBtn")}">${thumb}</a>`;
+  }
+
+  // ─── Daily-payment row (probation) ───────────────────────
+  function dailyRow(d) {
+    const isPaid = d.paid;
+    const slipBtn = isTransfer ? `
+      <input type="file" class="d-none" id="dslip_${d.work_date}" onchange="uploadDailySlip(${id}, '${d.work_date}', this)">
+      <button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('dslip_${d.work_date}').click()">
+        <i class="bi bi-paperclip me-1"></i>${t("slipUploadBtn")}
+      </button>
+      ${slipLink(d.slip_path)}` : "";
+    return `
+      <tr>
+        <td class="ps-3">${formatDate(d.work_date)}</td>
+        <td class="text-center">${d.fraction}</td>
+        <td class="text-end fw-semibold">${fmtMoney(d.amount)} ${t("baht")}</td>
+        <td class="text-center">
+          <span class="badge ${isPaid ? "bg-success" : "bg-warning text-dark"}">${isPaid ? t("badgePaid") : t("badgePending")}</span>
+        </td>
+        <td class="text-end pe-3">
+          <div class="d-flex justify-content-end align-items-center gap-2 flex-wrap">
+            <button class="btn btn-sm ${isPaid ? "btn-outline-secondary" : "btn-primary"}"
+                    onclick="toggleDailyPayment(${id}, '${d.work_date}', this)">
+              <i class="bi ${isPaid ? "bi-x-circle" : "bi-check-circle"} me-1"></i>${isPaid ? t("btnUnmarkPaid") : t("btnMarkPaid")}
+            </button>
+            ${slipBtn}
+          </div>
+        </td>
+      </tr>`;
+  }
+
+  const dailyTotal = dailyPayments.reduce((s, d) => s + d.amount, 0);
+  const dailySection = dailyPayments.length === 0 ? "" : `
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-warning bg-opacity-25 fw-bold py-2 d-flex align-items-center gap-2">
+        <i class="bi bi-hourglass-split text-warning"></i>${t("dailyPayTitle")}
+      </div>
+      <div class="card-body p-0">
+        <table class="table table-sm mb-0 align-middle">
+          <thead class="table-light">
+            <tr>
+              <th class="ps-3">${t("dailyPayDate")}</th>
+              <th class="text-center">${t("dailyPayFraction")}</th>
+              <th class="text-end">${t("dailyPayAmount")}</th>
+              <th class="text-center"></th>
+              <th class="text-end pe-3"></th>
+            </tr>
+          </thead>
+          <tbody>${dailyPayments.map(dailyRow).join("")}</tbody>
+          <tfoot class="table-light fw-bold">
+            <tr>
+              <td class="ps-3" colspan="2">${t("dailyPayTotal")}</td>
+              <td class="text-end">${fmtMoney(dailyTotal)} ${t("baht")}</td>
+              <td colspan="2"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>`;
 
   function periodCard(p) {
     const isPaid    = p.paid;
@@ -1528,15 +1832,26 @@ async function viewPayments(id) {
                       onclick="togglePayment(${id}, ${year}, ${month}, ${p.period}, this)">
                 <i class="bi ${isPaid ? "bi-x-circle" : "bi-check-circle"} me-1"></i>${isPaid ? t("btnUnmarkPaid") : t("btnMarkPaid")}
               </button>
+              ${isTransfer ? `
+              <div class="mt-2 d-flex justify-content-end align-items-center gap-1 flex-wrap">
+                <input type="file" class="d-none" id="pslip_${p.period}" onchange="uploadPeriodSlip(${id}, ${p.period}, ${year}, ${month}, this)">
+                <button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('pslip_${p.period}').click()">
+                  <i class="bi bi-paperclip me-1"></i>${t("slipUploadBtn")}
+                </button>
+                ${slipLink(p.slip_path)}
+              </div>` : ""}
             </div>
           </div>
         </div>
       </div>`;
   }
 
-  const cards = payments.length === 0
+  // Monthly period cards (empty when probation). Empty-state shown only when
+  // BOTH daily-payments AND periods are empty for this month.
+  const periodCards = payments.map(periodCard).join("");
+  const emptyState = (payments.length === 0 && dailyPayments.length === 0)
     ? `<div class="text-center text-muted py-5"><i class="bi bi-calendar-x fs-1 d-block mb-2"></i>${t("noPaymentMonth")}</div>`
-    : payments.map(periodCard).join("");
+    : "";
 
   const allPaid = payments.length > 0 && payments.every(p => p.paid);
   const pending = payments.filter(p => !p.paid);
@@ -1563,10 +1878,13 @@ async function viewPayments(id) {
       </div>
     </div>
 
+    ${dailySection}
+
     ${allPaid ? `<div class="alert alert-success d-flex align-items-center gap-2 mb-3"><i class="bi bi-check-circle-fill fs-5"></i> ${t("alertAllPaid")}</div>` : ""}
     ${pending.length > 0 ? `<div class="alert alert-warning d-flex align-items-center gap-2 mb-3"><i class="bi bi-clock fs-5"></i> ${t("alertPending", pending.length, pending.reduce((s, p) => s + p.amount, 0))}</div>` : ""}
 
-    ${cards}
+    ${periodCards}
+    ${emptyState}
 
     <div class="text-muted small mt-2">
       <i class="bi bi-info-circle me-1"></i>
@@ -1593,6 +1911,48 @@ async function togglePayment(empId, year, month, period, btn) {
   }
 }
 
+// ─── Daily payments (probation) ──────────────────────────────
+
+async function toggleDailyPayment(empId, workDate, btn) {
+  btn.disabled = true;
+  try {
+    await api.post(`/api/employees/${empId}/daily-payments/${workDate}/toggle`, {});
+    await viewPayments(empId);
+  } catch (e) {
+    alert(t("errSave") + e.message);
+    btn.disabled = false;
+  }
+}
+
+// Multipart slip upload: no Content-Type header — browser sets the boundary.
+async function uploadDailySlip(empId, workDate, input) {
+  const file = input.files && input.files[0];
+  if (!file) { alert(t("slipPickFirst")); return; }
+  const fd = new FormData();
+  fd.append("file", file);
+  try {
+    const r = await fetch(`/api/employees/${empId}/daily-payments/${workDate}/slip`, { method: "POST", body: fd });
+    if (!r.ok) throw new Error(await r.text());
+    await viewPayments(empId);
+  } catch (e) {
+    alert(t("errSave") + e.message);
+  }
+}
+
+async function uploadPeriodSlip(empId, period, year, month, input) {
+  const file = input.files && input.files[0];
+  if (!file) { alert(t("slipPickFirst")); return; }
+  const fd = new FormData();
+  fd.append("file", file);
+  try {
+    const r = await fetch(`/api/employees/${empId}/payments/${period}/slip?year=${year}&month=${month}`, { method: "POST", body: fd });
+    if (!r.ok) throw new Error(await r.text());
+    await viewPayments(empId);
+  } catch (e) {
+    alert(t("errSave") + e.message);
+  }
+}
+
 // ─── Resign / Cancel Resign ──────────────────────────────────
 
 async function confirmResign(id, name) {
@@ -1607,6 +1967,23 @@ async function confirmResign(id, name) {
   if (!confirm(t("confirmResignFinal", name, formatDate(dateStr)))) return;
   try {
     await api.post(`/api/employees/${id}/resign`, { end_date: dateStr, resign_note: note });
+    await render();
+  } catch (e) {
+    alert(t("errSave") + e.message);
+  }
+}
+
+async function passProbation(id, name) {
+  const today = new Date().toISOString().split("T")[0];
+  const dateStr = prompt(t("passProbationPrompt", name), today);
+  if (!dateStr) return;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    alert(t("confirmResignInvalid"));
+    return;
+  }
+  if (!confirm(t("passProbationConfirm", name, formatDate(dateStr)))) return;
+  try {
+    await api.post(`/api/employees/${id}/pass-probation`, { pass_date: dateStr });
     await render();
   } catch (e) {
     alert(t("errSave") + e.message);

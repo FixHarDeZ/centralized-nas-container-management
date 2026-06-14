@@ -2,6 +2,45 @@
 
 ---
 
+## 2026-06-14 — Probation mode + slip/document upload
+
+### งานที่ทำ (brainstorm → spec → plan → subagent-driven impl)
+Spec: `docs/superpowers/specs/2026-06-14-maid-probation-mode-design.md`
+Plan: `docs/superpowers/plans/2026-06-14-maid-probation-mode.md`
+
+**Probation mode** (axis `employment_status` แยกจาก holiday_mode):
+- แม่บ้านใหม่เริ่มแบบ probation → จ่ายรายวัน (`probation_daily_rate` กรอกตอนสร้าง), ลา/ชดเชย/holiday ปิด
+- จ่ายรายวันต่อวันผ่าน table `daily_payments` (toggle paid, amount snapshot)
+- กดผ่านโปร (`pass-probation` endpoint) → set `monthly_start_date`, active ทันที, เปิด leave + monthly
+- **Monthly anchor** = `monthly_start_date or start_date` thread เข้าทุก calc: `get_payments`, `_compute_period_amount`, `get_summary`, `get_overall`, `get_leave_balance`, `get_resign_summary` (calc.py functions รับ start_date param อยู่แล้ว → caller ส่ง anchor)
+- **Transition month**: daily (< pass_date, cap ใน `get_daily_payments`) + monthly pro-rate (≥ pass_date). ไม่ double-pay/orphan. Edge โปรข้ามเดือน fix (first-month detect ที่ anchor.month)
+- Resign ระหว่างโปร = unpaid days only (LEFT JOIN daily_payments paid_at)
+
+**Slip / Documents**:
+- `payment_method` (cash/transfer) ต่อแม่บ้าน. transfer → upload slip ทุก payment (daily + period), เก็บ `/data/slips`
+- เอกสาร id_card/passport หลายรูป/คน, เก็บ `/data/documents`. Serve ผ่าน FastAPI route (หลัง nginx basic-auth), validate jpg/png/webp/pdf ≤10MB
+- `delete_employee` ลบ daily_payments/employee_documents + ไฟล์ slip/doc ด้วย
+- **ไม่อยู่ใน DB backup** (`_backup_db` = SQLite เท่านั้น) — off-NAS backup ทำภายหลังถ้าต้องการ
+
+**Schema migration** (idempotent ALTER/CREATE IF NOT EXISTS): employees +4 cols, salary_payments +slip_path, ตารางใหม่ daily_payments/employee_documents. แถวเก่า → active/cash/NULL anchor (behavior เดิมไม่เปลี่ยน)
+
+**Frontend** (`static/app.js`): form probation toggle + payment_method + docs upload; detail badge + ปุ่มผ่านโปร + ซ่อน leave; payments view render per-month (daily section + monthly section, transition มีทั้งคู่)
+
+**ไฟล์ที่เปลี่ยน:** `main.py`, `calc.py`, `static/app.js`, `requirements.txt` (+pytest), `tests/` (ใหม่: conftest + test_probation + test_smoke)
+
+### Verify
+- pytest: 6 passed (calc layer: boundary, tally, anchor prorate, resign-unpaid)
+- E2E (TestClient): probation→payments[], leave reject, daily cap < pass_date, transition period2=5400 prorated, toggle on/after pass reject — ทุก assertion ผ่าน
+- Phase 1 spec-compliance review (subagent): no double-pay/orphan, anchor ครบ, idempotent migration — ผ่าน
+
+### Pre-deploy
+- ไม่ต้องเพิ่ม dep runtime (`python-multipart` มีอยู่แล้ว). pytest = dev เท่านั้น
+- ต้องมั่นใจ `/data/slips`, `/data/documents` เขียนได้ (สร้าง auto ตอน import)
+
+### Next (defer)
+- Off-NAS backup ของ slips/documents
+- delete_document ตอนนี้ silent ถ้าไม่เจอ (cosmetic)
+
 ## 2026-06-06 — Phase 1+2 enhance: backup + payslip
 
 ### งานที่ทำ
