@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Form
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from pydantic import BaseModel
@@ -109,6 +109,44 @@ app = FastAPI(title="Maid Tracker", lifespan=lifespan)
 
 DATA_DIR = os.environ.get("DATA_DIR", "/data")
 DB_PATH = os.path.join(DATA_DIR, "maid_tracker.db")
+
+_SLIP_DIR = os.path.join(DATA_DIR, "slips")
+_DOC_DIR  = os.path.join(DATA_DIR, "documents")
+os.makedirs(_SLIP_DIR, exist_ok=True)
+os.makedirs(_DOC_DIR, exist_ok=True)
+
+_ALLOWED_UPLOAD = {"image/jpeg", "image/png", "image/webp", "application/pdf"}
+_MAX_UPLOAD = 10 * 1024 * 1024  # 10MB
+_UPLOAD_EXT = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp", "application/pdf": ".pdf"}
+
+
+def _save_upload(file: "UploadFile", dest_dir: str, basename: str) -> str:
+    if file.content_type not in _ALLOWED_UPLOAD:
+        raise HTTPException(400, f"Unsupported type: {file.content_type}")
+    data = file.file.read()
+    if len(data) > _MAX_UPLOAD:
+        raise HTTPException(400, "File too large (max 10MB)")
+    fname = f"{basename}{_UPLOAD_EXT[file.content_type]}"
+    path = os.path.join(dest_dir, fname)
+    with open(path, "wb") as f:
+        f.write(data)
+    return fname  # store relative filename in DB
+
+
+@app.get("/api/slips/{fname}")
+def serve_slip(fname: str):
+    path = os.path.join(_SLIP_DIR, os.path.basename(fname))
+    if not os.path.exists(path):
+        raise HTTPException(404, "Not found")
+    return FileResponse(path)
+
+
+@app.get("/api/documents/{fname}")
+def serve_document(fname: str):
+    path = os.path.join(_DOC_DIR, os.path.basename(fname))
+    if not os.path.exists(path):
+        raise HTTPException(404, "Not found")
+    return FileResponse(path)
 
 _MAID_LINE_CHANNEL_SECRET = os.environ.get("MAID_LINE_CHANNEL_SECRET", "")
 
