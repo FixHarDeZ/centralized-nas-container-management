@@ -918,6 +918,7 @@ async function viewEmployeeDetail(id) {
           </div>
           <div class="flex-grow-1">
             <h4 class="fw-bold mb-1" style="letter-spacing:-.02em">${emp.name}
+              ${emp.employment_status === "probation" ? `<span class="badge ms-2" style="font-size:.65rem;background:#fef3c7;color:#b45309;border-radius:6px"><i class="bi bi-hourglass-split me-1"></i>${t("probationBadge")}</span>` : ""}
               ${resigned ? `<span class="badge ms-2" style="font-size:.65rem;background:#e2e8f0;color:#64748b;border-radius:6px">${t("resignedBadge")}</span>` : ""}
             </h4>
             <div class="mb-2" style="color:var(--text-muted)">${dispNat(emp.nationality)}${emp.age ? " · " + emp.age + (currentLang === "th" ? " ปี" : " yrs") : ""}</div>
@@ -931,6 +932,11 @@ async function viewEmployeeDetail(id) {
             <button class="btn btn-sm btn-outline-primary" style="border-radius:8px" onclick="navigate('/employee/${id}/edit')">
               <i class="bi bi-pencil me-1"></i>${t("edit")}
             </button>
+            ${emp.employment_status === "probation" && !resigned
+              ? `<button class="btn btn-sm btn-outline-success" style="border-radius:8px" onclick="passProbation(${id}, '${escHtml(emp.name)}')">
+                   <i class="bi bi-check2-circle me-1"></i>${t("btnPassProbation")}
+                 </button>`
+              : ""}
             ${resigned
               ? `<button class="btn btn-sm btn-outline-secondary" style="border-radius:8px" onclick="cancelResign(${id}, '${emp.name}')">
                    <i class="bi bi-arrow-counterclockwise me-1"></i>${t("btnCancelResign")}
@@ -1055,13 +1061,14 @@ async function viewEmployeeDetail(id) {
 
     <!-- Quick action buttons -->
     <div class="row g-3">
+      ${emp.employment_status === "probation" ? "" : `
       <div class="col-6 col-md-3">
         <button class="action-btn primary-action" onclick="navigate('/employee/${id}/leaves?y=${yr}&m=${mo}')">
           <i class="bi bi-calendar3 action-btn-icon"></i>
           <span class="action-btn-label">${t("btnCalendar")}</span>
           <span class="action-btn-sub">${monthLabel}</span>
         </button>
-      </div>
+      </div>`}
       <div class="col-6 col-md-3">
         <button class="action-btn" onclick="navigate('/employee/${id}/summary?y=${yr}&m=${mo}')">
           <i class="bi bi-bar-chart-line action-btn-icon" style="color:var(--primary)"></i>
@@ -1804,6 +1811,23 @@ async function confirmResign(id, name) {
   if (!confirm(t("confirmResignFinal", name, formatDate(dateStr)))) return;
   try {
     await api.post(`/api/employees/${id}/resign`, { end_date: dateStr, resign_note: note });
+    await render();
+  } catch (e) {
+    alert(t("errSave") + e.message);
+  }
+}
+
+async function passProbation(id, name) {
+  const today = new Date().toISOString().split("T")[0];
+  const dateStr = prompt(t("passProbationPrompt", name), today);
+  if (!dateStr) return;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    alert(t("confirmResignInvalid"));
+    return;
+  }
+  if (!confirm(t("passProbationConfirm", name, formatDate(dateStr)))) return;
+  try {
+    await api.post(`/api/employees/${id}/pass-probation`, { pass_date: dateStr });
     await render();
   } catch (e) {
     alert(t("errSave") + e.message);
