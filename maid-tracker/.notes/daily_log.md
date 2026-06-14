@@ -251,3 +251,29 @@ var theme = saved || "light";
 **ไฟล์:** `main.py` (migration, upload_documents, toggle_payment, toggle_daily_payment, get_payments, get_daily_payments), `static/app.js` (PAYERS const, doc form, typeLabel, payerSelect/payerBadge, toggle funcs, i18n TH+EN), `nginx/nginx.conf`, `tests/test_payments_docs.py` (3 tests ใหม่)
 
 **Test:** 12 passed (เดิม 9 + ใหม่ 3: paid_by roundtrip, other doc+label, invalid doc_type rejected)
+
+---
+
+## 2026-06-14 (รอบ 3)
+
+### Policy: อัตรารายวัน หารด้วยจำนวนวันทั้งเดือน (รวมวันหยุด)
+
+**คำขอ user:** "วันหยุดเราให้หยุด แต่เราก็จ่ายเงินเดือนให้" → daily rate ต้องหารด้วยจำนวนวันรวมวันหยุด ไม่ใช่แค่วันทำงาน จ-ส
+
+**เปลี่ยน:** `working_days_in_month` เดิม = นับ จ-ส (ไม่นับอาทิตย์) → นับ **ทุกวันในเดือน** (`calendar.monthrange()[1]`). ชื่อ fn คงเดิม (JSON-key stability) แต่ความหมายเปลี่ยน
+
+**Invariant ที่รักษา:** full month จ่ายเต็มเสมอ (dr × วันทั้งเดือน = salary). ต้องแก้ทั้ง divisor + billable counts พร้อมกัน ไม่งั้นพัง:
+- calc.py:29 divisor → `return n`
+- calc.py billable (resign) → ลบ filter `weekday()!=6`
+- main.py get_payments billable → `n - anchor.day + 1`
+- main.py get_summary billable → เหมือนกัน
+- main.py pass-probation transition billable → เหมือนกัน
+(5 จุด — grep `weekday` แยก salary-divisor ออกจาก Sunday-holiday/attendance logic ก่อนแก้ ห้ามแตะ `default_status`, Sunday-leave-redundant, compensatory-only-Sunday)
+
+**ผลข้างเคียง (แจ้ง user):** (1) หัก excess-leave ต่อวันน้อยลง (salary/30 แทน salary/26) — auto-track เพราะ `compute_leave_deduction` ใช้ `daily_rate()`. (2) ใช้กับ **ทั้งสอง holiday_mode** (monthly mode เดิมก็หาร จ-ส ทั้งที่ทำงานทุกวัน → uniform = แก้ให้ถูกด้วย)
+
+**Frontend:** preview `/26` → `/30` + label "เฉลี่ย 30 วัน/เดือน รวมวันหยุด" (TH+EN). CSV "จำนวนวันทำงานในเดือน" → "จำนวนวันในเดือน (รวมวันหยุด)"
+
+**ไฟล์:** `calc.py`, `main.py`, `static/app.js`, `README.md`, root `CLAUDE.md`, `tests/test_daily_divisor.py` (4 tests ใหม่ lock invariant), `tests/test_probation.py` (อัปเดต assertion 600→520, 5400→5720)
+
+**Test:** 16 passed (เดิม 12 + ใหม่ 4)

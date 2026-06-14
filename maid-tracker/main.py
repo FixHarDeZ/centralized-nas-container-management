@@ -945,12 +945,10 @@ def get_payments(emp_id: int, year: int, month: int):
     dr = emp["monthly_salary"] / wd_month if wd_month else 0
     half_salary = emp["monthly_salary"] / 2
 
-    # Base salary for this month (prorated if first month)
+    # Base salary for this month (prorated if first month).
+    # Count every day in the range — holidays are paid too.
     if anchor.year == year and anchor.month == month:
-        billable = sum(
-            1 for day in range(anchor.day, n + 1)
-            if date(year, month, day).weekday() != 6
-        )
+        billable = n - anchor.day + 1
         base_salary = dr * billable
     else:
         base_salary = emp["monthly_salary"]
@@ -1310,12 +1308,9 @@ def get_summary(emp_id: int, year: int, month: int):
     wd_month = working_days_in_month(year, month)
     dr = emp["monthly_salary"] / wd_month if wd_month else 0
 
-    # Prorated salary for first partial month
+    # Prorated salary for first partial month (all days paid, holidays included)
     if anchor.year == year and anchor.month == month:
-        billable = sum(
-            1 for day in range(anchor.day, n + 1)
-            if date(year, month, day).weekday() != 6
-        )
+        billable = n - anchor.day + 1
         base_salary = dr * billable
     else:
         base_salary = emp["monthly_salary"]
@@ -1630,7 +1625,7 @@ def _compute_period_amount(emp: dict, year: int, month: int, period: int) -> tup
     _, n        = calendar.monthrange(year, month)
 
     if anchor.year == year and anchor.month == month:
-        billable    = sum(1 for day in range(anchor.day, n + 1) if date(year, month, day).weekday() != 6)
+        billable    = n - anchor.day + 1   # all days paid, holidays included
         base_salary = dr * billable
     else:
         base_salary = emp["monthly_salary"]
@@ -2049,7 +2044,7 @@ def export_payslip(emp_id: int, year: int, month: int):
     w.writerow([])
     w.writerow(["รายการ", "จำนวน"])
     w.writerow(["เงินเดือนต่อเดือน (บาท)", f'{s["monthly_salary"]:.2f}'])
-    w.writerow(["จำนวนวันทำงานในเดือน", s["working_days_in_month"]])
+    w.writerow(["จำนวนวันในเดือน (รวมวันหยุด)", s["working_days_in_month"]])
     w.writerow(["อัตราต่อวัน (บาท)", f'{s["daily_rate"]:.2f}'])
     w.writerow(["เงินเดือนพื้นฐาน (บาท)", f'{s["base_salary"]:.2f}'])
     w.writerow([])
