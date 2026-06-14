@@ -48,6 +48,18 @@ def probation_up_to(monthly_start_date: date | None, today: date) -> date:
     return min(today, monthly_start_date - timedelta(days=1))
 
 
+def probation_worked_fraction(rec: dict | None) -> float:
+    """
+    Worked fraction for one probation day. Default model: every day is present (1.0).
+    An attendance row with status='leave' marks an absence:
+      full leave  → 0.0 worked, half leave → 0.5 worked.
+    (During probation 'leave' is repurposed to mean "ขาด/ไม่มาทำงาน".)
+    """
+    if rec and rec.get("status") == "leave":
+        return 0.5 if rec.get("half_day") else 0.0
+    return 1.0
+
+
 def compute_probation_tally(
     emp_id: int,
     start_date: date,
@@ -55,22 +67,28 @@ def compute_probation_tally(
     up_to: date | None = None,
 ) -> dict:
     """
-    Probation pay = sum of attendance rows status='work' (full=1.0, half=0.5)
-    in [start_date, up_to] × probation_daily_rate.
-    No default fill — only explicitly marked work days count. Leave/comp ignored.
+    Probation = daily pay, every calendar day present by DEFAULT.
+    Worked days = each day in [start_date, up_to] counts 1.0, minus days marked
+    absent (attendance status='leave': full→0.0, half→0.5).
+    Caller must pass `up_to` already clamped to today (do not pay future days).
     """
     end = up_to or date.today()
+    if end < start_date:
+        return {"total_days": 0.0, "amount": 0.0}
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     rows = conn.execute(
         "SELECT work_date, status, half_day FROM attendance "
-        "WHERE employee_id=? AND status='work' AND work_date >= ? AND work_date <= ?",
+        "WHERE employee_id=? AND work_date >= ? AND work_date <= ?",
         (emp_id, start_date.isoformat(), end.isoformat()),
     ).fetchall()
     conn.close()
+    saved = {r["work_date"]: {"status": r["status"], "half_day": bool(r["half_day"])} for r in rows}
     total = 0.0
-    for r in rows:
-        total += 0.5 if r["half_day"] else 1.0
+    d = start_date
+    while d <= end:
+        total += probation_worked_fraction(saved.get(d.isoformat()))
+        d += timedelta(days=1)
     return {
         "total_days": round(total, 2),
         "amount": round(total * probation_daily_rate, 2),
@@ -300,21 +318,28 @@ def compute_leave_deduction(
 
 def compute_probation_resign(emp_id, start_date, end_date, probation_daily_rate) -> dict:
     """
-    Resign while still in probation: settle only UNPAID marked work days × daily rate
-    (days already toggled paid in daily_payments are excluded). No monthly base.
+    Resign while still in probation: settle only UNPAID worked days × daily rate.
+    Default model: every day present unless marked absent ('leave'); days already
+    paid (daily_payments.paid_at) are excluded. No monthly base.
     """
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
-    rows = conn.execute(
-        "SELECT a.work_date, a.half_day FROM attendance a "
-        "LEFT JOIN daily_payments dp "
-        "  ON dp.employee_id = a.employee_id AND dp.work_date = a.work_date AND dp.paid_at IS NOT NULL "
-        "WHERE a.employee_id=? AND a.status='work' "
-        "  AND a.work_date >= ? AND a.work_date <= ? AND dp.id IS NULL",
-        (emp_id, start_date.isoformat(), end_date.isoformat()),
-    ).fetchall()
+    att = {r["work_date"]: {"status": r["status"], "half_day": bool(r["half_day"])}
+           for r in conn.execute(
+               "SELECT work_date, status, half_day FROM attendance "
+               "WHERE employee_id=? AND work_date >= ? AND work_date <= ?",
+               (emp_id, start_date.isoformat(), end_date.isoformat())).fetchall()}
+    paid = {r["work_date"] for r in conn.execute(
+        "SELECT work_date FROM daily_payments WHERE employee_id=? AND paid_at IS NOT NULL",
+        (emp_id,)).fetchall()}
     conn.close()
-    total = sum(0.5 if r["half_day"] else 1.0 for r in rows)
+    total = 0.0
+    d = start_date
+    while d <= end_date:
+        ds = d.isoformat()
+        if ds not in paid:
+            total += probation_worked_fraction(att.get(ds))
+        d += timedelta(days=1)
     return {
         "total_days":     round(total, 2),
         "daily_rate":     round(probation_daily_rate, 2),

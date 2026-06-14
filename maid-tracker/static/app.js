@@ -92,6 +92,7 @@ const TRANSLATIONS = {
     btnPassProbation: "ผ่านโปร",
     btnMarkAttendance: "ลงเวลาทำงาน",
     statusUnmarked: "ยังไม่ลง",
+    statusAbsent: "ขาด", statusAbsentHalf: "ขาดครึ่งวัน",
     btnDailyPay: "จ่ายเงินรายวัน",
     detailEarned: "ยอดสะสม", detailUnpaid: "ค้างจ่าย", detailPaid: "จ่ายแล้ว",
     labelRatePerDay: "บาท/วัน",
@@ -279,6 +280,7 @@ const TRANSLATIONS = {
     btnPassProbation: "Pass probation",
     btnMarkAttendance: "Mark attendance",
     statusUnmarked: "Unmarked",
+    statusAbsent: "Absent", statusAbsentHalf: "Half-day absent",
     btnDailyPay: "Daily pay",
     detailEarned: "Earned", detailUnpaid: "Unpaid", detailPaid: "Paid",
     labelRatePerDay: "Baht/day",
@@ -409,6 +411,12 @@ function slLabel(status, halfDay = false) {
   if (status === "leave") return t("statusLeaveHalf");
   if (status === "compensatory") return t("statusCompHalf");
   return sl(status);
+}
+
+// Calendar day label — probation repurposes 'leave' as "ขาด/absent"
+function dayLabel(status, halfDay, isProbation) {
+  if (isProbation && status === "leave") return halfDay ? t("statusAbsentHalf") : t("statusAbsent");
+  return slLabel(status, halfDay);
 }
 
 function switchLang() {
@@ -1169,6 +1177,9 @@ async function viewAttendance(id) {
   ]);
 
   const isProbation = emp.employment_status === "probation";
+  // Standalone calendar manages its own cells via optimistic update — disable any
+  // stale leave-list refresh hook left over from a previous view.
+  window.__refreshLeaveList = null;
   const cells = buildCalendarCells(id, days, emp.holiday_mode, isProbation);
   const legend = buildLegend(emp.holiday_mode, isProbation);
 
@@ -1273,8 +1284,13 @@ async function cycleDay(empId, dateStr, currentStatus, el, holidayMode, isProbat
   let halfDay = false;
 
   if (isProbation) {
-    // Probation: leave/comp/holiday disabled — only toggle work ↔ unmarked
-    nextStatus = currentStatus === "work" ? "unmarked" : "work";
+    // Probation: every day present by default — toggle work ↔ absent ('leave')
+    nextStatus = currentStatus === "leave" ? "work" : "leave";
+    if (nextStatus === "leave") {
+      const choice = await askHalfDay(dateStr, "leave");  // full = absent all day, half = absent half
+      if (!choice) return; // user cancelled
+      halfDay = choice === "half";
+    }
   } else {
     const dow = new Date(dateStr).getDay(); // 0=Sun
     if (mode === "monthly") {
@@ -1301,14 +1317,14 @@ async function cycleDay(empId, dateStr, currentStatus, el, holidayMode, isProbat
     .replace(/status-\S+/, "")
     .trimEnd() + " " + (STATUS_CSS[nextStatus] || "");
 
-  el.querySelector(".status-label").textContent = slLabel(nextStatus, halfDay);
+  el.querySelector(".status-label").textContent = dayLabel(nextStatus, halfDay, isProbation);
   el.dataset.status = nextStatus;
   el.dataset.halfDay = halfDay ? "1" : "0";
   el.setAttribute("onclick", `cycleDay(${empId},'${dateStr}','${nextStatus}',this,'${mode}',${isProbation ? "true" : "false"})`);
 
   try {
-    if (nextStatus === "unmarked") {
-      // Un-mark a probation work day → delete the attendance row
+    if (nextStatus === "unmarked" || (isProbation && nextStatus === "work")) {
+      // Probation 'work' is the default (no row) → clear any absence row
       await api.del(`/api/employees/${empId}/attendance/${dateStr}`);
     } else {
       await api.post(`/api/employees/${empId}/attendance`, {
@@ -1692,7 +1708,7 @@ function buildCalendarCells(id, days, holidayMode, isProbation) {
     const isFuture  = d.is_future;
     const disabled  = isBefore || isFuture;
     const statusCss = isFuture ? "status-future" : (STATUS_CSS[d.status] || "");
-    const label     = isFuture ? "—" : slLabel(d.status, d.half_day);
+    const label     = isFuture ? "—" : dayLabel(d.status, d.half_day, isProbation);
     const dayNum    = d.date.split("-")[2];
     const noteHtml  = d.note
       ? `<span class="cal-note text-muted" title="${escHtml(d.note)}" style="font-size:0.65rem;white-space:nowrap;overflow:hidden;max-width:100%;text-overflow:ellipsis">${escHtml(d.note)}</span>`
@@ -1713,8 +1729,8 @@ function buildLegend(holidayMode, isProbation) {
   const mode = holidayMode || "sunday";
   if (isProbation) {
     return [
-      { css: "status-work",     key: "statusWork",     suffix: "" },
-      { css: "status-unmarked", key: "statusUnmarked", suffix: "" },
+      { css: "status-work",  key: "statusWork",   suffix: "" },
+      { css: "status-leave", key: "statusAbsent", suffix: "" },
     ].map(l =>
       `<span class="cal-day ${l.css} px-2 py-1" style="min-height:0;border-radius:8px;cursor:default;font-size:0.75rem">${t(l.key)}${l.suffix}</span>`
     ).join("");
