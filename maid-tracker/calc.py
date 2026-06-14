@@ -34,6 +34,20 @@ def daily_rate(monthly_salary: float, year: int, month: int) -> float:
     return monthly_salary / wd if wd else 0.0
 
 
+# ── Probation / monthly day boundary ──────────────────────────
+
+def is_probation_day(d: date, monthly_start_date: date | None) -> bool:
+    """A day is a probation (daily-pay) day iff not yet passed, or strictly before pass date."""
+    return monthly_start_date is None or d < monthly_start_date
+
+
+def probation_up_to(monthly_start_date: date | None, today: date) -> date:
+    """Upper bound (inclusive) for probation tally: day before pass date, else today."""
+    if monthly_start_date is None:
+        return today
+    return min(today, monthly_start_date - timedelta(days=1))
+
+
 # ── Monthly-mode leave balance ────────────────────────────────
 
 def compute_monthly_leave_balance(
