@@ -90,6 +90,8 @@ const TRANSLATIONS = {
     // Probation (detail)
     probationBadge: "ทดลองงาน",
     btnPassProbation: "ผ่านโปร",
+    btnMarkAttendance: "ลงเวลาทำงาน",
+    statusUnmarked: "ยังไม่ลง",
     passProbationPrompt: (n) => `วันที่ ${n} ผ่านทดลองงาน (YYYY-MM-DD):`,
     passProbationConfirm: (n, d) => `ยืนยันให้ "${n}" ผ่านทดลองงานวันที่ ${d}?`,
     btnResign: "แจ้งลาออก", btnCancelResign: "ยกเลิกลาออก",
@@ -268,6 +270,8 @@ const TRANSLATIONS = {
     // Probation (detail)
     probationBadge: "Probation",
     btnPassProbation: "Pass probation",
+    btnMarkAttendance: "Mark attendance",
+    statusUnmarked: "Unmarked",
     passProbationPrompt: (n) => `Pass-probation date for ${n} (YYYY-MM-DD):`,
     passProbationConfirm: (n, d) => `Confirm "${n}" passes probation on ${d}?`,
     btnResign: "Record Resignation", btnCancelResign: "Cancel Resignation",
@@ -380,7 +384,7 @@ function sl(status) {
   const map = {
     work: t("statusWork"), leave: t("statusLeave"),
     holiday: t("statusHoliday"), compensatory: t("statusCompensatory"),
-    before_start: "—",
+    before_start: "—", unmarked: t("statusUnmarked"),
   };
   return map[status] || status;
 }
@@ -424,6 +428,7 @@ const STATUS_CSS = {
   holiday: "status-holiday",
   compensatory: "status-compensatory",
   before_start: "status-before_start",
+  unmarked: "status-unmarked",
 };
 
 // Weekday names indexed by Python weekday() value: 0=Mon … 6=Sun
@@ -1058,7 +1063,14 @@ async function viewEmployeeDetail(id) {
 
     <!-- Quick action buttons -->
     <div class="row g-3">
-      ${emp.employment_status === "probation" ? "" : `
+      ${emp.employment_status === "probation" ? `
+      <div class="col-6 col-md-3">
+        <button class="action-btn primary-action" onclick="navigate('/employee/${id}/attendance?y=${yr}&m=${mo}')">
+          <i class="bi bi-calendar-check action-btn-icon"></i>
+          <span class="action-btn-label">${t("btnMarkAttendance")}</span>
+          <span class="action-btn-sub">${monthLabel}</span>
+        </button>
+      </div>` : `
       <div class="col-6 col-md-3">
         <button class="action-btn primary-action" onclick="navigate('/employee/${id}/leaves?y=${yr}&m=${mo}')">
           <i class="bi bi-calendar3 action-btn-icon"></i>
@@ -1096,8 +1108,9 @@ async function viewAttendance(id) {
     api.get(`/api/employees/${id}/attendance?year=${year}&month=${month}`),
   ]);
 
-  const cells = buildCalendarCells(id, days);
-  const legend = buildLegend();
+  const isProbation = emp.employment_status === "probation";
+  const cells = buildCalendarCells(id, days, emp.holiday_mode, isProbation);
+  const legend = buildLegend(emp.holiday_mode, isProbation);
 
   ROOT.innerHTML = `
     <div class="page-breadcrumb mb-2">
@@ -1193,30 +1206,34 @@ function askHalfDay(dateStr, type) {
   });
 }
 
-async function cycleDay(empId, dateStr, currentStatus, el, holidayMode) {
+async function cycleDay(empId, dateStr, currentStatus, el, holidayMode, isProbation) {
   const mode = holidayMode || "sunday";
   // Cycle logic
   let nextStatus;
-  const dow = new Date(dateStr).getDay(); // 0=Sun
-
-  if (mode === "monthly") {
-    // Monthly mode: every day is simply work ↔ leave
-    nextStatus = currentStatus === "work" ? "leave" : "work";
-  } else {
-    // Sunday mode
-    if (dow === 0) {
-      nextStatus = currentStatus === "holiday" ? "compensatory" : "holiday";
-    } else {
-      nextStatus = currentStatus === "work" ? "leave" : "work";
-    }
-  }
-
-  // For leave / compensatory: ask full day or half day via modal
   let halfDay = false;
-  if (nextStatus === "leave" || nextStatus === "compensatory") {
-    const choice = await askHalfDay(dateStr, nextStatus === "leave" ? "leave" : "comp");
-    if (!choice) return; // user cancelled
-    halfDay = choice === "half";
+
+  if (isProbation) {
+    // Probation: leave/comp/holiday disabled — only toggle work ↔ unmarked
+    nextStatus = currentStatus === "work" ? "unmarked" : "work";
+  } else {
+    const dow = new Date(dateStr).getDay(); // 0=Sun
+    if (mode === "monthly") {
+      // Monthly mode: every day is simply work ↔ leave
+      nextStatus = currentStatus === "work" ? "leave" : "work";
+    } else {
+      // Sunday mode
+      if (dow === 0) {
+        nextStatus = currentStatus === "holiday" ? "compensatory" : "holiday";
+      } else {
+        nextStatus = currentStatus === "work" ? "leave" : "work";
+      }
+    }
+    // For leave / compensatory: ask full day or half day via modal
+    if (nextStatus === "leave" || nextStatus === "compensatory") {
+      const choice = await askHalfDay(dateStr, nextStatus === "leave" ? "leave" : "comp");
+      if (!choice) return; // user cancelled
+      halfDay = choice === "half";
+    }
   }
 
   // Optimistic UI update
@@ -1227,14 +1244,19 @@ async function cycleDay(empId, dateStr, currentStatus, el, holidayMode) {
   el.querySelector(".status-label").textContent = slLabel(nextStatus, halfDay);
   el.dataset.status = nextStatus;
   el.dataset.halfDay = halfDay ? "1" : "0";
-  el.setAttribute("onclick", `cycleDay(${empId},'${dateStr}','${nextStatus}',this,'${mode}')`);
+  el.setAttribute("onclick", `cycleDay(${empId},'${dateStr}','${nextStatus}',this,'${mode}',${isProbation ? "true" : "false"})`);
 
   try {
-    await api.post(`/api/employees/${empId}/attendance`, {
-      work_date: dateStr,
-      status: nextStatus,
-      half_day: halfDay,
-    });
+    if (nextStatus === "unmarked") {
+      // Un-mark a probation work day → delete the attendance row
+      await api.del(`/api/employees/${empId}/attendance/${dateStr}`);
+    } else {
+      await api.post(`/api/employees/${empId}/attendance`, {
+        work_date: dateStr,
+        status: nextStatus,
+        half_day: halfDay,
+      });
+    }
     if (window.__refreshLeaveList) await window.__refreshLeaveList();
   } catch (e) {
     alert(t("errSave") + e.message);
@@ -1566,8 +1588,9 @@ async function viewLeaveLog(id) {
   };
 }
 
-function buildCalendarCells(id, days, holidayMode) {
+function buildCalendarCells(id, days, holidayMode, isProbation) {
   const mode = holidayMode || "sunday";
+  const probArg = isProbation ? "true" : "false";
   const firstDate = days[0]?.date;
   if (!firstDate) return "";
   const firstDow = new Date(firstDate).getDay();
@@ -1585,7 +1608,7 @@ function buildCalendarCells(id, days, holidayMode) {
       : "";
     html += `
       <div class="cal-day ${statusCss}${disabled ? " cal-disabled" : ""}${isFuture ? " cal-future" : ""}"
-           ${!disabled ? `onclick="cycleDay(${id},'${d.date}','${d.status}',this,'${mode}')"` : ""}
+           ${!disabled ? `onclick="cycleDay(${id},'${d.date}','${d.status}',this,'${mode}',${probArg})"` : ""}
            data-date="${d.date}" data-status="${d.status}" data-half-day="${d.half_day ? 1 : 0}">
         <span class="day-num">${+dayNum}</span>
         <span class="status-label">${label}</span>
@@ -1595,8 +1618,16 @@ function buildCalendarCells(id, days, holidayMode) {
   return html;
 }
 
-function buildLegend(holidayMode) {
+function buildLegend(holidayMode, isProbation) {
   const mode = holidayMode || "sunday";
+  if (isProbation) {
+    return [
+      { css: "status-work",     key: "statusWork",     suffix: "" },
+      { css: "status-unmarked", key: "statusUnmarked", suffix: "" },
+    ].map(l =>
+      `<span class="cal-day ${l.css} px-2 py-1" style="min-height:0;border-radius:8px;cursor:default;font-size:0.75rem">${t(l.key)}${l.suffix}</span>`
+    ).join("");
+  }
   if (mode === "monthly") {
     return [
       { css: "status-work",  key: "statusWork",  suffix: "" },
