@@ -195,6 +195,63 @@ git commit -m "feat(maid-tracker): db migration for probation + slip + documents
 
 ## Phase 1 — Probation pay calc (TDD core)
 
+> **Boundary rule (one source of truth):** วันหนึ่งเป็น "probation day" ⟺ `monthly_start_date is None` **หรือ** `work_date < monthly_start_date`. ทุก call site (`compute_probation_tally` up_to, `get_daily_payments` cap, `toggle_daily_payment` guard, resign) ต้องใช้กฎเดียวกันนี้. Task 1.0 ทำ helper, Task ที่เหลือเรียกใช้.
+
+### Task 1.0: boundary helper + transition-boundary test
+
+**Files:**
+- Modify: `maid-tracker/calc.py` (helper)
+- Test: `maid-tracker/tests/test_probation.py`
+
+- [ ] **Step 1: failing test — boundary ที่วันผ่านโปร (pre-pass = probation, on/after = monthly)**
+
+`tests/test_probation.py` (ต้นไฟล์ มี `_calc` helper ตาม Task 1.1):
+```python
+def test_probation_day_boundary(db, monkeypatch):
+    calc = _calc(monkeypatch)
+    from datetime import date
+    # not passed yet → every day is probation
+    assert calc.is_probation_day(date(2026, 6, 25), None) is True
+    # passed on 06-20: pre-pass = probation, on/after = monthly
+    assert calc.is_probation_day(date(2026, 6, 19), date(2026, 6, 20)) is True
+    assert calc.is_probation_day(date(2026, 6, 20), date(2026, 6, 20)) is False
+    assert calc.is_probation_day(date(2026, 6, 21), date(2026, 6, 20)) is False
+```
+
+- [ ] **Step 2: รัน — FAIL (no is_probation_day)**
+
+Run: `cd maid-tracker && python -m pytest tests/test_probation.py::test_probation_day_boundary -v`
+Expected: FAIL `AttributeError ... is_probation_day`
+
+- [ ] **Step 3: implement helper ใน calc.py**
+
+```python
+def is_probation_day(d: date, monthly_start_date: date | None) -> bool:
+    """A day is a probation (daily-pay) day iff not yet passed, or strictly before pass date."""
+    return monthly_start_date is None or d < monthly_start_date
+
+
+def probation_up_to(monthly_start_date: date | None, today: date) -> date:
+    """Upper bound (inclusive) for probation tally: day before pass date, else today."""
+    if monthly_start_date is None:
+        return today
+    return min(today, monthly_start_date - timedelta(days=1))
+```
+
+- [ ] **Step 4: รัน — PASS**
+
+Run: `cd maid-tracker && python -m pytest tests/test_probation.py::test_probation_day_boundary -v`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add maid-tracker/calc.py maid-tracker/tests/test_probation.py
+git commit -m "feat(maid-tracker): probation/monthly day boundary helper"
+```
+
+> Task 1.1 `compute_probation_tally` caller ใน main.py ใช้ `probation_up_to(monthly_start_date, today)` เป็น `up_to`. `get_daily_payments`/`toggle` ใช้ `is_probation_day` (หรือ `work_date < monthly_start_date` ตรงๆ ตามที่ implement ใน Task 1.5).
+
 ### Task 1.1: `compute_probation_tally` ใน calc.py
 
 **Files:**
@@ -338,12 +395,17 @@ git commit -m "test(maid-tracker): monthly anchor prorate via param"
 - Modify: `maid-tracker/main.py:712-765` (`get_payments`)
 - Modify: `maid-tracker/main.py` `_compute_period_amount` helper (ค้นหา def แล้วแก้ให้ใช้ anchor เช่นกัน)
 
-- [ ] **Step 1: แก้ `get_payments` ให้ anchor**
+- [ ] **Step 1: แก้ `get_payments` ให้ anchor + skip periods ตอน probation**
 
 ใน `get_payments` หลัง `start_date = date.fromisoformat(emp["start_date"])` (line ~712) เพิ่ม:
 ```python
+    # Still in probation → no monthly periods at all (pay is daily via daily-payments)
+    if emp.get("employment_status") == "probation":
+        conn.close()
+        return []
     anchor = date.fromisoformat(emp["monthly_start_date"]) if emp.get("monthly_start_date") else start_date
 ```
+> หมายเหตุ: transition month (ผ่านโปรแล้ว, anchor=pass_date) — anchor logic เดิมจัดการถูก: ถ้า pass_date หลังวันที่ 15 → period 1 skip (`anchor <= mid_day` เป็น False), period 2 = prorated base. ไม่ต้องแก้เพิ่ม.
 แล้วแทนที่ทุกจุดที่ตรรกะ "first month / pro-rate / period skip" ใช้ `start_date`:
 - line ~741 `if start_date.year == year and start_date.month == month:` → `anchor`
 - line ~743 `range(start_date.day, n + 1)` → `range(anchor.day, n + 1)`
@@ -414,6 +476,9 @@ def pass_probation(emp_id: int, req: PassProbationRequest):
         conn.close(); raise HTTPException(404, "Employee not found")
     if emp["employment_status"] != "probation":
         conn.close(); raise HTTPException(400, "Employee is not in probation")
+    # validate pass_date: not before start_date
+    if req.pass_date < emp["start_date"]:
+        conn.close(); raise HTTPException(400, "pass_date before start_date")
     conn.execute(
         "UPDATE employees SET employment_status='active', monthly_start_date=? WHERE id=?",
         (req.pass_date, emp_id),
@@ -462,6 +527,8 @@ git commit -m "feat(maid-tracker): employee probation fields + pass-probation en
 
 - [ ] **Step 1: GET daily-payments — list วัน work ที่ mark แล้ว + paid status**
 
+> **⚠️ Bug-fix (advisor):** ต้อง **cap ที่ `monthly_start_date`** — คืนเฉพาะวัน probation (ก่อนผ่านโปร). ไม่งั้น transition month จะคืนวันหลังผ่านโปรที่ monthly salary จ่ายไปแล้ว → double-pay. ใช้ helper `_probation_day_bound` (Task 1.0) เพื่อให้ boundary อยู่ที่เดียว.
+
 ```python
 @app.get("/api/employees/{emp_id}/daily-payments")
 def get_daily_payments(emp_id: int, year: int, month: int):
@@ -471,10 +538,14 @@ def get_daily_payments(emp_id: int, year: int, month: int):
         conn.close(); raise HTTPException(404, "Employee not found")
     emp = dict(emp)
     rate = emp.get("probation_daily_rate") or 0
+    # cap: probation days only — strictly before monthly_start_date (if passed)
+    cap = emp.get("monthly_start_date")  # ISO str or None
+    cap_clause = " AND work_date < ?" if cap else ""
+    params = [emp_id, f"{year}-{month:02d}-%"] + ([cap] if cap else [])
     att = conn.execute(
         "SELECT work_date, half_day FROM attendance "
-        "WHERE employee_id=? AND status='work' AND work_date LIKE ? ORDER BY work_date",
-        (emp_id, f"{year}-{month:02d}-%"),
+        "WHERE employee_id=? AND status='work' AND work_date LIKE ?" + cap_clause + " ORDER BY work_date",
+        tuple(params),
     ).fetchall()
     paid = {r["work_date"]: dict(r) for r in conn.execute(
         "SELECT work_date, amount, paid_at, slip_path FROM daily_payments WHERE employee_id=? AND work_date LIKE ?",
@@ -506,6 +577,10 @@ def toggle_daily_payment(emp_id: int, work_date: str):
     if not emp:
         conn.close(); raise HTTPException(404, "Employee not found")
     emp = dict(emp)
+    # Guard: cannot toggle daily-payment on/after monthly_start_date (those days = monthly salary)
+    cap = emp.get("monthly_start_date")
+    if cap and work_date >= cap:
+        conn.close(); raise HTTPException(400, "Date is in monthly-salary period, not probation")
     att = conn.execute(
         "SELECT half_day FROM attendance WHERE employee_id=? AND work_date=? AND status='work'",
         (emp_id, work_date),
@@ -557,44 +632,65 @@ git commit -m "feat(maid-tracker): daily-payments endpoints for probation payout
 - Modify: `maid-tracker/main.py` resign-summary endpoint
 - Test: `maid-tracker/tests/test_probation.py`
 
-- [ ] **Step 1: failing test — resign ระหว่างโปร = unpaid work days × rate**
+- [ ] **Step 1: failing test — resign ระหว่างโปร = เฉพาะ unpaid work days × rate**
+
+> **⚠️ Bug-fix (advisor):** model = จ่ายรายวันไปเรื่อยๆ. วันที่ toggle paid แล้ว (มี `daily_payments.paid_at`) **ห้ามนับซ้ำ** ตอน resign. settlement = เฉพาะวัน work ที่ยังไม่จ่าย.
 
 ```python
-def test_resign_during_probation(db, monkeypatch):
+def test_resign_during_probation_unpaid_only(db, monkeypatch):
     calc = _calc(monkeypatch)
     eid = add_emp(db, name="D", start_date="2026-06-01", monthly_salary=15000,
                   employment_status="probation", probation_daily_rate=400)
     add_att(db, eid, "2026-06-02", "work")
     add_att(db, eid, "2026-06-03", "work")
-    r = calc.compute_probation_resign(eid, date(2026, 6, 1), date(2026, 6, 3), 400.0)
-    assert r["total_days"] == 2.0
+    add_att(db, eid, "2026-06-04", "work")
+    # 06-02 already paid → must NOT be counted again
+    db.execute("INSERT INTO daily_payments (employee_id, work_date, amount, paid_at) "
+               "VALUES (?,?,?,?)", (eid, "2026-06-02", 400.0, "2026-06-02 18:00"))
+    db.commit()
+    r = calc.compute_probation_resign(eid, date(2026, 6, 1), date(2026, 6, 4), 400.0)
+    assert r["total_days"] == 2.0       # 06-03, 06-04 only
     assert r["final_amount"] == 800.0
 ```
 
 - [ ] **Step 2: รัน — FAIL**
 
-Run: `cd maid-tracker && python -m pytest tests/test_probation.py::test_resign_during_probation -v`
+Run: `cd maid-tracker && python -m pytest tests/test_probation.py::test_resign_during_probation_unpaid_only -v`
 Expected: FAIL no `compute_probation_resign`
 
-- [ ] **Step 3: implement `compute_probation_resign` ใน calc.py**
+- [ ] **Step 3: implement `compute_probation_resign` ใน calc.py — เฉพาะ unpaid**
 
 ```python
 def compute_probation_resign(emp_id, start_date, end_date, probation_daily_rate) -> dict:
-    """Resign while still in probation: pay all marked work days × daily rate (no monthly base)."""
-    t = compute_probation_tally(emp_id, start_date, probation_daily_rate, up_to=end_date)
+    """
+    Resign while still in probation: settle only UNPAID marked work days × daily rate
+    (days already toggled paid in daily_payments are excluded). No monthly base.
+    """
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT a.work_date, a.half_day FROM attendance a "
+        "LEFT JOIN daily_payments dp "
+        "  ON dp.employee_id = a.employee_id AND dp.work_date = a.work_date AND dp.paid_at IS NOT NULL "
+        "WHERE a.employee_id=? AND a.status='work' "
+        "  AND a.work_date >= ? AND a.work_date <= ? AND dp.id IS NULL",
+        (emp_id, start_date.isoformat(), end_date.isoformat()),
+    ).fetchall()
+    conn.close()
+    total = sum(0.5 if r["half_day"] else 1.0 for r in rows)
     return {
-        "total_days":   t["total_days"],
-        "daily_rate":   round(probation_daily_rate, 2),
-        "base_salary":  0.0,
+        "total_days":     round(total, 2),
+        "daily_rate":     round(probation_daily_rate, 2),
+        "base_salary":    0.0,
         "balance_amount": 0.0,
-        "final_amount": t["amount"],
-        "probation":    True,
+        "final_amount":   round(total * probation_daily_rate, 2),
+        "probation":      True,
     }
 ```
 
 - [ ] **Step 4: รัน — PASS**
 
-Run: `cd maid-tracker && python -m pytest tests/test_probation.py::test_resign_during_probation -v`
+Run: `cd maid-tracker && python -m pytest tests/test_probation.py::test_resign_during_probation_unpaid_only -v`
 Expected: PASS
 
 - [ ] **Step 5: caller ใน main.py resign-summary เลือก branch ตาม `employment_status`**
@@ -887,7 +983,12 @@ git commit -m "feat(maid-tracker): probation badge + pass-probation UI"
 **Files:**
 - Modify: `maid-tracker/static/app.js`
 
-- [ ] **Step 1:** ถ้า status=probation → render รายการรายวัน (`GET daily-payments`) แต่ละแถว toggle paid + (ถ้า transfer) ปุ่ม upload slip + thumbnail. ถ้า active → 2 งวดเดิม + (ถ้า transfer) ปุ่ม slip ต่อ period. แสดงยอดรวม probation tally.
+- [ ] **Step 1:** **render ตามเดือนเทียบ anchor ไม่ใช่ตาม status ปัจจุบัน** (advisor bug-fix — transition month ต้องเห็นทั้ง daily ก่อนผ่านโปร + monthly หลังผ่านโปร):
+  - เรียกทั้ง `GET daily-payments?year=&month=` และ `GET payments?year=&month=` ทุกเดือน.
+  - ถ้า `daily-payments` คืน rows → render section "จ่ายรายวัน (ช่วงโปร)" แต่ละแถว toggle paid + (ถ้า transfer) ปุ่ม slip + thumbnail.
+  - ถ้า `payments` คืน periods → render section "เงินเดือน" 2 งวด + (ถ้า transfer) ปุ่ม slip ต่อ period.
+  - **Transition month** จะมี **ทั้งสอง section** (daily 06-01..06-19 + monthly 06-20..30) — ถูกต้อง, ไม่ double เพราะ backend cap แล้ว.
+  - เดือนเต็มโปร → มีแค่ daily. เดือนเต็มเงินเดือน → มีแค่ periods. แสดงยอดรวมรายวันที่ section หัว.
 - [ ] **Step 2: manual verify** — toggle จ่ายรายวัน, upload slip, เห็น thumbnail.
 - [ ] **Step 3: Commit**
 ```bash
@@ -943,5 +1044,11 @@ git commit -m "docs(maid-tracker): probation mode + slip/document upload"
 - Docs → Task 4.1 ✓
 
 **Placeholder scan:** ไม่มี TBD/TODO ใน implementation steps. Frontend tasks (Phase 3) ใช้ implement+manual-verify เพราะไม่มี JS test harness — ระบุ verify criteria ชัด.
+
+**Advisor bug-fixes (รอบ 2) — patched:**
+1. Transition double-pay/orphan → `get_daily_payments` cap ที่ `monthly_start_date` (Task 1.5) + `toggle` guard + SPA render per-month-relative-to-anchor (Task 3.3) + `get_payments` skip periods ตอน probation (Task 1.3).
+2. Resign re-pay paid days → `compute_probation_resign` นับเฉพาะ unpaid (LEFT JOIN daily_payments), test มีวัน paid (Task 1.6).
+3. Boundary 3 ที่ → centralize `is_probation_day`/`probation_up_to` (Task 1.0) + transition-boundary test.
+4. `pass_date` validation (ไม่ก่อน start_date) — Task 1.4.
 
 **Type consistency:** `monthly_start_date` TEXT (ISO) ทุกที่; anchor = `date.fromisoformat(...)` fallback `start_date`. `daily_payments.amount` REAL snapshot. calc ฟังก์ชันรับ `start_date: date` (ส่ง anchor) — signature เดิมไม่เปลี่ยน.
