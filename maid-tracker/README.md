@@ -70,15 +70,18 @@ TLS is terminated by Synology Reverse Proxy — the nginx sidecar handles Authel
 - Monthly logic anchors on `monthly_start_date or start_date`, so leave accrual and proration begin at the pass date — not the original start date. Existing (non-probation) employees are unaffected
 - Resign during probation settles only **unpaid** work days × daily rate (no monthly base)
 
-### 💳 Payment Method & Slips
+### 💳 Payment Method, Slips & Payer
 - Each employee has a **payment method**: `cash` or `transfer`
 - For `transfer`, an **attach-slip** button appears on every payment (daily probation days + monthly periods) — uploads an image/PDF stored under `/data/slips`
 - Slips are served behind the stack's basic auth
+- **Payer dropdown:** when marking a period/day as paid, pick who paid it (ฟิก / ปุ๊ก). The choice (`paid_by`) is stored and shown as a *"Paid by X"* badge; unmarking clears it. Payer list is the `PAYERS` const in `static/app.js`
 
-### 🪪 ID / Passport Documents
-- Upload **multiple** ID-card / passport images per employee (added at edit time), stored under `/data/documents`
+### 🪪 Documents (ID / Passport / Other)
+- Upload **multiple** images/PDFs per employee (added at edit time), stored under `/data/documents`
+- Document type is an enum: **ID Card**, **Passport**, or **Other** — picking *Other* reveals a free-text label field (display-only, e.g. "employment contract")
 - List, view, and delete documents from the employee form
 - **Note:** `/data/slips` and `/data/documents` are **not** included in the SQLite auto-backup
+- ⚠️ Uploads pass through the nginx sidecar — `client_max_body_size` is set to `25m` in `nginx/nginx.conf` (default 1MB causes `413 Request Entity Too Large` on phone photos). The app itself caps at 10MB
 
 ### 🚦 Max Leave Carry Cap *(optional per employee)*
 - Set a **max leave carry** (days) on each employee — leave the field blank for unlimited accumulation (default behaviour)
