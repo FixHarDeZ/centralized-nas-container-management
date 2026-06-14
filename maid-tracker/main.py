@@ -939,6 +939,81 @@ def toggle_payment(emp_id: int, period: int, year: int, month: int):
     return {"paid": bool(paid_at), "paid_at": paid_at}
 
 
+@app.get("/api/employees/{emp_id}/daily-payments")
+def get_daily_payments(emp_id: int, year: int, month: int):
+    conn = get_db()
+    emp = conn.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
+    if not emp:
+        conn.close(); raise HTTPException(404, "Employee not found")
+    emp = dict(emp)
+    rate = emp.get("probation_daily_rate") or 0
+    # cap: probation days only — strictly before monthly_start_date (if passed)
+    cap = emp.get("monthly_start_date")  # ISO str or None
+    cap_clause = " AND work_date < ?" if cap else ""
+    params = [emp_id, f"{year}-{month:02d}-%"] + ([cap] if cap else [])
+    att = conn.execute(
+        "SELECT work_date, half_day FROM attendance "
+        "WHERE employee_id=? AND status='work' AND work_date LIKE ?" + cap_clause + " ORDER BY work_date",
+        tuple(params),
+    ).fetchall()
+    paid = {r["work_date"]: dict(r) for r in conn.execute(
+        "SELECT work_date, amount, paid_at, slip_path FROM daily_payments WHERE employee_id=? AND work_date LIKE ?",
+        (emp_id, f"{year}-{month:02d}-%"),
+    ).fetchall()}
+    conn.close()
+    out = []
+    for a in att:
+        frac = 0.5 if a["half_day"] else 1.0
+        p = paid.get(a["work_date"])
+        out.append({
+            "work_date": a["work_date"],
+            "fraction": frac,
+            "amount": round((p["amount"] if p else rate * frac), 2),
+            "paid": bool(p and p["paid_at"]),
+            "paid_at": p["paid_at"] if p else None,
+            "slip_path": p["slip_path"] if p else None,
+        })
+    return out
+
+
+@app.post("/api/employees/{emp_id}/daily-payments/{work_date}/toggle")
+def toggle_daily_payment(emp_id: int, work_date: str):
+    conn = get_db()
+    emp = conn.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
+    if not emp:
+        conn.close(); raise HTTPException(404, "Employee not found")
+    emp = dict(emp)
+    # Guard: cannot toggle daily-payment on/after monthly_start_date (those days = monthly salary)
+    cap = emp.get("monthly_start_date")
+    if cap and work_date >= cap:
+        conn.close(); raise HTTPException(400, "Date is in monthly-salary period, not probation")
+    att = conn.execute(
+        "SELECT half_day FROM attendance WHERE employee_id=? AND work_date=? AND status='work'",
+        (emp_id, work_date),
+    ).fetchone()
+    if not att:
+        conn.close(); raise HTTPException(400, "No marked work day on that date")
+    existing = conn.execute(
+        "SELECT id, paid_at FROM daily_payments WHERE employee_id=? AND work_date=?",
+        (emp_id, work_date),
+    ).fetchone()
+    if existing and existing["paid_at"]:
+        conn.execute("UPDATE daily_payments SET paid_at=NULL WHERE id=?", (existing["id"],))
+        paid_at = None
+    else:
+        frac = 0.5 if att["half_day"] else 1.0
+        amount = round((emp.get("probation_daily_rate") or 0) * frac, 2)
+        now = datetime.now().strftime("%Y-%m-%d %H:%M")
+        conn.execute(
+            "INSERT INTO daily_payments (employee_id, work_date, amount, paid_at) VALUES (?,?,?,?) "
+            "ON CONFLICT(employee_id, work_date) DO UPDATE SET amount=excluded.amount, paid_at=excluded.paid_at",
+            (emp_id, work_date, amount, now),
+        )
+        paid_at = now
+    conn.commit(); conn.close()
+    return {"paid": bool(paid_at), "paid_at": paid_at}
+
+
 # ---------- Summary endpoints ----------
 
 @app.get("/api/employees/{emp_id}/summary")
