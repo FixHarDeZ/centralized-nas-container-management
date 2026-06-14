@@ -32,6 +32,7 @@ from calc import (
     working_days_in_month,
     compute_overall_balance,
     compute_resign_summary,
+    compute_probation_resign,
     compute_leave_deduction,
     compute_monthly_leave_balance,
 )
@@ -615,6 +616,26 @@ def get_resign_summary(emp_id: int):
     anchor = date.fromisoformat(emp["monthly_start_date"]) if emp.get("monthly_start_date") else start_date
     end_date   = date.fromisoformat(emp["end_date"])
     conn.close()
+
+    if emp.get("employment_status") == "probation":
+        s = compute_probation_resign(
+            emp_id, start_date, end_date, emp.get("probation_daily_rate") or 0.0
+        )
+        return {
+            "end_date":               emp["end_date"],
+            "resign_note":            emp.get("resign_note"),
+            "monthly_salary":         emp["monthly_salary"],
+            "daily_rate":             s["daily_rate"],
+            "working_days_in_month":  working_days_in_month(end_date.year, end_date.month),
+            "billable_days":          s["total_days"],
+            "base_salary":            s["base_salary"],
+            "total_compensatory_days": 0,
+            "total_leave_days":       0,
+            "cumulative_balance":     0,
+            "balance_amount":         s["balance_amount"],
+            "final_amount":           s["final_amount"],
+            "probation":              True,
+        }
 
     s = compute_resign_summary(
         emp_id, anchor, end_date, emp["monthly_salary"],
