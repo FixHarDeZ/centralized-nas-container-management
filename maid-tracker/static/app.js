@@ -71,6 +71,11 @@ const TRANSLATIONS = {
     docsTitle: "เอกสาร",
     docTypeIdCard: "บัตรประชาชน",
     docTypePassport: "พาสปอร์ต",
+    docTypeOther: "เอกสารอื่นๆ",
+    docLabelPlaceholder: "ชื่อเอกสาร (เช่น สัญญาจ้าง)",
+    payerLabel: "ผู้จ่าย",
+    payerNone: "—",
+    payerByLabel: (who) => `จ่ายโดย ${who}`,
     docFieldType: "ประเภทเอกสาร",
     docFieldFiles: "เลือกไฟล์ (เลือกได้หลายไฟล์)",
     docUploadBtn: "อัปโหลด",
@@ -259,6 +264,11 @@ const TRANSLATIONS = {
     docsTitle: "Documents",
     docTypeIdCard: "ID Card",
     docTypePassport: "Passport",
+    docTypeOther: "Other document",
+    docLabelPlaceholder: "Document name (e.g. contract)",
+    payerLabel: "Paid by",
+    payerNone: "—",
+    payerByLabel: (who) => `Paid by ${who}`,
     docFieldType: "Document type",
     docFieldFiles: "Choose files (multiple allowed)",
     docUploadBtn: "Upload",
@@ -432,6 +442,9 @@ function switchLang() {
 // ─── Root ────────────────────────────────────────────────────
 
 const ROOT = document.getElementById("app");
+
+// Who paid an installment (the two employers). Extend here if more payers are added.
+const PAYERS = ["ฟิก", "ปุ๊ก"];
 
 // Nationality display mapping (DB stores Thai strings)
 const NAT_DISPLAY = {
@@ -740,7 +753,10 @@ async function viewEmployeeForm(id) {
             <select class="form-select form-select-sm" id="docType">
               <option value="id_card">${t("docTypeIdCard")}</option>
               <option value="passport">${t("docTypePassport")}</option>
+              <option value="other">${t("docTypeOther")}</option>
             </select>
+            <input type="text" class="form-control form-control-sm mt-1 d-none" id="docLabel"
+                   placeholder="${t("docLabelPlaceholder")}" maxlength="80" />
           </div>
           <div class="col-12 col-sm-5">
             <label class="form-label small fw-semibold mb-1">${t("docFieldFiles")}</label>
@@ -854,7 +870,9 @@ async function viewEmployeeForm(id) {
         }
         listEl.innerHTML = docs.map(d => {
           const url       = `/api/documents/${d.file_path}`;
-          const typeLabel = d.doc_type === "passport" ? t("docTypePassport") : t("docTypeIdCard");
+          const typeLabel = d.doc_type === "passport" ? t("docTypePassport")
+                          : d.doc_type === "other"    ? (escHtml(d.doc_label || "") || t("docTypeOther"))
+                          : t("docTypeIdCard");
           const isImg     = /\.(png|jpe?g|gif|webp|bmp)$/i.test(d.file_path);
           const thumb     = isImg
             ? `<img src="${escHtml(url)}" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:6px">`
@@ -885,12 +903,19 @@ async function viewEmployeeForm(id) {
         alert(t("errDelete") + e.message);
       }
     };
+    // 'Other' reveals a free-text label field.
+    const docTypeSel = document.getElementById("docType");
+    const docLabelEl = document.getElementById("docLabel");
+    docTypeSel.addEventListener("change", () => {
+      docLabelEl.classList.toggle("d-none", docTypeSel.value !== "other");
+    });
     document.getElementById("docUploadBtn").addEventListener("click", async () => {
       const filesInput = document.getElementById("docFiles");
       const files = filesInput.files;
       if (!files || files.length === 0) { alert(t("docUploadFirst")); return; }
       const fd = new FormData();
-      fd.append("doc_type", document.getElementById("docType").value);
+      fd.append("doc_type", docTypeSel.value);
+      if (docTypeSel.value === "other") fd.append("doc_label", docLabelEl.value || "");
       for (const f of files) fd.append("files", f);
       const btn = document.getElementById("docUploadBtn");
       btn.disabled = true;
@@ -1839,6 +1864,18 @@ async function viewPayments(id) {
     return `<a href="${escHtml(url)}" target="_blank" rel="noopener" class="d-inline-flex align-items-center gap-1 ms-1" title="${t("slipViewBtn")}">${thumb}</a>`;
   }
 
+  // Payer picker (who paid this installment) — value read by the toggle handler on mark-paid.
+  function payerSelect(selId) {
+    return `<select id="${selId}" class="form-select form-select-sm" style="width:auto;display:inline-block" title="${t("payerLabel")}">
+        ${PAYERS.map(p => `<option value="${escHtml(p)}">${escHtml(p)}</option>`).join("")}
+      </select>`;
+  }
+  function payerBadge(who) {
+    if (!who) return "";
+    return `<span class="badge rounded-pill bg-info-subtle text-info-emphasis border border-info-subtle">
+        <i class="bi bi-person-fill me-1"></i>${t("payerByLabel", escHtml(who))}</span>`;
+  }
+
   // ─── Daily-payment row (probation) ───────────────────────
   function dailyRow(d) {
     const isPaid = d.paid;
@@ -1858,6 +1895,7 @@ async function viewPayments(id) {
         </td>
         <td class="text-end pe-3">
           <div class="d-flex justify-content-end align-items-center gap-2 flex-wrap">
+            ${isPaid ? payerBadge(d.paid_by) : payerSelect(`payer_d_${d.work_date}`)}
             <button class="btn btn-sm ${isPaid ? "btn-outline-secondary" : "btn-primary"}"
                     onclick="toggleDailyPayment(${id}, '${d.work_date}', this)">
               <i class="bi ${isPaid ? "bi-x-circle" : "bi-check-circle"} me-1"></i>${isPaid ? t("btnUnmarkPaid") : t("btnMarkPaid")}
@@ -1935,10 +1973,12 @@ async function viewPayments(id) {
               <div class="text-dark fw-bold fs-5">${fmtMoney(p.amount)} ${t("baht")}</div>
               ${noteSection}
               ${isPaid ? `<div class="text-success small mt-1"><i class="bi bi-check-circle-fill me-1"></i>${t("paidAtLabel")} ${escHtml(p.paid_at || "")}</div>` : ""}
+              ${isPaid ? `<div class="mt-1">${payerBadge(p.paid_by)}</div>` : ""}
             </div>
             <div class="text-end flex-shrink-0">
               <div class="badge ${isPaid ? "bg-success" : "bg-warning text-dark"} mb-2">${isPaid ? t("badgePaid") : t("badgePending")}</div>
               <br>
+              ${isPaid ? "" : `<div class="mb-2 d-flex justify-content-end">${payerSelect(`payer_p_${p.period}`)}</div>`}
               <button class="btn btn-sm ${isPaid ? "btn-outline-secondary" : "btn-primary"}"
                       onclick="togglePayment(${id}, ${year}, ${month}, ${p.period}, this)">
                 <i class="bi ${isPaid ? "bi-x-circle" : "bi-check-circle"} me-1"></i>${isPaid ? t("btnUnmarkPaid") : t("btnMarkPaid")}
@@ -2013,8 +2053,10 @@ function shiftPayments(id, year, month, delta) {
 
 async function togglePayment(empId, year, month, period, btn) {
   btn.disabled = true;
+  // Only present when not yet paid (mark-paid flow); ignored on unmark.
+  const payer = document.getElementById(`payer_p_${period}`)?.value || "";
   try {
-    await api.post(`/api/employees/${empId}/payments/${period}/toggle?year=${year}&month=${month}`, {});
+    await api.post(`/api/employees/${empId}/payments/${period}/toggle?year=${year}&month=${month}&paid_by=${encodeURIComponent(payer)}`, {});
     await viewPayments(empId);
   } catch (e) {
     alert(t("errSave") + e.message);
@@ -2026,8 +2068,9 @@ async function togglePayment(empId, year, month, period, btn) {
 
 async function toggleDailyPayment(empId, workDate, btn) {
   btn.disabled = true;
+  const payer = document.getElementById(`payer_d_${workDate}`)?.value || "";
   try {
-    await api.post(`/api/employees/${empId}/daily-payments/${workDate}/toggle`, {});
+    await api.post(`/api/employees/${empId}/daily-payments/${workDate}/toggle?paid_by=${encodeURIComponent(payer)}`, {});
     await viewPayments(empId);
   } catch (e) {
     alert(t("errSave") + e.message);
