@@ -747,6 +747,11 @@ def get_payments(emp_id: int, year: int, month: int):
     emp = dict(emp)
 
     start_date = date.fromisoformat(emp["start_date"])
+    # Still in probation → no monthly periods at all (pay is daily via daily-payments)
+    if emp.get("employment_status") == "probation":
+        conn.close()
+        return []
+    anchor = date.fromisoformat(emp["monthly_start_date"]) if emp.get("monthly_start_date") else start_date
     end_date = date.fromisoformat(emp["end_date"]) if emp.get("end_date") else None
     today = date.today()
 
@@ -775,9 +780,9 @@ def get_payments(emp_id: int, year: int, month: int):
     half_salary = emp["monthly_salary"] / 2
 
     # Base salary for this month (prorated if first month)
-    if start_date.year == year and start_date.month == month:
+    if anchor.year == year and anchor.month == month:
         billable = sum(
-            1 for day in range(start_date.day, n + 1)
+            1 for day in range(anchor.day, n + 1)
             if date(year, month, day).weekday() != 6
         )
         base_salary = dr * billable
@@ -788,9 +793,9 @@ def get_payments(emp_id: int, year: int, month: int):
     # If the employee started after the 15th their first month, period 1 is skipped,
     # so period 2 should pay the entire prorated base salary (not base - half).
     first_month_after_15 = (
-        start_date.year == year
-        and start_date.month == month
-        and start_date > mid_day
+        anchor.year == year
+        and anchor.month == month
+        and anchor > mid_day
     )
     period2_amount = base_salary if first_month_after_15 else base_salary - half_salary
 
@@ -799,14 +804,14 @@ def get_payments(emp_id: int, year: int, month: int):
     p2_deduction_days   = 0.0
     p2_deduction_amount = 0.0
     if max_carry is not None and max_carry >= 0:
-        ded = compute_leave_deduction(emp_id, year, month, max_carry, emp["monthly_salary"], start_date)
+        ded = compute_leave_deduction(emp_id, year, month, max_carry, emp["monthly_salary"], anchor)
         p2_deduction_days   = ded["deduction_days"]
         p2_deduction_amount = ded["deduction_amount"]
 
     result = []
 
     # Period 1 (15th) — skip if employee started after 15th or resigned before 15th
-    if start_date <= mid_day and (end_date is None or end_date >= mid_day):
+    if anchor <= mid_day and (end_date is None or end_date >= mid_day):
         result.append({
             "period": 1,
             "due_date": mid_day.isoformat(),
@@ -822,7 +827,7 @@ def get_payments(emp_id: int, year: int, month: int):
     if end_date and end_date.year == year and end_date.month == month:
         period2_due = end_date
 
-    if start_date <= last_day and (end_date is None or end_date >= date(year, month, 1)):
+    if anchor <= last_day and (end_date is None or end_date >= date(year, month, 1)):
         result.append({
             "period": 2,
             "due_date": period2_due.isoformat(),
@@ -1218,16 +1223,17 @@ def _compute_period_amount(emp: dict, year: int, month: int, period: int) -> tup
     dr          = emp["monthly_salary"] / wd_month if wd_month else 0
     half_salary = emp["monthly_salary"] / 2
     start_date  = date.fromisoformat(emp["start_date"])
+    anchor      = date.fromisoformat(emp["monthly_start_date"]) if emp.get("monthly_start_date") else start_date
     _, n        = calendar.monthrange(year, month)
 
-    if start_date.year == year and start_date.month == month:
-        billable    = sum(1 for day in range(start_date.day, n + 1) if date(year, month, day).weekday() != 6)
+    if anchor.year == year and anchor.month == month:
+        billable    = sum(1 for day in range(anchor.day, n + 1) if date(year, month, day).weekday() != 6)
         base_salary = dr * billable
     else:
         base_salary = emp["monthly_salary"]
 
     mid_day             = date(year, month, 15)
-    first_month_after15 = start_date.year == year and start_date.month == month and start_date > mid_day
+    first_month_after15 = anchor.year == year and anchor.month == month and anchor > mid_day
 
     if period == 1:
         return round(half_salary, 2), 0.0, 0.0
@@ -1236,7 +1242,7 @@ def _compute_period_amount(emp: dict, year: int, month: int, period: int) -> tup
     deduction_days, deduction_amount = 0.0, 0.0
     max_carry = emp.get("max_leave_carry")
     if max_carry is not None and max_carry >= 0:
-        ded = compute_leave_deduction(emp["id"], year, month, max_carry, emp["monthly_salary"], start_date)
+        ded = compute_leave_deduction(emp["id"], year, month, max_carry, emp["monthly_salary"], anchor)
         deduction_days   = ded["deduction_days"]
         deduction_amount = ded["deduction_amount"]
     return round(gross - deduction_amount, 2), deduction_days, deduction_amount
