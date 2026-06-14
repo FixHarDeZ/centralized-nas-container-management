@@ -1876,8 +1876,10 @@ async function viewPayments(id) {
         <i class="bi bi-person-fill me-1"></i>${t("payerByLabel", escHtml(who))}</span>`;
   }
 
-  // ─── Daily-payment row (probation) ───────────────────────
-  function dailyRow(d) {
+  // ─── Daily-payment card (probation) ──────────────────────
+  // Stacked card layout (not a wide table) so actions wrap instead of
+  // overflowing off the right edge on narrow/mobile screens.
+  function dailyCard(d) {
     const isPaid = d.paid;
     const slipBtn = isTransfer ? `
       <input type="file" class="d-none" id="dslip_${d.work_date}" onchange="uploadDailySlip(${id}, '${d.work_date}', this)">
@@ -1886,24 +1888,23 @@ async function viewPayments(id) {
       </button>
       ${slipLink(d.slip_path)}` : "";
     return `
-      <tr>
-        <td class="ps-3">${formatDate(d.work_date)}</td>
-        <td class="text-center">${d.fraction}</td>
-        <td class="text-end fw-semibold">${fmtMoney(d.amount)} ${t("baht")}</td>
-        <td class="text-center">
-          <span class="badge ${isPaid ? "bg-success" : "bg-warning text-dark"}">${isPaid ? t("badgePaid") : t("badgePending")}</span>
-        </td>
-        <td class="text-end pe-3">
-          <div class="d-flex justify-content-end align-items-center gap-2 flex-wrap">
-            ${isPaid ? payerBadge(d.paid_by) : payerSelect(`payer_d_${d.work_date}`)}
-            <button class="btn btn-sm ${isPaid ? "btn-outline-secondary" : "btn-primary"}"
-                    onclick="toggleDailyPayment(${id}, '${d.work_date}', this)">
-              <i class="bi ${isPaid ? "bi-x-circle" : "bi-check-circle"} me-1"></i>${isPaid ? t("btnUnmarkPaid") : t("btnMarkPaid")}
-            </button>
-            ${slipBtn}
+      <div class="border-bottom px-3 py-2">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="fw-semibold">${formatDate(d.work_date)}
+            <span class="text-muted small ms-1">×${d.fraction}</span>
           </div>
-        </td>
-      </tr>`;
+          <div class="fw-bold">${fmtMoney(d.amount)} ${t("baht")}</div>
+        </div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+          <span class="badge ${isPaid ? "bg-success" : "bg-warning text-dark"}">${isPaid ? t("badgePaid") : t("badgePending")}</span>
+          ${isPaid ? payerBadge(d.paid_by) : payerSelect(`payer_d_${d.work_date}`)}
+          <button class="btn btn-sm ${isPaid ? "btn-outline-secondary" : "btn-primary"}"
+                  onclick="toggleDailyPayment(${id}, '${d.work_date}', this)">
+            <i class="bi ${isPaid ? "bi-x-circle" : "bi-check-circle"} me-1"></i>${isPaid ? t("btnUnmarkPaid") : t("btnMarkPaid")}
+          </button>
+          ${slipBtn}
+        </div>
+      </div>`;
   }
 
   const isProb = emp.employment_status === "probation";
@@ -1917,25 +1918,11 @@ async function viewPayments(id) {
       </div>
       <div class="card-body p-0">
         ${dailyPayments.length === 0 ? `<div class="text-muted small p-3"><i class="bi bi-info-circle me-1"></i>${t("dailyPayHint")}</div>` : `
-        <table class="table table-sm mb-0 align-middle">
-          <thead class="table-light">
-            <tr>
-              <th class="ps-3">${t("dailyPayDate")}</th>
-              <th class="text-center">${t("dailyPayFraction")}</th>
-              <th class="text-end">${t("dailyPayAmount")}</th>
-              <th class="text-center"></th>
-              <th class="text-end pe-3"></th>
-            </tr>
-          </thead>
-          <tbody>${dailyPayments.map(dailyRow).join("")}</tbody>
-          <tfoot class="table-light fw-bold">
-            <tr>
-              <td class="ps-3" colspan="2">${t("dailyPayTotal")}</td>
-              <td class="text-end">${fmtMoney(dailyTotal)} ${t("baht")}</td>
-              <td colspan="2"></td>
-            </tr>
-          </tfoot>
-        </table>`}
+        <div>${dailyPayments.map(dailyCard).join("")}</div>
+        <div class="d-flex justify-content-between align-items-center px-3 py-2 bg-light fw-bold">
+          <span>${t("dailyPayTotal")}</span>
+          <span>${fmtMoney(dailyTotal)} ${t("baht")}</span>
+        </div>`}
       </div>
     </div>`;
 
