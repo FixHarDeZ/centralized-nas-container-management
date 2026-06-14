@@ -1866,8 +1866,8 @@ async function viewPayments(id) {
 
   // Payer picker (who paid this installment) — value read by the toggle handler on mark-paid.
   function payerSelect(selId) {
-    return `<select id="${selId}" class="form-select form-select-sm" style="width:auto;display:inline-block" title="${t("payerLabel")}">
-        ${PAYERS.map(p => `<option value="${escHtml(p)}">${escHtml(p)}</option>`).join("")}
+    return `<select id="${selId}" class="form-select form-select-sm" title="${t("payerLabel")}">
+        ${PAYERS.map(p => `<option value="${escHtml(p)}">${t("payerLabel")}: ${escHtml(p)}</option>`).join("")}
       </select>`;
   }
   function payerBadge(who) {
@@ -1883,21 +1883,23 @@ async function viewPayments(id) {
     const isPaid = d.paid;
     const slipBtn = isTransfer ? `
       <input type="file" class="d-none" id="dslip_${d.work_date}" onchange="uploadDailySlip(${id}, '${d.work_date}', this)">
-      <button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('dslip_${d.work_date}').click()">
-        <i class="bi bi-paperclip me-1"></i>${t("slipUploadBtn")}
-      </button>
-      ${slipLink(d.slip_path)}` : "";
+      <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-sm btn-outline-secondary flex-grow-1" onclick="document.getElementById('dslip_${d.work_date}').click()">
+          <i class="bi bi-paperclip me-1"></i>${t("slipUploadBtn")}
+        </button>
+        ${slipLink(d.slip_path)}
+      </div>` : "";
     return `
-      <div class="border-bottom px-3 py-2">
-        <div class="d-flex justify-content-between align-items-center mb-2">
+      <div class="border-bottom px-3 py-3">
+        <div class="d-flex justify-content-between align-items-center mb-1">
           <div class="fw-semibold">${formatDate(d.work_date)}
             <span class="text-muted small ms-1">×${d.fraction}</span>
           </div>
-          <div class="fw-bold">${fmtMoney(d.amount)} ${t("baht")}</div>
-        </div>
-        <div class="d-flex align-items-center gap-2 flex-wrap">
           <span class="badge ${isPaid ? "bg-success" : "bg-warning text-dark"}">${isPaid ? t("badgePaid") : t("badgePending")}</span>
-          ${isPaid ? payerBadge(d.paid_by) : payerSelect(`payer_d_${d.work_date}`)}
+        </div>
+        <div class="fw-bold fs-5 mb-2">${fmtMoney(d.amount)} ${t("baht")}</div>
+        <div class="mb-2">${isPaid ? payerBadge(d.paid_by) : payerSelect(`payer_d_${d.work_date}`)}</div>
+        <div class="d-grid gap-2">
           <button class="btn btn-sm ${isPaid ? "btn-outline-secondary" : "btn-primary"}"
                   onclick="toggleDailyPayment(${id}, '${d.work_date}', this)">
             <i class="bi ${isPaid ? "bi-x-circle" : "bi-check-circle"} me-1"></i>${isPaid ? t("btnUnmarkPaid") : t("btnMarkPaid")}
@@ -1953,32 +1955,31 @@ async function viewPayments(id) {
     return `
       <div class="card border-0 shadow-sm mb-3">
         <div class="card-body">
-          <div class="d-flex align-items-start gap-3">
-            <div class="flex-grow-1">
+          <div class="d-flex justify-content-between align-items-start mb-1">
+            <div>
               <div class="fw-bold">${label}</div>
-              <div class="text-muted small mb-2">${t("dueDateLabel")} ${formatDate(p.due_date)}</div>
-              <div class="text-dark fw-bold fs-5">${fmtMoney(p.amount)} ${t("baht")}</div>
-              ${noteSection}
-              ${isPaid ? `<div class="text-success small mt-1"><i class="bi bi-check-circle-fill me-1"></i>${t("paidAtLabel")} ${escHtml(p.paid_at || "")}</div>` : ""}
-              ${isPaid ? `<div class="mt-1">${payerBadge(p.paid_by)}</div>` : ""}
+              <div class="text-muted small">${t("dueDateLabel")} ${formatDate(p.due_date)}</div>
             </div>
-            <div class="text-end flex-shrink-0">
-              <div class="badge ${isPaid ? "bg-success" : "bg-warning text-dark"} mb-2">${isPaid ? t("badgePaid") : t("badgePending")}</div>
-              <br>
-              ${isPaid ? "" : `<div class="mb-2 d-flex justify-content-end">${payerSelect(`payer_p_${p.period}`)}</div>`}
-              <button class="btn btn-sm ${isPaid ? "btn-outline-secondary" : "btn-primary"}"
-                      onclick="togglePayment(${id}, ${year}, ${month}, ${p.period}, this)">
-                <i class="bi ${isPaid ? "bi-x-circle" : "bi-check-circle"} me-1"></i>${isPaid ? t("btnUnmarkPaid") : t("btnMarkPaid")}
+            <span class="badge ${isPaid ? "bg-success" : "bg-warning text-dark"}">${isPaid ? t("badgePaid") : t("badgePending")}</span>
+          </div>
+          <div class="text-dark fw-bold fs-4 mb-1">${fmtMoney(p.amount)} ${t("baht")}</div>
+          ${noteSection}
+          ${isPaid ? `<div class="text-success small mt-1"><i class="bi bi-check-circle-fill me-1"></i>${t("paidAtLabel")} ${escHtml(p.paid_at || "")}</div>` : ""}
+          ${isPaid ? `<div class="mt-1">${payerBadge(p.paid_by)}</div>` : ""}
+          ${isPaid ? "" : `<div class="mt-2">${payerSelect(`payer_p_${p.period}`)}</div>`}
+          <div class="d-grid gap-2 mt-2">
+            <button class="btn btn-sm ${isPaid ? "btn-outline-secondary" : "btn-primary"}"
+                    onclick="togglePayment(${id}, ${year}, ${month}, ${p.period}, this)">
+              <i class="bi ${isPaid ? "bi-x-circle" : "bi-check-circle"} me-1"></i>${isPaid ? t("btnUnmarkPaid") : t("btnMarkPaid")}
+            </button>
+            ${isTransfer ? `
+            <input type="file" class="d-none" id="pslip_${p.period}" onchange="uploadPeriodSlip(${id}, ${p.period}, ${year}, ${month}, this)">
+            <div class="d-flex align-items-center gap-2">
+              <button class="btn btn-sm btn-outline-secondary flex-grow-1" onclick="document.getElementById('pslip_${p.period}').click()">
+                <i class="bi bi-paperclip me-1"></i>${t("slipUploadBtn")}
               </button>
-              ${isTransfer ? `
-              <div class="mt-2 d-flex justify-content-end align-items-center gap-1 flex-wrap">
-                <input type="file" class="d-none" id="pslip_${p.period}" onchange="uploadPeriodSlip(${id}, ${p.period}, ${year}, ${month}, this)">
-                <button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('pslip_${p.period}').click()">
-                  <i class="bi bi-paperclip me-1"></i>${t("slipUploadBtn")}
-                </button>
-                ${slipLink(p.slip_path)}
-              </div>` : ""}
-            </div>
+              ${slipLink(p.slip_path)}
+            </div>` : ""}
           </div>
         </div>
       </div>`;
