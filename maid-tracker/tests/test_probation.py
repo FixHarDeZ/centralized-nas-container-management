@@ -50,3 +50,18 @@ def test_resign_uses_anchor_for_first_month_prorate(db, monkeypatch):
     r = calc.compute_resign_summary(eid, anchor, date(2026, 6, 30), 15600.0, holiday_mode="sunday")
     assert r["daily_rate"] == 600.0
     assert r["base_salary"] == 5400.0
+
+
+def test_resign_during_probation_unpaid_only(db, monkeypatch):
+    calc = _calc(monkeypatch)
+    eid = add_emp(db, name="D", start_date="2026-06-01", monthly_salary=15000,
+                  employment_status="probation", probation_daily_rate=400)
+    add_att(db, eid, "2026-06-02", "work")
+    add_att(db, eid, "2026-06-03", "work")
+    add_att(db, eid, "2026-06-04", "work")
+    db.execute("INSERT INTO daily_payments (employee_id, work_date, amount, paid_at) "
+               "VALUES (?,?,?,?)", (eid, "2026-06-02", 400.0, "2026-06-02 18:00"))
+    db.commit()
+    r = calc.compute_probation_resign(eid, date(2026, 6, 1), date(2026, 6, 4), 400.0)
+    assert r["total_days"] == 2.0
+    assert r["final_amount"] == 800.0

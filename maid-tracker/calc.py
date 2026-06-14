@@ -298,6 +298,33 @@ def compute_leave_deduction(
     }
 
 
+def compute_probation_resign(emp_id, start_date, end_date, probation_daily_rate) -> dict:
+    """
+    Resign while still in probation: settle only UNPAID marked work days × daily rate
+    (days already toggled paid in daily_payments are excluded). No monthly base.
+    """
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT a.work_date, a.half_day FROM attendance a "
+        "LEFT JOIN daily_payments dp "
+        "  ON dp.employee_id = a.employee_id AND dp.work_date = a.work_date AND dp.paid_at IS NOT NULL "
+        "WHERE a.employee_id=? AND a.status='work' "
+        "  AND a.work_date >= ? AND a.work_date <= ? AND dp.id IS NULL",
+        (emp_id, start_date.isoformat(), end_date.isoformat()),
+    ).fetchall()
+    conn.close()
+    total = sum(0.5 if r["half_day"] else 1.0 for r in rows)
+    return {
+        "total_days":     round(total, 2),
+        "daily_rate":     round(probation_daily_rate, 2),
+        "base_salary":    0.0,
+        "balance_amount": 0.0,
+        "final_amount":   round(total * probation_daily_rate, 2),
+        "probation":      True,
+    }
+
+
 def compute_resign_summary(
     emp_id: int,
     start_date: date,
