@@ -277,3 +277,13 @@ var theme = saved || "light";
 **ไฟล์:** `calc.py`, `main.py`, `static/app.js`, `README.md`, root `CLAUDE.md`, `tests/test_daily_divisor.py` (4 tests ใหม่ lock invariant), `tests/test_probation.py` (อัปเดต assertion 600→520, 5400→5720)
 
 **Test:** 16 passed (เดิม 12 + ใหม่ 4)
+
+---
+
+## 2026-06-15 — เพิ่ม basic-auth user ที่ nginx
+
+เพิ่ม user `Pookzii` (apr1 hash) ใน `nginx/.htpasswd` ข้าง `fixhardez` เดิม. Hash gen ผ่าน `openssl passwd -apr1`.
+
+**ไฟล์:** `nginx/.htpasswd`
+
+**Deploy:** ต้อง `./scripts/deploy.sh` + restart maid-nginx (htpasswd mount read-only) ถึงมีผลบน NAS. `nginx -s reload` ไม่พอเพราะไฟล์ mount ใหม่ตอน container start — restart container.
