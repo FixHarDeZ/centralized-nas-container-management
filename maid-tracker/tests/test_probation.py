@@ -47,8 +47,10 @@ def test_resign_uses_anchor_for_first_month_prorate(db, monkeypatch):
                   employment_status="active", monthly_start_date="2026-06-20")
     anchor = date(2026, 6, 20)
     r = calc.compute_resign_summary(eid, anchor, date(2026, 6, 30), 15600.0, holiday_mode="sunday")
-    assert r["daily_rate"] == 600.0
-    assert r["base_salary"] == 5400.0
+    # Daily rate now divides by calendar days (holidays paid): 15600/30 = 520.
+    assert r["daily_rate"] == 520.0
+    # 11 calendar days (Jun 20..30, Sundays included) × 520 = 5720.
+    assert r["base_salary"] == 5720.0
 
 
 def test_resign_during_probation_unpaid_only(db, monkeypatch):

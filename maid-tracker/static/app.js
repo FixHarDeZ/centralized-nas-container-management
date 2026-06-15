@@ -60,7 +60,7 @@ const TRANSLATIONS = {
     rowLeaveBalance: "คงเหลือ",
     summaryPolicyNoteMonthly: (n, max) => `แม่บ้านได้วันหยุด ${n} วัน/เดือน · สะสมสูงสุด ${max !== null ? max + " วัน" : "ไม่จำกัด"} · ส่วนเกินชำระวันลาออก`,
     nationalityOptions: ["ไทย","เมียนมา","กัมพูชา","ลาว","เวียดนาม","อื่นๆ"],
-    salaryPreview: (dr) => `อัตราค่าจ้างรายวัน ≈ <strong>${dr} บาท/วัน</strong> (คิดจาก 26 วันทำงาน/เดือน)`,
+    salaryPreview: (dr) => `อัตราค่าจ้างรายวัน ≈ <strong>${dr} บาท/วัน</strong> (เฉลี่ย 30 วัน/เดือน รวมวันหยุด)`,
     // Probation / payment method / documents
     fieldProbation: "เริ่มแบบทดลองงาน (จ่ายรายวัน)",
     fieldProbationDailyRate: "ค่าจ้างรายวัน (บาท)",
@@ -71,6 +71,11 @@ const TRANSLATIONS = {
     docsTitle: "เอกสาร",
     docTypeIdCard: "บัตรประชาชน",
     docTypePassport: "พาสปอร์ต",
+    docTypeOther: "เอกสารอื่นๆ",
+    docLabelPlaceholder: "ชื่อเอกสาร (เช่น สัญญาจ้าง)",
+    payerLabel: "ผู้จ่าย",
+    payerNone: "—",
+    payerByLabel: (who) => `จ่ายโดย ${who}`,
     docFieldType: "ประเภทเอกสาร",
     docFieldFiles: "เลือกไฟล์ (เลือกได้หลายไฟล์)",
     docUploadBtn: "อัปโหลด",
@@ -248,7 +253,7 @@ const TRANSLATIONS = {
     rowLeaveBalance: "Leave balance",
     summaryPolicyNoteMonthly: (n, max) => `Staff gets ${n} leave day(s)/month · Max accumulated: ${max !== null ? max + " day(s)" : "unlimited"} · Excess settled on resignation`,
     nationalityOptions: ["Thai","Myanmar","Cambodian","Lao","Vietnamese","Other"],
-    salaryPreview: (dr) => `Daily rate ≈ <strong>${dr} Baht/day</strong> (based on 26 working days/month)`,
+    salaryPreview: (dr) => `Daily rate ≈ <strong>${dr} Baht/day</strong> (avg 30 days/month, holidays included)`,
     // Probation / payment method / documents
     fieldProbation: "Start as probation (daily pay)",
     fieldProbationDailyRate: "Daily rate (Baht)",
@@ -259,6 +264,11 @@ const TRANSLATIONS = {
     docsTitle: "Documents",
     docTypeIdCard: "ID Card",
     docTypePassport: "Passport",
+    docTypeOther: "Other document",
+    docLabelPlaceholder: "Document name (e.g. contract)",
+    payerLabel: "Paid by",
+    payerNone: "—",
+    payerByLabel: (who) => `Paid by ${who}`,
     docFieldType: "Document type",
     docFieldFiles: "Choose files (multiple allowed)",
     docUploadBtn: "Upload",
@@ -432,6 +442,9 @@ function switchLang() {
 // ─── Root ────────────────────────────────────────────────────
 
 const ROOT = document.getElementById("app");
+
+// Who paid an installment (the two employers). Extend here if more payers are added.
+const PAYERS = ["ฟิก", "ปุ๊ก"];
 
 // Nationality display mapping (DB stores Thai strings)
 const NAT_DISPLAY = {
@@ -740,7 +753,10 @@ async function viewEmployeeForm(id) {
             <select class="form-select form-select-sm" id="docType">
               <option value="id_card">${t("docTypeIdCard")}</option>
               <option value="passport">${t("docTypePassport")}</option>
+              <option value="other">${t("docTypeOther")}</option>
             </select>
+            <input type="text" class="form-control form-control-sm mt-1 d-none" id="docLabel"
+                   placeholder="${t("docLabelPlaceholder")}" maxlength="80" />
           </div>
           <div class="col-12 col-sm-5">
             <label class="form-label small fw-semibold mb-1">${t("docFieldFiles")}</label>
@@ -790,7 +806,7 @@ async function viewEmployeeForm(id) {
   function updatePreview() {
     const sal = parseFloat(salInput.value);
     if (sal > 0) {
-      const dr = sal / 26;
+      const dr = sal / 30;
       preview.classList.remove("d-none");
       preview.innerHTML = `<i class="bi bi-info-circle me-1"></i>${t("salaryPreview", fmtMoney(dr))}`;
     } else {
@@ -854,7 +870,9 @@ async function viewEmployeeForm(id) {
         }
         listEl.innerHTML = docs.map(d => {
           const url       = `/api/documents/${d.file_path}`;
-          const typeLabel = d.doc_type === "passport" ? t("docTypePassport") : t("docTypeIdCard");
+          const typeLabel = d.doc_type === "passport" ? t("docTypePassport")
+                          : d.doc_type === "other"    ? (escHtml(d.doc_label || "") || t("docTypeOther"))
+                          : t("docTypeIdCard");
           const isImg     = /\.(png|jpe?g|gif|webp|bmp)$/i.test(d.file_path);
           const thumb     = isImg
             ? `<img src="${escHtml(url)}" alt="" style="width:48px;height:48px;object-fit:cover;border-radius:6px">`
@@ -885,12 +903,19 @@ async function viewEmployeeForm(id) {
         alert(t("errDelete") + e.message);
       }
     };
+    // 'Other' reveals a free-text label field.
+    const docTypeSel = document.getElementById("docType");
+    const docLabelEl = document.getElementById("docLabel");
+    docTypeSel.addEventListener("change", () => {
+      docLabelEl.classList.toggle("d-none", docTypeSel.value !== "other");
+    });
     document.getElementById("docUploadBtn").addEventListener("click", async () => {
       const filesInput = document.getElementById("docFiles");
       const files = filesInput.files;
       if (!files || files.length === 0) { alert(t("docUploadFirst")); return; }
       const fd = new FormData();
-      fd.append("doc_type", document.getElementById("docType").value);
+      fd.append("doc_type", docTypeSel.value);
+      if (docTypeSel.value === "other") fd.append("doc_label", docLabelEl.value || "");
       for (const f of files) fd.append("files", f);
       const btn = document.getElementById("docUploadBtn");
       btn.disabled = true;
@@ -1839,33 +1864,49 @@ async function viewPayments(id) {
     return `<a href="${escHtml(url)}" target="_blank" rel="noopener" class="d-inline-flex align-items-center gap-1 ms-1" title="${t("slipViewBtn")}">${thumb}</a>`;
   }
 
-  // ─── Daily-payment row (probation) ───────────────────────
-  function dailyRow(d) {
+  // Payer picker (who paid this installment) — value read by the toggle handler on mark-paid.
+  function payerSelect(selId) {
+    return `<select id="${selId}" class="form-select form-select-sm" title="${t("payerLabel")}">
+        ${PAYERS.map(p => `<option value="${escHtml(p)}">${t("payerLabel")}: ${escHtml(p)}</option>`).join("")}
+      </select>`;
+  }
+  function payerBadge(who) {
+    if (!who) return "";
+    return `<span class="badge rounded-pill bg-info-subtle text-info-emphasis border border-info-subtle">
+        <i class="bi bi-person-fill me-1"></i>${t("payerByLabel", escHtml(who))}</span>`;
+  }
+
+  // ─── Daily-payment card (probation) ──────────────────────
+  // Stacked card layout (not a wide table) so actions wrap instead of
+  // overflowing off the right edge on narrow/mobile screens.
+  function dailyCard(d) {
     const isPaid = d.paid;
     const slipBtn = isTransfer ? `
       <input type="file" class="d-none" id="dslip_${d.work_date}" onchange="uploadDailySlip(${id}, '${d.work_date}', this)">
-      <button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('dslip_${d.work_date}').click()">
-        <i class="bi bi-paperclip me-1"></i>${t("slipUploadBtn")}
-      </button>
-      ${slipLink(d.slip_path)}` : "";
+      <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-sm btn-outline-secondary flex-grow-1" onclick="document.getElementById('dslip_${d.work_date}').click()">
+          <i class="bi bi-paperclip me-1"></i>${t("slipUploadBtn")}
+        </button>
+        ${slipLink(d.slip_path)}
+      </div>` : "";
     return `
-      <tr>
-        <td class="ps-3">${formatDate(d.work_date)}</td>
-        <td class="text-center">${d.fraction}</td>
-        <td class="text-end fw-semibold">${fmtMoney(d.amount)} ${t("baht")}</td>
-        <td class="text-center">
-          <span class="badge ${isPaid ? "bg-success" : "bg-warning text-dark"}">${isPaid ? t("badgePaid") : t("badgePending")}</span>
-        </td>
-        <td class="text-end pe-3">
-          <div class="d-flex justify-content-end align-items-center gap-2 flex-wrap">
-            <button class="btn btn-sm ${isPaid ? "btn-outline-secondary" : "btn-primary"}"
-                    onclick="toggleDailyPayment(${id}, '${d.work_date}', this)">
-              <i class="bi ${isPaid ? "bi-x-circle" : "bi-check-circle"} me-1"></i>${isPaid ? t("btnUnmarkPaid") : t("btnMarkPaid")}
-            </button>
-            ${slipBtn}
+      <div class="border-bottom px-3 py-3">
+        <div class="d-flex justify-content-between align-items-center mb-1">
+          <div class="fw-semibold">${formatDate(d.work_date)}
+            <span class="text-muted small ms-1">×${d.fraction}</span>
           </div>
-        </td>
-      </tr>`;
+          <span class="badge ${isPaid ? "bg-success" : "bg-warning text-dark"}">${isPaid ? t("badgePaid") : t("badgePending")}</span>
+        </div>
+        <div class="fw-bold fs-5 mb-2">${fmtMoney(d.amount)} ${t("baht")}</div>
+        <div class="mb-2">${isPaid ? payerBadge(d.paid_by) : payerSelect(`payer_d_${d.work_date}`)}</div>
+        <div class="d-grid gap-2">
+          <button class="btn btn-sm ${isPaid ? "btn-outline-secondary" : "btn-primary"}"
+                  onclick="toggleDailyPayment(${id}, '${d.work_date}', this)">
+            <i class="bi ${isPaid ? "bi-x-circle" : "bi-check-circle"} me-1"></i>${isPaid ? t("btnUnmarkPaid") : t("btnMarkPaid")}
+          </button>
+          ${slipBtn}
+        </div>
+      </div>`;
   }
 
   const isProb = emp.employment_status === "probation";
@@ -1879,25 +1920,11 @@ async function viewPayments(id) {
       </div>
       <div class="card-body p-0">
         ${dailyPayments.length === 0 ? `<div class="text-muted small p-3"><i class="bi bi-info-circle me-1"></i>${t("dailyPayHint")}</div>` : `
-        <table class="table table-sm mb-0 align-middle">
-          <thead class="table-light">
-            <tr>
-              <th class="ps-3">${t("dailyPayDate")}</th>
-              <th class="text-center">${t("dailyPayFraction")}</th>
-              <th class="text-end">${t("dailyPayAmount")}</th>
-              <th class="text-center"></th>
-              <th class="text-end pe-3"></th>
-            </tr>
-          </thead>
-          <tbody>${dailyPayments.map(dailyRow).join("")}</tbody>
-          <tfoot class="table-light fw-bold">
-            <tr>
-              <td class="ps-3" colspan="2">${t("dailyPayTotal")}</td>
-              <td class="text-end">${fmtMoney(dailyTotal)} ${t("baht")}</td>
-              <td colspan="2"></td>
-            </tr>
-          </tfoot>
-        </table>`}
+        <div>${dailyPayments.map(dailyCard).join("")}</div>
+        <div class="d-flex justify-content-between align-items-center px-3 py-2 border-top fw-bold" style="background:var(--surface-3)">
+          <span>${t("dailyPayTotal")}</span>
+          <span>${fmtMoney(dailyTotal)} ${t("baht")}</span>
+        </div>`}
       </div>
     </div>`;
 
@@ -1928,30 +1955,31 @@ async function viewPayments(id) {
     return `
       <div class="card border-0 shadow-sm mb-3">
         <div class="card-body">
-          <div class="d-flex align-items-start gap-3">
-            <div class="flex-grow-1">
+          <div class="d-flex justify-content-between align-items-start mb-1">
+            <div>
               <div class="fw-bold">${label}</div>
-              <div class="text-muted small mb-2">${t("dueDateLabel")} ${formatDate(p.due_date)}</div>
-              <div class="text-dark fw-bold fs-5">${fmtMoney(p.amount)} ${t("baht")}</div>
-              ${noteSection}
-              ${isPaid ? `<div class="text-success small mt-1"><i class="bi bi-check-circle-fill me-1"></i>${t("paidAtLabel")} ${escHtml(p.paid_at || "")}</div>` : ""}
+              <div class="text-muted small">${t("dueDateLabel")} ${formatDate(p.due_date)}</div>
             </div>
-            <div class="text-end flex-shrink-0">
-              <div class="badge ${isPaid ? "bg-success" : "bg-warning text-dark"} mb-2">${isPaid ? t("badgePaid") : t("badgePending")}</div>
-              <br>
-              <button class="btn btn-sm ${isPaid ? "btn-outline-secondary" : "btn-primary"}"
-                      onclick="togglePayment(${id}, ${year}, ${month}, ${p.period}, this)">
-                <i class="bi ${isPaid ? "bi-x-circle" : "bi-check-circle"} me-1"></i>${isPaid ? t("btnUnmarkPaid") : t("btnMarkPaid")}
+            <span class="badge ${isPaid ? "bg-success" : "bg-warning text-dark"}">${isPaid ? t("badgePaid") : t("badgePending")}</span>
+          </div>
+          <div class="text-dark fw-bold fs-4 mb-1">${fmtMoney(p.amount)} ${t("baht")}</div>
+          ${noteSection}
+          ${isPaid ? `<div class="text-success small mt-1"><i class="bi bi-check-circle-fill me-1"></i>${t("paidAtLabel")} ${escHtml(p.paid_at || "")}</div>` : ""}
+          ${isPaid ? `<div class="mt-1">${payerBadge(p.paid_by)}</div>` : ""}
+          ${isPaid ? "" : `<div class="mt-2">${payerSelect(`payer_p_${p.period}`)}</div>`}
+          <div class="d-grid gap-2 mt-2">
+            <button class="btn btn-sm ${isPaid ? "btn-outline-secondary" : "btn-primary"}"
+                    onclick="togglePayment(${id}, ${year}, ${month}, ${p.period}, this)">
+              <i class="bi ${isPaid ? "bi-x-circle" : "bi-check-circle"} me-1"></i>${isPaid ? t("btnUnmarkPaid") : t("btnMarkPaid")}
+            </button>
+            ${isTransfer ? `
+            <input type="file" class="d-none" id="pslip_${p.period}" onchange="uploadPeriodSlip(${id}, ${p.period}, ${year}, ${month}, this)">
+            <div class="d-flex align-items-center gap-2">
+              <button class="btn btn-sm btn-outline-secondary flex-grow-1" onclick="document.getElementById('pslip_${p.period}').click()">
+                <i class="bi bi-paperclip me-1"></i>${t("slipUploadBtn")}
               </button>
-              ${isTransfer ? `
-              <div class="mt-2 d-flex justify-content-end align-items-center gap-1 flex-wrap">
-                <input type="file" class="d-none" id="pslip_${p.period}" onchange="uploadPeriodSlip(${id}, ${p.period}, ${year}, ${month}, this)">
-                <button class="btn btn-sm btn-outline-secondary" onclick="document.getElementById('pslip_${p.period}').click()">
-                  <i class="bi bi-paperclip me-1"></i>${t("slipUploadBtn")}
-                </button>
-                ${slipLink(p.slip_path)}
-              </div>` : ""}
-            </div>
+              ${slipLink(p.slip_path)}
+            </div>` : ""}
           </div>
         </div>
       </div>`;
@@ -2013,8 +2041,10 @@ function shiftPayments(id, year, month, delta) {
 
 async function togglePayment(empId, year, month, period, btn) {
   btn.disabled = true;
+  // Only present when not yet paid (mark-paid flow); ignored on unmark.
+  const payer = document.getElementById(`payer_p_${period}`)?.value || "";
   try {
-    await api.post(`/api/employees/${empId}/payments/${period}/toggle?year=${year}&month=${month}`, {});
+    await api.post(`/api/employees/${empId}/payments/${period}/toggle?year=${year}&month=${month}&paid_by=${encodeURIComponent(payer)}`, {});
     await viewPayments(empId);
   } catch (e) {
     alert(t("errSave") + e.message);
@@ -2026,8 +2056,9 @@ async function togglePayment(empId, year, month, period, btn) {
 
 async function toggleDailyPayment(empId, workDate, btn) {
   btn.disabled = true;
+  const payer = document.getElementById(`payer_d_${workDate}`)?.value || "";
   try {
-    await api.post(`/api/employees/${empId}/daily-payments/${workDate}/toggle`, {});
+    await api.post(`/api/employees/${empId}/daily-payments/${workDate}/toggle?paid_by=${encodeURIComponent(payer)}`, {});
     await viewPayments(empId);
   } catch (e) {
     alert(t("errSave") + e.message);
