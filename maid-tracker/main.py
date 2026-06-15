@@ -316,6 +316,12 @@ def init_db():
         c.execute("ALTER TABLE salary_payments ADD COLUMN slip_path TEXT")
     except Exception:
         pass
+    # Payer on monthly payments (daily_payments + employee_documents are altered
+    # below, after their CREATE — those tables may not exist yet on a fresh DB).
+    try:
+        c.execute("ALTER TABLE salary_payments ADD COLUMN paid_by TEXT")
+    except Exception:
+        pass
     # New tables
     c.executescript("""
         CREATE TABLE IF NOT EXISTS daily_payments (
@@ -337,6 +343,15 @@ def init_db():
             FOREIGN KEY(employee_id) REFERENCES employees(id)
         );
     """)
+    # Payer on daily payments + custom label on 'other' documents (post-CREATE).
+    try:
+        c.execute("ALTER TABLE daily_payments ADD COLUMN paid_by TEXT")
+    except Exception:
+        pass
+    try:
+        c.execute("ALTER TABLE employee_documents ADD COLUMN doc_label TEXT")
+    except Exception:
+        pass
     conn.commit()
     conn.close()
 
@@ -910,11 +925,12 @@ def get_payments(emp_id: int, year: int, month: int):
 
     # Paid status for this month
     paid_rows = conn.execute(
-        "SELECT period, paid_at, slip_path FROM salary_payments WHERE employee_id=? AND year=? AND month=?",
+        "SELECT period, paid_at, slip_path, paid_by FROM salary_payments WHERE employee_id=? AND year=? AND month=?",
         (emp_id, year, month),
     ).fetchall()
     paid_map = {r["period"]: r["paid_at"] for r in paid_rows}
     slip_map = {r["period"]: r["slip_path"] for r in paid_rows}
+    payer_map = {r["period"]: r["paid_by"] for r in paid_rows}
 
     # Attendance for this month (to calculate actual_pay for period 2)
     att_rows = conn.execute(
@@ -929,12 +945,10 @@ def get_payments(emp_id: int, year: int, month: int):
     dr = emp["monthly_salary"] / wd_month if wd_month else 0
     half_salary = emp["monthly_salary"] / 2
 
-    # Base salary for this month (prorated if first month)
+    # Base salary for this month (prorated if first month).
+    # Count every day in the range — holidays are paid too.
     if anchor.year == year and anchor.month == month:
-        billable = sum(
-            1 for day in range(anchor.day, n + 1)
-            if date(year, month, day).weekday() != 6
-        )
+        billable = n - anchor.day + 1
         base_salary = dr * billable
     else:
         base_salary = emp["monthly_salary"]
@@ -971,6 +985,7 @@ def get_payments(emp_id: int, year: int, month: int):
             "paid": bool(paid_map.get(1)),
             "paid_at": paid_map.get(1),
             "slip_path": slip_map.get(1),
+            "paid_by": payer_map.get(1),
         })
 
     # Period 2 (last day or resignation date if resigned this month)
@@ -988,6 +1003,7 @@ def get_payments(emp_id: int, year: int, month: int):
             "paid": bool(paid_map.get(2)),
             "paid_at": paid_map.get(2),
             "slip_path": slip_map.get(2),
+            "paid_by": payer_map.get(2),
         })
 
     return result
@@ -1026,17 +1042,21 @@ def upload_daily_slip(emp_id: int, work_date: str, file: UploadFile = File(...))
 
 
 @app.post("/api/employees/{emp_id}/documents")
-def upload_documents(emp_id: int, doc_type: str = Form(...), files: list[UploadFile] = File(...)):
-    if doc_type not in ("id_card", "passport"):
+def upload_documents(emp_id: int, doc_type: str = Form(...),
+                     doc_label: str = Form(""), files: list[UploadFile] = File(...)):
+    # doc_type stays an enum so it's safe to embed in the saved filename.
+    if doc_type not in ("id_card", "passport", "other"):
         raise HTTPException(400, "Invalid doc_type")
+    # Free-text label only meaningful for 'other'; display-only, never in a path.
+    label = (doc_label or "").strip()[:80] if doc_type == "other" else None
     conn = get_db()
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     saved = []
     for i, file in enumerate(files):
         fname = _save_upload(file, _DOC_DIR, f"doc_{emp_id}_{doc_type}_{int(datetime.now().timestamp())}_{i}")
         conn.execute(
-            "INSERT INTO employee_documents (employee_id, doc_type, file_path, uploaded_at) VALUES (?,?,?,?)",
-            (emp_id, doc_type, fname, now),
+            "INSERT INTO employee_documents (employee_id, doc_type, doc_label, file_path, uploaded_at) VALUES (?,?,?,?,?)",
+            (emp_id, doc_type, label, fname, now),
         )
         saved.append(fname)
     conn.commit(); conn.close()
@@ -1047,7 +1067,7 @@ def upload_documents(emp_id: int, doc_type: str = Form(...), files: list[UploadF
 def list_documents(emp_id: int):
     conn = get_db()
     rows = conn.execute(
-        "SELECT id, doc_type, file_path, uploaded_at FROM employee_documents WHERE employee_id=? ORDER BY uploaded_at",
+        "SELECT id, doc_type, doc_label, file_path, uploaded_at FROM employee_documents WHERE employee_id=? ORDER BY uploaded_at",
         (emp_id,),
     ).fetchall()
     conn.close()
@@ -1069,7 +1089,7 @@ def delete_document(emp_id: int, doc_id: int):
 
 
 @app.post("/api/employees/{emp_id}/payments/{period}/toggle")
-def toggle_payment(emp_id: int, period: int, year: int, month: int):
+def toggle_payment(emp_id: int, period: int, year: int, month: int, paid_by: str = ""):
     if period not in (1, 2):
         raise HTTPException(400, "Invalid period")
     conn = get_db()
@@ -1078,6 +1098,7 @@ def toggle_payment(emp_id: int, period: int, year: int, month: int):
         conn.close()
         raise HTTPException(404, "Employee not found")
     emp = dict(emp)
+    start_date = date.fromisoformat(emp["start_date"])
 
     existing = conn.execute(
         "SELECT paid_at FROM salary_payments WHERE employee_id=? AND year=? AND month=? AND period=?",
@@ -1086,9 +1107,10 @@ def toggle_payment(emp_id: int, period: int, year: int, month: int):
 
     amount, toggle_deduction_days, toggle_deduction_amount = _compute_period_amount(emp, year, month, period)
 
+    payer = (paid_by or "").strip()[:40] or None
     if existing and existing["paid_at"]:
         conn.execute(
-            "UPDATE salary_payments SET paid_at=NULL, leave_deduction_days=0 "
+            "UPDATE salary_payments SET paid_at=NULL, leave_deduction_days=0, paid_by=NULL "
             "WHERE employee_id=? AND year=? AND month=? AND period=?",
             (emp_id, year, month, period),
         )
@@ -1096,11 +1118,11 @@ def toggle_payment(emp_id: int, period: int, year: int, month: int):
     else:
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
         conn.execute(
-            "INSERT INTO salary_payments (employee_id, year, month, period, paid_at, leave_deduction_days) "
-            "VALUES (?,?,?,?,?,?) "
+            "INSERT INTO salary_payments (employee_id, year, month, period, paid_at, leave_deduction_days, paid_by) "
+            "VALUES (?,?,?,?,?,?,?) "
             "ON CONFLICT(employee_id, year, month, period) DO UPDATE SET "
-            "paid_at=excluded.paid_at, leave_deduction_days=excluded.leave_deduction_days",
-            (emp_id, year, month, period, now, round(toggle_deduction_days, 2)),
+            "paid_at=excluded.paid_at, leave_deduction_days=excluded.leave_deduction_days, paid_by=excluded.paid_by",
+            (emp_id, year, month, period, now, round(toggle_deduction_days, 2), payer),
         )
         paid_at = now
 
@@ -1147,7 +1169,7 @@ def get_daily_payments(emp_id: int, year: int, month: int):
                "SELECT work_date, status, half_day FROM attendance WHERE employee_id=? AND work_date LIKE ?",
                (emp_id, f"{year}-{month:02d}-%")).fetchall()}
     paid = {r["work_date"]: dict(r) for r in conn.execute(
-        "SELECT work_date, amount, paid_at, slip_path FROM daily_payments WHERE employee_id=? AND work_date LIKE ?",
+        "SELECT work_date, amount, paid_at, slip_path, paid_by FROM daily_payments WHERE employee_id=? AND work_date LIKE ?",
         (emp_id, f"{year}-{month:02d}-%"),
     ).fetchall()}
     conn.close()
@@ -1165,13 +1187,14 @@ def get_daily_payments(emp_id: int, year: int, month: int):
                 "paid": bool(p and p["paid_at"]),
                 "paid_at": p["paid_at"] if p else None,
                 "slip_path": p["slip_path"] if p else None,
+                "paid_by": p["paid_by"] if p else None,
             })
         d += timedelta(days=1)
     return out
 
 
 @app.post("/api/employees/{emp_id}/daily-payments/{work_date}/toggle")
-def toggle_daily_payment(emp_id: int, work_date: str):
+def toggle_daily_payment(emp_id: int, work_date: str, paid_by: str = ""):
     conn = get_db()
     emp = conn.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
     if not emp:
@@ -1193,16 +1216,17 @@ def toggle_daily_payment(emp_id: int, work_date: str):
         "SELECT id, paid_at FROM daily_payments WHERE employee_id=? AND work_date=?",
         (emp_id, work_date),
     ).fetchone()
+    payer = (paid_by or "").strip()[:40] or None
     if existing and existing["paid_at"]:
-        conn.execute("UPDATE daily_payments SET paid_at=NULL WHERE id=?", (existing["id"],))
+        conn.execute("UPDATE daily_payments SET paid_at=NULL, paid_by=NULL WHERE id=?", (existing["id"],))
         paid_at = None
     else:
         amount = round((emp.get("probation_daily_rate") or 0) * frac, 2)
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
         conn.execute(
-            "INSERT INTO daily_payments (employee_id, work_date, amount, paid_at) VALUES (?,?,?,?) "
-            "ON CONFLICT(employee_id, work_date) DO UPDATE SET amount=excluded.amount, paid_at=excluded.paid_at",
-            (emp_id, work_date, amount, now),
+            "INSERT INTO daily_payments (employee_id, work_date, amount, paid_at, paid_by) VALUES (?,?,?,?,?) "
+            "ON CONFLICT(employee_id, work_date) DO UPDATE SET amount=excluded.amount, paid_at=excluded.paid_at, paid_by=excluded.paid_by",
+            (emp_id, work_date, amount, now, payer),
         )
         paid_at = now
     conn.commit(); conn.close()
@@ -1284,12 +1308,9 @@ def get_summary(emp_id: int, year: int, month: int):
     wd_month = working_days_in_month(year, month)
     dr = emp["monthly_salary"] / wd_month if wd_month else 0
 
-    # Prorated salary for first partial month
+    # Prorated salary for first partial month (all days paid, holidays included)
     if anchor.year == year and anchor.month == month:
-        billable = sum(
-            1 for day in range(anchor.day, n + 1)
-            if date(year, month, day).weekday() != 6
-        )
+        billable = n - anchor.day + 1
         base_salary = dr * billable
     else:
         base_salary = emp["monthly_salary"]
@@ -1604,7 +1625,7 @@ def _compute_period_amount(emp: dict, year: int, month: int, period: int) -> tup
     _, n        = calendar.monthrange(year, month)
 
     if anchor.year == year and anchor.month == month:
-        billable    = sum(1 for day in range(anchor.day, n + 1) if date(year, month, day).weekday() != 6)
+        billable    = n - anchor.day + 1   # all days paid, holidays included
         base_salary = dr * billable
     else:
         base_salary = emp["monthly_salary"]
@@ -2023,7 +2044,7 @@ def export_payslip(emp_id: int, year: int, month: int):
     w.writerow([])
     w.writerow(["รายการ", "จำนวน"])
     w.writerow(["เงินเดือนต่อเดือน (บาท)", f'{s["monthly_salary"]:.2f}'])
-    w.writerow(["จำนวนวันทำงานในเดือน", s["working_days_in_month"]])
+    w.writerow(["จำนวนวันในเดือน (รวมวันหยุด)", s["working_days_in_month"]])
     w.writerow(["อัตราต่อวัน (บาท)", f'{s["daily_rate"]:.2f}'])
     w.writerow(["เงินเดือนพื้นฐาน (บาท)", f'{s["base_salary"]:.2f}'])
     w.writerow([])

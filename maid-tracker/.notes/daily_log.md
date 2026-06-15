@@ -229,3 +229,51 @@ var theme = saved || "light";
 ```
 
 **ผล:** ผู้ใช้ใหม่ (ไม่มี localStorage) จะเห็น light theme เสมอ ไม่ตาม OS preference อีกต่อไป ส่วนผู้ที่เคย toggle ยังจำค่าเดิมได้ปกติ
+
+---
+
+## 2026-06-14 (รอบ 2)
+
+### Feature: ผู้จ่าย (payer dropdown) + เอกสารอื่นๆ + fix 413 upload
+
+**สาเหตุ:** user รายงาน add passport ใบที่ 2 error `413 Request Entity Too Large` (nginx/1.31.1) + ขอเพิ่ม (1) เอกสารอื่นนอกจากบัตร/passport (2) dropdown เลือกผู้จ่ายแต่ละงวด (ฟิก/ปุ๊ก)
+
+**1. Fix 413:** `nginx/nginx.conf` เพิ่ม `client_max_body_size 25m;` — default nginx = 1MB, รูป passport จากมือถือ 3-8MB เลยโดน reject ก่อนถึง app. ตั้ง 25m > app cap 10MB → app ตอบ error สวยแทน
+
+**2. เอกสารอื่นๆ (`other`):** `doc_type` คงเป็น enum `id_card|passport|other` (กัน path-traversal เพราะ doc_type อยู่ใน filename ตอน `_save_upload`). เพิ่มคอลัมน์ `doc_label TEXT` (display-only) สำหรับชื่อเอกสารกรณี other. Frontend: option "เอกสารอื่นๆ" + text input โผล่เมื่อเลือก other; typeLabel map (escHtml(doc_label))
+
+**3. ผู้จ่าย (`paid_by`):** เพิ่มคอลัมน์ `paid_by TEXT` บน `salary_payments` + `daily_payments`. `toggle_payment`/`toggle_daily_payment` รับ query `paid_by`, เก็บตอน mark / clear (NULL) ตอน unmark. `get_payments`/`get_daily_payments` คืน `paid_by`. Frontend: `payerSelect()` dropdown (const `PAYERS=["ฟิก","ปุ๊ก"]`) ข้างปุ่มจ่าย + `payerBadge()` "จ่ายโดย X" เมื่อจ่ายแล้ว
+
+**Bug ที่เจอ+แก้ระหว่างทาง:**
+- migration ALTER `daily_payments.paid_by` + `employee_documents.doc_label` อยู่**ก่อน** executescript ที่ CREATE ตารางนั้น → fresh DB ALTER fail เงียบ (caught) → คอลัมน์หาย. ย้าย ALTER ไป**หลัง** CREATE
+- pre-existing `NameError: start_date` ใน `toggle_payment` (notify_payment อ้าง `start_date` ที่ไม่เคย define) — เผยตอน test mark-paid. แก้: `start_date = date.fromisoformat(emp["start_date"])`
+
+**ไฟล์:** `main.py` (migration, upload_documents, toggle_payment, toggle_daily_payment, get_payments, get_daily_payments), `static/app.js` (PAYERS const, doc form, typeLabel, payerSelect/payerBadge, toggle funcs, i18n TH+EN), `nginx/nginx.conf`, `tests/test_payments_docs.py` (3 tests ใหม่)
+
+**Test:** 12 passed (เดิม 9 + ใหม่ 3: paid_by roundtrip, other doc+label, invalid doc_type rejected)
+
+---
+
+## 2026-06-14 (รอบ 3)
+
+### Policy: อัตรารายวัน หารด้วยจำนวนวันทั้งเดือน (รวมวันหยุด)
+
+**คำขอ user:** "วันหยุดเราให้หยุด แต่เราก็จ่ายเงินเดือนให้" → daily rate ต้องหารด้วยจำนวนวันรวมวันหยุด ไม่ใช่แค่วันทำงาน จ-ส
+
+**เปลี่ยน:** `working_days_in_month` เดิม = นับ จ-ส (ไม่นับอาทิตย์) → นับ **ทุกวันในเดือน** (`calendar.monthrange()[1]`). ชื่อ fn คงเดิม (JSON-key stability) แต่ความหมายเปลี่ยน
+
+**Invariant ที่รักษา:** full month จ่ายเต็มเสมอ (dr × วันทั้งเดือน = salary). ต้องแก้ทั้ง divisor + billable counts พร้อมกัน ไม่งั้นพัง:
+- calc.py:29 divisor → `return n`
+- calc.py billable (resign) → ลบ filter `weekday()!=6`
+- main.py get_payments billable → `n - anchor.day + 1`
+- main.py get_summary billable → เหมือนกัน
+- main.py pass-probation transition billable → เหมือนกัน
+(5 จุด — grep `weekday` แยก salary-divisor ออกจาก Sunday-holiday/attendance logic ก่อนแก้ ห้ามแตะ `default_status`, Sunday-leave-redundant, compensatory-only-Sunday)
+
+**ผลข้างเคียง (แจ้ง user):** (1) หัก excess-leave ต่อวันน้อยลง (salary/30 แทน salary/26) — auto-track เพราะ `compute_leave_deduction` ใช้ `daily_rate()`. (2) ใช้กับ **ทั้งสอง holiday_mode** (monthly mode เดิมก็หาร จ-ส ทั้งที่ทำงานทุกวัน → uniform = แก้ให้ถูกด้วย)
+
+**Frontend:** preview `/26` → `/30` + label "เฉลี่ย 30 วัน/เดือน รวมวันหยุด" (TH+EN). CSV "จำนวนวันทำงานในเดือน" → "จำนวนวันในเดือน (รวมวันหยุด)"
+
+**ไฟล์:** `calc.py`, `main.py`, `static/app.js`, `README.md`, root `CLAUDE.md`, `tests/test_daily_divisor.py` (4 tests ใหม่ lock invariant), `tests/test_probation.py` (อัปเดต assertion 600→520, 5400→5720)
+
+**Test:** 16 passed (เดิม 12 + ใหม่ 4)

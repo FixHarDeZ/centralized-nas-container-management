@@ -24,9 +24,14 @@ def default_status(d: date, holiday_mode: str = "sunday") -> str:
 
 
 def working_days_in_month(year: int, month: int) -> int:
-    """Count Mon–Sat days in a month."""
+    """Salary divisor = ALL calendar days in the month (holidays are paid too).
+
+    Note: name kept for API/JSON-key stability; it now counts every day, not
+    just Mon–Sat. Daily rate = monthly_salary / this, and every proration
+    counts all days so a full month still pays exactly the monthly salary.
+    """
     _, n = calendar.monthrange(year, month)
-    return sum(1 for day in range(1, n + 1) if date(year, month, day).weekday() != 6)
+    return n
 
 
 def daily_rate(monthly_salary: float, year: int, month: int) -> float:
@@ -370,10 +375,8 @@ def compute_resign_summary(
     dr          = monthly_salary / wd_month if wd_month else 0.0
 
     month_start = max(date(year, month, 1), start_date)
-    billable    = sum(
-        1 for i in range((end_date - month_start).days + 1)
-        if (month_start + timedelta(days=i)).weekday() != 6
-    )
+    # All days in range are paid (holidays included) → count every day.
+    billable    = (end_date - month_start).days + 1
     base_salary = round(dr * billable, 2)
 
     if holiday_mode == "monthly":
