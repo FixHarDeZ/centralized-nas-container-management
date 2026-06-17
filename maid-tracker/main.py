@@ -135,6 +135,16 @@ def _save_upload(file: "UploadFile", dest_dir: str, basename: str) -> str:
     return fname  # store relative filename in DB
 
 
+def _finish_slip_upload(conn, emp_id: int, fname: str, already_paid: bool, label: str):
+    """Shared tail for slip-upload routes: fetch name, close, push slip image if already paid."""
+    emp_row = conn.execute("SELECT name FROM employees WHERE id=?", (emp_id,)).fetchone()
+    emp_name = emp_row["name"] if emp_row else ""
+    conn.commit(); conn.close()
+    if already_paid:
+        line_notify.notify_slip_image(emp_name=emp_name, slip_fname=fname, label=label)
+    return {"slip_path": fname}
+
+
 @app.get("/api/slips/public/{token}/{fname}")
 def serve_slip_public(token: str, fname: str):
     """Public (no basic-auth) slip route for LINE image messages. HMAC-token validated."""
@@ -1038,18 +1048,9 @@ def upload_period_slip(emp_id: int, period: int, year: int, month: int, file: Up
         (emp_id, year, month, period),
     ).fetchone()
     already_paid = bool(row and row["paid_at"])
-    emp_row = conn.execute("SELECT name FROM employees WHERE id=?", (emp_id,)).fetchone()
-    emp_name = emp_row["name"] if emp_row else ""
-    conn.commit(); conn.close()
-    if already_paid:
-        month_name   = line_notify.THAI_MONTHS[month]
-        period_label = f"รอบที่ {period} ({'วันที่ 15' if period == 1 else 'สิ้นเดือน'})"
-        line_notify.notify_slip_image(
-            emp_name=emp_name,
-            slip_fname=fname,
-            label=f"{month_name} {year} {period_label}",
-        )
-    return {"slip_path": fname}
+    month_name   = line_notify.THAI_MONTHS[month]
+    period_label = f"รอบที่ {period} ({'วันที่ 15' if period == 1 else 'สิ้นเดือน'})"
+    return _finish_slip_upload(conn, emp_id, fname, already_paid, f"{month_name} {year} {period_label}")
 
 
 @app.post("/api/employees/{emp_id}/daily-payments/{work_date}/slip")
@@ -1070,16 +1071,7 @@ def upload_daily_slip(emp_id: int, work_date: str, file: UploadFile = File(...))
         (emp_id, work_date),
     ).fetchone()
     already_paid = bool(row and row["paid_at"])
-    emp_row = conn.execute("SELECT name FROM employees WHERE id=?", (emp_id,)).fetchone()
-    emp_name = emp_row["name"] if emp_row else ""
-    conn.commit(); conn.close()
-    if already_paid:
-        line_notify.notify_slip_image(
-            emp_name=emp_name,
-            slip_fname=fname,
-            label=f"วันที่ {work_date}",
-        )
-    return {"slip_path": fname}
+    return _finish_slip_upload(conn, emp_id, fname, already_paid, f"วันที่ {work_date}")
 
 
 @app.post("/api/employees/{emp_id}/documents")

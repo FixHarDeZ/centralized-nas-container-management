@@ -15,7 +15,7 @@ Uses /v2/bot/message/push with the group ID so a single API call reaches all gro
 import os
 import hmac as _hmac
 import hashlib
-import requests
+import httpx
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 from calc import compute_overall_balance, compute_resign_summary
@@ -103,7 +103,7 @@ def send_line(text: str, extra_messages: list | None = None) -> None:
         messages.extend(extra_messages)
     payload = {"to": GROUP_ID, "messages": messages[:5]}
     try:
-        resp = requests.post(LINE_API_URL, headers=headers, json=payload, timeout=10)
+        resp = httpx.post(LINE_API_URL, headers=headers, json=payload, timeout=10)
         resp.raise_for_status()
         print(f"[LINE] sent to group {GROUP_ID[:8]}…: {text[:80].replace(chr(10), ' ')}")
     except Exception as e:
