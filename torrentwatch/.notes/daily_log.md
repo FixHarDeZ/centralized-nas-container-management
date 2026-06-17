@@ -3,6 +3,17 @@
 ---
 
 ### Session Log Entry
+**Timestamp:** 2026-06-17
+**Title:** feat — free-leech % + multiplier columns + sitewide-free notify
+
+- **Scrape:** `_parse_row` now reads `COL_FREE=3` (ฟรี → `free_leech`, keeps "NN%" text, drops "No") and `COL_MULTIPLIER=4` (คูณ → `multiplier`, keeps "xN", drops "No"). Other column indices unchanged (verified against existing FILES=5/DATE=7/SIZE=8/COMPLETED=9/SEEDS=10/LEECHES=11).
+- **DB:** added `free_leech TEXT` + `multiplier TEXT` to `torrents` (CREATE + ALTER migration). `upsert_torrent` refreshes both on UPDATE (free status changes during sitewide events) and sets on INSERT. New generic `get_meta`/`set_meta` helpers for internal flags.
+- **UI:** green `FREE NN%` badge + amber multiplier badge in card meta row (`app.js` + `.tw-badge-free`/`.tw-badge-mult` in `style.css`).
+- **Sitewide-free notify:** `_parse_listing`/`scrape_source` return pre-filter `today_total`/`today_free` counts (ALL today non-sticky rows, before seed/threshold filter — avoids the high-seed/freeleech bias of the stored subset). Scheduler aggregates across sources; `_maybe_notify_all_free` pushes LINE+Telegram once/day when `today_free == today_total > 0`, deduped via `set_meta("free_all_notified_date", today)`.
+- **UI:** click logo / "TorrentWatch" brand → กลับหน้าวันนี้ (listener บน `.tw-logo` ยิง click ของ today nav-item; `cursor:pointer`).
+- **Deployed** 2026-06-17 (`./scripts/deploy.sh -s torrentwatch -y`) — rebuilt, clean boot, columns verified live in `/data/torrentwatch.db`.
+
+### Session Log Entry
 **Timestamp:** 2026-06-08
 **Title:** fix — retention cleanup ไม่รัน หลัง restart
 

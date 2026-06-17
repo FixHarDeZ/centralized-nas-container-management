@@ -89,7 +89,7 @@ id, url (UNIQUE), label, enabled, sort_order (DEFAULT 0), created_at
 ```sql
 id, source_id (FK), site_id, title, detail_url, torrent_url,
 cover_url, seeds, leeches, date_posted, posted_at, category,
-file_count, file_size, completed, is_sticky, first_seen_at, last_updated_at,
+file_count, file_size, completed, free_leech, multiplier, is_sticky, first_seen_at, last_updated_at,
 downloaded_local, downloaded_nas,
 watched_status    -- 0=none, 1=watched, 2=skip
 sticky_notified   -- 0=ยังไม่ notify, 1=notify แล้ว (added 2026-05-21)
@@ -120,6 +120,9 @@ Default settings:
 - `scrape_interval_day = "60"` — interval (นาที) ช่วง 06:00–19:00 (15/20/30/60)
 - `notify_sticky_enabled = "0"` — push LINE+Telegram เมื่อพบ sticky/pinned torrent ที่ยังไม่เคย notify (sticky_notified=0)
 
+**Internal meta keys** (settings table, ไม่ผ่าน UI, อ่าน/เขียนด้วย `get_meta`/`set_meta`):
+- `free_all_notified_date` — วันที่ push "ทุก torrent ฟรี 100%" ไปแล้ว (กัน notify ซ้ำต่อวัน). Sitewide-free notify ทำงานเสมอ (ไม่มี toggle): scheduler นับ pre-filter `today_total`/`today_free` ต่อรอบ scrape → ยิงเมื่อ `today_free == today_total > 0`
+
 Index: `idx_torrents_source_date ON torrents(source_id, date_posted)`
 
 ---
@@ -137,6 +140,8 @@ Index: `idx_torrents_source_date ON torrents(source_id, date_posted)`
 ROW_SELECTOR  = "tr[data-category-id]"
 COL_COVER     = 1    # <img src="..."> (absolute URL, ไม่ใช่ categories icon)
 COL_TITLE     = 2    # <a href="details.php?id=X&hashinfo=Y"><b>title</b></a>
+COL_FREE      = 3    # ฟรี — "100%"/"50%"/"No" → free_leech (keeps %-text, else "")
+COL_MULTIPLIER= 4    # คูณ — "x6"/"No" → multiplier (keeps xN, else "")
 COL_FILES     = 5    # file count
 COL_DATE      = 7    # <nobr>DD-MM-YYYY<BR>HH:MM:SS</nobr>
 COL_SIZE      = 8    # "2.63 GB" / "380.60 MB"

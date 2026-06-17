@@ -166,6 +166,8 @@ html, body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  cursor: pointer;
+  user-select: none;
 }
 .tw-logo-icon {
   color: transparent;
@@ -756,6 +758,8 @@ html, body {
 }
 .tw-badge .bi { font-size: 10px; }
 .tw-badge-sticky   { background: var(--sticky-soft); color: var(--sticky); border: 1px solid color-mix(in srgb, var(--sticky) 30%, transparent); }
+.tw-badge-free     { background: color-mix(in srgb, #22c55e 18%, transparent); color: #22c55e; border: 1px solid color-mix(in srgb, #22c55e 35%, transparent); }
+.tw-badge-mult     { background: color-mix(in srgb, #f59e0b 18%, transparent); color: #f59e0b; border: 1px solid color-mix(in srgb, #f59e0b 35%, transparent); }
 .tw-badge-dl-local { background: var(--dl-local-soft); color: var(--dl-local); }
 .tw-badge-dl-nas   { background: var(--dl-nas-soft); color: var(--dl-nas); }
 .tw-badge-info     { background: var(--bg-soft); color: var(--text-muted); }

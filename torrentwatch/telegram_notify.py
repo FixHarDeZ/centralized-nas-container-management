@@ -61,6 +61,11 @@ async def notify_sticky_new(source_url: str, entries: list[dict]):
     await _send("\n".join(lines))
 
 
+async def notify_all_free(count: int):
+    """Push when every torrent posted today is 100% free-leech (sitewide free event)."""
+    await _send(f"🎉 วันนี้ทุก torrent ฟรี 100%! ({count} รายการ)\nโหลดได้ไม่เสีย ratio 🟢\n\n🕒 {_now()}")
+
+
 async def send_test_message() -> dict:
     """Send a test push and return {"ok": bool, "error": str}."""
     if not config.TELEGRAM_BOT_TOKEN or not config.TELEGRAM_CHAT_ID:
