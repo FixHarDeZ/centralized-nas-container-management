@@ -3,5 +3,5 @@ creation_rules:
     age: age19dju3r6yqjrztv5mpht42zk0ayg4h7st6uqqsy0d4pwjzs48dejsu6k56g
     encrypted_regex: '^(.*)$'
   - path_regex: ^secrets/test-vault\.sops\.yaml$
-    age: age1ddc0s28h8axjrnxal8kh3skpz579ec22rfkqey4vektvdhjkpyyq7gvrz6
+    age: age1ym9z6ttx2tt8l88e62qdr44kqdjks0qhaj8fg9shggwxgh8wvfwq52ghhh
     encrypted_regex: '^(.*)$'
