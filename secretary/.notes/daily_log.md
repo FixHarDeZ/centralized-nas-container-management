@@ -1,5 +1,34 @@
 # Secretary Stack — Daily Log
 
+## 2026-06-12 — Table cells with soft line-breaks lost during ingest (wuwa topup not retrievable)
+
+### Problem
+Bot kept answering "ไม่พบข้อมูล" for Wuthering Waves / wuwa topup template even though the
+data clearly exists in Notion (page `Game Top up templates`, page_id `4ea87e92a4b3470cbeaba8469e469430`).
+Bot returned the **page URL** (title matched) but never the row body (template steps + topup list).
+
+### Root Cause
+The page is a simple `table` block. Cells contain Notion **soft line-breaks** (shift+enter),
+which encode as literal `\n` inside `rich_text[].plain_text`. Two ingest functions broke on that:
+1. `_table_to_md` emitted each row as `"| c | c | c |"` — a cell with `\n` split the row across
+   multiple physical lines → malformed markdown table.
+2. `_split_table_to_rows` splits the section by `\n` and `continue`s on any line not starting
+   with `|`, so every continuation line (the actual template/topup content) was dropped.
+Net: only `"Game: Wuthering Waves / wuwa"` survived as the stored chunk — body gone. Proved with
+a standalone repro before editing.
+
+### Fix (`ingest/ingest.py`)
+- `_table_to_md`: escape in-cell newlines → `.replace("\n", "<br>")` so each row stays one line.
+- `_split_table_to_rows`: restore on parse → `.replace("<br>", "\n")` so chunk text stays readable.
+
+### Deploy + verify
+- `deploy.sh -s secretary` (rebuilds `secretary-ingest` image — `ingest.py` is `COPY`'d, not bind-mounted).
+- Auto-started incremental ingest **skips** the page (unchanged `last_edited_time`); must force a
+  targeted re-ingest: `docker compose run --rm secretary-ingest python ingest.py --page <id>`
+  (`--page` ⇒ `full=True`, bypasses the skip, replaces stale chunks). Result: 3 chunks (Genshin /
+  Honkai / Wuthering Waves rows).
+- Verified via `POST /query` — full template + topup list now returned for wuwa.
+
 ## 2026-06-05 — Fix If2 type error in Secretary Bot workflow
 
 ### Problem

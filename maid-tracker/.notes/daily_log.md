@@ -2,6 +2,32 @@
 
 ---
 
+## 2026-06-16 — LINE slip image push (daily + monthly payment)
+
+### ฟีเจอร์ที่เพิ่ม
+- **จ่ายรายวัน (probation):** `toggle_daily_payment` ตอน mark paid → ส่ง LINE text พร้อมสลิปรูปถ้ามี (ไม่เคยมีมาก่อน)
+- **จ่ายรายเดือน:** `toggle_payment` ส่ง LINE แบบเดิม + เพิ่ม `paid_by` ในข้อความ + สลิปรูปถ้ามีตอน mark paid
+- **slip upload ทั้ง daily + monthly:** ถ้า payment ถูก mark paid แล้ว → upload สลิปทีหลัง → ส่ง LINE image ทันที (trigger จาก upload endpoint)
+- **PDF slip:** skip image ส่ง LINE โดยอัตโนมัติ (LINE ไม่รองรับ PDF)
+
+### Security
+- **HMAC-signed public slip URL:** `/api/slips/public/{token}/{fname}` — token = HMAC-SHA256(CHANNEL_SECRET, fname)[:16]
+- nginx public location `/api/slips/public/` bypass basic-auth → app validate token เอง
+- ป้องกัน enumerate: ไม่ใช้ obscurity แต่ใช้ HMAC token จาก CHANNEL_SECRET ที่ LINE รู้
+
+### Config ที่ต้องทำก่อน deploy
+1. `make edit-vault` → เพิ่ม key `stacks.maid_tracker.public_base_url` = `https://<NAS_HOST>:15055`
+2. `make secrets` → สร้าง `.env` ใหม่
+3. `./scripts/deploy.sh`
+
+### ไฟล์ที่แก้
+- `main.py`: public slip route, toggle_payment/daily + upload endpoints
+- `line_notify.py`: HMAC helpers, notify_daily_payment, notify_slip_image, send_line extra_messages
+- `nginx/nginx.conf`: public location block
+- `secrets.manifest.yaml`: MAID_PUBLIC_BASE_URL vault key
+
+---
+
 ## 2026-06-14 (เพิ่มเติม) — Probation: default-present model + summary fix
 
 ### 2 ฟีดแบ็คจาก user (เทสต์ live)
@@ -277,3 +303,13 @@ var theme = saved || "light";
 **ไฟล์:** `calc.py`, `main.py`, `static/app.js`, `README.md`, root `CLAUDE.md`, `tests/test_daily_divisor.py` (4 tests ใหม่ lock invariant), `tests/test_probation.py` (อัปเดต assertion 600→520, 5400→5720)
 
 **Test:** 16 passed (เดิม 12 + ใหม่ 4)
+
+---
+
+## 2026-06-15 — เพิ่ม basic-auth user ที่ nginx
+
+เพิ่ม user `Pookzii` (apr1 hash) ใน `nginx/.htpasswd` ข้าง `fixhardez` เดิม. Hash gen ผ่าน `openssl passwd -apr1`.
+
+**ไฟล์:** `nginx/.htpasswd`
+
+**Deploy:** ต้อง `./scripts/deploy.sh` + restart maid-nginx (htpasswd mount read-only) ถึงมีผลบน NAS. `nginx -s reload` ไม่พอเพราะไฟล์ mount ใหม่ตอน container start — restart container.
