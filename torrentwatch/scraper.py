@@ -105,6 +105,8 @@ ROW_SELECTOR = "tr[data-category-id]"
 # Column indices (0-based) in each matching <tr>
 COL_COVER     = 1   # <td class="poster-column"> → <img src="...">
 COL_TITLE     = 2   # <td width="900"> → <a href="details.php?id=X&hashinfo=Y"><b>title
+COL_FREE      = 3   # ฟรี — free-leech percent ("100%" / "50%" / "No")
+COL_MULTIPLIER= 4   # คูณ — upload multiplier ("x6" / "No")
 COL_FILES     = 5   # ไฟล์ — plain number
 COL_DATE      = 7   # <nobr>DD-MM-YYYY<BR>HH:MM:SS</nobr>
 COL_SIZE      = 8   # ขนาด — "2.63 GB" / "380.60 MB"
@@ -399,15 +401,19 @@ async def scrape_source(
     on_page=None,            # optional callback(page_num, items_so_far)
     skip_sticky: bool = True,
     completed_min: int = 0,
-) -> tuple[list[dict], set[str]]:
+) -> tuple[list[dict], set[str], int, int]:
     """Scrape all pages until today's items are exhausted.
-    Returns (filtered_entries, all_sticky_site_ids_seen_on_site).
+    Returns (filtered_entries, all_sticky_site_ids_seen_on_site, today_total, today_free).
     seen_sticky_site_ids contains every sticky site_id found on bearbit this run
     (before any seed/threshold filter) so the caller can sync sticky state in the DB.
+    today_total/today_free are pre-filter counts of today's non-sticky rows so the
+    caller can detect a sitewide freeleech event (today_free == today_total > 0).
     """
     today              = datetime.now(_TZ).strftime("%Y-%m-%d")
     all_items          = []
     seen_sticky_ids: set[str] = set()
+    today_total        = 0
+    today_free         = 0
     max_pages          = 20   # safety cap
 
     for page in range(max_pages):
@@ -417,11 +423,13 @@ async def scrape_source(
             print(f"[scraper] page {page}: fetch failed, stopping")
             break
 
-        items, found_older, page_sticky_ids = _parse_listing(
+        items, found_older, page_sticky_ids, page_total, page_free = _parse_listing(
             html, page_url, today, seed_min, leech_min, keywords, filter_mode, skip_sticky, completed_min
         )
         all_items.extend(items)
         seen_sticky_ids.update(page_sticky_ids)
+        today_total += page_total
+        today_free  += page_free
         print(f"[scraper] page {page}: {len(items)} pass filter, found_older={found_older}")
 
         if on_page:
@@ -433,13 +441,16 @@ async def scrape_source(
         if found_older or not items:
             break
 
-    print(f"[scraper] total {len(all_items)} items across {page + 1} page(s) from {url}")
-    return all_items, seen_sticky_ids
+    print(f"[scraper] total {len(all_items)} items across {page + 1} page(s) from {url}; today {today_free}/{today_total} free")
+    return all_items, seen_sticky_ids, today_total, today_free
 
 
-def _parse_listing(html: str, base_url: str, today: str, seed_min: int, leech_min: int, keywords: list[str], filter_mode: str = "and", skip_sticky: bool = True, completed_min: int = 0) -> tuple[list[dict], bool, set[str]]:
-    """Returns (matching_entries, found_any_older_than_today, seen_sticky_site_ids).
+def _parse_listing(html: str, base_url: str, today: str, seed_min: int, leech_min: int, keywords: list[str], filter_mode: str = "and", skip_sticky: bool = True, completed_min: int = 0) -> tuple[list[dict], bool, set[str], int, int]:
+    """Returns (matching_entries, found_any_older_than_today, seen_sticky_site_ids,
+    today_total, today_free).
     seen_sticky_site_ids tracks every sticky site_id present on bearbit before filtering.
+    today_total/today_free count ALL non-sticky rows dated today BEFORE the seed/threshold
+    filter — so the caller can detect a sitewide freeleech event (today_free == today_total).
     """
     soup = BeautifulSoup(html, "html.parser")
     _seed_categories_from_page(soup)
@@ -447,6 +458,8 @@ def _parse_listing(html: str, base_url: str, today: str, seed_min: int, leech_mi
     found_older      = False
     seen_sticky_ids: set[str] = set()
     sticky_count     = 0
+    today_total      = 0
+    today_free       = 0
 
     rows = soup.select(ROW_SELECTOR)
 
@@ -478,6 +491,12 @@ def _parse_listing(html: str, base_url: str, today: str, seed_min: int, leech_mi
             found_older = True   # crossed into yesterday — signal to stop paging
             continue
 
+        # Pre-filter tally for sitewide-freeleech detection: every today row counts,
+        # even seed-0 / below-threshold ones, so the signal reflects the whole listing.
+        today_total += 1
+        if (entry.get("free_leech") or "") == "100%":
+            today_free += 1
+
         if entry["seeds"] == 0:
             continue
 
@@ -502,8 +521,8 @@ def _parse_listing(html: str, base_url: str, today: str, seed_min: int, leech_mi
         entry["keyword_match"] = kw_match
         results.append(entry)
 
-    print(f"[scraper] _parse_listing: {sticky_count} sticky, {len(results) - sticky_count} regular → total {len(results)} results")
-    return results, found_older, seen_sticky_ids
+    print(f"[scraper] _parse_listing: {sticky_count} sticky, {len(results) - sticky_count} regular → total {len(results)} results; today {today_free}/{today_total} free")
+    return results, found_older, seen_sticky_ids, today_total, today_free
 
 
 def _parse_row(row, base_url: str, today: str, skip_sticky: bool = True) -> dict | None:
@@ -594,6 +613,20 @@ def _parse_row(row, base_url: str, today: str, skip_sticky: bool = True) -> dict
     except Exception:
         pass
 
+    # ── Free-leech % (col 3) — keep "NN%" text, drop "No"/blank ──────────────
+    try:
+        raw_free = tds[COL_FREE].get_text(strip=True)
+        free_leech = raw_free if "%" in raw_free else ""
+    except Exception:
+        free_leech = ""
+
+    # ── Upload multiplier (col 4) — keep "xN" text, drop "No"/blank ──────────
+    try:
+        raw_mult = tds[COL_MULTIPLIER].get_text(strip=True)
+        multiplier = raw_mult if raw_mult.lower().startswith("x") else ""
+    except Exception:
+        multiplier = ""
+
     # ── File count (col 5) ───────────────────────────────────────────────────
     try:
         file_count = _parse_int(tds[COL_FILES].get_text(strip=True))
@@ -644,6 +677,8 @@ def _parse_row(row, base_url: str, today: str, skip_sticky: bool = True) -> dict
         "file_count":  file_count,
         "file_size":   file_size,
         "completed":   completed,
+        "free_leech":  free_leech,
+        "multiplier":  multiplier,
         "is_sticky":   is_sticky,
     }
 

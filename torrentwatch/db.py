@@ -68,6 +68,8 @@ def init_db():
                 file_count       INTEGER DEFAULT 0,
                 file_size        TEXT DEFAULT '',
                 completed        INTEGER DEFAULT 0,
+                free_leech       TEXT DEFAULT '',
+                multiplier       TEXT DEFAULT '',
                 first_seen_at    TEXT NOT NULL,
                 last_updated_at  TEXT NOT NULL,
                 downloaded_local INTEGER DEFAULT 0,
@@ -116,6 +118,8 @@ def init_db():
             "ALTER TABLE torrents ADD COLUMN file_count     INTEGER DEFAULT 0",
             "ALTER TABLE torrents ADD COLUMN file_size      TEXT DEFAULT ''",
             "ALTER TABLE torrents ADD COLUMN completed      INTEGER DEFAULT 0",
+            "ALTER TABLE torrents ADD COLUMN free_leech      TEXT DEFAULT ''",
+            "ALTER TABLE torrents ADD COLUMN multiplier      TEXT DEFAULT ''",
             "ALTER TABLE torrents ADD COLUMN is_sticky       INTEGER DEFAULT 0",
             "ALTER TABLE torrents ADD COLUMN watched_status  INTEGER DEFAULT 0",
             "ALTER TABLE torrents ADD COLUMN sticky_notified INTEGER DEFAULT 0",
@@ -273,10 +277,12 @@ def upsert_torrent(source_id: int, site_id: str, data: dict) -> tuple[bool, int]
         if existing:
             c.execute(
                 """UPDATE torrents
-                   SET seeds=?, leeches=?, completed=?, date_posted=?, category=?, is_sticky=?, last_updated_at=?
+                   SET seeds=?, leeches=?, completed=?, date_posted=?, category=?,
+                       free_leech=?, multiplier=?, is_sticky=?, last_updated_at=?
                    WHERE id=?""",
                 (data["seeds"], data["leeches"], data.get("completed", 0),
                  data["date_posted"], data.get("category", ""),
+                 data.get("free_leech", ""), data.get("multiplier", ""),
                  1 if data.get("is_sticky") else 0, now, existing["id"])
             )
             return False, existing["id"]
@@ -285,13 +291,15 @@ def upsert_torrent(source_id: int, site_id: str, data: dict) -> tuple[bool, int]
                 """INSERT INTO torrents
                    (source_id, site_id, title, detail_url, torrent_url, cover_url,
                     seeds, leeches, date_posted, posted_at, category,
-                    file_count, file_size, completed, is_sticky, first_seen_at, last_updated_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    file_count, file_size, completed, free_leech, multiplier,
+                    is_sticky, first_seen_at, last_updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (source_id, site_id, data["title"], data["detail_url"], data["torrent_url"],
                  data.get("cover_url"), data["seeds"], data["leeches"],
                  data["date_posted"], data.get("posted_at", ""), data.get("category", ""),
                  data.get("file_count", 0), data.get("file_size", ""),
-                 data.get("completed", 0), 1 if data.get("is_sticky") else 0, now, now)
+                 data.get("completed", 0), data.get("free_leech", ""), data.get("multiplier", ""),
+                 1 if data.get("is_sticky") else 0, now, now)
             )
             return True, c.execute("SELECT last_insert_rowid()").fetchone()[0]
 
@@ -469,6 +477,18 @@ def update_settings(data: dict):
         for key, val in data.items():
             if key in _DEFAULT_SETTINGS:
                 c.execute("INSERT OR REPLACE INTO settings(key, value) VALUES (?, ?)", (key, str(val)))
+
+
+def get_meta(key: str, default: str = "") -> str:
+    """Read an internal (non-user-editable) flag stored in the settings table."""
+    with _conn() as c:
+        row = c.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+        return row["value"] if row else default
+
+
+def set_meta(key: str, value: str):
+    with _conn() as c:
+        c.execute("INSERT OR REPLACE INTO settings(key, value) VALUES (?, ?)", (key, value))
 
 
 # ─── Utilities ────────────────────────────────────────────────────────────────

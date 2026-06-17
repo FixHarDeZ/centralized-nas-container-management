@@ -69,6 +69,11 @@ document.querySelectorAll(".tw-nav-item").forEach(btn => {
   });
 });
 
+// Logo / brand → back to Today (reuses the Today nav-item's click)
+document.querySelector(".tw-logo")?.addEventListener("click", () => {
+  document.querySelector('.tw-nav-item[data-tab="today"]')?.click();
+});
+
 function onTabActivate(tab) {
   if (tab === "today") loadToday();
   if (tab === "history") loadHistoryDates();
@@ -306,6 +311,8 @@ function cardHTML(t, readOnly) {
 
   const kwStar    = t.keyword_match ? `<span class="tw-kw-star">★ kw</span>` : "";
   const catBadge  = t.category ? `<span class="tw-badge-cat">${escHtml(catLabel(t.category))}</span>` : "";
+  const freeBadge = t.free_leech ? `<span class="tw-badge tw-badge-free">FREE ${escHtml(t.free_leech)}</span>` : "";
+  const multBadge = t.multiplier ? `<span class="tw-badge tw-badge-mult">${escHtml(t.multiplier)}</span>` : "";
   const stickyBadge = t.is_sticky ? `<span class="tw-badge tw-badge-sticky"><i class="bi bi-pin-fill"></i> Sticky</span>` : "";
 
   const thumbInner = t.cover_url
@@ -362,6 +369,8 @@ function cardHTML(t, readOnly) {
       <div class="tw-card-meta">
         <span class="tw-card-time">${_fmtTime(t.posted_at)}</span>
         ${catBadge}
+        ${freeBadge}
+        ${multBadge}
         ${stickyBadge}
       </div>
       <a class="tw-card-title tw-title-link" href="/api/detail/${t.id}" target="_blank" rel="noopener">${escHtml(t.title)}</a>

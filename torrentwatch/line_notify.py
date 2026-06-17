@@ -77,6 +77,11 @@ async def notify_round_summary(results: list[dict]):
     await _push("\n".join(lines))
 
 
+async def notify_all_free(count: int):
+    """Push when every torrent posted today is 100% free-leech (sitewide free event)."""
+    await _push(f"🎉 วันนี้ทุก torrent ฟรี 100%! ({count} รายการ)\nโหลดได้ไม่เสีย ratio 🟢\n\n🕒 {_now()}")
+
+
 async def send_test_message() -> dict:
     """Send a test push and return {"ok": bool, "error": str}. Checks response directly."""
     if not config.LINE_ACCESS_TOKEN or not config.LINE_USER_ID:

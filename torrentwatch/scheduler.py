@@ -71,6 +71,8 @@ async def _do_scrape():
 
     sources     = db.get_enabled_sources()
     total_found = 0
+    free_today  = 0   # pre-filter count of today's non-sticky rows that are 100% free
+    rows_today  = 0   # pre-filter count of all today's non-sticky rows (sitewide-free signal)
 
     try:
         # Re-login each cycle to recover from stale connections after long idle periods
@@ -89,12 +91,14 @@ async def _do_scrape():
             _scrape_progress = {"source": source_display, "source_idx": source_idx, "source_total": source_total, "page": 0, "found": 0}
 
             try:
-                entries, seen_sticky_ids = await scraper.scrape_source(
+                entries, seen_sticky_ids, src_total, src_free = await scraper.scrape_source(
                     source_url, seed_min, leech_min, keywords, filter_mode,
                     on_page=lambda pg, n, _lbl=source_display, _idx=source_idx, _tot=source_total: _update_progress(_lbl, _idx, _tot, pg, total_found + n),
                     skip_sticky=skip_sticky,
                     completed_min=completed_min,
                 )
+                rows_today += src_total
+                free_today += src_free
             except Exception as e:
                 print(f"[scheduler] scrape error {source_url}: {e}")
                 entries, seen_sticky_ids = [], set()
@@ -166,10 +170,31 @@ async def _do_scrape():
                 else:
                     print("[scheduler] auto-dl: /downloads not mounted, skipping")
 
+        # Sitewide free event: notify once/day when every torrent today is 100% free
+        try:
+            await _maybe_notify_all_free(today, rows_today, free_today)
+        except Exception as e:
+            print(f"[scheduler] all-free notify error: {e}")
+
     finally:
         _scrape_status   = "idle"
         _scrape_progress = {}
         print(f"[scheduler] scrape done — {total_found} entries across {len(sources)} sources")
+
+
+async def _maybe_notify_all_free(today: str, rows_today: int, free_today: int):
+    """Push LINE+Telegram once per day when EVERY today row on the site is 100% free-leech.
+    Uses pre-filter scrape counts (not the DB's filtered subset) so the signal reflects a
+    genuine sitewide freeleech event, not the high-seed/freeleech bias of stored torrents.
+    """
+    if rows_today <= 0 or free_today != rows_today:
+        return
+    if db.get_meta("free_all_notified_date") == today:
+        return  # already notified today
+    await line_notify.notify_all_free(rows_today)
+    await telegram_notify.notify_all_free(rows_today)
+    db.set_meta("free_all_notified_date", today)
+    print(f"[scheduler] all-free notify sent ({rows_today} today rows all 100% free)")
 
 
 def _update_progress(source_label: str, source_idx: int, source_total: int, page: int, found: int):
