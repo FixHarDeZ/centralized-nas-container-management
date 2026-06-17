@@ -193,6 +193,7 @@ final = base_salary_last_month + (cumulative_balance × daily_rate)
 | `MAID_LINE_CHANNEL_SECRET` | ❌ optional | สำหรับ verify webhook signature |
 | `NGINX_BASIC_AUTH_USER/PASS` | ❌ optional | เปิด HTTP Basic Auth (ยกเว้น `/webhook/line`) |
 | `MONTHLY_REPORT_TIME` | ❌ optional | เวลาส่งรายงานเดือน (default `20:00`) |
+| `MAID_PUBLIC_BASE_URL` | ❌ optional | URL สาธารณะของ maid-tracker (เช่น `https://<NAS_HOST>:15055`) — ใช้สำหรับ signed slip URL ส่ง LINE image (vault key: `stacks.maid_tracker.public_base_url`) |
 
 ---
 
