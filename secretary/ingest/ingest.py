@@ -364,7 +364,10 @@ def _table_to_md(block: dict) -> str:
     lines = []
     for i, row in enumerate(rows):
         cells = row.get("table_row", {}).get("cells", [])
-        cell_texts = [_rich_text_to_str(c) for c in cells]
+        # Notion soft line-breaks inside a cell encode as \n in plain_text. Left raw they
+        # split one row across multiple physical lines, breaking the markdown table and
+        # causing _split_table_to_rows to drop the continuation lines. Escape to <br>.
+        cell_texts = [_rich_text_to_str(c).replace("\n", "<br>") for c in cells]
         lines.append("| " + " | ".join(cell_texts) + " |")
         if i == 0:
             lines.append("| " + " | ".join(["---"] * len(cell_texts)) + " |")
@@ -441,7 +444,7 @@ def _split_table_to_rows(section_text: str, heading: str, title: str) -> list[di
                 preamble_lines.append(line)
             continue
         
-        cells = [c.strip() for c in line.split("|")[1:-1]]
+        cells = [c.strip().replace("<br>", "\n") for c in line.split("|")[1:-1]]
         
         # Skip separator line
         if all(c.replace("-", "").strip() == "" for c in cells):
