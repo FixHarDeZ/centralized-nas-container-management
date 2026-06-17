@@ -135,6 +135,19 @@ def _save_upload(file: "UploadFile", dest_dir: str, basename: str) -> str:
     return fname  # store relative filename in DB
 
 
+@app.get("/api/slips/public/{token}/{fname}")
+def serve_slip_public(token: str, fname: str):
+    """Public (no basic-auth) slip route for LINE image messages. HMAC-token validated."""
+    secret   = _MAID_LINE_CHANNEL_SECRET or "x"
+    expected = hmac.new(secret.encode(), fname.encode(), hashlib.sha256).hexdigest()[:16]
+    if not hmac.compare_digest(token, expected):
+        raise HTTPException(403, "Forbidden")
+    path = os.path.join(_SLIP_DIR, os.path.basename(fname))
+    if not os.path.exists(path):
+        raise HTTPException(404, "Not found")
+    return FileResponse(path)
+
+
 @app.get("/api/slips/{fname}")
 def serve_slip(fname: str):
     path = os.path.join(_SLIP_DIR, os.path.basename(fname))
@@ -1020,7 +1033,22 @@ def upload_period_slip(emp_id: int, period: int, year: int, month: int, file: Up
         "ON CONFLICT(employee_id, year, month, period) DO UPDATE SET slip_path=excluded.slip_path",
         (emp_id, year, month, period, fname),
     )
+    row = conn.execute(
+        "SELECT paid_at FROM salary_payments WHERE employee_id=? AND year=? AND month=? AND period=?",
+        (emp_id, year, month, period),
+    ).fetchone()
+    already_paid = bool(row and row["paid_at"])
+    emp_row = conn.execute("SELECT name FROM employees WHERE id=?", (emp_id,)).fetchone()
+    emp_name = emp_row["name"] if emp_row else ""
     conn.commit(); conn.close()
+    if already_paid:
+        month_name   = line_notify.THAI_MONTHS[month]
+        period_label = f"รอบที่ {period} ({'วันที่ 15' if period == 1 else 'สิ้นเดือน'})"
+        line_notify.notify_slip_image(
+            emp_name=emp_name,
+            slip_fname=fname,
+            label=f"{month_name} {year} {period_label}",
+        )
     return {"slip_path": fname}
 
 
@@ -1037,7 +1065,20 @@ def upload_daily_slip(emp_id: int, work_date: str, file: UploadFile = File(...))
             "INSERT INTO daily_payments (employee_id, work_date, amount, slip_path) VALUES (?,?,0,?)",
             (emp_id, work_date, fname),
         )
+    row = conn.execute(
+        "SELECT paid_at FROM daily_payments WHERE employee_id=? AND work_date=?",
+        (emp_id, work_date),
+    ).fetchone()
+    already_paid = bool(row and row["paid_at"])
+    emp_row = conn.execute("SELECT name FROM employees WHERE id=?", (emp_id,)).fetchone()
+    emp_name = emp_row["name"] if emp_row else ""
     conn.commit(); conn.close()
+    if already_paid:
+        line_notify.notify_slip_image(
+            emp_name=emp_name,
+            slip_fname=fname,
+            label=f"วันที่ {work_date}",
+        )
     return {"slip_path": fname}
 
 
@@ -1101,9 +1142,10 @@ def toggle_payment(emp_id: int, period: int, year: int, month: int, paid_by: str
     start_date = date.fromisoformat(emp["start_date"])
 
     existing = conn.execute(
-        "SELECT paid_at FROM salary_payments WHERE employee_id=? AND year=? AND month=? AND period=?",
+        "SELECT paid_at, slip_path FROM salary_payments WHERE employee_id=? AND year=? AND month=? AND period=?",
         (emp_id, year, month, period),
     ).fetchone()
+    slip_fname = existing["slip_path"] if existing else None
 
     amount, toggle_deduction_days, toggle_deduction_amount = _compute_period_amount(emp, year, month, period)
 
@@ -1142,6 +1184,8 @@ def toggle_payment(emp_id: int, period: int, year: int, month: int, paid_by: str
             monthly_salary=emp["monthly_salary"],
             deduction_days=toggle_deduction_days,
             deduction_amount=toggle_deduction_amount,
+            paid_by=payer,
+            slip_fname=slip_fname,
         )
 
     return {"paid": bool(paid_at), "paid_at": paid_at}
@@ -1220,6 +1264,7 @@ def toggle_daily_payment(emp_id: int, work_date: str, paid_by: str = ""):
     if existing and existing["paid_at"]:
         conn.execute("UPDATE daily_payments SET paid_at=NULL, paid_by=NULL WHERE id=?", (existing["id"],))
         paid_at = None
+        amount  = 0.0
     else:
         amount = round((emp.get("probation_daily_rate") or 0) * frac, 2)
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -1229,7 +1274,27 @@ def toggle_daily_payment(emp_id: int, work_date: str, paid_by: str = ""):
             (emp_id, work_date, amount, now, payer),
         )
         paid_at = now
+
+    slip_fname = None
+    if paid_at:
+        dp_row = conn.execute(
+            "SELECT slip_path FROM daily_payments WHERE employee_id=? AND work_date=?",
+            (emp_id, work_date),
+        ).fetchone()
+        slip_fname = dp_row["slip_path"] if dp_row else None
+
     conn.commit(); conn.close()
+
+    if paid_at:
+        line_notify.notify_daily_payment(
+            emp_name=emp["name"],
+            work_date=work_date,
+            amount=amount,
+            paid_at=paid_at,
+            paid_by=payer,
+            slip_fname=slip_fname,
+        )
+
     return {"paid": bool(paid_at), "paid_at": paid_at}
 
 
