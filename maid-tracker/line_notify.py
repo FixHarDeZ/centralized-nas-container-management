@@ -13,20 +13,44 @@ Uses /v2/bot/message/push with the group ID so a single API call reaches all gro
 """
 
 import os
+import hmac as _hmac
+import hashlib
 import requests
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 from calc import compute_overall_balance, compute_resign_summary
 
-LINE_API_URL = "https://api.line.me/v2/bot/message/push"
-TOKEN    = os.environ.get("MAID_LINE_CHANNEL_ACCESS_TOKEN", "")
-GROUP_ID = os.environ.get("MAID_LINE_GROUP_ID", "").strip()
-TZ       = ZoneInfo(os.environ.get("TZ", "Asia/Bangkok"))
+LINE_API_URL    = "https://api.line.me/v2/bot/message/push"
+TOKEN           = os.environ.get("MAID_LINE_CHANNEL_ACCESS_TOKEN", "")
+GROUP_ID        = os.environ.get("MAID_LINE_GROUP_ID", "").strip()
+CHANNEL_SECRET  = os.environ.get("MAID_LINE_CHANNEL_SECRET", "")
+PUBLIC_BASE_URL = os.environ.get("MAID_PUBLIC_BASE_URL", "").rstrip("/")
+TZ              = ZoneInfo(os.environ.get("TZ", "Asia/Bangkok"))
 
 THAI_MONTHS = [
     "", "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
     "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม",
 ]
+
+
+# ─── Slip helpers ────────────────────────────────────────────────────────────
+
+def _slip_token(fname: str) -> str:
+    """16-char HMAC-SHA256 token used by the public slip route."""
+    key = (CHANNEL_SECRET or "x").encode()
+    return _hmac.new(key, fname.encode(), hashlib.sha256).hexdigest()[:16]
+
+
+def _is_image_slip(fname: str) -> bool:
+    ext = (fname or "").rsplit(".", 1)[-1].lower()
+    return ext in ("jpg", "jpeg", "png", "webp")
+
+
+def _slip_public_url(fname: str) -> str | None:
+    """Return signed public URL for slip image, or None when config is missing or file is PDF."""
+    if not PUBLIC_BASE_URL or not fname or not _is_image_slip(fname):
+        return None
+    return f"{PUBLIC_BASE_URL}/api/slips/public/{_slip_token(fname)}/{fname}"
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -67,14 +91,17 @@ def _balance_block(b: dict) -> str:
 
 # ─── LINE sender ─────────────────────────────────────────────────────────────
 
-def send_line(text: str) -> None:
+def send_line(text: str, extra_messages: list | None = None) -> None:
     if not TOKEN or not GROUP_ID:
         return
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {TOKEN}",
     }
-    payload = {"to": GROUP_ID, "messages": [{"type": "text", "text": text}]}
+    messages = [{"type": "text", "text": text}]
+    if extra_messages:
+        messages.extend(extra_messages)
+    payload = {"to": GROUP_ID, "messages": messages[:5]}
     try:
         resp = requests.post(LINE_API_URL, headers=headers, json=payload, timeout=10)
         resp.raise_for_status()
@@ -132,19 +159,24 @@ def notify_payment(
     monthly_salary: float,
     deduction_days: float = 0.0,
     deduction_amount: float = 0.0,
+    paid_by: str | None = None,
+    slip_fname: str | None = None,
 ) -> None:
     """Call after marking a salary payment period as paid."""
     if not TOKEN or not GROUP_ID:
         return
 
-    month_name   = THAI_MONTHS[month]
-    period_label = f"รอบที่ {period} ({'วันที่ 15' if period == 1 else 'สิ้นเดือน'})"
-
+    month_name    = THAI_MONTHS[month]
+    period_label  = f"รอบที่ {period} ({'วันที่ 15' if period == 1 else 'สิ้นเดือน'})"
     deduction_line = ""
     if deduction_days > 0:
         deduction_line = (
             f"✂️ หักวันลาเกินสะสม {_fmt_days(deduction_days)} วัน: -฿{_fmt(deduction_amount)}\n"
         )
+    payer_line = f"  ผู้จ่าย: {paid_by}\n" if paid_by else ""
+
+    image_url = _slip_public_url(slip_fname) if slip_fname else None
+    extra = [{"type": "image", "originalContentUrl": image_url, "previewImageUrl": image_url}] if image_url else None
 
     try:
         b   = compute_overall_balance(emp_id, start_date, monthly_salary)
@@ -153,14 +185,59 @@ def notify_payment(
             f"📅 {month_name} {year}  {period_label}\n"
             f"{deduction_line}"
             f"💵 ฿{_fmt(amount)}\n"
+            f"{payer_line}"
             f"\n"
             f"{_balance_block(b)}\n"
             f"\n"
             f"🕒 {paid_at}"
         )
-        send_line(msg)
+        send_line(msg, extra)
     except Exception as e:
         print(f"[LINE] notify_payment error: {e}")
+
+
+def notify_daily_payment(
+    emp_name: str,
+    work_date: str,
+    amount: float,
+    paid_at: str,
+    paid_by: str | None = None,
+    slip_fname: str | None = None,
+) -> None:
+    """Call after marking a probation daily payment as paid."""
+    if not TOKEN or not GROUP_ID:
+        return
+
+    payer_line = f"\n  ผู้จ่าย: {paid_by}" if paid_by else ""
+    image_url  = _slip_public_url(slip_fname) if slip_fname else None
+    extra      = [{"type": "image", "originalContentUrl": image_url, "previewImageUrl": image_url}] if image_url else None
+
+    try:
+        msg = (
+            f"💰 จ่ายรายวันแล้ว — {emp_name}\n"
+            f"📅 วันที่ {work_date}\n"
+            f"💵 ฿{_fmt(amount)}{payer_line}\n"
+            f"\n"
+            f"🕒 {paid_at}"
+        )
+        send_line(msg, extra)
+    except Exception as e:
+        print(f"[LINE] notify_daily_payment error: {e}")
+
+
+def notify_slip_image(emp_name: str, slip_fname: str, label: str) -> None:
+    """Send slip image to LINE after upload when payment is already paid."""
+    image_url = _slip_public_url(slip_fname)
+    if not image_url:
+        return  # PDF or missing MAID_PUBLIC_BASE_URL — skip silently
+    if not TOKEN or not GROUP_ID:
+        return
+    try:
+        msg   = f"📎 สลิปโอนเงิน — {emp_name}\n{label}\n🕒 {_now_str()}"
+        extra = [{"type": "image", "originalContentUrl": image_url, "previewImageUrl": image_url}]
+        send_line(msg, extra)
+    except Exception as e:
+        print(f"[LINE] notify_slip_image error: {e}")
 
 
 def notify_cancel_attendance(
