@@ -106,6 +106,14 @@ Manual scripts to export/import n8n workflows via REST API (SSH tunnel to NAS lo
 Requires `N8N_API_KEY` in `secretary/.env` (generated from vault via `make secrets`).
 Workflow files are git-tracked for version control.
 
+## Notion Table Ingest — Gotcha (fixed 2026-06-12)
+Simple `table` block cells can hold **soft line-breaks** (shift+enter) → literal `\n` in
+`rich_text.plain_text`. `_table_to_md` now escapes those to `<br>` (keeps each row on one physical
+line); `_split_table_to_rows` restores `<br>`→`\n` on parse. Without this, multi-line cell content
+was silently dropped and only the first cell of the row survived as a chunk — symptom was "bot
+returns the page link but says ไม่พบข้อมูล / no detail". After editing table parsing, force a
+targeted re-ingest (`--page <id>`); incremental sync skips unchanged pages.
+
 ## Gaps / TODOs
 - **Architectural improvement (optional):** `/ingest-trigger` currently loads BGE-M3 in a subprocess inside `secretary-query` (which already has BGE-M3 resident). This works at 6 GB but is structurally OOM-prone. Proper fix: refactor `/ingest-trigger` to launch a one-shot `secretary-ingest` container via Docker socket so the ingest workload runs in its own 6 GB cgroup. Requires mounting docker.sock into secretary-query — security trade-off worth weighing.
 - **Schedule frequency:** n8n "Secretary Auto Sync" runs hourly. Most ticks update 0-2 pages. Consider dropping to every 4-6 h to amortise the BGE-M3 cold-load + Notion-poll cost. One-line workflow JSON change.
