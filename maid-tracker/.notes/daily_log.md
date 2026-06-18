@@ -326,3 +326,19 @@ var theme = saved || "light";
 **ไฟล์:** `nginx/.htpasswd`
 
 **Deploy:** ต้อง `./scripts/deploy.sh` + restart maid-nginx (htpasswd mount read-only) ถึงมีผลบน NAS. `nginx -s reload` ไม่พอเพราะไฟล์ mount ใหม่ตอน container start — restart container.
+
+---
+
+## 2026-06-18 — วันเกิดแม่บ้าน → คำนวณอายุอัตโนมัติ
+
+เพิ่มฟิลด์ `birth_date` (col `employees`, migration TEXT). ถ้ากรอกวันเกิด → คำนวณอายุให้อัตโนมัติ; ถ้าไม่กรอก → ใส่อายุเองได้เหมือนเดิม.
+
+**Design (single source of truth):** age คำนวณตอน **read** ไม่ใช่ตอน write. `_age_from_birth(bd)` (main.py) → `list_employees` + `get_employee` override `emp["age"]` เมื่อมี `birth_date`. ทุกจุดที่ display `emp.age` ทำงานต่อโดยไม่ต้องแก้ (app.js:586 list card, app.js:977 detail).
+
+**Frontend:** เพิ่ม `<input type=date name=birth_date>` ในฟอร์ม. JS `syncAge()` — มีวันเกิด → คำนวณอายุ + `disabled` ช่อง age (disabled input ไม่ถูกส่งใน FormData → age post เป็น null → server derive จาก birth_date). ว่าง → ช่อง age แก้ได้. label i18n `fieldBirthDate` (TH "วันเกิด" / EN "Date of Birth").
+
+**Edge:** `_age_from_birth` กัน parse fail/None/วันเกิดอนาคต → คืน None. ใช้ tuple-compare `(month,day)` leap-safe.
+
+**ไฟล์:** `main.py`, `static/app.js`, `.notes/00_INDEX.md`
+
+**Test:** age logic verified (birthday passed/not-yet/garbage/future/None). main.py + app.js parse OK.

@@ -297,7 +297,7 @@ def init_db():
         );
     """)
     # Migrate: add columns if they don't exist yet
-    for col, definition in [("end_date", "TEXT"), ("resign_note", "TEXT")]:
+    for col, definition in [("end_date", "TEXT"), ("resign_note", "TEXT"), ("birth_date", "TEXT")]:
         try:
             c.execute(f"ALTER TABLE employees ADD COLUMN {col} {definition}")
         except Exception:
@@ -475,9 +475,21 @@ def _send_monthly_report():
 
 # ---------- Pydantic models ----------
 
+def _age_from_birth(bd: Optional[str]) -> Optional[int]:
+    """Years from birth_date to today; None if unparseable or in the future."""
+    try:
+        b = date.fromisoformat(bd)
+    except (ValueError, TypeError):
+        return None
+    t = date.today()
+    age = t.year - b.year - ((t.month, t.day) < (b.month, b.day))
+    return age if age >= 0 else None
+
+
 class EmployeeCreate(BaseModel):
     name: str
     age: Optional[int] = None
+    birth_date: Optional[str] = None         # YYYY-MM-DD; when set, age is derived on read
     nationality: str = "ไทย"
     phone: Optional[str] = None
     line_id: Optional[str] = None
@@ -524,6 +536,8 @@ def list_employees():
     result = []
     for row in rows:
         emp = dict(row)
+        if emp.get("birth_date"):
+            emp["age"] = _age_from_birth(emp["birth_date"])
         start = date.fromisoformat(emp["start_date"])
         end = date.fromisoformat(emp["end_date"]) if emp.get("end_date") else today
         emp["total_days_employed"] = (end - start).days + 1
@@ -536,10 +550,10 @@ def create_employee(emp: EmployeeCreate):
     conn = get_db()
     c = conn.cursor()
     c.execute(
-        "INSERT INTO employees (name,age,nationality,phone,line_id,facebook,start_date,monthly_salary,"
+        "INSERT INTO employees (name,age,birth_date,nationality,phone,line_id,facebook,start_date,monthly_salary,"
         "max_leave_carry,holiday_mode,monthly_leave_days,employment_status,probation_daily_rate,payment_method) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        (emp.name, emp.age, emp.nationality, emp.phone, emp.line_id, emp.facebook,
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        (emp.name, emp.age, emp.birth_date, emp.nationality, emp.phone, emp.line_id, emp.facebook,
          emp.start_date, emp.monthly_salary, emp.max_leave_carry,
          emp.holiday_mode, emp.monthly_leave_days,
          emp.employment_status, emp.probation_daily_rate, emp.payment_method),
@@ -558,6 +572,8 @@ def get_employee(emp_id: int):
     if not row:
         raise HTTPException(404, "Employee not found")
     emp = dict(row)
+    if emp.get("birth_date"):
+        emp["age"] = _age_from_birth(emp["birth_date"])
     start = date.fromisoformat(emp["start_date"])
     today = date.today()
     end = date.fromisoformat(emp["end_date"]) if emp.get("end_date") else today
@@ -570,9 +586,9 @@ def update_employee(emp_id: int, emp: EmployeeCreate):
     conn = get_db()
     c = conn.cursor()
     c.execute(
-        "UPDATE employees SET name=?,age=?,nationality=?,phone=?,line_id=?,facebook=?,start_date=?,monthly_salary=?,"
+        "UPDATE employees SET name=?,age=?,birth_date=?,nationality=?,phone=?,line_id=?,facebook=?,start_date=?,monthly_salary=?,"
         "max_leave_carry=?,holiday_mode=?,monthly_leave_days=?,probation_daily_rate=?,payment_method=? WHERE id=?",
-        (emp.name, emp.age, emp.nationality, emp.phone, emp.line_id, emp.facebook,
+        (emp.name, emp.age, emp.birth_date, emp.nationality, emp.phone, emp.line_id, emp.facebook,
          emp.start_date, emp.monthly_salary, emp.max_leave_carry,
          emp.holiday_mode, emp.monthly_leave_days,
          emp.probation_daily_rate, emp.payment_method, emp_id),
