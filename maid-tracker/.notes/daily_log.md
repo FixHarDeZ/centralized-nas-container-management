@@ -2,6 +2,19 @@
 
 ---
 
+## 2026-06-17 — cleanup: httpx + dedup slip-upload tail (ponytail audit)
+
+Ponytail audit ทั้ง repo → ส่วนใหญ่ lean. เจอ 2 micro-cut ใน maid-tracker:
+
+- **requests → httpx**: เหลือใช้แค่ `requests.post` ที่เดียวใน `line_notify.send_line`. swap เป็น `httpx.post` (signature เหมือนกัน). ตัด dep `requests==2.32.3` ออก ใส่ `httpx==0.28.1` แทน → ตรงกับ stack อื่นทั้ง repo, dep น้อยลง 1.
+- **dedup slip-upload tail**: `upload_period_slip` + `upload_daily_slip` มี tail ซ้ำ (fetch paid_at, fetch emp name, commit/close, notify_slip_image ถ้า already_paid). แยกเป็น `_finish_slip_upload(conn, emp_id, fname, already_paid, label)`. `main.py` −19 บรรทัด net.
+
+**ไฟล์:** `line_notify.py`, `main.py`, `requirements.txt`
+
+**Test:** 16 passed. **Commit:** `116da32` (no Claude trailer). **Deploy:** `./scripts/deploy.sh -s maid-tracker -y` → image rebuilt (httpx-0.28.1 ติดตั้ง, requests หาย), container restarted OK.
+
+---
+
 ## 2026-06-16 — LINE slip image push (daily + monthly payment)
 
 ### ฟีเจอร์ที่เพิ่ม
