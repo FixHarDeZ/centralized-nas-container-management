@@ -101,7 +101,11 @@ else
   SSH_BASE="-o StrictHostKeyChecking=no -o ConnectTimeout=15 -p ${NAS_PORT} -i ${NAS_SSH_KEY}"
 fi
 
-SSH_MUX="-o ControlMaster=auto -o ControlPath=${MUX_SOCKET} -o ControlPersist=120"
+# ServerAlive* lets the mux notice a TCP path silently dropped (NAT/firewall
+# idle-timeout) while it sat idle waiting for the "Upload now?" answer. Without
+# it, reusing the black-holed connection hangs forever (ConnectTimeout doesn't
+# apply — the connection is already "established").
+SSH_MUX="-o ControlMaster=auto -o ControlPath=${MUX_SOCKET} -o ControlPersist=120 -o ServerAliveInterval=15 -o ServerAliveCountMax=3"
 SSH_OPTS="${SSH_BASE} ${SSH_MUX}"
 
 trap 'ssh -o ControlPath="${MUX_SOCKET}" -O exit "${SSH_DEST}" 2>/dev/null; rm -f "${MUX_SOCKET}" "${SSH_WRAPPER:-}"' EXIT
@@ -188,27 +192,59 @@ if [[ "$RESTART_ONLY" == false ]]; then
     log "Uploading project files via tar+ssh ..."
     COPYFILE_DISABLE=1 tar -czf - "${TAR_EXCLUDES[@]}" -C "${PROJECT_ROOT}" . \
       | ssh $SSH_OPTS "${SSH_DEST}" "cat > '${TMP_TAR}'"
-    ssh $SSH_OPTS "${SSH_DEST}" \
-      "bash -lc \"mkdir -p '${NAS_TARGET_PATH}' && tar -xzf '${TMP_TAR}' -C '${NAS_TARGET_PATH}' --no-same-permissions --no-same-owner 2>/dev/null && rm -f '${TMP_TAR}'\""
 
+    # Extract as root: some target dirs (e.g. uptime-kuma/, secretary/*_data) are
+    # owned by root because their containers created them, so the SSH user can't
+    # overwrite files there. sudo -S reads the password from the echo pipe (same
+    # pattern as the restart step). mkdir/rm run as the SSH user — they touch only
+    # the target root and the user-owned temp tar. No 2>/dev/null: a real failure
+    # must surface, not silently kill the script via set -e. --warning=no-unknown-keyword
+    # silences GNU tar's per-file noise about the com.apple.provenance xattr macOS adds.
+    log "Extracting on NAS ..."
+    TAR_X="tar --warning=no-unknown-keyword -xzf '${TMP_TAR}' -C '${NAS_TARGET_PATH}' --no-same-permissions --no-same-owner"
+    if [[ -n "${NAS_SUDO_PASSWORD}" ]]; then
+      EXTRACT_CMD="mkdir -p '${NAS_TARGET_PATH}' && echo '${NAS_SUDO_PASSWORD}' | sudo -S -p '' ${TAR_X} && rm -f '${TMP_TAR}'"
+    else
+      warn "NAS_SUDO_PASSWORD not set — extracting without sudo (root-owned files will fail)."
+      EXTRACT_CMD="mkdir -p '${NAS_TARGET_PATH}' && ${TAR_X} && rm -f '${TMP_TAR}'"
+    fi
+    ssh $SSH_OPTS "${SSH_DEST}" "bash -lc \"${EXTRACT_CMD}\"" </dev/null
+
+    # Per-stack .env files are excluded from the tar above — that exclude also
+    # strips secrets we must NOT ship (scripts/.env, backup-pre-vault/*) — and are
+    # re-uploaded selectively here. Write via a temp file + `sudo install` so
+    # root-owned stack dirs (e.g. uptime-kuma/) accept the file; a plain cat as the
+    # SSH user gets Permission denied there. install -D creates the dir, copies,
+    # and sets mode 644 in one root call, sidestepping password/stdin contention.
     log "Uploading per-stack .env files ..."
+    REMOTE_TMP_ENV="/tmp/nas_deploy_env_$$"
     for stack in "${ALL_STACKS[@]}"; do
       while IFS= read -r local_env; do
         rel_env="${local_env#${PROJECT_ROOT}/}"
-        nas_dir="${NAS_TARGET_PATH}/$(dirname "${rel_env}")"
-        ssh $SSH_OPTS "${SSH_DEST}" "mkdir -p '${nas_dir}' && cat > '${NAS_TARGET_PATH}/${rel_env}'" < "$local_env"
+        dest="${NAS_TARGET_PATH}/${rel_env}"
+        ssh $SSH_OPTS "${SSH_DEST}" "cat > '${REMOTE_TMP_ENV}'" < "$local_env"
+        if [[ -n "${NAS_SUDO_PASSWORD}" ]]; then
+          ssh $SSH_OPTS "${SSH_DEST}" \
+            "bash -lc \"echo '${NAS_SUDO_PASSWORD}' | sudo -S -p '' install -D -m 644 '${REMOTE_TMP_ENV}' '${dest}' && rm -f '${REMOTE_TMP_ENV}'\"" </dev/null
+        else
+          ssh $SSH_OPTS "${SSH_DEST}" \
+            "bash -lc \"install -D -m 644 '${REMOTE_TMP_ENV}' '${dest}' && rm -f '${REMOTE_TMP_ENV}'\"" </dev/null
+        fi
         dim "$rel_env"
       done < <(find "${PROJECT_ROOT}/${stack}" -name '.env' 2>/dev/null)
     done
 
     # nginx .htpasswd files must be world-readable (644) so the nginx worker
-    # process can open them. tar extraction with --no-same-permissions can
-    # leave them as 600, causing a 500 Permission denied error.
+    # process can open them. The sudo extract above leaves them root-owned 600,
+    # causing a 500 Permission denied error — so the chmod must run as root too
+    # (a chmod by the SSH user on a root-owned file is EPERM, silently swallowed).
     log "Fixing .htpasswd permissions ..."
+    HT_SUDO=""
+    [[ -n "${NAS_SUDO_PASSWORD}" ]] && HT_SUDO="echo '${NAS_SUDO_PASSWORD}' | sudo -S -p '' "
     for stack in "${ALL_STACKS[@]}"; do
       htpasswd_file="${NAS_TARGET_PATH}/${stack}/nginx/.htpasswd"
       ssh $SSH_OPTS "${SSH_DEST}" \
-        "bash -lc \"[ -f '${htpasswd_file}' ] && chmod 644 '${htpasswd_file}'\"" 2>/dev/null || true
+        "bash -lc \"[ -f '${htpasswd_file}' ] && ${HT_SUDO}chmod 644 '${htpasswd_file}'\"" </dev/null 2>/dev/null || true
     done
 
     ok "Upload complete ($(elapsed))"
@@ -278,10 +314,10 @@ for stack in "${STACKS_TO_RESTART[@]}"; do
   # --project-directory makes compose resolve the stack's own .env for both
   # variable interpolation and env_file: .env inside docker-compose.yml.
   ssh $SSH_OPTS "${SSH_DEST}" \
-    "bash -lc \"echo '${NAS_SUDO_PASSWORD}' | sudo -S docker compose \
+    "bash -lc \"echo '${NAS_SUDO_PASSWORD}' | sudo -S -p '' docker compose \
       --project-directory '${NAS_TARGET_PATH}/${stack}' \
       -f '${NAS_TARGET_PATH}/${stack}/docker-compose.yml' \
-      up -d --build 2>&1\""
+      up -d --build 2>&1\"" </dev/null
   ok "$stack restarted"
 done
 
