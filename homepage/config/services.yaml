@@ -121,9 +121,9 @@
 
     - Plex (DDNS):
         icon: plex.png
-        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:33400/web"
+        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:33400"
         description: External Plex Server
-        ping: "{{HOMEPAGE_VAR_DDNS_BASE_HTTP}}:33400"
+        ping: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:33400"
         widget:
           type: plex
           url: "{{HOMEPAGE_VAR_PLEX_URL}}"
