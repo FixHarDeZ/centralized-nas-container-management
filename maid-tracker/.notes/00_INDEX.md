@@ -46,6 +46,7 @@
 ```sql
 employees (
   id, name, age, nationality, phone, line_id, facebook,
+  birth_date TEXT,          -- YYYY-MM-DD; ถ้ามี → age คำนวณจากวันเกิดตอน read (override col age), ถ้าว่าง → age กรอกมือ
   start_date TEXT,          -- YYYY-MM-DD
   monthly_salary REAL,
   max_leave_carry REAL,     -- NULL = unlimited (sunday mode: max debt; monthly mode: max positive balance)

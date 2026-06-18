@@ -32,7 +32,7 @@ const TRANSLATIONS = {
     labelSalary: "เงินเดือน",
     // Employee form
     formTitleNew: "เพิ่มแม่บ้านใหม่", formTitleEdit: "แก้ไขข้อมูลแม่บ้าน",
-    fieldName: "ชื่อ", fieldAge: "อายุ", fieldNationality: "สัญชาติ",
+    fieldName: "ชื่อ", fieldAge: "อายุ", fieldBirthDate: "วันเกิด", fieldNationality: "สัญชาติ",
     fieldPhone: "เบอร์โทร", fieldLineId: "LINE ID", fieldFacebook: "Facebook (ไม่บังคับ)",
     fieldStartDate: "วันเริ่มงาน", fieldSalary: "เงินเดือน (บาท)",
     fieldMaxLeaveCarry: "วันลาค้างสูงสุด (ไม่บังคับ)",
@@ -225,7 +225,7 @@ const TRANSLATIONS = {
     labelSalary: "Salary",
     // Employee form
     formTitleNew: "Add New Staff", formTitleEdit: "Edit Staff Info",
-    fieldName: "Full Name", fieldAge: "Age", fieldNationality: "Nationality",
+    fieldName: "Full Name", fieldAge: "Age", fieldBirthDate: "Date of Birth", fieldNationality: "Nationality",
     fieldPhone: "Phone", fieldLineId: "LINE ID", fieldFacebook: "Facebook (optional)",
     fieldStartDate: "Start Date", fieldSalary: "Monthly Salary (Baht)",
     fieldMaxLeaveCarry: "Max Leave Carry (optional)",
@@ -642,8 +642,12 @@ async function viewEmployeeForm(id) {
               <input type="text" class="form-control" name="name" required value="${emp?.name || ""}" placeholder="${t("fieldName")}" />
             </div>
             <div class="col-6">
+              <label class="form-label fw-semibold">${t("fieldBirthDate")}</label>
+              <input type="date" class="form-control" name="birth_date" id="birthInput" max="${new Date().toISOString().slice(0,10)}" value="${emp?.birth_date || ""}" />
+            </div>
+            <div class="col-6">
               <label class="form-label fw-semibold">${t("fieldAge")}</label>
-              <input type="number" class="form-control" name="age" min="18" max="80" value="${emp?.age || ""}" placeholder="${currentLang === "th" ? "ปี" : "yrs"}" />
+              <input type="number" class="form-control" name="age" id="ageInput" min="18" max="80" value="${emp?.age || ""}" placeholder="${currentLang === "th" ? "ปี" : "yrs"}" />
             </div>
             <div class="col-6">
               <label class="form-label fw-semibold">${t("fieldNationality")}</label>
@@ -816,6 +820,26 @@ async function viewEmployeeForm(id) {
   salInput.addEventListener("input", updatePreview);
   updatePreview();
 
+  // Birth date → auto-compute age and lock the field. Empty → age is manual.
+  // Disabled input is omitted from FormData, so age posts as null and the
+  // server derives it from birth_date on read (single source of truth).
+  const birthInput = document.getElementById("birthInput");
+  const ageInput   = document.getElementById("ageInput");
+  function syncAge() {
+    if (birthInput.value) {
+      const b = new Date(birthInput.value), now = new Date();
+      let a = now.getFullYear() - b.getFullYear();
+      const m = now.getMonth() - b.getMonth();
+      if (m < 0 || (m === 0 && now.getDate() < b.getDate())) a--;
+      ageInput.value = a >= 0 ? a : "";
+      ageInput.disabled = true;
+    } else {
+      ageInput.disabled = false;
+    }
+  }
+  birthInput.addEventListener("change", syncAge);
+  syncAge();
+
   document.getElementById("empForm").addEventListener("submit", async e => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -823,6 +847,7 @@ async function viewEmployeeForm(id) {
     const body = {
       name:               fd.get("name"),
       age:                fd.get("age") ? +fd.get("age") : null,
+      birth_date:         fd.get("birth_date") || null,
       nationality:        fd.get("nationality"),
       phone:              fd.get("phone") || null,
       line_id:            fd.get("line_id") || null,
