@@ -18,7 +18,7 @@ import hashlib
 import httpx
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
-from calc import compute_overall_balance, compute_resign_summary
+from calc import compute_overall_balance, compute_resign_summary, compute_probation_resign
 
 LINE_API_URL    = "https://api.line.me/v2/bot/message/push"
 TOKEN           = os.environ.get("MAID_LINE_CHANNEL_ACCESS_TOKEN", "")
@@ -282,13 +282,33 @@ def notify_resign(
     resign_note: str | None,
     start_date: date,
     monthly_salary: float,
+    employment_status: str | None = None,
+    probation_daily_rate: float = 0.0,
 ) -> None:
     """Call after recording a resignation."""
     if not TOKEN or not GROUP_ID:
         return
 
     try:
-        end_date = date.fromisoformat(end_date_str)
+        end_date  = date.fromisoformat(end_date_str)
+        note_line = f"\n📝 เหตุผล: {resign_note}" if resign_note else ""
+
+        if employment_status == "probation":
+            s = compute_probation_resign(emp_id, start_date, end_date, probation_daily_rate)
+            msg = (
+                f"🚪 บันทึกลาออก — {emp_name}\n"
+                f"📅 วันที่ลาออก: {end_date_str}{note_line}\n"
+                f"\n"
+                f"💼 สรุปการลาออก (ทดลองงาน):\n"
+                f"  วันที่ยังไม่จ่าย: {_fmt(s['total_days'])} วัน × ฿{_fmt(s['daily_rate'])}\n"
+                f"  ───────────────────────\n"
+                f"  💵 ยอดที่ต้องจ่าย: ฿{_fmt(s['final_amount'])}\n"
+                f"\n"
+                f"🕒 {_now_str()}"
+            )
+            send_line(msg)
+            return
+
         s        = compute_resign_summary(emp_id, start_date, end_date, monthly_salary)
 
         balance  = s["cumulative_balance"]
@@ -296,8 +316,6 @@ def notify_resign(
         sign     = "+" if balance >= 0 else ""
         amt_sign = "+" if bal_amt >= 0 else ""
         kind     = "เครดิตชดเชย" if balance >= 0 else "ยอดค้างลา"
-
-        note_line = f"\n📝 เหตุผล: {resign_note}" if resign_note else ""
 
         msg = (
             f"🚪 บันทึกลาออก — {emp_name}\n"
