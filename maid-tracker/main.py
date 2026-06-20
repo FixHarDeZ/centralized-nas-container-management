@@ -691,6 +691,8 @@ def resign_employee(emp_id: int, req: ResignRequest):
         resign_note=req.resign_note,
         start_date=date.fromisoformat(emp["start_date"]),
         monthly_salary=emp["monthly_salary"],
+        employment_status=emp.get("employment_status"),
+        probation_daily_rate=emp.get("probation_daily_rate") or 0.0,
     )
 
     return {"message": "resigned"}

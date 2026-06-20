@@ -2,6 +2,16 @@
 
 ---
 
+## 2026-06-20 — fix: LINE resign notice used monthly calc for probation employees
+
+**Bug:** `notify_resign` (line_notify.py) always called `compute_resign_summary` (monthly leave-balance math) regardless of `employment_status`. Probation employees who'd been paid daily for every day worked still got a fabricated "ยอดค้างลา" line and nonzero ยอดที่ต้องจ่าย on resignation.
+
+**Fix:** `notify_resign` now branches on `employment_status == "probation"` → calls `compute_probation_resign` (unpaid days × daily rate, no monthly base/leave balance), matching the logic already used by the `GET /resign-summary` preview endpoint. `resign_employee` (main.py) now passes `employment_status` + `probation_daily_rate` through.
+
+**ไฟล์:** `line_notify.py`, `main.py`
+
+**Test:** no pytest runtime available in this sandbox (httpx not importable under system python3.13); verified manually by stubbing httpx + sqlite fixture — fully-paid probation resign now sends ฿0 with no leave-balance line.
+
 ## 2026-06-17 — cleanup: httpx + dedup slip-upload tail (ponytail audit)
 
 Ponytail audit ทั้ง repo → ส่วนใหญ่ lean. เจอ 2 micro-cut ใน maid-tracker:
