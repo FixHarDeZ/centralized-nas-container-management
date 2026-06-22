@@ -25,6 +25,15 @@ def test_wuwa_keeps_only_active_rows():
     assert codes == {"WUTHERINGGIFT"}  # Expired row dropped
 
 
+def test_wuwa_live_dom_status_in_button_label():
+    # Live wuthering.gg renders status as a button label ("COPY" / "Expired")
+    # plus tr class="active", not plain "Active"/"Expired" cell text.
+    src = {"code_regex": r"^[A-Z0-9]{4,20}$"}
+    codes = {e["code"] for e in fetch_table_status(src, _read("wuwa_live.html"))}
+    assert codes == {"WUTHERINGGIFT"}
+    assert "ILLUSIONHAUNTS" not in codes
+
+
 def test_roe_scopes_to_section_and_ignores_decoys():
     src = {"scope_selector": ".entry-content", "code_regex": r"\b[A-Za-z0-9]{11}\b"}
     codes = {e["code"] for e in fetch_section_regex(src, _read("roe.html"))}
