@@ -12,7 +12,7 @@ the `news-feed` stack (shared vault paths, see `secrets.manifest.yaml`).
 |------|------|-----|--------|-------|
 | Genshin Impact | API (`hoyo-codes.seria.moe`) | `https://hoyo-codes.seria.moe/codes?game=genshin` | In-app link included | Filters `status == "OK"` only. Most reliable source, JSON. |
 | Wuthering Waves | Scrape (`wuthering.gg/codes`) | `https://wuthering.gg/codes` | In-game only | Table row kept **unless** the status cell says "expired" — the live page only exposes status via a button label (e.g. "COPY" vs "Expired"), not the word "Active". **WuWa rarely has an active code at all** — codes are livestream-tied, so expect 0 or 1 most cycles. |
-| Throne of Desire | Scrape (`mustplay.in.th`) | `https://www.mustplay.in.th/content/page/69671b935ee1bb833c7a0884` | In-game only | Whole-page scope (`scope_selector: None`) guarded by a digit-required regex (`tod(?=...\d...)`) so Thai/English prose starting with "tod" doesn't false-positive. The build sandbox couldn't reach the site to pin a tighter selector — **tighten `scope_selector` from the NAS** if false positives show up in Telegram. |
+| Throne of Desire | **Disabled** (Scrape, `mustplay.in.th`) | `https://www.mustplay.in.th/content/page/69671b935ee1bb833c7a0884` | In-game only | **Currently disabled (`enabled: False`)** pending `scope_selector` pin from the NAS. Whole-page scope produces false positives (e.g. date strings like `today2024` matching the digit-guard regex). Re-enable once `scope_selector` is pinned to the real code container from an unfiltered network. |
 | Rise of Eros | Scrape (`cofregamers.com`) | `https://cofregamers.com/en/rise-of-eros-redeem-code-list/` | In-game only | Scoped to `.codigo-tabla-container`, matches 11-char alphanumeric codes. No per-code expiry status on the site, so every code in that container that hasn't been seen before is reported as new (no "expired" filter possible here). |
 
 In practice, most real Telegram traffic comes from Genshin and Rise of Eros —
@@ -31,10 +31,12 @@ actually changes.
   one-shot "scraper พัง" alert; the alert does not repeat on every poll while
   still broken. When the source fetches successfully again, a one-shot
   recovery message is sent.
-- **A zero-code result is *not* treated as broken.** WuWa legitimately has 0
+- **A zero-code result is *not* treated as broken** — except Rise of Eros. WuWa legitimately has 0
   or 1 active codes between livestreams, so an empty result is normal and
   must not trip the health alert (that would train the user to ignore the
-  channel).
+  channel). Rise of Eros, however, normally lists many active codes; if a fetch
+  returns 0 codes, the `.codigo-tabla-container` selector likely drifted, so a
+  health alert is sent (`expect_nonzero: True`).
 - State is a single JSON file: `{"seen": {<key>: [codes...]}, "health": {<key>: "ok"|"broken"}}`.
 
 ## Adding a new game

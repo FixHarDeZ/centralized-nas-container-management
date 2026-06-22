@@ -69,24 +69,22 @@ See `secrets.manifest.yaml` for the exact vault → env mapping consumed by
 |-----|------|-------------|------|-------|----------------|
 | `genshin` | Genshin Impact | `api_seria` | `hoyo-codes.seria.moe` (JSON API) | whole response | `status == "OK"` |
 | `wuwa` | Wuthering Waves | `table_status` | `wuthering.gg/codes` | `<table>` rows | keep unless status cell contains "expired" |
-| `throne_of_desire` | Throne of Desire | `section_regex` | `mustplay.in.th` content page | **whole page** (`scope_selector: None`) | regex requires a digit after `tod` prefix — no separate status filter, every regex match not already seen is reported |
-| `rise_of_eros` | Rise of Eros | `section_regex` | `cofregamers.com` redeem-code list | `.codigo-tabla-container` | 11-char alnum regex — no status filter (site exposes no per-code expiry) |
+| `throne_of_desire` | **Throne of Desire (disabled)** | `section_regex` | `mustplay.in.th` content page | **whole page** (`scope_selector: None`) | **Currently disabled (`enabled: False`)**; regex requires a digit after `tod` prefix — no separate status filter |
+| `rise_of_eros` | Rise of Eros | `section_regex` | `cofregamers.com` redeem-code list | `.codigo-tabla-container` | 11-char alnum regex — no status filter (site exposes no per-code expiry); **zero-result alert active (`expect_nonzero: True`)** |
 
 ## Known Gaps / Follow-ups
 
-- **`throne_of_desire.scope_selector` is `None` (whole-page scope).** The
-  build sandbox had no network access to `mustplay.in.th`, so the selector
-  could not be pinned empirically. The digit-guard regex
-  (`tod(?=[a-z0-9]*\d)[a-z0-9]{3,}`) is the only safety net against
-  false-positives from Thai/English prose. If Telegram starts getting junk
-  "Throne of Desire" alerts, pin `scope_selector` to the actual code-table
-  container from the NAS (which has outbound network access) and redeploy.
-- **`rise_of_eros` has no per-code expiry/status signal.** Unlike WuWa
+- **`throne_of_desire` is disabled pending selector pin.** `enabled: False`
+  because whole-page scope (`scope_selector: None`) produces false positives
+  (e.g. date strings like `today2024` matching the digit-guard regex
+  `tod(?=[a-z0-9]*\d)[a-z0-9]{3,}`). Re-enable once `scope_selector` is
+  pinned to the actual code-table container from the NAS (which has outbound
+  network access) and redeploy.
+- **`rise_of_eros` has `expect_nonzero: True` health guard.** Unlike WuWa
   (status column) or Genshin (`status` field), cofregamers.com's
-  `.codigo-tabla-container` doesn't expose whether a code is still
-  redeemable — every new 11-char match is reported as new with no way to
-  later mark it expired. Low risk (false positives just mean an occasionally
-  dead code gets sent), but worth knowing this source can't filter on its own.
+  `.codigo-tabla-container` doesn't expose per-code expiry — but RoE normally
+  lists many active codes, so 0 results almost certainly means the selector
+  drifted, triggering a one-shot health alert.
 - **WuWa status detection relies on a button-label heuristic**, not an
   explicit "Active"/"Expired" text field — verified against the live DOM at
   build time (2026-06-22) but could drift if the site redesigns the table.
