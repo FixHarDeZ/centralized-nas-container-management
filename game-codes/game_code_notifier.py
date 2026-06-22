@@ -145,3 +145,116 @@ def fetch(src: dict) -> list[dict]:
     r = requests.get(src["url"], headers=HEADERS, timeout=HTTP_TIMEOUT)
     r.raise_for_status()
     return _PARSERS[src["type"]](src, r.text)
+
+
+# --------------------------------------------------------------------------- #
+# State
+# --------------------------------------------------------------------------- #
+def load_state() -> dict:
+    if STATE_FILE.exists():
+        try:
+            s = json.loads(STATE_FILE.read_text(encoding="utf-8"))
+            s.setdefault("seen", {})
+            s.setdefault("health", {})
+            return s
+        except Exception as e:
+            log.warning("bad state file (%s), starting fresh", e)
+    return {"seen": {}, "health": {}}
+
+
+def save_state(state: dict) -> None:
+    STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def diff_new(src: dict, entries: list[dict], state: dict) -> list[dict]:
+    """Codes not seen before. First time a source appears -> seed silently."""
+    key = src["key"]
+    first_time = key not in state["seen"]
+    seen = set(state["seen"].get(key, []))
+    fresh = [e for e in entries if e["code"] not in seen]
+    state["seen"][key] = sorted(seen | {e["code"] for e in entries})
+    return [] if first_time else fresh
+
+
+# --------------------------------------------------------------------------- #
+# Telegram
+# --------------------------------------------------------------------------- #
+def send_telegram(text: str) -> None:
+    if not (TELEGRAM_TOKEN and TELEGRAM_CHAT_ID):
+        log.error("TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID not set")
+        return
+    resp = requests.post(
+        f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
+        json={"chat_id": TELEGRAM_CHAT_ID, "text": text,
+              "parse_mode": "HTML", "disable_web_page_preview": True},
+        timeout=HTTP_TIMEOUT,
+    )
+    if resp.status_code != 200:
+        log.error("telegram send failed: %s %s", resp.status_code, resp.text)
+
+
+def format_message(src: dict, entry: dict) -> str:
+    parts = [f"🎁 <b>{html.escape(src['name'])}</b>",
+             f"โค้ด: <code>{html.escape(entry['code'])}</code>"]
+    if entry.get("reward"):
+        parts.append(f"ของรางวัล: {html.escape(entry['reward'])}")
+    if src.get("redeem_url"):
+        link = src["redeem_url"].format(code=entry["code"])
+        parts.append(f'➡️ <a href="{html.escape(link)}">กดรับโค้ดที่นี่</a>')
+    else:
+        parts.append("ℹ️ เกมนี้กรอกโค้ดในเกมเท่านั้น")
+    return "\n".join(parts)
+
+
+# --------------------------------------------------------------------------- #
+# Main cycle
+#
+# ponytail: health alert fires only on exception/HTTP error, on the
+# healthy->broken edge (and recovery on broken->healthy). It does NOT treat a
+# zero-code result as broken: WuWa legitimately has ~1 active code and is often
+# empty between version livestreams, so alerting on zero would train the user to
+# ignore the channel. Upgrade path: add a per-source "expect_nonzero" flag if a
+# source should never be empty.
+# --------------------------------------------------------------------------- #
+def run_once(state: dict) -> None:
+    for src in SOURCES:
+        if src.get("enabled") is False:
+            continue
+        key = src["key"]
+        try:
+            entries = fetch(src)
+        except Exception as e:
+            log.error("fetch %s failed: %s", src["name"], e)
+            if state["health"].get(key) != "broken":
+                state["health"][key] = "broken"
+                send_telegram(f"⚠️ <b>{html.escape(src['name'])}</b> scraper พัง: "
+                              f"{html.escape(str(e))}\nอาจต้องอัปเดต selector/source")
+                save_state(state)
+            continue
+
+        if state["health"].get(key) == "broken":
+            state["health"][key] = "ok"
+            send_telegram(f"✅ <b>{html.escape(src['name'])}</b> scraper กลับมาทำงานแล้ว")
+
+        for entry in diff_new(src, entries, state):
+            log.info("new code %-18s %s", src["name"], entry["code"])
+            send_telegram(format_message(src, entry))
+        save_state(state)
+
+
+def main() -> None:
+    state = load_state()
+    if POLL_INTERVAL > 0:
+        log.info("loop mode every %ds", POLL_INTERVAL)
+        while True:
+            run_once(state)
+            time.sleep(POLL_INTERVAL)
+    else:
+        run_once(state)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.exit(0)
