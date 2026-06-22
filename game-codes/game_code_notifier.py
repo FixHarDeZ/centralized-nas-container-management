@@ -69,9 +69,11 @@ SOURCES = [
         "name": "Rise of Eros",
         "type": "section_regex",
         "url": "https://cofregamers.com/en/rise-of-eros-redeem-code-list/",
-        # ponytail: scope_selector REQUIRED — set empirically in Step 7. Without
-        # it, an 11-char alnum regex over the whole page is a false-positive farm.
-        "scope_selector": None,
+        # ponytail: pinned from live HTML (2026-06-22) — cofregamers.com wraps
+        # the redeem-code table(s) in this container; excludes later prose
+        # ("accelerates", "progression", "redemptions") that also happen to
+        # be 11 chars and would otherwise false-positive.
+        "scope_selector": ".codigo-tabla-container",
         "code_regex": r"\b[A-Za-z0-9]{11}\b",
         "redeem_url": None,
     },
@@ -108,7 +110,10 @@ def fetch_table_status(src: dict, text: str) -> list[dict]:
         code, status = cells[0], cells[1].lower()
         if not code_re.match(code):
             continue
-        if "active" in status and "expired" not in status:
+        # Status may be plain text ("Active"/"Expired") or, on some sites,
+        # only a button label ("COPY" for active, "Expired" for disabled) —
+        # so treat anything NOT explicitly saying expired as still active.
+        if "expired" not in status:
             out.append({"code": code, "reward": ""})
     return _dedupe(out)
 
