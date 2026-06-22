@@ -2,7 +2,7 @@
 
 **สร้าง:** 2026-06-22
 **Port:** — (no web layer, no exposed port)
-**Status:** Deployed on NAS, running. 429 retry fix pending redeploy.
+**Status:** Deployed on NAS, running. Per-source 429 cooldown fix applied (pending redeploy). ToD disabled (no source).
 
 ---
 
@@ -29,14 +29,15 @@ Single container, no web layer, no database server:
   "seen": {
     "genshin": ["CODE1", "CODE2"],
     "wuwa": ["..."],
-    "throne_of_desire": ["..."],
     "rise_of_eros": ["..."]
   },
   "health": {
     "genshin": "ok",
     "wuwa": "ok",
-    "throne_of_desire": "ok",
     "rise_of_eros": "ok"
+  },
+  "rate_limited_until": {
+    "rise_of_eros": 1750000000.0
   }
 }
 ```
@@ -47,6 +48,10 @@ Single container, no web layer, no database server:
   exception/HTTP error; flips back to `"ok"` on the next successful fetch.
   Drives the one-shot break/recovery Telegram alerts (no repeat spam while
   still broken).
+- `rate_limited_until[key]` — Unix timestamp. When a source returns 429, the
+  current time + cooldown (30 min first, 60 min if repeated within 1h) is
+  stored. Source is skipped in poll cycles until cooldown expires. Cleared on
+  successful fetch.
 - A source key only appears in `seen`/`health` after its first successful
   poll. First appearance seeds all currently-live codes silently (no
   Telegram message) — only codes found on later polls are reported.
@@ -74,12 +79,12 @@ See `secrets.manifest.yaml` for the exact vault → env mapping consumed by
 
 ## Known Gaps / Follow-ups
 
-- **`throne_of_desire` is disabled pending selector pin.** `enabled: False`
-  because whole-page scope (`scope_selector: None`) produces false positives
-  (e.g. date strings like `today2024` matching the digit-guard regex
-  `tod(?=[a-z0-9]*\d)[a-z0-9]{3,}`). Re-enable once `scope_selector` is
-  pinned to the actual code-table container from the NAS (which has outbound
-  network access) and redeploy.
+- **`throne_of_desire` is disabled — no good external source found.**
+  Searched cofregamers.com (all 3 pages), game8.co, pocketgamer.com,
+  ign.com, gamesradar.com, touchtapplay.com — none have ToD. Bing search
+  also returned nothing. User does NOT want mustplay.in.th (original source).
+  ToD has no dedicated code aggregator site. Keeping disabled unless user
+  finds a source (Discord, Facebook, official social channels).
 - **`rise_of_eros` has `expect_nonzero: True` health guard.** Unlike WuWa
   (status column) or Genshin (`status` field), cofregamers.com's
   `.codigo-tabla-container` doesn't expose per-code expiry — but RoE normally
