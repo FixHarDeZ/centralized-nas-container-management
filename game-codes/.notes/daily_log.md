@@ -39,3 +39,12 @@
   (`docker compose --project-directory game-codes/ -f game-codes/docker-compose.yml up -d --build`)
   and confirm `docker logs game-codes` shows a silent seed run. Not done in
   this session — left to a human deploy step.
+- **Deployed & first run:** container running on NAS. First poll hit
+  cofregamers.com 429 (Too Many Requests) — rate limit, not scraper breakage.
+  Telegram sent: "⚠️ Rise of Eros scraper พัง: 429 Client Error: Too Many
+  Requests".
+- **Fixed 429 handling:** replaced bare `fetch()` with retry loop — 3 attempts,
+  exponential backoff (10s → 20s) on HTTP 429 before giving up. 429 no longer
+  triggers health alert immediately; only after all retries exhausted.
+  File: `game_code_notifier.py:156-168`.
+- **Pending:** rebuild + redeploy container on NAS with the fix.

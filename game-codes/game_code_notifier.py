@@ -153,11 +153,19 @@ _PARSERS = {
 }
 
 
-def fetch(src: dict) -> list[dict]:
-    """Download src['url'] and parse. Raises on network/HTTP error."""
-    r = requests.get(src["url"], headers=HEADERS, timeout=HTTP_TIMEOUT)
-    r.raise_for_status()
-    return _PARSERS[src["type"]](src, r.text)
+def fetch(src: dict, retries: int = 3) -> list[dict]:
+    """Download src['url'] and parse. Retries on 429 with exponential backoff."""
+    last_exc = None
+    for attempt in range(retries):
+        r = requests.get(src["url"], headers=HEADERS, timeout=HTTP_TIMEOUT)
+        if r.status_code == 429 and attempt < retries - 1:
+            wait = 2 ** attempt * 10
+            log.warning("429 from %s, retry %d/%d in %ds", src["name"], attempt + 1, retries, wait)
+            time.sleep(wait)
+            continue
+        r.raise_for_status()
+        return _PARSERS[src["type"]](src, r.text)
+    raise last_exc
 
 
 # --------------------------------------------------------------------------- #

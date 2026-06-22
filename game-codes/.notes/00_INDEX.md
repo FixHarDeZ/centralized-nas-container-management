@@ -2,7 +2,7 @@
 
 **สร้าง:** 2026-06-22
 **Port:** — (no web layer, no exposed port)
-**Status:** Built, tests passing, not yet deployed to NAS
+**Status:** Deployed on NAS, running. 429 retry fix pending redeploy.
 
 ---
 
