@@ -153,13 +153,13 @@ _PARSERS = {
 }
 
 
-def fetch(src: dict, retries: int = 5) -> list[dict]:
+def fetch(src: dict, retries: int = 3) -> list[dict]:
     """Download src['url'] and parse. Retries on 429 with exponential backoff."""
     last_exc = None
     for attempt in range(retries):
         r = requests.get(src["url"], headers=HEADERS, timeout=HTTP_TIMEOUT)
         if r.status_code == 429 and attempt < retries - 1:
-            wait = 15 * (2 ** attempt)
+            wait = 20 * (2 ** attempt)
             log.warning("429 from %s, retry %d/%d in %ds", src["name"], attempt + 1, retries, wait)
             time.sleep(wait)
             continue
@@ -177,10 +177,11 @@ def load_state() -> dict:
             s = json.loads(STATE_FILE.read_text(encoding="utf-8"))
             s.setdefault("seen", {})
             s.setdefault("health", {})
+            s.setdefault("rate_limited_until", {})
             return s
         except Exception as e:
             log.warning("bad state file (%s), starting fresh", e)
-    return {"seen": {}, "health": {}}
+    return {"seen": {}, "health": {}, "rate_limited_until": {}}
 
 
 def save_state(state: dict) -> None:
@@ -246,19 +247,33 @@ def format_message(src: dict, entry: dict) -> str:
 # channel.
 # --------------------------------------------------------------------------- #
 def run_once(state: dict) -> None:
+    now = time.time()
     first = True
     for src in SOURCES:
         if src.get("enabled") is False:
             continue
+        key = src["key"]
+
+        cooldown_until = state.get("rate_limited_until", {}).get(key, 0)
+        if now < cooldown_until:
+            log.info("skip %s (cooldown until %.0fs)", src["name"], cooldown_until - now)
+            continue
+
         if not first:
             time.sleep(5)
         first = False
-        key = src["key"]
+
         try:
             entries = fetch(src)
         except Exception as e:
             log.error("fetch %s failed: %s", src["name"], e)
-            if state["health"].get(key) != "broken":
+            if "429" in str(e):
+                prev = state.get("rate_limited_until", {}).get(key, 0)
+                cooldown = 1800 if now - prev < 3600 else 3600
+                state.setdefault("rate_limited_until", {})[key] = now + cooldown
+                log.warning("%s rate-limited, cooldown %ds", src["name"], cooldown)
+                save_state(state)
+            elif state["health"].get(key) != "broken":
                 state["health"][key] = "broken"
                 send_telegram(f"⚠️ <b>{html.escape(src['name'])}</b> scraper พัง: "
                               f"{html.escape(str(e))}\nอาจต้องอัปเดต selector/source")
@@ -284,6 +299,7 @@ def run_once(state: dict) -> None:
             state["health"][key] = "ok"
             send_telegram(f"✅ <b>{html.escape(src['name'])}</b> scraper กลับมาทำงานแล้ว")
 
+        state.get("rate_limited_until", {}).pop(key, None)
         for entry in diff_new(src, entries, state):
             log.info("new code %-18s %s", src["name"], entry["code"])
             send_telegram(format_message(src, entry))

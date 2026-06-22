@@ -48,3 +48,17 @@
   triggers health alert immediately; only after all retries exhausted.
   File: `game_code_notifier.py:156-168`.
 - **Pending:** rebuild + redeploy container on NAS with the fix.
+- **Throne of Desire source research:** searched cofregamers.com (all 3 pages),
+  game8.co, pocketgamer.com, ign.com, gamesradar.com, touchtapplay.com —
+  none have ToD. Bing search also returned nothing relevant. ToD has no
+  dedicated code aggregator site. User doesn't want mustplay.in.th (original
+  source). ToD scraper remains **disabled**.
+- **NAS fetch test:** SSH'd into NAS and tested all 4 sources — all returned
+  200. Genshin 1018B, WuWa 24KB, RoE 309KB, ToD 95KB. Local workstation
+  may block some sites but NAS doesn't.
+- **Persistent 429 fix:** cofregamers.com rate-limits IP for extended periods
+  (retry within same cycle doesn't help). Added per-source cooldown tracking
+  in `state["rate_limited_until"]` — on 429, skip that source for 30 min
+  (first occurrence) or 60 min (repeated within 1h). Cooldown clears on
+  successful fetch. Retries reduced back to 3 (rapid retries are useless
+  against IP bans). File: `game_code_notifier.py`.
