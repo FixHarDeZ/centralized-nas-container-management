@@ -58,8 +58,11 @@ SOURCES = [
         "name": "Throne of Desire",
         "type": "section_regex",
         "url": "https://www.mustplay.in.th/content/page/69671b935ee1bb833c7a0884",
-        # ponytail: scope_selector set empirically in Step 7; require a digit so
-        # Thai/English prose words starting "tod" don't match.
+        # ponytail: scope_selector deferred to None (whole-page scope) — the build
+        # sandbox can't reach mustplay.in.th to pin a selector. The digit-guard regex
+        # below is the safety net; tighten scope_selector from an unfiltered network
+        # (e.g. on the NAS) if false positives appear. require a digit so Thai/English
+        # prose words starting "tod" don't match.
         "scope_selector": None,
         "code_regex": r"\btod(?=[a-z0-9]*\d)[a-z0-9]{3,}\b",
         "redeem_url": None,
@@ -113,6 +116,8 @@ def fetch_table_status(src: dict, text: str) -> list[dict]:
         # Status may be plain text ("Active"/"Expired") or, on some sites,
         # only a button label ("COPY" for active, "Expired" for disabled) —
         # so treat anything NOT explicitly saying expired as still active.
+        # A hypothetical third status (e.g. "Upcoming") would be kept, acceptable
+        # for a notifier (low harm).
         if "expired" not in status:
             out.append({"code": code, "reward": ""})
     return _dedupe(out)
