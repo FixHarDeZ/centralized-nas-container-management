@@ -66,6 +66,13 @@ SOURCES = [
         "scope_selector": None,
         "code_regex": r"\btod(?=[a-z0-9]*\d)[a-z0-9]{3,}\b",
         "redeem_url": None,
+        # ponytail: disabled — empirically today2024/today2025/etc. date
+        # strings on the page match the digit-guard regex above and would be
+        # pushed as fake "Throne of Desire" codes (spam). Re-enable once
+        # scope_selector is pinned to the real code container from an
+        # unfiltered network (e.g. the NAS); whole-page scope is what lets
+        # date strings through.
+        "enabled": False,
     },
     {
         "key": "rise_of_eros",
@@ -79,6 +86,12 @@ SOURCES = [
         "scope_selector": ".codigo-tabla-container",
         "code_regex": r"\b[A-Za-z0-9]{11}\b",
         "redeem_url": None,
+        # ponytail: RoE normally lists many active codes; unlike Genshin's
+        # JSON API (legitimately 0 active codes sometimes) or WuWa (often
+        # empty between livestreams), a 0-result here almost certainly means
+        # .codigo-tabla-container drifted, not that the game ran out of codes.
+        # Opt this source into the zero-result health guard below.
+        "expect_nonzero": True,
     },
 ]
 
@@ -183,14 +196,20 @@ def send_telegram(text: str) -> None:
     if not (TELEGRAM_TOKEN and TELEGRAM_CHAT_ID):
         log.error("TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID not set")
         return
-    resp = requests.post(
-        f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
-        json={"chat_id": TELEGRAM_CHAT_ID, "text": text,
-              "parse_mode": "HTML", "disable_web_page_preview": True},
-        timeout=HTTP_TIMEOUT,
-    )
-    if resp.status_code != 200:
-        log.error("telegram send failed: %s %s", resp.status_code, resp.text)
+    try:
+        resp = requests.post(
+            f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
+            json={"chat_id": TELEGRAM_CHAT_ID, "text": text,
+                  "parse_mode": "HTML", "disable_web_page_preview": True},
+            timeout=HTTP_TIMEOUT,
+        )
+        if resp.status_code != 200:
+            log.error("telegram send failed: %s %s", resp.status_code, resp.text)
+    except Exception as e:
+        # ponytail: a Telegram outage (timeout/connection error) must not
+        # propagate out of run_once->main and crash the container into a
+        # restart loop — log and move on, same as the non-200 branch above.
+        log.error("telegram send raised: %s", e)
 
 
 def format_message(src: dict, entry: dict) -> str:
@@ -209,12 +228,14 @@ def format_message(src: dict, entry: dict) -> str:
 # --------------------------------------------------------------------------- #
 # Main cycle
 #
-# ponytail: health alert fires only on exception/HTTP error, on the
-# healthy->broken edge (and recovery on broken->healthy). It does NOT treat a
-# zero-code result as broken: WuWa legitimately has ~1 active code and is often
-# empty between version livestreams, so alerting on zero would train the user to
-# ignore the channel. Upgrade path: add a per-source "expect_nonzero" flag if a
-# source should never be empty.
+# ponytail: health alert fires on exception/HTTP error, or on a zero-code
+# result for sources that opt into "expect_nonzero" (currently only RoE) —
+# both cases share the same health flag and the same healthy->broken edge
+# guard (rate-limited to one alert, with recovery on broken->healthy). A
+# plain zero-code result is NOT treated as broken by default: WuWa
+# legitimately has ~1 active code and is often empty between version
+# livestreams, so alerting on zero there would train the user to ignore the
+# channel.
 # --------------------------------------------------------------------------- #
 def run_once(state: dict) -> None:
     for src in SOURCES:
@@ -229,6 +250,21 @@ def run_once(state: dict) -> None:
                 state["health"][key] = "broken"
                 send_telegram(f"⚠️ <b>{html.escape(src['name'])}</b> scraper พัง: "
                               f"{html.escape(str(e))}\nอาจต้องอัปเดต selector/source")
+                save_state(state)
+            continue
+
+        # ponytail: a successful fetch that returns [] is normally fine (see
+        # module-docstring note above re WuWa/Genshin) — but a source that
+        # opts into "expect_nonzero" (RoE) should never legitimately be
+        # empty, so treat 0 results the same as the exception path: same
+        # health flag, same healthy->broken edge-guard (rate-limited to one
+        # alert), same recovery branch when codes reappear.
+        if src.get("expect_nonzero") and not entries:
+            log.error("fetch %s returned 0 codes (expect_nonzero)", src["name"])
+            if state["health"].get(key) != "broken":
+                state["health"][key] = "broken"
+                send_telegram(f"⚠️ <b>{html.escape(src['name'])}</b> คืนค่า 0 โค้ด — "
+                              f"source/selector อาจเปลี่ยน")
                 save_state(state)
             continue
 
