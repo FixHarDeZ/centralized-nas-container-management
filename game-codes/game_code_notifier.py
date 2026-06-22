@@ -153,13 +153,13 @@ _PARSERS = {
 }
 
 
-def fetch(src: dict, retries: int = 3) -> list[dict]:
+def fetch(src: dict, retries: int = 5) -> list[dict]:
     """Download src['url'] and parse. Retries on 429 with exponential backoff."""
     last_exc = None
     for attempt in range(retries):
         r = requests.get(src["url"], headers=HEADERS, timeout=HTTP_TIMEOUT)
         if r.status_code == 429 and attempt < retries - 1:
-            wait = 2 ** attempt * 10
+            wait = 15 * (2 ** attempt)
             log.warning("429 from %s, retry %d/%d in %ds", src["name"], attempt + 1, retries, wait)
             time.sleep(wait)
             continue
@@ -246,9 +246,13 @@ def format_message(src: dict, entry: dict) -> str:
 # channel.
 # --------------------------------------------------------------------------- #
 def run_once(state: dict) -> None:
+    first = True
     for src in SOURCES:
         if src.get("enabled") is False:
             continue
+        if not first:
+            time.sleep(5)
+        first = False
         key = src["key"]
         try:
             entries = fetch(src)
