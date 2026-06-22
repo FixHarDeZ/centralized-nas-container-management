@@ -1,0 +1,13 @@
+services:
+  game-codes:
+    build: .
+    container_name: game-codes
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - TZ=Asia/Bangkok
+    volumes:
+      - game_codes_data:/data
+
+volumes:
+  game_codes_data:
