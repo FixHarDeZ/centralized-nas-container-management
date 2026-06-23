@@ -254,3 +254,11 @@ This was the path used to backfill the User-Password page. The standalone contai
 ### Architecture Change
 - n8n Error Workflow ครอบทุก workflow อัตโนมัติ (Secretary Auto Sync, Secretary Bot, และ future workflows)
 - Credential ใช้ "Secretary Bot" telegramApi ตัวเดิม (id: QiUZ8rINLwwPL1qu)
+
+## 2026-06-23
+
+### Bug: secretary-n8n restart loop
+- **Bug:** `secretary-n8n` crash-loop ต่อเนื่อง (RestartCount 29+), error `EACCES: permission denied, open '/home/node/.n8n/config'`
+- **Root cause:** Container mount จริงคือ Docker named volume `secretary_n8n_data` → `/volume2/@docker/volumes/secretary_n8n_data/_data` (ไม่ใช่ `/volume2/docker/secretary/n8n_data` ตามที่ compose `device:` ระบุ — path นั้นเป็น dir เก่าที่ไม่ได้ใช้แล้ว). Ownership ของ `_data` กลายเป็นไม่ตรง uid container ทำให้ container user `node` (uid 1000:1000) เขียน config/database ไม่ได้
+- **Fix:** `chown -R 1000:1000 /volume2/@docker/volumes/secretary_n8n_data/_data` แล้ว `docker restart secretary-n8n` → ขึ้นปกติ, RestartCount reset เป็น 0
+- **Note:** `/volume2/docker/secretary/n8n_data` ใน compose `volumes.n8n_data.driver_opts.device` เป็น path ที่ไม่ได้ map จริง (Docker ใช้ named volume ปกติแทน bind mount) — ควรเช็คว่า compose `device:` config ตรงกับ volume name mapping จริงหรือไม่ในรอบ deploy ถัดไป
