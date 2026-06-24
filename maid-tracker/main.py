@@ -1591,7 +1591,7 @@ def get_summary(emp_id: int, year: int, month: int):
             "actual_pay": tally["amount"],
             "total_earned": tally["amount"],
             "total_paid": paid_amount,
-            "total_unpaid": round(tally["amount"] - paid_amount, 2),
+            "total_unpaid": max(0, round(tally["amount"] - paid_amount, 2)),
         }
 
     all_rows = conn.execute(
@@ -1801,7 +1801,7 @@ def get_overall(emp_id: int):
             "balance_amount": 0,
             "total_earned": tally["amount"],
             "total_paid": paid_amount,
-            "total_unpaid": round(tally["amount"] - paid_amount, 2),
+            "total_unpaid": max(0, round(tally["amount"] - paid_amount, 2)),
         }
 
     rows = conn.execute(
@@ -2132,6 +2132,7 @@ async def line_webhook(request: Request):
                 monthly_salary=emp["monthly_salary"],
                 employment_status=emp.get("employment_status", "monthly"),
                 probation_daily_rate=emp.get("probation_daily_rate", 0.0),
+                language=emp.get("notify_language", "th"),
             )
             continue
 
