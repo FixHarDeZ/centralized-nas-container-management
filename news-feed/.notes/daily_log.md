@@ -2,6 +2,11 @@
 
 ---
 
+## 2026-06-24 — Candidate 5: add SQLite backup via shared sqlite_backup module
+
+เพิ่ม `_backup_job` ใน scheduler — ทุกวัน 03:00 สำรอง `/data/news.db` ไป `/data/backups/news-*.db.gz`
+(Online Backup API + gzip, retention 30 วัน). news-feed ไม่มี backup มาก่อน — นี่เป็น backup แรก.
+
 ## 2026-06-24 — Notifier deep module: รวม transport LINE/Telegram
 
 ยุบโค้ดส่ง LINE/Telegram ที่ซ้ำกัน 5 ชุดข้าม stack → 1 module เดียว `shared/notify.py`
