@@ -12,7 +12,7 @@ Guidance for Claude Code (claude.ai/code) on project rules, architecture, and de
 
 ## 🛠️ Environment & Deployment Gotchas
 
-*   **NAS Environment:** Synology DSM 7.3.2 (Container Manager) บน DS925+ NAS Target Path: `/volume2/docker/`
+*   **NAS Environment:** Synology DSM 7.4 (Container Manager) บน DS925+ NAS Target Path: `/volume2/docker/`
 *   **Secrets Vault:** Secrets ทั้ง project อยู่ใน `secrets/vault.sops.yaml` (sops+age encrypted, commit ลง git ได้). แต่ละ stack มี `secrets.manifest.yaml` ระบุว่าตัวเองใช้ key อะไร mapped จาก vault path ไหน (`env:` = secret จาก vault, `literals:` = ค่า public). Generator `scripts/render_env.py` (เรียกผ่าน `make secrets`) decrypt vault + อ่าน manifest → สร้าง `<stack>/.env` + root `.env.deploy` (gitignored)
 *   **Workflow:** `make edit-vault` (sops transparently decrypt+re-encrypt) → `make secrets` → `./scripts/deploy.sh`
 *   **NAS ไม่ต้องลง sops/age:** decryption เกิดที่ workstation, NAS รับ `<stack>/.env` plaintext แบบเดิมเป๊ะ — ไม่มี runtime decrypt
