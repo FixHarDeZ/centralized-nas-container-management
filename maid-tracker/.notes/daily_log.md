@@ -2,6 +2,12 @@
 
 ---
 
+## 2026-06-24 — Candidate 5: migrate backup to shared sqlite_backup module
+
+Inline `_backup_db()` (Online Backup API + gzip + retention) ย้ายไป `shared/sqlite_backup.py`
+ผ่าน `from sqlite_backup import backup_db`. ลบ `gzip`, `shutil` imports ที่ไม่ใช้แล้ว.
+Manual trigger API (`POST /api/admin/backup`) ยังใช้ wrapper `_backup_db()` เหมือนเดิม.
+
 ## 2026-06-20 — fix: LINE resign notice used monthly calc for probation employees
 
 **Bug:** `notify_resign` (line_notify.py) always called `compute_resign_summary` (monthly leave-balance math) regardless of `employment_status`. Probation employees who'd been paid daily for every day worked still got a fabricated "ยอดค้างลา" line and nonzero ยอดที่ต้องจ่าย on resignation.

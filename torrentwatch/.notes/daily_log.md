@@ -2,6 +2,11 @@
 
 ---
 
+## 2026-06-24 — Candidate 5: add SQLite backup via shared sqlite_backup module
+
+เพิ่ม `_backup_job` ใน scheduler — ทุกวัน 03:00 สำรอง `/data/torrentwatch.db` ไป `/data/backups/torrent-*.db.gz`
+(Online Backup API + gzip, retention 30 วัน). torrentwatch ไม่มี backup มาก่อน — นี่เป็น backup แรก.
+
 ## 2026-06-24 — ใช้ shared Notifier ใน _push/_send (transport-only)
 
 ส่วนหนึ่งของงานรวม transport ข้าม stack → `shared/notify.py` (stdlib `urllib`, vendored ด้วย
