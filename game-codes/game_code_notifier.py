@@ -17,7 +17,7 @@ import sys
 import time
 from pathlib import Path
 
-import requests
+from http_client import get as http_get
 from bs4 import BeautifulSoup
 
 from notify import Notifier, TgCreds
@@ -155,19 +155,10 @@ _PARSERS = {
 }
 
 
-def fetch(src: dict, retries: int = 3) -> list[dict]:
-    """Download src['url'] and parse. Retries on 429 with exponential backoff."""
-    last_exc = None
-    for attempt in range(retries):
-        r = requests.get(src["url"], headers=HEADERS, timeout=HTTP_TIMEOUT)
-        if r.status_code == 429 and attempt < retries - 1:
-            wait = 20 * (2 ** attempt)
-            log.warning("429 from %s, retry %d/%d in %ds", src["name"], attempt + 1, retries, wait)
-            time.sleep(wait)
-            continue
-        r.raise_for_status()
-        return _PARSERS[src["type"]](src, r.text)
-    raise last_exc
+def fetch(src: dict) -> list[dict]:
+    """Download src['url'] and parse. Retries via shared http_client (429, 5xx, backoff)."""
+    r = http_get(src["url"], headers=HEADERS, timeout=HTTP_TIMEOUT, retries=3, backoff=20.0)
+    return _PARSERS[src["type"]](src, r.text)
 
 
 # --------------------------------------------------------------------------- #
