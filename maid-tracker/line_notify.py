@@ -13,13 +13,12 @@ Uses /v2/bot/message/push with the group ID so a single API call reaches all gro
 
 import hashlib
 import hmac as _hmac
+import json
 import os
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 import httpx
-import json
-
 import i18n
 from calc import (
     compute_overall_balance,
