@@ -111,7 +111,7 @@ scripts/deploy.sh
 
 > `NAS_SUDO_PASSWORD` in the root `.env` is only used to run `sudo docker compose` during stack restarts. SSH itself uses key auth exclusively. Compose finds each stack's `.env` automatically via `--project-directory`.
 
-## Adding a Stack to Container Manager (DSM 7.3.2)
+## Adding a Stack to Container Manager (DSM 7.4)
 
 After uploading files to the NAS via `deploy.sh`, register each stack in Synology Container Manager:
 
