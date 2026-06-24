@@ -10,7 +10,7 @@ def _or_response(models):
     return m
 
 
-@patch("app.pricer.httpx.get")
+@patch("app.pricer.http_get")
 def test_fetch_prices_upserts_models(mock_get, tmp_path):
     mock_get.return_value = _or_response([{
         "id": "deepseek/deepseek-chat",
@@ -32,7 +32,7 @@ def test_fetch_prices_upserts_models(mock_get, tmp_path):
     assert abs(prices[0]["prompt_price"] - 0.14) < 0.001
 
 
-@patch("app.pricer.httpx.get", side_effect=Exception("timeout"))
+@patch("app.pricer.http_get", side_effect=Exception("timeout"))
 def test_fetch_prices_tolerates_network_error(mock_get, tmp_path):
     db_path = str(tmp_path / "p2.db")
     from app.models import get_conn, init_db

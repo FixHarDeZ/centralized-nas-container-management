@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime, timezone
 
-import httpx
+from app.http_client import get as http_get
 
 from app.models import get_conn, upsert_price
 
@@ -12,7 +12,7 @@ _OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
 
 def fetch_prices(db_path: str) -> int:
     try:
-        resp = httpx.get(_OPENROUTER_MODELS_URL, timeout=30.0)
+        resp = http_get(_OPENROUTER_MODELS_URL, retries=3, backoff=1.0, timeout=30.0)
         resp.raise_for_status()
     except Exception as exc:
         logger.error("pricer fetch failed: %s", exc)
