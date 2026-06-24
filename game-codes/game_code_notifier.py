@@ -9,18 +9,17 @@ ENV:
   POLL_INTERVAL                  loop interval seconds; 0/unset = run once
 """
 import html
-import json
 import logging
-import re
 import sys
 import time
 
 from http_client import get as http_get
-from bs4 import BeautifulSoup
 
 from notify import Notifier, TgCreds
 
-from config import TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, STATE_FILE, POLL_INTERVAL
+from config import TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, POLL_INTERVAL
+from parsers import parse
+from state import load_state, save_state, diff_new
 
 HTTP_TIMEOUT = 20
 HEADERS = {
@@ -46,29 +45,17 @@ SOURCES = [
         "name": "Wuthering Waves",
         "type": "table_status",
         "url": "https://wuthering.gg/codes",
-        # code cell must look like a WuWa code; status cell decides keep/drop
         "code_regex": r"^[A-Z0-9]{4,20}$",
-        "redeem_url": None,  # WuWa redeems in-game only
+        "redeem_url": None,
     },
     {
         "key": "throne_of_desire",
         "name": "Throne of Desire",
         "type": "section_regex",
         "url": "https://www.mustplay.in.th/content/page/69671b935ee1bb833c7a0884",
-        # ponytail: scope_selector deferred to None (whole-page scope) — the build
-        # sandbox can't reach mustplay.in.th to pin a selector. The digit-guard regex
-        # below is the safety net; tighten scope_selector from an unfiltered network
-        # (e.g. on the NAS) if false positives appear. require a digit so Thai/English
-        # prose words starting "tod" don't match.
         "scope_selector": None,
         "code_regex": r"\btod(?=[a-z0-9]*\d)[a-z0-9]{3,}\b",
         "redeem_url": None,
-        # ponytail: disabled — empirically today2024/today2025/etc. date
-        # strings on the page match the digit-guard regex above and would be
-        # pushed as fake "Throne of Desire" codes (spam). Re-enable once
-        # scope_selector is pinned to the real code container from an
-        # unfiltered network (e.g. the NAS); whole-page scope is what lets
-        # date strings through.
         "enabled": False,
     },
     {
@@ -76,125 +63,24 @@ SOURCES = [
         "name": "Rise of Eros",
         "type": "section_regex",
         "url": "https://cofregamers.com/en/rise-of-eros-redeem-code-list/",
-        # ponytail: pinned from live HTML (2026-06-22) — cofregamers.com wraps
-        # the redeem-code table(s) in this container; excludes later prose
-        # ("accelerates", "progression", "redemptions") that also happen to
-        # be 11 chars and would otherwise false-positive.
         "scope_selector": ".codigo-tabla-container",
         "code_regex": r"\b[A-Za-z0-9]{11}\b",
         "redeem_url": None,
-        # ponytail: RoE normally lists many active codes; unlike Genshin's
-        # JSON API (legitimately 0 active codes sometimes) or WuWa (often
-        # empty between livestreams), a 0-result here almost certainly means
-        # .codigo-tabla-container drifted, not that the game ran out of codes.
-        # Opt this source into the zero-result health guard below.
         "expect_nonzero": True,
     },
 ]
 
 
-def _dedupe(entries: list[dict]) -> list[dict]:
-    out, seen = [], set()
-    for e in entries:
-        if e["code"] in seen:
-            continue
-        seen.add(e["code"])
-        out.append(e)
-    return out
-
-
-def fetch_api_seria(src: dict, text: str) -> list[dict]:
-    data = json.loads(text)
-    return [
-        {"code": it["code"], "reward": (it.get("rewards") or "").strip()}
-        for it in data.get("codes", [])
-        if it.get("status") == "OK"
-    ]
-
-
-def fetch_table_status(src: dict, text: str) -> list[dict]:
-    soup = BeautifulSoup(text, "html.parser")
-    code_re = re.compile(src["code_regex"])
-    out = []
-    for row in soup.select("tr"):
-        cells = [c.get_text(" ", strip=True) for c in row.find_all(["td", "th"])]
-        if len(cells) < 2:
-            continue
-        code, status = cells[0], cells[1].lower()
-        if not code_re.match(code):
-            continue
-        # Status may be plain text ("Active"/"Expired") or, on some sites,
-        # only a button label ("COPY" for active, "Expired" for disabled) —
-        # so treat anything NOT explicitly saying expired as still active.
-        # A hypothetical third status (e.g. "Upcoming") would be kept, acceptable
-        # for a notifier (low harm).
-        if "expired" not in status:
-            out.append({"code": code, "reward": ""})
-    return _dedupe(out)
-
-
-def fetch_section_regex(src: dict, text: str) -> list[dict]:
-    soup = BeautifulSoup(text, "html.parser")
-    if src.get("scope_selector"):
-        scope = " ".join(el.get_text(" ", strip=True) for el in soup.select(src["scope_selector"]))
-    else:
-        scope = soup.get_text(" ", strip=True)
-    code_re = re.compile(src["code_regex"])
-    return _dedupe([{"code": m.group(0), "reward": ""} for m in code_re.finditer(scope)])
-
-
-_PARSERS = {
-    "api_seria": fetch_api_seria,
-    "table_status": fetch_table_status,
-    "section_regex": fetch_section_regex,
-}
-
-
 def fetch(src: dict) -> list[dict]:
-    """Download src['url'] and parse. Retries via shared http_client (429, 5xx, backoff)."""
+    """Download src['url'] and parse."""
     r = http_get(src["url"], headers=HEADERS, timeout=HTTP_TIMEOUT, retries=3, backoff=20.0)
-    return _PARSERS[src["type"]](src, r.text)
+    return parse(src, r.text)
 
 
-# --------------------------------------------------------------------------- #
-# State
-# --------------------------------------------------------------------------- #
-def load_state() -> dict:
-    if STATE_FILE.exists():
-        try:
-            s = json.loads(STATE_FILE.read_text(encoding="utf-8"))
-            s.setdefault("seen", {})
-            s.setdefault("health", {})
-            s.setdefault("rate_limited_until", {})
-            return s
-        except Exception as e:
-            log.warning("bad state file (%s), starting fresh", e)
-    return {"seen": {}, "health": {}, "rate_limited_until": {}}
-
-
-def save_state(state: dict) -> None:
-    STATE_FILE.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
-def diff_new(src: dict, entries: list[dict], state: dict) -> list[dict]:
-    """Codes not seen before. First time a source appears -> seed silently."""
-    key = src["key"]
-    first_time = key not in state["seen"]
-    seen = set(state["seen"].get(key, []))
-    fresh = [e for e in entries if e["code"] not in seen]
-    state["seen"][key] = sorted(seen | {e["code"] for e in entries})
-    return [] if first_time else fresh
-
-
-# --------------------------------------------------------------------------- #
-# Telegram
-# --------------------------------------------------------------------------- #
 def send_telegram(text: str) -> None:
     if not (TELEGRAM_TOKEN and TELEGRAM_CHAT_ID):
         log.error("GAME_CODES_TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID not set")
         return
-    # Notifier swallows transport errors internally, so a Telegram outage can't
-    # propagate out of run_once->main and crash the container into a restart loop.
     Notifier(
         telegram=TgCreds(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID,
                          parse_mode="HTML", disable_preview=True),
@@ -215,18 +101,6 @@ def format_message(src: dict, entry: dict) -> str:
     return "\n".join(parts)
 
 
-# --------------------------------------------------------------------------- #
-# Main cycle
-#
-# ponytail: health alert fires on exception/HTTP error, or on a zero-code
-# result for sources that opt into "expect_nonzero" (currently only RoE) —
-# both cases share the same health flag and the same healthy->broken edge
-# guard (rate-limited to one alert, with recovery on broken->healthy). A
-# plain zero-code result is NOT treated as broken by default: WuWa
-# legitimately has ~1 active code and is often empty between version
-# livestreams, so alerting on zero there would train the user to ignore the
-# channel.
-# --------------------------------------------------------------------------- #
 def run_once(state: dict) -> None:
     now = time.time()
     first = True
@@ -261,12 +135,6 @@ def run_once(state: dict) -> None:
                 save_state(state)
             continue
 
-        # ponytail: a successful fetch that returns [] is normally fine (see
-        # module-docstring note above re WuWa/Genshin) — but a source that
-        # opts into "expect_nonzero" (RoE) should never legitimately be
-        # empty, so treat 0 results the same as the exception path: same
-        # health flag, same healthy->broken edge-guard (rate-limited to one
-        # alert), same recovery branch when codes reappear.
         if src.get("expect_nonzero") and not entries:
             log.error("fetch %s returned 0 codes (expect_nonzero)", src["name"])
             if state["health"].get(key) != "broken":
