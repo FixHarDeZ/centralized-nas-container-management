@@ -686,6 +686,14 @@ async function viewEmployeeForm(id) {
                 <option value="transfer" ${emp?.payment_method === "transfer" ? "selected" : ""}>${t("paymentMethodTransfer")}</option>
               </select>
             </div>
+            <!-- Notification language (appended translation for non-Thai maids) -->
+            <div class="col-6">
+              <label class="form-label fw-semibold">ภาษาแจ้งเตือน</label>
+              <select class="form-select" name="notify_language">
+                ${[["th","ไทย"],["my","พม่า"],["en","อังกฤษ"],["lo","ลาว"],["km","เขมร"]].map(([v,lbl]) =>
+                  `<option value="${v}" ${(emp?.notify_language || "th") === v ? "selected" : ""}>${lbl}</option>`).join("")}
+              </select>
+            </div>
             <!-- Probation -->
             <div class="col-12">
               <div class="form-check">
@@ -858,6 +866,7 @@ async function viewEmployeeForm(id) {
       holiday_mode:       mode,
       monthly_leave_days: mode === "monthly" ? +(fd.get("monthly_leave_days") || 0) : 0,
       payment_method:     fd.get("payment_method") || "cash",
+      notify_language:    fd.get("notify_language") || "th",
       probation_daily_rate: fd.get("probation_daily_rate") !== "" && fd.get("probation_daily_rate") != null
                               ? +fd.get("probation_daily_rate") : null,
     };
@@ -1926,7 +1935,7 @@ async function viewPayments(id) {
         <div class="mb-2">${isPaid ? payerBadge(d.paid_by) : payerSelect(`payer_d_${d.work_date}`)}</div>
         <div class="d-grid gap-2">
           <button class="btn btn-sm ${isPaid ? "btn-outline-secondary" : "btn-primary"}"
-                  onclick="toggleDailyPayment(${id}, '${d.work_date}', this)">
+                  onclick="toggleDailyPayment(${id}, '${d.work_date}', this, ${isPaid}, ${d.amount})">
             <i class="bi ${isPaid ? "bi-x-circle" : "bi-check-circle"} me-1"></i>${isPaid ? t("btnUnmarkPaid") : t("btnMarkPaid")}
           </button>
           ${slipBtn}
@@ -2079,11 +2088,20 @@ async function togglePayment(empId, year, month, period, btn) {
 
 // ─── Daily payments (probation) ──────────────────────────────
 
-async function toggleDailyPayment(empId, workDate, btn) {
-  btn.disabled = true;
+async function toggleDailyPayment(empId, workDate, btn, isPaid, computed) {
   const payer = document.getElementById(`payer_d_${workDate}`)?.value || "";
+  let url = `/api/employees/${empId}/daily-payments/${workDate}/toggle?paid_by=${encodeURIComponent(payer)}`;
+  if (!isPaid) {
+    // ponytail: window.prompt is enough for one optional override; no modal needed.
+    const entered = window.prompt("จำนวนเงินที่จ่ายวันนี้ (บาท)", String(computed));
+    if (entered === null) return;               // cancelled
+    const amt = parseFloat(entered);
+    if (isNaN(amt) || amt <= 0) { alert("จำนวนเงินไม่ถูกต้อง"); return; }
+    url += `&amount=${amt}`;
+  }
+  btn.disabled = true;
   try {
-    await api.post(`/api/employees/${empId}/daily-payments/${workDate}/toggle?paid_by=${encodeURIComponent(payer)}`, {});
+    await api.post(url, {});
     await viewPayments(empId);
   } catch (e) {
     alert(t("errSave") + e.message);

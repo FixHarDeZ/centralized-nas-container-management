@@ -33,7 +33,10 @@
 |------|---------|
 | `main.py` | FastAPI app — routes, middleware, LINE webhook |
 | `calc.py` | Calculation helpers (daily rate, balance, monthly-leave-balance) |
-| `line_notify.py` | LINE Messaging API push functions |
+| `line_notify.py` | LINE Messaging API push functions (+ `_append_tr` แนบคำแปล, `_reminder_body`) |
+| `i18n.py` | Static fragment translations (`translate_block`) สำหรับ notify แม่บ้าน — my/lo/km machine-generated (ยังไม่ผ่าน native review) |
+| `reminder_translate.py` | แปล reminder free-text ด้วย MiMo ตอน save (คืน None = fail → Thai-only) |
+| `http_client.py` | Vendored จาก `shared/http_client.py` (httpx + retry) — guard ด้วย `tests/test_shared_sync.py` |
 | `keywords.py` | LINE keyword lists — แก้ที่นี่เพื่อเพิ่ม/ลด trigger phrase |
 | `static/app.js` | SPA frontend — routing, views, i18n (TH/EN) |
 | `static/style.css` | Custom styles + calendar grid |
@@ -59,7 +62,8 @@ employees (
   employment_status TEXT DEFAULT 'active',  -- 'probation' (จ่ายรายวัน, ลาปิด) | 'active'
   probation_daily_rate REAL,                -- เรตรายวันช่วงโปร
   monthly_start_date TEXT,                  -- = วันผ่านโปร; NULL ระหว่างโปร. monthly calc anchor = monthly_start_date or start_date
-  payment_method TEXT DEFAULT 'cash'        -- 'cash' | 'transfer' (transfer → แนบ slip ได้)
+  payment_method TEXT DEFAULT 'cash',       -- 'cash' | 'transfer' (transfer → แนบ slip ได้)
+  notify_language TEXT DEFAULT 'th'          -- 'th'|'my'|'en'|'lo'|'km' — non-Thai → แนบคำแปลใต้ข้อความ LINE
 )
 
 attendance (
@@ -102,7 +106,8 @@ reminders (
   schedule_value TEXT,         -- digit: "0","0,5" | weekday: "0,3" (0=Mon…6=Sun)
   send_time TEXT,              -- "HH:MM"
   last_sent_date TEXT,
-  created_at TEXT
+  created_at TEXT,
+  message_i18n TEXT            -- JSON {my,en,lo,km} cache, แปลตอน save ด้วย MiMo (NULL = Thai-only)
 )
 ```
 
@@ -195,6 +200,9 @@ final = base_salary_last_month + (cumulative_balance × daily_rate)
 | `NGINX_BASIC_AUTH_USER/PASS` | ❌ optional | เปิด HTTP Basic Auth (ยกเว้น `/webhook/line`) |
 | `MONTHLY_REPORT_TIME` | ❌ optional | เวลาส่งรายงานเดือน (default `20:00`) |
 | `MAID_PUBLIC_BASE_URL` | ❌ optional | URL สาธารณะของ maid-tracker (เช่น `https://<NAS_HOST>:15055`) — ใช้สำหรับ signed slip URL ส่ง LINE image (vault key: `stacks.maid_tracker.public_base_url`) |
+| `MIMO_API_KEY` | ❌ optional | MiMo token แปล reminder ตอน save (vault key: `shared.llm.mimo_api_key`). ว่าง → reminder Thai-only |
+| `MIMO_BASE_URL` | — | literal `https://token-plan-sgp.xiaomimimo.com/v1` |
+| `MIMO_MODEL` | — | literal `xiaomi/mimo-v2.5` (reasoning model — `max_tokens` ต้องสูง) |
 
 ---
 
@@ -217,7 +225,7 @@ final = base_salary_last_month + (cumulative_balance × daily_rate)
 | POST | `/api/employees/{id}/pass-probation` | ผ่านโปร (body `pass_date`) → active + set monthly_start_date |
 | DELETE | `/api/employees/{id}/pass-probation` | ยกเลิกผ่านโปร (กลับ probation) |
 | GET | `/api/employees/{id}/daily-payments?year=&month=` | รายการจ่ายรายวันช่วงโปร (cap < monthly_start_date) |
-| POST | `/api/employees/{id}/daily-payments/{work_date}/toggle?paid_by=` | บันทึก/ยกเลิกจ่ายรายวัน (`paid_by`=ผู้จ่าย) |
+| POST | `/api/employees/{id}/daily-payments/{work_date}/toggle?paid_by=&amount=` | บันทึก/ยกเลิกจ่ายรายวัน (`paid_by`=ผู้จ่าย, `amount`=override จำนวนเงิน optional `>0`, ไม่ส่ง=คำนวณ `rate×frac`) |
 | POST | `/api/employees/{id}/daily-payments/{work_date}/slip` | upload slip รายวัน (multipart) |
 | POST | `/api/employees/{id}/payments/{period}/slip?year=&month=` | upload slip งวดเดือน (multipart) |
 | GET | `/api/slips/{fname}` | serve slip |
