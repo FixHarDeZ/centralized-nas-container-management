@@ -1,9 +1,15 @@
+import asyncio
 import httpx
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import config
+from notify import Notifier, TgCreds
 
 _TZ = ZoneInfo(config.TZ)
+
+# Shared transport (plain text). send_test_message/get_updates keep their own
+# httpx calls so they can return detailed diagnostics to the dashboard.
+_N = Notifier(telegram=TgCreds(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID), timeout=10)
 
 
 def _now() -> str:
@@ -15,18 +21,8 @@ def _url(method: str) -> str:
 
 
 async def _send(text: str):
-    if not config.TELEGRAM_BOT_TOKEN or not config.TELEGRAM_CHAT_ID:
-        return
-    async with httpx.AsyncClient(timeout=10) as c:
-        try:
-            resp = await c.post(
-                _url("sendMessage"),
-                json={"chat_id": config.TELEGRAM_CHAT_ID, "text": text},
-            )
-            if resp.status_code != 200:
-                print(f"[Telegram] send failed {resp.status_code}: {resp.text[:200]}")
-        except Exception as e:
-            print(f"[Telegram] send error: {e}")
+    # Notifier is sync (stdlib urllib); run off the event loop.
+    await asyncio.to_thread(_N.send, text)
 
 
 async def notify_keyword_matches(source_url: str, matches: list[dict]):

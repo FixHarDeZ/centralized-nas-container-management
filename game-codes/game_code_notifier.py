@@ -20,6 +20,8 @@ from pathlib import Path
 import requests
 from bs4 import BeautifulSoup
 
+from notify import Notifier, TgCreds
+
 TELEGRAM_TOKEN = os.environ.get("GAME_CODES_TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
 STATE_FILE = Path(os.environ.get("STATE_FILE", "seen_codes.json"))
@@ -203,22 +205,15 @@ def diff_new(src: dict, entries: list[dict], state: dict) -> list[dict]:
 # --------------------------------------------------------------------------- #
 def send_telegram(text: str) -> None:
     if not (TELEGRAM_TOKEN and TELEGRAM_CHAT_ID):
-        log.error("TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID not set")
+        log.error("GAME_CODES_TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID not set")
         return
-    try:
-        resp = requests.post(
-            f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
-            json={"chat_id": TELEGRAM_CHAT_ID, "text": text,
-                  "parse_mode": "HTML", "disable_web_page_preview": True},
-            timeout=HTTP_TIMEOUT,
-        )
-        if resp.status_code != 200:
-            log.error("telegram send failed: %s %s", resp.status_code, resp.text)
-    except Exception as e:
-        # ponytail: a Telegram outage (timeout/connection error) must not
-        # propagate out of run_once->main and crash the container into a
-        # restart loop — log and move on, same as the non-200 branch above.
-        log.error("telegram send raised: %s", e)
+    # Notifier swallows transport errors internally, so a Telegram outage can't
+    # propagate out of run_once->main and crash the container into a restart loop.
+    Notifier(
+        telegram=TgCreds(TELEGRAM_TOKEN, TELEGRAM_CHAT_ID,
+                         parse_mode="HTML", disable_preview=True),
+        timeout=HTTP_TIMEOUT,
+    ).send(text)
 
 
 def format_message(src: dict, entry: dict) -> str:
