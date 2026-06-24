@@ -1,5 +1,22 @@
 # game-codes — Daily Log
 
+## 2026-06-24 — Candidate 3 + 4: typed config + scraper split
+
+**Candidate 3 — typed config module:**
+- Created `config.py` with pydantic BaseSettings: `GAME_CODES_TELEGRAM_BOT_TOKEN` (required),
+  `TELEGRAM_CHAT_ID` (required), `STATE_FILE` (default `seen_codes.json`), `POLL_INTERVAL` (ge=0)
+- Module-level aliases preserved (`TELEGRAM_TOKEN`, etc.) — backward compatible
+- `field_validator` strips whitespace on token/chat_id
+- `tests/conftest.py` seeds env vars for test isolation
+- Fail-fast at startup if required env vars missing
+
+**Candidate 4 — split scraper:**
+- `parsers.py`: `_dedupe`, `fetch_api_seria`, `fetch_table_status`, `fetch_section_regex`, `parse()`
+- `state.py`: `load_state`, `save_state`, `diff_new`
+- `game_code_notifier.py`: slim orchestrator (SOURCES, fetch, send_telegram, run_once, main)
+- Parsers now independently testable without HTTP (import from `parsers` directly)
+- 8/8 tests pass, Dockerfile updated to COPY new files
+
 ## 2026-06-24 — Final verification + deploy (SDD Task 6)
 
 All test suites pass: shared 16/16, sync guard 2/2, game-codes 8/8, news-feed 133/133.
