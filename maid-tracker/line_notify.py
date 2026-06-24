@@ -18,6 +18,8 @@ from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 import httpx
+import json
+
 import i18n
 from calc import (
     compute_overall_balance,
@@ -435,13 +437,27 @@ def notify_resign(
         print(f"[LINE] notify_resign error: {e}")
 
 
-def notify_reminder(name: str, message: str) -> None:
+def _reminder_body(name, message, message_i18n, active_langs):
+    """Thai reminder + one cached translated block per active non-Thai language."""
+    body = f"🔔 แจ้งเตือนงานวันนี้ — {name}\n\n{message}"
+    if message_i18n and active_langs:
+        try:
+            cache = json.loads(message_i18n)
+        except Exception:
+            cache = {}
+        for lang in active_langs:
+            tr = cache.get(lang)
+            if tr:
+                body += f"{_TR_SEP}{tr}"
+    return body + f"\n\n🕒 {_now_str()}"
+
+
+def notify_reminder(name, message, message_i18n=None, active_langs=None):
     """Call from the scheduler when a task reminder fires."""
     if not TOKEN or not GROUP_ID:
         return
     try:
-        msg = f"🔔 แจ้งเตือนงานวันนี้ — {name}\n\n{message}\n\n🕒 {_now_str()}"
-        send_line(msg)
+        send_line(_reminder_body(name, message, message_i18n, active_langs or []))
     except Exception as e:
         print(f"[LINE] notify_reminder error: {e}")
 

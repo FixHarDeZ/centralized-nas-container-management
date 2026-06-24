@@ -434,6 +434,18 @@ def _should_fire_today(r: dict, today: date) -> bool:
     return False
 
 
+def _active_notify_langs():
+    """Distinct non-Thai notify languages among currently-employed staff."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT DISTINCT notify_language FROM employees "
+        "WHERE end_date IS NULL AND notify_language IS NOT NULL "
+        "AND notify_language != 'th'",
+    ).fetchall()
+    conn.close()
+    return [r[0] for r in rows]
+
+
 def _check_reminders():
     tz = _TZ
     now = datetime.now(tz)
@@ -454,7 +466,11 @@ def _check_reminders():
         if not _should_fire_today(r, today):
             continue
 
-        line_notify.notify_reminder(r["name"], r["message"])
+        line_notify.notify_reminder(
+            r["name"], r["message"],
+            message_i18n=r.get("message_i18n"),
+            active_langs=_active_notify_langs(),
+        )
 
         conn = get_db()
         conn.execute(
@@ -1939,7 +1955,11 @@ def test_reminder(rem_id: int):
     if not row:
         raise HTTPException(404, "Reminder not found")
     r = dict(row)
-    line_notify.notify_reminder(r["name"], r["message"])
+    line_notify.notify_reminder(
+        r["name"], r["message"],
+        message_i18n=r.get("message_i18n"),
+        active_langs=_active_notify_langs(),
+    )
     return {"message": "sent"}
 
 
