@@ -1506,6 +1506,28 @@ def toggle_daily_payment(
     return {"paid": bool(paid_at), "paid_at": paid_at}
 
 
+@app.post("/api/employees/{emp_id}/daily-payments/{work_date}/amount")
+def set_daily_amount(emp_id: int, work_date: str, amount: float):
+    """Correct the amount of an already-paid probation day (in place, stays paid)."""
+    if amount <= 0:
+        raise HTTPException(400, "amount must be greater than 0")
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id, paid_at FROM daily_payments WHERE employee_id=? AND work_date=?",
+        (emp_id, work_date),
+    ).fetchone()
+    if not row or not row["paid_at"]:
+        conn.close()
+        raise HTTPException(400, "Day is not marked paid")
+    conn.execute(
+        "UPDATE daily_payments SET amount=? WHERE id=?",
+        (round(amount, 2), row["id"]),
+    )
+    conn.commit()
+    conn.close()
+    return {"amount": round(amount, 2)}
+
+
 # ---------- Summary endpoints ----------
 
 

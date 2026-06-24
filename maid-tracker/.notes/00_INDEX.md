@@ -1,6 +1,6 @@
 # maid-tracker — Index (Memory File)
 
-อัปเดตล่าสุด: 2026-06-14
+อัปเดตล่าสุด: 2026-06-24
 
 ---
 
@@ -226,6 +226,7 @@ final = base_salary_last_month + (cumulative_balance × daily_rate)
 | DELETE | `/api/employees/{id}/pass-probation` | ยกเลิกผ่านโปร (กลับ probation) |
 | GET | `/api/employees/{id}/daily-payments?year=&month=` | รายการจ่ายรายวันช่วงโปร (cap < monthly_start_date) |
 | POST | `/api/employees/{id}/daily-payments/{work_date}/toggle?paid_by=&amount=` | บันทึก/ยกเลิกจ่ายรายวัน (`paid_by`=ผู้จ่าย, `amount`=override จำนวนเงิน optional `>0`, ไม่ส่ง=คำนวณ `rate×frac`) |
+| POST | `/api/employees/{id}/daily-payments/{work_date}/amount?amount=` | แก้จำนวนเงินของวันที่จ่ายแล้ว (in-place, ยังคง paid) |
 | POST | `/api/employees/{id}/daily-payments/{work_date}/slip` | upload slip รายวัน (multipart) |
 | POST | `/api/employees/{id}/payments/{period}/slip?year=&month=` | upload slip งวดเดือน (multipart) |
 | GET | `/api/slips/{fname}` | serve slip |
