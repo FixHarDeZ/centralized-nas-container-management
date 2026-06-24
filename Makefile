@@ -9,7 +9,8 @@ PY = .venv/bin/python
 # Single source: shared/notify.py. Guarded by tests/test_shared_sync.py.
 NOTIFY_COPIES = news-feed/app/notify.py game-codes/notify.py \
                 watchtower/notifier/notify.py torrentwatch/notify.py
-HTTP_COPIES = news-feed/app/http_client.py game-codes/http_client.py
+HTTP_COPIES = news-feed/app/http_client.py game-codes/http_client.py \
+              maid-tracker/http_client.py
 BACKUP_COPIES = maid-tracker/sqlite_backup.py news-feed/app/sqlite_backup.py \
                 torrentwatch/sqlite_backup.py
 
