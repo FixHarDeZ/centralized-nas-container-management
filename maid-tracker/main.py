@@ -16,6 +16,7 @@ from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 import line_notify
+import reminder_translate
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from calc import (
@@ -324,6 +325,7 @@ def init_db():
         ("probation_daily_rate", "REAL"),
         ("monthly_start_date", "TEXT"),
         ("payment_method", "TEXT DEFAULT 'cash'"),
+        ("notify_language", "TEXT DEFAULT 'th'"),
     ]:
         try:
             c.execute(f"ALTER TABLE employees ADD COLUMN {col} {definition}")
@@ -368,6 +370,10 @@ def init_db():
         pass
     try:
         c.execute("ALTER TABLE employee_documents ADD COLUMN doc_label TEXT")
+    except Exception:
+        pass
+    try:
+        c.execute("ALTER TABLE reminders ADD COLUMN message_i18n TEXT")
     except Exception:
         pass
     conn.commit()
@@ -428,6 +434,18 @@ def _should_fire_today(r: dict, today: date) -> bool:
     return False
 
 
+def _active_notify_langs():
+    """Distinct non-Thai notify languages among currently-employed staff."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT DISTINCT notify_language FROM employees "
+        "WHERE end_date IS NULL AND notify_language IS NOT NULL "
+        "AND notify_language != 'th'",
+    ).fetchall()
+    conn.close()
+    return [r[0] for r in rows]
+
+
 def _check_reminders():
     tz = _TZ
     now = datetime.now(tz)
@@ -448,7 +466,11 @@ def _check_reminders():
         if not _should_fire_today(r, today):
             continue
 
-        line_notify.notify_reminder(r["name"], r["message"])
+        line_notify.notify_reminder(
+            r["name"], r["message"],
+            message_i18n=r.get("message_i18n"),
+            active_langs=_active_notify_langs(),
+        )
 
         conn = get_db()
         conn.execute(
@@ -514,6 +536,7 @@ class EmployeeCreate(BaseModel):
     employment_status: str = "active"  # 'probation' | 'active'
     probation_daily_rate: float | None = None
     payment_method: str = "cash"  # 'cash' | 'transfer'
+    notify_language: str = "th"  # 'th'|'my'|'en'|'lo'|'km' — appended translation
 
 
 class AttendanceUpdate(BaseModel):
@@ -564,8 +587,8 @@ def create_employee(emp: EmployeeCreate):
     c = conn.cursor()
     c.execute(
         "INSERT INTO employees (name,age,birth_date,nationality,phone,line_id,facebook,start_date,monthly_salary,"
-        "max_leave_carry,holiday_mode,monthly_leave_days,employment_status,probation_daily_rate,payment_method) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "max_leave_carry,holiday_mode,monthly_leave_days,employment_status,probation_daily_rate,payment_method,notify_language) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
             emp.name,
             emp.age,
@@ -582,6 +605,7 @@ def create_employee(emp: EmployeeCreate):
             emp.employment_status,
             emp.probation_daily_rate,
             emp.payment_method,
+            emp.notify_language,
         ),
     )
     new_id = c.lastrowid
@@ -613,7 +637,7 @@ def update_employee(emp_id: int, emp: EmployeeCreate):
     c = conn.cursor()
     c.execute(
         "UPDATE employees SET name=?,age=?,birth_date=?,nationality=?,phone=?,line_id=?,facebook=?,start_date=?,monthly_salary=?,"
-        "max_leave_carry=?,holiday_mode=?,monthly_leave_days=?,probation_daily_rate=?,payment_method=? WHERE id=?",
+        "max_leave_carry=?,holiday_mode=?,monthly_leave_days=?,probation_daily_rate=?,payment_method=?,notify_language=? WHERE id=?",
         (
             emp.name,
             emp.age,
@@ -629,6 +653,7 @@ def update_employee(emp_id: int, emp: EmployeeCreate):
             emp.monthly_leave_days,
             emp.probation_daily_rate,
             emp.payment_method,
+            emp.notify_language,
             emp_id,
         ),
     )
@@ -739,6 +764,7 @@ def resign_employee(emp_id: int, req: ResignRequest):
         monthly_salary=emp["monthly_salary"],
         employment_status=emp.get("employment_status"),
         probation_daily_rate=emp.get("probation_daily_rate") or 0.0,
+        language=emp.get("notify_language", "th"),
     )
 
     return {"message": "resigned"}
@@ -964,6 +990,7 @@ def upsert_attendance(emp_id: int, att: AttendanceUpdate):
             half_day=att.half_day,
             start_date=start_date,
             monthly_salary=monthly_salary,
+            language=emp.get("notify_language", "th"),
         )
     elif att.status in ("work", "holiday") and prev_status in ("leave", "compensatory"):
         # Cancelled a previously recorded leave or compensatory day
@@ -1336,6 +1363,7 @@ def toggle_payment(emp_id: int, period: int, year: int, month: int, paid_by: str
             deduction_amount=toggle_deduction_amount,
             paid_by=payer,
             slip_fname=slip_fname,
+            language=emp.get("notify_language", "th"),
         )
 
     return {"paid": bool(paid_at), "paid_at": paid_at}
@@ -1402,7 +1430,9 @@ def get_daily_payments(emp_id: int, year: int, month: int):
 
 
 @app.post("/api/employees/{emp_id}/daily-payments/{work_date}/toggle")
-def toggle_daily_payment(emp_id: int, work_date: str, paid_by: str = ""):
+def toggle_daily_payment(
+    emp_id: int, work_date: str, paid_by: str = "", amount: float | None = None
+):
     conn = get_db()
     emp = conn.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
     if not emp:
@@ -1436,7 +1466,13 @@ def toggle_daily_payment(emp_id: int, work_date: str, paid_by: str = ""):
         paid_at = None
         amount = 0.0
     else:
-        amount = round((emp.get("probation_daily_rate") or 0) * frac, 2)
+        if amount is not None:
+            if amount <= 0:
+                conn.close()
+                raise HTTPException(400, "amount must be greater than 0")
+            amount = round(amount, 2)
+        else:
+            amount = round((emp.get("probation_daily_rate") or 0) * frac, 2)
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
         conn.execute(
             "INSERT INTO daily_payments (employee_id, work_date, amount, paid_at, paid_by) VALUES (?,?,?,?,?) "
@@ -1464,6 +1500,7 @@ def toggle_daily_payment(emp_id: int, work_date: str, paid_by: str = ""):
             paid_at=paid_at,
             paid_by=payer,
             slip_fname=slip_fname,
+            language=emp.get("notify_language", "th"),
         )
 
     return {"paid": bool(paid_at), "paid_at": paid_at}
@@ -1835,9 +1872,11 @@ def create_reminder(rem: ReminderCreate):
     conn = get_db()
     c = conn.cursor()
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    tr = reminder_translate.translate_reminder(rem.message)
+    i18n_json = json.dumps(tr, ensure_ascii=False) if tr else None
     c.execute(
-        "INSERT INTO reminders (name, message, enabled, schedule_type, schedule_value, send_time, created_at) "
-        "VALUES (?,?,?,?,?,?,?)",
+        "INSERT INTO reminders (name, message, enabled, schedule_type, schedule_value, send_time, created_at, message_i18n) "
+        "VALUES (?,?,?,?,?,?,?,?)",
         (
             rem.name,
             rem.message,
@@ -1846,6 +1885,7 @@ def create_reminder(rem: ReminderCreate):
             rem.schedule_value,
             rem.send_time,
             now_str,
+            i18n_json,
         ),
     )
     new_id = c.lastrowid
@@ -1860,9 +1900,11 @@ def update_reminder(rem_id: int, rem: ReminderCreate):
         raise HTTPException(400, "Invalid schedule_type")
     conn = get_db()
     c = conn.cursor()
+    tr = reminder_translate.translate_reminder(rem.message)
+    i18n_json = json.dumps(tr, ensure_ascii=False) if tr else None
     c.execute(
         "UPDATE reminders SET name=?, message=?, enabled=?, "
-        "schedule_type=?, schedule_value=?, send_time=? WHERE id=?",
+        "schedule_type=?, schedule_value=?, send_time=?, message_i18n=? WHERE id=?",
         (
             rem.name,
             rem.message,
@@ -1870,6 +1912,7 @@ def update_reminder(rem_id: int, rem: ReminderCreate):
             rem.schedule_type,
             rem.schedule_value,
             rem.send_time,
+            i18n_json,
             rem_id,
         ),
     )
@@ -1912,7 +1955,11 @@ def test_reminder(rem_id: int):
     if not row:
         raise HTTPException(404, "Reminder not found")
     r = dict(row)
-    line_notify.notify_reminder(r["name"], r["message"])
+    line_notify.notify_reminder(
+        r["name"], r["message"],
+        message_i18n=r.get("message_i18n"),
+        active_langs=_active_notify_langs(),
+    )
     return {"message": "sent"}
 
 
@@ -2169,6 +2216,7 @@ async def line_webhook(request: Request):
                     monthly_salary=emp["monthly_salary"],
                     deduction_days=ded_days,
                     deduction_amount=ded_amount,
+                    language=emp.get("notify_language", "th"),
                 )
 
             conn.close()
@@ -2266,6 +2314,7 @@ async def line_webhook(request: Request):
             half_day=is_half_day,
             start_date=start_date,
             monthly_salary=emp["monthly_salary"],
+            language=emp.get("notify_language", "th"),
         )
 
     return {"status": "ok"}
