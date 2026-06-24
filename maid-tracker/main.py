@@ -324,6 +324,7 @@ def init_db():
         ("probation_daily_rate", "REAL"),
         ("monthly_start_date", "TEXT"),
         ("payment_method", "TEXT DEFAULT 'cash'"),
+        ("notify_language", "TEXT DEFAULT 'th'"),
     ]:
         try:
             c.execute(f"ALTER TABLE employees ADD COLUMN {col} {definition}")
@@ -514,6 +515,7 @@ class EmployeeCreate(BaseModel):
     employment_status: str = "active"  # 'probation' | 'active'
     probation_daily_rate: float | None = None
     payment_method: str = "cash"  # 'cash' | 'transfer'
+    notify_language: str = "th"  # 'th'|'my'|'en'|'lo'|'km' — appended translation
 
 
 class AttendanceUpdate(BaseModel):
@@ -564,8 +566,8 @@ def create_employee(emp: EmployeeCreate):
     c = conn.cursor()
     c.execute(
         "INSERT INTO employees (name,age,birth_date,nationality,phone,line_id,facebook,start_date,monthly_salary,"
-        "max_leave_carry,holiday_mode,monthly_leave_days,employment_status,probation_daily_rate,payment_method) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "max_leave_carry,holiday_mode,monthly_leave_days,employment_status,probation_daily_rate,payment_method,notify_language) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
             emp.name,
             emp.age,
@@ -582,6 +584,7 @@ def create_employee(emp: EmployeeCreate):
             emp.employment_status,
             emp.probation_daily_rate,
             emp.payment_method,
+            emp.notify_language,
         ),
     )
     new_id = c.lastrowid
@@ -613,7 +616,7 @@ def update_employee(emp_id: int, emp: EmployeeCreate):
     c = conn.cursor()
     c.execute(
         "UPDATE employees SET name=?,age=?,birth_date=?,nationality=?,phone=?,line_id=?,facebook=?,start_date=?,monthly_salary=?,"
-        "max_leave_carry=?,holiday_mode=?,monthly_leave_days=?,probation_daily_rate=?,payment_method=? WHERE id=?",
+        "max_leave_carry=?,holiday_mode=?,monthly_leave_days=?,probation_daily_rate=?,payment_method=?,notify_language=? WHERE id=?",
         (
             emp.name,
             emp.age,
@@ -629,6 +632,7 @@ def update_employee(emp_id: int, emp: EmployeeCreate):
             emp.monthly_leave_days,
             emp.probation_daily_rate,
             emp.payment_method,
+            emp.notify_language,
             emp_id,
         ),
     )
