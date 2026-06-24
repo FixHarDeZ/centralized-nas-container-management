@@ -5,7 +5,6 @@ A fake adapter is injected at the transport seam so no network is hit.
 import sys
 import time
 from pathlib import Path
-from unittest.mock import MagicMock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -36,12 +35,6 @@ def _make_response(status_code=200, text="ok"):
         content=text.encode(),
         request=httpx.Request("GET", "http://test.com"),
     )
-
-
-def _make_error(status_code):
-    resp = _make_response(status_code)
-    resp.raise_for_status()
-    return resp
 
 
 def test_get_returns_response():
@@ -90,10 +83,24 @@ def test_get_exhausted_retries_raises(monkeypatch):
 
 
 def test_get_custom_retry_on(monkeypatch):
-    adapter = MockAdapter([_make_response(503), _make_response(200)])
+    adapter = MockAdapter([_make_response(503)])
     monkeypatch.setattr(time, "sleep", lambda _: None)
-    resp = get("http://test.com", retries=3, backoff=1.0, _adapter=adapter)
-    assert resp.status_code == 200
+    try:
+        get("http://test.com", retries=3, backoff=1.0, retry_on=[429], _adapter=adapter)
+        assert False, "should have raised"
+    except httpx.HTTPStatusError as e:
+        assert e.response.status_code == 503
+    assert adapter._call_count == 1
+
+
+def test_get_retries_zero_raises():
+    adapter = MockAdapter([])
+    try:
+        get("http://test.com", retries=0, _adapter=adapter)
+        assert False, "should have raised"
+    except ValueError as e:
+        assert "retries" in str(e).lower()
+    assert adapter._call_count == 0
 
 
 def test_post_returns_response():
