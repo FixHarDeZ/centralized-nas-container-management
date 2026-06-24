@@ -2130,6 +2130,8 @@ async def line_webhook(request: Request):
                 emp_name=emp["name"],
                 start_date=date.fromisoformat(emp["start_date"]),
                 monthly_salary=emp["monthly_salary"],
+                employment_status=emp.get("employment_status", "monthly"),
+                probation_daily_rate=emp.get("probation_daily_rate", 0.0),
             )
             continue
 

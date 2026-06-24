@@ -23,6 +23,7 @@ import i18n
 from calc import (
     compute_overall_balance,
     compute_probation_resign,
+    compute_probation_tally,
     compute_resign_summary,
 )
 
@@ -466,13 +467,25 @@ def notify_balance_query(
     emp_name: str,
     start_date: date,
     monthly_salary: float,
+    employment_status: str = "monthly",
+    probation_daily_rate: float = 0.0,
 ) -> None:
     """Call when a group member asks for the current balance via LINE chat."""
     if not TOKEN or not GROUP_ID:
         return
     try:
-        b = compute_overall_balance(emp_id, start_date, monthly_salary)
-        msg = f"📊 ยอดสะสม — {emp_name}\n\n{_balance_block(b)}\n\n🕒 {_now_str()}"
+        if employment_status == "probation":
+            t = compute_probation_tally(emp_id, start_date, probation_daily_rate)
+            msg = (
+                f"📊 ยอดสะสม — {emp_name}\n\n"
+                f"📅 วันที่ทำงาน: {t['total_days']} วัน\n"
+                f"💵 ยอดจ่ายสะสม: ฿{_fmt(t['amount'])}\n"
+                f"(฿{_fmt(probation_daily_rate)}/วัน)\n\n"
+                f"🕒 {_now_str()}"
+            )
+        else:
+            b = compute_overall_balance(emp_id, start_date, monthly_salary)
+            msg = f"📊 ยอดสะสม — {emp_name}\n\n{_balance_block(b)}\n\n🕒 {_now_str()}"
         send_line(msg)
     except Exception as e:
         print(f"[LINE] notify_balance_query error: {e}")
