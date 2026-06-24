@@ -23,6 +23,7 @@ import db
 import line_notify
 import telegram_notify
 import scraper
+from sqlite_backup import backup_db
 
 _TZ = ZoneInfo(config.TZ)
 _scheduler = BackgroundScheduler(timezone=config.TZ)
@@ -253,12 +254,28 @@ def reload_scrape_job():
         _update_next()
 
 
+def _backup_job():
+    backup_dir = "/data/backups"
+    retention = 30
+    path = backup_db(config.DB_PATH, backup_dir, prefix="torrent", retention_days=retention)
+    if path:
+        print(f"[scheduler] backup: {path}")
+    else:
+        print("[scheduler] backup: failed or nothing to backup")
+
+
 def start():
     reload_scrape_job()
     _scheduler.add_job(
         _cleanup_job,
         CronTrigger(hour=3, minute=0, timezone=config.TZ),
         id="cleanup",
+        replace_existing=True,
+    )
+    _scheduler.add_job(
+        _backup_job,
+        CronTrigger(hour=3, minute=0, timezone=config.TZ),
+        id="backup",
         replace_existing=True,
     )
     _scheduler.start()
