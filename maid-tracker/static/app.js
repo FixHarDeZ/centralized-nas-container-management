@@ -686,6 +686,14 @@ async function viewEmployeeForm(id) {
                 <option value="transfer" ${emp?.payment_method === "transfer" ? "selected" : ""}>${t("paymentMethodTransfer")}</option>
               </select>
             </div>
+            <!-- Notification language (appended translation for non-Thai maids) -->
+            <div class="col-6">
+              <label class="form-label fw-semibold">ภาษาแจ้งเตือน</label>
+              <select class="form-select" name="notify_language">
+                ${[["th","ไทย"],["my","พม่า"],["en","อังกฤษ"],["lo","ลาว"],["km","เขมร"]].map(([v,lbl]) =>
+                  `<option value="${v}" ${(emp?.notify_language || "th") === v ? "selected" : ""}>${lbl}</option>`).join("")}
+              </select>
+            </div>
             <!-- Probation -->
             <div class="col-12">
               <div class="form-check">
@@ -858,6 +866,7 @@ async function viewEmployeeForm(id) {
       holiday_mode:       mode,
       monthly_leave_days: mode === "monthly" ? +(fd.get("monthly_leave_days") || 0) : 0,
       payment_method:     fd.get("payment_method") || "cash",
+      notify_language:    fd.get("notify_language") || "th",
       probation_daily_rate: fd.get("probation_daily_rate") !== "" && fd.get("probation_daily_rate") != null
                               ? +fd.get("probation_daily_rate") : null,
     };
