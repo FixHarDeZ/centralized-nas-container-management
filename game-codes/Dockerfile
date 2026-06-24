@@ -6,7 +6,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY --chown=app:app config.py notify.py http_client.py game_code_notifier.py ./
+COPY --chown=app:app config.py parsers.py state.py notify.py http_client.py game_code_notifier.py ./
 
 RUN mkdir -p /data && chown app:app /data
 

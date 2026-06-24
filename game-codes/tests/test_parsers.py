@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from game_code_notifier import (
+from parsers import (
     fetch_api_seria,
     fetch_table_status,
     fetch_section_regex,
