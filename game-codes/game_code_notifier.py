@@ -11,21 +11,16 @@ ENV:
 import html
 import json
 import logging
-import os
 import re
 import sys
 import time
-from pathlib import Path
 
 from http_client import get as http_get
 from bs4 import BeautifulSoup
 
 from notify import Notifier, TgCreds
 
-TELEGRAM_TOKEN = os.environ.get("GAME_CODES_TELEGRAM_BOT_TOKEN", "").strip()
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
-STATE_FILE = Path(os.environ.get("STATE_FILE", "seen_codes.json"))
-POLL_INTERVAL = int(os.environ.get("POLL_INTERVAL", "0"))
+from config import TELEGRAM_TOKEN, TELEGRAM_CHAT_ID, STATE_FILE, POLL_INTERVAL
 
 HTTP_TIMEOUT = 20
 HEADERS = {
