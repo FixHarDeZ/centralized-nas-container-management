@@ -20,6 +20,11 @@ CASES = [
         "news-feed/app/http_client.py",
         "game-codes/http_client.py",
     ]),
+    ("shared/sqlite_backup.py", [
+        "maid-tracker/sqlite_backup.py",
+        "news-feed/app/sqlite_backup.py",
+        "torrentwatch/sqlite_backup.py",
+    ]),
 ]
 
 

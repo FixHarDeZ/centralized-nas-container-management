@@ -10,6 +10,7 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from app.config import get_config  # DB_PATH removed — db_path passed in
+from app.sqlite_backup import backup_db
 from app.fetcher import fetch_all
 from app.models import (
     delete_articles_older_than,
@@ -236,5 +237,23 @@ def setup_scheduler(db_path: str) -> BackgroundScheduler:
             replace_existing=True,
             max_instances=1,
         )
+
+    def _backup_job() -> None:
+        import os
+        backup_dir = os.environ.get("NEWS_FEED_BACKUP_DIR", "/data/backups")
+        retention = int(os.environ.get("NEWS_FEED_BACKUP_RETENTION_DAYS", "30"))
+        path = backup_db(db_path, backup_dir, prefix="news", retention_days=retention)
+        if path:
+            logger.info("backup_job: %s", path)
+        else:
+            logger.warning("backup_job: failed or nothing to backup")
+
+    scheduler.add_job(
+        _backup_job,
+        trigger=CronTrigger(hour=3, minute=0),
+        id="backup_job",
+        replace_existing=True,
+        max_instances=1,
+    )
 
     return scheduler

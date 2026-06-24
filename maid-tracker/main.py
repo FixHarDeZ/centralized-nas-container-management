@@ -18,9 +18,7 @@ import time
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 import calendar
-import gzip
 import glob
-import shutil
 import line_notify
 from keywords import (
     LEAVE_KEYWORDS, COMP_KEYWORDS, HALF_DAY_KEYWORDS, BALANCE_KEYWORDS,
@@ -40,6 +38,7 @@ from calc import (
 )
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from sqlite_backup import backup_db
 
 _scheduler = BackgroundScheduler(timezone=os.environ.get("TZ", "Asia/Bangkok"))
 _TZ = ZoneInfo(os.environ.get("TZ", "Asia/Bangkok"))
@@ -52,43 +51,9 @@ _BACKUP_RETENTION_DAYS = int(os.environ.get("MAID_BACKUP_RETENTION_DAYS", "30"))
 
 
 def _backup_db() -> Optional[str]:
-    """Daily SQLite backup via Online Backup API + gzip. Returns path written.
-
-    Uses sqlite3.Connection.backup() for a consistent snapshot even while writes
-    occur. Prunes files older than MAID_BACKUP_RETENTION_DAYS afterwards.
-    """
-    try:
-        os.makedirs(_BACKUP_DIR, exist_ok=True)
-        stamp = datetime.now(_TZ).strftime("%Y%m%d-%H%M%S")
-        plain_path = os.path.join(_BACKUP_DIR, f"maid-{stamp}.db")
-        gz_path = plain_path + ".gz"
-
-        src = sqlite3.connect(DB_PATH)
-        try:
-            dst = sqlite3.connect(plain_path)
-            try:
-                src.backup(dst)
-            finally:
-                dst.close()
-        finally:
-            src.close()
-
-        with open(plain_path, "rb") as fin, gzip.open(gz_path, "wb", compresslevel=6) as fout:
-            shutil.copyfileobj(fin, fout)
-        os.remove(plain_path)
-
-        cutoff = time.time() - _BACKUP_RETENTION_DAYS * 86400
-        for f in glob.glob(os.path.join(_BACKUP_DIR, "maid-*.db.gz")):
-            try:
-                if os.path.getmtime(f) < cutoff:
-                    os.remove(f)
-            except OSError:
-                pass
-
-        return gz_path
-    except Exception as e:
-        print(f"[backup] failed: {e}", flush=True)
-        return None
+    """Daily SQLite backup via shared sqlite_backup module."""
+    return backup_db(DB_PATH, _BACKUP_DIR, prefix="maid",
+                     retention_days=_BACKUP_RETENTION_DAYS, tz=_TZ.key)
 
 
 @asynccontextmanager
