@@ -1,7 +1,12 @@
 # TorrentWatch — Project Index (Memory Blueprint)
 
-> อัปเดตล่าสุด: 2026-05-20 (sticky notify toggle added)
+> อัปเดตล่าสุด: 2026-06-24 (notify transport → shared Notifier)
 > ใช้ไฟล์นี้เป็น cold-start memory ก่อนเริ่มงานทุกครั้ง
+
+> **2026-06-24 — Notifier:** `line_notify._push` / `telegram_notify._send` สลับ body เป็น
+> `await asyncio.to_thread(_N.send, text)` โดย `_N` = shared `Notifier` จาก `shared/notify.py`
+> (vendored = `notify.py`, `make sync-shared`). ไม่ merge 2 module — toggle แยกอิสระคงเดิม.
+> `send_test_message`/`get_updates` ยังเป็น httpx. ดู daily_log 2026-06-24.
 
 ---
 

@@ -4,6 +4,11 @@
 **Port:** 5064 (external) → Nginx :80 → news-feed :8000 (internal)  
 **Status:** Running ✅ (2026-05-25)
 
+> **2026-06-24 — Notifier:** transport LINE/Telegram ย้ายไป shared module `shared/notify.py`
+> (vendored = `app/notify.py`). `app/notifier.py` เหลือ formatter + `_notifier().send()`;
+> creds อ่านจาก env เดิม (`LINE_CHANNEL_ACCESS_TOKEN`/`LINE_USER_ID`/`NEWS_FEED_TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`).
+> แก้ shared module ต้อง `make sync-shared`. ดู daily_log 2026-06-24.
+
 ---
 
 ## Architecture

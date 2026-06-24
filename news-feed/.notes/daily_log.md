@@ -2,6 +2,24 @@
 
 ---
 
+## 2026-06-24 — Notifier deep module: รวม transport LINE/Telegram
+
+ยุบโค้ดส่ง LINE/Telegram ที่ซ้ำกัน 5 ชุดข้าม stack → 1 module เดียว `shared/notify.py`
+(stdlib `urllib` ล้วน, ไม่มี dep). vendored เข้าทุก stack ผ่าน `make sync-shared`; copy
+commit ลง git + กัน drift ด้วย `tests/test_shared_sync.py`. interface:
+`Notifier(line=LineCreds, telegram=TgCreds, post=…).send(text) -> list[str]`
+(ไม่ raise, return ช่องที่สำเร็จ). config อ่าน env ที่ stack เอง แล้วฉีดเข้า constructor.
+
+**news-feed:** `app/notifier.py` ตัด `_send_line`/`_send_telegram` (httpx) → `_notifier().send()`.
+formatter (`_format_digest`, summarizer alert) คงเดิม. Telegram parse_mode=HTML คงไว้.
+`tests/test_notifier.py` เขียนใหม่ — patch ผ่าน seam `app.notify._urllib_post` แทน httpx.
+vendored copy = `news-feed/app/notify.py` (Dockerfile `COPY app/` พามาอยู่แล้ว). 133 pass.
+
+⚠️ verify ครอบแค่ถึง transport seam (test inject fake post; TLS check urllib ใน
+`python:3.12-slim` บน NAS ผ่าน). path จริง (POST ที่ auth แล้ว) พิสูจน์ตอน digest รอบแรกหลัง deploy.
+
+---
+
 ## 2026-06-09 — Hotfix: Digest window stuck at 4h min clamp
 
 ### บั๊กที่เจอ

@@ -2,6 +2,24 @@
 
 ---
 
+## 2026-06-24 — ใช้ shared Notifier ใน _push/_send (transport-only)
+
+ส่วนหนึ่งของงานรวม transport ข้าม stack → `shared/notify.py` (stdlib `urllib`, vendored ด้วย
+`make sync-shared`, กัน drift ด้วย `tests/test_shared_sync.py`).
+
+**torrentwatch:** สลับเฉพาะ body ของ `line_notify._push` และ `telegram_notify._send` →
+`await asyncio.to_thread(_N.send, text)` (Notifier เป็น sync urllib รันนอก event loop).
+สร้าง `_N` ระดับ module: LINE channel ใน line_notify, Telegram channel (plain text) ใน
+telegram_notify. **ไม่ merge 2 module** — toggle LINE/Telegram แยกอิสระใน scheduler ยังทำงานเดิม.
+`send_test_message`/`get_updates` คง httpx ไว้เพราะต้องคืน diagnostics ให้ dashboard.
+vendored copy = `torrentwatch/notify.py` (`COPY . .` พามาอยู่แล้ว). import-smoke ผ่าน (stack ไม่มี test).
+
+หมายเหตุ: formatter ที่ซ้ำกันระหว่าง line_notify/telegram_notify ยังเหลืออยู่ — เป็น candidate แยก ยังไม่แตะ.
+
+⚠️ verify ถึงแค่ transport seam; ของจริงพิสูจน์ตอน scrape เจอ match ครั้งแรกหลัง deploy.
+
+---
+
 ### Session Log Entry
 **Timestamp:** 2026-06-17
 **Title:** feat — free-leech % + multiplier columns + sitewide-free notify

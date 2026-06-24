@@ -1,10 +1,16 @@
+import asyncio
 import httpx
 from datetime import datetime
 from zoneinfo import ZoneInfo
 import config
+from notify import LineCreds, Notifier
 
 _TZ  = ZoneInfo(config.TZ)
 _URL = "https://api.line.me/v2/bot/message/push"
+
+# Shared transport; send_test_message/get_updates keep their own httpx calls so
+# they can return detailed diagnostics to the dashboard.
+_N = Notifier(line=LineCreds(config.LINE_ACCESS_TOKEN, config.LINE_USER_ID), timeout=10)
 
 
 def _now() -> str:
@@ -19,19 +25,8 @@ def _headers() -> dict:
 
 
 async def _push(text: str):
-    if not config.LINE_ACCESS_TOKEN or not config.LINE_USER_ID:
-        return
-    async with httpx.AsyncClient(timeout=10) as c:
-        try:
-            resp = await c.post(
-                _URL,
-                headers=_headers(),
-                json={"to": config.LINE_USER_ID, "messages": [{"type": "text", "text": text}]},
-            )
-            if resp.status_code != 200:
-                print(f"[LINE] push failed {resp.status_code}: {resp.text[:200]}")
-        except Exception as e:
-            print(f"[LINE] push error: {e}")
+    # Notifier is sync (stdlib urllib); run off the event loop.
+    await asyncio.to_thread(_N.send, text)
 
 
 async def notify_keyword_matches(source_url: str, matches: list[dict]):

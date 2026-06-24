@@ -4,6 +4,10 @@
 **Port:** — (no web layer, no exposed port)
 **Status:** Deployed on NAS, running. Per-source 429 cooldown fix applied (pending redeploy). ToD disabled (no source).
 
+> **2026-06-24 — Notifier:** `send_telegram()` เหลือ wrapper ครอบ shared `Notifier` จาก
+> `shared/notify.py` (vendored = `notify.py`, `make sync-shared`). Telegram-only, HTML,
+> disable_preview. wrapper เก็บไว้เพราะ test + health-alert เรียกใช้. ดู daily_log 2026-06-24.
+
 ---
 
 ## Architecture

@@ -1,5 +1,18 @@
 # game-codes — Daily Log
 
+## 2026-06-24 — ใช้ shared Notifier แทน send_telegram เดิม
+
+ส่วนหนึ่งของงานรวม transport ข้าม stack → `shared/notify.py` (stdlib `urllib`, vendored ด้วย
+`make sync-shared`, กัน drift ด้วย `tests/test_shared_sync.py`).
+
+**game-codes:** `send_telegram()` เหลือ wrapper บางๆ ครอบ `Notifier(telegram=TgCreds(...,
+parse_mode="HTML", disable_preview=True), timeout=HTTP_TIMEOUT).send(text)` — ตัด requests POST
++ try/except เดิมออก (Notifier กลืน error ภายใน, ตรงกับ ponytail comment เดิมที่กันไม่ให้
+crash restart loop). เก็บ wrapper `send_telegram` ไว้เพราะ `tests/test_runtime.py` monkeypatch
+มัน + health-alert เรียกมัน. Dockerfile เพิ่ม `COPY notify.py`. ยังใช้ requests ใน `fetch()`. 8 pass.
+
+⚠️ verify ถึงแค่ transport seam; ของจริงพิสูจน์ตอน poll เจอ code ใหม่ครั้งแรกหลัง deploy.
+
 ## 2026-06-22
 
 - Created new `game-codes/` stack: single Python poller container, no web

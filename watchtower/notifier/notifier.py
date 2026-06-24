@@ -9,9 +9,10 @@ import re
 import time
 import json
 import socket
-import requests
 from datetime import datetime
 from zoneinfo import ZoneInfo
+
+from notify import LineCreds, Notifier, TgCreds
 
 # ─── Config ────────────────────────────────────────────────────────────────
 LINE_API_URL         = "https://api.line.me/v2/bot/message/push"
@@ -58,38 +59,18 @@ def extract_msg(log_line: str) -> str:
     return m.group(1) if m else log_line
 
 
-# ─── LINE ──────────────────────────────────────────────────────────────────
-def send_line(text: str) -> None:
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {CHANNEL_ACCESS_TOKEN}",
-    }
-    payload = {"to": LINE_USER_ID, "messages": [{"type": "text", "text": text}]}
-    try:
-        resp = requests.post(LINE_API_URL, headers=headers, json=payload, timeout=10)
-        resp.raise_for_status()
-        print(f"[{now()}] LINE sent: {text[:100].replace(chr(10), ' ')}")
-    except Exception as e:
-        print(f"[{now()}] ERROR sending LINE: {e}")
-
-
-# ─── Telegram ───────────────────────────────────────────────────────────────
-def send_telegram(text: str) -> None:
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        return
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    try:
-        resp = requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": text}, timeout=10)
-        if resp.status_code != 200:
-            print(f"[{now()}] ERROR sending Telegram: {resp.status_code} {resp.text[:100]}")
-    except Exception as e:
-        print(f"[{now()}] ERROR sending Telegram: {e}")
+# ─── Notifier ────────────────────────────────────────────────────────────────
+_notifier = Notifier(
+    line=LineCreds(CHANNEL_ACCESS_TOKEN, LINE_USER_ID),
+    telegram=TgCreds(TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID),  # plain text, no parse_mode
+    timeout=10,
+)
 
 
 def notify(text: str) -> None:
     """Send to both LINE and Telegram (Telegram is optional — skipped if not configured)."""
-    send_line(text)
-    send_telegram(text)
+    sent = _notifier.send(text)
+    print(f"[{now()}] notify -> {sent or 'none'}: {text[:80].replace(chr(10), ' ')}")
 
 
 # ─── Docker socket HTTP (no CLI needed) ────────────────────────────────────
