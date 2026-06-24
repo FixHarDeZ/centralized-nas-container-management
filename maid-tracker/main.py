@@ -743,6 +743,7 @@ def resign_employee(emp_id: int, req: ResignRequest):
         monthly_salary=emp["monthly_salary"],
         employment_status=emp.get("employment_status"),
         probation_daily_rate=emp.get("probation_daily_rate") or 0.0,
+        language=emp.get("notify_language", "th"),
     )
 
     return {"message": "resigned"}
@@ -968,6 +969,7 @@ def upsert_attendance(emp_id: int, att: AttendanceUpdate):
             half_day=att.half_day,
             start_date=start_date,
             monthly_salary=monthly_salary,
+            language=emp.get("notify_language", "th"),
         )
     elif att.status in ("work", "holiday") and prev_status in ("leave", "compensatory"):
         # Cancelled a previously recorded leave or compensatory day
@@ -1340,6 +1342,7 @@ def toggle_payment(emp_id: int, period: int, year: int, month: int, paid_by: str
             deduction_amount=toggle_deduction_amount,
             paid_by=payer,
             slip_fname=slip_fname,
+            language=emp.get("notify_language", "th"),
         )
 
     return {"paid": bool(paid_at), "paid_at": paid_at}
@@ -1476,6 +1479,7 @@ def toggle_daily_payment(
             paid_at=paid_at,
             paid_by=payer,
             slip_fname=slip_fname,
+            language=emp.get("notify_language", "th"),
         )
 
     return {"paid": bool(paid_at), "paid_at": paid_at}
@@ -2181,6 +2185,7 @@ async def line_webhook(request: Request):
                     monthly_salary=emp["monthly_salary"],
                     deduction_days=ded_days,
                     deduction_amount=ded_amount,
+                    language=emp.get("notify_language", "th"),
                 )
 
             conn.close()
@@ -2278,6 +2283,7 @@ async def line_webhook(request: Request):
             half_day=is_half_day,
             start_date=start_date,
             monthly_salary=emp["monthly_salary"],
+            language=emp.get("notify_language", "th"),
         )
 
     return {"status": "ok"}

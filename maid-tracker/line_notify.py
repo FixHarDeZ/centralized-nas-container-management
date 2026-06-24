@@ -18,6 +18,7 @@ from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 import httpx
+import i18n
 from calc import (
     compute_overall_balance,
     compute_probation_resign,
@@ -106,6 +107,30 @@ def _balance_block(b: dict) -> str:
     )
 
 
+# ─── Translation append (non-Thai maids) ─────────────────────────────────────
+
+_TR_SEP = "\n\n─────────\n"
+
+
+def _balance_params(b: dict) -> dict:
+    """Pre-formatted balance fields for i18n.translate_block."""
+    bal = b["balance"]
+    return {
+        "comp": _fmt_days(b["total_comp"]) if b["total_comp"] else "0",
+        "leave": f"-{_fmt_days(b['total_leave'])}" if b["total_leave"] else "0",
+        "kind_pos": bal >= 0,
+        "bal_days": _fmt_days(abs(bal)),
+        "bal_amt": _fmt(abs(b["balance_amount"])),
+        "daily_rate": _fmt(b["daily_rate"]),
+    }
+
+
+def _append_tr(msg: str, msg_type: str, language: str, **params) -> str:
+    """Append the translated block below the Thai message for non-Thai maids."""
+    block = i18n.translate_block(msg_type, language, **params)
+    return msg + _TR_SEP + block if block else msg
+
+
 # ─── LINE sender ─────────────────────────────────────────────────────────────
 
 
@@ -141,6 +166,7 @@ def notify_attendance(
     half_day: bool,
     start_date: date,
     monthly_salary: float,
+    language: str = "th",
 ) -> None:
     """Call after saving a leave or compensatory attendance record."""
     if not TOKEN or not GROUP_ID:
@@ -163,6 +189,11 @@ def notify_attendance(
             f"\n"
             f"🕒 {_now_str()}"
         )
+        msg = _append_tr(
+            msg, "attendance", language,
+            name=emp_name, date=work_date, status=status, half=half_day,
+            **_balance_params(b),
+        )
         send_line(msg)
     except Exception as e:
         print(f"[LINE] notify_attendance error: {e}")
@@ -182,6 +213,7 @@ def notify_payment(
     deduction_amount: float = 0.0,
     paid_by: str | None = None,
     slip_fname: str | None = None,
+    language: str = "th",
 ) -> None:
     """Call after marking a salary payment period as paid."""
     if not TOKEN or not GROUP_ID:
@@ -220,6 +252,11 @@ def notify_payment(
             f"\n"
             f"🕒 {paid_at}"
         )
+        msg = _append_tr(
+            msg, "payment", language,
+            name=emp_name, month=month, year=year, period=period,
+            amount=_fmt(amount), paid_by=paid_by, **_balance_params(b),
+        )
         send_line(msg, extra)
     except Exception as e:
         print(f"[LINE] notify_payment error: {e}")
@@ -232,6 +269,7 @@ def notify_daily_payment(
     paid_at: str,
     paid_by: str | None = None,
     slip_fname: str | None = None,
+    language: str = "th",
 ) -> None:
     """Call after marking a probation daily payment as paid."""
     if not TOKEN or not GROUP_ID:
@@ -258,6 +296,10 @@ def notify_daily_payment(
             f"💵 ฿{_fmt(amount)}{payer_line}\n"
             f"\n"
             f"🕒 {paid_at}"
+        )
+        msg = _append_tr(
+            msg, "daily_payment", language,
+            name=emp_name, date=work_date, amount=_fmt(amount), paid_by=paid_by,
         )
         send_line(msg, extra)
     except Exception as e:
@@ -329,6 +371,7 @@ def notify_resign(
     monthly_salary: float,
     employment_status: str | None = None,
     probation_daily_rate: float = 0.0,
+    language: str = "th",
 ) -> None:
     """Call after recording a resignation."""
     if not TOKEN or not GROUP_ID:
@@ -356,6 +399,10 @@ def notify_resign(
                 f"\n"
                 f"🕒 {_now_str()}"
             )
+            msg = _append_tr(
+                msg, "resign", language,
+                name=emp_name, end_date=end_date_str, final=_fmt(s["final_amount"]),
+            )
             send_line(msg)
             return
 
@@ -378,6 +425,10 @@ def notify_resign(
             f"  💵 ยอดที่ต้องจ่าย: ฿{_fmt(s['final_amount'])}\n"
             f"\n"
             f"🕒 {_now_str()}"
+        )
+        msg = _append_tr(
+            msg, "resign", language,
+            name=emp_name, end_date=end_date_str, final=_fmt(s["final_amount"]),
         )
         send_line(msg)
     except Exception as e:
