@@ -2,6 +2,21 @@
 
 ---
 
+## 2026-06-24 — fix: daily-pay amount edit + JS cache-bust
+
+**Bug:** User could not edit the amount of an already-paid probation daily payment. Two root causes:
+1. Stale cached `app.js` — `index.html` loaded `/static/app.js` with no cache-bust query param.
+2. No endpoint to edit amount on an already-paid day (toggle only flips paid state).
+
+**Fix:**
+- `main.py`: added `POST /api/employees/{emp_id}/daily-payments/{work_date}/amount?amount=` — updates amount in-place on an already-paid day; 400 if not paid or amount<=0.
+- `static/app.js`: added "แก้จำนวนเงิน" button on paid daily cards + `editDailyAmount()` fn (prompt → POST → refresh).
+- `static/index.html`: added `?v=20260624` cache-bust on `app.js` script tag.
+
+**Files:** `main.py`, `static/app.js`, `static/index.html`
+
+**Test:** 33/33 passed (py_compile OK, node --check OK). `python-multipart` re-installed in venv (was missing).
+
 ## 2026-06-24 — Candidate 5: migrate backup to shared sqlite_backup module
 
 Inline `_backup_db()` (Online Backup API + gzip + retention) ย้ายไป `shared/sqlite_backup.py`

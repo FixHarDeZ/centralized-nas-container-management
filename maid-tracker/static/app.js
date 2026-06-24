@@ -1938,6 +1938,10 @@ async function viewPayments(id) {
                   onclick="toggleDailyPayment(${id}, '${d.work_date}', this, ${isPaid}, ${d.amount})">
             <i class="bi ${isPaid ? "bi-x-circle" : "bi-check-circle"} me-1"></i>${isPaid ? t("btnUnmarkPaid") : t("btnMarkPaid")}
           </button>
+          ${isPaid ? `<button class="btn btn-sm btn-outline-primary"
+                  onclick="editDailyAmount(${id}, '${d.work_date}', ${d.amount})">
+            <i class="bi bi-pencil me-1"></i>แก้จำนวนเงิน
+          </button>` : ""}
           ${slipBtn}
         </div>
       </div>`;
@@ -2106,6 +2110,20 @@ async function toggleDailyPayment(empId, workDate, btn, isPaid, computed) {
   } catch (e) {
     alert(t("errSave") + e.message);
     btn.disabled = false;
+  }
+}
+
+// Edit the amount of an already-paid daily payment (stays paid).
+async function editDailyAmount(empId, workDate, current) {
+  const entered = window.prompt("แก้จำนวนเงินที่จ่าย (บาท)", String(current));
+  if (entered === null) return;
+  const amt = parseFloat(entered);
+  if (isNaN(amt) || amt <= 0) { alert("จำนวนเงินไม่ถูกต้อง"); return; }
+  try {
+    await api.post(`/api/employees/${empId}/daily-payments/${workDate}/amount?amount=${amt}`, {});
+    await viewPayments(empId);
+  } catch (e) {
+    alert(t("errSave") + e.message);
   }
 }
 
