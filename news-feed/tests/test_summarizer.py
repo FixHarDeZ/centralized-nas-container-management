@@ -15,7 +15,7 @@ def test_summarize_anthropic(mock_cls, base_config):
     mock_client.messages.create.assert_called_once()
 
 
-@patch("app.summarizer.httpx.post")
+@patch("app.summarizer.http_post")
 def test_summarize_openrouter(mock_post, base_config):
     mock_resp = MagicMock()
     mock_resp.raise_for_status = MagicMock()
@@ -42,7 +42,7 @@ def test_summarize_retries_on_failure(mock_cls, mock_sleep, base_config):
     assert mock_client.messages.create.call_count == 2
 
 
-@patch("app.summarizer.httpx.post")
+@patch("app.summarizer.http_post")
 @patch("app.summarizer.time.sleep")
 @patch("app.summarizer.anthropic.Anthropic")
 def test_summarize_fallback_on_primary_failure(mock_cls, mock_sleep, mock_post, base_config):
