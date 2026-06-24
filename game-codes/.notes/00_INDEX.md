@@ -2,11 +2,15 @@
 
 **สร้าง:** 2026-06-22
 **Port:** — (no web layer, no exposed port)
-**Status:** Deployed on NAS, running. Per-source 429 cooldown fix applied (pending redeploy). ToD disabled (no source).
+**Status:** Deployed on NAS, running. Shared http_client migration deployed (httpx, no requests). Per-source 429 cooldown active. ToD disabled (no source).
 
 > **2026-06-24 — Notifier:** `send_telegram()` เหลือ wrapper ครอบ shared `Notifier` จาก
 > `shared/notify.py` (vendored = `notify.py`, `make sync-shared`). Telegram-only, HTML,
 > disable_preview. wrapper เก็บไว้เพราะ test + health-alert เรียกใช้. ดู daily_log 2026-06-24.
+>
+> **2026-06-24 — http_client migration:** `fetch()` เปลี่ยนจาก `requests.get()` inline retry
+> เป็น `http_client.get()` (shared module, vendored = `http_client.py`). `requests` ถูกลบออกจาก
+> dependencies, ใช้ `httpx==0.28.0` แทน. ดู daily_log 2026-06-24.
 
 ---
 
@@ -106,6 +110,7 @@ See `secrets.manifest.yaml` for the exact vault → env mapping consumed by
 
 | File | Responsibility |
 |------|-----------------|
+| `http_client.py` | Shared HTTP client with retry (vendored from `shared/http_client.py` via `make sync-shared`). |
 | `game_code_notifier.py` | Entire app: `SOURCES` config, 3 parsers, fetch, state load/save, diff, Telegram send, health-alert edge logic, main loop. |
 | `secrets.manifest.yaml` | Vault → env mapping (`make secrets` reads this to generate `.env`). |
 | `Dockerfile` | `python:3.12-slim`, non-root `app` user, `/data` volume mount point. |
