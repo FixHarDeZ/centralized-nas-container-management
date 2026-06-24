@@ -15,16 +15,19 @@ import hashlib
 import hmac as _hmac
 import json
 import os
-from datetime import date, datetime
+import sqlite3
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import httpx
 import i18n
 from calc import (
+    DB_PATH,
     compute_overall_balance,
     compute_probation_resign,
     compute_probation_tally,
     compute_resign_summary,
+    probation_worked_fraction,
 )
 
 LINE_API_URL = "https://api.line.me/v2/bot/message/push"
@@ -477,17 +480,48 @@ def notify_balance_query(
     try:
         if employment_status == "probation":
             t = compute_probation_tally(emp_id, start_date, probation_daily_rate)
+            # Per-day unpaid: overpayment on one day does NOT reduce other days
+            conn = sqlite3.connect(DB_PATH)
+            conn.row_factory = sqlite3.Row
+            paid_rows = conn.execute(
+                "SELECT work_date, amount FROM daily_payments "
+                "WHERE employee_id=? AND paid_at IS NOT NULL",
+                (emp_id,),
+            ).fetchall()
+            paid_by_day = {r["work_date"]: r["amount"] for r in paid_rows}
+            att_rows = conn.execute(
+                "SELECT work_date, status, half_day FROM attendance WHERE employee_id=?",
+                (emp_id,),
+            ).fetchall()
+            conn.close()
+            att_map = {
+                r["work_date"]: {"status": r["status"], "half_day": bool(r["half_day"])}
+                for r in att_rows
+            }
+            today = date.today()
+            unpaid_amount = 0.0
+            d = start_date
+            while d <= today:
+                day_rate = probation_daily_rate * probation_worked_fraction(
+                    att_map.get(d.isoformat())
+                )
+                day_paid = paid_by_day.get(d.isoformat(), 0.0)
+                unpaid_amount += max(0, day_rate - day_paid)
+                d += timedelta(days=1)
+            total_paid = round(sum(paid_by_day.values()), 2)
+            total_unpaid = round(unpaid_amount, 2)
+            accumulated = round(total_paid + total_unpaid, 2)
             msg = (
                 f"📊 ยอดสะสม — {emp_name}\n\n"
                 f"📅 วันที่ทำงาน: {t['total_days']} วัน\n"
-                f"💵 ยอดจ่ายสะสม: ฿{_fmt(t['amount'])}\n"
+                f"💵 ยอดจ่ายสะสม: ฿{_fmt(accumulated)}\n"
                 f"(฿{_fmt(probation_daily_rate)}/วัน)\n\n"
                 f"🕒 {_now_str()}"
             )
             msg = _append_tr(
                 msg, "balance_query", language,
                 name=emp_name, days=t["total_days"],
-                amount=_fmt(t["amount"]), daily_rate=_fmt(probation_daily_rate),
+                amount=_fmt(accumulated), daily_rate=_fmt(probation_daily_rate),
             )
         else:
             b = compute_overall_balance(emp_id, start_date, monthly_salary)
