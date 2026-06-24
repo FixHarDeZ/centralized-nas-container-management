@@ -1,10 +1,10 @@
-import pytest
 from app.models import get_watchlist, set_watchlist, toggle_watchlist
 
 _NOW = "2026-06-05T00:00:00Z"
 
 
 # ── model layer ──────────────────────────────────────────────────────────────
+
 
 def test_get_watchlist_empty(db):
     assert get_watchlist(db) == []
@@ -40,6 +40,7 @@ def test_set_watchlist_empty(db):
 
 # ── API layer ────────────────────────────────────────────────────────────────
 
+
 def test_api_get_watchlist_empty(client):
     r = client.get("/api/watchlist")
     assert r.status_code == 200
@@ -47,7 +48,10 @@ def test_api_get_watchlist_empty(client):
 
 
 def test_api_post_watchlist(client):
-    r = client.post("/api/watchlist", json={"model_ids": ["openai/gpt-4o", "anthropic/claude-3"]})
+    r = client.post(
+        "/api/watchlist",
+        json={"model_ids": ["openai/gpt-4o", "anthropic/claude-3"]},
+    )
     assert r.status_code == 200
     assert set(r.json()["model_ids"]) == {"openai/gpt-4o", "anthropic/claude-3"}
 

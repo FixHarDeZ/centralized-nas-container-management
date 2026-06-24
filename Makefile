@@ -2,7 +2,7 @@ AGE_KEY ?= $(HOME)/.config/sops/age/keys.txt
 export SOPS_AGE_KEY_FILE = $(AGE_KEY)
 PY = .venv/bin/python
 
-.PHONY: secrets check edit-vault rotate-key clean-env test sync-shared help
+.PHONY: secrets check edit-vault rotate-key clean-env test sync-shared lint format help
 
 # Vendored copies of shared/notify.py — each stack builds its own image with
 # build context = its own dir, so the file must physically live inside each.
@@ -39,3 +39,10 @@ sync-shared:    ## Copy shared/{notify,http_client,sqlite_backup}.py into each s
 
 test:           ## Run repo-level pytest suite
 	@$(PY) -m pytest tests/ -v
+
+lint:           ## Run ruff linter (no auto-fix)
+	@$(PY) -m ruff check
+
+format:         ## Auto-format + safe-fix with ruff
+	@$(PY) -m ruff format
+	@$(PY) -m ruff check --fix

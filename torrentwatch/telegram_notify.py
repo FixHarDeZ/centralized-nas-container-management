@@ -1,15 +1,19 @@
 import asyncio
-import httpx
 from datetime import datetime
 from zoneinfo import ZoneInfo
+
 import config
+import httpx
 from notify import Notifier, TgCreds
 
 _TZ = ZoneInfo(config.TZ)
 
 # Shared transport (plain text). send_test_message/get_updates keep their own
 # httpx calls so they can return detailed diagnostics to the dashboard.
-_N = Notifier(telegram=TgCreds(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID), timeout=10)
+_N = Notifier(
+    telegram=TgCreds(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID),
+    timeout=10,
+)
 
 
 def _now() -> str:
@@ -30,6 +34,7 @@ async def notify_keyword_matches(source_url: str, matches: list[dict]):
     if not matches:
         return
     from urllib.parse import urlparse
+
     label = urlparse(source_url).path.split("/")[-1] or source_url
 
     lines = [f"🎯 keyword match ใหม่! — {label}\n"]
@@ -46,6 +51,7 @@ async def notify_sticky_new(source_url: str, entries: list[dict]):
     if not entries:
         return
     from urllib.parse import urlparse
+
     label = urlparse(source_url).path.split("/")[-1] or source_url
 
     lines = [f"📌 Sticky ใหม่! — {label}\n"]
@@ -59,13 +65,18 @@ async def notify_sticky_new(source_url: str, entries: list[dict]):
 
 async def notify_all_free(count: int):
     """Push when every torrent posted today is 100% free-leech (sitewide free event)."""
-    await _send(f"🎉 วันนี้ทุก torrent ฟรี 100%! ({count} รายการ)\nโหลดได้ไม่เสีย ratio 🟢\n\n🕒 {_now()}")
+    await _send(
+        f"🎉 วันนี้ทุก torrent ฟรี 100%! ({count} รายการ)\nโหลดได้ไม่เสีย ratio 🟢\n\n🕒 {_now()}",
+    )
 
 
 async def send_test_message() -> dict:
     """Send a test push and return {"ok": bool, "error": str}."""
     if not config.TELEGRAM_BOT_TOKEN or not config.TELEGRAM_CHAT_ID:
-        return {"ok": False, "error": "ยังไม่ได้ตั้งค่า TORRENTWATCH_TELEGRAM_BOT_TOKEN / TORRENTWATCH_TELEGRAM_CHAT_ID ใน .env"}
+        return {
+            "ok": False,
+            "error": "ยังไม่ได้ตั้งค่า TORRENTWATCH_TELEGRAM_BOT_TOKEN / TORRENTWATCH_TELEGRAM_CHAT_ID ใน .env",
+        }
     try:
         async with httpx.AsyncClient(timeout=10) as c:
             resp = await c.post(
@@ -77,7 +88,10 @@ async def send_test_message() -> dict:
             )
         if resp.status_code == 200:
             return {"ok": True}
-        return {"ok": False, "error": f"Telegram API {resp.status_code}: {resp.text[:120]}"}
+        return {
+            "ok": False,
+            "error": f"Telegram API {resp.status_code}: {resp.text[:120]}",
+        }
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
@@ -85,7 +99,10 @@ async def send_test_message() -> dict:
 async def get_updates() -> dict:
     """Call getUpdates to help user discover their chat_id."""
     if not config.TELEGRAM_BOT_TOKEN:
-        return {"ok": False, "error": "TORRENTWATCH_TELEGRAM_BOT_TOKEN ยังไม่ได้ตั้งค่าใน .env"}
+        return {
+            "ok": False,
+            "error": "TORRENTWATCH_TELEGRAM_BOT_TOKEN ยังไม่ได้ตั้งค่าใน .env",
+        }
     try:
         async with httpx.AsyncClient(timeout=10) as c:
             resp = await c.get(_url("getUpdates"))
@@ -93,19 +110,23 @@ async def get_updates() -> dict:
         chats: list[dict] = []
         seen: set[int] = set()
         for update in data.get("result", []):
-            msg = (update.get("message")
-                   or update.get("channel_post")
-                   or update.get("my_chat_member", {}).get("chat")
-                   or {})
+            msg = (
+                update.get("message")
+                or update.get("channel_post")
+                or update.get("my_chat_member", {}).get("chat")
+                or {}
+            )
             chat = msg.get("chat") or msg
             chat_id = chat.get("id")
             if chat_id and chat_id not in seen:
                 seen.add(chat_id)
-                chats.append({
-                    "chat_id": chat_id,
-                    "type": chat.get("type", ""),
-                    "name": chat.get("title") or chat.get("first_name", ""),
-                })
+                chats.append(
+                    {
+                        "chat_id": chat_id,
+                        "type": chat.get("type", ""),
+                        "name": chat.get("title") or chat.get("first_name", ""),
+                    },
+                )
         return {"ok": True, "chats": chats, "raw_count": len(data.get("result", []))}
     except Exception as e:
         return {"ok": False, "error": str(e)}

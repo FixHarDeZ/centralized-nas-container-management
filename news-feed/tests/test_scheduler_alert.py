@@ -1,9 +1,10 @@
 import json
-from datetime import datetime, timezone, timedelta
-from pathlib import Path
-from unittest.mock import patch, MagicMock
 
-from app.scheduler import _load_summarizer_state, _save_summarizer_state, _ALERT_THRESHOLD
+from app.scheduler import (
+    _ALERT_THRESHOLD,
+    _load_summarizer_state,
+    _save_summarizer_state,
+)
 
 
 def test_load_state_missing_file(tmp_path):
@@ -14,7 +15,9 @@ def test_load_state_missing_file(tmp_path):
 
 def test_load_state_reads_file(tmp_path):
     (tmp_path / "summarizer_state.json").write_text(
-        json.dumps({"consecutive_empty": 3, "last_alert_at": "2026-06-01T00:00:00+00:00"})
+        json.dumps(
+            {"consecutive_empty": 3, "last_alert_at": "2026-06-01T00:00:00+00:00"},
+        ),
     )
     state = _load_summarizer_state(tmp_path)
     assert state["consecutive_empty"] == 3

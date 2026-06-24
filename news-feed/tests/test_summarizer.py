@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock, patch
+
 import pytest
-from app.summarizer import summarize, _dispatch
+from app.summarizer import summarize
 
 
 @patch("app.summarizer.anthropic.Anthropic")
@@ -8,7 +9,7 @@ def test_summarize_anthropic(mock_cls, base_config):
     mock_client = MagicMock()
     mock_cls.return_value = mock_client
     mock_client.messages.create.return_value = MagicMock(
-        content=[MagicMock(text="สรุปทดสอบ")]
+        content=[MagicMock(text="สรุปทดสอบ")],
     )
     result = summarize("Title", "Body text", base_config)
     assert result == "สรุปทดสอบ"
@@ -22,7 +23,11 @@ def test_summarize_openrouter(mock_post, base_config):
     mock_resp.json.return_value = {"choices": [{"message": {"content": "สรุป OR"}}]}
     mock_post.return_value = mock_resp
 
-    config = {**base_config, "summarizer_provider": "openrouter", "summarizer_model": "deepseek/deepseek-chat"}
+    config = {
+        **base_config,
+        "summarizer_provider": "openrouter",
+        "summarizer_model": "deepseek/deepseek-chat",
+    }
     result = summarize("Title", "Body text", config)
     assert result == "สรุป OR"
     assert mock_post.call_args[0][0] == "https://openrouter.ai/api/v1/chat/completions"
@@ -45,7 +50,12 @@ def test_summarize_retries_on_failure(mock_cls, mock_sleep, base_config):
 @patch("app.summarizer.http_post")
 @patch("app.summarizer.time.sleep")
 @patch("app.summarizer.anthropic.Anthropic")
-def test_summarize_fallback_on_primary_failure(mock_cls, mock_sleep, mock_post, base_config):
+def test_summarize_fallback_on_primary_failure(
+    mock_cls,
+    mock_sleep,
+    mock_post,
+    base_config,
+):
     """Primary (anthropic) fails all retries → fallback (openrouter) succeeds."""
     mock_client = MagicMock()
     mock_cls.return_value = mock_client
@@ -53,12 +63,16 @@ def test_summarize_fallback_on_primary_failure(mock_cls, mock_sleep, mock_post, 
 
     mock_resp = MagicMock()
     mock_resp.raise_for_status = MagicMock()
-    mock_resp.json.return_value = {"choices": [{"message": {"content": "สรุปจาก fallback"}}]}
+    mock_resp.json.return_value = {
+        "choices": [{"message": {"content": "สรุปจาก fallback"}}],
+    }
     mock_post.return_value = mock_resp
 
     config = {
         **base_config,
-        "summarizer_fallback": [{"provider": "openrouter", "model": "deepseek/deepseek-chat"}],
+        "summarizer_fallback": [
+            {"provider": "openrouter", "model": "deepseek/deepseek-chat"},
+        ],
     }
     result = summarize("Title", "Body", config)
     assert result == "สรุปจาก fallback"
@@ -75,7 +89,9 @@ def test_summarize_raises_when_all_fail(mock_cls, mock_sleep, base_config):
 
     config = {
         **base_config,
-        "summarizer_fallback": [{"provider": "anthropic", "model": "claude-haiku-4-5-20251001"}],
+        "summarizer_fallback": [
+            {"provider": "anthropic", "model": "claude-haiku-4-5-20251001"},
+        ],
     }
     with pytest.raises(Exception, match="all broken"):
         summarize("Title", "Body", config)
@@ -83,8 +99,10 @@ def test_summarize_raises_when_all_fail(mock_cls, mock_sleep, base_config):
 
 def test_summarize_no_fallback_raises_on_failure(base_config):
     """No fallback configured → original behavior: raises on primary failure."""
-    with patch("app.summarizer.anthropic.Anthropic") as mock_cls, \
-         patch("app.summarizer.time.sleep"):
+    with (
+        patch("app.summarizer.anthropic.Anthropic") as mock_cls,
+        patch("app.summarizer.time.sleep"),
+    ):
         mock_client = MagicMock()
         mock_cls.return_value = mock_client
         mock_client.messages.create.side_effect = Exception("boom")

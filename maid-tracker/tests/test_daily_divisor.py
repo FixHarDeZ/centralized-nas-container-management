@@ -4,10 +4,12 @@ Locks the invariant: dr = salary / calendar_days, and a full month still
 pays exactly the monthly salary (catches any proration loop left counting
 Mon–Sat only).
 """
+
 import importlib
 from datetime import date
 
 import calc
+
 from tests.conftest import add_emp
 
 
@@ -24,21 +26,41 @@ def test_daily_rate_includes_holidays():
 
 
 def test_full_month_pays_full_salary(db):
-    importlib.reload(calc)   # rebind calc.DB_PATH to this test's DATA_DIR
+    importlib.reload(calc)  # rebind calc.DB_PATH to this test's DATA_DIR
     # Worked the whole of Feb 2025, no leave → base salary == monthly salary.
-    eid = add_emp(db, name="A", start_date="2025-02-01", monthly_salary=28000,
-                  holiday_mode="sunday")
-    r = calc.compute_resign_summary(eid, date(2025, 2, 1), date(2025, 2, 28),
-                                    28000, holiday_mode="sunday")
+    eid = add_emp(
+        db,
+        name="A",
+        start_date="2025-02-01",
+        monthly_salary=28000,
+        holiday_mode="sunday",
+    )
+    r = calc.compute_resign_summary(
+        eid,
+        date(2025, 2, 1),
+        date(2025, 2, 28),
+        28000,
+        holiday_mode="sunday",
+    )
     assert r["daily_rate"] == 1000.0
-    assert r["base_salary"] == 28000.0   # 1000 × 28 (Sundays included)
+    assert r["base_salary"] == 28000.0  # 1000 × 28 (Sundays included)
 
 
 def test_partial_month_prorates_over_calendar_days(db):
     importlib.reload(calc)
     # Start 2025-02-15 → 14 calendar days (15..28) paid, incl 2 Sundays.
-    eid = add_emp(db, name="B", start_date="2025-02-15", monthly_salary=28000,
-                  holiday_mode="sunday")
-    r = calc.compute_resign_summary(eid, date(2025, 2, 15), date(2025, 2, 28),
-                                    28000, holiday_mode="sunday")
-    assert r["base_salary"] == 14000.0   # 1000 × 14 calendar days
+    eid = add_emp(
+        db,
+        name="B",
+        start_date="2025-02-15",
+        monthly_salary=28000,
+        holiday_mode="sunday",
+    )
+    r = calc.compute_resign_summary(
+        eid,
+        date(2025, 2, 15),
+        date(2025, 2, 28),
+        28000,
+        holiday_mode="sunday",
+    )
+    assert r["base_salary"] == 14000.0  # 1000 × 14 calendar days

@@ -1,4 +1,3 @@
-import asyncio
 import base64
 import os
 import re
@@ -9,17 +8,16 @@ from pathlib import Path
 from typing import Literal
 from zoneinfo import ZoneInfo
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Request
-from fastapi.responses import FileResponse, Response, StreamingResponse
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
-
 import config
 import db
 import line_notify
-import telegram_notify
-import scraper
 import scheduler
+import scraper
+import telegram_notify
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 _STATIC_DIR = Path(__file__).parent / "static"
 
@@ -53,8 +51,10 @@ async def basic_auth_middleware(request: Request, call_next):
         try:
             decoded = base64.b64decode(auth[6:]).decode("utf-8")
             user, _, password = decoded.partition(":")
-            if (secrets.compare_digest(user, config.BASIC_AUTH_USER) and
-                    secrets.compare_digest(password, config.BASIC_AUTH_PASS)):
+            if secrets.compare_digest(
+                user,
+                config.BASIC_AUTH_USER,
+            ) and secrets.compare_digest(password, config.BASIC_AUTH_PASS):
                 return await call_next(request)
         except Exception:
             pass
@@ -66,21 +66,27 @@ async def basic_auth_middleware(request: Request, call_next):
 
 # ─── Sources ─────────────────────────────────────────────────────────────────
 
+
 class SourceIn(BaseModel):
     url: str
+
 
 class SourceToggle(BaseModel):
     enabled: bool
 
+
 class SourceRename(BaseModel):
     label: str
+
 
 class SourceReorder(BaseModel):
     direction: Literal["up", "down"]
 
+
 @app.get("/api/sources")
 def api_get_sources():
     return db.get_sources()
+
 
 @app.post("/api/sources", status_code=201)
 def api_add_source(body: SourceIn):
@@ -92,17 +98,21 @@ def api_add_source(body: SourceIn):
     except Exception:
         raise HTTPException(409, "Source URL already exists")
 
+
 @app.delete("/api/sources/{source_id}", status_code=204)
 def api_remove_source(source_id: int):
     db.remove_source(source_id)
+
 
 @app.patch("/api/sources/{source_id}", status_code=204)
 def api_toggle_source(source_id: int, body: SourceToggle):
     db.toggle_source(source_id, body.enabled)
 
+
 @app.patch("/api/sources/{source_id}/label", status_code=204)
 def api_rename_source(source_id: int, body: SourceRename):
     db.rename_source(source_id, body.label)
+
 
 @app.post("/api/sources/{source_id}/reorder", status_code=200)
 def api_reorder_source(source_id: int, body: SourceReorder):
@@ -111,6 +121,7 @@ def api_reorder_source(source_id: int, body: SourceReorder):
 
 
 # ─── Categories ──────────────────────────────────────────────────────────────
+
 
 @app.get("/api/categories")
 def api_get_categories():
@@ -135,7 +146,7 @@ def _with_keyword_flag(torrents: list[dict], keywords: list[str]) -> list[dict]:
 
 
 @app.get("/api/torrents")
-def api_get_torrents(source_id: int, sort: str = "seeds", filter: str = "all"):  # noqa: A002
+def api_get_torrents(source_id: int, sort: str = "seeds", filter: str = "all"):
     today = _today()
     rows = db.get_today_torrents(source_id, today, sort)
     keywords = db.get_keywords_for_source(source_id)
@@ -170,6 +181,7 @@ def api_search(source_id: int, q: str, limit: int = 50):
 
 # ─── Download ─────────────────────────────────────────────────────────────────
 
+
 def _content_disposition(title: str) -> str:
     """Build Content-Disposition header using ASCII-safe filename only.
 
@@ -178,11 +190,9 @@ def _content_disposition(title: str) -> str:
     causing the response to stall. Thai characters are replaced with underscores;
     the browser/torrent client recognises the file by its .torrent extension.
     """
-    ascii_only = re.sub(r'[^\x20-\x7E]+', '_', title.strip())[:80].strip('_')
+    ascii_only = re.sub(r"[^\x20-\x7E]+", "_", title.strip())[:80].strip("_")
     safe = (ascii_only or "torrent") + ".torrent"
     return f'attachment; filename="{safe}"'
-
-
 
 
 @app.get("/api/download/local/{torrent_id}")
@@ -218,7 +228,10 @@ async def api_download_nas(torrent_id: int):
 
     nas_dir = Path(config.NAS_DOWNLOADS_DIR)
     if not nas_dir.exists():
-        raise HTTPException(503, "NAS volume (/downloads) not mounted — uncomment the volume line in docker-compose.yml")
+        raise HTTPException(
+            503,
+            "NAS volume (/downloads) not mounted — uncomment the volume line in docker-compose.yml",
+        )
     nas_dir.mkdir(parents=True, exist_ok=True)
 
     data = await scraper.fetch_torrent_bytes(t["torrent_url"], t.get("detail_url", ""))
@@ -234,6 +247,7 @@ async def api_download_nas(torrent_id: int):
 
 # ─── Proxy detail page (bypass bearbit anti-hotlink check) ────────────────────
 
+
 @app.get("/api/cover/{torrent_id}")
 async def api_cover(torrent_id: int):
     """Proxy cover image through authenticated scraper session (fixes CDN session-expire breaks)."""
@@ -245,10 +259,17 @@ async def api_cover(torrent_id: int):
         raise HTTPException(502, "Failed to fetch cover image")
     url_lower = t["cover_url"].lower()
     ct = "image/jpeg"
-    if ".png" in url_lower: ct = "image/png"
-    elif ".gif" in url_lower: ct = "image/gif"
-    elif ".webp" in url_lower: ct = "image/webp"
-    return Response(content=data, media_type=ct, headers={"Cache-Control": "max-age=3600"})
+    if ".png" in url_lower:
+        ct = "image/png"
+    elif ".gif" in url_lower:
+        ct = "image/gif"
+    elif ".webp" in url_lower:
+        ct = "image/webp"
+    return Response(
+        content=data,
+        media_type=ct,
+        headers={"Cache-Control": "max-age=3600"},
+    )
 
 
 @app.get("/api/stats")
@@ -258,6 +279,7 @@ def api_stats(source_id: int | None = None):
 
 class TorrentStatusBody(BaseModel):
     status: int  # 0=normal, 1=watched, 2=skip
+
 
 @app.post("/api/torrents/{torrent_id}/status", status_code=204)
 def api_set_torrent_status(torrent_id: int, body: TorrentStatusBody):
@@ -290,13 +312,16 @@ async def api_proxy_detail(torrent_id: int):
 
 # ─── Keywords ─────────────────────────────────────────────────────────────────
 
+
 class KeywordIn(BaseModel):
     source_id: int
     keyword: str
 
+
 @app.get("/api/keywords")
 def api_get_keywords(source_id: int):
     return db.get_keywords(source_id)
+
 
 @app.post("/api/keywords", status_code=201)
 def api_add_keyword(body: KeywordIn):
@@ -308,6 +333,7 @@ def api_add_keyword(body: KeywordIn):
     except Exception:
         raise HTTPException(409, "Keyword already exists for this source")
 
+
 @app.delete("/api/keywords/{keyword_id}", status_code=204)
 def api_remove_keyword(keyword_id: int):
     db.remove_keyword(keyword_id)
@@ -315,9 +341,11 @@ def api_remove_keyword(keyword_id: int):
 
 # ─── Settings ─────────────────────────────────────────────────────────────────
 
+
 @app.get("/api/settings")
 def api_get_settings():
     return db.get_settings()
+
 
 @app.put("/api/settings", status_code=204)
 def api_update_settings(body: dict):
@@ -327,6 +355,7 @@ def api_update_settings(body: dict):
 
 # ─── Scrape / Status ─────────────────────────────────────────────────────────
 
+
 @app.post("/api/scrape")
 async def api_scrape(background_tasks: BackgroundTasks):
     if scheduler._scrape_status == "running":
@@ -334,12 +363,14 @@ async def api_scrape(background_tasks: BackgroundTasks):
     background_tasks.add_task(scheduler.trigger_now)
     return {"status": "started"}
 
+
 @app.get("/api/status")
 def api_status():
     return scheduler.status()
 
 
 # ─── Debug ───────────────────────────────────────────────────────────────────
+
 
 @app.get("/api/debug/html")
 async def api_debug_html(source_id: int):
@@ -360,8 +391,8 @@ async def api_debug_download_test(torrent_id: int):
     if not t:
         raise HTTPException(404, "Torrent not found")
     result = await scraper.probe_download_url(t["torrent_url"])
-    result["stored_url"]  = t["torrent_url"]
-    result["detail_url"]  = t.get("detail_url", "")
+    result["stored_url"] = t["torrent_url"]
+    result["detail_url"] = t.get("detail_url", "")
     result["title"] = t["title"][:60]
     return result
 
@@ -385,17 +416,18 @@ async def api_debug_relogin():
 
 # ─── LINE Test ─────────────────────────────────────────────────────────────────
 
+
 @app.post("/api/line/test")
 async def api_line_test():
     """Send a test LINE message to verify the configuration."""
     result = await line_notify.send_test_message()
     if result["ok"]:
         return {"status": "ok", "message": "Test message sent"}
-    else:
-        raise HTTPException(400, result.get("error", "LINE send failed"))
+    raise HTTPException(400, result.get("error", "LINE send failed"))
 
 
 # ─── Telegram ─────────────────────────────────────────────────────────────────
+
 
 @app.post("/api/telegram/test")
 async def api_telegram_test():
@@ -403,8 +435,7 @@ async def api_telegram_test():
     result = await telegram_notify.send_test_message()
     if result["ok"]:
         return {"status": "ok", "message": "Test message sent"}
-    else:
-        raise HTTPException(400, result.get("error", "Telegram send failed"))
+    raise HTTPException(400, result.get("error", "Telegram send failed"))
 
 
 @app.get("/api/telegram/get-chat-id")
@@ -426,6 +457,7 @@ def api_clear_all(source_id: int):
 # ─── SPA static files ─────────────────────────────────────────────────────────
 
 app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
+
 
 @app.get("/{full_path:path}")
 def spa_fallback(full_path: str):

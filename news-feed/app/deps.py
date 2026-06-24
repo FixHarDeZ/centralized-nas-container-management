@@ -1,5 +1,5 @@
 import sqlite3
-from typing import Generator
+from collections.abc import Generator
 
 from fastapi import Request
 

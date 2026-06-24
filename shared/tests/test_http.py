@@ -2,15 +2,15 @@
 
 A fake adapter is injected at the transport seam so no network is hit.
 """
+
 import sys
 import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from http_client import get, post  # noqa: E402
-
 import httpx
+from http_client import get, post
 
 
 class MockAdapter:
@@ -72,7 +72,9 @@ def test_get_retries_on_500(monkeypatch):
 
 
 def test_get_exhausted_retries_raises(monkeypatch):
-    adapter = MockAdapter([_make_response(429), _make_response(429), _make_response(429)])
+    adapter = MockAdapter(
+        [_make_response(429), _make_response(429), _make_response(429)],
+    )
     monkeypatch.setattr(time, "sleep", lambda _: None)
     try:
         get("http://test.com", retries=3, backoff=1.0, _adapter=adapter)
@@ -120,4 +122,5 @@ def test_post_retries_on_429(monkeypatch):
 
 if __name__ == "__main__":
     import pytest
+
     raise SystemExit(pytest.main([__file__, "-v"]))

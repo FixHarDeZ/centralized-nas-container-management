@@ -8,11 +8,13 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="")
 
     telegram_token: str = Field(
-        ..., alias="GAME_CODES_TELEGRAM_BOT_TOKEN",
+        ...,
+        alias="GAME_CODES_TELEGRAM_BOT_TOKEN",
         description="Telegram bot token for game-codes notifications",
     )
     telegram_chat_id: str = Field(
-        ..., alias="TELEGRAM_CHAT_ID",
+        ...,
+        alias="TELEGRAM_CHAT_ID",
         description="Telegram chat ID for game-codes notifications",
     )
 
@@ -22,11 +24,14 @@ class Settings(BaseSettings):
         return v.strip() if isinstance(v, str) else v
 
     state_file: Path = Field(
-        default=Path("seen_codes.json"), alias="STATE_FILE",
+        default=Path("seen_codes.json"),
+        alias="STATE_FILE",
         description="Path to the seen-codes JSON state file",
     )
     poll_interval: int = Field(
-        default=0, alias="POLL_INTERVAL", ge=0,
+        default=0,
+        alias="POLL_INTERVAL",
+        ge=0,
         description="Loop interval in seconds; 0 = run once",
     )
 

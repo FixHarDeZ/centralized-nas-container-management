@@ -1,12 +1,24 @@
 from collections import Counter
 
 from app.models import (
-    article_exists, insert_article, update_article_summary,
-    get_articles, get_article, get_article_count, get_last_fetch_time,
-    get_source_counts, upsert_price, get_prices, set_free_expiry,
-    insert_digest_log, get_digest_history, get_recent_articles_for_digest,
-    get_sent_article_ids, select_digest_articles,
-    delete_all_articles, delete_articles_older_than,
+    article_exists,
+    delete_all_articles,
+    delete_articles_older_than,
+    get_article,
+    get_article_count,
+    get_articles,
+    get_digest_history,
+    get_last_fetch_time,
+    get_prices,
+    get_recent_articles_for_digest,
+    get_sent_article_ids,
+    get_source_counts,
+    insert_article,
+    insert_digest_log,
+    select_digest_articles,
+    set_free_expiry,
+    update_article_summary,
+    upsert_price,
 )
 
 
@@ -61,20 +73,33 @@ def test_get_source_counts(db, sample_article):
 
 
 def test_upsert_price(db):
-    upsert_price(db, {
-        "model_id": "openai/gpt-4o", "provider": "openai", "name": "GPT-4o",
-        "prompt_price": 5.0, "complete_price": 15.0, "context_length": 128000,
-        "updated_at": "2026-05-23T00:00:00",
-    })
+    upsert_price(
+        db,
+        {
+            "model_id": "openai/gpt-4o",
+            "provider": "openai",
+            "name": "GPT-4o",
+            "prompt_price": 5.0,
+            "complete_price": 15.0,
+            "context_length": 128000,
+            "updated_at": "2026-05-23T00:00:00",
+        },
+    )
     prices = get_prices(db)
     assert len(prices) == 1
     assert prices[0]["model_id"] == "openai/gpt-4o"
 
 
 def test_upsert_price_updates_existing(db):
-    base = {"model_id": "x/y", "provider": "x", "name": "Y",
-            "prompt_price": 1.0, "complete_price": 2.0,
-            "context_length": 4096, "updated_at": "2026-05-23T00:00:00"}
+    base = {
+        "model_id": "x/y",
+        "provider": "x",
+        "name": "Y",
+        "prompt_price": 1.0,
+        "complete_price": 2.0,
+        "context_length": 4096,
+        "updated_at": "2026-05-23T00:00:00",
+    }
     upsert_price(db, base)
     upsert_price(db, {**base, "prompt_price": 0.5})
     prices = get_prices(db)
@@ -84,9 +109,18 @@ def test_upsert_price_updates_existing(db):
 
 def test_get_prices_filter_provider(db):
     for p, mid in [("openai", "openai/gpt-4o"), ("anthropic", "anthropic/claude-3")]:
-        upsert_price(db, {"model_id": mid, "provider": p, "name": mid,
-                          "prompt_price": 1.0, "complete_price": 2.0,
-                          "context_length": 4096, "updated_at": "2026-05-23T00:00:00"})
+        upsert_price(
+            db,
+            {
+                "model_id": mid,
+                "provider": p,
+                "name": mid,
+                "prompt_price": 1.0,
+                "complete_price": 2.0,
+                "context_length": 4096,
+                "updated_at": "2026-05-23T00:00:00",
+            },
+        )
     assert len(get_prices(db, provider="openai")) == 1
     assert len(get_prices(db)) == 2
 
@@ -113,12 +147,23 @@ def test_get_sent_article_ids(db, sample_article):
 
 
 def _make_article(id, source):
-    return {"id": id, "source": source, "title": "T", "url": f"https://x.com/{id}",
-            "published": "2026-05-23T07:00:00", "fetched_at": "2026-05-23T07:01:00", "summary_th": "s"}
+    return {
+        "id": id,
+        "source": source,
+        "title": "T",
+        "url": f"https://x.com/{id}",
+        "published": "2026-05-23T07:00:00",
+        "fetched_at": "2026-05-23T07:01:00",
+        "summary_th": "s",
+    }
 
 
 def test_select_digest_articles_basic():
-    candidates = [_make_article("a1", "tc"), _make_article("a2", "vb"), _make_article("a3", "tc")]
+    candidates = [
+        _make_article("a1", "tc"),
+        _make_article("a2", "vb"),
+        _make_article("a3", "tc"),
+    ]
     result = select_digest_articles(candidates, sent_ids=set())
     assert [a["id"] for a in result] == ["a1", "a2", "a3"]
 
@@ -137,12 +182,15 @@ def test_select_digest_articles_quota_per_source():
 
 
 def test_select_digest_articles_quota_mixed():
-    candidates = (
-        [_make_article(f"tc{i}", "techcrunch") for i in range(3)] +
-        [_make_article(f"vb{i}", "venturebeat") for i in range(3)]
-    )
+    candidates = [_make_article(f"tc{i}", "techcrunch") for i in range(3)] + [
+        _make_article(f"vb{i}", "venturebeat") for i in range(3)
+    ]
     result = select_digest_articles(
-        candidates, sent_ids=set(), base=5, extra_max=0, max_per_source=2
+        candidates,
+        sent_ids=set(),
+        base=5,
+        extra_max=0,
+        max_per_source=2,
     )
     ids = [a["id"] for a in result]
     assert ids == ["tc0", "tc1", "vb0", "vb1"]
@@ -162,7 +210,11 @@ def test_select_digest_articles_dynamic_size():
         for i in range(3):
             candidates.append(_make_article(f"{src}{i}", src))
     result = select_digest_articles(
-        candidates, sent_ids=set(), base=5, extra_max=5, max_per_source=2
+        candidates,
+        sent_ids=set(),
+        base=5,
+        extra_max=5,
+        max_per_source=2,
     )
     assert len(result) == 10
     # Verify per-source cap held throughout the extras
@@ -201,8 +253,11 @@ def test_get_recent_articles_with_summary(db, sample_article):
 def test_get_recent_articles_respects_limit(db):
     for i in range(5):
         art = {
-            "id": f"id{i}", "source": "techcrunch_ai", "title": f"Title {i}",
-            "url": f"https://example.com/{i}", "published": "2026-05-23T07:00:00",
+            "id": f"id{i}",
+            "source": "techcrunch_ai",
+            "title": f"Title {i}",
+            "url": f"https://example.com/{i}",
+            "published": "2026-05-23T07:00:00",
             "fetched_at": "2026-05-23T07:01:00",
         }
         insert_article(db, art)
@@ -212,11 +267,18 @@ def test_get_recent_articles_respects_limit(db):
 
 
 def _insert_test_price(db, model_id="openai/gpt-4o"):
-    upsert_price(db, {
-        "model_id": model_id, "provider": "openai", "name": "GPT-4o",
-        "prompt_price": 5.0, "complete_price": 15.0, "context_length": 128000,
-        "updated_at": "2026-05-23T00:00:00",
-    })
+    upsert_price(
+        db,
+        {
+            "model_id": model_id,
+            "provider": "openai",
+            "name": "GPT-4o",
+            "prompt_price": 5.0,
+            "complete_price": 15.0,
+            "context_length": 128000,
+            "updated_at": "2026-05-23T00:00:00",
+        },
+    )
 
 
 def test_set_free_expiry(db):
@@ -241,6 +303,7 @@ def test_set_free_expiry_not_found(db):
 def test_set_free_expiry_invalid_date(db):
     _insert_test_price(db)
     import pytest
+
     with pytest.raises(ValueError, match="Invalid date format"):
         set_free_expiry(db, "openai/gpt-4o", "31-12-2025")
 
@@ -255,16 +318,30 @@ def test_delete_all_articles(db, sample_article):
 
 def test_delete_articles_older_than(db):
     # Old article (fetched 40 days ago) and a fresh one
-    insert_article(db, {
-        "id": "old1", "source": "techcrunch_ai", "title": "Old",
-        "url": "https://example.com/old", "published": "2026-01-01T00:00:00Z",
-        "fetched_at": "2026-01-01T00:00:00Z",
-    })
-    insert_article(db, {
-        "id": "new1", "source": "techcrunch_ai", "title": "New",
-        "url": "https://example.com/new", "published": "2026-05-29T00:00:00Z",
-        "fetched_at": __import__("datetime").datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
-    })
+    insert_article(
+        db,
+        {
+            "id": "old1",
+            "source": "techcrunch_ai",
+            "title": "Old",
+            "url": "https://example.com/old",
+            "published": "2026-01-01T00:00:00Z",
+            "fetched_at": "2026-01-01T00:00:00Z",
+        },
+    )
+    insert_article(
+        db,
+        {
+            "id": "new1",
+            "source": "techcrunch_ai",
+            "title": "New",
+            "url": "https://example.com/new",
+            "published": "2026-05-29T00:00:00Z",
+            "fetched_at": __import__("datetime")
+            .datetime.utcnow()
+            .strftime("%Y-%m-%dT%H:%M:%SZ"),
+        },
+    )
     deleted = delete_articles_older_than(db, days=30)
     assert deleted == 1
     assert get_article(db, "old1") is None
@@ -272,9 +349,15 @@ def test_delete_articles_older_than(db):
 
 
 def test_upsert_price_preserves_free_expires_at(db):
-    model = {"model_id": "openai/gpt-4o", "provider": "openai", "name": "GPT-4o",
-             "prompt_price": 5.0, "complete_price": 15.0, "context_length": 128000,
-             "updated_at": "2026-01-01T00:00:00Z"}
+    model = {
+        "model_id": "openai/gpt-4o",
+        "provider": "openai",
+        "name": "GPT-4o",
+        "prompt_price": 5.0,
+        "complete_price": 15.0,
+        "context_length": 128000,
+        "updated_at": "2026-01-01T00:00:00Z",
+    }
     upsert_price(db, model)
     set_free_expiry(db, "openai/gpt-4o", "2026-12-31")
     # upsert again with updated prices

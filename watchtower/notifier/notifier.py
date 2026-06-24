@@ -1,28 +1,27 @@
-"""
-Watchtower LINE Notifier - Sidecar Script
+"""Watchtower LINE Notifier - Sidecar Script
 อ่าน Watchtower logs ผ่าน Docker socket API โดยตรง (ไม่พึ่ง docker CLI binary)
 Patterns ปรับให้ตรงกับ Watchtower 1.7.x structured log format
 """
 
+import json
 import os
 import re
-import time
-import json
 import socket
+import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from notify import LineCreds, Notifier, TgCreds
 
 # ─── Config ────────────────────────────────────────────────────────────────
-LINE_API_URL         = "https://api.line.me/v2/bot/message/push"
+LINE_API_URL = "https://api.line.me/v2/bot/message/push"
 CHANNEL_ACCESS_TOKEN = os.environ["WATCHTOWER_LINE_CHANNEL_ACCESS_TOKEN"]
-LINE_USER_ID         = os.environ["WATCHTOWER_LINE_USER_ID"]
+LINE_USER_ID = os.environ["WATCHTOWER_LINE_USER_ID"]
 WATCHTOWER_CONTAINER = os.environ.get("WATCHTOWER_CONTAINER_NAME", "watchtower")
-DOCKER_SOCKET        = os.environ.get("DOCKER_SOCKET", "/var/run/docker.sock")
-TZ                   = ZoneInfo(os.environ.get("TZ", "Asia/Bangkok"))
-TELEGRAM_BOT_TOKEN   = os.environ.get("WATCHTOWER_TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID     = os.environ.get("TELEGRAM_CHAT_ID", "")
+DOCKER_SOCKET = os.environ.get("DOCKER_SOCKET", "/var/run/docker.sock")
+TZ = ZoneInfo(os.environ.get("TZ", "Asia/Bangkok"))
+TELEGRAM_BOT_TOKEN = os.environ.get("WATCHTOWER_TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 # ─── Watchtower 1.7.x structured log patterns ──────────────────────────────
 # ตัวอย่าง log จริง:
@@ -34,18 +33,30 @@ TELEGRAM_CHAT_ID     = os.environ.get("TELEGRAM_CHAT_ID", "")
 #   msg="Session done" Failed=0 Scanned=4 Updated=1
 #   msg="Session done" Failed=0 Scanned=4 Updated=0
 
-PAT_SESSION_START = re.compile(r'msg="Watchtower \d+\.\d+|msg="Starting Watchtower', re.I)
-PAT_FOUND_NEW     = re.compile(r'msg="Found new ([^\s"]+) image \(([a-f0-9]+)\)"', re.I)
-PAT_STOPPING      = re.compile(r'msg="Stopping /([^\s"]+)', re.I)
-PAT_CREATING      = re.compile(r'msg="Creating /([^\s"]+)"', re.I)
-PAT_REMOVING      = re.compile(r'msg="Removing image ([a-f0-9]+)"', re.I)
-PAT_SESSION_DONE  = re.compile(r'msg="Session done".*?Updated=(\d+)', re.I)
-PAT_ERROR         = re.compile(r'level=error|level=fatal|panic:', re.I)
+PAT_SESSION_START = re.compile(
+    r'msg="Watchtower \d+\.\d+|msg="Starting Watchtower',
+    re.IGNORECASE,
+)
+PAT_FOUND_NEW = re.compile(
+    r'msg="Found new ([^\s"]+) image \(([a-f0-9]+)\)"', re.IGNORECASE
+)
+PAT_STOPPING = re.compile(r'msg="Stopping /([^\s"]+)', re.IGNORECASE)
+PAT_CREATING = re.compile(r'msg="Creating /([^\s"]+)"', re.IGNORECASE)
+PAT_REMOVING = re.compile(r'msg="Removing image ([a-f0-9]+)"', re.IGNORECASE)
+PAT_SESSION_DONE = re.compile(r'msg="Session done".*?Updated=(\d+)', re.IGNORECASE)
+PAT_ERROR = re.compile(r"level=error|level=fatal|panic:", re.IGNORECASE)
 
 # state ระหว่าง session
-_pending_updates: dict[str, dict] = {}      # container_name -> {"image_name": str, "new_id": str, "old_id": str|None}
-_image_queue: list[dict] = []               # FIFO queue of {"name": image_name, "id": new_id} waiting for Creating
-_containers_updated_order: list[str] = []   # FIFO ลำดับ container ที่ update แล้ว รอ Removing image
+_pending_updates: dict[
+    str,
+    dict,
+] = {}  # container_name -> {"image_name": str, "new_id": str, "old_id": str|None}
+_image_queue: list[
+    dict
+] = []  # FIFO queue of {"name": image_name, "id": new_id} waiting for Creating
+_containers_updated_order: list[
+    str
+] = []  # FIFO ลำดับ container ที่ update แล้ว รอ Removing image
 _session_start_time: datetime | None = None
 
 
@@ -91,12 +102,12 @@ class DockerSocketSession:
                 if not chunk:
                     break
                 data += chunk
-            except socket.timeout:
+            except TimeoutError:
                 break
         sock.close()
         parts = data.split(b"\r\n\r\n", 1)
         header = parts[0].decode(errors="replace")
-        body   = parts[1].decode(errors="replace") if len(parts) > 1 else ""
+        body = parts[1].decode(errors="replace") if len(parts) > 1 else ""
         status = int(header.split(" ")[1]) if " " in header else 0
         return status, body
 
@@ -140,7 +151,7 @@ class DockerSocketSession:
                 buf += chunk
 
             payload = buf[8 : 8 + frame_size]
-            buf     = buf[8 + frame_size :]
+            buf = buf[8 + frame_size :]
             for line in payload.decode(errors="replace").rstrip("\n").splitlines():
                 if line.strip():
                     yield line.strip()
@@ -148,7 +159,11 @@ class DockerSocketSession:
 
 # ─── Log handler ───────────────────────────────────────────────────────────
 def handle_line(log_line: str) -> None:
-    global _pending_updates, _image_queue, _containers_updated_order, _session_start_time
+    global \
+        _pending_updates, \
+        _image_queue, \
+        _containers_updated_order, \
+        _session_start_time
 
     print(f"[LOG] {log_line}")
 
@@ -161,15 +176,15 @@ def handle_line(log_line: str) -> None:
         notify(
             f"🟢 Watchtower เริ่มทำงานแล้ว\n"
             f"📋 กำลังตรวจสอบ container updates...\n"
-            f"🕒 {now()}"
+            f"🕒 {now()}",
         )
         return
 
     # ── Found new image → เก็บไว้รอ Creating ─────────────────────────────
     m = PAT_FOUND_NEW.search(log_line)
     if m:
-        image_name = m.group(1)        # e.g. ghcr.io/gethomepage/homepage:latest
-        new_id     = m.group(2)[:12]   # e.g. 8d2d6aa5c260
+        image_name = m.group(1)  # e.g. ghcr.io/gethomepage/homepage:latest
+        new_id = m.group(2)[:12]  # e.g. 8d2d6aa5c260
         _image_queue.append({"name": image_name, "id": new_id})
         if _session_start_time is None:
             _session_start_time = datetime.now(TZ)
@@ -179,15 +194,23 @@ def handle_line(log_line: str) -> None:
     m = PAT_CREATING.search(log_line)
     if m:
         container_name = m.group(1)
-        img = _image_queue.pop(0) if _image_queue else {"name": "unknown image", "id": "?"}
-        _pending_updates[container_name] = {"image_name": img["name"], "new_id": img["id"], "old_id": None}
+        img = (
+            _image_queue.pop(0)
+            if _image_queue
+            else {"name": "unknown image", "id": "?"}
+        )
+        _pending_updates[container_name] = {
+            "image_name": img["name"],
+            "new_id": img["id"],
+            "old_id": None,
+        }
         _containers_updated_order.append(container_name)
         notify(
             f"🔄 Container อัปเดตแล้ว!\n"
             f"📦 {container_name}\n"
             f"🖼 {img['name']}\n"
             f"  🆕 {img['id']}\n"
-            f"🕒 {now()}"
+            f"🕒 {now()}",
         )
         return
 
@@ -217,17 +240,14 @@ def handle_line(log_line: str) -> None:
                 lines.append(f"  • {k}: {v['image_name']}\n    {old} → {new}")
             notify(
                 f"✅ ตรวจสอบเสร็จ — อัปเดต {updated_count} container\n"
-                f"{chr(10).join(lines)}{duration}\n🕒 {now()}"
+                f"{chr(10).join(lines)}{duration}\n🕒 {now()}",
             )
         else:
-            notify(
-                f"✅ ตรวจสอบเสร็จ — ไม่มี container ที่ต้องอัปเดต"
-                f"{duration}\n🕒 {now()}"
-            )
+            notify(f"✅ ตรวจสอบเสร็จ — ไม่มี container ที่ต้องอัปเดต{duration}\n🕒 {now()}")
         _pending_updates = {}
         _image_queue.clear()
         _containers_updated_order.clear()
-        _session_start_time = None   # fix: reset ทุก session ไม่งั้น session ถัดไปนับเวลาผิด
+        _session_start_time = None  # fix: reset ทุก session ไม่งั้น session ถัดไปนับเวลาผิด
         return
 
     # ── Error ──────────────────────────────────────────────────────────────
@@ -246,11 +266,15 @@ def main() -> None:
         try:
             container_id = docker.get_container_id(WATCHTOWER_CONTAINER)
             if not container_id:
-                print(f"[{now()}] Container '{WATCHTOWER_CONTAINER}' not found, retrying in 15s...")
+                print(
+                    f"[{now()}] Container '{WATCHTOWER_CONTAINER}' not found, retrying in 15s...",
+                )
                 time.sleep(15)
                 continue
 
-            print(f"[{now()}] Streaming logs for {WATCHTOWER_CONTAINER} ({container_id[:12]})")
+            print(
+                f"[{now()}] Streaming logs for {WATCHTOWER_CONTAINER} ({container_id[:12]})",
+            )
             for line in docker.stream_logs(container_id):
                 handle_line(line)
 

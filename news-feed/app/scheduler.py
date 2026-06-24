@@ -1,6 +1,6 @@
 import json
 import logging
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 from datetime import time as _time
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -10,7 +10,6 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from app.config import get_config  # DB_PATH removed — db_path passed in
-from app.sqlite_backup import backup_db
 from app.fetcher import fetch_all
 from app.models import (
     delete_articles_older_than,
@@ -23,6 +22,7 @@ from app.models import (
 )
 from app.notifier import send_digest, send_summarizer_alert
 from app.pricer import fetch_prices
+from app.sqlite_backup import backup_db
 
 _ALERT_THRESHOLD = 2  # consecutive empty digests before alerting
 _ALERT_COOLDOWN_HOURS = 6  # minimum hours between repeated alerts
@@ -62,6 +62,7 @@ def _compute_digest_window(
 
     Raises:
         ValueError: if `now` is naive (no tzinfo).
+
     """
     if now.tzinfo is None:
         raise ValueError("_compute_digest_window: 'now' must be timezone-aware")
@@ -74,9 +75,7 @@ def _compute_digest_window(
     # own previous tick — wrap to the prior tick / yesterday instead.
     now_minute = now.replace(second=0, microsecond=0)
     today = now.date()
-    candidates_today = [
-        datetime.combine(today, t, tzinfo=now.tzinfo) for t in times
-    ]
+    candidates_today = [datetime.combine(today, t, tzinfo=now.tzinfo) for t in times]
     prev_ticks = [d for d in candidates_today if d < now_minute]
     if prev_ticks:
         prev = max(prev_ticks)
@@ -106,6 +105,7 @@ def _save_summarizer_state(data_dir: Path, state: dict) -> None:
     except Exception as exc:
         logger.warning("Could not save summarizer state: %s", exc)
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -120,7 +120,7 @@ def setup_scheduler(db_path: str) -> BackgroundScheduler:
         logger.info("price_job starting")
         count = fetch_prices(db_path)
         logger.info("price_job done: %d models upserted", count)
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        today = datetime.now(UTC).strftime("%Y-%m-%d")
         conn = get_conn(db_path)
         try:
             snapped = snapshot_all_prices(conn, today)
@@ -133,7 +133,11 @@ def setup_scheduler(db_path: str) -> BackgroundScheduler:
         conn = get_conn(db_path)
         try:
             deleted = delete_articles_older_than(conn, days)
-            logger.info("cleanup_job done: %d articles older than %dd deleted", deleted, days)
+            logger.info(
+                "cleanup_job done: %d articles older than %dd deleted",
+                deleted,
+                days,
+            )
         finally:
             conn.close()
 
@@ -151,13 +155,18 @@ def setup_scheduler(db_path: str) -> BackgroundScheduler:
             )
             history = get_digest_history(conn, limit=20)
             sent_ids = {aid for entry in history for aid in entry["article_ids"]}
-            candidates = get_recent_articles_for_digest(conn, hours=window_hours, limit=100)
+            candidates = get_recent_articles_for_digest(
+                conn,
+                hours=window_hours,
+                limit=100,
+            )
             unsent_candidates = [c for c in candidates if c["id"] not in sent_ids]
             base = int(float(config.get("digest_size_base", 5)))
             size_max = int(float(config.get("digest_size_max", 10)))
             extra_max = max(0, size_max - base)
             articles = select_digest_articles(
-                candidates, sent_ids,
+                candidates,
+                sent_ids,
                 base=base,
                 extra_max=extra_max,
                 max_per_source=int(float(config.get("digest_max_per_source", 2))),
@@ -166,13 +175,16 @@ def setup_scheduler(db_path: str) -> BackgroundScheduler:
             if sent and articles:
                 insert_digest_log(
                     conn,
-                    datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
                     [a["id"] for a in articles],
                     ",".join(sent),
                 )
             logger.info(
                 "digest_job sent to: %s (window=%.1fh, candidates=%d, selected=%d)",
-                sent, window_hours, len(candidates), len(articles),
+                sent,
+                window_hours,
+                len(candidates),
+                len(articles),
             )
 
             # Alert if summarizer appears broken (candidates exist but none have summaries)
@@ -181,13 +193,15 @@ def setup_scheduler(db_path: str) -> BackgroundScheduler:
                 state["consecutive_empty"] = state.get("consecutive_empty", 0) + 1
                 logger.warning(
                     "digest_job: %d candidates but 0 articles sent (consecutive_empty=%d)",
-                    len(candidates), state["consecutive_empty"],
+                    len(candidates),
+                    state["consecutive_empty"],
                 )
                 if state["consecutive_empty"] >= _ALERT_THRESHOLD:
                     last = state.get("last_alert_at")
-                    now = datetime.now(timezone.utc)
+                    now = datetime.now(UTC)
                     cooldown_ok = last is None or (
-                        now - datetime.fromisoformat(last) > timedelta(hours=_ALERT_COOLDOWN_HOURS)
+                        now - datetime.fromisoformat(last)
+                        > timedelta(hours=_ALERT_COOLDOWN_HOURS)
                     )
                     if cooldown_ok:
                         send_summarizer_alert(config)
@@ -208,7 +222,7 @@ def setup_scheduler(db_path: str) -> BackgroundScheduler:
         id="fetch_job",
         replace_existing=True,
         max_instances=1,
-        next_run_time=datetime.now(timezone.utc) + timedelta(seconds=5),
+        next_run_time=datetime.now(UTC) + timedelta(seconds=5),
     )
 
     scheduler.add_job(
@@ -240,6 +254,7 @@ def setup_scheduler(db_path: str) -> BackgroundScheduler:
 
     def _backup_job() -> None:
         import os
+
         backup_dir = os.environ.get("NEWS_FEED_BACKUP_DIR", "/data/backups")
         retention = int(os.environ.get("NEWS_FEED_BACKUP_RETENTION_DAYS", "30"))
         path = backup_db(db_path, backup_dir, prefix="news", retention_days=retention)

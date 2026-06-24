@@ -15,6 +15,7 @@ channel's error is caught and logged; the channel is omitted from the returned
 list of successes. Message *formatting* is intentionally NOT here — it stays
 local to each stack.
 """
+
 from __future__ import annotations
 
 import json
@@ -39,8 +40,8 @@ class LineCreds:
 class TgCreds:
     token: str
     chat: str
-    parse_mode: str | None = None      # "HTML" for stacks that send HTML markup
-    disable_preview: bool = False      # game-codes suppresses link previews
+    parse_mode: str | None = None  # "HTML" for stacks that send HTML markup
+    disable_preview: bool = False  # game-codes suppresses link previews
 
 
 def _urllib_post(url: str, payload: dict, headers: dict, timeout: float) -> int:
@@ -81,7 +82,12 @@ class Notifier:
         sent: list[str] = []
         if self._line and self._line.token and self._line.to and self._send_line(text):
             sent.append("line")
-        if self._telegram and self._telegram.token and self._telegram.chat and self._send_telegram(text):
+        if (
+            self._telegram
+            and self._telegram.token
+            and self._telegram.chat
+            and self._send_telegram(text)
+        ):
             sent.append("telegram")
         return sent
 
@@ -98,7 +104,7 @@ class Notifier:
                 logger.error("LINE send failed: HTTP %s", status)
                 return False
             return True
-        except Exception as exc:  # noqa: BLE001 — never propagate
+        except Exception as exc:
             logger.error("LINE send error: %s", exc)
             return False
 
@@ -110,11 +116,16 @@ class Notifier:
         if c.disable_preview:
             payload["disable_web_page_preview"] = True
         try:
-            status = self._post(_TG_URL.format(token=c.token), payload, {}, self._timeout)
+            status = self._post(
+                _TG_URL.format(token=c.token),
+                payload,
+                {},
+                self._timeout,
+            )
             if status != 200:
                 logger.error("Telegram send failed: HTTP %s", status)
                 return False
             return True
-        except Exception as exc:  # noqa: BLE001 — never propagate
+        except Exception as exc:
             logger.error("Telegram send error: %s", exc)
             return False

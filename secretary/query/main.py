@@ -6,7 +6,10 @@ import time
 from contextlib import asynccontextmanager
 
 import cohere
+import llm_client
+import nous_auth
 from fastapi import FastAPI
+from fastapi.responses import JSONResponse
 from FlagEmbedding import BGEM3FlagModel
 from pydantic import BaseModel
 from qdrant_client import AsyncQdrantClient
@@ -16,10 +19,6 @@ from qdrant_client.models import (
     Prefetch,
     SparseVector,
 )
-
-import llm_client
-import nous_auth
-from fastapi.responses import JSONResponse
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -203,9 +202,15 @@ async def ingest_trigger(full: bool = False, page_id: str = ""):
         combined = (stdout + stderr).decode(errors="replace")
         if proc.returncode == 0:
             return {"status": "done", "summary": combined}
-        return JSONResponse(status_code=500, content={"status": "error", "summary": combined})
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "summary": combined},
+        )
     except Exception as exc:
-        return JSONResponse(status_code=500, content={"status": "error", "summary": str(exc)})
+        return JSONResponse(
+            status_code=500,
+            content={"status": "error", "summary": str(exc)},
+        )
 
 
 @app.get("/nous/auth")
@@ -214,7 +219,10 @@ async def nous_auth_start():
         return await nous_auth.token_manager.start_device_flow()
     except Exception as exc:
         log.error("Nous device flow failed: %s", exc)
-        return JSONResponse(status_code=503, content={"error": "Nous Portal unavailable", "details": str(exc)})
+        return JSONResponse(
+            status_code=503,
+            content={"error": "Nous Portal unavailable", "details": str(exc)},
+        )
 
 
 @app.get("/nous/auth/status")

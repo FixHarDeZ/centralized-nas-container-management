@@ -2,8 +2,8 @@ from pathlib import Path
 
 from parsers import (
     fetch_api_seria,
-    fetch_table_status,
     fetch_section_regex,
+    fetch_table_status,
 )
 
 FIX = Path(__file__).parent / "fixtures"
@@ -42,7 +42,10 @@ def test_roe_scopes_to_section_and_ignores_decoys():
 
 
 def test_tod_regex_requires_digit():
-    src = {"scope_selector": ".post-body", "code_regex": r"\btod(?=[a-z0-9]*\d)[a-z0-9]{3,}\b"}
+    src = {
+        "scope_selector": ".post-body",
+        "code_regex": r"\btod(?=[a-z0-9]*\d)[a-z0-9]{3,}\b",
+    }
     codes = {e["code"] for e in fetch_section_regex(src, _read("tod.html"))}
     assert codes == {"tod18347", "todhot666"}
     assert "todays" not in codes

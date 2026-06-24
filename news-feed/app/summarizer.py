@@ -1,7 +1,9 @@
+import logging
 import os
 import time
-import logging
+
 import anthropic
+
 from app.http_client import post as http_post
 
 logger = logging.getLogger(__name__)
@@ -20,8 +22,14 @@ def _anthropic_retry(fn, retries: int = 3):
         except Exception as exc:
             if attempt == retries - 1:
                 raise
-            wait = 2 ** attempt
-            logger.warning("anthropic retry %d/%d after %ds: %s", attempt + 1, retries, wait, exc)
+            wait = 2**attempt
+            logger.warning(
+                "anthropic retry %d/%d after %ds: %s",
+                attempt + 1,
+                retries,
+                wait,
+                exc,
+            )
             time.sleep(wait)
 
 
@@ -32,7 +40,13 @@ def _summarize_anthropic(title: str, body: str, model: str) -> str:
         resp = client.messages.create(
             model=model,
             max_tokens=300,
-            system=[{"type": "text", "text": _SYSTEM, "cache_control": {"type": "ephemeral"}}],
+            system=[
+                {
+                    "type": "text",
+                    "text": _SYSTEM,
+                    "cache_control": {"type": "ephemeral"},
+                },
+            ],
             messages=[{"role": "user", "content": _user_prompt(title, body)}],
         )
         return resp.content[0].text
@@ -68,7 +82,10 @@ def _summarize_openrouter(title: str, body: str, model: str) -> str:
 
 def _summarize_mimo(title: str, body: str, model: str) -> str:
     api_key = os.getenv("MIMO_API_KEY", "")
-    base_url = os.getenv("MIMO_BASE_URL", "https://token-plan-sgp.xiaomimimo.com/v1").rstrip("/")
+    base_url = os.getenv(
+        "MIMO_BASE_URL",
+        "https://token-plan-sgp.xiaomimimo.com/v1",
+    ).rstrip("/")
 
     resp = http_post(
         f"{base_url}/chat/completions",
@@ -101,7 +118,10 @@ def _dispatch(provider: str, title: str, body: str, model: str) -> str:
 
 
 def summarize(title: str, body: str, config: dict) -> str:
-    primary = {"provider": config.get("summarizer_provider", "anthropic"), "model": config.get("summarizer_model", "claude-sonnet-4-6")}
+    primary = {
+        "provider": config.get("summarizer_provider", "anthropic"),
+        "model": config.get("summarizer_model", "claude-sonnet-4-6"),
+    }
     chain = [primary] + list(config.get("summarizer_fallback", []))
 
     last_exc: Exception | None = None
@@ -111,7 +131,11 @@ def summarize(title: str, body: str, config: dict) -> str:
         try:
             result = _dispatch(provider, title, body, model)
             if last_exc is not None:
-                logger.warning("summarize fallback succeeded with provider=%s model=%s", provider, model)
+                logger.warning(
+                    "summarize fallback succeeded with provider=%s model=%s",
+                    provider,
+                    model,
+                )
             return result
         except Exception as exc:
             logger.warning("summarize failed provider=%s: %s", provider, exc)

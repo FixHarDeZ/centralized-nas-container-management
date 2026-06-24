@@ -7,11 +7,13 @@ file and re-run `make sync-shared`.
 
 Uses httpx only. stdlib time.sleep for sync backoff.
 """
+
 from __future__ import annotations
 
 import logging
 import time
-from typing import Any, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 import httpx
 
@@ -28,7 +30,7 @@ def _request(
     backoff: float = 1.0,
     retry_on: Sequence[int] = _DEFAULT_RETRY_ON,
     timeout: float = 30.0,
-    _adapter: Optional[Any] = None,
+    _adapter: Any | None = None,
     **kwargs,
 ) -> httpx.Response:
     if retries < 1:
@@ -42,10 +44,14 @@ def _request(
             else:
                 resp = httpx.request(method, url, timeout=timeout, **kwargs)
             if resp.status_code in retry_on_set and attempt < retries - 1:
-                wait = backoff * (2 ** attempt)
+                wait = backoff * (2**attempt)
                 logger.warning(
                     "%d from %s, retry %d/%d in %.1fs",
-                    resp.status_code, url, attempt + 1, retries, wait,
+                    resp.status_code,
+                    url,
+                    attempt + 1,
+                    retries,
+                    wait,
                 )
                 time.sleep(wait)
                 continue
@@ -55,10 +61,14 @@ def _request(
             raise
         except Exception as exc:
             if attempt < retries - 1:
-                wait = backoff * (2 ** attempt)
+                wait = backoff * (2**attempt)
                 logger.warning(
                     "error from %s, retry %d/%d in %.1fs: %s",
-                    url, attempt + 1, retries, wait, exc,
+                    url,
+                    attempt + 1,
+                    retries,
+                    wait,
+                    exc,
                 )
                 time.sleep(wait)
                 continue
@@ -73,13 +83,19 @@ def get(
     backoff: float = 1.0,
     retry_on: Sequence[int] = _DEFAULT_RETRY_ON,
     timeout: float = 30.0,
-    _adapter: Optional[Any] = None,
+    _adapter: Any | None = None,
     **kwargs,
 ) -> httpx.Response:
     """GET with retry. Returns httpx.Response. Raises on non-retryable status."""
     return _request(
-        "GET", url, retries=retries, backoff=backoff,
-        retry_on=retry_on, timeout=timeout, _adapter=_adapter, **kwargs,
+        "GET",
+        url,
+        retries=retries,
+        backoff=backoff,
+        retry_on=retry_on,
+        timeout=timeout,
+        _adapter=_adapter,
+        **kwargs,
     )
 
 
@@ -90,11 +106,17 @@ def post(
     backoff: float = 1.0,
     retry_on: Sequence[int] = _DEFAULT_RETRY_ON,
     timeout: float = 30.0,
-    _adapter: Optional[Any] = None,
+    _adapter: Any | None = None,
     **kwargs,
 ) -> httpx.Response:
     """POST with retry. Returns httpx.Response. Raises on non-retryable status."""
     return _request(
-        "POST", url, retries=retries, backoff=backoff,
-        retry_on=retry_on, timeout=timeout, _adapter=_adapter, **kwargs,
+        "POST",
+        url,
+        retries=retries,
+        backoff=backoff,
+        retry_on=retry_on,
+        timeout=timeout,
+        _adapter=_adapter,
+        **kwargs,
     )

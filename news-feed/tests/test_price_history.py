@@ -2,27 +2,34 @@ from app.models import get_price_history, snapshot_all_prices, upsert_price
 
 
 def _seed_prices(conn):
-    upsert_price(conn, {
-        "model_id": "openai/gpt-4o",
-        "provider": "openai",
-        "name": "GPT-4o",
-        "prompt_price": 2.5,
-        "complete_price": 10.0,
-        "context_length": 128000,
-        "updated_at": "2026-06-05T00:00:00Z",
-    })
-    upsert_price(conn, {
-        "model_id": "anthropic/claude-3",
-        "provider": "anthropic",
-        "name": "Claude 3",
-        "prompt_price": 3.0,
-        "complete_price": 15.0,
-        "context_length": 200000,
-        "updated_at": "2026-06-05T00:00:00Z",
-    })
+    upsert_price(
+        conn,
+        {
+            "model_id": "openai/gpt-4o",
+            "provider": "openai",
+            "name": "GPT-4o",
+            "prompt_price": 2.5,
+            "complete_price": 10.0,
+            "context_length": 128000,
+            "updated_at": "2026-06-05T00:00:00Z",
+        },
+    )
+    upsert_price(
+        conn,
+        {
+            "model_id": "anthropic/claude-3",
+            "provider": "anthropic",
+            "name": "Claude 3",
+            "prompt_price": 3.0,
+            "complete_price": 15.0,
+            "context_length": 200000,
+            "updated_at": "2026-06-05T00:00:00Z",
+        },
+    )
 
 
 # ── model layer ──────────────────────────────────────────────────────────────
+
 
 def test_snapshot_all_prices_returns_count(db):
     _seed_prices(db)
@@ -43,7 +50,10 @@ def test_get_price_history_returns_entries(db):
 def test_snapshot_idempotent_same_day(db):
     _seed_prices(db)
     snapshot_all_prices(db, "2026-06-05")
-    snapshot_all_prices(db, "2026-06-05")  # second call → INSERT OR REPLACE, still 1 row
+    snapshot_all_prices(
+        db,
+        "2026-06-05",
+    )  # second call → INSERT OR REPLACE, still 1 row
     history = get_price_history(db, "openai/gpt-4o")
     assert len(history) == 1
 
@@ -71,6 +81,7 @@ def test_get_price_history_unknown_model(db):
 
 
 # ── API layer ────────────────────────────────────────────────────────────────
+
 
 def test_api_history_empty(client):
     r = client.get("/api/prices/openai%2Fgpt-4o/history")

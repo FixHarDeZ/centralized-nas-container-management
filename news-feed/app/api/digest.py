@@ -1,13 +1,19 @@
 import os
 import sqlite3
-from datetime import datetime, timezone
-from typing import Annotated, Optional
+from datetime import UTC, datetime
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 
 from app.config import get_config
 from app.deps import get_db
-from app.models import get_conn, get_digest_history, get_recent_articles_for_digest, insert_digest_log, select_digest_articles
+from app.models import (
+    get_conn,
+    get_digest_history,
+    get_recent_articles_for_digest,
+    insert_digest_log,
+    select_digest_articles,
+)
 from app.notifier import send_digest
 
 router = APIRouter(prefix="/api/digest", tags=["digest"])
@@ -21,6 +27,7 @@ def digest_history(db: Annotated[sqlite3.Connection, Depends(get_db)]):
 def _run_digest(db_path: str, *, log_when_sent: bool = True) -> dict:
     """Shared digest execution path for /trigger and /test."""
     from zoneinfo import ZoneInfo
+
     from app.scheduler import _compute_digest_window
 
     config = get_config()
@@ -39,7 +46,8 @@ def _run_digest(db_path: str, *, log_when_sent: bool = True) -> dict:
         size_max = int(float(config.get("digest_size_max", 10)))
         max_per_source = int(float(config.get("digest_max_per_source", 2)))
         articles = select_digest_articles(
-            candidates, sent_ids,
+            candidates,
+            sent_ids,
             base=base,
             extra_max=max(0, size_max - base),
             max_per_source=max_per_source,
@@ -48,7 +56,7 @@ def _run_digest(db_path: str, *, log_when_sent: bool = True) -> dict:
         if log_when_sent and sent and articles:
             insert_digest_log(
                 conn,
-                datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
                 [a["id"] for a in articles],
                 ",".join(sent),
             )
@@ -69,11 +77,12 @@ def _run_digest(db_path: str, *, log_when_sent: bool = True) -> dict:
 
 
 @router.post("/trigger")
-def trigger_digest(x_admin_token: Optional[str] = Header(None)):
+def trigger_digest(x_admin_token: str | None = Header(None)):
     expected = os.getenv("ADMIN_TOKEN", "")
     if not expected or x_admin_token != expected:
         raise HTTPException(status_code=403, detail="Forbidden")
     from app.config import DB_PATH
+
     return _run_digest(DB_PATH)
 
 

@@ -1,6 +1,6 @@
 import hashlib
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import feedparser
 from bs4 import BeautifulSoup
@@ -26,8 +26,8 @@ def _entry_published(entry) -> str:
     for field in ("published_parsed", "updated_parsed"):
         val = entry.get(field)
         if val:
-            return datetime(*val[:6], tzinfo=timezone.utc).strftime(_DT_FMT)
-    return datetime.now(timezone.utc).strftime(_DT_FMT)
+            return datetime(*val[:6], tzinfo=UTC).strftime(_DT_FMT)
+    return datetime.now(UTC).strftime(_DT_FMT)
 
 
 def _entry_body(entry) -> str:
@@ -59,15 +59,18 @@ def fetch_all(db_path: str, config: dict) -> list[str]:
                 article_id = hashlib.sha256(entry_url.encode()).hexdigest()[:16]
                 if article_exists(conn, article_id):
                     continue
-                fetched_at = datetime.now(timezone.utc).strftime(_DT_FMT)
-                insert_article(conn, {
-                    "id": article_id,
-                    "source": source_key,
-                    "title": entry.get("title", ""),
-                    "url": entry_url,
-                    "published": _entry_published(entry),
-                    "fetched_at": fetched_at,
-                })
+                fetched_at = datetime.now(UTC).strftime(_DT_FMT)
+                insert_article(
+                    conn,
+                    {
+                        "id": article_id,
+                        "source": source_key,
+                        "title": entry.get("title", ""),
+                        "url": entry_url,
+                        "published": _entry_published(entry),
+                        "fetched_at": fetched_at,
+                    },
+                )
                 body = _entry_body(entry)
                 try:
                     summary = summarize(entry.get("title", ""), body, config)

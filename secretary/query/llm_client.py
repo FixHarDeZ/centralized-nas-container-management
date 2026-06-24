@@ -1,8 +1,8 @@
 import os
-from anthropic import AsyncAnthropic
-from openai import AsyncOpenAI
 
 import nous_auth
+from anthropic import AsyncAnthropic
+from openai import AsyncOpenAI
 
 _PROVIDER = os.getenv("LLM_PROVIDER", "anthropic")
 
@@ -59,7 +59,10 @@ async def get_llm_response(system: str, user: str) -> str:
         )
         return msg.content[0].text
 
-    messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user},
+    ]
 
     if _PROVIDER == "openrouter":
         client = _get_openrouter()

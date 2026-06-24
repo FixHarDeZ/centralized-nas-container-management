@@ -22,8 +22,13 @@ def _schedule_file() -> Path:
 
 def _env_defaults() -> dict:
     return {
-        "digest_times": [t.strip() for t in os.getenv("DIGEST_TIMES", "07:00,12:00,18:00").split(",")],
-        "enabled_sources": [s.strip() for s in os.getenv("ENABLED_SOURCES", ",".join(SOURCES)).split(",")],
+        "digest_times": [
+            t.strip() for t in os.getenv("DIGEST_TIMES", "07:00,12:00,18:00").split(",")
+        ],
+        "enabled_sources": [
+            s.strip()
+            for s in os.getenv("ENABLED_SOURCES", ",".join(SOURCES)).split(",")
+        ],
         "summarizer_provider": os.getenv("SUMMARIZER_PROVIDER", "anthropic"),
         "summarizer_model": os.getenv("SUMMARIZER_MODEL", "claude-sonnet-4-6"),
         "retention_days": int(os.getenv("RETENTION_DAYS", "30")),
