@@ -1,26 +1,38 @@
-"""Guard: vendored copies of shared/notify.py must match the single source.
+"""Guard: vendored copies of shared/{notify,http_client}.py must match the single source.
 
-Each stack builds its own image with build context = its own dir, so notify.py
-is vendored (committed) into each stack. If this fails, run `make sync-shared`.
+Each stack builds its own image with build context = its own dir, so these files
+are vendored (committed) into each stack. If this fails, run `make sync-shared`.
 """
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-CANONICAL = ROOT / "shared" / "notify.py"
-COPIES = [
-    "news-feed/app/notify.py",
-    "game-codes/notify.py",
-    "watchtower/notifier/notify.py",
-    "torrentwatch/notify.py",
+
+CASES = [
+    ("shared/notify.py", [
+        "news-feed/app/notify.py",
+        "game-codes/notify.py",
+        "watchtower/notifier/notify.py",
+        "torrentwatch/notify.py",
+    ]),
+    ("shared/http_client.py", [
+        "news-feed/app/http_client.py",
+        "game-codes/http_client.py",
+    ]),
 ]
 
 
-@pytest.mark.parametrize("rel", COPIES)
-def test_vendored_copy_matches_canonical(rel):
-    copy = ROOT / rel
-    assert copy.exists(), f"{rel} missing — run `make sync-shared`"
-    assert copy.read_bytes() == CANONICAL.read_bytes(), (
-        f"{rel} drifted from shared/notify.py — run `make sync-shared`"
-    )
+@pytest.mark.parametrize(
+    "canonical_rel,copies",
+    CASES,
+    ids=[c[0].split("/")[-1] for c in CASES],
+)
+def test_vendored_copy_matches_canonical(canonical_rel, copies):
+    canonical = ROOT / canonical_rel
+    for rel in copies:
+        copy = ROOT / rel
+        assert copy.exists(), f"{rel} missing — run `make sync-shared`"
+        assert copy.read_bytes() == canonical.read_bytes(), (
+            f"{rel} drifted from {canonical_rel} — run `make sync-shared`"
+        )
