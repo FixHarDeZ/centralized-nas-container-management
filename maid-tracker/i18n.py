@@ -103,4 +103,5 @@ def translate_block(msg_type, lang, **p):
         balance=balance, month=p.get("month", ""), year=p.get("year", ""),
         period=p.get("period", ""), amount=p.get("amount", ""), payer=payer,
         end_date=p.get("end_date", ""), final=p.get("final", ""),
+        days=p.get("days", ""),
     )
