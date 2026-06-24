@@ -25,6 +25,7 @@ CASES = [
         [
             "news-feed/app/http_client.py",
             "game-codes/http_client.py",
+            "maid-tracker/http_client.py",
         ],
     ),
     (
