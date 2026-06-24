@@ -1560,12 +1560,31 @@ def get_summary(emp_id: int, year: int, month: int):
             else {"total_days": 0.0, "amount": 0.0}
         )
         paid_rows = conn.execute(
-            "SELECT amount FROM daily_payments "
+            "SELECT work_date, amount FROM daily_payments "
             "WHERE employee_id=? AND work_date LIKE ? AND paid_at IS NOT NULL",
             (emp_id, f"{year}-{month:02d}-%"),
         ).fetchall()
+        paid_by_day = {r["work_date"]: r["amount"] for r in paid_rows}
+        paid_amount = round(sum(paid_by_day.values()), 2)
+        # Per-day unpaid: each day's tip (overpayment) does NOT reduce other days' unpaid
+        att_rows = conn.execute(
+            "SELECT work_date, status, half_day FROM attendance "
+            "WHERE employee_id=? AND work_date >= ? AND work_date <= ?",
+            (emp_id, m_start.isoformat(), m_end.isoformat()),
+        ).fetchall()
         conn.close()
-        paid_amount = round(sum(r["amount"] for r in paid_rows), 2)
+        att_map = {
+            r["work_date"]: {"status": r["status"], "half_day": bool(r["half_day"])}
+            for r in att_rows
+        }
+        unpaid_amount = 0.0
+        d = m_start
+        while d <= m_end:
+            day_rate = rate * probation_worked_fraction(att_map.get(d.isoformat()))
+            day_paid = paid_by_day.get(d.isoformat(), 0.0)
+            unpaid_amount += max(0, day_rate - day_paid)
+            d += timedelta(days=1)
+        unpaid_amount = round(unpaid_amount, 2)
         return {
             "year": year,
             "month": month,
@@ -1591,7 +1610,7 @@ def get_summary(emp_id: int, year: int, month: int):
             "actual_pay": tally["amount"],
             "total_earned": tally["amount"],
             "total_paid": paid_amount,
-            "total_unpaid": max(0, round(tally["amount"] - paid_amount, 2)),
+            "total_unpaid": unpaid_amount,
         }
 
     all_rows = conn.execute(
@@ -1781,11 +1800,29 @@ def get_overall(emp_id: int):
         rate = emp.get("probation_daily_rate") or 0.0
         tally = compute_probation_tally(emp_id, start_date, rate, up_to=end)
         paid_rows = conn.execute(
-            "SELECT amount FROM daily_payments WHERE employee_id=? AND paid_at IS NOT NULL",
+            "SELECT work_date, amount FROM daily_payments WHERE employee_id=? AND paid_at IS NOT NULL",
+            (emp_id,),
+        ).fetchall()
+        paid_by_day = {r["work_date"]: r["amount"] for r in paid_rows}
+        paid_amount = round(sum(paid_by_day.values()), 2)
+        # Per-day unpaid: each day's tip (overpayment) does NOT reduce other days' unpaid
+        att_rows = conn.execute(
+            "SELECT work_date, status, half_day FROM attendance WHERE employee_id=?",
             (emp_id,),
         ).fetchall()
         conn.close()
-        paid_amount = round(sum(r["amount"] for r in paid_rows), 2)
+        att_map = {
+            r["work_date"]: {"status": r["status"], "half_day": bool(r["half_day"])}
+            for r in att_rows
+        }
+        unpaid_amount = 0.0
+        d = start_date
+        while d <= end:
+            day_rate = rate * probation_worked_fraction(att_map.get(d.isoformat()))
+            day_paid = paid_by_day.get(d.isoformat(), 0.0)
+            unpaid_amount += max(0, day_rate - day_paid)
+            d += timedelta(days=1)
+        unpaid_amount = round(unpaid_amount, 2)
         return {
             "start_date": emp["start_date"],
             "employment_status": "probation",
@@ -1801,7 +1838,7 @@ def get_overall(emp_id: int):
             "balance_amount": 0,
             "total_earned": tally["amount"],
             "total_paid": paid_amount,
-            "total_unpaid": max(0, round(tally["amount"] - paid_amount, 2)),
+            "total_unpaid": unpaid_amount,
         }
 
     rows = conn.execute(
