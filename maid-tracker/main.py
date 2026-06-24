@@ -16,6 +16,7 @@ from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 import line_notify
+import reminder_translate
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from calc import (
@@ -369,6 +370,10 @@ def init_db():
         pass
     try:
         c.execute("ALTER TABLE employee_documents ADD COLUMN doc_label TEXT")
+    except Exception:
+        pass
+    try:
+        c.execute("ALTER TABLE reminders ADD COLUMN message_i18n TEXT")
     except Exception:
         pass
     conn.commit()
@@ -1851,9 +1856,11 @@ def create_reminder(rem: ReminderCreate):
     conn = get_db()
     c = conn.cursor()
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    tr = reminder_translate.translate_reminder(rem.message)
+    i18n_json = json.dumps(tr, ensure_ascii=False) if tr else None
     c.execute(
-        "INSERT INTO reminders (name, message, enabled, schedule_type, schedule_value, send_time, created_at) "
-        "VALUES (?,?,?,?,?,?,?)",
+        "INSERT INTO reminders (name, message, enabled, schedule_type, schedule_value, send_time, created_at, message_i18n) "
+        "VALUES (?,?,?,?,?,?,?,?)",
         (
             rem.name,
             rem.message,
@@ -1862,6 +1869,7 @@ def create_reminder(rem: ReminderCreate):
             rem.schedule_value,
             rem.send_time,
             now_str,
+            i18n_json,
         ),
     )
     new_id = c.lastrowid
@@ -1876,9 +1884,11 @@ def update_reminder(rem_id: int, rem: ReminderCreate):
         raise HTTPException(400, "Invalid schedule_type")
     conn = get_db()
     c = conn.cursor()
+    tr = reminder_translate.translate_reminder(rem.message)
+    i18n_json = json.dumps(tr, ensure_ascii=False) if tr else None
     c.execute(
         "UPDATE reminders SET name=?, message=?, enabled=?, "
-        "schedule_type=?, schedule_value=?, send_time=? WHERE id=?",
+        "schedule_type=?, schedule_value=?, send_time=?, message_i18n=? WHERE id=?",
         (
             rem.name,
             rem.message,
@@ -1886,6 +1896,7 @@ def update_reminder(rem_id: int, rem: ReminderCreate):
             rem.schedule_type,
             rem.schedule_value,
             rem.send_time,
+            i18n_json,
             rem_id,
         ),
     )
