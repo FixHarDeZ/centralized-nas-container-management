@@ -49,9 +49,16 @@ def get_schedule():
 @router.post("")
 def post_schedule(body: dict):
     allowed_keys = {
-        "digest_times", "enabled_sources", "summarizer_provider", "summarizer_model",
-        "retention_days", "summarizer_fallback", "custom_sources",
-        "digest_window_buffer_hours", "digest_size_base", "digest_size_max",
+        "digest_times",
+        "enabled_sources",
+        "summarizer_provider",
+        "summarizer_model",
+        "retention_days",
+        "summarizer_fallback",
+        "custom_sources",
+        "digest_window_buffer_hours",
+        "digest_size_base",
+        "digest_size_max",
         "digest_max_per_source",
     }
     filtered = {k: v for k, v in body.items() if k in allowed_keys}
@@ -65,7 +72,10 @@ def post_schedule(body: dict):
         fb = filtered["summarizer_fallback"]
         if isinstance(fb, list):
             filtered["summarizer_fallback"] = [
-                {"provider": str(e.get("provider", "anthropic")), "model": str(e.get("model", ""))}
+                {
+                    "provider": str(e.get("provider", "anthropic")),
+                    "model": str(e.get("model", "")),
+                }
                 for e in fb
                 if isinstance(e, dict) and e.get("provider") in valid_providers
             ]
@@ -75,7 +85,11 @@ def post_schedule(body: dict):
         cs = filtered["custom_sources"]
         if isinstance(cs, list):
             filtered["custom_sources"] = [
-                {"key": str(e.get("key", "")).strip(), "name": str(e.get("name", "")).strip(), "url": str(e.get("url", "")).strip()}
+                {
+                    "key": str(e.get("key", "")).strip(),
+                    "name": str(e.get("name", "")).strip(),
+                    "url": str(e.get("url", "")).strip(),
+                }
                 for e in cs
                 if isinstance(e, dict)
                 and str(e.get("key", "")).strip()
@@ -94,7 +108,10 @@ def post_schedule(body: dict):
     # (only max sent, base from existing config) is validated correctly.
     if "digest_size_max" in filtered:
         existing = get_config()
-        prospective_base = filtered.get("digest_size_base", existing.get("digest_size_base", 5))
+        prospective_base = filtered.get(
+            "digest_size_base",
+            existing.get("digest_size_base", 5),
+        )
         if filtered["digest_size_max"] < int(prospective_base):
             del filtered["digest_size_max"]
 

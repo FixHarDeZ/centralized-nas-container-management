@@ -1,5 +1,4 @@
-"""
-Maid Tracker — LINE Notifier
+"""Maid Tracker — LINE Notifier
 Sends notifications via LINE Messaging API when:
   - Leave or compensatory attendance is recorded
   - Salary payment is marked as paid
@@ -12,28 +11,45 @@ If either env var is missing, all notify calls are silently skipped.
 Uses /v2/bot/message/push with the group ID so a single API call reaches all group members.
 """
 
-import os
-import hmac as _hmac
 import hashlib
-import httpx
+import hmac as _hmac
+import os
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
-from calc import compute_overall_balance, compute_resign_summary, compute_probation_resign
 
-LINE_API_URL    = "https://api.line.me/v2/bot/message/push"
-TOKEN           = os.environ.get("MAID_LINE_CHANNEL_ACCESS_TOKEN", "")
-GROUP_ID        = os.environ.get("MAID_LINE_GROUP_ID", "").strip()
-CHANNEL_SECRET  = os.environ.get("MAID_LINE_CHANNEL_SECRET", "")
+import httpx
+from calc import (
+    compute_overall_balance,
+    compute_probation_resign,
+    compute_resign_summary,
+)
+
+LINE_API_URL = "https://api.line.me/v2/bot/message/push"
+TOKEN = os.environ.get("MAID_LINE_CHANNEL_ACCESS_TOKEN", "")
+GROUP_ID = os.environ.get("MAID_LINE_GROUP_ID", "").strip()
+CHANNEL_SECRET = os.environ.get("MAID_LINE_CHANNEL_SECRET", "")
 PUBLIC_BASE_URL = os.environ.get("MAID_PUBLIC_BASE_URL", "").rstrip("/")
-TZ              = ZoneInfo(os.environ.get("TZ", "Asia/Bangkok"))
+TZ = ZoneInfo(os.environ.get("TZ", "Asia/Bangkok"))
 
 THAI_MONTHS = [
-    "", "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
-    "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม",
+    "",
+    "มกราคม",
+    "กุมภาพันธ์",
+    "มีนาคม",
+    "เมษายน",
+    "พฤษภาคม",
+    "มิถุนายน",
+    "กรกฎาคม",
+    "สิงหาคม",
+    "กันยายน",
+    "ตุลาคม",
+    "พฤศจิกายน",
+    "ธันวาคม",
 ]
 
 
 # ─── Slip helpers ────────────────────────────────────────────────────────────
+
 
 def _slip_token(fname: str) -> str:
     """16-char HMAC-SHA256 token used by the public slip route."""
@@ -55,6 +71,7 @@ def _slip_public_url(fname: str) -> str | None:
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
+
 def _now_str() -> str:
     return datetime.now(TZ).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -71,13 +88,13 @@ def _fmt_days(days: float) -> str:
 
 def _balance_block(b: dict) -> str:
     """Format the balance summary block for LINE messages."""
-    bal       = b["balance"]
-    bal_amt   = b["balance_amount"]
-    sign      = "+" if bal >= 0 else ""
-    amt_sign  = "+" if bal_amt >= 0 else ""
-    kind      = "เครดิตสะสม" if bal >= 0 else "ยอดค้าง"
+    bal = b["balance"]
+    bal_amt = b["balance_amount"]
+    sign = "+" if bal >= 0 else ""
+    amt_sign = "+" if bal_amt >= 0 else ""
+    kind = "เครดิตสะสม" if bal >= 0 else "ยอดค้าง"
 
-    comp_str  = f"+{_fmt_days(b['total_comp'])}" if b["total_comp"] else "0"
+    comp_str = f"+{_fmt_days(b['total_comp'])}" if b["total_comp"] else "0"
     leave_str = f"-{_fmt_days(b['total_leave'])}" if b["total_leave"] else "0"
 
     return (
@@ -90,6 +107,7 @@ def _balance_block(b: dict) -> str:
 
 
 # ─── LINE sender ─────────────────────────────────────────────────────────────
+
 
 def send_line(text: str, extra_messages: list | None = None) -> None:
     if not TOKEN or not GROUP_ID:
@@ -105,12 +123,15 @@ def send_line(text: str, extra_messages: list | None = None) -> None:
     try:
         resp = httpx.post(LINE_API_URL, headers=headers, json=payload, timeout=10)
         resp.raise_for_status()
-        print(f"[LINE] sent to group {GROUP_ID[:8]}…: {text[:80].replace(chr(10), ' ')}")
+        print(
+            f"[LINE] sent to group {GROUP_ID[:8]}…: {text[:80].replace(chr(10), ' ')}",
+        )
     except Exception as e:
         print(f"[LINE] ERROR: {e}")
 
 
 # ─── Public notify functions ──────────────────────────────────────────────────
+
 
 def notify_attendance(
     emp_id: int,
@@ -126,14 +147,14 @@ def notify_attendance(
         return
 
     STATUS_LABEL = {
-        "leave":        "🔴 ลา",
+        "leave": "🔴 ลา",
         "compensatory": "🟢 ชดเชย",
     }
-    half_label   = " (ครึ่งวัน)" if half_day else " (เต็มวัน)"
+    half_label = " (ครึ่งวัน)" if half_day else " (เต็มวัน)"
     status_label = STATUS_LABEL.get(status, status) + half_label
 
     try:
-        b   = compute_overall_balance(emp_id, start_date, monthly_salary)
+        b = compute_overall_balance(emp_id, start_date, monthly_salary)
         msg = (
             f"📋 บันทึกการทำงาน — {emp_name}\n"
             f"📅 {work_date}:  {status_label}\n"
@@ -166,20 +187,28 @@ def notify_payment(
     if not TOKEN or not GROUP_ID:
         return
 
-    month_name    = THAI_MONTHS[month]
-    period_label  = f"รอบที่ {period} ({'วันที่ 15' if period == 1 else 'สิ้นเดือน'})"
+    month_name = THAI_MONTHS[month]
+    period_label = f"รอบที่ {period} ({'วันที่ 15' if period == 1 else 'สิ้นเดือน'})"
     deduction_line = ""
     if deduction_days > 0:
-        deduction_line = (
-            f"✂️ หักวันลาเกินสะสม {_fmt_days(deduction_days)} วัน: -฿{_fmt(deduction_amount)}\n"
-        )
+        deduction_line = f"✂️ หักวันลาเกินสะสม {_fmt_days(deduction_days)} วัน: -฿{_fmt(deduction_amount)}\n"
     payer_line = f"  ผู้จ่าย: {paid_by}\n" if paid_by else ""
 
     image_url = _slip_public_url(slip_fname) if slip_fname else None
-    extra = [{"type": "image", "originalContentUrl": image_url, "previewImageUrl": image_url}] if image_url else None
+    extra = (
+        [
+            {
+                "type": "image",
+                "originalContentUrl": image_url,
+                "previewImageUrl": image_url,
+            },
+        ]
+        if image_url
+        else None
+    )
 
     try:
-        b   = compute_overall_balance(emp_id, start_date, monthly_salary)
+        b = compute_overall_balance(emp_id, start_date, monthly_salary)
         msg = (
             f"💰 จ่ายเงินเดือนแล้ว — {emp_name}\n"
             f"📅 {month_name} {year}  {period_label}\n"
@@ -209,8 +238,18 @@ def notify_daily_payment(
         return
 
     payer_line = f"\n  ผู้จ่าย: {paid_by}" if paid_by else ""
-    image_url  = _slip_public_url(slip_fname) if slip_fname else None
-    extra      = [{"type": "image", "originalContentUrl": image_url, "previewImageUrl": image_url}] if image_url else None
+    image_url = _slip_public_url(slip_fname) if slip_fname else None
+    extra = (
+        [
+            {
+                "type": "image",
+                "originalContentUrl": image_url,
+                "previewImageUrl": image_url,
+            },
+        ]
+        if image_url
+        else None
+    )
 
     try:
         msg = (
@@ -233,8 +272,14 @@ def notify_slip_image(emp_name: str, slip_fname: str, label: str) -> None:
     if not TOKEN or not GROUP_ID:
         return
     try:
-        msg   = f"📎 สลิปโอนเงิน — {emp_name}\n{label}\n🕒 {_now_str()}"
-        extra = [{"type": "image", "originalContentUrl": image_url, "previewImageUrl": image_url}]
+        msg = f"📎 สลิปโอนเงิน — {emp_name}\n{label}\n🕒 {_now_str()}"
+        extra = [
+            {
+                "type": "image",
+                "originalContentUrl": image_url,
+                "previewImageUrl": image_url,
+            },
+        ]
         send_line(msg, extra)
     except Exception as e:
         print(f"[LINE] notify_slip_image error: {e}")
@@ -254,14 +299,14 @@ def notify_cancel_attendance(
         return
 
     STATUS_LABEL = {
-        "leave":        "🔴 ลา",
+        "leave": "🔴 ลา",
         "compensatory": "🟢 ชดเชย",
     }
-    half_label   = " (ครึ่งวัน)" if prev_half_day else " (เต็มวัน)"
+    half_label = " (ครึ่งวัน)" if prev_half_day else " (เต็มวัน)"
     status_label = STATUS_LABEL.get(prev_status, prev_status) + half_label
 
     try:
-        b   = compute_overall_balance(emp_id, start_date, monthly_salary)
+        b = compute_overall_balance(emp_id, start_date, monthly_salary)
         msg = (
             f"↩️ ยกเลิกการบันทึก — {emp_name}\n"
             f"📅 {work_date}:  ยกเลิก{status_label}\n"
@@ -290,11 +335,16 @@ def notify_resign(
         return
 
     try:
-        end_date  = date.fromisoformat(end_date_str)
+        end_date = date.fromisoformat(end_date_str)
         note_line = f"\n📝 เหตุผล: {resign_note}" if resign_note else ""
 
         if employment_status == "probation":
-            s = compute_probation_resign(emp_id, start_date, end_date, probation_daily_rate)
+            s = compute_probation_resign(
+                emp_id,
+                start_date,
+                end_date,
+                probation_daily_rate,
+            )
             msg = (
                 f"🚪 บันทึกลาออก — {emp_name}\n"
                 f"📅 วันที่ลาออก: {end_date_str}{note_line}\n"
@@ -309,13 +359,13 @@ def notify_resign(
             send_line(msg)
             return
 
-        s        = compute_resign_summary(emp_id, start_date, end_date, monthly_salary)
+        s = compute_resign_summary(emp_id, start_date, end_date, monthly_salary)
 
-        balance  = s["cumulative_balance"]
-        bal_amt  = s["balance_amount"]
-        sign     = "+" if balance >= 0 else ""
+        balance = s["cumulative_balance"]
+        bal_amt = s["balance_amount"]
+        sign = "+" if balance >= 0 else ""
         amt_sign = "+" if bal_amt >= 0 else ""
-        kind     = "เครดิตชดเชย" if balance >= 0 else "ยอดค้างลา"
+        kind = "เครดิตชดเชย" if balance >= 0 else "ยอดค้างลา"
 
         msg = (
             f"🚪 บันทึกลาออก — {emp_name}\n"
@@ -339,13 +389,7 @@ def notify_reminder(name: str, message: str) -> None:
     if not TOKEN or not GROUP_ID:
         return
     try:
-        msg = (
-            f"🔔 แจ้งเตือนงานวันนี้ — {name}\n"
-            f"\n"
-            f"{message}\n"
-            f"\n"
-            f"🕒 {_now_str()}"
-        )
+        msg = f"🔔 แจ้งเตือนงานวันนี้ — {name}\n\n{message}\n\n🕒 {_now_str()}"
         send_line(msg)
     except Exception as e:
         print(f"[LINE] notify_reminder error: {e}")
@@ -361,22 +405,15 @@ def notify_balance_query(
     if not TOKEN or not GROUP_ID:
         return
     try:
-        b   = compute_overall_balance(emp_id, start_date, monthly_salary)
-        msg = (
-            f"📊 ยอดสะสม — {emp_name}\n"
-            f"\n"
-            f"{_balance_block(b)}\n"
-            f"\n"
-            f"🕒 {_now_str()}"
-        )
+        b = compute_overall_balance(emp_id, start_date, monthly_salary)
+        msg = f"📊 ยอดสะสม — {emp_name}\n\n{_balance_block(b)}\n\n🕒 {_now_str()}"
         send_line(msg)
     except Exception as e:
         print(f"[LINE] notify_balance_query error: {e}")
 
 
 def notify_monthly_report(employees: list[dict]) -> None:
-    """
-    Send end-of-month summary for all active employees.
+    """Send end-of-month summary for all active employees.
     Called by the scheduler on the last day of each month at 20:00.
     `employees` is a list of dicts with keys: id, name, start_date, monthly_salary.
     """
@@ -385,23 +422,23 @@ def notify_monthly_report(employees: list[dict]) -> None:
     if not employees:
         return
 
-    today  = date.today()
+    today = date.today()
     month_name = THAI_MONTHS[today.month]
-    year_be    = today.year + 543
+    year_be = today.year + 543
 
     lines = [f"📅 สรุปประจำเดือน {month_name} {year_be}\n"]
 
     for emp in employees:
         try:
             start = date.fromisoformat(emp["start_date"])
-            b     = compute_overall_balance(emp["id"], start, emp["monthly_salary"])
-            bal   = b["balance"]
-            sign  = "+" if bal >= 0 else ""
-            kind  = "เครดิต" if bal >= 0 else "ค้างลา"
+            b = compute_overall_balance(emp["id"], start, emp["monthly_salary"])
+            bal = b["balance"]
+            sign = "+" if bal >= 0 else ""
+            kind = "เครดิต" if bal >= 0 else "ค้างลา"
             lines.append(
                 f"👤 {emp['name']}\n"
                 f"  ชดเชย +{_fmt_days(b['total_comp'])} วัน  |  ลา -{_fmt_days(b['total_leave'])} วัน\n"
-                f"  ⚖️ {kind}: {sign}{_fmt_days(abs(bal))} วัน  ≈ {sign}฿{_fmt(abs(b['balance_amount']))}"
+                f"  ⚖️ {kind}: {sign}{_fmt_days(abs(bal))} วัน  ≈ {sign}฿{_fmt(abs(b['balance_amount']))}",
             )
         except Exception as e:
             print(f"[LINE] monthly report error for emp {emp.get('id')}: {e}")
@@ -420,10 +457,7 @@ def notify_cancel_resign(emp_name: str) -> None:
 
     try:
         msg = (
-            f"↩️ ยกเลิกลาออก — {emp_name}\n"
-            f"✅ ยกเลิกการลาออกเรียบร้อยแล้ว\n"
-            f"\n"
-            f"🕒 {_now_str()}"
+            f"↩️ ยกเลิกลาออก — {emp_name}\n✅ ยกเลิกการลาออกเรียบร้อยแล้ว\n\n🕒 {_now_str()}"
         )
         send_line(msg)
     except Exception as e:

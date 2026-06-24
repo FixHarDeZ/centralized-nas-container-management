@@ -1,13 +1,14 @@
 import importlib
-import os
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 
 def _reload(monkeypatch, provider: str):
     """Reload llm_client with the given LLM_PROVIDER env var."""
     monkeypatch.setenv("LLM_PROVIDER", provider)
     import llm_client as m
+
     importlib.reload(m)
     m._anthropic_client = None
     m._openrouter_client = None
@@ -85,8 +86,10 @@ async def test_nous_returns_text(monkeypatch):
     fake_token_manager = MagicMock()
     fake_token_manager.get_access_token = AsyncMock(return_value="test-bearer-token")
 
-    with patch("llm_client.nous_auth") as mock_nous_auth, \
-         patch("llm_client.AsyncOpenAI", return_value=fake_openai_instance):
+    with (
+        patch("llm_client.nous_auth") as mock_nous_auth,
+        patch("llm_client.AsyncOpenAI", return_value=fake_openai_instance),
+    ):
         mock_nous_auth.token_manager = fake_token_manager
         result = await m.get_llm_response("system", "user")
 

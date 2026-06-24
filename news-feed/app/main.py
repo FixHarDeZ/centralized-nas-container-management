@@ -6,11 +6,14 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.api import digest, fetch, health, news, prices, schedule, watchlist
-from app.config import DB_PATH, DATA_DIR
+from app.config import DATA_DIR, DB_PATH
 from app.models import get_conn, init_db
 from app.scheduler import setup_scheduler
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 logger = logging.getLogger(__name__)
 
 

@@ -1,5 +1,4 @@
-"""
-APScheduler jobs for TorrentWatch.
+"""APScheduler jobs for TorrentWatch.
 
 Fixed auto-scrape schedule (Asia/Bangkok):
   19:00–01:00  every 30 minutes  (minute 0,30; hour 19-23,0)
@@ -15,24 +14,22 @@ from pathlib import Path
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
-
 import config
 import db
 import line_notify
-import telegram_notify
 import scraper
+import telegram_notify
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 from sqlite_backup import backup_db
 
 _TZ = ZoneInfo(config.TZ)
 _scheduler = BackgroundScheduler(timezone=config.TZ)
 
-_last_scrape:     str  = ""
-_next_scrape:     str  = ""
-_scrape_status:   str  = "idle"
-_scrape_progress: dict = {}   # {"source": label, "page": N, "found": N}
-
+_last_scrape: str = ""
+_next_scrape: str = ""
+_scrape_status: str = "idle"
+_scrape_progress: dict = {}  # {"source": label, "page": N, "found": N}
 
 
 def _run_async(coro):
@@ -54,26 +51,34 @@ async def _do_scrape():
     _last_scrape = now.strftime("%Y-%m-%d %H:%M")
     today = now.strftime("%Y-%m-%d")
 
-    settings      = db.get_settings()
-    seed_min      = int(settings.get("seed_min", 5))
-    leech_min     = int(settings.get("leech_min", 10))
+    settings = db.get_settings()
+    seed_min = int(settings.get("seed_min", 5))
+    leech_min = int(settings.get("leech_min", 10))
     completed_min = int(settings.get("completed_min", 20))
-    filter_mode   = settings.get("filter_mode", "and")
+    filter_mode = settings.get("filter_mode", "and")
     scrape_sticky_val = settings.get("scrape_sticky", "0")
-    skip_sticky  = scrape_sticky_val != "1"
-    line_notify_enabled     = settings.get("line_notify_keyword_enabled", "0") == "1"
-    telegram_notify_enabled = settings.get("telegram_notify_keyword_enabled", "0") == "1"
-    notify_sticky_enabled   = settings.get("notify_sticky_enabled", "0") == "1"
-    auto_dl      = settings.get("auto_download_nas", "0") == "1"
-    nas_dir      = Path(config.NAS_DOWNLOADS_DIR)
-    print(f"[scheduler] scrape_sticky={scrape_sticky_val!r} → skip_sticky={skip_sticky}")
+    skip_sticky = scrape_sticky_val != "1"
+    line_notify_enabled = settings.get("line_notify_keyword_enabled", "0") == "1"
+    telegram_notify_enabled = (
+        settings.get("telegram_notify_keyword_enabled", "0") == "1"
+    )
+    notify_sticky_enabled = settings.get("notify_sticky_enabled", "0") == "1"
+    auto_dl = settings.get("auto_download_nas", "0") == "1"
+    nas_dir = Path(config.NAS_DOWNLOADS_DIR)
+    print(
+        f"[scheduler] scrape_sticky={scrape_sticky_val!r} → skip_sticky={skip_sticky}",
+    )
     if notify_sticky_enabled and skip_sticky:
-        print("[scheduler] warning: notify_sticky_enabled=1 but scrape_sticky=0 — sticky entries are not scraped, no sticky notifications will fire")
+        print(
+            "[scheduler] warning: notify_sticky_enabled=1 but scrape_sticky=0 — sticky entries are not scraped, no sticky notifications will fire",
+        )
 
-    sources     = db.get_enabled_sources()
+    sources = db.get_enabled_sources()
     total_found = 0
-    free_today  = 0   # pre-filter count of today's non-sticky rows that are 100% free
-    rows_today  = 0   # pre-filter count of all today's non-sticky rows (sitewide-free signal)
+    free_today = 0  # pre-filter count of today's non-sticky rows that are 100% free
+    rows_today = (
+        0  # pre-filter count of all today's non-sticky rows (sitewide-free signal)
+    )
 
     try:
         # Re-login each cycle to recover from stale connections after long idle periods
@@ -82,19 +87,40 @@ async def _do_scrape():
             return
 
         for i, source in enumerate(sources):
-            source_id    = source["id"]
-            source_url   = source["url"]
-            keywords     = db.get_keywords_for_source(source_id)
-            source_display = (source.get("label") or "").strip() or urlparse(source_url).path.split("/")[-1] or source_url
+            source_id = source["id"]
+            source_url = source["url"]
+            keywords = db.get_keywords_for_source(source_id)
+            source_display = (
+                (source.get("label") or "").strip()
+                or urlparse(source_url).path.split("/")[-1]
+                or source_url
+            )
             source_total = len(sources)
-            source_idx   = i + 1
+            source_idx = i + 1
 
-            _scrape_progress = {"source": source_display, "source_idx": source_idx, "source_total": source_total, "page": 0, "found": 0}
+            _scrape_progress = {
+                "source": source_display,
+                "source_idx": source_idx,
+                "source_total": source_total,
+                "page": 0,
+                "found": 0,
+            }
 
             try:
-                entries, seen_sticky_ids, src_total, src_free = await scraper.scrape_source(
-                    source_url, seed_min, leech_min, keywords, filter_mode,
-                    on_page=lambda pg, n, _lbl=source_display, _idx=source_idx, _tot=source_total: _update_progress(_lbl, _idx, _tot, pg, total_found + n),
+                (
+                    entries,
+                    seen_sticky_ids,
+                    src_total,
+                    src_free,
+                ) = await scraper.scrape_source(
+                    source_url,
+                    seed_min,
+                    leech_min,
+                    keywords,
+                    filter_mode,
+                    on_page=lambda pg, n, _lbl=source_display, _idx=source_idx, _tot=source_total: (
+                        _update_progress(_lbl, _idx, _tot, pg, total_found + n)
+                    ),
                     skip_sticky=skip_sticky,
                     completed_min=completed_min,
                 )
@@ -107,15 +133,23 @@ async def _do_scrape():
             new_keyword_matches: list[dict] = []
             for entry in entries:
                 try:
-                    is_new, torrent_id = db.upsert_torrent(source_id, entry["site_id"], entry)
+                    is_new, torrent_id = db.upsert_torrent(
+                        source_id,
+                        entry["site_id"],
+                        entry,
+                    )
                     if is_new and entry.get("keyword_match"):
                         new_keyword_matches.append({**entry, "id": torrent_id})
                 except Exception as e:
-                    print(f"[scheduler] upsert error {source_url} site_id={entry.get('site_id')}: {e}")
+                    print(
+                        f"[scheduler] upsert error {source_url} site_id={entry.get('site_id')}: {e}",
+                    )
 
             try:
                 if not skip_sticky:
-                    print(f"[scheduler] calling sync_stickies — seen_sticky_ids={seen_sticky_ids}")
+                    print(
+                        f"[scheduler] calling sync_stickies — seen_sticky_ids={seen_sticky_ids}",
+                    )
                     db.sync_stickies(source_id, seen_sticky_ids, today)
             except Exception as e:
                 print(f"[scheduler] sync_stickies error {source_url}: {e}")
@@ -125,14 +159,20 @@ async def _do_scrape():
             # Push LINE notification for newly-found keyword-matched torrents only
             try:
                 if line_notify_enabled and new_keyword_matches:
-                    await line_notify.notify_keyword_matches(source_url, new_keyword_matches)
+                    await line_notify.notify_keyword_matches(
+                        source_url,
+                        new_keyword_matches,
+                    )
             except Exception as e:
                 print(f"[scheduler] LINE notify error {source_url}: {e}")
 
             # Push Telegram notification for newly-found keyword-matched torrents only
             try:
                 if telegram_notify_enabled and new_keyword_matches:
-                    await telegram_notify.notify_keyword_matches(source_url, new_keyword_matches)
+                    await telegram_notify.notify_keyword_matches(
+                        source_url,
+                        new_keyword_matches,
+                    )
             except Exception as e:
                 print(f"[scheduler] Telegram notify error {source_url}: {e}")
 
@@ -143,13 +183,20 @@ async def _do_scrape():
                     unnotified = db.get_unnotified_stickies(source_id)
                     if unnotified:
                         line_on = bool(config.LINE_ACCESS_TOKEN and config.LINE_USER_ID)
-                        tg_on   = bool(config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID)
+                        tg_on = bool(
+                            config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID,
+                        )
                         if line_on:
                             await line_notify.notify_sticky_new(source_url, unnotified)
                         if tg_on:
-                            await telegram_notify.notify_sticky_new(source_url, unnotified)
+                            await telegram_notify.notify_sticky_new(
+                                source_url,
+                                unnotified,
+                            )
                         db.mark_stickies_notified([e["id"] for e in unnotified])
-                        print(f"[scheduler] sticky notify sent for {len(unnotified)} entries")
+                        print(
+                            f"[scheduler] sticky notify sent for {len(unnotified)} entries",
+                        )
             except Exception as e:
                 print(f"[scheduler] sticky notify error {source_url}: {e}")
 
@@ -159,7 +206,8 @@ async def _do_scrape():
                     for match in new_keyword_matches:
                         try:
                             data = await scraper.fetch_torrent_bytes(
-                                match["torrent_url"], match.get("detail_url", "")
+                                match["torrent_url"],
+                                match.get("detail_url", ""),
                             )
                             if data:
                                 dest = nas_dir / db.torrent_filename(match["title"])
@@ -167,7 +215,9 @@ async def _do_scrape():
                                 db.mark_downloaded_nas(match["id"])
                                 print(f"[scheduler] auto-dl: {match['title'][:50]}")
                         except Exception as e:
-                            print(f"[scheduler] auto-dl error {match['title'][:30]}: {e}")
+                            print(
+                                f"[scheduler] auto-dl error {match['title'][:30]}: {e}",
+                            )
                 else:
                     print("[scheduler] auto-dl: /downloads not mounted, skipping")
 
@@ -178,9 +228,11 @@ async def _do_scrape():
             print(f"[scheduler] all-free notify error: {e}")
 
     finally:
-        _scrape_status   = "idle"
+        _scrape_status = "idle"
         _scrape_progress = {}
-        print(f"[scheduler] scrape done — {total_found} entries across {len(sources)} sources")
+        print(
+            f"[scheduler] scrape done — {total_found} entries across {len(sources)} sources",
+        )
 
 
 async def _maybe_notify_all_free(today: str, rows_today: int, free_today: int):
@@ -198,9 +250,21 @@ async def _maybe_notify_all_free(today: str, rows_today: int, free_today: int):
     print(f"[scheduler] all-free notify sent ({rows_today} today rows all 100% free)")
 
 
-def _update_progress(source_label: str, source_idx: int, source_total: int, page: int, found: int):
+def _update_progress(
+    source_label: str,
+    source_idx: int,
+    source_total: int,
+    page: int,
+    found: int,
+):
     global _scrape_progress
-    _scrape_progress = {"source": source_label, "source_idx": source_idx, "source_total": source_total, "page": page, "found": found}
+    _scrape_progress = {
+        "source": source_label,
+        "source_idx": source_idx,
+        "source_total": source_total,
+        "page": page,
+        "found": found,
+    }
 
 
 def _scrape_job():
@@ -224,9 +288,9 @@ def reload_scrape_job():
     """Set up scrape jobs using intervals from DB settings."""
     settings = db.get_settings()
     night_interval = int(settings.get("scrape_interval_night", 30))
-    day_interval   = int(settings.get("scrape_interval_day",   60))
-    night_minutes  = _minute_pattern(night_interval)
-    day_minutes    = _minute_pattern(day_interval)
+    day_interval = int(settings.get("scrape_interval_day", 60))
+    night_minutes = _minute_pattern(night_interval)
+    day_minutes = _minute_pattern(day_interval)
 
     # Night window: 19:00–01:00
     _scheduler.add_job(
@@ -238,7 +302,11 @@ def reload_scrape_job():
     # Day window: 06:00–19:00
     _scheduler.add_job(
         _scrape_job,
-        CronTrigger(hour="6,7,8,9,10,11,12,13,14,15,16,17,18", minute=day_minutes, timezone=config.TZ),
+        CronTrigger(
+            hour="6,7,8,9,10,11,12,13,14,15,16,17,18",
+            minute=day_minutes,
+            timezone=config.TZ,
+        ),
         id="scrape_day",
         replace_existing=True,
     )
@@ -249,7 +317,9 @@ def reload_scrape_job():
         id="scrape_eod",
         replace_existing=True,
     )
-    print(f"[scheduler] scrape jobs set — night (19:00-01:00 / {night_interval}min), day (06:00-19:00 / {day_interval}min), end-of-day (23:58)")
+    print(
+        f"[scheduler] scrape jobs set — night (19:00-01:00 / {night_interval}min), day (06:00-19:00 / {day_interval}min), end-of-day (23:58)",
+    )
     if _scheduler.running:
         _update_next()
 
@@ -257,7 +327,12 @@ def reload_scrape_job():
 def _backup_job():
     backup_dir = "/data/backups"
     retention = 30
-    path = backup_db(config.DB_PATH, backup_dir, prefix="torrent", retention_days=retention)
+    path = backup_db(
+        config.DB_PATH,
+        backup_dir,
+        prefix="torrent",
+        retention_days=retention,
+    )
     if path:
         print(f"[scheduler] backup: {path}")
     else:
@@ -312,13 +387,15 @@ def _update_next():
 def status() -> dict:
     _update_next()
     return {
-        "last_scrape":     _last_scrape,
-        "next_scrape":     _next_scrape,
-        "scrape_status":   _scrape_status,
-        "scraper_ready":   scraper.is_ready(),
+        "last_scrape": _last_scrape,
+        "next_scrape": _next_scrape,
+        "scrape_status": _scrape_status,
+        "scraper_ready": scraper.is_ready(),
         "scrape_progress": _scrape_progress,
-        "line_configured":     bool(config.LINE_ACCESS_TOKEN and config.LINE_USER_ID),
-        "telegram_configured": bool(config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID),
+        "line_configured": bool(config.LINE_ACCESS_TOKEN and config.LINE_USER_ID),
+        "telegram_configured": bool(
+            config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID,
+        ),
     }
 
 

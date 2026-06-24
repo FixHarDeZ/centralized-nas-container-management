@@ -1,5 +1,4 @@
 import os
-from typing import Optional
 
 from fastapi import APIRouter, Header, HTTPException, Request
 
@@ -10,7 +9,7 @@ router = APIRouter(prefix="/api/fetch", tags=["fetch"])
 
 
 @router.post("/trigger")
-def trigger_fetch(request: Request, x_admin_token: Optional[str] = Header(None)):
+def trigger_fetch(request: Request, x_admin_token: str | None = Header(None)):
     expected = os.getenv("ADMIN_TOKEN", "")
     if not expected or x_admin_token != expected:
         raise HTTPException(status_code=403, detail="Forbidden")

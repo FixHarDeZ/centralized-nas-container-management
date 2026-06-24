@@ -5,12 +5,14 @@ This is the entry point invoked by `make secrets`. See
 docs/superpowers/specs/2026-05-30-env-secrets-management-redesign-design.md
 for the design.
 """
+
 from __future__ import annotations
 
 import subprocess
 import sys
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 import yaml
 
@@ -41,13 +43,10 @@ def compose_quote(value: Any) -> str:
     if "\n" in s or "\r" in s:
         raise RenderError(
             "value contains a newline; docker-compose .env does not support "
-            "multiline values — base64-encode or split into multiple keys"
+            "multiline values — base64-encode or split into multiple keys",
         )
 
-    needs_quoting = (
-        s != s.strip()
-        or any(ch in s for ch in (" ", "#", '"', "\\", "$"))
-    )
+    needs_quoting = s != s.strip() or any(ch in s for ch in (" ", "#", '"', "\\", "$"))
     if not needs_quoting:
         return s
 
@@ -92,14 +91,14 @@ def render_stack(vault: Mapping[str, Any], manifest: Mapping[str, Any]) -> str:
         if value is None:
             raise RenderError(
                 f"manifest references missing vault path '{vault_path}' "
-                f"for ENV '{env_name}'"
+                f"for ENV '{env_name}'",
             )
         lines.append(f"{env_name}={compose_quote(value)}")
 
     for env_name, value in literals.items():
         if env_name in seen:
             raise RenderError(
-                f"literal '{env_name}' collides with env mapping in same manifest"
+                f"literal '{env_name}' collides with env mapping in same manifest",
             )
         seen.add(env_name)
         lines.append(f"{env_name}={compose_quote(value)}")
@@ -109,7 +108,8 @@ def render_stack(vault: Mapping[str, Any], manifest: Mapping[str, Any]) -> str:
 
 def find_manifests(repo_root: Path) -> list[Path]:
     """Return all manifest files: every <stack>/secrets.manifest.yaml plus
-    the root deploy.manifest.yaml if it exists."""
+    the root deploy.manifest.yaml if it exists.
+    """
     result: list[Path] = []
     deploy = repo_root / "deploy.manifest.yaml"
     if deploy.exists():
@@ -140,7 +140,8 @@ def output_path(manifest_path: Path) -> Path:
 
 def load_vault(path: Path) -> dict:
     """Load a vault file. If it appears to be sops-encrypted (has a 'sops:' key
-    at the top level), shell out to `sops -d`. Otherwise parse as plaintext YAML."""
+    at the top level), shell out to `sops -d`. Otherwise parse as plaintext YAML.
+    """
     text = path.read_text()
     if "\nsops:\n" in text or text.startswith("sops:\n"):
         result = subprocess.run(
@@ -150,7 +151,9 @@ def load_vault(path: Path) -> dict:
             check=False,
         )
         if result.returncode != 0:
-            raise RenderError(f"sops decrypt failed for {path}: {result.stderr.strip()}")
+            raise RenderError(
+                f"sops decrypt failed for {path}: {result.stderr.strip()}",
+            )
         return yaml.safe_load(result.stdout) or {}
     return yaml.safe_load(text) or {}
 
@@ -163,7 +166,7 @@ def main(argv: list[str] | None = None) -> int:
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="Render per-stack .env files from sops vault + manifests"
+        description="Render per-stack .env files from sops vault + manifests",
     )
     parser.add_argument(
         "--root",
@@ -208,7 +211,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     root = Path(args.root).resolve()
-    vault_path = Path(args.vault) if args.vault else root / "secrets" / "vault.sops.yaml"
+    vault_path = (
+        Path(args.vault) if args.vault else root / "secrets" / "vault.sops.yaml"
+    )
 
     if not vault_path.exists():
         print(f"error: vault not found at {vault_path}", file=sys.stderr)

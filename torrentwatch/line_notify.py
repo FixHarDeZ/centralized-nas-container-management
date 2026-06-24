@@ -1,11 +1,12 @@
 import asyncio
-import httpx
 from datetime import datetime
 from zoneinfo import ZoneInfo
+
 import config
+import httpx
 from notify import LineCreds, Notifier
 
-_TZ  = ZoneInfo(config.TZ)
+_TZ = ZoneInfo(config.TZ)
 _URL = "https://api.line.me/v2/bot/message/push"
 
 # Shared transport; send_test_message/get_updates keep their own httpx calls so
@@ -34,6 +35,7 @@ async def notify_keyword_matches(source_url: str, matches: list[dict]):
     if not matches:
         return
     from urllib.parse import urlparse
+
     label = urlparse(source_url).path.split("/")[-1] or source_url
 
     lines = [f"🎯 keyword match ใหม่! — {label}\n"]
@@ -50,6 +52,7 @@ async def notify_sticky_new(source_url: str, entries: list[dict]):
     if not entries:
         return
     from urllib.parse import urlparse
+
     label = urlparse(source_url).path.split("/")[-1] or source_url
 
     lines = [f"📌 Sticky ใหม่! — {label}\n"]
@@ -66,6 +69,7 @@ async def notify_round_summary(results: list[dict]):
     lines = [f"📡 TorrentWatch — รอบ {_now()}\n"]
     for r in results:
         from urllib.parse import urlparse
+
         label = urlparse(r["source_url"]).path.split("/")[-1] or r["source_url"]
         kw_part = f", keyword {r['keyword_count']} รายการ" if r["keyword_count"] else ""
         lines.append(f"• {label}: {r['total_count']} รายการ{kw_part}")
@@ -74,19 +78,32 @@ async def notify_round_summary(results: list[dict]):
 
 async def notify_all_free(count: int):
     """Push when every torrent posted today is 100% free-leech (sitewide free event)."""
-    await _push(f"🎉 วันนี้ทุก torrent ฟรี 100%! ({count} รายการ)\nโหลดได้ไม่เสีย ratio 🟢\n\n🕒 {_now()}")
+    await _push(
+        f"🎉 วันนี้ทุก torrent ฟรี 100%! ({count} รายการ)\nโหลดได้ไม่เสีย ratio 🟢\n\n🕒 {_now()}",
+    )
 
 
 async def send_test_message() -> dict:
     """Send a test push and return {"ok": bool, "error": str}. Checks response directly."""
     if not config.LINE_ACCESS_TOKEN or not config.LINE_USER_ID:
-        return {"ok": False, "error": "ยังไม่ได้ตั้งค่า TORRENTWATCH_LINE_ACCESS_TOKEN / TORRENTWATCH_LINE_USER_ID ใน .env"}
+        return {
+            "ok": False,
+            "error": "ยังไม่ได้ตั้งค่า TORRENTWATCH_LINE_ACCESS_TOKEN / TORRENTWATCH_LINE_USER_ID ใน .env",
+        }
     try:
         async with httpx.AsyncClient(timeout=10) as c:
             resp = await c.post(
                 _URL,
                 headers=_headers(),
-                json={"to": config.LINE_USER_ID, "messages": [{"type": "text", "text": f"🧪 TorrentWatch — ทดสอบการแจ้งเตือน LINE\nหากเห็นข้อความนี้ แสดงว่าตั้งค่าถูกต้องแล้ว ✓\n🕒 {_now()}"}]},
+                json={
+                    "to": config.LINE_USER_ID,
+                    "messages": [
+                        {
+                            "type": "text",
+                            "text": f"🧪 TorrentWatch — ทดสอบการแจ้งเตือน LINE\nหากเห็นข้อความนี้ แสดงว่าตั้งค่าถูกต้องแล้ว ✓\n🕒 {_now()}",
+                        },
+                    ],
+                },
             )
         if resp.status_code == 200:
             return {"ok": True}

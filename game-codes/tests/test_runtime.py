@@ -6,7 +6,7 @@ def test_first_run_seeds_silently():
     state = {"seen": {}, "health": {}}
     entries = [{"code": "AAA", "reward": ""}, {"code": "BBB", "reward": ""}]
     new = diff_new({"key": "genshin"}, entries, state)
-    assert new == []                                  # nothing reported first time
+    assert new == []  # nothing reported first time
     assert set(state["seen"]["genshin"]) == {"AAA", "BBB"}  # but all recorded
 
 
@@ -29,6 +29,7 @@ def test_expect_nonzero_source_alerts_once_then_recovers(monkeypatch):
     }
     monkeypatch.setattr(g, "SOURCES", [src])
     import state as state_mod
+
     monkeypatch.setattr(state_mod, "save_state", lambda state: None)
     alerts = []
     monkeypatch.setattr(g, "send_telegram", lambda text: alerts.append(text))

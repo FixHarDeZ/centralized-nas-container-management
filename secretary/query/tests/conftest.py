@@ -1,8 +1,9 @@
 # secretary/query/tests/conftest.py
 import sys
+from unittest.mock import AsyncMock, MagicMock
+
 import numpy as np
 import pytest
-from unittest.mock import MagicMock, AsyncMock
 
 # Stub out heavy deps before main.py is ever imported.
 # These mocks persist for the entire test session.
@@ -41,9 +42,10 @@ async def ac(monkeypatch):
     fake_model = _make_fake_model()
     fake_qdrant = _make_fake_qdrant()
 
-    import main
     from unittest.mock import patch
-    from httpx import AsyncClient, ASGITransport
+
+    import main
+    from httpx import ASGITransport, AsyncClient
 
     fake_llm = MagicMock()
     fake_llm.get_llm_response = AsyncMock(return_value="mocked answer")
@@ -52,9 +54,10 @@ async def ac(monkeypatch):
         # ASGITransport does not fire ASGI lifespan events, so the lifespan
         # hook that normally assigns these never runs.  Assign directly so the
         # endpoints see the fakes they expect.
-        main.qdrant = fake_qdrant          # /health reads module-level qdrant
+        main.qdrant = fake_qdrant  # /health reads module-level qdrant
         main.app.state.model = fake_model  # /query reads app.state.model
         async with AsyncClient(
-            transport=ASGITransport(app=main.app), base_url="http://test"
+            transport=ASGITransport(app=main.app),
+            base_url="http://test",
         ) as client:
             yield client, fake_qdrant, fake_model, fake_llm

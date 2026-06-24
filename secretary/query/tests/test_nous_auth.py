@@ -1,14 +1,15 @@
 import importlib
-import json
 import time
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 
 def _make_manager(monkeypatch, tmp_path):
     """Reload nous_auth with a temp token file path and return a fresh NousTokenManager."""
     monkeypatch.setenv("NOUS_TOKEN_FILE", str(tmp_path / "nous_token.json"))
     import nous_auth
+
     importlib.reload(nous_auth)
     return nous_auth.NousTokenManager()
 
@@ -33,6 +34,7 @@ async def test_start_device_flow_returns_fields(monkeypatch, tmp_path):
     mock_http.post = AsyncMock(return_value=fake_resp)
 
     import nous_auth
+
     with patch.object(nous_auth.httpx, "AsyncClient", return_value=mock_http):
         result = await manager.start_device_flow()
 
@@ -94,6 +96,7 @@ async def test_get_access_token_refreshes_when_expired(monkeypatch, tmp_path):
     mock_http.post = AsyncMock(return_value=fake_resp)
 
     import nous_auth
+
     with patch.object(nous_auth.httpx, "AsyncClient", return_value=mock_http):
         token = await manager.get_access_token()
 
@@ -121,6 +124,7 @@ def test_save_load_roundtrip(monkeypatch, tmp_path):
     manager._save(tokens)
 
     import nous_auth
+
     importlib.reload(nous_auth)
     manager2 = nous_auth.NousTokenManager()
     assert manager2._tokens == tokens
@@ -172,6 +176,7 @@ async def test_poll_for_token_saves_on_success(monkeypatch, tmp_path):
     mock_http.post = AsyncMock(side_effect=[pending_resp, success_resp])
 
     import nous_auth
+
     with patch.object(nous_auth.httpx, "AsyncClient", return_value=mock_http):
         with patch("asyncio.sleep", new_callable=AsyncMock):
             await manager._poll_for_token("dev-code", interval=1, expires_in=60)

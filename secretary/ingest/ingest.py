@@ -5,7 +5,6 @@ import re
 import sqlite3
 import time
 import uuid
-from typing import Optional
 
 import tiktoken
 from FlagEmbedding import BGEM3FlagModel
@@ -47,6 +46,7 @@ qdrant = QdrantClient(url=QDRANT_URL)
 # Qdrant helpers
 # ---------------------------------------------------------------------------
 
+
 def ensure_collection() -> None:
     existing = [c.name for c in qdrant.get_collections().collections]
     if COLLECTION_NAME in existing:
@@ -64,11 +64,12 @@ def ensure_collection() -> None:
 
 
 def delete_page_points(page_id: str) -> None:
-    from qdrant_client.models import Filter, FieldCondition, MatchValue
+    from qdrant_client.models import FieldCondition, Filter, MatchValue
+
     qdrant.delete(
         collection_name=COLLECTION_NAME,
         points_selector=Filter(
-            must=[FieldCondition(key="page_id", match=MatchValue(value=page_id))]
+            must=[FieldCondition(key="page_id", match=MatchValue(value=page_id))],
         ),
     )
 
@@ -76,6 +77,7 @@ def delete_page_points(page_id: str) -> None:
 # ---------------------------------------------------------------------------
 # State DB helpers
 # ---------------------------------------------------------------------------
+
 
 def open_state_db() -> sqlite3.Connection:
     os.makedirs(os.path.dirname(STATE_DB), exist_ok=True)
@@ -87,13 +89,13 @@ def open_state_db() -> sqlite3.Connection:
             last_edited_time TEXT,
             chunk_count INTEGER
         )
-        """
+        """,
     )
     conn.commit()
     return conn
 
 
-def get_stored_state(conn: sqlite3.Connection, page_id: str) -> Optional[tuple]:
+def get_stored_state(conn: sqlite3.Connection, page_id: str) -> tuple | None:
     row = conn.execute(
         "SELECT last_edited_time, chunk_count FROM page_state WHERE page_id=?",
         (page_id,),
@@ -101,7 +103,12 @@ def get_stored_state(conn: sqlite3.Connection, page_id: str) -> Optional[tuple]:
     return row
 
 
-def upsert_state(conn: sqlite3.Connection, page_id: str, last_edited: str, chunk_count: int) -> None:
+def upsert_state(
+    conn: sqlite3.Connection,
+    page_id: str,
+    last_edited: str,
+    chunk_count: int,
+) -> None:
     conn.execute(
         "INSERT OR REPLACE INTO page_state (page_id, last_edited_time, chunk_count) VALUES (?,?,?)",
         (page_id, last_edited, chunk_count),
@@ -123,6 +130,7 @@ def all_stored_page_ids(conn: sqlite3.Connection) -> set:
 # Notion fetch helpers (with rate limiting + retry)
 # ---------------------------------------------------------------------------
 
+
 def _sleep_rate():
     time.sleep(0.34)
 
@@ -141,7 +149,7 @@ _retry_notion = retry(
 
 
 @_retry_notion
-def _notion_search(cursor: Optional[str]) -> dict:
+def _notion_search(cursor: str | None) -> dict:
     kwargs = {"filter": {"property": "object", "value": "page"}, "page_size": 100}
     if cursor:
         kwargs["start_cursor"] = cursor
@@ -150,7 +158,7 @@ def _notion_search(cursor: Optional[str]) -> dict:
 
 
 @_retry_notion
-def _notion_db_query(db_id: str, cursor: Optional[str]) -> dict:
+def _notion_db_query(db_id: str, cursor: str | None) -> dict:
     kwargs = {"database_id": db_id, "page_size": 100}
     if cursor:
         kwargs["start_cursor"] = cursor
@@ -159,7 +167,7 @@ def _notion_db_query(db_id: str, cursor: Optional[str]) -> dict:
 
 
 @_retry_notion
-def _notion_blocks_list(block_id: str, cursor: Optional[str]) -> dict:
+def _notion_blocks_list(block_id: str, cursor: str | None) -> dict:
     kwargs = {"block_id": block_id, "page_size": 100}
     if cursor:
         kwargs["start_cursor"] = cursor
@@ -168,7 +176,7 @@ def _notion_blocks_list(block_id: str, cursor: Optional[str]) -> dict:
 
 
 @_retry_notion
-def _notion_page_children(page_id: str, cursor: Optional[str]) -> dict:
+def _notion_page_children(page_id: str, cursor: str | None) -> dict:
     kwargs = {"block_id": page_id, "page_size": 100}
     if cursor:
         kwargs["start_cursor"] = cursor
@@ -192,7 +200,10 @@ def fetch_all_blocks(block_id: str) -> list:
             break
         cursor = resp["next_cursor"]
     for block in blocks:
-        if block.get("has_children") and block["type"] not in ("child_page", "child_database"):
+        if block.get("has_children") and block["type"] not in (
+            "child_page",
+            "child_database",
+        ):
             block["_children"] = fetch_all_blocks(block["id"])
     return blocks
 
@@ -245,6 +256,7 @@ def _collect_child_pages(root_id: str) -> list[dict]:
 # Page metadata extraction
 # ---------------------------------------------------------------------------
 
+
 def get_page_title(page: dict) -> str:
     props = page.get("properties", {})
     for key in ("Name", "Title", "title"):
@@ -273,6 +285,7 @@ def get_page_url(page: dict) -> str:
 # ---------------------------------------------------------------------------
 # Block → Markdown converter
 # ---------------------------------------------------------------------------
+
 
 def _rich_text_to_str(rich_texts: list) -> str:
     return "".join(rt.get("plain_text", "") for rt in rich_texts)
@@ -383,6 +396,7 @@ def page_to_markdown(page_id: str) -> str:
 # Chunking
 # ---------------------------------------------------------------------------
 
+
 def _count_tokens(text: str) -> int:
     return len(TOKENIZER.encode(text))
 
@@ -431,40 +445,38 @@ def _extract_keywords(*texts: str) -> list[str]:
 
 def _split_table_to_rows(section_text: str, heading: str, title: str) -> list[dict]:
     """Split a table section into per-row chunks for better retrieval."""
-    
     lines = section_text.strip().split("\n")
     header = None
     separator_seen = False
     rows = []
     preamble_lines = []
-    
+
     for line in lines:
         if not line.startswith("|"):
             if header is None:
                 preamble_lines.append(line)
             continue
-        
+
         cells = [c.strip().replace("<br>", "\n") for c in line.split("|")[1:-1]]
-        
+
         # Skip separator line
         if all(c.replace("-", "").strip() == "" for c in cells):
-            separator_seen = True
             continue
-        
+
         if header is None:
             header = cells
         else:
             rows.append(cells)
-    
+
     if not header or not rows:
         return []
-    
+
     # Get category from heading (e.g., "Application", "Website")
     category = heading.lower() if heading else ""
-    
+
     chunks = []
     preamble = "\n".join(preamble_lines).strip()
-    
+
     for row in rows:
         # Build rich text for each row
         row_parts = []
@@ -474,16 +486,16 @@ def _split_table_to_rows(section_text: str, heading: str, title: str) -> list[di
                 row_parts.append(f"{h}: {v}")
                 if i == 0:
                     primary_name = v
-        
+
         if not row_parts:
             continue
-       
+
         row_text = "\n".join(row_parts)
-        
+
         # Add preamble context if exists
         if preamble:
             row_text = f"{preamble}\n{row_text}"
-        
+
         # Build breadcrumb: Title > Section > Entry Name
         breadcrumb_parts = [title]
         if heading:
@@ -491,28 +503,29 @@ def _split_table_to_rows(section_text: str, heading: str, title: str) -> list[di
         if primary_name:
             breadcrumb_parts.append(primary_name)
         breadcrumb = " > ".join(breadcrumb_parts)
-        
+
         # Extract keywords for better retrieval
         keywords = _extract_keywords(primary_name, *[v for v in row if v])
-        
-        chunks.append({
-            "heading": heading,
-            "text": row_text,
-            "breadcrumb": breadcrumb,
-            "keywords": keywords,
-            "category": category,
-            "is_table_row": True,
-        })
-    
+
+        chunks.append(
+            {
+                "heading": heading,
+                "text": row_text,
+                "breadcrumb": breadcrumb,
+                "keywords": keywords,
+                "category": category,
+                "is_table_row": True,
+            },
+        )
+
     return chunks
 
 
 def chunk_document(title: str, markdown: str) -> list[dict]:
     """Split by ## headings, then by paragraph if oversized, then merge tiny sections.
-    
+
     For sections containing tables, split into per-row chunks for better retrieval.
     """
-
     sections = re.split(r"(?=^## )", markdown, flags=re.MULTILINE)
     raw_sections = []
     for sec in sections:
@@ -533,7 +546,7 @@ def chunk_document(title: str, markdown: str) -> list[dict]:
             if table_chunks:
                 expanded.extend(table_chunks)
                 continue
-        
+
         # Non-table sections: use original logic
         tok = _count_tokens(sec["text"])
         if tok > 500:
@@ -554,10 +567,12 @@ def chunk_document(title: str, markdown: str) -> list[dict]:
             i += 1
         elif _count_tokens(sec["text"]) < 50 and i + 1 < len(expanded):
             next_sec = expanded[i + 1]
-            merged.append({
-                "heading": sec["heading"] or next_sec["heading"],
-                "text": sec["text"] + "\n\n" + next_sec["text"],
-            })
+            merged.append(
+                {
+                    "heading": sec["heading"] or next_sec["heading"],
+                    "text": sec["text"] + "\n\n" + next_sec["text"],
+                },
+            )
             i += 2
         else:
             merged.append(sec)
@@ -571,13 +586,15 @@ def chunk_document(title: str, markdown: str) -> list[dict]:
 
         # Table row chunks already have breadcrumb and keywords
         if sec.get("is_table_row"):
-            chunks.append({
-                "text": sec["text"],
-                "breadcrumb": sec["breadcrumb"],
-                "chunk_index": idx,
-                "keywords": sec.get("keywords", []),
-                "category": sec.get("category", ""),
-            })
+            chunks.append(
+                {
+                    "text": sec["text"],
+                    "breadcrumb": sec["breadcrumb"],
+                    "chunk_index": idx,
+                    "keywords": sec.get("keywords", []),
+                    "category": sec.get("category", ""),
+                },
+            )
         else:
             # Regular chunks: 3-level breadcrumb (Title > H2 > H3)
             h3 = _first_h3(sec["text"])
@@ -587,12 +604,14 @@ def chunk_document(title: str, markdown: str) -> list[dict]:
             if h3 and h3 != current_h2:
                 breadcrumb_parts.append(h3)
             breadcrumb = " > ".join(breadcrumb_parts)
-            
-            chunks.append({
-                "text": sec["text"],
-                "breadcrumb": breadcrumb,
-                "chunk_index": idx,
-            })
+
+            chunks.append(
+                {
+                    "text": sec["text"],
+                    "breadcrumb": breadcrumb,
+                    "chunk_index": idx,
+                },
+            )
 
     return chunks
 
@@ -600,6 +619,7 @@ def chunk_document(title: str, markdown: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Embedding
 # ---------------------------------------------------------------------------
+
 
 def embed_texts(texts: list[str]) -> list[dict]:
     result = embed_model.encode(texts, return_dense=True, return_sparse=True)
@@ -616,16 +636,19 @@ def embed_texts(texts: list[str]) -> list[dict]:
                 continue
             indices.append(int(token_id_str))
             values.append(w)
-        output.append({
-            "dense": dense.tolist(),
-            "sparse": SparseVector(indices=indices, values=values),
-        })
+        output.append(
+            {
+                "dense": dense.tolist(),
+                "sparse": SparseVector(indices=indices, values=values),
+            },
+        )
     return output
 
 
 # ---------------------------------------------------------------------------
 # Qdrant upsert
 # ---------------------------------------------------------------------------
+
 
 def upsert_chunks(page: dict, chunks: list[dict]) -> None:
     if not chunks:
@@ -662,7 +685,7 @@ def upsert_chunks(page: dict, chunks: list[dict]) -> None:
                     "keywords": chunk.get("keywords", []),
                     "category": chunk.get("category", ""),
                 },
-            )
+            ),
         )
 
     qdrant.upsert(collection_name=COLLECTION_NAME, points=points)
@@ -672,7 +695,13 @@ def upsert_chunks(page: dict, chunks: list[dict]) -> None:
 # Core ingest logic
 # ---------------------------------------------------------------------------
 
-def ingest_page(page: dict, conn: sqlite3.Connection, dry_run: bool, full: bool) -> dict:
+
+def ingest_page(
+    page: dict,
+    conn: sqlite3.Connection,
+    dry_run: bool,
+    full: bool,
+) -> dict:
     page_id = page["id"]
     page_title = get_page_title(page)
     last_edited = page.get("last_edited_time", "")
@@ -729,18 +758,34 @@ def remove_deleted_pages(live_ids: set, conn: sqlite3.Connection, dry_run: bool)
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main():
     parser = argparse.ArgumentParser(description="Notion → Qdrant ingestion")
     parser.add_argument("--full", action="store_true", help="Re-ingest all pages")
-    parser.add_argument("--page", metavar="ID", help="Ingest a single page by Notion ID")
-    parser.add_argument("--dry-run", action="store_true", help="Show changes without writing")
+    parser.add_argument(
+        "--page",
+        metavar="ID",
+        help="Ingest a single page by Notion ID",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show changes without writing",
+    )
     args = parser.parse_args()
 
     ensure_collection()
     conn = open_state_db()
 
     start = time.time()
-    stats = {"processed": 0, "updated": 0, "skipped": 0, "errors": 0, "chunks": 0, "deleted": 0}
+    stats = {
+        "processed": 0,
+        "updated": 0,
+        "skipped": 0,
+        "errors": 0,
+        "chunks": 0,
+        "deleted": 0,
+    }
 
     if args.page:
         page = _notion_page_retrieve(args.page)
@@ -770,8 +815,13 @@ def main():
     elapsed = time.time() - start
     log.info(
         "\nSummary — pages: %d | updated: %d | skipped: %d | chunks: %d | deleted: %d | errors: %d | time: %.1fs",
-        stats["processed"], stats["updated"], stats["skipped"],
-        stats["chunks"], stats["deleted"], stats["errors"], elapsed,
+        stats["processed"],
+        stats["updated"],
+        stats["skipped"],
+        stats["chunks"],
+        stats["deleted"],
+        stats["errors"],
+        elapsed,
     )
 
     conn.close()

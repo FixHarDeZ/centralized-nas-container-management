@@ -10,6 +10,7 @@ Usage:
 
 Delete this script after Phase A cutover (Task 19).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -18,7 +19,6 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-
 
 # ────────────────────────────────────────────────────────────────────────────
 # IMPORT MAP — for every current <stack>/.env key, declare where it lands in
@@ -61,11 +61,11 @@ LITERAL_KEYS: set[tuple[str, str]] = {
 # Per-stack mappings: ENV name → vault dotted path (excluding literals above).
 IMPORT_MAP: dict[str, dict[str, str]] = {
     "root": {
-        "NAS_USER":          "shared.nas.user",
-        "NAS_HOST":          "shared.nas.host",
-        "NAS_PORT":          "shared.nas.port",
-        "NAS_SSH_KEY":       "shared.nas.ssh_key",
-        "NAS_TARGET_PATH":   "shared.nas.target_path",
+        "NAS_USER": "shared.nas.user",
+        "NAS_HOST": "shared.nas.host",
+        "NAS_PORT": "shared.nas.port",
+        "NAS_SSH_KEY": "shared.nas.ssh_key",
+        "NAS_TARGET_PATH": "shared.nas.target_path",
         "NAS_SUDO_PASSWORD": "shared.nas.sudo_password",
         # NAS_SSH_ALIAS handled as a literal in deploy.manifest.yaml
         # SYNC_NOTION_TOKEN / NOTION_SUMMARY_DATABASE_ID: sync_notion.py is
@@ -73,88 +73,88 @@ IMPORT_MAP: dict[str, dict[str, str]] = {
         # should rotate them outside this migration.
     },
     "homepage": {
-        "NAS_VOLUME_ROOT":                 "stacks.homepage.nas_volume_root",
-        "NAS_VOLUME_STORAGE":              "stacks.homepage.nas_volume_storage",
-        "HOMEPAGE_ALLOWED_HOSTS":          "stacks.homepage.allowed_hosts",
-        "HOMEPAGE_VAR_DDNS_BASE_HTTP":     "stacks.homepage.var_ddns_base_http",
-        "HOMEPAGE_VAR_DDNS_BASE_HTTPS":    "stacks.homepage.var_ddns_base_https",
-        "HOMEPAGE_VAR_QUICKCONNECT_URL":   "stacks.homepage.var_quickconnect_url",
-        "HOMEPAGE_VAR_NAS_URL":            "stacks.homepage.var_nas_url",
-        "HOMEPAGE_VAR_NAS_USERNAME":       "stacks.homepage.var_nas_username",
-        "HOMEPAGE_VAR_NAS_PASSWORD":       "stacks.homepage.var_nas_password",
-        "HOMEPAGE_VAR_JELLYFIN_URL":       "stacks.homepage.var_jellyfin_url",
-        "HOMEPAGE_VAR_JELLYFIN_KEY":       "stacks.homepage.var_jellyfin_key",
-        "HOMEPAGE_VAR_PLEX_URL":           "stacks.homepage.var_plex_url",
-        "HOMEPAGE_VAR_PLEX_KEY":           "stacks.homepage.var_plex_key",
-        "HOMEPAGE_VAR_PORTAINER_URL":      "stacks.homepage.var_portainer_url",
-        "HOMEPAGE_VAR_PORTAINER_KEY":      "stacks.homepage.var_portainer_key",
-        "HOMEPAGE_VAR_UPTIME_KUMA_URL":    "stacks.homepage.var_uptime_kuma_url",
-        "HOMEPAGE_VAR_UPTIME_KUMA_SLUG":   "stacks.homepage.var_uptime_kuma_slug",
-        "HOMEPAGE_VAR_MAID_TRACKER_URL":   "stacks.homepage.var_maid_tracker_url",
-        "HOMEPAGE_VAR_TORRENTWATCH_URL":   "stacks.homepage.var_torrentwatch_url",
-        "HOMEPAGE_VAR_NEWS_FEED_HTTP":     "stacks.homepage.var_news_feed_http",
-        "HOMEPAGE_VAR_NEWS_FEED_HTTPS":    "stacks.homepage.var_news_feed_https",
-        "HOMEPAGE_VAR_HERMES_HTTP":        "stacks.homepage.var_hermes_http",
-        "HOMEPAGE_VAR_HERMES_HTTPS":       "stacks.homepage.var_hermes_https",
-        "HOMEPAGE_VAR_N8N_HTTP":           "stacks.homepage.var_n8n_http",
-        "HOMEPAGE_VAR_N8N_HTTPS":          "stacks.homepage.var_n8n_https",
+        "NAS_VOLUME_ROOT": "stacks.homepage.nas_volume_root",
+        "NAS_VOLUME_STORAGE": "stacks.homepage.nas_volume_storage",
+        "HOMEPAGE_ALLOWED_HOSTS": "stacks.homepage.allowed_hosts",
+        "HOMEPAGE_VAR_DDNS_BASE_HTTP": "stacks.homepage.var_ddns_base_http",
+        "HOMEPAGE_VAR_DDNS_BASE_HTTPS": "stacks.homepage.var_ddns_base_https",
+        "HOMEPAGE_VAR_QUICKCONNECT_URL": "stacks.homepage.var_quickconnect_url",
+        "HOMEPAGE_VAR_NAS_URL": "stacks.homepage.var_nas_url",
+        "HOMEPAGE_VAR_NAS_USERNAME": "stacks.homepage.var_nas_username",
+        "HOMEPAGE_VAR_NAS_PASSWORD": "stacks.homepage.var_nas_password",
+        "HOMEPAGE_VAR_JELLYFIN_URL": "stacks.homepage.var_jellyfin_url",
+        "HOMEPAGE_VAR_JELLYFIN_KEY": "stacks.homepage.var_jellyfin_key",
+        "HOMEPAGE_VAR_PLEX_URL": "stacks.homepage.var_plex_url",
+        "HOMEPAGE_VAR_PLEX_KEY": "stacks.homepage.var_plex_key",
+        "HOMEPAGE_VAR_PORTAINER_URL": "stacks.homepage.var_portainer_url",
+        "HOMEPAGE_VAR_PORTAINER_KEY": "stacks.homepage.var_portainer_key",
+        "HOMEPAGE_VAR_UPTIME_KUMA_URL": "stacks.homepage.var_uptime_kuma_url",
+        "HOMEPAGE_VAR_UPTIME_KUMA_SLUG": "stacks.homepage.var_uptime_kuma_slug",
+        "HOMEPAGE_VAR_MAID_TRACKER_URL": "stacks.homepage.var_maid_tracker_url",
+        "HOMEPAGE_VAR_TORRENTWATCH_URL": "stacks.homepage.var_torrentwatch_url",
+        "HOMEPAGE_VAR_NEWS_FEED_HTTP": "stacks.homepage.var_news_feed_http",
+        "HOMEPAGE_VAR_NEWS_FEED_HTTPS": "stacks.homepage.var_news_feed_https",
+        "HOMEPAGE_VAR_HERMES_HTTP": "stacks.homepage.var_hermes_http",
+        "HOMEPAGE_VAR_HERMES_HTTPS": "stacks.homepage.var_hermes_https",
+        "HOMEPAGE_VAR_N8N_HTTP": "stacks.homepage.var_n8n_http",
+        "HOMEPAGE_VAR_N8N_HTTPS": "stacks.homepage.var_n8n_https",
     },
     "news-feed": {
         # Current news-feed/.env only has OPENROUTER + Telegram + ADMIN.
         # ANTHROPIC + LINE_* are NOT currently used (spec example was aspirational).
-        "OPENROUTER_API_KEY":           "shared.llm.openrouter_api_key",
+        "OPENROUTER_API_KEY": "shared.llm.openrouter_api_key",
         "NEWS_FEED_TELEGRAM_BOT_TOKEN": "stacks.news_feed.telegram.bot_token",
-        "TELEGRAM_CHAT_ID":             "stacks.news_feed.telegram.chat_id",
-        "ADMIN_TOKEN":                  "stacks.news_feed.admin_token",
+        "TELEGRAM_CHAT_ID": "stacks.news_feed.telegram.chat_id",
+        "ADMIN_TOKEN": "stacks.news_feed.admin_token",
     },
     "hermes-agent": {
-        "OPENROUTER_API_KEY":         "stacks.hermes_agent.openrouter_api_key",
-        "XIAOMI_API_KEY":             "stacks.hermes_agent.xiaomi.api_key",
-        "XIAOMI_BASE_URL":             "stacks.hermes_agent.xiaomi.base_url",
-        "HERMES_TELEGRAM_BOT_TOKEN":  "stacks.hermes_agent.telegram.bot_token",
-        "TELEGRAM_ALLOWED_USERS":     "stacks.hermes_agent.telegram.allowed_users",
-        "DISCORD_BOT_TOKEN":          "stacks.hermes_agent.discord.bot_token",
-        "DISCORD_ALLOWED_GUILDS":     "stacks.hermes_agent.discord.allowed_guilds",
+        "OPENROUTER_API_KEY": "stacks.hermes_agent.openrouter_api_key",
+        "XIAOMI_API_KEY": "stacks.hermes_agent.xiaomi.api_key",
+        "XIAOMI_BASE_URL": "stacks.hermes_agent.xiaomi.base_url",
+        "HERMES_TELEGRAM_BOT_TOKEN": "stacks.hermes_agent.telegram.bot_token",
+        "TELEGRAM_ALLOWED_USERS": "stacks.hermes_agent.telegram.allowed_users",
+        "DISCORD_BOT_TOKEN": "stacks.hermes_agent.discord.bot_token",
+        "DISCORD_ALLOWED_GUILDS": "stacks.hermes_agent.discord.allowed_guilds",
     },
     "watchtower": {
         "WATCHTOWER_LINE_CHANNEL_ACCESS_TOKEN": "stacks.watchtower.line.channel_access_token",
-        "WATCHTOWER_LINE_USER_ID":              "stacks.watchtower.line.user_id",
-        "WATCHTOWER_TELEGRAM_BOT_TOKEN":        "stacks.watchtower.telegram.bot_token",
-        "TELEGRAM_CHAT_ID":                     "stacks.watchtower.telegram.chat_id",
+        "WATCHTOWER_LINE_USER_ID": "stacks.watchtower.line.user_id",
+        "WATCHTOWER_TELEGRAM_BOT_TOKEN": "stacks.watchtower.telegram.bot_token",
+        "TELEGRAM_CHAT_ID": "stacks.watchtower.telegram.chat_id",
     },
     "torrentwatch": {
-        "NAS_TORRENT_PATH":               "stacks.torrentwatch.torrent_path",
-        "TORRENTWATCH_SITE_USERNAME":     "stacks.torrentwatch.site.username",
-        "TORRENTWATCH_SITE_PASSWORD":     "stacks.torrentwatch.site.password",
-        "TORRENTWATCH_DEFAULT_URLS":      "stacks.torrentwatch.default_urls",
-        "NGINX_BASIC_AUTH_USER":          "stacks.torrentwatch.nginx_basic_auth.user",
-        "NGINX_BASIC_AUTH_PASS":          "stacks.torrentwatch.nginx_basic_auth.pass",
+        "NAS_TORRENT_PATH": "stacks.torrentwatch.torrent_path",
+        "TORRENTWATCH_SITE_USERNAME": "stacks.torrentwatch.site.username",
+        "TORRENTWATCH_SITE_PASSWORD": "stacks.torrentwatch.site.password",
+        "TORRENTWATCH_DEFAULT_URLS": "stacks.torrentwatch.default_urls",
+        "NGINX_BASIC_AUTH_USER": "stacks.torrentwatch.nginx_basic_auth.user",
+        "NGINX_BASIC_AUTH_PASS": "stacks.torrentwatch.nginx_basic_auth.pass",
         "TORRENTWATCH_LINE_ACCESS_TOKEN": "stacks.torrentwatch.line.access_token",
-        "TORRENTWATCH_LINE_USER_ID":      "stacks.torrentwatch.line.user_id",
+        "TORRENTWATCH_LINE_USER_ID": "stacks.torrentwatch.line.user_id",
         "TORRENTWATCH_TELEGRAM_BOT_TOKEN": "stacks.torrentwatch.telegram.bot_token",
-        "TORRENTWATCH_TELEGRAM_CHAT_ID":  "stacks.torrentwatch.telegram.chat_id",
+        "TORRENTWATCH_TELEGRAM_CHAT_ID": "stacks.torrentwatch.telegram.chat_id",
     },
     "maid-tracker": {
         "MAID_LINE_CHANNEL_ACCESS_TOKEN": "stacks.maid_tracker.line.channel_access_token",
-        "MAID_LINE_CHANNEL_SECRET":       "stacks.maid_tracker.line.channel_secret",
-        "MAID_LINE_GROUP_ID":             "stacks.maid_tracker.line.group_id",
-        "NGINX_BASIC_AUTH_USER":          "stacks.maid_tracker.nginx_basic_auth.user",
-        "NGINX_BASIC_AUTH_PASS":          "stacks.maid_tracker.nginx_basic_auth.pass",
+        "MAID_LINE_CHANNEL_SECRET": "stacks.maid_tracker.line.channel_secret",
+        "MAID_LINE_GROUP_ID": "stacks.maid_tracker.line.group_id",
+        "NGINX_BASIC_AUTH_USER": "stacks.maid_tracker.nginx_basic_auth.user",
+        "NGINX_BASIC_AUTH_PASS": "stacks.maid_tracker.nginx_basic_auth.pass",
     },
     "secretary": {
-        "N8N_BASIC_AUTH_USER":     "stacks.secretary.n8n.basic_auth_user",
+        "N8N_BASIC_AUTH_USER": "stacks.secretary.n8n.basic_auth_user",
         "N8N_BASIC_AUTH_PASSWORD": "stacks.secretary.n8n.basic_auth_password",
-        "N8N_WEBHOOK_URL":         "stacks.secretary.n8n.webhook_url",
+        "N8N_WEBHOOK_URL": "stacks.secretary.n8n.webhook_url",
     },
     "secretary/ingest": {
         "SECRETARY_NOTION_TOKEN": "shared.notion.secretary_token",
     },
     "secretary/query": {
-        "ANTHROPIC_API_KEY":   "stacks.secretary.query.anthropic_api_key",
-        "OPENROUTER_API_KEY":  "stacks.secretary.query.openrouter_api_key",
-        "NORUS_API_KEY":       "stacks.secretary.query.norus_api_key",
-        "NORUS_BASE_URL":      "stacks.secretary.query.norus_base_url",
-        "COHERE_API_KEY":      "shared.llm.cohere_api_key",
+        "ANTHROPIC_API_KEY": "stacks.secretary.query.anthropic_api_key",
+        "OPENROUTER_API_KEY": "stacks.secretary.query.openrouter_api_key",
+        "NORUS_API_KEY": "stacks.secretary.query.norus_api_key",
+        "NORUS_BASE_URL": "stacks.secretary.query.norus_base_url",
+        "COHERE_API_KEY": "shared.llm.cohere_api_key",
     },
 }
 
@@ -226,8 +226,10 @@ def main(argv: list[str] | None = None) -> int:
 
     # root .env first
     skipped = import_stack("root", root / ".env", vault, counters)
-    print(f"  root: imported {len(IMPORT_MAP['root'])} keys, "
-          f"skipped (literal): {skipped or 'none'}")
+    print(
+        f"  root: imported {len(IMPORT_MAP['root'])} keys, "
+        f"skipped (literal): {skipped or 'none'}",
+    )
 
     # Per-stack
     for stack_name in IMPORT_MAP:
@@ -236,8 +238,10 @@ def main(argv: list[str] | None = None) -> int:
         env_file = root / stack_name / ".env"
         skipped = import_stack(stack_name, env_file, vault, counters)
         n_mapped = len(IMPORT_MAP[stack_name])
-        print(f"  {stack_name}: imported up to {n_mapped} keys, "
-              f"skipped (literal): {skipped or 'none'}")
+        print(
+            f"  {stack_name}: imported up to {n_mapped} keys, "
+            f"skipped (literal): {skipped or 'none'}",
+        )
 
     # Hard-coded constant fields that aren't sourced from .env files
     deep_set(vault, "shared.nas.target_path", "/volume2/docker")

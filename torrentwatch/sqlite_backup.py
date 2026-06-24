@@ -4,13 +4,13 @@ Usage:
     from sqlite_backup import backup_db
     path = backup_db("/data/app.db", "/data/backups", prefix="app")
 """
+
 import glob
 import gzip
 import os
 import sqlite3
 import time
-from datetime import datetime, timezone
-from pathlib import Path
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 
@@ -42,8 +42,12 @@ def backup_db(
         finally:
             src.close()
 
-        with open(plain_path, "rb") as fin, gzip.open(gz_path, "wb", compresslevel=6) as fout:
+        with (
+            open(plain_path, "rb") as fin,
+            gzip.open(gz_path, "wb", compresslevel=6) as fout,
+        ):
             import shutil
+
             shutil.copyfileobj(fin, fout)
         os.remove(plain_path)
 

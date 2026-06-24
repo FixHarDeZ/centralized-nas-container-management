@@ -1,5 +1,6 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 
 def _make_hit(breadcrumb: str, text: str, url: str = "", score: float = 0.9):
@@ -20,6 +21,7 @@ def _make_hit(breadcrumb: str, text: str, url: str = "", score: float = 0.9):
 # ---------------------------------------------------------------------------
 # /health
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_health_ok(ac):
@@ -54,6 +56,7 @@ async def test_health_qdrant_down(ac):
 # ---------------------------------------------------------------------------
 # /query — hybrid (no Cohere)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_query_hybrid_returns_answer(ac):
@@ -108,6 +111,7 @@ async def test_query_top_k_final_slices_results(ac):
 # /query — hybrid + Cohere rerank path
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_query_rerank_path(ac):
     client, fake_qdrant, _, fake_llm = ac
@@ -131,8 +135,10 @@ async def test_query_rerank_path(ac):
     fake_co.rerank = AsyncMock(return_value=fake_rerank_resp)
     fake_llm.get_llm_response = AsyncMock(return_value="reranked answer [1]")
 
-    with patch("main.cohere") as mock_cohere, \
-         patch("main.COHERE_API_KEY", "co-test-key"):
+    with (
+        patch("main.cohere") as mock_cohere,
+        patch("main.COHERE_API_KEY", "co-test-key"),
+    ):
         mock_cohere.AsyncClientV2.return_value = fake_co
         resp = await client.post(
             "/query",
@@ -151,6 +157,7 @@ async def test_query_rerank_path(ac):
 # ---------------------------------------------------------------------------
 # /nous/auth and /nous/auth/status
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_nous_auth_status_unauthenticated(ac):
@@ -172,13 +179,15 @@ async def test_nous_auth_starts_flow(ac):
     client, _, __, ___ = ac
 
     fake_manager = MagicMock()
-    fake_manager.start_device_flow = AsyncMock(return_value={
-        "authenticated": False,
-        "verification_uri": "https://portal.nousresearch.com/manage-subscription?user_code=TEST-1234",
-        "user_code": "TEST-1234",
-        "expires_in": 300,
-        "message": "Open https://portal.nousresearch.com/... and enter code: TEST-1234",
-    })
+    fake_manager.start_device_flow = AsyncMock(
+        return_value={
+            "authenticated": False,
+            "verification_uri": "https://portal.nousresearch.com/manage-subscription?user_code=TEST-1234",
+            "user_code": "TEST-1234",
+            "expires_in": 300,
+            "message": "Open https://portal.nousresearch.com/... and enter code: TEST-1234",
+        },
+    )
 
     with patch("main.nous_auth") as mock_nous_auth:
         mock_nous_auth.token_manager = fake_manager
@@ -196,7 +205,9 @@ async def test_nous_auth_start_portal_error(ac):
     client, _, __, ___ = ac
 
     fake_manager = MagicMock()
-    fake_manager.start_device_flow = AsyncMock(side_effect=Exception("Connection refused"))
+    fake_manager.start_device_flow = AsyncMock(
+        side_effect=Exception("Connection refused"),
+    )
 
     with patch("main.nous_auth") as mock_nous_auth:
         mock_nous_auth.token_manager = fake_manager
@@ -212,7 +223,10 @@ async def test_nous_auth_status_authenticated(ac):
     client, _, __, ___ = ac
 
     fake_manager = MagicMock()
-    fake_manager.auth_status.return_value = {"authenticated": True, "expires_at": 1234567890}
+    fake_manager.auth_status.return_value = {
+        "authenticated": True,
+        "expires_at": 1234567890,
+    }
 
     with patch("main.nous_auth") as mock_nous_auth:
         mock_nous_auth.token_manager = fake_manager

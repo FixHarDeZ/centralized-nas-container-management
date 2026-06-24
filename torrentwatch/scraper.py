@@ -1,5 +1,4 @@
-"""
-TorrentWatch — bearbit.org scraper
+"""TorrentWatch — bearbit.org scraper
 
 Login flow: POST /login.php → session cookie maintained in _client.
 If a fetch redirects to login page, re-login is attempted automatically.
@@ -9,16 +8,14 @@ changes layout without touching other code. Use GET /api/debug/html?source_id=<i
 to inspect the raw HTML from a running container.
 """
 
-import asyncio
 import re
 from datetime import datetime
-from urllib.parse import urljoin, urlparse, urlencode, parse_qs, urlunparse
+from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
 from zoneinfo import ZoneInfo
 
+import config
 import httpx
 from bs4 import BeautifulSoup
-
-import config
 
 _TZ = ZoneInfo(config.TZ)
 
@@ -27,11 +24,16 @@ _TZ = ZoneInfo(config.TZ)
 # live HTML extraction during each scrape, so new/renamed categories are
 # picked up automatically without any code change.
 _cat_cache: dict[str, str] = {
-    "901": "H Anime",     "902": "H Game",
-    "903": "JP เซ็น",    "904": "JP ไม่เซ็น",
-    "905": "ฝรั่ง",      "906": "เอเชียเซ็น",
-    "907": "เอเชีย",     "908": "Gay",
-    "910": "คลิป",       "911": "รูป",
+    "901": "H Anime",
+    "902": "H Game",
+    "903": "JP เซ็น",
+    "904": "JP ไม่เซ็น",
+    "905": "ฝรั่ง",
+    "906": "เอเชียเซ็น",
+    "907": "เอเชีย",
+    "908": "Gay",
+    "910": "คลิป",
+    "911": "รูป",
     "912": "นิตยสาร",
 }
 
@@ -49,6 +51,7 @@ def _seed_categories_from_page(soup: BeautifulSoup) -> None:
     We prioritize class="catlink" anchors first, then fall back to other cat= links
     (skipping placeholder labels like "[All]").
     """
+
     def _try_add(cat_id: str, a) -> bool:
         if cat_id in _cat_cache:
             return False
@@ -94,8 +97,9 @@ def _extract_category(row, cat_id: str) -> str:
                 return name
     return _cat_cache.get(cat_id, cat_id)
 
+
 # ─── Selectors — based on actual bearbit.org HTML (verified 2026-05-08) ───────
-LOGIN_URL        = f"{config.SITE_BASE_URL}/login.php"
+LOGIN_URL = f"{config.SITE_BASE_URL}/login.php"
 LOGIN_FIELD_USER = "username"
 LOGIN_FIELD_PASS = "password"
 
@@ -103,16 +107,16 @@ LOGIN_FIELD_PASS = "password"
 ROW_SELECTOR = "tr[data-category-id]"
 
 # Column indices (0-based) in each matching <tr>
-COL_COVER     = 1   # <td class="poster-column"> → <img src="...">
-COL_TITLE     = 2   # <td width="900"> → <a href="details.php?id=X&hashinfo=Y"><b>title
-COL_FREE      = 3   # ฟรี — free-leech percent ("100%" / "50%" / "No")
-COL_MULTIPLIER= 4   # คูณ — upload multiplier ("x6" / "No")
-COL_FILES     = 5   # ไฟล์ — plain number
-COL_DATE      = 7   # <nobr>DD-MM-YYYY<BR>HH:MM:SS</nobr>
-COL_SIZE      = 8   # ขนาด — "2.63 GB" / "380.60 MB"
-COL_COMPLETED = 9   # ดาวน์โหลดเสร็จ — completed/snatched count
-COL_SEEDS     = 10  # ปล่อย — <span class="green|red">N</span> or plain number
-COL_LEECHES   = 11  # ดูด — plain number (may be inside <b><a>N</a></b>)
+COL_COVER = 1  # <td class="poster-column"> → <img src="...">
+COL_TITLE = 2  # <td width="900"> → <a href="details.php?id=X&hashinfo=Y"><b>title
+COL_FREE = 3  # ฟรี — free-leech percent ("100%" / "50%" / "No")
+COL_MULTIPLIER = 4  # คูณ — upload multiplier ("x6" / "No")
+COL_FILES = 5  # ไฟล์ — plain number
+COL_DATE = 7  # <nobr>DD-MM-YYYY<BR>HH:MM:SS</nobr>
+COL_SIZE = 8  # ขนาด — "2.63 GB" / "380.60 MB"
+COL_COMPLETED = 9  # ดาวน์โหลดเสร็จ — completed/snatched count
+COL_SEEDS = 10  # ปล่อย — <span class="green|red">N</span> or plain number
+COL_LEECHES = 11  # ดูด — plain number (may be inside <b><a>N</a></b>)
 
 # Download URL constructed from site_id (id= param in details.php URL)
 # Adjust if the server returns 403/redirect — may need dl.php or downloadlink.php
@@ -185,7 +189,7 @@ def _is_login_page(html: str, url: str) -> bool:
     if any(m in url_lower for m in LOGIN_URL_MARKERS):
         return True
     # Fallback: actual <input type="password"> field present means this IS the login form
-    return bool(re.search(r'<input[^>]+type=["\']password["\']', html, re.I))
+    return bool(re.search(r'<input[^>]+type=["\']password["\']', html, re.IGNORECASE))
 
 
 async def _fetch(url: str) -> str | None:
@@ -219,7 +223,8 @@ async def _fetch(url: str) -> str | None:
 
 async def relogin() -> bool:
     """Re-establish login session. Call at the start of each scrape cycle to prevent
-    stale connections after long idle periods (e.g. overnight pause)."""
+    stale connections after long idle periods (e.g. overnight pause).
+    """
     global _login_ok
     _login_ok = await _login()
     return _login_ok
@@ -257,7 +262,9 @@ async def fetch_detail_html(detail_url: str) -> bytes | None:
         return resp.content or None
     except Exception as e:
         # Connection failed (stale pool / session drop after idle) — re-login once and retry
-        print(f"[scraper] detail error: {type(e).__name__}: {e} — re-logging in and retrying")
+        print(
+            f"[scraper] detail error: {type(e).__name__}: {e} — re-logging in and retrying",
+        )
         try:
             _login_ok = await _login()
             if not _login_ok:
@@ -281,12 +288,14 @@ async def resolve_download_url(detail_url: str) -> str | None:
     # Look for links containing torrent-download keywords
     for a in soup.find_all("a", href=True):
         href = a["href"]
-        if re.search(r"(downloadlink|getfile|dl\.php|\.torrent)", href, re.I):
-            url = href if href.startswith("http") else urljoin(config.SITE_BASE_URL, href)
+        if re.search(r"(downloadlink|getfile|dl\.php|\.torrent)", href, re.IGNORECASE):
+            url = (
+                href if href.startswith("http") else urljoin(config.SITE_BASE_URL, href)
+            )
             print(f"[scraper] resolved download URL: {url}")
             return url
     # Fallback: any href with "download" and an id param
-    for a in soup.find_all("a", href=re.compile(r"download.*id=\d+", re.I)):
+    for a in soup.find_all("a", href=re.compile(r"download.*id=\d+", re.IGNORECASE)):
         href = a["href"]
         url = href if href.startswith("http") else urljoin(config.SITE_BASE_URL, href)
         print(f"[scraper] resolved (fallback) download URL: {url}")
@@ -326,7 +335,7 @@ async def fetch_torrent_bytes(torrent_url: str, detail_url: str = "") -> bytes |
     if not torrent_url.startswith("http"):
         torrent_url = urljoin(config.SITE_BASE_URL, torrent_url)
 
-    referer = detail_url if detail_url else f"{config.SITE_BASE_URL}/"
+    referer = detail_url or f"{config.SITE_BASE_URL}/"
     headers = {"Referer": referer}
 
     try:
@@ -338,7 +347,7 @@ async def fetch_torrent_bytes(torrent_url: str, detail_url: str = "") -> bytes |
 
         # torrent_url failed — resolve from detail page (browser flow: visit detail → click download)
         if detail_url:
-            print(f"[scraper] stored URL failed, resolving from detail page…")
+            print("[scraper] stored URL failed, resolving from detail page…")
             real_url = await resolve_download_url(detail_url)
             if real_url and real_url != torrent_url:
                 resp2 = await _client.get(real_url, headers={"Referer": detail_url})
@@ -362,12 +371,12 @@ async def probe_download_url(torrent_url: str) -> dict:
         preview = resp.content[:200]
         is_torrent = _is_torrent_content(ct, preview)
         return {
-            "url_tried":    torrent_url,
-            "final_url":    str(resp.url),
-            "status":       resp.status_code,
+            "url_tried": torrent_url,
+            "final_url": str(resp.url),
+            "status": resp.status_code,
             "content_type": ct,
-            "size":         len(resp.content),
-            "is_torrent":   is_torrent,
+            "size": len(resp.content),
+            "is_torrent": is_torrent,
             "preview_text": preview.decode("utf-8", errors="replace")[:200],
         }
     except Exception as e:
@@ -398,7 +407,7 @@ async def scrape_source(
     leech_min: int,
     keywords: list[str],
     filter_mode: str = "and",
-    on_page=None,            # optional callback(page_num, items_so_far)
+    on_page=None,  # optional callback(page_num, items_so_far)
     skip_sticky: bool = True,
     completed_min: int = 0,
 ) -> tuple[list[dict], set[str], int, int]:
@@ -409,28 +418,38 @@ async def scrape_source(
     today_total/today_free are pre-filter counts of today's non-sticky rows so the
     caller can detect a sitewide freeleech event (today_free == today_total > 0).
     """
-    today              = datetime.now(_TZ).strftime("%Y-%m-%d")
-    all_items          = []
+    today = datetime.now(_TZ).strftime("%Y-%m-%d")
+    all_items = []
     seen_sticky_ids: set[str] = set()
-    today_total        = 0
-    today_free         = 0
-    max_pages          = 20   # safety cap
+    today_total = 0
+    today_free = 0
+    max_pages = 20  # safety cap
 
     for page in range(max_pages):
         page_url = _page_url(url, page)
-        html     = await _fetch(page_url)
+        html = await _fetch(page_url)
         if not html:
             print(f"[scraper] page {page}: fetch failed, stopping")
             break
 
         items, found_older, page_sticky_ids, page_total, page_free = _parse_listing(
-            html, page_url, today, seed_min, leech_min, keywords, filter_mode, skip_sticky, completed_min
+            html,
+            page_url,
+            today,
+            seed_min,
+            leech_min,
+            keywords,
+            filter_mode,
+            skip_sticky,
+            completed_min,
         )
         all_items.extend(items)
         seen_sticky_ids.update(page_sticky_ids)
         today_total += page_total
-        today_free  += page_free
-        print(f"[scraper] page {page}: {len(items)} pass filter, found_older={found_older}")
+        today_free += page_free
+        print(
+            f"[scraper] page {page}: {len(items)} pass filter, found_older={found_older}",
+        )
 
         if on_page:
             try:
@@ -441,11 +460,23 @@ async def scrape_source(
         if found_older or not items:
             break
 
-    print(f"[scraper] total {len(all_items)} items across {page + 1} page(s) from {url}; today {today_free}/{today_total} free")
+    print(
+        f"[scraper] total {len(all_items)} items across {page + 1} page(s) from {url}; today {today_free}/{today_total} free",
+    )
     return all_items, seen_sticky_ids, today_total, today_free
 
 
-def _parse_listing(html: str, base_url: str, today: str, seed_min: int, leech_min: int, keywords: list[str], filter_mode: str = "and", skip_sticky: bool = True, completed_min: int = 0) -> tuple[list[dict], bool, set[str], int, int]:
+def _parse_listing(
+    html: str,
+    base_url: str,
+    today: str,
+    seed_min: int,
+    leech_min: int,
+    keywords: list[str],
+    filter_mode: str = "and",
+    skip_sticky: bool = True,
+    completed_min: int = 0,
+) -> tuple[list[dict], bool, set[str], int, int]:
     """Returns (matching_entries, found_any_older_than_today, seen_sticky_site_ids,
     today_total, today_free).
     seen_sticky_site_ids tracks every sticky site_id present on bearbit before filtering.
@@ -454,12 +485,12 @@ def _parse_listing(html: str, base_url: str, today: str, seed_min: int, leech_mi
     """
     soup = BeautifulSoup(html, "html.parser")
     _seed_categories_from_page(soup)
-    results          = []
-    found_older      = False
+    results = []
+    found_older = False
     seen_sticky_ids: set[str] = set()
-    sticky_count     = 0
-    today_total      = 0
-    today_free       = 0
+    sticky_count = 0
+    today_total = 0
+    today_free = 0
 
     rows = soup.select(ROW_SELECTOR)
 
@@ -488,7 +519,7 @@ def _parse_listing(html: str, base_url: str, today: str, seed_min: int, leech_mi
             continue
 
         if entry["date_posted"] != today:
-            found_older = True   # crossed into yesterday — signal to stop paging
+            found_older = True  # crossed into yesterday — signal to stop paging
             continue
 
         # Pre-filter tally for sitewide-freeleech detection: every today row counts,
@@ -521,19 +552,26 @@ def _parse_listing(html: str, base_url: str, today: str, seed_min: int, leech_mi
         entry["keyword_match"] = kw_match
         results.append(entry)
 
-    print(f"[scraper] _parse_listing: {sticky_count} sticky, {len(results) - sticky_count} regular → total {len(results)} results; today {today_free}/{today_total} free")
+    print(
+        f"[scraper] _parse_listing: {sticky_count} sticky, {len(results) - sticky_count} regular → total {len(results)} results; today {today_free}/{today_total} free",
+    )
     return results, found_older, seen_sticky_ids, today_total, today_free
 
 
 def _parse_row(row, base_url: str, today: str, skip_sticky: bool = True) -> dict | None:
     # Detect sticky via image src OR text label ("Sticky:" on viewbrsb, "Auto Sticky:" on viewno18sbx)
     is_sticky = bool(
-        row.find("img", src=re.compile(r"sticky\.gif|heart\.gif|pinned\.gif|autosticky", re.I))
-        or row.find("img", alt=re.compile(r"sticky", re.I))
-        or row.find(string=re.compile(r"auto\s*sticky", re.I))
+        row.find(
+            "img",
+            src=re.compile(
+                r"sticky\.gif|heart\.gif|pinned\.gif|autosticky", re.IGNORECASE
+            ),
+        )
+        or row.find("img", alt=re.compile(r"sticky", re.IGNORECASE))
+        or row.find(string=re.compile(r"auto\s*sticky", re.IGNORECASE)),
     )
     if skip_sticky and is_sticky:
-        print(f"[scraper] _parse_row: skip_sticky=True — dropping sticky row")
+        print("[scraper] _parse_row: skip_sticky=True — dropping sticky row")
         return None
 
     # Extract category
@@ -543,7 +581,9 @@ def _parse_row(row, base_url: str, today: str, skip_sticky: bool = True) -> dict
     tds = row.find_all("td", recursive=False)
     if len(tds) < 12:
         if is_sticky:
-            print(f"[scraper] _parse_row: STICKY row has only {len(tds)} <td>s (need 12) — dropping")
+            print(
+                f"[scraper] _parse_row: STICKY row has only {len(tds)} <td>s (need 12) — dropping",
+            )
         return None
 
     # ── Title & detail URL (col 2: td width=900) ────────────────────────────
@@ -558,14 +598,14 @@ def _parse_row(row, base_url: str, today: str, skip_sticky: bool = True) -> dict
                 break
     if not title_a:
         if is_sticky:
-            print(f"[scraper] _parse_row: STICKY row has no title link — dropping")
+            print("[scraper] _parse_row: STICKY row has no title link — dropping")
         return None
 
     b_tag = title_a.find("b")
     title = (b_tag or title_a).get_text(strip=True)
     if not title or len(title) < 3:
         if is_sticky:
-            print(f"[scraper] _parse_row: STICKY row has empty/short title — dropping")
+            print("[scraper] _parse_row: STICKY row has empty/short title — dropping")
         return None
 
     detail_url = urljoin(base_url, title_a["href"])
@@ -574,7 +614,7 @@ def _parse_row(row, base_url: str, today: str, skip_sticky: bool = True) -> dict
     m = re.search(r"[?&]id=(\d+)", title_a["href"])
     if not m:
         if is_sticky:
-            print(f"[scraper] _parse_row: STICKY row has no id= in href — dropping")
+            print("[scraper] _parse_row: STICKY row has no id= in href — dropping")
         return None
     site_id = m.group(1)
     m_hash = re.search(r"[?&]hashinfo=(\d+)", title_a["href"])
@@ -583,8 +623,8 @@ def _parse_row(row, base_url: str, today: str, skip_sticky: bool = True) -> dict
     # ── Torrent download URL — try download.php with both id and hashinfo ────
     torrent_url = (
         f"{config.SITE_BASE_URL}/download.php?id={site_id}&hashinfo={hashinfo}"
-        if hashinfo else
-        f"{config.SITE_BASE_URL}/download.php?id={site_id}"
+        if hashinfo
+        else f"{config.SITE_BASE_URL}/download.php?id={site_id}"
     )
 
     # ── Cover image — poster imgs always have absolute URLs (http/https);
@@ -592,7 +632,11 @@ def _parse_row(row, base_url: str, today: str, skip_sticky: bool = True) -> dict
     cover_url = None
     for img in row.find_all("img"):
         src = img.get("src", "")
-        if src.startswith("http") and "categories" not in src and "no_poster" not in src:
+        if (
+            src.startswith("http")
+            and "categories" not in src
+            and "no_poster" not in src
+        ):
             cover_url = src
             break
 
@@ -604,11 +648,13 @@ def _parse_row(row, base_url: str, today: str, skip_sticky: bool = True) -> dict
         if nobr:
             raw = nobr.get_text(separator=" ", strip=True)  # "DD-MM-YYYY HH:MM:SS"
             parts_dt = raw.split()
-            date_raw = parts_dt[0]   # "DD-MM-YYYY"
+            date_raw = parts_dt[0]  # "DD-MM-YYYY"
             time_raw = parts_dt[1] if len(parts_dt) > 1 else ""
             d_parts = date_raw.split("-")
             if len(d_parts) == 3 and d_parts[2].startswith("20"):
-                date_posted = f"{d_parts[2]}-{d_parts[1].zfill(2)}-{d_parts[0].zfill(2)}"
+                date_posted = (
+                    f"{d_parts[2]}-{d_parts[1].zfill(2)}-{d_parts[0].zfill(2)}"
+                )
                 posted_at = f"{date_posted} {time_raw}".strip()
     except Exception:
         pass
@@ -659,27 +705,29 @@ def _parse_row(row, base_url: str, today: str, skip_sticky: bool = True) -> dict
         leeches = 0
 
     if is_sticky:
-        print(f"[scraper] _parse_row: STICKY parsed OK — site_id={site_id} title={title[:60]}")
+        print(
+            f"[scraper] _parse_row: STICKY parsed OK — site_id={site_id} title={title[:60]}",
+        )
 
     return {
-        "site_id":     site_id,
-        "title":       title,
-        "detail_url":  detail_url,
+        "site_id": site_id,
+        "title": title,
+        "detail_url": detail_url,
         "torrent_url": torrent_url,
-        "cover_url":   cover_url,
-        "seeds":       seeds,
-        "leeches":     leeches,
+        "cover_url": cover_url,
+        "seeds": seeds,
+        "leeches": leeches,
         # Sticky rows carry their original upload date which may be old.
         # Store today so they show up in the Today tab.
         "date_posted": today if is_sticky else date_posted,
-        "posted_at":   posted_at,
-        "category":    category,
-        "file_count":  file_count,
-        "file_size":   file_size,
-        "completed":   completed,
-        "free_leech":  free_leech,
-        "multiplier":  multiplier,
-        "is_sticky":   is_sticky,
+        "posted_at": posted_at,
+        "category": category,
+        "file_count": file_count,
+        "file_size": file_size,
+        "completed": completed,
+        "free_leech": free_leech,
+        "multiplier": multiplier,
+        "is_sticky": is_sticky,
     }
 
 

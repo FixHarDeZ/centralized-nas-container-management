@@ -1,8 +1,7 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from zoneinfo import ZoneInfo
 
 import pytest
-
 from app.scheduler import _compute_digest_window, _parse_digest_times
 
 BKK = ZoneInfo("Asia/Bangkok")
@@ -56,7 +55,9 @@ def test_empty_digest_times_falls_back_to_12h():
 
 def test_unsorted_and_duplicate_times_handled():
     # Same as the canonical test but config came in unsorted with a dup
-    w = _compute_digest_window(_at(2026, 6, 8, 7, 0), ["18:00", "07:00", "07:00", "12:00"])
+    w = _compute_digest_window(
+        _at(2026, 6, 8, 7, 0), ["18:00", "07:00", "07:00", "12:00"],
+    )
     assert w == pytest.approx(14.0)
 
 
@@ -146,7 +147,8 @@ def test_parse_times_empty_list():
 
 def test_digest_job_uses_adaptive_window_and_dynamic_size(tmp_path, monkeypatch):
     """Smoke: 15 fresh articles across 5 sources → 10 sent (per-source cap 2 binds before size cap)."""
-    from datetime import datetime, timezone
+    from datetime import datetime
+
     from app.config import update_config
     from app.models import get_conn, init_db, insert_article, update_article_summary
     from app.scheduler import setup_scheduler
@@ -156,27 +158,39 @@ def test_digest_job_uses_adaptive_window_and_dynamic_size(tmp_path, monkeypatch)
     conn = get_conn(db_path)
     init_db(conn)
 
-    now_iso = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now_iso = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     for src in ["a", "b", "c", "d", "e"]:
         for i in range(3):
             aid = f"{src}{i}"
-            insert_article(conn, {
-                "id": aid, "source": src,
-                "title": f"t-{aid}", "url": f"https://x/{aid}",
-                "published": "2026-06-08T06:00:00",
-                "fetched_at": now_iso,
-            })
+            insert_article(
+                conn,
+                {
+                    "id": aid,
+                    "source": src,
+                    "title": f"t-{aid}",
+                    "url": f"https://x/{aid}",
+                    "published": "2026-06-08T06:00:00",
+                    "fetched_at": now_iso,
+                },
+            )
             update_article_summary(conn, aid, "สรุป")
     conn.close()
 
-    update_config({
-        "digest_size_base": 5, "digest_size_max": 10, "digest_max_per_source": 2,
-        "digest_window_buffer_hours": 1.0,
-        "digest_times": ["07:00", "12:00", "18:00"],
-    })
+    update_config(
+        {
+            "digest_size_base": 5,
+            "digest_size_max": 10,
+            "digest_max_per_source": 2,
+            "digest_window_buffer_hours": 1.0,
+            "digest_times": ["07:00", "12:00", "18:00"],
+        },
+    )
 
     sent = []
-    monkeypatch.setattr("app.scheduler.send_digest", lambda articles, cfg: sent.append(list(articles)) or ["line"])
+    monkeypatch.setattr(
+        "app.scheduler.send_digest",
+        lambda articles, cfg: sent.append(list(articles)) or ["line"],
+    )
 
     sched = setup_scheduler(db_path)
     try:

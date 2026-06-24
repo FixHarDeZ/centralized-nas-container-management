@@ -1,7 +1,6 @@
 import json
 import sqlite3
 from datetime import datetime
-from typing import Optional
 
 
 def get_conn(db_path: str) -> sqlite3.Connection:
@@ -68,19 +67,36 @@ def article_exists(conn: sqlite3.Connection, article_id: str) -> bool:
 def insert_article(conn: sqlite3.Connection, article: dict) -> None:
     conn.execute(
         "INSERT OR IGNORE INTO articles (id, source, title, url, published, fetched_at) VALUES (?,?,?,?,?,?)",
-        (article["id"], article["source"], article["title"], article["url"],
-         article["published"], article["fetched_at"]),
+        (
+            article["id"],
+            article["source"],
+            article["title"],
+            article["url"],
+            article["published"],
+            article["fetched_at"],
+        ),
     )
     conn.commit()
 
 
-def update_article_summary(conn: sqlite3.Connection, article_id: str, summary_th: str) -> None:
-    conn.execute("UPDATE articles SET summary_th = ? WHERE id = ?", (summary_th, article_id))
+def update_article_summary(
+    conn: sqlite3.Connection,
+    article_id: str,
+    summary_th: str,
+) -> None:
+    conn.execute(
+        "UPDATE articles SET summary_th = ? WHERE id = ?",
+        (summary_th, article_id),
+    )
     conn.commit()
 
 
-def get_articles(conn: sqlite3.Connection, source: Optional[str] = None,
-                 date: Optional[str] = None, limit: int = 20) -> list[dict]:
+def get_articles(
+    conn: sqlite3.Connection,
+    source: str | None = None,
+    date: str | None = None,
+    limit: int = 20,
+) -> list[dict]:
     query = "SELECT * FROM articles WHERE 1=1"
     params: list = []
     if source:
@@ -94,12 +110,16 @@ def get_articles(conn: sqlite3.Connection, source: Optional[str] = None,
     return [dict(row) for row in conn.execute(query, params).fetchall()]
 
 
-def get_article(conn: sqlite3.Connection, article_id: str) -> Optional[dict]:
+def get_article(conn: sqlite3.Connection, article_id: str) -> dict | None:
     row = conn.execute("SELECT * FROM articles WHERE id = ?", (article_id,)).fetchone()
     return dict(row) if row else None
 
 
-def get_recent_articles_for_digest(conn: sqlite3.Connection, hours: float = 6, limit: int = 5) -> list[dict]:
+def get_recent_articles_for_digest(
+    conn: sqlite3.Connection,
+    hours: float = 6,
+    limit: int = 5,
+) -> list[dict]:
     rows = conn.execute(
         "SELECT * FROM articles WHERE summary_th IS NOT NULL "
         "AND fetched_at >= datetime('now', ?) "
@@ -130,7 +150,7 @@ def delete_all_articles(conn: sqlite3.Connection) -> int:
     return cur.rowcount
 
 
-def get_last_fetch_time(conn: sqlite3.Connection) -> Optional[str]:
+def get_last_fetch_time(conn: sqlite3.Connection) -> str | None:
     row = conn.execute("SELECT MAX(fetched_at) FROM articles").fetchone()
     return row[0]  # MAX() returns None on empty table
 
@@ -150,13 +170,24 @@ def upsert_price(conn: sqlite3.Connection, model: dict) -> None:
         "VALUES (?,?,?,?,?,?,?) ON CONFLICT(model_id) DO UPDATE SET "
         "provider=excluded.provider, name=excluded.name, prompt_price=excluded.prompt_price, "
         "complete_price=excluded.complete_price, context_length=excluded.context_length, updated_at=excluded.updated_at",
-        (model["model_id"], model["provider"], model["name"], model["prompt_price"],
-         model["complete_price"], model.get("context_length"), model["updated_at"]),
+        (
+            model["model_id"],
+            model["provider"],
+            model["name"],
+            model["prompt_price"],
+            model["complete_price"],
+            model.get("context_length"),
+            model["updated_at"],
+        ),
     )
     conn.commit()
 
 
-def set_free_expiry(conn: sqlite3.Connection, model_id: str, expires_at: Optional[str]) -> bool:
+def set_free_expiry(
+    conn: sqlite3.Connection,
+    model_id: str,
+    expires_at: str | None,
+) -> bool:
     if expires_at is not None:
         try:
             datetime.strptime(expires_at, "%Y-%m-%d")
@@ -170,13 +201,16 @@ def set_free_expiry(conn: sqlite3.Connection, model_id: str, expires_at: Optiona
     return cur.rowcount > 0
 
 
-def get_price_updated_at(conn: sqlite3.Connection) -> Optional[str]:
+def get_price_updated_at(conn: sqlite3.Connection) -> str | None:
     row = conn.execute("SELECT MAX(updated_at) FROM prices").fetchone()
     return row[0]
 
 
-def get_prices(conn: sqlite3.Connection, provider: Optional[str] = None,
-               sort: str = "combined_asc") -> list[dict]:
+def get_prices(
+    conn: sqlite3.Connection,
+    provider: str | None = None,
+    sort: str = "combined_asc",
+) -> list[dict]:
     sort_map = {
         "prompt_asc": "prompt_price ASC",
         "prompt_desc": "prompt_price DESC",
@@ -193,8 +227,12 @@ def get_prices(conn: sqlite3.Connection, provider: Optional[str] = None,
     return [dict(r) for r in conn.execute(query, params).fetchall()]
 
 
-def insert_digest_log(conn: sqlite3.Connection, sent_at: str,
-                      article_ids: list[str], channels: str) -> int:
+def insert_digest_log(
+    conn: sqlite3.Connection,
+    sent_at: str,
+    article_ids: list[str],
+    channels: str,
+) -> int:
     cur = conn.execute(
         "INSERT INTO digest_log (sent_at, article_ids, channels) VALUES (?,?,?)",
         (sent_at, json.dumps(article_ids), channels),
@@ -238,7 +276,8 @@ def get_sent_article_ids(conn: sqlite3.Connection) -> set[str]:
 
 def get_digest_history(conn: sqlite3.Connection, limit: int = 30) -> list[dict]:
     rows = conn.execute(
-        "SELECT * FROM digest_log ORDER BY sent_at DESC LIMIT ?", (limit,)
+        "SELECT * FROM digest_log ORDER BY sent_at DESC LIMIT ?",
+        (limit,),
     ).fetchall()
     result = []
     for r in rows:
@@ -250,6 +289,7 @@ def get_digest_history(conn: sqlite3.Connection, limit: int = 30) -> list[dict]:
 
 # ── Watchlist ────────────────────────────────────────────────────────────────
 
+
 def get_watchlist(conn: sqlite3.Connection) -> list[str]:
     rows = conn.execute("SELECT model_id FROM watchlist ORDER BY added_at").fetchall()
     return [r[0] for r in rows]
@@ -257,12 +297,18 @@ def get_watchlist(conn: sqlite3.Connection) -> list[str]:
 
 def toggle_watchlist(conn: sqlite3.Connection, model_id: str, now: str) -> bool:
     """Add if absent, remove if present. Returns True if now in watchlist."""
-    existing = conn.execute("SELECT 1 FROM watchlist WHERE model_id = ?", (model_id,)).fetchone()
+    existing = conn.execute(
+        "SELECT 1 FROM watchlist WHERE model_id = ?",
+        (model_id,),
+    ).fetchone()
     if existing:
         conn.execute("DELETE FROM watchlist WHERE model_id = ?", (model_id,))
         conn.commit()
         return False
-    conn.execute("INSERT INTO watchlist (model_id, added_at) VALUES (?, ?)", (model_id, now))
+    conn.execute(
+        "INSERT INTO watchlist (model_id, added_at) VALUES (?, ?)",
+        (model_id, now),
+    )
     conn.commit()
     return True
 
@@ -271,15 +317,21 @@ def set_watchlist(conn: sqlite3.Connection, model_ids: list[str], now: str) -> N
     """Replace entire watchlist."""
     conn.execute("DELETE FROM watchlist")
     for mid in model_ids:
-        conn.execute("INSERT OR IGNORE INTO watchlist (model_id, added_at) VALUES (?, ?)", (mid, now))
+        conn.execute(
+            "INSERT OR IGNORE INTO watchlist (model_id, added_at) VALUES (?, ?)",
+            (mid, now),
+        )
     conn.commit()
 
 
 # ── Price History ────────────────────────────────────────────────────────────
 
+
 def snapshot_all_prices(conn: sqlite3.Connection, snapshot_date: str) -> int:
     """Snapshot current prices table into price_history for snapshot_date. Returns row count."""
-    rows = conn.execute("SELECT model_id, prompt_price, complete_price FROM prices").fetchall()
+    rows = conn.execute(
+        "SELECT model_id, prompt_price, complete_price FROM prices",
+    ).fetchall()
     count = 0
     for r in rows:
         conn.execute(
@@ -291,7 +343,11 @@ def snapshot_all_prices(conn: sqlite3.Connection, snapshot_date: str) -> int:
     return count
 
 
-def get_price_history(conn: sqlite3.Connection, model_id: str, days: int = 30) -> list[dict]:
+def get_price_history(
+    conn: sqlite3.Connection,
+    model_id: str,
+    days: int = 30,
+) -> list[dict]:
     rows = conn.execute(
         """SELECT snapshot_date, prompt_price, complete_price
            FROM price_history

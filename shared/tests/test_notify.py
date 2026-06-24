@@ -3,12 +3,13 @@
 A fake `post` is injected at the internal transport seam so no network is hit.
 This single suite replaces the per-copy transport tests across stacks.
 """
+
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from notify import LineCreds, Notifier, TgCreds  # noqa: E402
+from notify import LineCreds, Notifier, TgCreds
 
 
 class RecordingPost:

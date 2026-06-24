@@ -4,6 +4,7 @@ Transport itself is covered once in shared/tests/test_notify.py. Here we only
 verify news-feed wires creds + formatting into the Notifier correctly, by
 monkeypatching the vendored transport (app.notify._urllib_post).
 """
+
 from app.notifier import send_digest, send_summarizer_alert
 
 
@@ -38,10 +39,17 @@ def test_send_digest_sends_to_both_channels(monkeypatch, base_config):
 def test_send_digest_skips_when_no_credentials(monkeypatch, base_config):
     rec = _Recorder()
     monkeypatch.setattr("app.notify._urllib_post", rec)
-    for k in ("LINE_CHANNEL_ACCESS_TOKEN", "LINE_USER_ID",
-              "NEWS_FEED_TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"):
+    for k in (
+        "LINE_CHANNEL_ACCESS_TOKEN",
+        "LINE_USER_ID",
+        "NEWS_FEED_TELEGRAM_BOT_TOKEN",
+        "TELEGRAM_CHAT_ID",
+    ):
         monkeypatch.delenv(k, raising=False)
-    sent = send_digest([{"title": "X", "summary_th": "Y", "url": "https://x.com"}], base_config)
+    sent = send_digest(
+        [{"title": "X", "summary_th": "Y", "url": "https://x.com"}],
+        base_config,
+    )
     assert sent == []
     assert rec.calls == []
 

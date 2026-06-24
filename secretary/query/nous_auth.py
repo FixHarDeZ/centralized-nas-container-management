@@ -19,7 +19,12 @@ def _token_file() -> Path:
     return Path(os.getenv("NOUS_TOKEN_FILE", "/data/nous_token.json"))
 
 
-_TERMINAL_OAUTH_ERRORS = {"access_denied", "expired_token", "invalid_client", "invalid_grant"}
+_TERMINAL_OAUTH_ERRORS = {
+    "access_denied",
+    "expired_token",
+    "invalid_client",
+    "invalid_grant",
+}
 
 
 class NousTokenManager:
@@ -48,7 +53,7 @@ class NousTokenManager:
     def _is_valid(self) -> bool:
         return bool(
             self._tokens
-            and self._tokens.get("expires_at", 0) > time.time() + _REFRESH_BUFFER_SECS
+            and self._tokens.get("expires_at", 0) > time.time() + _REFRESH_BUFFER_SECS,
         )
 
     async def start_device_flow(self) -> dict:
@@ -70,7 +75,7 @@ class NousTokenManager:
         if self._poll_task and not self._poll_task.done():
             self._poll_task.cancel()
         self._poll_task = asyncio.create_task(
-            self._poll_for_token(device_code, interval, expires_in)
+            self._poll_for_token(device_code, interval, expires_in),
         )
 
         return {
@@ -97,18 +102,27 @@ class NousTokenManager:
                     )
                     if resp.status_code == 200:
                         d = resp.json()
-                        self._save({
-                            "access_token": d["access_token"],
-                            "refresh_token": d["refresh_token"],
-                            "expires_at": int(time.time()) + int(d["expires_in"]),
-                        })
+                        self._save(
+                            {
+                                "access_token": d["access_token"],
+                                "refresh_token": d["refresh_token"],
+                                "expires_at": int(time.time()) + int(d["expires_in"]),
+                            },
+                        )
                         return
                     error = (resp.json() if resp.content else {}).get("error", "")
                     if error in _TERMINAL_OAUTH_ERRORS:
-                        log.warning("Nous token poll: terminal error %r — aborting", error)
+                        log.warning(
+                            "Nous token poll: terminal error %r — aborting",
+                            error,
+                        )
                         return
                     if error != "authorization_pending":
-                        log.warning("Nous token poll: unexpected status %s / %r, retrying", resp.status_code, error)
+                        log.warning(
+                            "Nous token poll: unexpected status %s / %r, retrying",
+                            resp.status_code,
+                            error,
+                        )
                 except Exception as exc:
                     log.warning("Nous token poll: network error (%s), retrying", exc)
 
@@ -135,11 +149,13 @@ class NousTokenManager:
             )
             resp.raise_for_status()
             d = resp.json()
-        self._save({
-            "access_token": d["access_token"],
-            "refresh_token": d.get("refresh_token", self._tokens["refresh_token"]),
-            "expires_at": int(time.time()) + int(d["expires_in"]),
-        })
+        self._save(
+            {
+                "access_token": d["access_token"],
+                "refresh_token": d.get("refresh_token", self._tokens["refresh_token"]),
+                "expires_at": int(time.time()) + int(d["expires_in"]),
+            },
+        )
 
     def auth_status(self) -> dict:
         if not self._tokens:

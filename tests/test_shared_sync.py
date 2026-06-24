@@ -3,6 +3,7 @@
 Each stack builds its own image with build context = its own dir, so these files
 are vendored (committed) into each stack. If this fails, run `make sync-shared`.
 """
+
 from pathlib import Path
 
 import pytest
@@ -10,21 +11,30 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 CASES = [
-    ("shared/notify.py", [
-        "news-feed/app/notify.py",
-        "game-codes/notify.py",
-        "watchtower/notifier/notify.py",
-        "torrentwatch/notify.py",
-    ]),
-    ("shared/http_client.py", [
-        "news-feed/app/http_client.py",
-        "game-codes/http_client.py",
-    ]),
-    ("shared/sqlite_backup.py", [
-        "maid-tracker/sqlite_backup.py",
-        "news-feed/app/sqlite_backup.py",
-        "torrentwatch/sqlite_backup.py",
-    ]),
+    (
+        "shared/notify.py",
+        [
+            "news-feed/app/notify.py",
+            "game-codes/notify.py",
+            "watchtower/notifier/notify.py",
+            "torrentwatch/notify.py",
+        ],
+    ),
+    (
+        "shared/http_client.py",
+        [
+            "news-feed/app/http_client.py",
+            "game-codes/http_client.py",
+        ],
+    ),
+    (
+        "shared/sqlite_backup.py",
+        [
+            "maid-tracker/sqlite_backup.py",
+            "news-feed/app/sqlite_backup.py",
+            "torrentwatch/sqlite_backup.py",
+        ],
+    ),
 ]
 
 

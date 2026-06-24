@@ -4,6 +4,7 @@
 Two .env files are equivalent when, after unquoting and ignoring comments and
 blank lines, they yield the same {key: value} mapping.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -22,7 +23,8 @@ class DiffResult:
 
 def _unquote(value: str) -> str:
     """Reverse the simple cases of compose-quote: strip surrounding ' or ".
-    Multi-line/escaped values are out of scope (rejected by render_env)."""
+    Multi-line/escaped values are out of scope (rejected by render_env).
+    """
     s = value
     if len(s) >= 2:
         if s[0] == s[-1] == "'":

@@ -42,11 +42,15 @@ def fetch_table_status(src: dict, text: str) -> list[dict]:
 def fetch_section_regex(src: dict, text: str) -> list[dict]:
     soup = BeautifulSoup(text, "html.parser")
     if src.get("scope_selector"):
-        scope = " ".join(el.get_text(" ", strip=True) for el in soup.select(src["scope_selector"]))
+        scope = " ".join(
+            el.get_text(" ", strip=True) for el in soup.select(src["scope_selector"])
+        )
     else:
         scope = soup.get_text(" ", strip=True)
     code_re = re.compile(src["code_regex"])
-    return _dedupe([{"code": m.group(0), "reward": ""} for m in code_re.finditer(scope)])
+    return _dedupe(
+        [{"code": m.group(0), "reward": ""} for m in code_re.finditer(scope)],
+    )
 
 
 PARSERS = {

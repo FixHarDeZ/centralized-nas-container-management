@@ -1,6 +1,7 @@
 import os
 import sqlite3
 import tempfile
+
 import pytest
 
 
@@ -34,7 +35,7 @@ def db(monkeypatch):
             paid_at TEXT, slip_path TEXT,
             UNIQUE(employee_id, work_date)
         );
-        """
+        """,
     )
     conn.commit()
     yield conn
@@ -44,7 +45,10 @@ def db(monkeypatch):
 def add_emp(conn, **kw):
     cols = ", ".join(kw.keys())
     qs = ", ".join("?" for _ in kw)
-    cur = conn.execute(f"INSERT INTO employees ({cols}) VALUES ({qs})", tuple(kw.values()))
+    cur = conn.execute(
+        f"INSERT INTO employees ({cols}) VALUES ({qs})",
+        tuple(kw.values()),
+    )
     conn.commit()
     return cur.lastrowid
 

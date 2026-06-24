@@ -1,4 +1,5 @@
 """Validate that secrets/manifest.schema.json enforces the spec rules."""
+
 from __future__ import annotations
 
 import json
@@ -7,7 +8,9 @@ from pathlib import Path
 import pytest
 from jsonschema import Draft202012Validator
 
-SCHEMA_PATH = Path(__file__).resolve().parent.parent / "secrets" / "manifest.schema.json"
+SCHEMA_PATH = (
+    Path(__file__).resolve().parent.parent / "secrets" / "manifest.schema.json"
+)
 
 
 @pytest.fixture
@@ -43,10 +46,15 @@ def test_both_sections_pass(validator: Draft202012Validator) -> None:
 def test_unknown_top_level_key_fails(validator: Draft202012Validator) -> None:
     doc = {"env": {"FOO": "shared.llm.x"}, "extra": "nope"}
     errors = list(validator.iter_errors(doc))
-    assert any("extra" in str(e.message) or "additional" in str(e.message).lower() for e in errors)
+    assert any(
+        "extra" in str(e.message) or "additional" in str(e.message).lower()
+        for e in errors
+    )
 
 
-def test_env_value_must_start_with_allowed_prefix(validator: Draft202012Validator) -> None:
+def test_env_value_must_start_with_allowed_prefix(
+    validator: Draft202012Validator,
+) -> None:
     doc = {"env": {"FOO": "random.path.thing"}}
     errors = list(validator.iter_errors(doc))
     assert errors, "expected validation error for non-shared/stacks/deploy prefix"

@@ -1,4 +1,5 @@
 """Tests for scripts/render_env.py."""
+
 from __future__ import annotations
 
 import sys
@@ -9,7 +10,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-import render_env  # noqa: E402
+import render_env
 
 
 def test_render_one_stack_with_env_and_literals(tmp_path: Path) -> None:
@@ -68,12 +69,12 @@ def test_value_with_double_quote_is_single_quoted() -> None:
 
 def test_value_with_single_quote_uses_double_quotes_and_escapes() -> None:
     # Has a literal ' so cannot use single quotes; wrap in " and escape \ and "
-    assert render_env.compose_quote("it's a test") == "\"it's a test\""
+    assert render_env.compose_quote("it's a test") == '"it\'s a test"'
 
 
 def test_value_with_backslash_in_double_quoted_form_is_escaped() -> None:
     # Cannot use single quotes (input has '), must use double quotes, escape backslash.
-    assert render_env.compose_quote("a\\b'c") == "\"a\\\\b'c\""
+    assert render_env.compose_quote("a\\b'c") == '"a\\\\b\'c"'
 
 
 def test_value_with_dollar_sign_stays_literal_single_quoted() -> None:
@@ -88,7 +89,10 @@ def test_value_with_leading_whitespace_is_quoted() -> None:
 def test_multiline_value_raises() -> None:
     with pytest.raises(render_env.RenderError) as exc_info:
         render_env.compose_quote("line1\nline2")
-    assert "newline" in str(exc_info.value).lower() or "multiline" in str(exc_info.value).lower()
+    assert (
+        "newline" in str(exc_info.value).lower()
+        or "multiline" in str(exc_info.value).lower()
+    )
 
 
 def test_numeric_value_serialized_as_string() -> None:
@@ -136,7 +140,9 @@ def test_find_manifests_includes_root_deploy_manifest(tmp_path: Path) -> None:
     assert any(p.name == "deploy.manifest.yaml" for p in paths)
 
 
-def test_find_manifests_recurses_one_level_for_secretary_substacks(tmp_path: Path) -> None:
+def test_find_manifests_recurses_one_level_for_secretary_substacks(
+    tmp_path: Path,
+) -> None:
     sub = tmp_path / "secretary" / "ingest"
     sub.mkdir(parents=True)
     (sub / "secrets.manifest.yaml").write_text("env: {}\n")
@@ -158,7 +164,9 @@ def test_output_path_for_stack_manifest_is_sibling_env(tmp_path: Path) -> None:
     assert render_env.output_path(manifest_path) == tmp_path / "newsfeed" / ".env"
 
 
-def test_output_path_for_root_deploy_manifest_is_root_env_deploy(tmp_path: Path) -> None:
+def test_output_path_for_root_deploy_manifest_is_root_env_deploy(
+    tmp_path: Path,
+) -> None:
     manifest_path = tmp_path / "deploy.manifest.yaml"
     assert render_env.output_path(manifest_path) == tmp_path / ".env.deploy"
 
@@ -174,19 +182,13 @@ def test_integration_render_using_fixtures(tmp_path: Path) -> None:
 
 
 def test_main_renders_all_manifests_in_repo(tmp_path: Path) -> None:
-    (tmp_path / "vault.yaml").write_text(
-        "shared:\n  k: v1\nstacks:\n  s:\n    a: v2\n"
-    )
+    (tmp_path / "vault.yaml").write_text("shared:\n  k: v1\nstacks:\n  s:\n    a: v2\n")
     (tmp_path / "a").mkdir()
-    (tmp_path / "a" / "secrets.manifest.yaml").write_text(
-        "env:\n  FOO: shared.k\n"
-    )
+    (tmp_path / "a" / "secrets.manifest.yaml").write_text("env:\n  FOO: shared.k\n")
     (tmp_path / "b").mkdir()
-    (tmp_path / "b" / "secrets.manifest.yaml").write_text(
-        "env:\n  BAR: stacks.s.a\n"
-    )
+    (tmp_path / "b" / "secrets.manifest.yaml").write_text("env:\n  BAR: stacks.s.a\n")
     rc = render_env.main(
-        ["--root", str(tmp_path), "--vault", str(tmp_path / "vault.yaml")]
+        ["--root", str(tmp_path), "--vault", str(tmp_path / "vault.yaml")],
     )
     assert rc == 0
     assert (tmp_path / "a" / ".env").read_text().splitlines()[-1] == "FOO=v1"
@@ -198,14 +200,17 @@ def test_main_stack_filter_renders_only_named(tmp_path: Path) -> None:
     for name in ("a", "b"):
         (tmp_path / name).mkdir()
         (tmp_path / name / "secrets.manifest.yaml").write_text(
-            "env:\n  FOO: shared.k\n"
+            "env:\n  FOO: shared.k\n",
         )
     rc = render_env.main(
         [
-            "--root", str(tmp_path),
-            "--vault", str(tmp_path / "vault.yaml"),
-            "--stack", "a",
-        ]
+            "--root",
+            str(tmp_path),
+            "--vault",
+            str(tmp_path / "vault.yaml"),
+            "--stack",
+            "a",
+        ],
     )
     assert rc == 0
     assert (tmp_path / "a" / ".env").exists()
@@ -215,15 +220,15 @@ def test_main_stack_filter_renders_only_named(tmp_path: Path) -> None:
 def test_main_check_does_not_write(tmp_path: Path) -> None:
     (tmp_path / "vault.yaml").write_text("shared:\n  k: v1\n")
     (tmp_path / "a").mkdir()
-    (tmp_path / "a" / "secrets.manifest.yaml").write_text(
-        "env:\n  FOO: shared.k\n"
-    )
+    (tmp_path / "a" / "secrets.manifest.yaml").write_text("env:\n  FOO: shared.k\n")
     rc = render_env.main(
         [
-            "--root", str(tmp_path),
-            "--vault", str(tmp_path / "vault.yaml"),
+            "--root",
+            str(tmp_path),
+            "--vault",
+            str(tmp_path / "vault.yaml"),
             "--check",
-        ]
+        ],
     )
     assert rc == 0
     assert not (tmp_path / "a" / ".env").exists()
@@ -233,10 +238,10 @@ def test_main_returns_nonzero_on_missing_vault_path(tmp_path: Path) -> None:
     (tmp_path / "vault.yaml").write_text("shared: {}\n")
     (tmp_path / "a").mkdir()
     (tmp_path / "a" / "secrets.manifest.yaml").write_text(
-        "env:\n  FOO: shared.missing\n"
+        "env:\n  FOO: shared.missing\n",
     )
     rc = render_env.main(
-        ["--root", str(tmp_path), "--vault", str(tmp_path / "vault.yaml")]
+        ["--root", str(tmp_path), "--vault", str(tmp_path / "vault.yaml")],
     )
     assert rc != 0
 
@@ -244,15 +249,16 @@ def test_main_returns_nonzero_on_missing_vault_path(tmp_path: Path) -> None:
 def test_main_with_suffix_writes_to_alternate_filename(tmp_path: Path) -> None:
     (tmp_path / "vault.yaml").write_text("shared:\n  k: v1\n")
     (tmp_path / "a").mkdir()
-    (tmp_path / "a" / "secrets.manifest.yaml").write_text(
-        "env:\n  FOO: shared.k\n"
-    )
+    (tmp_path / "a" / "secrets.manifest.yaml").write_text("env:\n  FOO: shared.k\n")
     rc = render_env.main(
         [
-            "--root", str(tmp_path),
-            "--vault", str(tmp_path / "vault.yaml"),
-            "--suffix", ".new",
-        ]
+            "--root",
+            str(tmp_path),
+            "--vault",
+            str(tmp_path / "vault.yaml"),
+            "--suffix",
+            ".new",
+        ],
     )
     assert rc == 0
     assert (tmp_path / "a" / ".env.new").exists()

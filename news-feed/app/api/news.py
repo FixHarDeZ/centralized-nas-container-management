@@ -1,5 +1,5 @@
 import sqlite3
-from typing import Annotated, Optional
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -44,8 +44,8 @@ def clear_all_articles(db: Annotated[sqlite3.Connection, Depends(get_db)]):
 @router.get("")
 def list_news(
     db: Annotated[sqlite3.Connection, Depends(get_db)],
-    source: Optional[str] = Query(None),
-    date: Optional[str] = Query(None),
+    source: str | None = Query(None),
+    date: str | None = Query(None),
     limit: int = Query(20, ge=1, le=100),
 ):
     return get_articles(db, source=source, date=date, limit=limit)
