@@ -358,3 +358,21 @@ var theme = saved || "light";
 **ไฟล์:** `main.py`, `static/app.js`, `.notes/00_INDEX.md`
 
 **Test:** age logic verified (birthday passed/not-yet/garbage/future/None). main.py + app.js parse OK.
+
+---
+
+## 2026-06-24 — แจ้งเตือนหลายภาษา + override จ่ายรายวัน + แปล reminder ด้วย MiMo
+
+**3 ฟีเจอร์ (branch `feat/maid-multilingual-notify`):**
+
+1. **Multilingual notify (Feature A):** เพิ่ม `employees.notify_language` (`th`|`my`|`en`|`lo`|`km`, default `th`) + dropdown "ภาษาแจ้งเตือน" ในฟอร์ม. notify 4 ตัวที่แม่บ้านสนใจ (`notify_attendance`/`notify_payment`/`notify_daily_payment`/`notify_resign`) ต่อท้าย block แปลภาษาใต้ข้อความไทย (separator `─────────`, ข้อความเดียว ไม่กิน `messages[:5]`). Static fragment dict ใน `i18n.py` (`translate_block`), label คงที่แปลครั้งเดียว reuse, ตัวเลข/ชื่อ/วันที่ (numeric `MM/YYYY`) คงเดิม.
+   - ⚠️ **my/lo/km เป็น machine-generated ยังไม่ผ่าน native review** (คอมเมนต์กำกับทุก block). en self-verified. ควรให้เจ้าของภาษาตรวจก่อนใช้จริง.
+   - resign block ใช้ยอดจ่ายสุทธิ (`final`) อย่างเดียว (resign summary ไม่มี comp/leave breakdown แบบ balance block).
+2. **Daily-pay override (Feature B):** `toggle_daily_payment` รับ `amount` (optional). mark paid: ส่ง `amount>0` → เก็บตามนั้น (จ่ายเกินได้ ไม่ cap), ไม่ส่ง → คำนวณเดิม `rate×frac`. UI prompt ช่องเงิน pre-fill ค่าคำนวณ. ไม่ต้อง migration (col `amount` มีอยู่). `total_paid` สะท้อนอัตโนมัติ.
+3. **Reminder translation (Feature C):** reminder เป็น free-text → แปลตอน save ด้วย **MiMo** (`xiaomi/mimo-v2.5`, OpenAI-compatible, ลอกจาก news-feed `_summarize_mimo`). เก็บ JSON ใน `reminders.message_i18n`. `notify_reminder` ตอนส่ง query ภาษาของแม่บ้าน active (non-Thai) แล้วต่อท้าย block ที่ cache ไว้. แปลล้มเหลว/empty/bad JSON → Thai-only (non-blocking).
+   - ⚠️ MiMo v2.5 = reasoning model: `max_tokens=1500` (น้อยไป → `content` ว่าง). treat empty = fail.
+   - vault: token promote → `shared.llm.mimo_api_key` (news-feed repoint ด้วย). `scripts/` ยังใช้ `shared.mimo.anthropic_api_key` (เดิม, out of scope).
+
+**ไฟล์ใหม่:** `i18n.py`, `reminder_translate.py`, `http_client.py` (vendored จาก `shared/`, เพิ่มใน Makefile `HTTP_COPIES` + guard test).
+**Test:** 33 pass (i18n key-coverage, notify append, daily override, reminder translate stubs, reminder body filtering).
+**ค้าง:** native review my/lo/km; ทดสอบ MiMo จริงบน NAS (workstation sandbox อาจ block).
