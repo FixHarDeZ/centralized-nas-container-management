@@ -1402,7 +1402,9 @@ def get_daily_payments(emp_id: int, year: int, month: int):
 
 
 @app.post("/api/employees/{emp_id}/daily-payments/{work_date}/toggle")
-def toggle_daily_payment(emp_id: int, work_date: str, paid_by: str = ""):
+def toggle_daily_payment(
+    emp_id: int, work_date: str, paid_by: str = "", amount: float | None = None
+):
     conn = get_db()
     emp = conn.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
     if not emp:
@@ -1436,7 +1438,13 @@ def toggle_daily_payment(emp_id: int, work_date: str, paid_by: str = ""):
         paid_at = None
         amount = 0.0
     else:
-        amount = round((emp.get("probation_daily_rate") or 0) * frac, 2)
+        if amount is not None:
+            if amount <= 0:
+                conn.close()
+                raise HTTPException(400, "amount must be greater than 0")
+            amount = round(amount, 2)
+        else:
+            amount = round((emp.get("probation_daily_rate") or 0) * frac, 2)
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
         conn.execute(
             "INSERT INTO daily_payments (employee_id, work_date, amount, paid_at, paid_by) VALUES (?,?,?,?,?) "
