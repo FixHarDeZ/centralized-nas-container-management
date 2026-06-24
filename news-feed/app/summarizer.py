@@ -1,8 +1,8 @@
 import os
 import time
 import logging
-import httpx
 import anthropic
+from app.http_client import post as http_post
 
 logger = logging.getLogger(__name__)
 
@@ -13,7 +13,7 @@ def _user_prompt(title: str, body: str) -> str:
     return f"สรุปบทความนี้ 2-3 ประโยค:\nTitle: {title}\nContent: {body[:1500]}"
 
 
-def _with_retry(fn, retries: int = 3):
+def _anthropic_retry(fn, retries: int = 3):
     for attempt in range(retries):
         try:
             return fn()
@@ -21,7 +21,7 @@ def _with_retry(fn, retries: int = 3):
             if attempt == retries - 1:
                 raise
             wait = 2 ** attempt
-            logger.warning("summarize retry %d/%d after %ds: %s", attempt + 1, retries, wait, exc)
+            logger.warning("anthropic retry %d/%d after %ds: %s", attempt + 1, retries, wait, exc)
             time.sleep(wait)
 
 
@@ -37,61 +37,59 @@ def _summarize_anthropic(title: str, body: str, model: str) -> str:
         )
         return resp.content[0].text
 
-    return _with_retry(call)
+    return _anthropic_retry(call)
 
 
 def _summarize_openrouter(title: str, body: str, model: str) -> str:
     api_key = os.getenv("OPENROUTER_API_KEY", "")
 
-    def call():
-        resp = httpx.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "HTTP-Referer": "news-feed-nas",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": model,
-                "max_tokens": 300,
-                "messages": [
-                    {"role": "system", "content": _SYSTEM},
-                    {"role": "user", "content": _user_prompt(title, body)},
-                ],
-            },
-            timeout=30.0,
-        )
-        resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"]
-
-    return _with_retry(call)
+    resp = http_post(
+        "https://openrouter.ai/api/v1/chat/completions",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "HTTP-Referer": "news-feed-nas",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": model,
+            "max_tokens": 300,
+            "messages": [
+                {"role": "system", "content": _SYSTEM},
+                {"role": "user", "content": _user_prompt(title, body)},
+            ],
+        },
+        timeout=60.0,
+        retries=3,
+        backoff=1.0,
+    )
+    resp.raise_for_status()
+    return resp.json()["choices"][0]["message"]["content"]
 
 
 def _summarize_mimo(title: str, body: str, model: str) -> str:
     api_key = os.getenv("MIMO_API_KEY", "")
     base_url = os.getenv("MIMO_BASE_URL", "https://token-plan-sgp.xiaomimimo.com/v1").rstrip("/")
 
-    def call():
-        resp = httpx.post(
-            f"{base_url}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": model,
-                "max_tokens": 1500,
-                "messages": [
-                    {"role": "system", "content": _SYSTEM},
-                    {"role": "user", "content": _user_prompt(title, body)},
-                ],
-            },
-            timeout=60.0,
-        )
-        resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"]
-
-    return _with_retry(call)
+    resp = http_post(
+        f"{base_url}/chat/completions",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": model,
+            "max_tokens": 1500,
+            "messages": [
+                {"role": "system", "content": _SYSTEM},
+                {"role": "user", "content": _user_prompt(title, body)},
+            ],
+        },
+        timeout=60.0,
+        retries=3,
+        backoff=1.0,
+    )
+    resp.raise_for_status()
+    return resp.json()["choices"][0]["message"]["content"]
 
 
 def _dispatch(provider: str, title: str, body: str, model: str) -> str:
