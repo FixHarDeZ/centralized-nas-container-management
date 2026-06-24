@@ -469,6 +469,7 @@ def notify_balance_query(
     monthly_salary: float,
     employment_status: str = "monthly",
     probation_daily_rate: float = 0.0,
+    language: str = "th",
 ) -> None:
     """Call when a group member asks for the current balance via LINE chat."""
     if not TOKEN or not GROUP_ID:
@@ -483,9 +484,24 @@ def notify_balance_query(
                 f"(฿{_fmt(probation_daily_rate)}/วัน)\n\n"
                 f"🕒 {_now_str()}"
             )
+            msg = _append_tr(
+                msg, "balance_query", language,
+                name=emp_name, days=t["total_days"],
+                amount=_fmt(t["amount"]), daily_rate=_fmt(probation_daily_rate),
+            )
         else:
             b = compute_overall_balance(emp_id, start_date, monthly_salary)
             msg = f"📊 ยอดสะสม — {emp_name}\n\n{_balance_block(b)}\n\n🕒 {_now_str()}"
+            msg = _append_tr(
+                msg, "balance", language,
+                name=emp_name,
+                comp=f"+{_fmt_days(b['total_comp'])}" if b["total_comp"] else "0",
+                leave=f"-{_fmt_days(b['total_leave'])}" if b["total_leave"] else "0",
+                kind_pos=b["balance"] >= 0,
+                bal_days=_fmt_days(abs(b["balance"])),
+                bal_amt=_fmt(abs(b["balance_amount"])),
+                daily_rate=_fmt(b["daily_rate"]),
+            )
         send_line(msg)
     except Exception as e:
         print(f"[LINE] notify_balance_query error: {e}")

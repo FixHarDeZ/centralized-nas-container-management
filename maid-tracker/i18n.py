@@ -37,6 +37,7 @@ _MSG = {
         "daily_payment": "💵 Daily pay — {name}\n📅 {date}: ฿{amount}\n{payer}",
         "resign": "🚪 Resignation — {name}\n📅 Last day: {end_date}\n💵 Total payout: ฿{final}",
         "balance": "📊 Balance: comp {comp} / leave {leave} days\n⚖️ {kind}: {bal_days} days ≈ ฿{bal_amt} (฿{daily_rate}/day)",
+        "balance_query": "📊 Accumulated — {name}\n\n📅 Days worked: {days} days\n💵 Total paid: ฿{amount}\n(฿{daily_rate}/day)",
         "kind_pos": "credit", "kind_neg": "owed", "payer": "  Paid by: {paid_by}\n",
     },
     # machine-generated, needs native-speaker review
@@ -46,6 +47,7 @@ _MSG = {
         "daily_payment": "💵 နေ့စဉ်လုပ်ခ — {name}\n📅 {date}: ฿{amount}\n{payer}",
         "resign": "🚪 အလုပ်ထွက် — {name}\n📅 နောက်ဆုံးနေ့: {end_date}\n💵 စုစုပေါင်းပေးချေငွေ: ฿{final}",
         "balance": "📊 လက်ကျန်: အပို {comp} / ခွင့် {leave} ရက်\n⚖️ {kind}: {bal_days} ရက် ≈ ฿{bal_amt} (฿{daily_rate}/ရက်)",
+        "balance_query": "📊 စုပေါင်း — {name}\n\n📅 အလုပ်လုပ်သည့်ရက်: {days} ရက်\n💵 ပေးပြီးငွေ: ฿{amount}\n(฿{daily_rate}/ရက်)",
         "kind_pos": "အကြွေး", "kind_neg": "ပေးရန်", "payer": "  ပေးသူ: {paid_by}\n",
     },
     # machine-generated, needs native-speaker review
@@ -55,6 +57,7 @@ _MSG = {
         "daily_payment": "💵 ຄ່າຈ້າງລາຍວັນ — {name}\n📅 {date}: ฿{amount}\n{payer}",
         "resign": "🚪 ລາອອກ — {name}\n📅 ມື້ສຸດທ້າຍ: {end_date}\n💵 ຍອດຈ່າຍລວມ: ฿{final}",
         "balance": "📊 ຍອດ: ຊົດເຊີຍ {comp} / ລາ {leave} ມື້\n⚖️ {kind}: {bal_days} ມື້ ≈ ฿{bal_amt} (฿{daily_rate}/ມື້)",
+        "balance_query": "📊 ລວມ — {name}\n\n📅 ມື້ເຮັດວຽກ: {days} ມື້\n💵 ຈ່າຍແລ້ວ: ฿{amount}\n(฿{daily_rate}/ມື້)",
         "kind_pos": "ເຄຣດິດ", "kind_neg": "ຄ້າງ", "payer": "  ຜູ້ຈ່າຍ: {paid_by}\n",
     },
     # machine-generated, needs native-speaker review
@@ -64,6 +67,7 @@ _MSG = {
         "daily_payment": "💵 ប្រាក់ឈ្នួលប្រចាំថ្ងៃ — {name}\n📅 {date}: ฿{amount}\n{payer}",
         "resign": "🚪 លាឈប់ — {name}\n📅 ថ្ងៃចុងក្រោយ: {end_date}\n💵 ប្រាក់សរុបត្រូវបង់: ฿{final}",
         "balance": "📊 សមតុល្យ: សង {comp} / ឈប់ {leave} ថ្ងៃ\n⚖️ {kind}: {bal_days} ថ្ងៃ ≈ ฿{bal_amt} (฿{daily_rate}/ថ្ងៃ)",
+        "balance_query": "📊 សរុប — {name}\n\n📅 ថ្ងៃធ្វើការ: {days} ថ្ងៃ\n💵 បានបង់: ฿{amount}\n(฿{daily_rate}/ថ្ងៃ)",
         "kind_pos": "ឥណទាន", "kind_neg": "ជំពាក់", "payer": "  អ្នកបង់: {paid_by}\n",
     },
 }
