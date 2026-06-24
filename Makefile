@@ -9,6 +9,7 @@ PY = .venv/bin/python
 # Single source: shared/notify.py. Guarded by tests/test_shared_sync.py.
 NOTIFY_COPIES = news-feed/app/notify.py game-codes/notify.py \
                 watchtower/notifier/notify.py torrentwatch/notify.py
+HTTP_COPIES = news-feed/app/http_client.py game-codes/http_client.py
 
 help:           ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -29,8 +30,9 @@ clean-env:      ## Remove all generated .env files (does not touch vault)
 	@find . -name '.env' -not -path './.git/*' -not -path './.venv/*' -not -path './backup-pre-vault/*' -delete
 	@rm -f .env.deploy
 
-sync-shared:    ## Copy shared/notify.py into each stack (vendored, committed)
+sync-shared:    ## Copy shared/{notify,http_client}.py into each stack (vendored, committed)
 	@for dst in $(NOTIFY_COPIES); do cp shared/notify.py $$dst && echo "synced $$dst"; done
+	@for dst in $(HTTP_COPIES); do cp shared/http_client.py $$dst && echo "synced $$dst"; done
 
 test:           ## Run repo-level pytest suite
 	@$(PY) -m pytest tests/ -v
