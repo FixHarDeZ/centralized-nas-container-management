@@ -1607,8 +1607,8 @@ def get_summary(emp_id: int, year: int, month: int):
             "deduction_amount": 0.0,
             "money_owed": 0,
             "money_credit": 0,
-            "actual_pay": tally["amount"],
-            "total_earned": tally["amount"],
+            "actual_pay": paid_amount + unpaid_amount,
+            "total_earned": paid_amount + unpaid_amount,
             "total_paid": paid_amount,
             "total_unpaid": unpaid_amount,
         }
@@ -1836,7 +1836,7 @@ def get_overall(emp_id: int):
             "overall_balance": 0,
             "daily_rate": round(rate, 2),
             "balance_amount": 0,
-            "total_earned": tally["amount"],
+            "total_earned": paid_amount + unpaid_amount,
             "total_paid": paid_amount,
             "total_unpaid": unpaid_amount,
         }
