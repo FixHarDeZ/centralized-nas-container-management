@@ -8,11 +8,11 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="")
 
     telegram_token: str = Field(
-        ..., alias="GAME_CODES_TELEGRAM_BOT_TOKEN",
+        default="", alias="GAME_CODES_TELEGRAM_BOT_TOKEN",
         description="Telegram bot token for game-codes notifications",
     )
     telegram_chat_id: str = Field(
-        ..., alias="TELEGRAM_CHAT_ID",
+        default="", alias="TELEGRAM_CHAT_ID",
         description="Telegram chat ID for game-codes notifications",
     )
     state_file: Path = Field(
