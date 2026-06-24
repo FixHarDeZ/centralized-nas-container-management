@@ -1926,7 +1926,7 @@ async function viewPayments(id) {
         <div class="mb-2">${isPaid ? payerBadge(d.paid_by) : payerSelect(`payer_d_${d.work_date}`)}</div>
         <div class="d-grid gap-2">
           <button class="btn btn-sm ${isPaid ? "btn-outline-secondary" : "btn-primary"}"
-                  onclick="toggleDailyPayment(${id}, '${d.work_date}', this)">
+                  onclick="toggleDailyPayment(${id}, '${d.work_date}', this, ${isPaid}, ${d.amount})">
             <i class="bi ${isPaid ? "bi-x-circle" : "bi-check-circle"} me-1"></i>${isPaid ? t("btnUnmarkPaid") : t("btnMarkPaid")}
           </button>
           ${slipBtn}
@@ -2079,11 +2079,20 @@ async function togglePayment(empId, year, month, period, btn) {
 
 // ─── Daily payments (probation) ──────────────────────────────
 
-async function toggleDailyPayment(empId, workDate, btn) {
-  btn.disabled = true;
+async function toggleDailyPayment(empId, workDate, btn, isPaid, computed) {
   const payer = document.getElementById(`payer_d_${workDate}`)?.value || "";
+  let url = `/api/employees/${empId}/daily-payments/${workDate}/toggle?paid_by=${encodeURIComponent(payer)}`;
+  if (!isPaid) {
+    // ponytail: window.prompt is enough for one optional override; no modal needed.
+    const entered = window.prompt("จำนวนเงินที่จ่ายวันนี้ (บาท)", String(computed));
+    if (entered === null) return;               // cancelled
+    const amt = parseFloat(entered);
+    if (isNaN(amt) || amt <= 0) { alert("จำนวนเงินไม่ถูกต้อง"); return; }
+    url += `&amount=${amt}`;
+  }
+  btn.disabled = true;
   try {
-    await api.post(`/api/employees/${empId}/daily-payments/${workDate}/toggle?paid_by=${encodeURIComponent(payer)}`, {});
+    await api.post(url, {});
     await viewPayments(empId);
   } catch (e) {
     alert(t("errSave") + e.message);
