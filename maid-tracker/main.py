@@ -2023,13 +2023,24 @@ def delete_reminder(rem_id: int):
 def test_reminder(rem_id: int):
     conn = get_db()
     row = conn.execute("SELECT * FROM reminders WHERE id=?", (rem_id,)).fetchone()
-    conn.close()
     if not row:
+        conn.close()
         raise HTTPException(404, "Reminder not found")
     r = dict(row)
+    mi18n = r.get("message_i18n")
+    if not mi18n:
+        tr = reminder_translate.translate_reminder(r["message"])
+        if tr:
+            mi18n = json.dumps(tr, ensure_ascii=False)
+            conn.execute(
+                "UPDATE reminders SET message_i18n=? WHERE id=?",
+                (mi18n, r["id"]),
+            )
+            conn.commit()
+    conn.close()
     line_notify.notify_reminder(
         r["name"], r["message"],
-        message_i18n=r.get("message_i18n"),
+        message_i18n=mi18n,
         active_langs=_active_notify_langs(),
     )
     return {"message": "sent"}
