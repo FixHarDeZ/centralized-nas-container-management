@@ -9,3 +9,4 @@ backup-pre-vault/
 __pycache__/
 *.pyc
 .superpowers/
+.worktrees/
