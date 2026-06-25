@@ -1,6 +1,6 @@
 # maid-tracker — Index (Memory File)
 
-อัปเดตล่าสุด: 2026-06-24
+อัปเดตล่าสุด: 2026-06-25
 
 ---
 
@@ -35,8 +35,7 @@
 | `calc.py` | Calculation helpers (daily rate, balance, monthly-leave-balance) |
 | `line_notify.py` | LINE Messaging API push functions (+ `_append_tr` แนบคำแปล, `_reminder_body`) |
 | `i18n.py` | Static fragment translations (`translate_block`) สำหรับ notify แม่บ้าน — my/lo/km machine-generated (ยังไม่ผ่าน native review) |
-| `reminder_translate.py` | แปล reminder free-text ด้วย MiMo ตอน save (คืน None = fail → Thai-only) |
-| `http_client.py` | Vendored จาก `shared/http_client.py` (httpx + retry) — guard ด้วย `tests/test_shared_sync.py` |
+| `reminder_i18n.py` | Static hand-maintained dict (`REMINDERS`) แปล reminder text คงที่ — `lookup(text) -> dict\|None`. เพิ่ม reminder text ใหม่ = เพิ่ม entry เอง ไม่งั้น fallback Thai-only |
 | `keywords.py` | LINE keyword lists — แก้ที่นี่เพื่อเพิ่ม/ลด trigger phrase |
 | `static/app.js` | SPA frontend — routing, views, i18n (TH/EN) |
 | `static/style.css` | Custom styles + calendar grid |
@@ -107,7 +106,7 @@ reminders (
   send_time TEXT,              -- "HH:MM"
   last_sent_date TEXT,
   created_at TEXT,
-  message_i18n TEXT            -- JSON {my,en,lo,km} cache, แปลตอน save ด้วย MiMo (NULL = Thai-only)
+  message_i18n TEXT            -- JSON {my,en,lo,km} cache, มาจาก reminder_i18n.lookup() (sync, static dict — เดิมเป็น MiMo LLM call) ตอน create/update/fire reminder. lookup() ไม่เจอ (ข้อความใหม่ที่ไม่อยู่ใน dict) = NULL = ส่ง Thai-only
 )
 ```
 
@@ -144,6 +143,13 @@ working_days_in_month = จำนวนวัน "ทั้งเดือน" (
 
 ### Payer (ผู้จ่าย)
 - `paid_by` (ฟิก/ปุ๊ก) บน `salary_payments` + `daily_payments`. เลือกจาก dropdown ตอนกด "บันทึกจ่ายแล้ว" → ส่ง query `paid_by=`. Unmark → clear เป็น NULL. รายชื่อ payer = const `PAYERS` ใน app.js (แก้ที่เดียว). แสดงเป็น badge "จ่ายโดย X" บนงวด/วันที่จ่ายแล้ว.
+
+### Reminder Translation (static dict, ไม่ใช่ LLM แล้ว)
+- **เปลี่ยนจาก MiMo LLM → static dict** (2026-06-25): reminder text เป็น free-text แต่ในทางปฏิบัติมีแค่ ~2-10 ข้อความคงที่ที่ owner ใช้จริง (แทบไม่เปลี่ยน) — เรียก LLM ทุกครั้งคือ over-engineering ที่มี failure mode (token truncation เคยทำให้พม่าหาย), latency, ต้องดูแล secrets โดยไม่จำเป็น.
+- `reminder_i18n.py` เก็บ `REMINDERS: dict[str, dict[str, str]]` แมป Thai text ตรงตัว → `{my, en, lo, km}`. `lookup(text) -> dict | None` — sync, ไม่มี I/O.
+- เรียกใช้ 4 จุดใน `main.py` (create_reminder, update_reminder, `_check_reminders` ตอน fire, test_reminder): ได้ผล lookup แล้ว cache เป็น JSON ใน `reminders.message_i18n` เหมือนเดิม.
+- **เพิ่ม reminder text ใหม่ที่ต้องการแปล:** ต้องเพิ่ม entry ใน `REMINDERS` dict เอง (key = Thai text ตรงตัวเป๊ะ). ข้อความใหม่ที่ไม่ตรง key ใดๆ → `lookup()` คืน `None` → ส่ง Thai-only เงียบๆ (ไม่ error, ไม่ retry, ไม่มี auto-translate อีกแล้ว).
+- ไฟล์ที่ลบไปแล้ว: `reminder_translate.py` (MiMo caller), `http_client.py` (vendored httpx+retry ใช้เฉพาะไฟล์นั้น). `MIMO_API_KEY`/`MIMO_BASE_URL`/`MIMO_MODEL` ลบออกจาก `secrets.manifest.yaml` แล้ว.
 
 ### โหมดวันหยุด 2 แบบ
 
@@ -200,9 +206,8 @@ final = base_salary_last_month + (cumulative_balance × daily_rate)
 | `NGINX_BASIC_AUTH_USER/PASS` | ❌ optional | เปิด HTTP Basic Auth (ยกเว้น `/webhook/line`) |
 | `MONTHLY_REPORT_TIME` | ❌ optional | เวลาส่งรายงานเดือน (default `20:00`) |
 | `MAID_PUBLIC_BASE_URL` | ❌ optional | URL สาธารณะของ maid-tracker (เช่น `https://<NAS_HOST>:15055`) — ใช้สำหรับ signed slip URL ส่ง LINE image (vault key: `stacks.maid_tracker.public_base_url`) |
-| `MIMO_API_KEY` | ❌ optional | MiMo token แปล reminder ตอน save (vault key: `shared.llm.mimo_api_key`). ว่าง → reminder Thai-only |
-| `MIMO_BASE_URL` | — | literal `https://token-plan-sgp.xiaomimimo.com/v1` |
-| `MIMO_MODEL` | — | literal `xiaomi/mimo-v2.5` (reasoning model — reasoning_tokens≈1427/call → `max_tokens=4000`; ต่ำไป= JSON truncated = Thai-only) |
+
+**ถอดแล้ว (2026-06-25):** `MIMO_API_KEY`/`MIMO_BASE_URL`/`MIMO_MODEL` — reminder translation ย้ายจาก MiMo LLM call ไปเป็น static dict (`reminder_i18n.py`), ไม่ต้องใช้ secret/API ใดๆ แล้ว. ดูหัวข้อ "Reminder Translation" ด้านล่าง.
 
 ---
 
