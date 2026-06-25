@@ -202,7 +202,7 @@ final = base_salary_last_month + (cumulative_balance × daily_rate)
 | `MAID_PUBLIC_BASE_URL` | ❌ optional | URL สาธารณะของ maid-tracker (เช่น `https://<NAS_HOST>:15055`) — ใช้สำหรับ signed slip URL ส่ง LINE image (vault key: `stacks.maid_tracker.public_base_url`) |
 | `MIMO_API_KEY` | ❌ optional | MiMo token แปล reminder ตอน save (vault key: `shared.llm.mimo_api_key`). ว่าง → reminder Thai-only |
 | `MIMO_BASE_URL` | — | literal `https://token-plan-sgp.xiaomimimo.com/v1` |
-| `MIMO_MODEL` | — | literal `xiaomi/mimo-v2.5` (reasoning model — `max_tokens` ต้องสูง) |
+| `MIMO_MODEL` | — | literal `xiaomi/mimo-v2.5` (reasoning model — reasoning_tokens≈1427/call → `max_tokens=4000`; ต่ำไป= JSON truncated = Thai-only) |
 
 ---
 

@@ -37,7 +37,9 @@ def translate_reminder(text: str) -> dict | None:
             },
             json={
                 "model": model,
-                "max_tokens": 1500,  # reasoning model — low values yield empty content
+                # reasoning model burns ~1400 tokens thinking before output;
+                # 1500 truncated the JSON mid-string. 4000 leaves ample room.
+                "max_tokens": 4000,
                 "messages": [
                     {"role": "system", "content": _SYSTEM},
                     {"role": "user", "content": text},

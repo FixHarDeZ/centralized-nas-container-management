@@ -2,6 +2,101 @@
 
 ---
 
+## 2026-06-25 — Fix reminder Burmese แปลหายบ่อย (MiMo token truncation)
+
+**อาการ:** LINE reminder แม่บ้าน (notify_language=`my`) ส่วนใหญ่มีแต่ไทย บางครั้งมีพม่า.
+**Root cause (วัด live บน NAS):** `reminder_translate.translate_reminder` ใช้ MiMo `xiaomi/mimo-v2.5` (reasoning model). `reasoning_tokens≈1427` ต่อ call → `max_tokens=1500` เหลือ ~70 token ให้ output → JSON output ถูกตัดกลางคัน → `json.loads` error `Unterminated string` → return `None` → ส่ง Thai-only. ไม่ persist + set `last_sent_date` → ไม่ retry วันนั้น.
+**Fix:** `reminder_translate.py` `max_tokens` 1500 → **4000**. ทดสอบ live: `finish_reason=stop`, JSON ครบ 4 ภาษา (my/en/lo/km).
+**Backfill:** seeded reminders 2 ตัวใน live DB มี `message_i18n=NULL` → run translate+UPDATE ตรง (ไม่ส่ง LINE) ให้ cache พม่าไว้แล้ว.
+**Deploy:** `./scripts/deploy.sh -s maid-tracker -y` (rebuild image, COPY . . bake fix). ยืนยัน container `/app/reminder_translate.py` = 4000.
+**ไฟล์:** `reminder_translate.py`.
+**ค้าง:** ยัง depend MiMo ตอน fire สำหรับ reminder ใหม่ที่ผู้ใช้เพิ่ม — ถ้า MiMo ล่ม fire-time = Thai-only วันนั้น (ไม่ retry). พิจารณา manual translation field ถ้าเจ็บอีก.
+
+---
+
+## 2026-06-25 — fix: reminders on-the-fly translation for existing reminders
+
+**Bug:** Existing reminders created before i18n feature have empty `message_i18n`. LINE notifications showed Thai only, even when employees have `notify_language = "my"`.
+
+**Fix:** Both `_check_reminders` (scheduler) and `test_reminder` (test button) now translate on-the-fly when `message_i18n` is empty — calls `reminder_translate.translate_reminder()` via MiMo, caches result in DB for subsequent fires.
+
+**Files:** `main.py`
+
+**Test:** 33/33 passed. Deployed.
+
+## 2026-06-25 — fix: probation per-day unpaid + accumulated + total_earned
+
+**Bugs (3 related):**
+1. `total_unpaid = earned - paid` (cumulative) — yesterday's tip (200 vs 167) reduced today's unpaid (334 → 301). Should be per-day: each day's overpayment is a tip, doesn't reduce other days.
+2. LINE balance query "ยอดสะสม" showed `compute_probation_tally` amount (501) instead of `total_paid + total_unpaid` (534).
+3. Dashboard `total_earned` showed tally amount (501) instead of actual cost including tips (534).
+
+**Fix:**
+- `main.py` `/summary` + `/overall`: per-day unpaid calculation — iterate each day, `max(0, day_rate - day_paid)`, sum. `total_earned = total_paid + total_unpaid`.
+- `line_notify.py` `notify_balance_query`: accumulated = `total_paid + total_unpaid` (per-day), not `tally['amount']`.
+- `i18n.py` `translate_block`: added `days` and `daily_rate` params to `.format()` call (were missing, caused KeyError).
+
+**Files:** `main.py`, `line_notify.py`, `i18n.py`
+
+**Test:** 33/33 passed. Deployed + verified API returns `total_earned: 534, total_paid: 200, total_unpaid: 334`.
+
+## 2026-06-24 — fix: probation balance — no negative unpaid + i18n for balance query
+
+**Bugs:**
+1. `total_unpaid = earned - paid` went negative when overpaid (e.g., 167 earned - 200 paid = -33). Dashboard showed "ค้างจ่าย -33" which is confusing — overpayment should be treated as tip, not tracked.
+2. `notify_balance_query` had no i18n — always Thai, even for non-Thai employees.
+
+**Fix:**
+- `main.py`: `total_unpaid = max(0, earned - paid)` in both `/summary` and `/overall` endpoints.
+- `line_notify.py`: `notify_balance_query` now accepts `language` param, uses `_append_tr` for translated blocks.
+- `i18n.py`: added `balance_query` key for all languages (en/my/lo/km).
+
+**Files:** `main.py`, `line_notify.py`, `i18n.py`
+
+**Test:** 33/33 passed. Deployed.
+
+## 2026-06-24 — fix: balance query shows wrong data for probation employees
+
+**Bug:** `notify_balance_query` always called `compute_overall_balance` (monthly mode) — showing comp/leave days which don't apply to probation employees. Probation employees are paid daily, no leave/comp balance.
+
+**Fix:** `notify_balance_query` now branches on `employment_status`:
+- `"probation"` → `compute_probation_tally` → shows days worked + cumulative amount
+- `"monthly"` → `compute_overall_balance` → shows comp/leave balance (existing behavior)
+
+**Files:** `line_notify.py` (import `compute_probation_tally`, branch in `notify_balance_query`), `main.py` (pass `employment_status` + `probation_daily_rate` from employee record)
+
+**Test:** 33/33 passed. Deployed.
+
+## 2026-06-25 — fix: probation per-day unpaid + accumulated + total_earned
+
+**Bugs (3 related):**
+1. `total_unpaid = earned - paid` (cumulative) — yesterday's tip (200 vs 167) reduced today's unpaid (334 → 301). Should be per-day: each day's overpayment is a tip, doesn't reduce other days.
+2. LINE balance query "ยอดสะสม" showed `compute_probation_tally` amount (501) instead of `total_paid + total_unpaid` (534).
+3. Dashboard `total_earned` showed tally amount (501) instead of actual cost including tips (534).
+
+**Fix:**
+- `main.py` `/summary` + `/overall`: per-day unpaid calculation — iterate each day, `max(0, day_rate - day_paid)`, sum. `total_earned = total_paid + total_unpaid`.
+- `line_notify.py` `notify_balance_query`: accumulated = `total_paid + total_unpaid` (per-day), not `tally['amount']`.
+- `i18n.py` `translate_block`: added `days` and `daily_rate` params to `.format()` call (were missing, caused KeyError).
+
+**Files:** `main.py`, `line_notify.py`, `i18n.py`
+
+**Test:** 33/33 passed. Deployed + verified API returns `total_earned: 534, total_paid: 200, total_unpaid: 334`.
+
+## 2026-06-24 — fix: nginx blocked LINE webhook (401 → keyword commands dead)
+
+**Bug:** All LINE keyword commands (แสดงยอด, ยอดสะสม, วันนี้ลา, จ่ายแล้ว, etc.) silently failed — no response in group chat.
+
+**Root cause:** `nginx.conf` applied `auth_basic` to all `location /` paths. The `/webhook/line` endpoint had no dedicated location block, so nginx returned 401 before the request reached FastAPI. The `_AUTH_SKIP_PATHS` in main.py only skips app-level middleware — nginx blocks first.
+
+**Fix:** Added explicit `location /webhook/line` block in `nginx.conf` without `auth_basic`, matching the existing `/api/slips/public/` pattern.
+
+**Files:** `nginx/nginx.conf`
+
+**Test:** `curl -X POST https://<NAS_HOST>:15055/webhook/line -d '{}'` → 400 (was 401). Deployed + verified.
+
+**Note:** With 2 active employees, keyword queries require a name in the message (e.g., "ส้มแสดงยอด"). Without a name, the system sends a clarification prompt.
+
 ## 2026-06-24 — fix: daily-pay amount edit + JS cache-bust
 
 **Bug:** User could not edit the amount of an already-paid probation daily payment. Two root causes:
