@@ -16,7 +16,7 @@ from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 import line_notify
-import reminder_translate
+import reminder_i18n
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from calc import (
@@ -468,7 +468,7 @@ def _check_reminders():
 
         mi18n = r.get("message_i18n")
         if not mi18n:
-            tr = reminder_translate.translate_reminder(r["message"])
+            tr = reminder_i18n.lookup(r["message"])
             if tr:
                 mi18n = json.dumps(tr, ensure_ascii=False)
                 c2 = get_db()
@@ -1944,7 +1944,7 @@ def create_reminder(rem: ReminderCreate):
     conn = get_db()
     c = conn.cursor()
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    tr = reminder_translate.translate_reminder(rem.message)
+    tr = reminder_i18n.lookup(rem.message)
     i18n_json = json.dumps(tr, ensure_ascii=False) if tr else None
     c.execute(
         "INSERT INTO reminders (name, message, enabled, schedule_type, schedule_value, send_time, created_at, message_i18n) "
@@ -1972,7 +1972,7 @@ def update_reminder(rem_id: int, rem: ReminderCreate):
         raise HTTPException(400, "Invalid schedule_type")
     conn = get_db()
     c = conn.cursor()
-    tr = reminder_translate.translate_reminder(rem.message)
+    tr = reminder_i18n.lookup(rem.message)
     i18n_json = json.dumps(tr, ensure_ascii=False) if tr else None
     c.execute(
         "UPDATE reminders SET name=?, message=?, enabled=?, "
@@ -2029,7 +2029,7 @@ def test_reminder(rem_id: int):
     r = dict(row)
     mi18n = r.get("message_i18n")
     if not mi18n:
-        tr = reminder_translate.translate_reminder(r["message"])
+        tr = reminder_i18n.lookup(r["message"])
         if tr:
             mi18n = json.dumps(tr, ensure_ascii=False)
             conn.execute(
