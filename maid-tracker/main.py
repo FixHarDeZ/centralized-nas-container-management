@@ -466,9 +466,22 @@ def _check_reminders():
         if not _should_fire_today(r, today):
             continue
 
+        mi18n = r.get("message_i18n")
+        if not mi18n:
+            tr = reminder_translate.translate_reminder(r["message"])
+            if tr:
+                mi18n = json.dumps(tr, ensure_ascii=False)
+                c2 = get_db()
+                c2.execute(
+                    "UPDATE reminders SET message_i18n=? WHERE id=?",
+                    (mi18n, r["id"]),
+                )
+                c2.commit()
+                c2.close()
+
         line_notify.notify_reminder(
             r["name"], r["message"],
-            message_i18n=r.get("message_i18n"),
+            message_i18n=mi18n,
             active_langs=_active_notify_langs(),
         )
 
