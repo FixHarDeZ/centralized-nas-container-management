@@ -6,13 +6,13 @@ are vendored (committed) into each stack. Copies are discovered by filename matc
 If this fails, run `make sync-shared`.
 """
 
+import subprocess
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 SHARED_DIR = ROOT / "shared"
-SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv"}
 
 CANONICALS = sorted(
     p for p in SHARED_DIR.glob("*.py") if not p.name.startswith("test_")
@@ -20,10 +20,17 @@ CANONICALS = sorted(
 
 
 def discover_copies(canonical: Path) -> list[Path]:
+    out = subprocess.run(
+        ["git", "ls-files", f"--", f"*/{canonical.name}"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
     return sorted(
-        p
-        for p in ROOT.rglob(canonical.name)
-        if p != canonical and not SKIP_DIRS & set(p.parts)
+        ROOT / rel
+        for rel in out.splitlines()
+        if not rel.startswith("shared/")
     )
 
 
