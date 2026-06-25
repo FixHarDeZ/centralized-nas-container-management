@@ -2,6 +2,22 @@
 
 ---
 
+## 2026-06-25 (2) — Reminder translation: MiMo LLM → static dict (`reminder_i18n.py`)
+
+**เหตุผล:** input space reminder ทั้งหมดมีแค่ ~2-10 ข้อความคงที่ (owner ยืนยัน แทบไม่เปลี่ยน). เรียก MiMo ทุกครั้งที่ save reminder คือ over-engineering — มี failure mode (token truncation, ดู entry ก่อนหน้า), latency, ต้องดูแล secrets/dependency โดยไม่จำเป็น.
+
+**เปลี่ยน:**
+- เพิ่ม `reminder_i18n.py`: dict `REMINDERS: dict[str, dict[str, str]]` แมป Thai reminder text → `{my, en, lo, km}`. Seeded จาก MiMo output ที่ผลิตจริงใน production cache อยู่แล้ว (ยัง machine-generated, ยังไม่ผ่าน native review เหมือน `i18n.py`). ฟังก์ชัน `lookup(text) -> dict | None`.
+- ลบไฟล์: `reminder_translate.py` (MiMo caller), `http_client.py` (vendored httpx+retry client ที่ใช้เฉพาะ `reminder_translate`)
+- `main.py` เปลี่ยนทุก call site (4 จุด) จาก `reminder_translate.translate_reminder(...)` (async, MiMo call) → `reminder_i18n.lookup(r["message"])` (sync, dict lookup)
+- `secrets.manifest.yaml`: ลบ `MIMO_*` keys ทั้งหมด (ไม่ใช้ MiMo แล้ว)
+
+**Fallback behavior:** ข้อความ reminder ใหม่ที่ไม่อยู่ใน dict → `lookup()` คืน `None` → ส่ง Thai-only เหมือนเดิม (ไม่มี auto-translate แล้ว). ต้องเพิ่ม entry ใน `REMINDERS` dict เองเมื่อมี reminder text ใหม่ที่ต้องการแปล.
+
+**ไฟล์:** เพิ่ม `reminder_i18n.py`; ลบ `reminder_translate.py`, `http_client.py`; แก้ `main.py`, `secrets.manifest.yaml`.
+
+---
+
 ## 2026-06-25 — Fix reminder Burmese แปลหายบ่อย (MiMo token truncation)
 
 **อาการ:** LINE reminder แม่บ้าน (notify_language=`my`) ส่วนใหญ่มีแต่ไทย บางครั้งมีพม่า.
