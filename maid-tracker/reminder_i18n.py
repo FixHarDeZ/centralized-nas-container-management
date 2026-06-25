@@ -9,6 +9,12 @@ needs native-speaker review — same caveat as i18n.py.
 """
 
 REMINDERS: dict[str, dict[str, str]] = {
+    "🛏️ วันนี้เปลี่ยนผ้าปูที่นอนด้วยนะคะ": {
+        "my": "ဒီနေ့ အိပ်ရာခင်း ပြောင်းပါ",
+        "en": "Please change the bedsheets today.",
+        "lo": "ກະລຸນາປ່ຽນຜ້າປູບ່ຽນມື້ນີ້",
+        "km": "ថ្ងៃនេះ សូមផ្លាស់ប្តូរស្បៃក្បាលដេក",
+    },
     "🚿 วันนี้ล้างห้องน้ำด้วยนะคะ": {
         "my": "ဒီနေ့ အိမ်သာကိုလည်း သန့်ရှင်းပါဦး။",
         "en": "Please clean the bathroom today as well.",
