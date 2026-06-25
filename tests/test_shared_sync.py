@@ -1,7 +1,9 @@
-"""Guard: vendored copies of shared/{notify,http_client}.py must match the single source.
+"""Guard: vendored copies of shared/*.py must match the single source.
 
 Each stack builds its own image with build context = its own dir, so these files
-are vendored (committed) into each stack. If this fails, run `make sync-shared`.
+are vendored (committed) into each stack. Copies are discovered by filename match
+(not hardcoded) so adding/removing a vendored copy never needs a test edit.
+If this fails, run `make sync-shared`.
 """
 
 from pathlib import Path
@@ -9,46 +11,31 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+SHARED_DIR = ROOT / "shared"
+SKIP_DIRS = {".git", "node_modules", "__pycache__", ".venv", "venv"}
 
-CASES = [
-    (
-        "shared/notify.py",
-        [
-            "news-feed/app/notify.py",
-            "game-codes/notify.py",
-            "watchtower/notifier/notify.py",
-            "torrentwatch/notify.py",
-        ],
-    ),
-    (
-        "shared/http_client.py",
-        [
-            "news-feed/app/http_client.py",
-            "game-codes/http_client.py",
-            "maid-tracker/http_client.py",
-        ],
-    ),
-    (
-        "shared/sqlite_backup.py",
-        [
-            "maid-tracker/sqlite_backup.py",
-            "news-feed/app/sqlite_backup.py",
-            "torrentwatch/sqlite_backup.py",
-        ],
-    ),
-]
+CANONICALS = sorted(
+    p for p in SHARED_DIR.glob("*.py") if not p.name.startswith("test_")
+)
+
+
+def discover_copies(canonical: Path) -> list[Path]:
+    return sorted(
+        p
+        for p in ROOT.rglob(canonical.name)
+        if p != canonical and not SKIP_DIRS & set(p.parts)
+    )
 
 
 @pytest.mark.parametrize(
-    "canonical_rel,copies",
-    CASES,
-    ids=[c[0].split("/")[-1] for c in CASES],
+    "canonical",
+    CANONICALS,
+    ids=[p.name for p in CANONICALS],
 )
-def test_vendored_copy_matches_canonical(canonical_rel, copies):
-    canonical = ROOT / canonical_rel
-    for rel in copies:
-        copy = ROOT / rel
-        assert copy.exists(), f"{rel} missing — run `make sync-shared`"
+def test_vendored_copy_matches_canonical(canonical):
+    copies = discover_copies(canonical)
+    for copy in copies:
+        rel = copy.relative_to(ROOT)
         assert copy.read_bytes() == canonical.read_bytes(), (
-            f"{rel} drifted from {canonical_rel} — run `make sync-shared`"
+            f"{rel} drifted from shared/{canonical.name} — run `make sync-shared`"
         )
