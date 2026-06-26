@@ -68,3 +68,19 @@ def test_text_multiple_matching_names_is_ambiguous_and_rearms():
     assert d.action == "ask"
     assert d.payment_id is None
     assert d.slip_path == "/data/slips/y.jpg"
+
+
+def test_signature_roundtrip(monkeypatch):
+    import base64
+    import hashlib
+    import hmac
+    import os
+    from importlib import reload
+
+    os.environ["FRIENDLY_LINE_CHANNEL_SECRET"] = "s3cr3t"
+    import app.main as m
+    reload(m)
+    body = b'{"events":[]}'
+    good = base64.b64encode(hmac.new(b"s3cr3t", body, hashlib.sha256).digest()).decode()
+    assert m._verify_line_signature(body, good) is True
+    assert m._verify_line_signature(body, "bad") is False
