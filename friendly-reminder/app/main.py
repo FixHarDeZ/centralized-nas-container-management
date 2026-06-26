@@ -1,10 +1,17 @@
 """Friendly Reminder — installment payment tracker with LINE notifications."""
+import base64
 import csv
+import hashlib
+import hmac
 import io
+import json
+import logging
 import mimetypes
 import os
 import shutil
 import sqlite3
+import time
+import urllib.request
 import uuid
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
@@ -13,13 +20,14 @@ from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from app.db import DB_PATH, SLIPS_DIR, get_conn, init_db
 from app.notify import LineCreds, Notifier
+from app.slip_match import PendingStore, decide
 
 _TZ = ZoneInfo(os.environ.get("TZ", "Asia/Bangkok"))
 
@@ -27,12 +35,19 @@ _LINE_TOKEN = os.environ.get("FRIENDLY_LINE_CHANNEL_ACCESS_TOKEN", "")
 _LINE_GROUP = os.environ.get("FRIENDLY_LINE_GROUP_ID", "").strip()
 _REMINDER_TIME = os.environ.get("REMINDER_TIME", "08:00")
 _DAY_BEFORE_TIME = os.environ.get("DAY_BEFORE_REMINDER_TIME", "20:00")
+_LINE_SECRET = os.environ.get("FRIENDLY_LINE_CHANNEL_SECRET", "")
 
 _notifier = Notifier(
     line=LineCreds(token=_LINE_TOKEN, to=_LINE_GROUP) if _LINE_TOKEN and _LINE_GROUP else None,
 )
 
 _scheduler = BackgroundScheduler(timezone=_TZ.key)
+
+# In-memory pending-slip slot for the LINE webhook (see app/slip_match.py).
+_pending = PendingStore()
+_LINE_CONTENT_URL = "https://api-data.line.me/v2/bot/message/{mid}/content"
+_CT_EXT = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
+_logger = logging.getLogger(__name__)
 
 THAI_MONTHS = [
     "", "มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน",
@@ -55,6 +70,51 @@ def _open_db():
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
+
+
+# ─── LINE webhook helpers ──────────────────────────────────────────────────────
+
+def _verify_line_signature(body: bytes, signature: str) -> bool:
+    if not _LINE_SECRET:
+        return False
+    computed = base64.b64encode(
+        hmac.new(_LINE_SECRET.encode(), body, hashlib.sha256).digest()
+    ).decode()
+    return hmac.compare_digest(computed, signature)
+
+
+def _fetch_line_content(message_id: str) -> tuple[bytes, str]:
+    """Download a LINE message's binary content. The content URL is short-lived,
+    so this must run when the image event arrives."""
+    req = urllib.request.Request(
+        _LINE_CONTENT_URL.format(mid=message_id),
+        headers={"Authorization": f"Bearer {_LINE_TOKEN}"},
+    )
+    with urllib.request.urlopen(req, timeout=20) as resp:
+        ct = resp.headers.get("Content-Type", "").split(";")[0].strip()
+        return resp.read(), _CT_EXT.get(ct, ".jpg")
+
+
+def _outstanding_payments(conn) -> list[dict]:
+    """Payments that are due (this month or earlier) and still unpaid."""
+    today = date.today()
+    rows = conn.execute(
+        "SELECT p.id, p.installment_number, p.amount, i.name, i.num_installments "
+        "FROM payments p JOIN installments i ON i.id = p.installment_id "
+        "WHERE p.paid_at IS NULL AND (p.due_year < ? OR (p.due_year = ? AND p.due_month <= ?)) "
+        "ORDER BY p.due_year, p.due_month",
+        (today.year, today.year, today.month),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _apply_attach_pay(conn, payment_id: int, slip_filename: str) -> None:
+    """Idempotent: keep the original paid_at if already paid; always attach slip."""
+    conn.execute(
+        "UPDATE payments SET paid_at = COALESCE(paid_at, ?), slip_filename = ? WHERE id = ?",
+        (_now_str(), slip_filename, payment_id),
+    )
+    conn.commit()
 
 
 def _send_monthly_reminder() -> None:
@@ -441,6 +501,56 @@ def download_report(conn=Depends(get_conn)):
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# ─── LINE webhook ──────────────────────────────────────────────────────────────
+
+@app.post("/webhook/line")
+async def line_webhook(request: Request):
+    """Public endpoint (nginx skips basic auth here). A slip image posted in the
+    group attaches to the single outstanding payment and marks it paid; if several
+    are outstanding, the bot asks which by name and matches the next text reply."""
+    if not _LINE_SECRET:
+        raise HTTPException(503, "Webhook not configured")
+    body = await request.body()
+    if not _verify_line_signature(body, request.headers.get("X-Line-Signature", "")):
+        raise HTTPException(400, "Invalid LINE signature")
+    try:
+        data = json.loads(body)
+    except Exception:
+        raise HTTPException(400, "Invalid JSON")
+
+    for event in data.get("events", []):
+        try:
+            if event.get("type") != "message":
+                continue
+            if (event.get("source") or {}).get("groupId") != _LINE_GROUP:
+                continue
+            msg = event.get("message", {})
+            conn = _open_db()
+            try:
+                outstanding = _outstanding_payments(conn)
+                saved_basename = None
+                text = None
+                if msg.get("type") == "image":
+                    content, ext = _fetch_line_content(msg["id"])
+                    saved_basename = f"line_{msg['id']}_{uuid.uuid4().hex[:8]}{ext}"
+                    (SLIPS_DIR / saved_basename).write_bytes(content)
+                elif msg.get("type") == "text":
+                    text = (msg.get("text") or "").strip()
+                else:
+                    continue
+
+                d = decide(outstanding, saved_basename, text, _LINE_GROUP, _pending, time.time())
+                if d.action == "attach_pay" and d.payment_id is not None:
+                    _apply_attach_pay(conn, d.payment_id, d.slip_path)
+                if d.reply_text:
+                    _notifier.send(d.reply_text)
+            finally:
+                conn.close()
+        except Exception:  # one bad event must not 500 the batch (LINE retries forever)
+            _logger.exception("webhook event failed")
+    return {"ok": True}
 
 
 # ─── Static frontend ──────────────────────────────────────────────────────────
