@@ -34,7 +34,7 @@ header h1 { font-size: 1.5rem; font-weight: 700; }
 header .subtitle { color: var(--text-muted); font-size: 0.875rem; margin-top: 0.25rem; }
 
 main {
-  max-width: 900px;
+  max-width: 960px;
   margin: 1.5rem auto;
   padding: 0 1rem;
   display: flex;
@@ -151,18 +151,6 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter: invert(0.7); }
 }
 .btn-danger:hover { background: rgba(239,68,68,0.1); }
 
-.btn-icon {
-  background: none;
-  border: none;
-  color: var(--text-muted);
-  font-size: 1rem;
-  cursor: pointer;
-  padding: 0.2rem 0.4rem;
-  border-radius: var(--radius-sm);
-  transition: color 0.15s;
-}
-.btn-icon:hover { color: var(--text); }
-
 /* Installment list */
 .section-header {
   display: flex;
@@ -263,6 +251,53 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter: invert(0.7); }
 }
 .btn-unpay:hover { color: var(--danger); border-color: var(--danger); }
 
+/* Slip column */
+.slip-cell { white-space: nowrap; }
+
+.btn-slip {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.2rem 0.5rem;
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.btn-slip:hover { color: var(--primary); border-color: var(--primary); }
+
+.btn-slip-view {
+  color: var(--primary);
+  font-size: 0.72rem;
+  text-decoration: none;
+}
+.btn-slip-view:hover { text-decoration: underline; }
+
+.slip-thumb-link { display: inline-block; vertical-align: middle; }
+.slip-thumb {
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: opacity 0.15s;
+  vertical-align: middle;
+}
+.slip-thumb:hover { opacity: 0.8; }
+
+.btn-slip-del {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  cursor: pointer;
+  padding: 0 0.2rem;
+  vertical-align: middle;
+  line-height: 1;
+}
+.btn-slip-del:hover { color: var(--danger); }
+
 .inst-footer {
   display: flex;
   justify-content: flex-end;
@@ -270,33 +305,6 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter: invert(0.7); }
   border-top: 1px solid var(--border);
   margin-top: 0.5rem;
 }
-
-/* Modal */
-.modal-overlay {
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,0.6);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 100;
-  padding: 1rem;
-}
-.modal {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  max-width: 480px;
-  width: 100%;
-  max-height: 80vh;
-  overflow-y: auto;
-}
-.modal-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1rem 1.25rem 0.75rem;
-  border-bottom: 1px solid var(--border);
-}
-.modal-header h3 { font-size: 1rem; font-weight: 600; }
-#modal-body { padding: 1rem 1.25rem 1.25rem; font-size: 0.875rem; }
 
 /* Misc */
 .loading { color: var(--text-muted); text-align: center; padding: 1.5rem; }
@@ -317,4 +325,6 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter: invert(0.7); }
   .summary-grid { grid-template-columns: 1fr 1fr; }
   .form-row { grid-template-columns: 1fr; }
   .progress-bar-wrap { display: none; }
+  .payments-table th:nth-child(5),
+  .payments-table td:nth-child(5) { display: none; }
 }

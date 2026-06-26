@@ -88,16 +88,10 @@ async function loadInstallments() {
       return;
     }
 
-    const today = new Date();
-    const curYear = today.getFullYear();
-    const curMonth = today.getMonth() + 1;
-
     el.innerHTML = items.map(inst => {
       const pct = inst.num_installments > 0
-        ? Math.round((inst.paid_count / inst.num_installments) * 100)
-        : 0;
+        ? Math.round((inst.paid_count / inst.num_installments) * 100) : 0;
       const complete = inst.is_complete;
-      const perInstallment = inst.total_price / inst.num_installments;
 
       return `
         <div class="inst-card" id="inst-${inst.id}">
@@ -131,7 +125,7 @@ async function loadInstallments() {
             </div>
           </div>
           <div class="inst-body" id="body-${inst.id}">
-            <div class="loading" id="table-${inst.id}">กำลังโหลด...</div>
+            <div id="table-${inst.id}"></div>
           </div>
         </div>`;
     }).join('');
@@ -142,14 +136,12 @@ async function loadInstallments() {
 
 async function toggleInst(id) {
   const card = document.getElementById(`inst-${id}`);
-  const body = document.getElementById(`body-${id}`);
-  const tableEl = document.getElementById(`table-${id}`);
-
   if (card.classList.contains('expanded')) {
     card.classList.remove('expanded');
     return;
   }
   card.classList.add('expanded');
+  const tableEl = document.getElementById(`table-${id}`);
   if (tableEl && !tableEl.dataset.loaded) {
     await loadPaymentsTable(id);
   }
@@ -157,6 +149,9 @@ async function toggleInst(id) {
 
 async function loadPaymentsTable(instId) {
   const tableEl = document.getElementById(`table-${instId}`);
+  if (!tableEl) return;
+  tableEl.innerHTML = '<div class="loading">กำลังโหลด...</div>';
+
   const today = new Date();
   const curYear = today.getFullYear();
   const curMonth = today.getMonth() + 1;
@@ -171,6 +166,7 @@ async function loadPaymentsTable(instId) {
             <th>กำหนดชำระ</th>
             <th>ยอด (฿)</th>
             <th>สถานะ</th>
+            <th>สลิป</th>
             <th></th>
           </tr>
         </thead>
@@ -180,8 +176,8 @@ async function loadPaymentsTable(instId) {
       const isCurrent = p.due_year === curYear && p.due_month === curMonth;
       const dueTxt = `${THAI_MONTHS[p.due_month]} ${p.due_year + 543}`;
       const dueClass = isCurrent && !p.paid_at ? 'due-current' : '';
-      let statusHtml;
-      let actionHtml;
+
+      let statusHtml, actionHtml, slipHtml;
 
       if (p.paid_at) {
         statusHtml = `<span class="paid-at">✓ ${p.paid_at.substring(0, 10)}</span>`;
@@ -191,12 +187,26 @@ async function loadPaymentsTable(instId) {
         actionHtml = `<button class="btn-pay" onclick="pay(${p.id}, ${instId})">จ่ายแล้ว</button>`;
       }
 
+      // Slip column
+      if (p.slip_filename) {
+        const isImg = /\.(jpg|jpeg|png|webp)$/i.test(p.slip_filename);
+        slipHtml = isImg
+          ? `<a href="/api/slips/${p.slip_filename}" target="_blank" class="slip-thumb-link">
+               <img src="/api/slips/${p.slip_filename}" class="slip-thumb" alt="slip" />
+             </a>`
+          : `<a href="/api/slips/${p.slip_filename}" target="_blank" class="btn-slip-view">📄 ดูสลิป</a>`;
+        slipHtml += ` <button class="btn-slip-del" onclick="deleteSlip(${p.id}, ${instId})" title="ลบสลิป">✕</button>`;
+      } else {
+        slipHtml = `<button class="btn-slip" onclick="triggerSlipUpload(${p.id}, ${instId})">📎 แนบ</button>`;
+      }
+
       html += `
         <tr id="prow-${p.id}">
           <td>${p.installment_number}</td>
           <td class="${dueClass}">${dueTxt}</td>
           <td>${fmt(p.amount)}</td>
           <td>${statusHtml}</td>
+          <td class="slip-cell">${slipHtml}</td>
           <td>${actionHtml}</td>
         </tr>`;
     }
@@ -214,11 +224,16 @@ async function loadPaymentsTable(instId) {
   }
 }
 
+// ─── Pay / Unpay ──────────────────────────────────────────────────────────────
+
 async function pay(paymentId, instId) {
   try {
     await api('POST', `/api/payments/${paymentId}/pay`);
-    tableEl_reset(instId);
-    await Promise.all([loadSummary(), loadPaymentsTable(instId), refreshInstHeader(instId)]);
+    // Sequential refresh to avoid reading before commit
+    await loadSummary();
+    _tableReset(instId);
+    await loadPaymentsTable(instId);
+    _refreshInstHeader(instId);
   } catch (e) {
     alert(`เกิดข้อผิดพลาด: ${e.message}`);
   }
@@ -228,37 +243,43 @@ async function unpay(paymentId, instId) {
   if (!confirm('ยืนยันยกเลิกการจ่ายนี้?')) return;
   try {
     await api('POST', `/api/payments/${paymentId}/unpay`);
-    tableEl_reset(instId);
-    await Promise.all([loadSummary(), loadPaymentsTable(instId), refreshInstHeader(instId)]);
+    await loadSummary();
+    _tableReset(instId);
+    await loadPaymentsTable(instId);
+    _refreshInstHeader(instId);
   } catch (e) {
     alert(`เกิดข้อผิดพลาด: ${e.message}`);
   }
 }
 
-function tableEl_reset(instId) {
+function _tableReset(instId) {
   const el = document.getElementById(`table-${instId}`);
-  if (el) { el.dataset.loaded = ''; el.innerHTML = '<div class="loading">กำลังโหลด...</div>'; }
+  if (el) { el.dataset.loaded = ''; el.innerHTML = ''; }
 }
 
-async function refreshInstHeader(instId) {
-  const items = await api('GET', '/api/installments');
-  const inst = items.find(i => i.id === instId);
-  if (!inst) return;
-  const card = document.getElementById(`inst-${instId}`);
-  if (!card) return;
-  const pct = Math.round((inst.paid_count / inst.num_installments) * 100);
-  const complete = inst.is_complete;
+async function _refreshInstHeader(instId) {
+  try {
+    const items = await api('GET', '/api/installments');
+    const inst = items.find(i => i.id === instId);
+    if (!inst) return;
+    const card = document.getElementById(`inst-${instId}`);
+    if (!card) return;
+    const pct = Math.round((inst.paid_count / inst.num_installments) * 100);
+    const complete = inst.is_complete;
 
-  card.querySelector('.progress-bar-fill').style.width = pct + '%';
-  card.querySelector('.progress-bar-fill').classList.toggle('complete', complete);
-  card.querySelector('.progress-label').textContent = `${inst.paid_count}/${inst.num_installments} งวด`;
-  const amtEl = card.querySelector('.inst-amount');
-  amtEl.innerHTML = complete
-    ? '<span class="complete-text">ชำระครบแล้ว</span>'
-    : `<span class="remaining">฿${fmt(inst.total_remaining)}</span><br><span class="total">คงเหลือ ${inst.remaining_count} งวด</span>`;
-  const badge = card.querySelector('.badge');
-  badge.className = `badge ${complete ? 'badge-complete' : 'badge-active'}`;
-  badge.textContent = complete ? 'ชำระครบ' : 'ผ่อนอยู่';
+    const fill = card.querySelector('.progress-bar-fill');
+    if (fill) { fill.style.width = pct + '%'; fill.classList.toggle('complete', complete); }
+    const label = card.querySelector('.progress-label');
+    if (label) label.textContent = `${inst.paid_count}/${inst.num_installments} งวด`;
+    const amtEl = card.querySelector('.inst-amount');
+    if (amtEl) amtEl.innerHTML = complete
+      ? '<span class="complete-text">ชำระครบแล้ว</span>'
+      : `<span class="remaining">฿${fmt(inst.total_remaining)}</span><br><span class="total">คงเหลือ ${inst.remaining_count} งวด</span>`;
+    const badge = card.querySelector('.badge');
+    if (badge) { badge.className = `badge ${complete ? 'badge-complete' : 'badge-active'}`; badge.textContent = complete ? 'ชำระครบ' : 'ผ่อนอยู่'; }
+  } catch (e) {
+    console.warn('refreshInstHeader error', e);
+  }
 }
 
 async function deleteInst(instId) {
@@ -268,6 +289,52 @@ async function deleteInst(instId) {
     await Promise.all([loadSummary(), loadInstallments()]);
   } catch (e) {
     alert(`ลบไม่ได้: ${e.message}`);
+  }
+}
+
+// ─── Slip upload ──────────────────────────────────────────────────────────────
+
+let _slipTarget = null; // { paymentId, instId }
+
+function triggerSlipUpload(paymentId, instId) {
+  _slipTarget = { paymentId, instId };
+  const input = document.getElementById('slip-file-input');
+  input.value = '';
+  input.click();
+}
+
+document.getElementById('slip-file-input').addEventListener('change', async function () {
+  if (!this.files.length || !_slipTarget) return;
+  const { paymentId, instId } = _slipTarget;
+  _slipTarget = null;
+
+  const formData = new FormData();
+  formData.append('file', this.files[0]);
+
+  try {
+    const res = await fetch(`/api/payments/${paymentId}/slip`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || res.statusText);
+    }
+    _tableReset(instId);
+    await loadPaymentsTable(instId);
+  } catch (e) {
+    alert(`อัปโหลดสลิปไม่ได้: ${e.message}`);
+  }
+});
+
+async function deleteSlip(paymentId, instId) {
+  if (!confirm('ลบสลิปนี้?')) return;
+  try {
+    await api('DELETE', `/api/payments/${paymentId}/slip`);
+    _tableReset(instId);
+    await loadPaymentsTable(instId);
+  } catch (e) {
+    alert(`ลบสลิปไม่ได้: ${e.message}`);
   }
 }
 
@@ -284,12 +351,12 @@ document.getElementById('add-form').addEventListener('submit', async e => {
     const name = document.getElementById('f-name').value.trim();
     const price = parseFloat(document.getElementById('f-price').value);
     const installments = parseInt(document.getElementById('f-installments').value);
-    const start = document.getElementById('f-start').value;  // "YYYY-MM"
+    const start = document.getElementById('f-start').value;
     const note = document.getElementById('f-note').value.trim() || null;
 
     await api('POST', '/api/installments', { name, total_price: price, num_installments: installments, start_date: start, note });
-
     e.target.reset();
+    document.getElementById('f-start').value = defaultMonth;
     await Promise.all([loadSummary(), loadInstallments()]);
   } catch (err) {
     errEl.textContent = err.message;
@@ -313,7 +380,6 @@ function formatStartDate(ym) {
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 
-// Set default start month to current month
 const now = new Date();
 const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 document.getElementById('f-start').value = defaultMonth;
