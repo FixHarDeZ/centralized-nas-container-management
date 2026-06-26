@@ -47,6 +47,7 @@ main {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 1.25rem 1.5rem;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.25);
 }
 .card h2 { font-size: 1rem; font-weight: 600; margin-bottom: 1rem; }
 
@@ -325,6 +326,40 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter: invert(0.7); }
   .summary-grid { grid-template-columns: 1fr 1fr; }
   .form-row { grid-template-columns: 1fr; }
   .progress-bar-wrap { display: none; }
-  .payments-table th:nth-child(5),
-  .payments-table td:nth-child(5) { display: none; }
+
+  /* Collapse the 6-col payments table into stacked cards so nothing —
+     especially the slip column — gets clipped off-screen. */
+  .payments-table thead { display: none; }
+  .payments-table,
+  .payments-table tbody,
+  .payments-table tr,
+  .payments-table td { display: block; width: 100%; }
+  .payments-table tr {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    padding: 0.5rem 0.85rem;
+    margin-bottom: 0.6rem;
+  }
+  .payments-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.32rem 0;
+    text-align: right;
+    border: none;
+  }
+  .payments-table td::before {
+    content: attr(data-label);
+    color: var(--text-muted);
+    font-size: 0.72rem;
+    text-align: left;
+    flex-shrink: 0;
+  }
+  .payments-table td:last-child { justify-content: flex-end; }
+  .payments-table td:last-child::before { content: none; }
+  .slip-cell { white-space: normal; justify-content: flex-end; }
+  .slip-thumb { width: 64px; height: 64px; }
+  .btn-pay, .btn-unpay, .btn-slip { min-height: 32px; }
 }
