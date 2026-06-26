@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Friendly Reminder — ติดตามการผ่อนชำระ</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header>
+    <h1>💳 Friendly Reminder</h1>
+    <p class="subtitle">ระบบติดตามการผ่อนชำระรายเดือน</p>
+  </header>
+
+  <main>
+    <!-- Summary banner -->
+    <section id="summary-section" class="card">
+      <h2 id="summary-title">สรุปเดือนนี้</h2>
+      <div id="summary-content" class="summary-grid">
+        <div class="loading">กำลังโหลด...</div>
+      </div>
+    </section>
+
+    <!-- Add new installment -->
+    <section class="card">
+      <h2>➕ เพิ่มรายการผ่อนใหม่</h2>
+      <form id="add-form">
+        <div class="form-row">
+          <label>ชื่อรายการ
+            <input type="text" id="f-name" placeholder="เช่น โทรศัพท์ iPhone 15" required />
+          </label>
+          <label>ราคารวม (บาท)
+            <input type="number" id="f-price" placeholder="30000" min="1" step="0.01" required />
+          </label>
+        </div>
+        <div class="form-row">
+          <label>จำนวนงวด
+            <input type="number" id="f-installments" placeholder="10" min="1" max="120" required />
+          </label>
+          <label>เดือนที่เริ่มผ่อน
+            <input type="month" id="f-start" required />
+          </label>
+        </div>
+        <label>หมายเหตุ (ไม่บังคับ)
+          <input type="text" id="f-note" placeholder="ซื้อจาก iStudio ..." />
+        </label>
+        <div class="form-actions">
+          <button type="submit" class="btn-primary">บันทึกรายการ</button>
+        </div>
+        <div id="add-error" class="error-msg hidden"></div>
+      </form>
+    </section>
+
+    <!-- Installments list -->
+    <section class="card">
+      <div class="section-header">
+        <h2>📋 รายการทั้งหมด</h2>
+        <a href="/api/report" class="btn-secondary" download>⬇ ดาวน์โหลด CSV</a>
+      </div>
+      <div id="list-content">
+        <div class="loading">กำลังโหลด...</div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Payment detail modal -->
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modal-title"></h3>
+        <button id="modal-close" class="btn-icon">✕</button>
+      </div>
+      <div id="modal-body"></div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
