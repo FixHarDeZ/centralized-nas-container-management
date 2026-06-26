@@ -34,7 +34,7 @@ class PendingStore:
 
 def _confirm(name: str, number: int, total: int, amount: float) -> str:
     """Format confirmation message."""
-    return f"✅ บันทึกสลิป จ่ายแล้ว {name} งวดที่ {number}/{total} ฿{amount:,.2f}"
+    return f"✅ บันทึกสลิป + จ่ายแล้ว — {name} งวดที่ {number}/{total} ฿{amount:,.2f}"
 
 
 def decide(
@@ -74,18 +74,23 @@ def decide(
         if entry is None:
             return Decision("ignore")
 
-        # Match text against outstanding names
-        for p in outstanding:
-            if p["name"].lower() in text.lower():
-                return Decision(
-                    "attach_pay",
-                    p["id"],
-                    _confirm(p["name"], p["installment_number"], p["num_installments"], p["amount"]),
-                    entry["path"],
-                )
+        # Match text against the candidate names — require exactly one
+        matched = [
+            p for p in outstanding
+            if p["id"] in entry["candidate_ids"] and p["name"] in text
+        ]
+        if len(matched) == 1:
+            p = matched[0]
+            return Decision(
+                "attach_pay",
+                p["id"],
+                _confirm(p["name"], p["installment_number"], p["num_installments"], p["amount"]),
+                entry["path"],
+            )
 
-        # No match: ask again (do not re-arm pending; let it expire or user cancel)
-        return Decision("ignore", reply_text="❌ ไม่พบรายการนี้ ลองพิมพ์ใหม่อีกครั้ง")
+        # Zero or many matches: re-arm pending so the user can try again within the TTL
+        pending.put(group_id, entry["path"], entry["candidate_ids"], now_ts)
+        return Decision("ask", reply_text="❓ ไม่พบชื่อรายการที่ตรง พิมพ์ชื่อให้ชัดเจนนะ", slip_path=entry["path"])
 
     # Should not reach here
     return Decision("ignore")
