@@ -241,11 +241,9 @@ if [[ "$RESTART_ONLY" == false ]]; then
     log "Fixing .htpasswd permissions ..."
     HT_SUDO=""
     [[ -n "${NAS_SUDO_PASSWORD}" ]] && HT_SUDO="echo '${NAS_SUDO_PASSWORD}' | sudo -S -p '' "
-    for stack in "${ALL_STACKS[@]}"; do
-      htpasswd_file="${NAS_TARGET_PATH}/${stack}/nginx/.htpasswd"
-      ssh $SSH_OPTS "${SSH_DEST}" \
-        "bash -lc \"[ -f '${htpasswd_file}' ] && ${HT_SUDO}chmod 644 '${htpasswd_file}'\"" </dev/null 2>/dev/null || true
-    done
+    # Single round-trip: chmod every nginx/.htpasswd under the target in one find.
+    ssh $SSH_OPTS "${SSH_DEST}" \
+      "bash -lc \"${HT_SUDO}find '${NAS_TARGET_PATH}' -maxdepth 3 -path '*/nginx/.htpasswd' -exec chmod 644 {} +\"" </dev/null 2>/dev/null || true
 
     ok "Upload complete ($(elapsed))"
   fi
@@ -317,7 +315,7 @@ for stack in "${STACKS_TO_RESTART[@]}"; do
     "bash -lc \"echo '${NAS_SUDO_PASSWORD}' | sudo -S -p '' docker compose \
       --project-directory '${NAS_TARGET_PATH}/${stack}' \
       -f '${NAS_TARGET_PATH}/${stack}/docker-compose.yml' \
-      up -d --build 2>&1\"" </dev/null
+      up -d --build --force-recreate 2>&1\"" </dev/null
   ok "$stack restarted"
 done
 

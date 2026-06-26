@@ -202,12 +202,12 @@ async function loadPaymentsTable(instId) {
 
       html += `
         <tr id="prow-${p.id}">
-          <td>${p.installment_number}</td>
-          <td class="${dueClass}">${dueTxt}</td>
-          <td>${fmt(p.amount)}</td>
-          <td>${statusHtml}</td>
-          <td class="slip-cell">${slipHtml}</td>
-          <td>${actionHtml}</td>
+          <td data-label="งวดที่">${p.installment_number}</td>
+          <td data-label="กำหนดชำระ" class="${dueClass}">${dueTxt}</td>
+          <td data-label="ยอด (฿)">${fmt(p.amount)}</td>
+          <td data-label="สถานะ">${statusHtml}</td>
+          <td data-label="สลิป" class="slip-cell">${slipHtml}</td>
+          <td data-label="">${actionHtml}</td>
         </tr>`;
     }
 
