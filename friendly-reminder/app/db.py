@@ -1,16 +1,17 @@
 """SQLite database setup and helpers for friendly-reminder."""
 from __future__ import annotations
 
+import os
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
-import os
-
 DB_PATH = Path(os.environ.get("DATA_DIR", "/data")) / "friendly-reminder.db"
+SLIPS_DIR = Path(os.environ.get("DATA_DIR", "/data")) / "slips"
 
 
 def init_db() -> None:
+    SLIPS_DIR.mkdir(parents=True, exist_ok=True)
     with _conn() as conn:
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS installments (
@@ -32,9 +33,15 @@ def init_db() -> None:
                 amount              REAL    NOT NULL,
                 paid_at             TEXT,
                 note                TEXT,
+                slip_filename       TEXT,
                 UNIQUE(installment_id, installment_number)
             );
         """)
+        # Migration: add slip_filename for existing databases that pre-date this column
+        try:
+            conn.execute("ALTER TABLE payments ADD COLUMN slip_filename TEXT")
+        except Exception:
+            pass
 
 
 @contextmanager
