@@ -43,3 +43,28 @@ def test_pending_expires_after_ttl():
     p = PendingStore()
     p.put("G", "/data/slips/z.jpg", [10], 100.0)
     assert p.take("G", 100.0 + PendingStore.TTL + 1) is None
+
+
+def test_text_no_matching_name_asks_and_rearms():
+    p = PendingStore()
+    # arm pending with two candidates
+    decide(OUT2, saved_slip_path="/data/slips/y.jpg", text=None, group_id="G", pending=p, now_ts=100.0)
+    # text mentions no candidate name → ask + re-arm
+    d = decide(OUT2, saved_slip_path=None, text="จ่ายเงินแล้วนะ", group_id="G", pending=p, now_ts=101.0)
+    assert d.action == "ask"
+    assert d.slip_path == "/data/slips/y.jpg"
+    # re-armed: a correct name now still resolves to the same slip
+    d2 = decide(OUT2, saved_slip_path=None, text="จ่ายตู้เย็นแล้ว", group_id="G", pending=p, now_ts=102.0)
+    assert d2.action == "attach_pay"
+    assert d2.payment_id == 20
+    assert d2.slip_path == "/data/slips/y.jpg"
+
+
+def test_text_multiple_matching_names_is_ambiguous_and_rearms():
+    p = PendingStore()
+    decide(OUT2, saved_slip_path="/data/slips/y.jpg", text=None, group_id="G", pending=p, now_ts=100.0)
+    # text contains BOTH names → ambiguous → ask (not attach_pay), re-armed
+    d = decide(OUT2, saved_slip_path=None, text="จ่าย iPhone 15 กับ ตู้เย็น", group_id="G", pending=p, now_ts=101.0)
+    assert d.action == "ask"
+    assert d.payment_id is None
+    assert d.slip_path == "/data/slips/y.jpg"
