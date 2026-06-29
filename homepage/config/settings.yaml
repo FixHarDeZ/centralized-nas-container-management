@@ -4,8 +4,8 @@ title: Fix's NAS Dashboard
 description: Synology DS925+ Home Lab
 
 # ─── Theme ────────────────────────────────────────────────────────────────────
-color: stone  # หรือใช้ zinc (เทาโมเดิร์น), indigo (น้ำเงินสว่าง), หรือ stone ก็ได้ครับ
-theme: light    # บังคับเป็นธีมสว่างเพื่อความ Clean & Modern
+color: slate  # เทาน้ำเงินเข้มโมเดิร์น (zinc/neutral ก็เข้มได้)
+theme: dark    # ธีมมืดเพื่อความ modern
 
 # ─── Layout ───────────────────────────────────────────────────────────────────
 layout:
@@ -26,6 +26,6 @@ layout:
     columns: 3
 
 # ─── Misc ─────────────────────────────────────────────────────────────────────
-headerStyle: clean
+headerStyle: boxedWidgets  # การ์ดมุมมน ดูโมเดิร์น
 language: en
 showStats: true
