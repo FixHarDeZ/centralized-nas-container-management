@@ -27,7 +27,7 @@ Notifier(line=LineCreds(token, to),
   does not read the environment.
 - **Sync.** Async callers (torrentwatch) wrap with `asyncio.to_thread(n.send, text)`.
 
-Scope v1: news-feed, torrentwatch, watchtower, game-codes. **maid-tracker is
+Scope v1: news-feed, torrentwatch, watchtower. **maid-tracker is
 excluded** — it pushes to a LINE *group* and sends multi-message image payloads
 (signed slip URLs), which would leak LINE's payload shape into the interface.
 
