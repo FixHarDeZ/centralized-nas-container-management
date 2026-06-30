@@ -304,9 +304,21 @@ async def resolve_download_url(detail_url: str) -> str | None:
     return None
 
 
+def _unwrap_weserv(cover_url: str) -> str:
+    """bearbit wraps covers in images.weserv.nl, which now 400s 'Domain blocked by
+    policy' on the bearbit image host. Unwrap to the inner `url=` and fetch direct."""
+    p = urlparse(cover_url)
+    if "weserv.nl" in p.netloc:
+        inner = parse_qs(p.query).get("url", [None])[0]
+        if inner:
+            return inner if inner.startswith("http") else "https://" + inner
+    return cover_url
+
+
 async def fetch_cover_bytes(cover_url: str) -> bytes | None:
     """Fetch a cover image through the authenticated session (bypasses CDN session checks)."""
     global _login_ok
+    cover_url = _unwrap_weserv(cover_url)
     headers = {"Referer": f"{config.SITE_BASE_URL}/"}
     try:
         resp = await _client.get(cover_url, headers=headers)

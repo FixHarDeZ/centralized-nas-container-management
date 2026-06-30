@@ -593,3 +593,10 @@ Fix (`scheduler.py`):
 **Verify:** `GET /api/download/local/11339` ผ่าน basic auth ใน container → `len 78421 magic d8:announce` (valid bittorrent) ✅
 
 **Gotcha ใหม่:** stored `torrent_url` (`download.php?id=`) ใช้ไม่ได้แล้ว — โหลดต้องผ่าน resolve detail page เพื่อเอา token `dlt` สด เสมอ. inbox PM ที่ยังไม่อ่าน block การโหลดทั้งหมด.
+
+### Cover image 502 (same session)
+
+**อาการ:** `/api/cover/{id}` คืน 502 — รูปปกแตกทั้งหน้า
+**Root cause:** `cover_url` ห่อด้วย proxy `images.weserv.nl?url=...img.messi-bearbit.xyz...`. weserv เพิ่งบล็อก domain นั้น → `400 {"status":"error","message":"Domain or TLD blocked by policy"}`. host จริง `img.messi-bearbit.xyz` เสิร์ฟตรงได้ (`200 image/jpeg`)
+**Fix:** `_unwrap_weserv()` ใน scraper.py — ถ้า cover_url เป็น weserv ดึง inner `url=` param มา fetch ตรง (แก้ที่ `fetch_cover_bytes` จุดเดียว ครอบทั้ง row เก่า+ใหม่)
+**Note:** inner เสิร์ฟรูป full-size (~1.2MB) — weserv เคย resize 200x280 ให้. หนักขึ้นแต่ใช้ได้. ถ้า bandwidth สำคัญค่อยหา proxy resize อื่น
