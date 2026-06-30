@@ -1,5 +1,9 @@
 # Daily Log
 
+## 2026-06-30 — Docker healthcheck + CI test coverage
+- **Healthcheck** เพิ่มใน `docker-compose.yml` (service `maid-tracker`): stdlib urllib ยิง `GET http://localhost:8000/` (catch-all route → `static/index.html`) `interval 30s / timeout 10s / retries 3 / start_period 30s`. Hung uvicorn → Docker auto-restart (เดิมไม่มี healthcheck เลย). Deploy + verified `(healthy)` บน NAS.
+- **CI:** project เพิ่ม `.github/workflows/tests.yml` — รัน `pytest tests/` ของ stack นี้ (31 tests) ทุก PR ที่แตะ `*.py`/`requirements.txt`. เดิม CI รันแค่ root `tests/` + `shared/tests/` → stack tests ไม่เคยรันอัตโนมัติ.
+
 ---
 
 ## 2026-06-25 (2) — Reminder translation: MiMo LLM → static dict (`reminder_i18n.py`)
