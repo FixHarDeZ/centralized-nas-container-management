@@ -8,6 +8,12 @@ services:
     env_file: .env
     environment:
       - TZ=Asia/Bangkok
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     volumes:
       - news_feed_data:/data
 
