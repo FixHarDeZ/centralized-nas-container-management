@@ -63,6 +63,50 @@ def probation_worked_fraction(rec: dict | None) -> float:
     return 1.0
 
 
+def compute_probation_unpaid(
+    emp_id: int,
+    start_date: date,
+    probation_daily_rate: float,
+    up_to: date | None = None,
+) -> dict:
+    """Amount-based outstanding for a probation employee — the SAME math the
+    dashboard ค้างจ่าย and the LINE balance query use, factored out so they can't
+    drift. Per day: max(0, day_rate - day_paid); a tip (overpay) on one day does
+    NOT reduce another day's unpaid. Returns {total_paid, total_unpaid}.
+    """
+    end = up_to or date.today()
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    paid_rows = conn.execute(
+        "SELECT work_date, amount FROM daily_payments "
+        "WHERE employee_id=? AND paid_at IS NOT NULL",
+        (emp_id,),
+    ).fetchall()
+    paid_by_day = {r["work_date"]: r["amount"] for r in paid_rows}
+    att_rows = conn.execute(
+        "SELECT work_date, status, half_day FROM attendance WHERE employee_id=?",
+        (emp_id,),
+    ).fetchall()
+    conn.close()
+    att_map = {
+        r["work_date"]: {"status": r["status"], "half_day": bool(r["half_day"])}
+        for r in att_rows
+    }
+    unpaid = 0.0
+    d = start_date
+    while d <= end:
+        day_rate = probation_daily_rate * probation_worked_fraction(
+            att_map.get(d.isoformat())
+        )
+        day_paid = paid_by_day.get(d.isoformat(), 0.0)
+        unpaid += max(0, day_rate - day_paid)
+        d += timedelta(days=1)
+    return {
+        "total_paid": round(sum(paid_by_day.values()), 2),
+        "total_unpaid": round(unpaid, 2),
+    }
+
+
 def compute_probation_tally(
     emp_id: int,
     start_date: date,

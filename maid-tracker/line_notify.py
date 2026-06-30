@@ -15,19 +15,17 @@ import hashlib
 import hmac as _hmac
 import json
 import os
-import sqlite3
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
 import httpx
 import i18n
 from calc import (
-    DB_PATH,
     compute_overall_balance,
     compute_probation_resign,
     compute_probation_tally,
+    compute_probation_unpaid,
     compute_resign_summary,
-    probation_worked_fraction,
 )
 
 LINE_API_URL = "https://api.line.me/v2/bot/message/push"
@@ -311,7 +309,9 @@ def notify_daily_payment(
         print(f"[LINE] notify_daily_payment error: {e}")
 
 
-def notify_slip_image(emp_name: str, slip_fname: str, label: str) -> None:
+def notify_slip_image(
+    emp_name: str, slip_fname: str, label: str, language: str = "th"
+) -> None:
     """Send slip image to LINE after upload when payment is already paid."""
     image_url = _slip_public_url(slip_fname)
     if not image_url:
@@ -320,6 +320,7 @@ def notify_slip_image(emp_name: str, slip_fname: str, label: str) -> None:
         return
     try:
         msg = f"📎 สลิปโอนเงิน — {emp_name}\n{label}\n🕒 {_now_str()}"
+        msg = _append_tr(msg, "slip_image", language, name=emp_name)
         extra = [
             {
                 "type": "image",
@@ -340,6 +341,7 @@ def notify_cancel_attendance(
     prev_half_day: bool,
     start_date: date,
     monthly_salary: float,
+    language: str = "th",
 ) -> None:
     """Call after reverting a leave or compensatory day back to work/holiday."""
     if not TOKEN or not GROUP_ID:
@@ -361,6 +363,11 @@ def notify_cancel_attendance(
             f"{_balance_block(b)}\n"
             f"\n"
             f"🕒 {_now_str()}"
+        )
+        msg = _append_tr(
+            msg, "cancel_attendance", language,
+            name=emp_name, date=work_date, status=prev_status, half=prev_half_day,
+            **_balance_params(b),
         )
         send_line(msg)
     except Exception as e:
@@ -480,37 +487,8 @@ def notify_balance_query(
     try:
         if employment_status == "probation":
             t = compute_probation_tally(emp_id, start_date, probation_daily_rate)
-            # Per-day unpaid: overpayment on one day does NOT reduce other days
-            conn = sqlite3.connect(DB_PATH)
-            conn.row_factory = sqlite3.Row
-            paid_rows = conn.execute(
-                "SELECT work_date, amount FROM daily_payments "
-                "WHERE employee_id=? AND paid_at IS NOT NULL",
-                (emp_id,),
-            ).fetchall()
-            paid_by_day = {r["work_date"]: r["amount"] for r in paid_rows}
-            att_rows = conn.execute(
-                "SELECT work_date, status, half_day FROM attendance WHERE employee_id=?",
-                (emp_id,),
-            ).fetchall()
-            conn.close()
-            att_map = {
-                r["work_date"]: {"status": r["status"], "half_day": bool(r["half_day"])}
-                for r in att_rows
-            }
-            today = date.today()
-            unpaid_amount = 0.0
-            d = start_date
-            while d <= today:
-                day_rate = probation_daily_rate * probation_worked_fraction(
-                    att_map.get(d.isoformat())
-                )
-                day_paid = paid_by_day.get(d.isoformat(), 0.0)
-                unpaid_amount += max(0, day_rate - day_paid)
-                d += timedelta(days=1)
-            total_paid = round(sum(paid_by_day.values()), 2)
-            total_unpaid = round(unpaid_amount, 2)
-            accumulated = round(total_paid + total_unpaid, 2)
+            u = compute_probation_unpaid(emp_id, start_date, probation_daily_rate)
+            accumulated = round(u["total_paid"] + u["total_unpaid"], 2)
             msg = (
                 f"📊 ยอดสะสม — {emp_name}\n\n"
                 f"📅 วันที่ทำงาน: {t['total_days']} วัน\n"
@@ -541,10 +519,60 @@ def notify_balance_query(
         print(f"[LINE] notify_balance_query error: {e}")
 
 
+def _monthly_entry(emp: dict) -> str:
+    """Per-employee block for the monthly report (Thai + maid-language translation).
+
+    Probation: leave does not exist — show only whether there is an outstanding
+    daily-pay balance, matching the dashboard ค้างจ่าย. Active: cumulative
+    comp/leave balance as before.
+    """
+    name = emp["name"]
+    lang = emp.get("notify_language") or "th"
+    start = date.fromisoformat(emp["start_date"])
+
+    if emp.get("employment_status") == "probation":
+        rate = emp.get("probation_daily_rate") or 0.0
+        unpaid = compute_probation_unpaid(emp["id"], start, rate)["total_unpaid"]
+        if unpaid > 0:
+            thai = f"👤 {name} (ทดลองงาน)\n  💵 ค้างจ่าย: ฿{_fmt(unpaid)}"
+            block = i18n.translate_block(
+                "monthly_probation_owed", lang, name=name, amount=_fmt(unpaid)
+            )
+        else:
+            thai = f"👤 {name} (ทดลองงาน)\n  ✅ ไม่มียอดค้างจ่าย"
+            block = i18n.translate_block("monthly_probation_clear", lang, name=name)
+        return thai + (_TR_SEP + block if block else "")
+
+    # Active: anchor leave accrual at pass-probation date when present.
+    anchor = (
+        date.fromisoformat(emp["monthly_start_date"])
+        if emp.get("monthly_start_date")
+        else start
+    )
+    b = compute_overall_balance(emp["id"], anchor, emp["monthly_salary"])
+    bal = b["balance"]
+    sign = "+" if bal >= 0 else ""
+    kind = "เครดิต" if bal >= 0 else "ค้างลา"
+    thai = (
+        f"👤 {name}\n"
+        f"  ชดเชย +{_fmt_days(b['total_comp'])} วัน  |  ลา -{_fmt_days(b['total_leave'])} วัน\n"
+        f"  ⚖️ {kind}: {sign}{_fmt_days(abs(bal))} วัน  ≈ {sign}฿{_fmt(abs(b['balance_amount']))}"
+    )
+    block = i18n.translate_block(
+        "monthly", lang, name=name,
+        comp=f"+{_fmt_days(b['total_comp'])}" if b["total_comp"] else "0",
+        leave=f"-{_fmt_days(b['total_leave'])}" if b["total_leave"] else "0",
+        kind_pos=bal >= 0, bal_days=_fmt_days(abs(bal)),
+        bal_amt=_fmt(abs(b["balance_amount"])),
+    )
+    return thai + (_TR_SEP + block if block else "")
+
+
 def notify_monthly_report(employees: list[dict]) -> None:
     """Send end-of-month summary for all active employees.
     Called by the scheduler on the last day of each month at 20:00.
-    `employees` is a list of dicts with keys: id, name, start_date, monthly_salary.
+    `employees` is a list of dicts with keys: id, name, start_date, monthly_salary,
+    employment_status, probation_daily_rate, monthly_start_date, notify_language.
     """
     if not TOKEN or not GROUP_ID:
         return
@@ -559,16 +587,7 @@ def notify_monthly_report(employees: list[dict]) -> None:
 
     for emp in employees:
         try:
-            start = date.fromisoformat(emp["start_date"])
-            b = compute_overall_balance(emp["id"], start, emp["monthly_salary"])
-            bal = b["balance"]
-            sign = "+" if bal >= 0 else ""
-            kind = "เครดิต" if bal >= 0 else "ค้างลา"
-            lines.append(
-                f"👤 {emp['name']}\n"
-                f"  ชดเชย +{_fmt_days(b['total_comp'])} วัน  |  ลา -{_fmt_days(b['total_leave'])} วัน\n"
-                f"  ⚖️ {kind}: {sign}{_fmt_days(abs(bal))} วัน  ≈ {sign}฿{_fmt(abs(b['balance_amount']))}",
-            )
+            lines.append(_monthly_entry(emp))
         except Exception as e:
             print(f"[LINE] monthly report error for emp {emp.get('id')}: {e}")
 
@@ -579,7 +598,7 @@ def notify_monthly_report(employees: list[dict]) -> None:
         print(f"[LINE] notify_monthly_report error: {e}")
 
 
-def notify_cancel_resign(emp_name: str) -> None:
+def notify_cancel_resign(emp_name: str, language: str = "th") -> None:
     """Call after cancelling a resignation."""
     if not TOKEN or not GROUP_ID:
         return
@@ -588,6 +607,7 @@ def notify_cancel_resign(emp_name: str) -> None:
         msg = (
             f"↩️ ยกเลิกลาออก — {emp_name}\n✅ ยกเลิกการลาออกเรียบร้อยแล้ว\n\n🕒 {_now_str()}"
         )
+        msg = _append_tr(msg, "cancel_resign", language, name=emp_name)
         send_line(msg)
     except Exception as e:
         print(f"[LINE] notify_cancel_resign error: {e}")

@@ -38,6 +38,12 @@ _MSG = {
         "resign": "🚪 Resignation — {name}\n📅 Last day: {end_date}\n💵 Total payout: ฿{final}",
         "balance": "📊 Balance: comp {comp} / leave {leave} days\n⚖️ {kind}: {bal_days} days ≈ ฿{bal_amt} (฿{daily_rate}/day)",
         "balance_query": "📊 Accumulated — {name}\n\n📅 Days worked: {days} days\n💵 Total paid: ฿{amount}\n(฿{daily_rate}/day)",
+        "monthly": "📊 {name}: comp {comp} / leave {leave} days\n  ⚖️ {kind} {bal_days} days ≈ ฿{bal_amt}",
+        "monthly_probation_owed": "📊 {name}: 💵 outstanding ฿{amount}",
+        "monthly_probation_clear": "📊 {name}: ✅ no outstanding",
+        "cancel_attendance": "↩️ Cancelled — {name}\n📅 {date}: cancel {status}\n\n{balance}",
+        "cancel_resign": "↩️ Resignation cancelled — {name}",
+        "slip_image": "📎 Transfer slip — {name}",
         "kind_pos": "credit", "kind_neg": "owed", "payer": "  Paid by: {paid_by}\n",
     },
     # machine-generated, needs native-speaker review
@@ -48,6 +54,12 @@ _MSG = {
         "resign": "🚪 အလုပ်ထွက် — {name}\n📅 နောက်ဆုံးနေ့: {end_date}\n💵 စုစုပေါင်းပေးချေငွေ: ฿{final}",
         "balance": "📊 လက်ကျန်: အပို {comp} / ခွင့် {leave} ရက်\n⚖️ {kind}: {bal_days} ရက် ≈ ฿{bal_amt} (฿{daily_rate}/ရက်)",
         "balance_query": "📊 စုပေါင်း — {name}\n\n📅 အလုပ်လုပ်သည့်ရက်: {days} ရက်\n💵 ပေးပြီးငွေ: ฿{amount}\n(฿{daily_rate}/ရက်)",
+        "monthly": "📊 {name}: အပို {comp} / ခွင့် {leave} ရက်\n  ⚖️ {kind} {bal_days} ရက် ≈ ฿{bal_amt}",
+        "monthly_probation_owed": "📊 {name}: 💵 ပေးရန်ကျန် ฿{amount}",
+        "monthly_probation_clear": "📊 {name}: ✅ ပေးရန်မကျန်ပါ",
+        "cancel_attendance": "↩️ ပယ်ဖျက် — {name}\n📅 {date}: {status} ပယ်ဖျက်\n\n{balance}",
+        "cancel_resign": "↩️ အလုပ်ထွက်ခြင်း ပယ်ဖျက် — {name}",
+        "slip_image": "📎 ငွေလွှဲ slip — {name}",
         "kind_pos": "အကြွေး", "kind_neg": "ပေးရန်", "payer": "  ပေးသူ: {paid_by}\n",
     },
     # machine-generated, needs native-speaker review
@@ -58,6 +70,12 @@ _MSG = {
         "resign": "🚪 ລາອອກ — {name}\n📅 ມື້ສຸດທ້າຍ: {end_date}\n💵 ຍອດຈ່າຍລວມ: ฿{final}",
         "balance": "📊 ຍອດ: ຊົດເຊີຍ {comp} / ລາ {leave} ມື້\n⚖️ {kind}: {bal_days} ມື້ ≈ ฿{bal_amt} (฿{daily_rate}/ມື້)",
         "balance_query": "📊 ລວມ — {name}\n\n📅 ມື້ເຮັດວຽກ: {days} ມື້\n💵 ຈ່າຍແລ້ວ: ฿{amount}\n(฿{daily_rate}/ມື້)",
+        "monthly": "📊 {name}: ຊົດເຊີຍ {comp} / ລາ {leave} ມື້\n  ⚖️ {kind} {bal_days} ມື້ ≈ ฿{bal_amt}",
+        "monthly_probation_owed": "📊 {name}: 💵 ຄ້າງຈ່າຍ ฿{amount}",
+        "monthly_probation_clear": "📊 {name}: ✅ ບໍ່ມີຍອດຄ້າງຈ່າຍ",
+        "cancel_attendance": "↩️ ຍົກເລີກ — {name}\n📅 {date}: ຍົກເລີກ {status}\n\n{balance}",
+        "cancel_resign": "↩️ ຍົກເລີກການລາອອກ — {name}",
+        "slip_image": "📎 ສະລິບໂອນເງິນ — {name}",
         "kind_pos": "ເຄຣດິດ", "kind_neg": "ຄ້າງ", "payer": "  ຜູ້ຈ່າຍ: {paid_by}\n",
     },
     # machine-generated, needs native-speaker review
@@ -68,6 +86,12 @@ _MSG = {
         "resign": "🚪 លាឈប់ — {name}\n📅 ថ្ងៃចុងក្រោយ: {end_date}\n💵 ប្រាក់សរុបត្រូវបង់: ฿{final}",
         "balance": "📊 សមតុល្យ: សង {comp} / ឈប់ {leave} ថ្ងៃ\n⚖️ {kind}: {bal_days} ថ្ងៃ ≈ ฿{bal_amt} (฿{daily_rate}/ថ្ងៃ)",
         "balance_query": "📊 សរុប — {name}\n\n📅 ថ្ងៃធ្វើការ: {days} ថ្ងៃ\n💵 បានបង់: ฿{amount}\n(฿{daily_rate}/ថ្ងៃ)",
+        "monthly": "📊 {name}: សង {comp} / ឈប់ {leave} ថ្ងៃ\n  ⚖️ {kind} {bal_days} ថ្ងៃ ≈ ฿{bal_amt}",
+        "monthly_probation_owed": "📊 {name}: 💵 នៅជំពាក់ ฿{amount}",
+        "monthly_probation_clear": "📊 {name}: ✅ គ្មានបំណុលត្រូវបង់",
+        "cancel_attendance": "↩️ បានបោះបង់ — {name}\n📅 {date}: បោះបង់ {status}\n\n{balance}",
+        "cancel_resign": "↩️ បានបោះបង់ការលាឈប់ — {name}",
+        "slip_image": "📎 វិក្កយប័ត្រផ្ទេរប្រាក់ — {name}",
         "kind_pos": "ឥណទាន", "kind_neg": "ជំពាក់", "payer": "  អ្នកបង់: {paid_by}\n",
     },
 }
@@ -91,8 +115,9 @@ def translate_block(msg_type, lang, **p):
         if "status" in p
         else ""
     )
+    kind = (m["kind_pos"] if p["kind_pos"] else m["kind_neg"]) if "kind_pos" in p else ""
     balance = ""
-    if "bal_days" in p:
+    if "daily_rate" in p and "bal_days" in p:
         balance = _balance_block_tr(
             lang, comp=p["comp"], leave=p["leave"], kind_pos=p["kind_pos"],
             bal_days=p["bal_days"], bal_amt=p["bal_amt"], daily_rate=p["daily_rate"],
@@ -104,4 +129,6 @@ def translate_block(msg_type, lang, **p):
         period=p.get("period", ""), amount=p.get("amount", ""), payer=payer,
         end_date=p.get("end_date", ""), final=p.get("final", ""),
         days=p.get("days", ""), daily_rate=p.get("daily_rate", ""),
+        comp=p.get("comp", ""), leave=p.get("leave", ""), kind=kind,
+        bal_days=p.get("bal_days", ""), bal_amt=p.get("bal_amt", ""),
     )

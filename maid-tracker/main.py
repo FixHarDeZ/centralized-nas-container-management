@@ -24,6 +24,7 @@ from calc import (
     compute_monthly_leave_balance,
     compute_probation_resign,
     compute_probation_tally,
+    compute_probation_unpaid,
     compute_resign_summary,
     default_status,
     probation_worked_fraction,
@@ -120,14 +121,17 @@ def _save_upload(file: "UploadFile", dest_dir: str, basename: str) -> str:
 def _finish_slip_upload(conn, emp_id: int, fname: str, already_paid: bool, label: str):
     """Shared tail for slip-upload routes: fetch name, close, push slip image if already paid."""
     emp_row = conn.execute(
-        "SELECT name FROM employees WHERE id=?",
+        "SELECT name, notify_language FROM employees WHERE id=?",
         (emp_id,),
     ).fetchone()
     emp_name = emp_row["name"] if emp_row else ""
+    language = (emp_row["notify_language"] if emp_row else None) or "th"
     conn.commit()
     conn.close()
     if already_paid:
-        line_notify.notify_slip_image(emp_name=emp_name, slip_fname=fname, label=label)
+        line_notify.notify_slip_image(
+            emp_name=emp_name, slip_fname=fname, label=label, language=language
+        )
     return {"slip_path": fname}
 
 
@@ -508,7 +512,8 @@ def _send_monthly_report():
 
     conn = get_db()
     rows = conn.execute(
-        "SELECT id, name, start_date, monthly_salary FROM employees "
+        "SELECT id, name, start_date, monthly_salary, employment_status, "
+        "probation_daily_rate, monthly_start_date, notify_language FROM employees "
         "WHERE end_date IS NULL OR end_date=''",
     ).fetchall()
     conn.close()
@@ -787,8 +792,11 @@ def resign_employee(emp_id: int, req: ResignRequest):
 def cancel_resign(emp_id: int):
     conn = get_db()
     # Fetch employee name before clearing resign data
-    emp = conn.execute("SELECT name FROM employees WHERE id=?", (emp_id,)).fetchone()
+    emp = conn.execute(
+        "SELECT name, notify_language FROM employees WHERE id=?", (emp_id,)
+    ).fetchone()
     emp_name = emp["name"] if emp else None
+    language = (emp["notify_language"] if emp else None) or "th"
     conn.execute(
         "UPDATE employees SET end_date=NULL, resign_note=NULL WHERE id=?",
         (emp_id,),
@@ -797,7 +805,7 @@ def cancel_resign(emp_id: int):
     conn.close()
 
     if emp_name:
-        line_notify.notify_cancel_resign(emp_name=emp_name)
+        line_notify.notify_cancel_resign(emp_name=emp_name, language=language)
 
     return {"message": "cancelled"}
 
@@ -1015,6 +1023,7 @@ def upsert_attendance(emp_id: int, att: AttendanceUpdate):
             prev_half_day=prev_half_day,
             start_date=start_date,
             monthly_salary=monthly_salary,
+            language=emp.get("notify_language", "th"),
         )
 
     return {"message": "saved"}
@@ -1812,30 +1821,10 @@ def get_overall(emp_id: int):
     if emp.get("employment_status") == "probation":
         rate = emp.get("probation_daily_rate") or 0.0
         tally = compute_probation_tally(emp_id, start_date, rate, up_to=end)
-        paid_rows = conn.execute(
-            "SELECT work_date, amount FROM daily_payments WHERE employee_id=? AND paid_at IS NOT NULL",
-            (emp_id,),
-        ).fetchall()
-        paid_by_day = {r["work_date"]: r["amount"] for r in paid_rows}
-        paid_amount = round(sum(paid_by_day.values()), 2)
-        # Per-day unpaid: each day's tip (overpayment) does NOT reduce other days' unpaid
-        att_rows = conn.execute(
-            "SELECT work_date, status, half_day FROM attendance WHERE employee_id=?",
-            (emp_id,),
-        ).fetchall()
         conn.close()
-        att_map = {
-            r["work_date"]: {"status": r["status"], "half_day": bool(r["half_day"])}
-            for r in att_rows
-        }
-        unpaid_amount = 0.0
-        d = start_date
-        while d <= end:
-            day_rate = rate * probation_worked_fraction(att_map.get(d.isoformat()))
-            day_paid = paid_by_day.get(d.isoformat(), 0.0)
-            unpaid_amount += max(0, day_rate - day_paid)
-            d += timedelta(days=1)
-        unpaid_amount = round(unpaid_amount, 2)
+        u = compute_probation_unpaid(emp_id, start_date, rate, up_to=end)
+        paid_amount = u["total_paid"]
+        unpaid_amount = u["total_unpaid"]
         return {
             "start_date": emp["start_date"],
             "employment_status": "probation",
