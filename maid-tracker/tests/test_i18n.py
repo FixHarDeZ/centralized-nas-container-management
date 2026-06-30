@@ -9,7 +9,12 @@ def test_all_msg_types_render_for_every_nonthai_lang():
         deduction_days="0", paid_by="ฟิก",
         end_date="2026-06-30", base_salary="15000",
     )
-    for mt in ("attendance", "payment", "daily_payment", "resign"):
+    msg_types = (
+        "attendance", "payment", "daily_payment", "resign",
+        "monthly", "monthly_probation_owed", "monthly_probation_clear",
+        "cancel_attendance", "cancel_resign", "slip_image",
+    )
+    for mt in msg_types:
         for lang in ("my", "en", "lo", "km"):
             out = i18n.translate_block(mt, lang, **params)
             assert isinstance(out, str) and out.strip(), (mt, lang)

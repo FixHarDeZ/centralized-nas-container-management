@@ -1,6 +1,6 @@
 # maid-tracker — Index (Memory File)
 
-อัปเดตล่าสุด: 2026-06-25
+อัปเดตล่าสุด: 2026-06-30
 
 ---
 
@@ -130,6 +130,7 @@ working_days_in_month = จำนวนวัน "ทั้งเดือน" (
 - **Probation tally (default-present model)** = ทุกวันใน [start, up_to] นับ 1.0 อัตโนมัติ (มาทำงานทุกวันรวมอาทิตย์) **ลบ** วันที่ mark ขาด. วันขาด = attendance status=`leave` (repurpose = "ขาด" ช่วงโปร: full→0, half→0.5). `compute_probation_tally`/`probation_worked_fraction` ใน calc.py. caller ต้องส่ง `up_to` ≤ วันนี้ (ไม่จ่ายอนาคต — `get_summary` clamp `min(month_end, today)`).
 - **Mark absence (UI):** ปุ่ม "ลงเวลาทำงาน" บนหน้า detail → ปฏิทิน `/attendance`. ช่วงโปร cell toggle **work ↔ ขาด** (ขาดถาม full/half; คลิกกลับ work = DELETE row คืน default). comp/holiday ปิด. `get_attendance` คืน `work` เป็น default ทุกวัน ≤ วันนี้.
 - **จ่ายรายวัน** ผ่าน `daily_payments` (toggle paid ต่อวัน, `amount` snapshot). `get_daily_payments` iterate วัน default-present (frac>0) ใน window (cap < `monthly_start_date`). จ่ายวัน default ได้แม้ไม่มี attendance row. จ่ายวันขาดไม่ได้ (400).
+- **ยอดค้างจ่าย (amount-based)** = `calc.compute_probation_unpaid()` → Σ `max(0, day_rate − day_paid)` ต่อวัน (overpay/ทิปวันหนึ่งไม่ลดวันอื่น). **single source** ใช้ร่วม `get_overall` (dashboard ค้างจ่าย), `notify_balance_query`, monthly report → ไม่ drift. ต่างจาก `compute_probation_resign` (presence-based unpaid×rate).
 - **กดผ่านโปร** (`POST pass-probation` body `pass_date`): set `monthly_start_date=pass_date`, `employment_status='active'` → เปิด leave + monthly ทันที.
 - **Monthly anchor** = `monthly_start_date or start_date`. ทุก monthly/leave calc (payments, summary, overall, leave-balance, resign) ใช้ anchor → pro-rate/leave accrual เริ่มที่วันผ่านโปร ไม่ใช่ start_date. แถวเก่า (monthly_start_date NULL) fallback = start_date (behavior เดิม).
 - **Transition month** (เดือนที่ผ่านโปร): วัน `< pass_date` = daily (`get_daily_payments` cap `work_date < monthly_start_date`), วัน `>= pass_date` = monthly pro-rate. ไม่ double-pay/orphan. ถ้า pass_date หลังวันที่ 15 → period 1 skip, period 2 = full prorated base.
@@ -268,4 +269,4 @@ final = base_salary_last_month + (cumulative_balance × daily_rate)
 | Job | Trigger | Action |
 |-----|---------|--------|
 | `check_reminders` | ทุก 1 นาที | ตรวจ reminders ที่ enabled และส่ง LINE |
-| `monthly_report` | วันสุดท้ายของเดือน เวลา `MONTHLY_REPORT_TIME` | ส่งสรุปรายเดือนทาง LINE |
+| `monthly_report` | วันสุดท้ายของเดือน เวลา `MONTHLY_REPORT_TIME` | ส่งสรุปรายเดือนทาง LINE. แต่ละคนแนบ block แปลภาษา (`notify_language`) ใต้บล็อกไทย. **Probation** → แสดงแค่ `ค้างจ่าย ฿X` / `ไม่มียอดค้างจ่าย` (ไม่มี comp/leave). **Active** → balance เดิม resolve anchor=`monthly_start_date or start_date`. `line_notify._monthly_entry()` |
