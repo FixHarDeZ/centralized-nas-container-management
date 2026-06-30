@@ -1,0 +1,27 @@
+name: tests
+
+on:
+  pull_request:
+    paths: ['**/*.py', '**/requirements.txt']
+  push:
+    branches: [main]
+
+jobs:
+  stack-tests:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # ponytail: lean stacks only. secretary/query deferred — flagembedding
+        # pulls torch (~2GB) and its rerank test needs a cohere key in CI.
+        stack: [maid-tracker, news-feed, friendly-reminder]
+    defaults:
+      run:
+        working-directory: ${{ matrix.stack }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt
+      - run: python -m pytest tests/ -v
