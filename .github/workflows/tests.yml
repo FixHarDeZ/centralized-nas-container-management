@@ -2,7 +2,7 @@ name: tests
 
 on:
   pull_request:
-    paths: ['**/*.py', '**/requirements.txt']
+    paths: ['**/*.py', '**/requirements.txt', '.github/workflows/tests.yml']
   push:
     branches: [main]
 
