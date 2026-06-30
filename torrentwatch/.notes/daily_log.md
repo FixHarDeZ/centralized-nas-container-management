@@ -574,3 +574,22 @@ Fix (`scheduler.py`):
 ### Pending / Next Steps
 
 - [ ] Cover image โหลดตรงจาก bearbit CDN — ถ้า session expire รูปแตกพร้อมกัน
+
+---
+
+## 2026-06-30 — Fix: download button broken (bearbit unread-PM gate)
+
+**อาการ:** ปุ่ม Download Local/NAS คืน `502 {"detail":"Failed to fetch torrent file from site"}`
+
+**Root cause (diagnose จาก container logs + live probe บน NAS):**
+- bearbit เปลี่ยน endpoint: `download.php?id=X` เดิม **ตาย → 404**
+- ลิงก์ใหม่ในหน้า detail = `downloadnew.php?id=X&genid=..&dltm=..&dlt=<token>&filename=..` (token สดต่อ session, `resolve_download_url` หาเจออยู่แล้วผ่าน fallback regex)
+- แต่ `downloadnew.php` คืน **`200 text/html charset=windows-874`** = หน้า HTML block ไม่ใช่ไฟล์ .torrent
+- เนื้อหา block page (ไทย): "คุณมีจดหมายใหม่ยังไม่ได้อ่าน กรุณาอ่านจดหมายก่อนดาวน์โหลด" → **bearbit gate การโหลดไว้หลัง inbox PM ที่ยังไม่อ่าน** (PM broadcast VIP/Donate)
+- ยืนยัน: `GET inbox.php` (เคลียร์ unread flag) แล้วยิง `downloadnew.php` ซ้ำ → `application/x-bittorrent` len 78421 ✅
+
+**Fix (`scraper.py` `fetch_torrent_bytes`):** เมื่อ resolved URL คืนไม่ใช่ torrent → `GET /inbox.php` เคลียร์ gate แล้ว retry resolved URL อีก 1 ครั้ง. self-heal ทุกครั้งที่ bearbit ส่ง PM ใหม่
+
+**Verify:** `GET /api/download/local/11339` ผ่าน basic auth ใน container → `len 78421 magic d8:announce` (valid bittorrent) ✅
+
+**Gotcha ใหม่:** stored `torrent_url` (`download.php?id=`) ใช้ไม่ได้แล้ว — โหลดต้องผ่าน resolve detail page เพื่อเอา token `dlt` สด เสมอ. inbox PM ที่ยังไม่อ่าน block การโหลดทั้งหมด.
