@@ -1,5 +1,9 @@
 # Daily Log — Friendly Reminder
 
+## 2026-06-30 — Docker healthcheck + CI test coverage
+- **Healthcheck** เพิ่มใน `docker-compose.yml` (service `friendly-reminder`): stdlib urllib ยิง `GET http://localhost:8000/` (StaticFiles `html=True` → index) `interval 30s / timeout 10s / retries 3 / start_period 30s`. Hung uvicorn → Docker auto-restart. Deploy + verified `(healthy)` บน NAS.
+- **CI:** project เพิ่ม `.github/workflows/tests.yml` — รัน `pytest tests/` ของ stack นี้ (8 tests, `test_slip_match.py`) ทุก PR ที่แตะ `*.py`/`requirements.txt`. เดิมไม่เคยรันใน CI.
+
 ## 2026-06-26 (v3) — LINE slip auto-pay + mobile redesign
 - **Mobile fix:** payments table 6 คอลัมน์ล้นจอ + CSS เดิม `@media(max-width:600px)` **ซ่อน** คอลัมน์สลิป (`nth-child(5)`) → redesign เป็น stacked cards (`display:block` + `td::before{content:attr(data-label)}`) สลิปเห็นครบ. app.js เพิ่ม `data-label` ทุก `<td>`. Polish: card box-shadow.
 - **LINE webhook** `POST /webhook/line` (`app/main.py`): ตรวจ `X-Line-Signature` (HMAC-SHA256, บังคับ — endpoint flip→paid) + กรอง `source.groupId == FRIENDLY_LINE_GROUP_ID`. รูปสลิป → download จาก `api-data.line.me/.../content` ทันที (URL หมดอายุไว) เซฟลง `/data/slips`.

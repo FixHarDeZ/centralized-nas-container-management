@@ -1,5 +1,9 @@
 # Daily Log — news-feed
 
+## 2026-06-30 — Docker healthcheck + CI test coverage
+- **Healthcheck** เพิ่มใน `docker-compose.yml` (service `news-feed`): stdlib urllib ยิง `GET http://localhost:8000/` (StaticFiles `html=True` → index) `interval 30s / timeout 10s / retries 3 / start_period 30s`. Hung uvicorn → Docker auto-restart. Deploy + verified `(healthy)` บน NAS.
+- **CI:** project เพิ่ม `.github/workflows/tests.yml` — รัน `pytest tests/` ของ stack นี้ (133 tests) ทุก PR ที่แตะ `*.py`/`requirements.txt`. เดิมไม่เคยรันใน CI.
+
 ---
 
 ## 2026-06-24 — Candidate 5: add SQLite backup via shared sqlite_backup module
