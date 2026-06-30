@@ -1,5 +1,9 @@
 # Daily Log
 
+## 2026-06-30 (3) — i18n km typo fix
+
+- `i18n._STATUS['km']['compensatory']`: `🟢 ថ្ងៃសងសង` → `🟢 ថ្ងៃសង` (พยางค์ `សង` ซ้ำผิด, high confidence). best-effort review my/lo/km: **lo โอเคหมด**; **my flag 2 จุดยังไม่แก้** (`kind_pos="အကြွေး"` semantics น่าจะกลับ pos/neg; comp label `အပိုဆောင်းရက်` แปลกๆ) — ต้อง native พม่าจริงดู, disclaimer คงไว้.
+
 ## 2026-06-30 (2) — Monthly report LINE noti: probation outstanding-only + maid language
 
 **ปัญหา (จากเจ้าของ):**

@@ -19,7 +19,7 @@ _STATUS = {
     # machine-generated, needs native-speaker review
     "lo": {"leave": "🔴 ລາພັກ", "compensatory": "🟢 ມື້ຊົດເຊີຍ"},
     # machine-generated, needs native-speaker review
-    "km": {"leave": "🔴 ច្បាប់ឈប់", "compensatory": "🟢 ថ្ងៃសងសង"},
+    "km": {"leave": "🔴 ច្បាប់ឈប់", "compensatory": "🟢 ថ្ងៃសង"},
 }
 
 _HALF = {
