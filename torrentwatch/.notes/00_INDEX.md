@@ -154,7 +154,7 @@ COL_COMPLETED = 9    # completed/snatches count (best guess — verify via /api/
 COL_SEEDS     = 10   # <span class="green|red">N</span>
 COL_LEECHES   = 11
 ```
-Download URL: `SITE_BASE_URL/download.php?id={site_id}&hashinfo={hashinfo}`
+Download URL: ~~`download.php?id={site_id}`~~ **ตายแล้ว (404, มิ.ย. 2026)**. bearbit ย้ายไป `downloadnew.php?id=X&genid=..&dltm=..&dlt=<token>&filename=..` — token สดต่อ session → ต้อง `resolve_download_url(detail_url)` ดึงลิงก์จากหน้า detail ทุกครั้ง (stored `torrent_url` ใช้ไม่ได้แล้ว). **⚠️ Download gate:** ถ้ามี inbox PM ที่ยังไม่อ่าน bearbit คืน HTML block page แทน .torrent → `fetch_torrent_bytes` ยิง `GET /inbox.php` เคลียร์ unread flag แล้ว retry (self-heal)
 
 ### Filter Logic
 - `seeds == 0` → ทิ้งเสมอ

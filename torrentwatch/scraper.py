@@ -355,6 +355,16 @@ async def fetch_torrent_bytes(torrent_url: str, detail_url: str = "") -> bytes |
                 print(f"[scraper] resolved download → {resp2.status_code} {ct2}")
                 if resp2.status_code == 200 and _is_torrent_content(ct2, resp2.content):
                     return resp2.content
+                # Bearbit gates downloads behind unread inbox PMs (system broadcasts),
+                # serving an HTML block page instead of the .torrent. Viewing inbox.php
+                # clears the unread flag — do it, then retry the resolved URL once.
+                print("[scraper] resolved URL returned non-torrent — clearing inbox gate and retrying")
+                await _client.get(f"{config.SITE_BASE_URL}/inbox.php")
+                resp3 = await _client.get(real_url, headers={"Referer": detail_url})
+                ct3 = resp3.headers.get("content-type", "")
+                print(f"[scraper] retry after inbox → {resp3.status_code} {ct3}")
+                if resp3.status_code == 200 and _is_torrent_content(ct3, resp3.content):
+                    return resp3.content
         return None
     except Exception as e:
         print(f"[scraper] torrent download error: {e}")
