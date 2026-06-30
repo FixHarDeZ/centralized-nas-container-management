@@ -1,5 +1,10 @@
 # TorrentWatch — Daily Log
 
+## 2026-06-30 — Docker healthcheck
+- **Healthcheck** เพิ่มใน `docker-compose.yml` (service `torrentwatch`): stdlib urllib ยิง `GET http://localhost:8000/api/status` (public endpoint) `interval 30s / timeout 10s / retries 3 / start_period 30s`. Hung uvicorn → Docker auto-restart. Deploy + verified `(healthy)` บน NAS.
+- **⚠️ Regression แก้แล้ว:** PR #8 ลบ `torrentwatch/notify.py` ผิด (เข้าใจผิดว่า dead code). จริงๆ `line_notify.py` + `telegram_notify.py` ทำ `from notify import Notifier, LineCreds/TgCreds` (ดู INDEX banner) → **เป็น live dependency**. ตอน deploy รอดเพราะ build ใช้ cached `COPY` layer (ไฟล์ Jun 25 ยังอยู่ใน container) แต่ clean rebuild จะ ImportError. **Restore จาก git** (`git checkout b751a37 -- torrentwatch/notify.py`, identical กับ `shared/notify.py`). บทเรียน: เช็ค import ภายใน `line_notify`/`telegram_notify` เองด้วย ไม่ใช่ grep แล้ว filter ชื่อไฟล์ทิ้ง.
+- หมายเหตุ: torrentwatch ยังไม่มี test suite → ไม่อยู่ใน CI matrix ใหม่ (`.github/workflows/tests.yml`).
+
 ---
 
 ## 2026-06-24 — Candidate 5: add SQLite backup via shared sqlite_backup module
