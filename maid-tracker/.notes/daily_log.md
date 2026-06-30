@@ -1,5 +1,24 @@
 # Daily Log
 
+## 2026-06-30 (2) — Monthly report LINE noti: probation outstanding-only + maid language
+
+**ปัญหา (จากเจ้าของ):**
+1. สรุปรายเดือน LINE แสดง "ค้างลา 0.5 วัน ≈ ฿167" สำหรับแม่บ้าน **ทดลองงาน** — แต่ช่วงโปรไม่มีวันลา จึงไม่ควรมียอดค้างลา. คาดหวัง: ช่วงโปรแสดงแค่ "มี/ไม่มียอดค้างจ่าย".
+2. noti สรุปรายเดือน **ไม่แนบภาษาแม่บ้าน** (`notify_language`) ทั้งที่ noti อื่นแนบ. คาดหวัง: ถ้าตั้งภาษาไว้ ทุก noti ต้องมีคำแปล.
+
+**แก้:**
+- `calc.compute_probation_unpaid(emp_id, start, rate, up_to=None)` — แยก amount-based per-day unpaid (`max(0, day_rate − day_paid)`, tip วันหนึ่งไม่ลดวันอื่น) ออกเป็น helper. **ใช้ร่วม** `get_overall` (dashboard ค้างจ่าย) + `notify_balance_query` + monthly report → ตัวเลขไม่ drift. ลบ logic inline เดิมใน 2 จุดทิ้ง.
+- `line_notify._monthly_entry(emp)` (แยกจาก `notify_monthly_report`): probation → ใช้ `compute_probation_unpaid` แสดงแค่ `💵 ค้างจ่าย: ฿X` หรือ `✅ ไม่มียอดค้างจ่าย` (ไม่มี comp/leave). active → balance เดิม แต่ resolve **anchor = `monthly_start_date or start_date`** (เดิมส่ง `start_date` ดิบ → คนผ่านโปรนับ leave จาก start_date ผิด). ต่อท้าย block แปลภาษาต่อแม่บ้าน (`notify_language`) ใต้บล็อกไทยของแต่ละคน.
+- `main._send_monthly_report` SELECT เพิ่ม `employment_status, probation_daily_rate, monthly_start_date, notify_language`.
+- `i18n.py`: เพิ่ม msg_type `monthly` / `monthly_probation_owed` / `monthly_probation_clear` ครบ 4 ภาษา (en/my/lo/km). `translate_block` เปิดให้ template ใช้ `{comp}{leave}{kind}{bal_days}{bal_amt}` ตรงๆ + guard balance-block path ด้วย `daily_rate in p` (monthly ไม่ส่ง daily_rate). my/lo/km ยัง machine-generated.
+- **ปิด gap "ทุก noti"**: เพิ่ม `language` param + `_append_tr` ให้ `notify_cancel_attendance` / `notify_cancel_resign` / `notify_slip_image` (เดิม Thai-only) + plumb `notify_language` จาก caller ใน main.py (cancel-resign + slip-upload SELECT เพิ่ม col). i18n msg_type `cancel_attendance`/`cancel_resign`/`slip_image` × 4 ภาษา. **ครบทุก notify แล้ว.**
+
+**Test:** 33 pass + `test_monthly_report.py` (compute_probation_unpaid overpay-no-cross-reduction; i18n monthly blocks owed/clear/active + Thai=None) + `test_i18n` ขยาย coverage ครบ 10 msg_type × 4 ภาษา.
+**ค้าง / flag:**
+- **monthly-mode maid** (holiday_mode='monthly') ในสรุปรายเดือนยังใช้ `compute_overall_balance` (sunday semantics) — balance ที่ถูกต้องต้องใช้ `compute_monthly_leave_balance` (accrued−used). **pre-existing**, ไม่แก้ในรอบนี้เพราะ half-fix (แค่ส่ง holiday_mode) ได้ตัวเลขผิดแบบใหม่. ถ้ามีแม่บ้าน monthly mode จริงต้องแก้แยก.
+- ยังไม่ smoke-test ข้อความประกอบจริงบน NAS (line_notify bind helper ตอน import → unit-test assembled message ลำบาก). ต้อง `/deploy` + trigger รายงานดู LINE จริง.
+- native review my/lo/km.
+
 ## 2026-06-30 — Docker healthcheck + CI test coverage
 - **Healthcheck** เพิ่มใน `docker-compose.yml` (service `maid-tracker`): stdlib urllib ยิง `GET http://localhost:8000/` (catch-all route → `static/index.html`) `interval 30s / timeout 10s / retries 3 / start_period 30s`. Hung uvicorn → Docker auto-restart (เดิมไม่มี healthcheck เลย). Deploy + verified `(healthy)` บน NAS.
 - **CI:** project เพิ่ม `.github/workflows/tests.yml` — รัน `pytest tests/` ของ stack นี้ (31 tests) ทุก PR ที่แตะ `*.py`/`requirements.txt`. เดิม CI รันแค่ root `tests/` + `shared/tests/` → stack tests ไม่เคยรันอัตโนมัติ.
