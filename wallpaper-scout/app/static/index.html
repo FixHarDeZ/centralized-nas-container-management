@@ -1,5 +1,31 @@
 <!DOCTYPE html>
-<html>
-<head><title>Wallpaper Scout</title></head>
-<body>Wallpaper Scout dashboard — placeholder, replaced in Task 7.</body>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Wallpaper Scout</title>
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<h1>Wallpaper Scout</h1>
+
+<form id="topic-form">
+  <input type="text" id="query" placeholder="เช่น IU, Wuthering Waves" required />
+  <label><input type="checkbox" name="purpose" value="mobile" /> Mobile</label>
+  <label><input type="checkbox" name="purpose" value="laptop" /> Laptop</label>
+  <label><input type="checkbox" name="purpose" value="pc" /> PC</label>
+  <label>รอบ/วัน <input type="number" id="frequency" value="1" min="1" max="24" /></label>
+  <label>รูป/รอบ <input type="number" id="max_new" value="5" min="1" max="50" /></label>
+  <button type="submit">เพิ่ม Topic</button>
+</form>
+
+<table id="topics-table">
+  <thead>
+    <tr><th>Query</th><th>Purpose</th><th>รอบ/วัน</th><th>รูป/รอบ</th><th>วันนี้</th><th>สถานะ</th><th></th></tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<script src="/app.js"></script>
+</body>
 </html>
