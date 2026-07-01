@@ -64,6 +64,24 @@ def test_first_cycle_uses_toplist_and_marks_backfilled(env, mocker):
         assert f.read() == b"fake-bytes"
 
 
+def test_first_cycle_does_not_mark_backfilled_if_nothing_downloaded(env, mocker):
+    scheduler, db, photos_dir = env
+    topic_id = db.create_topic("IU", ["mobile"], frequency_per_day=1, max_new_per_cycle=5)
+
+    mocker.patch("app.scheduler.llm.expand_query", return_value=["IU"])
+    mocker.patch(
+        "app.scheduler.wallhaven.search",
+        return_value=[{"id": "abc", "path": "https://x/abc.jpg", "file_type": "image/jpeg"}],
+    )
+    mocker.patch("app.scheduler.wallhaven.download_image", side_effect=Exception("boom"))
+
+    scheduler.run_topic_cycle(topic_id)
+
+    topic = db.get_topic(topic_id)
+    assert topic["backfilled"] == 0
+    assert db.download_exists(topic_id, "mobile", "abc") is False
+
+
 def test_second_cycle_uses_date_added_and_skips_existing(env, mocker):
     scheduler, db, photos_dir = env
     topic_id = db.create_topic("IU", ["mobile"], frequency_per_day=1, max_new_per_cycle=5)

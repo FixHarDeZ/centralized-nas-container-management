@@ -58,10 +58,11 @@ def run_topic_cycle(topic_id: int) -> None:
     sorting = "toplist" if not topic["backfilled"] else "date_added"
     slug = slugify(topic["query"])
 
+    downloaded = 0
     for purpose in topic["purposes"]:
-        _run_purpose(topic_id, purpose, search_terms, sorting, topic["max_new_per_cycle"], slug)
+        downloaded += _run_purpose(topic_id, purpose, search_terms, sorting, topic["max_new_per_cycle"], slug)
 
-    if not topic["backfilled"]:
+    if not topic["backfilled"] and downloaded > 0:
         db.mark_backfilled(topic_id)
 
 
@@ -72,7 +73,7 @@ def _run_purpose(
     sorting: str,
     max_new: int,
     slug: str,
-) -> None:
+) -> int:
     results = wallhaven.search(search_terms, purpose, sorting)
     new_count = 0
     for item in results:
@@ -93,6 +94,7 @@ def _run_purpose(
         (dest_dir / filename).write_bytes(image_bytes)
         db.record_download(topic_id, purpose, wallhaven_id, filename)
         new_count += 1
+    return new_count
 
 
 def send_daily_summary() -> None:
