@@ -23,6 +23,7 @@ import app.db as db
 import app.llm as llm
 import app.wallhaven as wallhaven
 from app.notify import Notifier, TgCreds
+import app.photos_albums as photos_albums
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +73,9 @@ def run_topic_cycle(topic_id: int) -> int:
     if not topic["backfilled"]:
         db.mark_backfilled(topic_id)
 
+    # No sync_albums() here: freshly written files aren't indexed by Synology
+    # Photos yet, so an immediate sync sees nothing. The periodic 5-min job
+    # (start_all) picks them up once indexing catches up.
     return downloaded
 
 
@@ -99,8 +103,17 @@ def _run_purpose(
         ext = item["path"].rsplit(".", 1)[-1]
         dest_dir = _PHOTOS_ROOT / purpose / slug
         dest_dir.mkdir(parents=True, exist_ok=True)
+        # Touch parent dirs to trigger Synology Photos folder indexing.
+        # New folders created by the container aren't visible to Photos until touched.
+        for d in [dest_dir, dest_dir.parent, dest_dir.parent.parent]:
+            if d.exists() and d != Path("/"):
+                os.utime(d, None)
         filename = f"{wallhaven_id}.{ext}"
-        (dest_dir / filename).write_bytes(image_bytes)
+        dest_path = dest_dir / filename
+        dest_path.write_bytes(image_bytes)
+        # Touch file to trigger Synology Photos indexing (doesn't auto-index
+        # files written by the container — needs a filesystem mtime change).
+        os.utime(dest_path, None)
         db.record_download(topic_id, purpose, wallhaven_id, filename)
         new_count += 1
     return new_count
@@ -150,5 +163,15 @@ def start_all(sched) -> None:
         send_daily_summary,
         trigger=CronTrigger(hour=int(hour), minute=int(minute), timezone=_TZ),
         id="daily-summary",
+        replace_existing=True,
+    )
+
+    # Periodic album sync — picks up files once the host-side cron touch (every
+    # 2 min) has let Synology index them. Kept at 2 min to match the cron cadence
+    # so a fresh Scout lands in albums within ~2-4 min instead of waiting a cycle.
+    sched.add_job(
+        photos_albums.sync_albums,
+        trigger=IntervalTrigger(minutes=2),
+        id="album-sync",
         replace_existing=True,
     )

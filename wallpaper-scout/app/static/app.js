@@ -11,31 +11,57 @@ async function loadTopics() {
   const res = await fetch("/api/topics");
   const topics = await res.json();
   topicsById = Object.fromEntries(topics.map((t) => [t.id, t]));
-  const tbody = document.querySelector("#topics-table tbody");
-  tbody.innerHTML = "";
+
+  const totalToday = topics.reduce((s, t) => s + (t.downloaded_today || 0), 0);
+  document.getElementById("total-today").innerHTML = `วันนี้ <b>${totalToday}</b> รูป`;
+
+  const grid = document.getElementById("topics");
+  grid.innerHTML = "";
+  if (topics.length === 0) {
+    grid.innerHTML = `<div class="empty-state">ยังไม่มี topic — เพิ่มด้านบน</div>`;
+    return;
+  }
+
   for (const t of topics) {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td>${escapeHtml(t.query)}</td>
-      <td>${escapeHtml(t.purposes.join(", "))}</td>
-      <td>${escapeHtml(t.search_terms ? t.search_terms.join(", ") : "(AI คิดให้)")}</td>
-      <td>${t.frequency_per_day}</td>
-      <td>${t.max_new_per_cycle}</td>
-      <td>${t.downloaded_today}</td>
-      <td>${t.enabled ? "เปิด" : "หยุด"}</td>
-      <td>
-        <button data-action="run" data-id="${t.id}">Scout ตอนนี้</button>
+    const counts = t.counts_by_purpose || {};
+    const purposeChips = t.purposes
+      .map((p) => {
+        const n = counts[p] || 0;
+        return `<span class="pchip${n === 0 ? " empty" : ""}">${escapeHtml(p)} <span class="n">${n}</span></span>`;
+      })
+      .join("");
+
+    const terms = t.search_terms
+      ? `<div class="terms">🔎 ${escapeHtml(t.search_terms.join(", "))}</div>`
+      : `<div class="terms ai">🔎 AI คิดให้</div>`;
+
+    const card = document.createElement("div");
+    card.className = "topic" + (t.enabled ? "" : " disabled");
+    card.innerHTML = `
+      <div class="topic-head">
+        <span class="q">${escapeHtml(t.query)}</span>
+        <span class="badge ${t.enabled ? "on" : "off"}">${t.enabled ? "เปิด" : "หยุด"}</span>
+      </div>
+      ${terms}
+      <div class="purposes">${purposeChips}</div>
+      <div class="meta">
+        <span>รอบ/วัน <b>${t.frequency_per_day}</b></span>
+        <span>รูป/รอบ <b>${t.max_new_per_cycle}</b></span>
+        <span>วันนี้ <b>${t.downloaded_today}</b></span>
+      </div>
+      <div class="topic-actions">
+        <button class="primary" data-action="run" data-id="${t.id}">Scout ตอนนี้</button>
         <button data-action="edit" data-id="${t.id}">แก้ไข</button>
         <button data-action="toggle" data-id="${t.id}" data-enabled="${t.enabled ? "true" : "false"}">${t.enabled ? "หยุด" : "เปิด"}</button>
-        <button data-action="delete" data-id="${t.id}">ลบ</button>
-      </td>`;
-    tbody.appendChild(tr);
+        <button class="danger" data-action="delete" data-id="${t.id}">ลบ</button>
+      </div>`;
+    grid.appendChild(card);
   }
 }
 
 function setFormMode(editing) {
-  const form = document.getElementById("topic-form");
-  form.querySelector('button[type="submit"]').textContent = editing ? "บันทึก" : "เพิ่ม Topic";
+  document.getElementById("form-title").textContent = editing ? "แก้ไข Topic" : "เพิ่ม Topic";
+  document.getElementById("submit-btn").textContent = editing ? "บันทึก" : "เพิ่ม Topic";
   document.getElementById("cancel-edit").style.display = editing ? "" : "none";
 }
 
@@ -51,6 +77,7 @@ function startEdit(id) {
   document.getElementById("frequency").value = t.frequency_per_day;
   document.getElementById("max_new").value = t.max_new_per_cycle;
   setFormMode(true);
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function cancelEdit() {
@@ -97,11 +124,12 @@ document.getElementById("topic-form").addEventListener("submit", async (e) => {
   loadTopics();
 });
 
-document.querySelector("#topics-table tbody").addEventListener("click", async (e) => {
+document.getElementById("topics").addEventListener("click", async (e) => {
   const btn = e.target.closest("button");
   if (!btn) return;
   const id = btn.dataset.id;
   if (btn.dataset.action === "delete") {
+    if (!confirm("ลบ topic นี้?")) return;
     await fetch(`/api/topics/${id}`, { method: "DELETE" });
   } else if (btn.dataset.action === "toggle") {
     const enabled = btn.dataset.enabled === "true";
@@ -117,11 +145,7 @@ document.querySelector("#topics-table tbody").addEventListener("click", async (e
     try {
       const res = await fetch(`/api/topics/${id}/run`, { method: "POST" });
       const data = await res.json();
-      if (res.ok) {
-        alert(`Scout เสร็จแล้ว: โหลดรูปใหม่ ${data.downloaded} รูป`);
-      } else {
-        alert(`Scout ล้มเหลว: ${data.detail}`);
-      }
+      alert(res.ok ? `Scout เสร็จ: โหลดรูปใหม่ ${data.downloaded} รูป` : `Scout ล้มเหลว: ${data.detail}`);
     } finally {
       btn.disabled = false;
       btn.textContent = originalText;

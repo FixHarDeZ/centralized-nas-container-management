@@ -7,25 +7,46 @@
 <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-<h1>Wallpaper Scout</h1>
+<header class="topbar">
+  <h1>🖼️ Wallpaper Scout</h1>
+  <div class="stat" id="total-today">วันนี้ — รูป</div>
+</header>
 
-<form id="topic-form">
-  <input type="text" id="query" placeholder="เช่น IU, Wuthering Waves" required />
-  <input type="text" id="search_terms" placeholder="Search terms เอง คั่นด้วย , (เว้นว่าง = ให้ AI คิดให้)" />
-  <label><input type="checkbox" name="purpose" value="mobile" /> Mobile</label>
-  <label><input type="checkbox" name="purpose" value="pc" /> PC</label>
-  <label>รอบ/วัน <input type="number" id="frequency" value="1" min="1" max="24" /></label>
-  <label>รูป/รอบ <input type="number" id="max_new" value="5" min="1" max="50" /></label>
-  <button type="submit">เพิ่ม Topic</button>
-  <button type="button" id="cancel-edit" style="display:none">ยกเลิก</button>
-</form>
+<section class="card form-card">
+  <h2 id="form-title">เพิ่ม Topic</h2>
+  <form id="topic-form">
+    <div class="field grow">
+      <label for="query">Query</label>
+      <input type="text" id="query" placeholder="เช่น IU, Wuthering Waves" required />
+    </div>
+    <div class="field grow">
+      <label for="search_terms">Search terms (เว้นว่าง = AI คิดให้)</label>
+      <input type="text" id="search_terms" placeholder="คั่นด้วย ," />
+    </div>
+    <div class="field">
+      <label>Purpose</label>
+      <div class="chips">
+        <label class="chip-check"><input type="checkbox" name="purpose" value="mobile" /> Mobile</label>
+        <label class="chip-check"><input type="checkbox" name="purpose" value="pc" /> PC</label>
+        <label class="chip-check"><input type="checkbox" name="purpose" value="best" /> Best</label>
+      </div>
+    </div>
+    <div class="field narrow">
+      <label for="frequency">รอบ/วัน</label>
+      <input type="number" id="frequency" value="1" min="1" max="24" />
+    </div>
+    <div class="field narrow">
+      <label for="max_new">รูป/รอบ</label>
+      <input type="number" id="max_new" value="5" min="1" max="50" />
+    </div>
+    <div class="field actions">
+      <button type="submit" class="primary" id="submit-btn">เพิ่ม Topic</button>
+      <button type="button" id="cancel-edit" class="ghost" style="display:none">ยกเลิก</button>
+    </div>
+  </form>
+</section>
 
-<table id="topics-table">
-  <thead>
-    <tr><th>Query</th><th>Purpose</th><th>Search Terms</th><th>รอบ/วัน</th><th>รูป/รอบ</th><th>วันนี้</th><th>สถานะ</th><th></th></tr>
-  </thead>
-  <tbody></tbody>
-</table>
+<section id="topics" class="topics-grid"></section>
 
 <script src="/app.js"></script>
 </body>

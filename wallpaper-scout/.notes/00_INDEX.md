@@ -1,11 +1,11 @@
 # Wallpaper Scout — Project Index (Memory Blueprint)
 
-> อัปเดตล่าสุด: 2026-07-01 (initial build)
+> อัปเดตล่าสุด: 2026-07-01 (review album sync + dashboard redesign + per-purpose counts)
 > ใช้ไฟล์นี้เป็น cold-start memory ก่อนเริ่มงานทุกครั้ง
 
 ## Overview
 
-FastAPI stack ที่ให้ผู้ใช้ลงทะเบียน "topic" (คำค้น เช่น "IU", "Wuthering Waves") พร้อมระบุ purpose (mobile/pc wallpaper), scrape รูปจาก Wallhaven API (SFW only) ตาม preset สัดส่วน/ความละเอียดคงที่ เขียนไฟล์ตรงเข้า `/volume1/homes/fixhardez/Photos/wallpapers/<purpose>/<topic>/` ให้ Synology Photos auto-index (ไม่ใช้ DSM Photos API เลย)
+FastAPI stack ที่ให้ผู้ใช้ลงทะเบียน "topic" (คำค้น เช่น "IU", "Wuthering Waves") พร้อมระบุ purpose (mobile/pc wallpaper), scrape รูปจาก Wallhaven API (SFW only) ตาม preset สัดส่วน/ความละเอียดคงที่ เขียนไฟล์ตรงเข้า `/volume1/homes/fixhardez/Photos/wallpapers/<purpose>/<topic>/` ให้ Synology Photos auto-index + sync เข้า Normal Albums อัตโนมัติ
 
 ## Tech Stack
 
@@ -19,6 +19,7 @@ FastAPI stack ที่ให้ผู้ใช้ลงทะเบียน "t
 | Frontend | Vanilla JS SPA |
 | Auth | Nginx Basic Auth sidecar (LAN-only, no public HTTPS proxy — no inbound webhook needed) |
 | Notifications | Telegram only — reuses `news-feed`'s bot/chat (`stacks.news_feed.telegram.*` vault keys), no separate wallpaper-scout bot |
+| Photos sync | `synology-api` library → Synology Photos API via `host.docker.internal:5000`. Creates Normal Albums per purpose ("Wallpapers — mobile", "Wallpapers — pc"), syncs items after each download cycle + on startup. DSM credentials in vault (`stacks.wallpaper_scout.dsm_*`). Container needs `extra_hosts: host.docker.internal:host-gateway` in docker-compose. |
 
 ## Ports
 
@@ -32,7 +33,11 @@ FastAPI stack ที่ให้ผู้ใช้ลงทะเบียน "t
 - **Dedup:** exact Wallhaven-ID only, `UNIQUE(topic_id, purpose, wallhaven_id)` in SQLite. No perceptual hashing.
 - **Sort:** `toplist` once per topic (first cycle, `backfilled=0`), then `date_added` forever after — `toplist` is near-static and would starve a recurring scrape of new results.
 - **Purpose presets are hardcoded**, not user-configurable: `mobile` (portrait, ≥1080x1920), `pc` (16:9/21:9/32:9, ≥2560x1440). (`laptop` was removed from `PURPOSE_PRESETS` after the initial build — existing topics with stale `"laptop"` in their `purposes` list are skipped with a warning at cycle time, not migrated in the DB.)
-- **No DSM Photos API** — plain filesystem writes only, to avoid the DSM auto-block gotcha documented in root `CLAUDE.md`. Container `user:` must match host `fixhardez` UID/GID or synofoto won't index the files.
+- **Synology Photos API** — used for album management only (Normal Albums). Login via `synology-api` library to DSM HTTP port 5000 via `host.docker.internal`. Condition Albums don't support folder-based filtering via API, so Normal Albums with `add_item` are used instead. Session is lazy-initialized on first use, not per-request.
+- **⚠️ Synology Photos ไม่ auto-index ไฟล์จาก container** — มี touch สองชั้น: (1) container `os.utime(dest_path, None)` + parent dirs หลัง write_bytes, (2) host-side cron ทุก 2 นาที. **ยังไม่ได้ test ว่าตัวไหนโหลดแบริ่ง** — เก็บไว้ทั้งคู่. Host cron ติดตั้งผ่าน `host-setup/install-photos-index-touch.sh` (in-repo, idempotent, รันครั้งเดียวต่อ NAS ด้วย sudo) — **ห้ามพึ่ง state นอก repo**: `/usr/local/bin/touch-wallpapers.sh` + `/etc/cron.d/touch-wallpapers` ไม่อยู่ใน `deploy.sh` tar, redeploy NAS ใหม่ต้องรัน installer ซ้ำ. Marker อยู่ `/volume1/homes/fixhardez/.wallpaper-last-touch` (survive reboot).
+- **Album sync re-login:** `photos_albums._api` ตรวจ `_AUTH_ERR_CODES={105,106,107,119}` → reconnect ครั้งเดียว + retry (single retry, ไม่ loop, auto-block risk ต่ำ). ก่อนหน้านี้ session ตายแล้ว album หยุด sync ถาวรเงียบ.
+- **ไม่ sync_albums() inline หลัง download** — ไฟล์ยังไม่ index (race) → sync เห็น 0. ใช้ periodic job ตัวเดียว (ทุก 2 นาที, match cron cadence → Scout ใหม่เข้า album ใน ~2-4 นาที).
+- **Per-purpose counts:** `db.purpose_counts_by_topic()` (GROUP BY topic_id, purpose, all-time) → `/api/topics` แนบ `counts_by_purpose` → dashboard โชว์ chip ต่อ purpose ว่ารูปลง purpose ไหนของแต่ละ query.
 - **Retention:** keep forever, no cleanup job (unlike torrentwatch's 7-day inbox retention — this is a keep collection, not a transient inbox).
 - **`/data` and `/photos_root` are both bind mounts, not named volumes** — the container runs as `fixhardez`'s dynamically-looked-up uid/gid, and a fresh named volume would be owned by root at creation (no baked-in Dockerfile uid to chown to), breaking SQLite writes at startup.
 - **`schedule_topic()` passes `next_run_time=datetime.now(_TZ)`** on job creation — `IntervalTrigger`'s default first fire is `now + interval`, which would otherwise leave a freshly created topic showing zero images for up to a full day.

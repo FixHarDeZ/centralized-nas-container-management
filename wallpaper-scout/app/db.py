@@ -140,6 +140,21 @@ def record_download(topic_id: int, purpose: str, wallhaven_id: str, filename: st
         )
 
 
+def purpose_counts_by_topic() -> dict[int, dict[str, int]]:
+    """All-time download counts grouped by topic and purpose.
+
+    Returns {topic_id: {purpose: n}} — shows where each query's images landed.
+    """
+    with _conn() as conn:
+        rows = conn.execute(
+            "SELECT topic_id, purpose, COUNT(*) AS n FROM downloads GROUP BY topic_id, purpose"
+        ).fetchall()
+        out: dict[int, dict[str, int]] = {}
+        for r in rows:
+            out.setdefault(r["topic_id"], {})[r["purpose"]] = r["n"]
+        return out
+
+
 def daily_download_counts(day: str) -> dict[str, int]:
     with _conn() as conn:
         rows = conn.execute(

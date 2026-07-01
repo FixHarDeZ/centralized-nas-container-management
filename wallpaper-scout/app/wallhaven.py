@@ -14,6 +14,7 @@ BASE_URL = "https://wallhaven.cc/api/v1/search"
 PURPOSE_PRESETS: dict[str, dict[str, str]] = {
     "mobile": {"ratios": "9x16,9x19.5,9x20", "atleast": "1080x1920"},
     "pc": {"ratios": "16x9,21x9,32x9", "atleast": "2560x1440"},
+    "best": {"ratios": "", "atleast": ""},
 }
 
 
@@ -38,12 +39,14 @@ def search(query_terms: list[str], purpose: str, sorting: str, page: int = 1) ->
             "q": _quote(term),
             "categories": "111",
             "purity": "100",
-            "ratios": preset["ratios"],
-            "atleast": preset["atleast"],
             "sorting": sorting,
             "order": "desc",
             "page": page,
         }
+        if preset.get("ratios"):
+            params["ratios"] = preset["ratios"]
+        if preset.get("atleast"):
+            params["atleast"] = preset["atleast"]
         if api_key:
             params["apikey"] = api_key
         resp = http_client.get(BASE_URL, params=params, timeout=30.0)

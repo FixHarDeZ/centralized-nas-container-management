@@ -6,6 +6,8 @@ services:
     user: "${PHOTOS_UID}:${PHOTOS_GID}"
     expose:
       - "8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     env_file: .env
     environment:
       - TZ=Asia/Bangkok

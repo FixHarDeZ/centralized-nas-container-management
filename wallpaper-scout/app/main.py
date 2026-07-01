@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 import app.db as db
 import app.scheduler as scheduler
+import app.photos_albums as photos_albums
 
 _STATIC_DIR = Path(__file__).parent / "static"
 _sched = BackgroundScheduler()
@@ -21,6 +22,7 @@ _sched = BackgroundScheduler()
 async def _lifespan(_app: FastAPI):
     db.init_db()
     scheduler.start_all(_sched)
+    photos_albums.ensure_albums_exist()
     _sched.start()
     yield
     _sched.shutdown(wait=False)
@@ -59,7 +61,13 @@ def status():
 
 @app.get("/api/topics")
 def list_topics():
-    return [_with_today_count(t) for t in db.list_topics()]
+    by_purpose = db.purpose_counts_by_topic()
+    out = []
+    for t in db.list_topics():
+        t = _with_today_count(t)
+        t["counts_by_purpose"] = by_purpose.get(t["id"], {})
+        out.append(t)
+    return out
 
 
 @app.post("/api/topics", status_code=201)
