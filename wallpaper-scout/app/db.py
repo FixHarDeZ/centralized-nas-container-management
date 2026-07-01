@@ -12,7 +12,7 @@ def init_db() -> None:
         conn.executescript("""
         CREATE TABLE IF NOT EXISTS topics (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            query TEXT NOT NULL UNIQUE,
+            query TEXT NOT NULL,
             purposes TEXT NOT NULL,
             frequency_per_day INTEGER NOT NULL,
             max_new_per_cycle INTEGER NOT NULL,
