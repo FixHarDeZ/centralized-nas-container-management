@@ -87,6 +87,14 @@ def update_topic(topic_id: int, payload: TopicUpdate):
     return _with_today_count(updated)
 
 
+@app.post("/api/topics/{topic_id}/run", status_code=202)
+def run_topic_now(topic_id: int):
+    if db.get_topic(topic_id) is None:
+        raise HTTPException(status_code=404, detail="topic not found")
+    _sched.add_job(scheduler.run_topic_cycle, args=[topic_id])
+    return {"status": "queued"}
+
+
 @app.delete("/api/topics/{topic_id}", status_code=204)
 def delete_topic(topic_id: int):
     scheduler.unschedule_topic(_sched, topic_id)

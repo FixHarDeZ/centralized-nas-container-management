@@ -4,9 +4,13 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+let topicsById = {};
+let editingId = null;
+
 async function loadTopics() {
   const res = await fetch("/api/topics");
   const topics = await res.json();
+  topicsById = Object.fromEntries(topics.map((t) => [t.id, t]));
   const tbody = document.querySelector("#topics-table tbody");
   tbody.innerHTML = "";
   for (const t of topics) {
@@ -19,12 +23,41 @@ async function loadTopics() {
       <td>${t.downloaded_today}</td>
       <td>${t.enabled ? "เปิด" : "หยุด"}</td>
       <td>
+        <button data-action="run" data-id="${t.id}">Scout ตอนนี้</button>
+        <button data-action="edit" data-id="${t.id}">แก้ไข</button>
         <button data-action="toggle" data-id="${t.id}" data-enabled="${t.enabled ? "true" : "false"}">${t.enabled ? "หยุด" : "เปิด"}</button>
         <button data-action="delete" data-id="${t.id}">ลบ</button>
       </td>`;
     tbody.appendChild(tr);
   }
 }
+
+function setFormMode(editing) {
+  const form = document.getElementById("topic-form");
+  form.querySelector('button[type="submit"]').textContent = editing ? "บันทึก" : "เพิ่ม Topic";
+  document.getElementById("cancel-edit").style.display = editing ? "" : "none";
+}
+
+function startEdit(id) {
+  const t = topicsById[id];
+  if (!t) return;
+  editingId = id;
+  document.getElementById("query").value = t.query;
+  for (const c of document.querySelectorAll('input[name="purpose"]')) {
+    c.checked = t.purposes.includes(c.value);
+  }
+  document.getElementById("frequency").value = t.frequency_per_day;
+  document.getElementById("max_new").value = t.max_new_per_cycle;
+  setFormMode(true);
+}
+
+function cancelEdit() {
+  editingId = null;
+  document.getElementById("topic-form").reset();
+  setFormMode(false);
+}
+
+document.getElementById("cancel-edit").addEventListener("click", cancelEdit);
 
 document.getElementById("topic-form").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -33,17 +66,28 @@ document.getElementById("topic-form").addEventListener("submit", async (e) => {
     alert("เลือกอย่างน้อย 1 purpose");
     return;
   }
-  await fetch("/api/topics", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      query: document.getElementById("query").value,
-      purposes,
-      frequency_per_day: Number(document.getElementById("frequency").value),
-      max_new_per_cycle: Number(document.getElementById("max_new").value),
-    }),
-  });
+  const payload = {
+    query: document.getElementById("query").value,
+    purposes,
+    frequency_per_day: Number(document.getElementById("frequency").value),
+    max_new_per_cycle: Number(document.getElementById("max_new").value),
+  };
+  if (editingId) {
+    await fetch(`/api/topics/${editingId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    editingId = null;
+  } else {
+    await fetch("/api/topics", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  }
   e.target.reset();
+  setFormMode(false);
   loadTopics();
 });
 
@@ -60,6 +104,13 @@ document.querySelector("#topics-table tbody").addEventListener("click", async (e
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ enabled: !enabled }),
     });
+  } else if (btn.dataset.action === "run") {
+    await fetch(`/api/topics/${id}/run`, { method: "POST" });
+    alert("เริ่ม scout รอบนี้แล้ว รอสักครู่แล้วรีเฟรชดูผล");
+    return;
+  } else if (btn.dataset.action === "edit") {
+    startEdit(Number(id));
+    return;
   }
   loadTopics();
 });

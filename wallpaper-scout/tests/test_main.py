@@ -123,3 +123,23 @@ def test_get_dashboard_static_index(client):
     resp = client.get("/")
     assert resp.status_code == 200
     assert "text/html" in resp.headers["content-type"]
+
+
+def test_run_topic_now_enqueues_cycle(client, mocker):
+    created = client.post(
+        "/api/topics",
+        json={"query": "IU", "purposes": ["mobile"], "frequency_per_day": 1, "max_new_per_cycle": 5},
+    ).json()
+
+    mock_run = mocker.patch("app.main.scheduler.run_topic_cycle")
+    resp = client.post(f"/api/topics/{created['id']}/run")
+    assert resp.status_code == 202
+
+    import time
+    time.sleep(0.3)
+    mock_run.assert_called_once_with(created["id"])
+
+
+def test_run_nonexistent_topic_404(client):
+    resp = client.post("/api/topics/99999/run")
+    assert resp.status_code == 404
