@@ -64,7 +64,30 @@ def test_first_cycle_uses_toplist_and_marks_backfilled(env, mocker):
         assert f.read() == b"fake-bytes"
 
 
-def test_first_cycle_does_not_mark_backfilled_if_nothing_downloaded(env, mocker):
+def test_first_cycle_marks_backfilled_even_if_toplist_finds_nothing(env, mocker):
+    # A niche topic can genuinely have zero results in Wallhaven's toplist
+    # window (a real observed case, not hypothetical) — that's a valid,
+    # completed backfill attempt, not a failure to retry. Otherwise the
+    # topic gets stuck retrying an empty toplist forever and never reaches
+    # date_added, where real results usually exist.
+    scheduler, db, photos_dir = env
+    topic_id = db.create_topic("IU", ["mobile"], frequency_per_day=1, max_new_per_cycle=5)
+
+    mocker.patch("app.scheduler.llm.expand_query", return_value=["IU"])
+    mocker.patch("app.scheduler.wallhaven.search", return_value=[])
+
+    scheduler.run_topic_cycle(topic_id)
+
+    topic = db.get_topic(topic_id)
+    assert topic["backfilled"] == 1
+
+
+def test_first_cycle_marks_backfilled_even_if_all_downloads_fail(env, mocker):
+    # Accepted tradeoff: if search finds items but every download throws
+    # (e.g. a transient CDN outage), this cycle's batch is lost, but the
+    # topic still advances to date_added next cycle rather than retrying
+    # toplist forever — a much more common failure mode (empty toplist) is
+    # what this gate exists to fix, at the cost of this rarer one.
     scheduler, db, photos_dir = env
     topic_id = db.create_topic("IU", ["mobile"], frequency_per_day=1, max_new_per_cycle=5)
 
@@ -78,7 +101,7 @@ def test_first_cycle_does_not_mark_backfilled_if_nothing_downloaded(env, mocker)
     scheduler.run_topic_cycle(topic_id)
 
     topic = db.get_topic(topic_id)
-    assert topic["backfilled"] == 0
+    assert topic["backfilled"] == 1
     assert db.download_exists(topic_id, "mobile", "abc") is False
 
 

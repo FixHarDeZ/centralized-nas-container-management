@@ -62,7 +62,11 @@ def run_topic_cycle(topic_id: int) -> int:
     for purpose in topic["purposes"]:
         downloaded += _run_purpose(topic_id, purpose, search_terms, sorting, topic["max_new_per_cycle"], slug)
 
-    if not topic["backfilled"] and downloaded > 0:
+    # An empty toplist result is a valid, completed outcome (niche topics can
+    # genuinely have nothing in Wallhaven's toplist window) — advance to
+    # date_added regardless, so the topic isn't stuck retrying toplist forever.
+    # Only a raised exception (network/API failure) should skip this and retry.
+    if not topic["backfilled"]:
         db.mark_backfilled(topic_id)
 
     return downloaded
