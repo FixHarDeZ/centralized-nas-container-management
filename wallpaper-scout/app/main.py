@@ -34,6 +34,7 @@ class TopicCreate(BaseModel):
     purposes: list[str]
     frequency_per_day: int = 1
     max_new_per_cycle: int = 5
+    search_terms: list[str] | None = None
 
 
 class TopicUpdate(BaseModel):
@@ -42,6 +43,7 @@ class TopicUpdate(BaseModel):
     frequency_per_day: int | None = None
     max_new_per_cycle: int | None = None
     enabled: bool | None = None
+    search_terms: list[str] | None = None
 
 
 def _with_today_count(topic: dict) -> dict:
@@ -63,6 +65,8 @@ def list_topics():
 @app.post("/api/topics", status_code=201)
 def create_topic(payload: TopicCreate):
     topic_id = db.create_topic(payload.query, payload.purposes, payload.frequency_per_day, payload.max_new_per_cycle)
+    if payload.search_terms:
+        db.set_search_terms(topic_id, payload.search_terms)
     topic = db.get_topic(topic_id)
     scheduler.schedule_topic(_sched, topic)
     return _with_today_count(topic)
@@ -74,10 +78,13 @@ def update_topic(topic_id: int, payload: TopicUpdate):
     if topic is None:
         raise HTTPException(status_code=404, detail="topic not found")
 
-    fields = {k: v for k, v in payload.model_dump(exclude_unset=True).items()}
+    fields = payload.model_dump(exclude_unset=True)
     if "enabled" in fields:
         fields["enabled"] = int(fields["enabled"])
+    search_terms = fields.pop("search_terms", None)
     db.update_topic(topic_id, **fields)
+    if search_terms is not None:
+        db.set_search_terms(topic_id, search_terms)
 
     updated = db.get_topic(topic_id)
     if updated["enabled"]:

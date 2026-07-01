@@ -65,6 +65,36 @@ def test_patch_topic_purposes(client):
     assert resp.json()["purposes"] == ["laptop"]
 
 
+def test_create_topic_with_manual_search_terms_skips_llm_expansion(client, mocker):
+    expand_mock = mocker.patch("app.scheduler.llm.expand_query")
+    resp = client.post(
+        "/api/topics",
+        json={
+            "query": "IU",
+            "purposes": ["mobile"],
+            "frequency_per_day": 1,
+            "max_new_per_cycle": 5,
+            "search_terms": ["IU", "Lee Ji Eun", "dlwlrma"],
+        },
+    )
+    assert resp.status_code == 201
+    assert resp.json()["search_terms"] == ["IU", "Lee Ji Eun", "dlwlrma"]
+
+
+def test_patch_topic_search_terms(client):
+    created = client.post(
+        "/api/topics",
+        json={"query": "IU", "purposes": ["mobile"], "frequency_per_day": 1, "max_new_per_cycle": 5},
+    ).json()
+
+    resp = client.patch(
+        f"/api/topics/{created['id']}",
+        json={"search_terms": ["IU", "Lee Ji Eun", "dlwlrma"]},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["search_terms"] == ["IU", "Lee Ji Eun", "dlwlrma"]
+
+
 def test_delete_topic(client):
     created = client.post(
         "/api/topics",

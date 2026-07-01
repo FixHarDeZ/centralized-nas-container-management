@@ -18,6 +18,7 @@ async function loadTopics() {
     tr.innerHTML = `
       <td>${escapeHtml(t.query)}</td>
       <td>${escapeHtml(t.purposes.join(", "))}</td>
+      <td>${escapeHtml(t.search_terms ? t.search_terms.join(", ") : "(AI คิดให้)")}</td>
       <td>${t.frequency_per_day}</td>
       <td>${t.max_new_per_cycle}</td>
       <td>${t.downloaded_today}</td>
@@ -43,6 +44,7 @@ function startEdit(id) {
   if (!t) return;
   editingId = id;
   document.getElementById("query").value = t.query;
+  document.getElementById("search_terms").value = t.search_terms ? t.search_terms.join(", ") : "";
   for (const c of document.querySelectorAll('input[name="purpose"]')) {
     c.checked = t.purposes.includes(c.value);
   }
@@ -72,6 +74,10 @@ document.getElementById("topic-form").addEventListener("submit", async (e) => {
     frequency_per_day: Number(document.getElementById("frequency").value),
     max_new_per_cycle: Number(document.getElementById("max_new").value),
   };
+  const searchTermsRaw = document.getElementById("search_terms").value.trim();
+  if (searchTermsRaw) {
+    payload.search_terms = searchTermsRaw.split(",").map((s) => s.trim()).filter(Boolean);
+  }
   if (editingId) {
     await fetch(`/api/topics/${editingId}`, {
       method: "PATCH",
