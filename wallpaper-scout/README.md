@@ -8,7 +8,7 @@ Research + curate wallpapers from Wallhaven into Synology Photos, split by purpo
 2. On first run for a topic, an LLM (MiMo primary, Anthropic fallback) expands the topic into a few alias search terms (romanization, alt names) to widen Wallhaven recall.
 3. Each scheduled cycle searches Wallhaven (SFW only) for that topic+purpose, using a hardcoded ratio/resolution preset per purpose, and downloads up to `max_new_per_cycle` images it hasn't downloaded before (Wallhaven's own image ID is the dedup key).
 4. Images land in `/photos_root/<purpose>/<topic-slug>/<wallhaven-id>.<ext>`, bind-mounted to `/volume1/homes/fixhardez/Photos/wallpapers/...` on the NAS — Synology Photos auto-indexes this under its "Folders" tab (not "Albums" — no DSM API/login used anywhere in this stack).
-5. Once/day, a LINE message summarizes how many new images were downloaded, broken down by topic.
+5. Once/day, a Telegram message (same bot/chat as `news-feed`) summarizes how many new images were downloaded, broken down by topic.
 
 ## Known limitations (v1)
 

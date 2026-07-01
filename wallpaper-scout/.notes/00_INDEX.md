@@ -18,6 +18,7 @@ FastAPI stack ที่ให้ผู้ใช้ลงทะเบียน "t
 | Scheduler | APScheduler `BackgroundScheduler` — one `IntervalTrigger` job per topic + one daily `CronTrigger` summary job |
 | Frontend | Vanilla JS SPA |
 | Auth | Nginx Basic Auth sidecar (LAN-only, no public HTTPS proxy — no inbound webhook needed) |
+| Notifications | Telegram only — reuses `news-feed`'s bot/chat (`stacks.news_feed.telegram.*` vault keys), no separate wallpaper-scout bot |
 
 ## Ports
 

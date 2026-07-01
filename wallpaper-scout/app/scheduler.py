@@ -1,4 +1,4 @@
-"""APScheduler jobs: per-topic scrape cycle + daily LINE summary.
+"""APScheduler jobs: per-topic scrape cycle + daily Telegram summary.
 
 Sort strategy per topic: the first cycle after a topic is created runs
 `toplist` (grab a good initial batch of existing wallpapers). Every
@@ -22,7 +22,7 @@ from apscheduler.jobstores.base import JobLookupError
 import app.db as db
 import app.llm as llm
 import app.wallhaven as wallhaven
-from app.notify import LineCreds, Notifier
+from app.notify import Notifier, TgCreds
 
 logger = logging.getLogger(__name__)
 
@@ -30,11 +30,11 @@ _TZ = ZoneInfo(os.environ.get("TZ", "Asia/Bangkok"))
 _PHOTOS_ROOT = Path(os.environ.get("PHOTOS_ROOT", "/photos_root"))
 
 notifier = Notifier(
-    line=LineCreds(
-        token=os.environ.get("WALLPAPER_SCOUT_LINE_ACCESS_TOKEN", ""),
-        to=os.environ.get("WALLPAPER_SCOUT_LINE_USER_ID", ""),
+    telegram=TgCreds(
+        token=os.environ.get("WALLPAPER_SCOUT_TELEGRAM_BOT_TOKEN", ""),
+        chat=os.environ.get("WALLPAPER_SCOUT_TELEGRAM_CHAT_ID", ""),
     )
-    if os.environ.get("WALLPAPER_SCOUT_LINE_ACCESS_TOKEN") and os.environ.get("WALLPAPER_SCOUT_LINE_USER_ID")
+    if os.environ.get("WALLPAPER_SCOUT_TELEGRAM_BOT_TOKEN") and os.environ.get("WALLPAPER_SCOUT_TELEGRAM_CHAT_ID")
     else None,
 )
 
