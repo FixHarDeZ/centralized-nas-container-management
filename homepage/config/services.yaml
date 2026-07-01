@@ -89,6 +89,16 @@
         description: ระบบบันทึกการทำงานแม่บ้าน
         ping: "{{HOMEPAGE_VAR_MAID_TRACKER_URL}}"
 
+    - Friendly Reminder:
+        icon: mdi-calendar-clock
+        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15066"
+        description: ระบบติดตามการผ่อนชำระรายเดือน
+
+    - Wallpaper Scout:
+        icon: mdi-image-multiple-outline
+        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15067"
+        description: Wallpaper Research & Curation (Wallhaven)
+
     - Synology Note Station:
         icon: synology-note-station.png
         href: "{{HOMEPAGE_VAR_QUICKCONNECT_URL}}/note/"
