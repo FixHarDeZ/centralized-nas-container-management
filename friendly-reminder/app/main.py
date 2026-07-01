@@ -231,6 +231,10 @@ class InstallmentCreate(BaseModel):
     note: Optional[str] = None
 
 
+class InstallmentUpdate(BaseModel):
+    due_day: int
+
+
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
 def _generate_payments(conn, installment_id: int, total_price: float,
@@ -332,6 +336,22 @@ def create_installment(body: InstallmentCreate, conn=Depends(get_conn)):
 
 @app.get("/api/installments/{installment_id}")
 def get_installment(installment_id: int, conn=Depends(get_conn)):
+    return _installment_with_payments(conn, installment_id)
+
+
+@app.patch("/api/installments/{installment_id}")
+def update_installment(installment_id: int, body: InstallmentUpdate, conn=Depends(get_conn)):
+    if not (1 <= body.due_day <= 31):
+        raise HTTPException(status_code=400, detail="due_day must be between 1 and 31")
+    row = conn.execute(
+        "SELECT id FROM installments WHERE id = ?", (installment_id,)
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Installment not found")
+    conn.execute(
+        "UPDATE installments SET due_day = ? WHERE id = ?", (body.due_day, installment_id)
+    )
+    conn.commit()
     return _installment_with_payments(conn, installment_id)
 
 

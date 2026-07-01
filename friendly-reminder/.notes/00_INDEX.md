@@ -20,6 +20,7 @@ FastAPI + SQLite + Nginx Basic Auth
 - `GET /api/installments` — list all with stats
 - `POST /api/installments` — create (name, total_price, num_installments, start_date, due_day, note)
 - `GET /api/installments/{id}` — detail + all payments
+- `PATCH /api/installments/{id}` — แก้ due_day ของรายการเดิม (validate 1-31)
 - `DELETE /api/installments/{id}` — delete (cascades to payments)
 - `POST /api/payments/{id}/pay` — mark paid → sends LINE notification
 - `POST /api/payments/{id}/unpay` — undo

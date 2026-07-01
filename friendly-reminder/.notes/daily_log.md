@@ -12,6 +12,7 @@
 - **Frontend:** form input "ครบกำหนดชำระ (วันที่ของเดือน)"; payments table แสดงวันที่ครบกำหนด + badge 🔴 เกินกำหนด; installment meta "ครบกำหนดทุกวันที่ X"; JS `effectiveDueDay()` mirror clamp
 - **Tests:** `tests/test_due_date.py` (clamp 5 cases) — 13/13 passed
 - **REMINDER_TIME เปลี่ยนความหมาย:** เดิม "เวลาส่งวันที่ 1" → ตอนนี้ "เวลารันแจ้งเตือนครบ/เกินกำหนดทุกวัน" (env ไม่ต้องแก้)
+- **แก้ due_day รายการเดิม:** `PATCH /api/installments/{id}` (`InstallmentUpdate.due_day`, validate 1-31, UPDATE column แล้ว reminder recompute เอง). Frontend: input + ปุ่ม "บันทึกวันครบกำหนด" ใน footer ของ card ที่ขยาย — อัปเดต meta inline ไม่ collapse card (`saveDueDay()`). CSS `.due-day-edit`
 
 ## 2026-06-30 — Docker healthcheck + CI test coverage
 - **Healthcheck** เพิ่มใน `docker-compose.yml` (service `friendly-reminder`): stdlib urllib ยิง `GET http://localhost:8000/` (StaticFiles `html=True` → index) `interval 30s / timeout 10s / retries 3 / start_period 30s`. Hung uvicorn → Docker auto-restart. Deploy + verified `(healthy)` บน NAS.

@@ -220,6 +220,12 @@ async function loadPaymentsTable(instId) {
     html += `</tbody></table>`;
     html += `
       <div class="inst-footer">
+        <div class="due-day-edit">
+          <label>ครบกำหนดทุกวันที่
+            <input type="number" id="due-day-${instId}" min="1" max="31" value="${inst.due_day}" />
+          </label>
+          <button class="btn-secondary" onclick="saveDueDay(${instId})">บันทึกวันครบกำหนด</button>
+        </div>
         <button class="btn-danger" onclick="deleteInst(${instId})">🗑 ลบรายการนี้</button>
       </div>`;
 
@@ -285,6 +291,26 @@ async function _refreshInstHeader(instId) {
     if (badge) { badge.className = `badge ${complete ? 'badge-complete' : 'badge-active'}`; badge.textContent = complete ? 'ชำระครบ' : 'ผ่อนอยู่'; }
   } catch (e) {
     console.warn('refreshInstHeader error', e);
+  }
+}
+
+async function saveDueDay(instId) {
+  const input = document.getElementById(`due-day-${instId}`);
+  const dueDay = parseInt(input.value);
+  if (!(dueDay >= 1 && dueDay <= 31)) {
+    alert('วันครบกำหนดต้องอยู่ระหว่าง 1-31');
+    return;
+  }
+  try {
+    await api('PATCH', `/api/installments/${instId}`, { due_day: dueDay });
+    // Update the header meta in place so the expanded card stays open.
+    const meta = document.querySelector(`#inst-${instId} .inst-meta`);
+    if (meta) meta.innerHTML = meta.innerHTML.replace(/ครบกำหนดทุกวันที่ \d+/, `ครบกำหนดทุกวันที่ ${dueDay}`);
+    await loadSummary();
+    _tableReset(instId);
+    await loadPaymentsTable(instId);
+  } catch (e) {
+    alert(`บันทึกไม่ได้: ${e.message}`);
   }
 }
 
