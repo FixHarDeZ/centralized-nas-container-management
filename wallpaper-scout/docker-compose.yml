@@ -1,0 +1,35 @@
+services:
+  wallpaper-scout:
+    build: .
+    container_name: wallpaper-scout
+    restart: unless-stopped
+    user: "${PHOTOS_UID}:${PHOTOS_GID}"
+    expose:
+      - "8000"
+    env_file: .env
+    environment:
+      - TZ=Asia/Bangkok
+      - DATA_DIR=/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/status', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    volumes:
+      - ${NAS_WALLPAPER_SCOUT_DATA_PATH}:/data
+      - ${NAS_PHOTOS_WALLPAPERS_PATH}:/photos_root
+
+  nginx:
+    image: nginx:alpine
+    container_name: wallpaper-scout-nginx
+    restart: unless-stopped
+    ports:
+      - "5067:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/.htpasswd:/etc/nginx/.htpasswd:ro
+    environment:
+      - TZ=Asia/Bangkok
+    depends_on:
+      - wallpaper-scout
