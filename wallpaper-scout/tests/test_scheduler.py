@@ -25,6 +25,20 @@ def test_slugify(env):
     assert scheduler.slugify("IU!!") == "iu"
 
 
+def test_schedule_topic_passes_next_run_time(env, mocker):
+    scheduler, db, photos_dir = env
+    topic_id = db.create_topic("IU", ["mobile"], frequency_per_day=1, max_new_per_cycle=5)
+    topic = db.get_topic(topic_id)
+
+    mock_sched = mocker.MagicMock()
+    scheduler.schedule_topic(mock_sched, topic)
+
+    from datetime import datetime
+
+    next_run_time = mock_sched.add_job.call_args.kwargs["next_run_time"]
+    assert isinstance(next_run_time, datetime)
+
+
 def test_first_cycle_uses_toplist_and_marks_backfilled(env, mocker):
     scheduler, db, photos_dir = env
     topic_id = db.create_topic("IU", ["mobile"], frequency_per_day=1, max_new_per_cycle=5)
