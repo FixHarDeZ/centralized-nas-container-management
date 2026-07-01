@@ -1,3 +1,9 @@
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+
 async function loadTopics() {
   const res = await fetch("/api/topics");
   const topics = await res.json();
@@ -6,8 +12,8 @@ async function loadTopics() {
   for (const t of topics) {
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td>${t.query}</td>
-      <td>${t.purposes.join(", ")}</td>
+      <td>${escapeHtml(t.query)}</td>
+      <td>${escapeHtml(t.purposes.join(", "))}</td>
       <td>${t.frequency_per_day}</td>
       <td>${t.max_new_per_cycle}</td>
       <td>${t.downloaded_today}</td>
