@@ -60,6 +60,9 @@ def run_topic_cycle(topic_id: int) -> int:
 
     downloaded = 0
     for purpose in topic["purposes"]:
+        if purpose not in wallhaven.PURPOSE_PRESETS:
+            logger.warning("unknown purpose=%s topic=%s — skipping (removed preset or stale data)", purpose, topic_id)
+            continue
         downloaded += _run_purpose(topic_id, purpose, search_terms, sorting, topic["max_new_per_cycle"], slug)
 
     # An empty toplist result is a valid, completed outcome (niche topics can

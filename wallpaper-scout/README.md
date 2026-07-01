@@ -1,6 +1,6 @@
 # Wallpaper Scout
 
-Research + curate wallpapers from Wallhaven into Synology Photos, split by purpose (mobile/laptop/pc) and topic.
+Research + curate wallpapers from Wallhaven into Synology Photos, split by purpose (mobile/pc) and topic.
 
 ## How it works
 

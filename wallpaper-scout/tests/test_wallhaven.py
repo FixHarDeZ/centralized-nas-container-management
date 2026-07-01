@@ -13,8 +13,8 @@ class _FakeResponse:
         return self._json
 
 
-def test_purpose_presets_has_three_fixed_keys():
-    assert set(wallhaven.PURPOSE_PRESETS) == {"mobile", "laptop", "pc"}
+def test_purpose_presets_has_fixed_keys():
+    assert set(wallhaven.PURPOSE_PRESETS) == {"mobile", "pc"}
     assert wallhaven.PURPOSE_PRESETS["mobile"]["atleast"] == "1080x1920"
     assert wallhaven.PURPOSE_PRESETS["pc"]["atleast"] == "2560x1440"
 

@@ -5,7 +5,7 @@
 
 ## Overview
 
-FastAPI stack ที่ให้ผู้ใช้ลงทะเบียน "topic" (คำค้น เช่น "IU", "Wuthering Waves") พร้อมระบุ purpose (mobile/laptop/pc wallpaper), scrape รูปจาก Wallhaven API (SFW only) ตาม preset สัดส่วน/ความละเอียดคงที่ เขียนไฟล์ตรงเข้า `/volume1/homes/fixhardez/Photos/wallpapers/<purpose>/<topic>/` ให้ Synology Photos auto-index (ไม่ใช้ DSM Photos API เลย)
+FastAPI stack ที่ให้ผู้ใช้ลงทะเบียน "topic" (คำค้น เช่น "IU", "Wuthering Waves") พร้อมระบุ purpose (mobile/pc wallpaper), scrape รูปจาก Wallhaven API (SFW only) ตาม preset สัดส่วน/ความละเอียดคงที่ เขียนไฟล์ตรงเข้า `/volume1/homes/fixhardez/Photos/wallpapers/<purpose>/<topic>/` ให้ Synology Photos auto-index (ไม่ใช้ DSM Photos API เลย)
 
 ## Tech Stack
 
@@ -31,7 +31,7 @@ FastAPI stack ที่ให้ผู้ใช้ลงทะเบียน "t
 
 - **Dedup:** exact Wallhaven-ID only, `UNIQUE(topic_id, purpose, wallhaven_id)` in SQLite. No perceptual hashing.
 - **Sort:** `toplist` once per topic (first cycle, `backfilled=0`), then `date_added` forever after — `toplist` is near-static and would starve a recurring scrape of new results.
-- **Purpose presets are hardcoded**, not user-configurable: `mobile` (portrait, ≥1080x1920), `laptop` (16:9/16:10, ≥1920x1080), `pc` (16:9/21:9/32:9, ≥2560x1440).
+- **Purpose presets are hardcoded**, not user-configurable: `mobile` (portrait, ≥1080x1920), `pc` (16:9/21:9/32:9, ≥2560x1440). (`laptop` was removed from `PURPOSE_PRESETS` after the initial build — existing topics with stale `"laptop"` in their `purposes` list are skipped with a warning at cycle time, not migrated in the DB.)
 - **No DSM Photos API** — plain filesystem writes only, to avoid the DSM auto-block gotcha documented in root `CLAUDE.md`. Container `user:` must match host `fixhardez` UID/GID or synofoto won't index the files.
 - **Retention:** keep forever, no cleanup job (unlike torrentwatch's 7-day inbox retention — this is a keep collection, not a transient inbox).
 - **`/data` and `/photos_root` are both bind mounts, not named volumes** — the container runs as `fixhardez`'s dynamically-looked-up uid/gid, and a fresh named volume would be owned by root at creation (no baked-in Dockerfile uid to chown to), breaking SQLite writes at startup.

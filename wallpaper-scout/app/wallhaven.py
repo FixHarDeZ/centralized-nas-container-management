@@ -13,7 +13,6 @@ BASE_URL = "https://wallhaven.cc/api/v1/search"
 
 PURPOSE_PRESETS: dict[str, dict[str, str]] = {
     "mobile": {"ratios": "9x16,9x19.5,9x20", "atleast": "1080x1920"},
-    "laptop": {"ratios": "16x9,16x10", "atleast": "1920x1080"},
     "pc": {"ratios": "16x9,21x9,32x9", "atleast": "2560x1440"},
 }
 

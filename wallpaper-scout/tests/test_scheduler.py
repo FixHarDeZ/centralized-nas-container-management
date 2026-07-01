@@ -163,6 +163,27 @@ def test_disabled_topic_is_skipped(env, mocker):
     search_mock.assert_not_called()
 
 
+def test_unknown_purpose_is_skipped_not_crashed(env, mocker):
+    # Stale data case: a topic created before "laptop" was removed from
+    # PURPOSE_PRESETS still has it in its purposes list — must skip that
+    # purpose (not KeyError) and still process the remaining valid ones.
+    scheduler, db, photos_dir = env
+    topic_id = db.create_topic("IU", ["laptop", "mobile"], frequency_per_day=1, max_new_per_cycle=5)
+
+    mocker.patch("app.scheduler.llm.expand_query", return_value=["IU"])
+    search_mock = mocker.patch(
+        "app.scheduler.wallhaven.search",
+        return_value=[{"id": "abc", "path": "https://x/abc.jpg", "file_type": "image/jpeg"}],
+    )
+    mocker.patch("app.scheduler.wallhaven.download_image", return_value=b"fake-bytes")
+
+    downloaded = scheduler.run_topic_cycle(topic_id)
+
+    assert downloaded == 1
+    search_mock.assert_called_once_with(["IU"], "mobile", "toplist")
+    assert db.download_exists(topic_id, "mobile", "abc") is True
+
+
 def test_send_daily_summary_sends_aggregated_message(env, mocker):
     scheduler, db, photos_dir = env
     topic_id = db.create_topic("IU", ["mobile"], frequency_per_day=1, max_new_per_cycle=5)
