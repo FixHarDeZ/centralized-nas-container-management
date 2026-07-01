@@ -87,12 +87,15 @@ def update_topic(topic_id: int, payload: TopicUpdate):
     return _with_today_count(updated)
 
 
-@app.post("/api/topics/{topic_id}/run", status_code=202)
+@app.post("/api/topics/{topic_id}/run")
 def run_topic_now(topic_id: int):
     if db.get_topic(topic_id) is None:
         raise HTTPException(status_code=404, detail="topic not found")
-    _sched.add_job(scheduler.run_topic_cycle, args=[topic_id])
-    return {"status": "queued"}
+    try:
+        downloaded = scheduler.run_topic_cycle(topic_id)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"scout cycle failed: {exc}") from exc
+    return {"downloaded": downloaded}
 
 
 @app.delete("/api/topics/{topic_id}", status_code=204)

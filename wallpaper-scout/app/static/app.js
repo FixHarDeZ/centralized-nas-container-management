@@ -105,8 +105,22 @@ document.querySelector("#topics-table tbody").addEventListener("click", async (e
       body: JSON.stringify({ enabled: !enabled }),
     });
   } else if (btn.dataset.action === "run") {
-    await fetch(`/api/topics/${id}/run`, { method: "POST" });
-    alert("เริ่ม scout รอบนี้แล้ว รอสักครู่แล้วรีเฟรชดูผล");
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "กำลัง scout...";
+    try {
+      const res = await fetch(`/api/topics/${id}/run`, { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        alert(`Scout เสร็จแล้ว: โหลดรูปใหม่ ${data.downloaded} รูป`);
+      } else {
+        alert(`Scout ล้มเหลว: ${data.detail}`);
+      }
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
+    loadTopics();
     return;
   } else if (btn.dataset.action === "edit") {
     startEdit(Number(id));

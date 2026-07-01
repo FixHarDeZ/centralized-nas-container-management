@@ -44,10 +44,10 @@ def slugify(text: str) -> str:
     return slug or "topic"
 
 
-def run_topic_cycle(topic_id: int) -> None:
+def run_topic_cycle(topic_id: int) -> int:
     topic = db.get_topic(topic_id)
     if topic is None or not topic["enabled"]:
-        return
+        return 0
 
     if topic["search_terms"]:
         search_terms = topic["search_terms"]
@@ -64,6 +64,8 @@ def run_topic_cycle(topic_id: int) -> None:
 
     if not topic["backfilled"] and downloaded > 0:
         db.mark_backfilled(topic_id)
+
+    return downloaded
 
 
 def _run_purpose(
