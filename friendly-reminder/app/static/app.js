@@ -106,6 +106,7 @@ async function loadInstallments() {
               <div class="inst-meta">
                 ฿${fmt(inst.total_price)} · ${inst.num_installments} งวด
                 · เริ่ม ${formatStartDate(inst.start_date)}
+                · ครบกำหนดทุกวันที่ ${inst.due_day}
                 ${inst.note ? `· <em>${esc(inst.note)}</em>` : ''}
               </div>
             </div>
@@ -172,10 +173,14 @@ async function loadPaymentsTable(instId) {
         </thead>
         <tbody>`;
 
+    const todayNum = curYear * 372 + curMonth * 31 + today.getDate();
     for (const p of inst.payments) {
+      const dueDayNum = effectiveDueDay(p.due_year, p.due_month, inst.due_day);
+      const dueTxt = `${dueDayNum} ${THAI_MONTHS[p.due_month]} ${p.due_year + 543}`;
+      const dueNum = p.due_year * 372 + p.due_month * 31 + dueDayNum;
       const isCurrent = p.due_year === curYear && p.due_month === curMonth;
-      const dueTxt = `${THAI_MONTHS[p.due_month]} ${p.due_year + 543}`;
-      const dueClass = isCurrent && !p.paid_at ? 'due-current' : '';
+      const isOverdue = dueNum <= todayNum;
+      const dueClass = (isCurrent || isOverdue) && !p.paid_at ? 'due-current' : '';
 
       let statusHtml, actionHtml, slipHtml;
 
@@ -183,7 +188,8 @@ async function loadPaymentsTable(instId) {
         statusHtml = `<span class="paid-at">✓ ${p.paid_at.substring(0, 10)}</span>`;
         actionHtml = `<button class="btn-unpay" onclick="unpay(${p.id}, ${instId})">ยกเลิก</button>`;
       } else {
-        statusHtml = `<span class="unpaid ${dueClass}">${isCurrent ? '⚡ ครบกำหนด' : '—'}</span>`;
+        const dueLabel = isOverdue ? (isCurrent ? '⚡ ครบกำหนด' : '🔴 เกินกำหนด') : '—';
+        statusHtml = `<span class="unpaid ${dueClass}">${dueLabel}</span>`;
         actionHtml = `<button class="btn-pay" onclick="pay(${p.id}, ${instId})">จ่ายแล้ว</button>`;
       }
 
@@ -352,11 +358,13 @@ document.getElementById('add-form').addEventListener('submit', async e => {
     const price = parseFloat(document.getElementById('f-price').value);
     const installments = parseInt(document.getElementById('f-installments').value);
     const start = document.getElementById('f-start').value;
+    const dueDay = parseInt(document.getElementById('f-due-day').value);
     const note = document.getElementById('f-note').value.trim() || null;
 
-    await api('POST', '/api/installments', { name, total_price: price, num_installments: installments, start_date: start, note });
+    await api('POST', '/api/installments', { name, total_price: price, num_installments: installments, start_date: start, due_day: dueDay, note });
     e.target.reset();
     document.getElementById('f-start').value = defaultMonth;
+    document.getElementById('f-due-day').value = '1';
     await Promise.all([loadSummary(), loadInstallments()]);
   } catch (err) {
     errEl.textContent = err.message;
@@ -376,6 +384,12 @@ function formatStartDate(ym) {
   if (!ym) return '';
   const [y, m] = ym.split('-').map(Number);
   return `${THAI_MONTHS[m]} ${y + 543}`;
+}
+
+// Due day-of-month clamped to the month's last day (mirrors backend _effective_due).
+function effectiveDueDay(year, month, dueDay) {
+  const last = new Date(year, month, 0).getDate();
+  return Math.min(dueDay || 1, last);
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────

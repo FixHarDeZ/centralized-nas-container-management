@@ -1,5 +1,18 @@
 # Daily Log — Friendly Reminder
 
+## 2026-07-01 — Per-installment due day + repeating overdue reminder
+- **Feature:** ระบุวันครบกำหนดต่อรายการได้ (เช่น ทุกวันที่ 25) + ถ้าเลย due_day ยังไม่จ่าย → แจ้งเตือน LINE ซ้ำทุกวันจนกว่าจ่าย
+- **DB:** เพิ่ม `installments.due_day INTEGER NOT NULL DEFAULT 1` (`app/db.py` schema + ALTER migration; default 1 = พฤติกรรมเดิม)
+- **Scheduler redesign** (`app/main.py`):
+  - เดิม `_send_monthly_reminder` cron `day=1` → **ลบทิ้ง** แทนด้วย `_send_due_reminder` รันทุกวันเวลา `REMINDER_TIME`: ยิงทุกงวด unpaid ที่ `effective_due <= today` (ครบกำหนดวันนี้ + เกินกำหนด) → ยิงซ้ำทุกวันจนจ่าย
+  - `_send_day_before_reminder` generalize จาก `tomorrow.day != 1` → `effective_due == tomorrow` (ใช้ due_day จริง)
+  - helper `_effective_due(y, m, due_day)` clamp วันเกินเดือนด้วย `calendar.monthrange` (due_day=31 → 28/29 ก.พ.)
+- **⚠️ `_outstanding_payments` (LINE slip webhook) คงไว้ที่ month-granularity โดยตั้งใจ** — สลิปโพสต์ก่อน due_day (จ่ายล่วงหน้า) ต้อง match ได้ ห้าม route ผ่าน `effective_due <= today`
+- **API:** `InstallmentCreate.due_day` (validate 1-31); summary/report SELECT `i.due_day`; report CSV เพิ่มคอลัมน์ "วันครบกำหนด"
+- **Frontend:** form input "ครบกำหนดชำระ (วันที่ของเดือน)"; payments table แสดงวันที่ครบกำหนด + badge 🔴 เกินกำหนด; installment meta "ครบกำหนดทุกวันที่ X"; JS `effectiveDueDay()` mirror clamp
+- **Tests:** `tests/test_due_date.py` (clamp 5 cases) — 13/13 passed
+- **REMINDER_TIME เปลี่ยนความหมาย:** เดิม "เวลาส่งวันที่ 1" → ตอนนี้ "เวลารันแจ้งเตือนครบ/เกินกำหนดทุกวัน" (env ไม่ต้องแก้)
+
 ## 2026-06-30 — Docker healthcheck + CI test coverage
 - **Healthcheck** เพิ่มใน `docker-compose.yml` (service `friendly-reminder`): stdlib urllib ยิง `GET http://localhost:8000/` (StaticFiles `html=True` → index) `interval 30s / timeout 10s / retries 3 / start_period 30s`. Hung uvicorn → Docker auto-restart. Deploy + verified `(healthy)` บน NAS.
 - **CI:** project เพิ่ม `.github/workflows/tests.yml` — รัน `pytest tests/` ของ stack นี้ (8 tests, `test_slip_match.py`) ทุก PR ที่แตะ `*.py`/`requirements.txt`. เดิมไม่เคยรันใน CI.
