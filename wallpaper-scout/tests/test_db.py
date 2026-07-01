@@ -45,6 +45,13 @@ def test_update_topic(db):
     assert topic["frequency_per_day"] == 4
 
 
+def test_update_topic_purposes(db):
+    topic_id = db.create_topic("IU", ["mobile"], 1, 5)
+    db.update_topic(topic_id, purposes=["mobile", "pc"])
+    topic = db.get_topic(topic_id)
+    assert topic["purposes"] == ["mobile", "pc"]
+
+
 def test_delete_topic(db):
     topic_id = db.create_topic("IU", ["mobile"], 1, 5)
     db.delete_topic(topic_id)

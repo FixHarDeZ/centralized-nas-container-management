@@ -54,6 +54,17 @@ def test_patch_topic(client):
     assert resp.json()["frequency_per_day"] == 4
 
 
+def test_patch_topic_purposes(client):
+    created = client.post(
+        "/api/topics",
+        json={"query": "IU", "purposes": ["mobile"], "frequency_per_day": 1, "max_new_per_cycle": 5},
+    ).json()
+
+    resp = client.patch(f"/api/topics/{created['id']}", json={"purposes": ["laptop"]})
+    assert resp.status_code == 200
+    assert resp.json()["purposes"] == ["laptop"]
+
+
 def test_delete_topic(client):
     created = client.post(
         "/api/topics",
@@ -63,6 +74,49 @@ def test_delete_topic(client):
     resp = client.delete(f"/api/topics/{created['id']}")
     assert resp.status_code == 204
     assert client.get("/api/topics").json() == []
+
+
+def test_create_topic_schedules_job(client, mocker):
+    mock_schedule = mocker.patch("app.main.scheduler.schedule_topic")
+    client.post(
+        "/api/topics",
+        json={"query": "IU", "purposes": ["mobile"], "frequency_per_day": 1, "max_new_per_cycle": 5},
+    )
+    mock_schedule.assert_called_once()
+
+
+def test_patch_topic_disable_unschedules_job(client, mocker):
+    created = client.post(
+        "/api/topics",
+        json={"query": "IU", "purposes": ["mobile"], "frequency_per_day": 1, "max_new_per_cycle": 5},
+    ).json()
+
+    mock_unschedule = mocker.patch("app.main.scheduler.unschedule_topic")
+    client.patch(f"/api/topics/{created['id']}", json={"enabled": False})
+    mock_unschedule.assert_called_once_with(mocker.ANY, created["id"])
+
+
+def test_delete_topic_unschedules_job(client, mocker):
+    created = client.post(
+        "/api/topics",
+        json={"query": "IU", "purposes": ["mobile"], "frequency_per_day": 1, "max_new_per_cycle": 5},
+    ).json()
+
+    mock_unschedule = mocker.patch("app.main.scheduler.unschedule_topic")
+    client.delete(f"/api/topics/{created['id']}")
+    mock_unschedule.assert_called_once_with(mocker.ANY, created["id"])
+
+
+def test_patch_nonexistent_topic_404(client):
+    resp = client.patch("/api/topics/99999", json={"enabled": False})
+    assert resp.status_code == 404
+
+
+def test_delete_nonexistent_topic_204(client):
+    # pinning current behavior: no existence check on DELETE, so this is a
+    # silent no-op 204 rather than a 404 (see main.py delete_topic)
+    resp = client.delete("/api/topics/99999")
+    assert resp.status_code == 204
 
 
 def test_get_dashboard_static_index(client):

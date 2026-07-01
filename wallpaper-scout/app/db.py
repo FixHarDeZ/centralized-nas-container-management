@@ -96,6 +96,8 @@ def update_topic(topic_id: int, **fields) -> None:
     fields = {k: v for k, v in fields.items() if k in allowed_fields}
     if not fields:
         return
+    if "purposes" in fields:
+        fields["purposes"] = json.dumps(fields["purposes"])
 
     with _conn() as conn:
         set_clause = ", ".join(f"{k} = ?" for k in fields.keys())
