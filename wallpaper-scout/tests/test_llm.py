@@ -32,7 +32,7 @@ def test_expand_query_falls_back_to_topic_on_bad_json(mocker):
 
 
 def test_expand_query_falls_back_to_anthropic_when_mimo_raises(mocker):
-    mocker.patch("app.llm.http_client.post", side_effect=RuntimeError("mimo down"))
+    mock_post = mocker.patch("app.llm.http_client.post", side_effect=RuntimeError("mimo down"))
     fake_client = mocker.Mock()
     fake_client.messages.create.return_value = mocker.Mock(
         content=[mocker.Mock(text=json.dumps(["Genshin Impact", "原神"]))]
@@ -40,7 +40,22 @@ def test_expand_query_falls_back_to_anthropic_when_mimo_raises(mocker):
     mocker.patch("app.llm.anthropic.Anthropic", return_value=fake_client)
 
     terms = llm.expand_query("Genshin Impact")
+
+    # Proves MiMo was tried first (and failed) before Anthropic fallback ran,
+    # not the other way around.
+    mock_post.assert_called_once()
+    fake_client.messages.create.assert_called_once()
     assert terms == ["Genshin Impact", "原神"]
+
+
+def test_expand_query_returns_topic_when_mimo_returns_empty_list(mocker):
+    mocker.patch(
+        "app.llm.http_client.post",
+        return_value=_FakeMimoResponse(json.dumps([])),
+    )
+
+    terms = llm.expand_query("SomeTopic")
+    assert terms == ["SomeTopic"]
 
 
 def test_expand_query_falls_back_to_topic_when_both_providers_raise(mocker):

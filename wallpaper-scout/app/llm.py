@@ -91,7 +91,7 @@ def _dispatch(provider: str, topic: str, model: str) -> str:
 def _parse(text: str, topic: str) -> list[str]:
     try:
         data = json.loads(text)
-        if isinstance(data, list) and all(isinstance(x, str) for x in data):
+        if isinstance(data, list) and data and all(isinstance(x, str) for x in data):
             return data[:5]
     except (json.JSONDecodeError, TypeError):
         pass
