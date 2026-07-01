@@ -18,6 +18,7 @@ Docker stacks for Synology DS925+ NAS, managed via Synology Container Manager.
 | `hermes-agent/` | Autonomous AI agent — Telegram + Discord (NousResearch/hermes-agent) | `5063` (Nginx basic-auth dashboard) | `https://…:15063` |
 | `torrentwatch/` | Daily torrent monitor for bearbit.org — scrapes, filters, LINE alerts | `5059` | `https://…:15059` |
 | `news-feed/` | AI & IT news feed bot — Thai summaries via Claude/DeepSeek, digest to LINE + Telegram, dashboard | `5064` | `https://…:15064` |
+| `wallpaper-scout/` | Wallpaper research/curation — Wallhaven API + LLM alias expansion, writes into Synology Photos folders by purpose/topic | `5067` | — (LAN-only, no public HTTPS proxy) |
 
 ### Reverse Proxy Summary
 
