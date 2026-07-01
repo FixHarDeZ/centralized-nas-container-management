@@ -20,6 +20,7 @@ def init_db() -> None:
                 total_price      REAL    NOT NULL,
                 num_installments INTEGER NOT NULL,
                 start_date       TEXT    NOT NULL,
+                due_day          INTEGER NOT NULL DEFAULT 1,
                 note             TEXT,
                 created_at       TEXT    NOT NULL DEFAULT (datetime('now', 'localtime'))
             );
@@ -40,6 +41,11 @@ def init_db() -> None:
         # Migration: add slip_filename for existing databases that pre-date this column
         try:
             conn.execute("ALTER TABLE payments ADD COLUMN slip_filename TEXT")
+        except Exception:
+            pass
+        # Migration: add due_day (default 1 = old behaviour) for pre-existing databases
+        try:
+            conn.execute("ALTER TABLE installments ADD COLUMN due_day INTEGER NOT NULL DEFAULT 1")
         except Exception:
             pass
 

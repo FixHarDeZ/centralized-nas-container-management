@@ -1,5 +1,6 @@
 """Friendly Reminder — installment payment tracker with LINE notifications."""
 import base64
+import calendar
 import csv
 import hashlib
 import hmac
@@ -61,6 +62,13 @@ def _fmt(amount: float) -> str:
     return f"{amount:,.2f}"
 
 
+def _effective_due(year: int, month: int, due_day: int) -> date:
+    """Due date for a payment, clamping due_day to the month's last day
+    (e.g. due_day=31 → 28/29 in Feb)."""
+    last = calendar.monthrange(year, month)[1]
+    return date(year, month, min(due_day, last))
+
+
 def _now_str() -> str:
     return datetime.now(_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -117,70 +125,73 @@ def _apply_attach_pay(conn, payment_id: int, slip_filename: str) -> None:
     conn.commit()
 
 
-def _send_monthly_reminder() -> None:
-    """Fire on the 1st of each month — notify about all payments due this month."""
+def _unpaid_with_due(conn) -> list[dict]:
+    """All unpaid payments with their effective due date resolved."""
+    rows = conn.execute("""
+        SELECT p.installment_number, p.amount, p.due_year, p.due_month,
+               i.name, i.num_installments, i.due_day
+        FROM payments p
+        JOIN installments i ON i.id = p.installment_id
+        WHERE p.paid_at IS NULL
+    """).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["due"] = _effective_due(r["due_year"], r["due_month"], r["due_day"])
+        out.append(d)
+    out.sort(key=lambda d: (d["due"], d["name"], d["installment_number"]))
+    return out
+
+
+def _send_due_reminder() -> None:
+    """Run daily — notify about every unpaid payment that is due today or overdue.
+    Repeats each day until the payment is marked paid."""
     today = date.today()
-    year, month = today.year, today.month
     conn = _open_db()
     try:
-        rows = conn.execute("""
-            SELECT p.installment_number, p.amount, i.name, i.num_installments
-            FROM payments p
-            JOIN installments i ON i.id = p.installment_id
-            WHERE p.due_year = ? AND p.due_month = ? AND p.paid_at IS NULL
-            ORDER BY i.name, p.installment_number
-        """, (year, month)).fetchall()
+        due = [d for d in _unpaid_with_due(conn) if d["due"] <= today]
     finally:
         conn.close()
 
-    if not rows:
+    if not due:
         return
 
-    month_name = THAI_MONTHS[month]
-    lines = [f"💳 ยอดผ่อนชำระ — {month_name} {year + 543}\n"]
+    lines = ["💳 ครบกำหนดชำระ / เกินกำหนด\n"]
     total = 0.0
-    for r in rows:
+    for d in due:
+        overdue = (today - d["due"]).days
+        tag = "⚡ ครบกำหนดวันนี้" if overdue == 0 else f"🔴 เกินกำหนด {overdue} วัน"
         lines.append(
-            f"  • {r['name']}  งวดที่ {r['installment_number']}/{r['num_installments']}"
-            f"  ฿{_fmt(r['amount'])}"
+            f"  • {d['name']}  งวดที่ {d['installment_number']}/{d['num_installments']}"
+            f"  ฿{_fmt(d['amount'])}\n"
+            f"     กำหนด {d['due'].day} {THAI_MONTHS[d['due'].month]} {d['due'].year + 543} · {tag}"
         )
-        total += r["amount"]
+        total += d["amount"]
     lines.append(f"\n💵 รวมทั้งหมด: ฿{_fmt(total)}")
     lines.append(f"🕒 {_now_str()}")
     _notifier.send("\n".join(lines))
 
 
 def _send_day_before_reminder() -> None:
-    """Run daily — notify if any unpaid payment is due tomorrow (i.e. tomorrow is the 1st)."""
+    """Run daily — notify if any unpaid payment is due tomorrow."""
     tomorrow = date.today() + timedelta(days=1)
-    if tomorrow.day != 1:
-        return
-
-    year, month = tomorrow.year, tomorrow.month
     conn = _open_db()
     try:
-        rows = conn.execute("""
-            SELECT p.installment_number, p.amount, i.name, i.num_installments
-            FROM payments p
-            JOIN installments i ON i.id = p.installment_id
-            WHERE p.due_year = ? AND p.due_month = ? AND p.paid_at IS NULL
-            ORDER BY i.name, p.installment_number
-        """, (year, month)).fetchall()
+        due = [d for d in _unpaid_with_due(conn) if d["due"] == tomorrow]
     finally:
         conn.close()
 
-    if not rows:
+    if not due:
         return
 
-    month_name = THAI_MONTHS[month]
-    lines = [f"⏰ แจ้งเตือนล่วงหน้า 1 วัน\nพรุ่งนี้ครบกำหนดชำระ — {month_name} {year + 543}\n"]
+    lines = ["⏰ แจ้งเตือนล่วงหน้า 1 วัน\nพรุ่งนี้ครบกำหนดชำระ\n"]
     total = 0.0
-    for r in rows:
+    for d in due:
         lines.append(
-            f"  • {r['name']}  งวดที่ {r['installment_number']}/{r['num_installments']}"
-            f"  ฿{_fmt(r['amount'])}"
+            f"  • {d['name']}  งวดที่ {d['installment_number']}/{d['num_installments']}"
+            f"  ฿{_fmt(d['amount'])}"
         )
-        total += r["amount"]
+        total += d["amount"]
     lines.append(f"\n💵 รวม: ฿{_fmt(total)}")
     lines.append(f"🕒 {_now_str()}")
     _notifier.send("\n".join(lines))
@@ -191,9 +202,9 @@ async def lifespan(app: FastAPI):
     init_db()
     h1, m1 = _REMINDER_TIME.split(":")
     _scheduler.add_job(
-        _send_monthly_reminder,
-        CronTrigger(day=1, hour=int(h1), minute=int(m1)),
-        id="monthly_reminder",
+        _send_due_reminder,
+        CronTrigger(hour=int(h1), minute=int(m1)),
+        id="due_reminder",
     )
     h2, m2 = _DAY_BEFORE_TIME.split(":")
     _scheduler.add_job(
@@ -216,7 +227,12 @@ class InstallmentCreate(BaseModel):
     total_price: float
     num_installments: int
     start_date: str  # YYYY-MM
+    due_day: int = 1  # day of month payment is due (1-31, clamped to month length)
     note: Optional[str] = None
+
+
+class InstallmentUpdate(BaseModel):
+    due_day: int
 
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -296,6 +312,8 @@ def create_installment(body: InstallmentCreate, conn=Depends(get_conn)):
         raise HTTPException(status_code=400, detail="num_installments must be >= 1")
     if body.total_price <= 0:
         raise HTTPException(status_code=400, detail="total_price must be positive")
+    if not (1 <= body.due_day <= 31):
+        raise HTTPException(status_code=400, detail="due_day must be between 1 and 31")
     try:
         year, month = map(int, body.start_date.split("-"))
         if not (1 <= month <= 12):
@@ -304,9 +322,10 @@ def create_installment(body: InstallmentCreate, conn=Depends(get_conn)):
         raise HTTPException(status_code=400, detail="start_date must be YYYY-MM format")
 
     cur = conn.execute(
-        "INSERT INTO installments (name, total_price, num_installments, start_date, note) "
-        "VALUES (?, ?, ?, ?, ?)",
-        (body.name.strip(), body.total_price, body.num_installments, body.start_date, body.note),
+        "INSERT INTO installments (name, total_price, num_installments, start_date, due_day, note) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (body.name.strip(), body.total_price, body.num_installments,
+         body.start_date, body.due_day, body.note),
     )
     installment_id = cur.lastrowid
     _generate_payments(conn, installment_id, body.total_price, body.num_installments, body.start_date)
@@ -317,6 +336,22 @@ def create_installment(body: InstallmentCreate, conn=Depends(get_conn)):
 
 @app.get("/api/installments/{installment_id}")
 def get_installment(installment_id: int, conn=Depends(get_conn)):
+    return _installment_with_payments(conn, installment_id)
+
+
+@app.patch("/api/installments/{installment_id}")
+def update_installment(installment_id: int, body: InstallmentUpdate, conn=Depends(get_conn)):
+    if not (1 <= body.due_day <= 31):
+        raise HTTPException(status_code=400, detail="due_day must be between 1 and 31")
+    row = conn.execute(
+        "SELECT id FROM installments WHERE id = ?", (installment_id,)
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Installment not found")
+    conn.execute(
+        "UPDATE installments SET due_day = ? WHERE id = ?", (body.due_day, installment_id)
+    )
+    conn.commit()
     return _installment_with_payments(conn, installment_id)
 
 
@@ -449,7 +484,7 @@ def current_month_summary(conn=Depends(get_conn)):
     rows = conn.execute("""
         SELECT p.id, p.installment_id, p.installment_number, p.amount, p.paid_at,
                p.due_year, p.due_month, p.slip_filename,
-               i.name, i.num_installments, i.total_price
+               i.name, i.num_installments, i.total_price, i.due_day
         FROM payments p
         JOIN installments i ON i.id = p.installment_id
         WHERE p.due_year = ? AND p.due_month = ?
@@ -473,7 +508,7 @@ def current_month_summary(conn=Depends(get_conn)):
 @app.get("/api/report")
 def download_report(conn=Depends(get_conn)):
     rows = conn.execute("""
-        SELECT i.name, i.total_price, i.num_installments, i.start_date,
+        SELECT i.name, i.total_price, i.num_installments, i.start_date, i.due_day,
                p.installment_number, p.due_year, p.due_month, p.amount, p.paid_at, p.note
         FROM payments p
         JOIN installments i ON i.id = p.installment_id
@@ -483,13 +518,13 @@ def download_report(conn=Depends(get_conn)):
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow([
-        "ชื่อรายการ", "ราคารวม", "จำนวนงวด", "วันที่เริ่ม",
+        "ชื่อรายการ", "ราคารวม", "จำนวนงวด", "วันที่เริ่ม", "วันครบกำหนด",
         "งวดที่", "ปีที่ครบกำหนด", "เดือนที่ครบกำหนด",
         "ยอดงวด", "จ่ายเมื่อ", "หมายเหตุ",
     ])
     for r in rows:
         writer.writerow([
-            r["name"], r["total_price"], r["num_installments"], r["start_date"],
+            r["name"], r["total_price"], r["num_installments"], r["start_date"], r["due_day"],
             r["installment_number"], r["due_year"], r["due_month"],
             r["amount"], r["paid_at"] or "", r["note"] or "",
         ])

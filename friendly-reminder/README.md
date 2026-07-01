@@ -1,12 +1,15 @@
 # friendly-reminder
 
 ระบบติดตามการผ่อนชำระรายเดือน — FastAPI + SQLite + Nginx Basic Auth. บันทึกรายการผ่อน
-(ชื่อ, ราคา, จำนวนงวด, เดือนเริ่มต้น) แล้ว auto-generate งวดชำระตลอดอายุสัญญา.
+(ชื่อ, ราคา, จำนวนงวด, เดือนเริ่มต้น, วันครบกำหนด) แล้ว auto-generate งวดชำระตลอดอายุสัญญา.
 
 - **Port:** `5066` (nginx → app:8000)
 - **Data:** SQLite + สลิป/เอกสาร ใน volume `/data`
-- **Reminder:** APScheduler ส่ง LINE วันที่ 1 ของเดือน (`REMINDER_TIME`, default 08:00) +
-  แจ้งล่วงหน้า 1 วัน (`DAY_BEFORE_REMINDER_TIME`, default 20:00)
+- **Due day:** ระบุวันครบกำหนดต่อรายการได้ (`due_day` 1-31 เช่นทุกวันที่ 25); วันเกินความยาวเดือน
+  clamp เป็นวันสุดท้ายของเดือน (31 → 28/29 ก.พ.)
+- **Reminder:** APScheduler ส่ง LINE ทุกวันเวลา `REMINDER_TIME` (default 08:00) สำหรับงวดที่
+  **ครบกำหนด/เกินกำหนด** — ยิงซ้ำทุกวันจนกว่าจะกด "จ่ายแล้ว" + แจ้งล่วงหน้า 1 วันก่อน due_day
+  (`DAY_BEFORE_REMINDER_TIME`, default 20:00)
 - **Export:** CSV ที่ `/api/report`
 
 ## LINE slip auto-pay (webhook)
