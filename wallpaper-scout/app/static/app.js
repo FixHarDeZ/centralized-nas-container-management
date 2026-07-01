@@ -13,7 +13,7 @@ async function loadTopics() {
       <td>${t.downloaded_today}</td>
       <td>${t.enabled ? "เปิด" : "หยุด"}</td>
       <td>
-        <button data-action="toggle" data-id="${t.id}" data-enabled="${t.enabled}">${t.enabled ? "หยุด" : "เปิด"}</button>
+        <button data-action="toggle" data-id="${t.id}" data-enabled="${t.enabled ? "true" : "false"}">${t.enabled ? "หยุด" : "เปิด"}</button>
         <button data-action="delete" data-id="${t.id}">ลบ</button>
       </td>`;
     tbody.appendChild(tr);
