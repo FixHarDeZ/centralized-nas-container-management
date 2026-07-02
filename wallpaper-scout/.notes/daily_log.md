@@ -18,7 +18,11 @@
 
 **Gotcha:** booru pc floor = 1920×1080 (ไม่ใช่ wallhaven 2560×1440) — corpus booru มี 1440p+ น้อย ถ้าใช้ floor เข้มจะเหลือน้อย. `rating:s` ยังโผล่ tag ล่อแหลม (bikini/cleavage) — SFW-legal แต่ไม่สะอาด, ทำ tag blacklist ทีหลังได้. Idol topics (IU) booru ช่วยไม่ได้ (อนิเมะ/เกมเท่านั้น) — ต้องรอ reddit OAuth.
 
-**Tests:** `test_booru.py` (7) + scheduler multi-source routing/quota/default. รวม 56 passed. **ยังไม่ deploy, ยังไม่ commit.**
+**Tests:** `test_booru.py` (7) + scheduler multi-source routing/quota/default. รวม 56 passed.
+
+**Deployed** (commit 57e3d49). เปิด booru ให้ topic "Wuthering Waves" (id 5) → scout.
+
+**🐛 Bug พบตอน scout จริง (commit 1389dc2):** `resp.json()` อยู่**นอก** try/except ใน `booru.search` → konachan.net ตอบ 200 เป็น Cloudflare HTML page บางจังหวะ → `JSONDecodeError` หลุดออกมา → ทั้ง cycle 502 (ล้ม wallhaven downloads ในรอบเดียวกันด้วย). Fix: ดึง `resp.json()` เข้าไปใน try. เพิ่ม regression test (57 passed). Redeploy. Scout ซ้ำ: downloaded 15, ไม่ 502, มี booru files (yr-/kc-) 18 ไฟล์บน disk.
 
 ## 2026-07-01 — Review mimo handoff + dashboard redesign
 
