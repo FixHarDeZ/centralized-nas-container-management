@@ -2,16 +2,17 @@
 
 **สร้าง:** 2026-05-24  
 **Port:** 5063 (external Nginx basic auth) → 9119 (dashboard internal)  
-**Status:** Updated ✅ (2026-05-25)
+**Status:** Updated ✅ (2026-07-02)
 
 ---
 
 ## Architecture
 
-Three containers in the stack:
+Two containers in the stack:
 - **hermes-gateway** — from `hermes-agent` image, runs `hermes gateway run`; connects Telegram + Discord, processes messages
-- **hermes-dashboard** — from `hermes-agent` image, runs `hermes dashboard`; listens only on internal port `9119`
-- **hermes-nginx** — `nginx:alpine` sidecar; exposes `5063`, enforces HTTP Basic Auth via `.htpasswd`, proxies to `hermes-dashboard:9119`
+- **hermes-dashboard** — from `hermes-agent` image, runs `hermes dashboard`; exposes `5063:9119` with built-in basic auth
+
+Auth is injected via `scripts/inject-dashboard-auth.sh` wrapper (reads `DASHBOARD_PASSWORD_HASH` from vault-seeded env var).
 
 Persistent volume: `hermes_agent_data:/opt/data` — config, sessions, memories, skills, logs
 
@@ -25,6 +26,18 @@ Persistent volume: `hermes_agent_data:/opt/data` — config, sessions, memories,
 | `.env` | `hermes-agent/.env` | API keys + bot tokens |
 | `nginx/nginx.conf` | `hermes-agent/nginx/nginx.conf` | Basic auth reverse proxy to dashboard |
 | `nginx/.htpasswd` | `hermes-agent/nginx/.htpasswd` | APR1 credentials file (gitignored, must exist before deploy) |
+
+### Dashboard Auth (v2026.7.1+)
+
+Hermes v2026.7.1 requires auth providers when binding to non-loopback addresses. The `--insecure` flag no longer bypasses this. Solution: `scripts/inject-dashboard-auth.sh` wrapper reads env vars and injects `dashboard.basic_auth` into `config.yaml` before s6 starts.
+
+| Vault Key | Env Var | Purpose |
+|-----------|---------|---------|
+| `stacks.hermes_agent.dashboard.basic_auth_user` | `DASHBOARD_BASIC_AUTH_USER` | Username (default: `fixhardez`) |
+| `stacks.hermes_agent.dashboard.password_hash` | `DASHBOARD_PASSWORD_HASH` | scrypt hash for hermes dashboard auth |
+| `stacks.hermes_agent.dashboard.basic_auth_password` | — | Plaintext password (vault only, not in .env) |
+
+Login credentials: `fixhardez` / `REDACTED` (also behind nginx basic auth layer)
 
 ### Critical: HERMES_HOME
 
@@ -80,6 +93,8 @@ Tracker: `docs/superpowers/specs/2026-06-02-hermes-token-tuning-verification.md`
 | DISCORD_BOT_TOKEN | Discord (empty = disabled) |
 | HERMES_UID | Container user UID (1000) |
 | HERMES_GID | Container group GID (100) |
+| DASHBOARD_BASIC_AUTH_USER | Dashboard auth username (default: fixhardez) |
+| DASHBOARD_PASSWORD_HASH | scrypt hash for dashboard auth (from vault) |
 
 ---
 
@@ -93,6 +108,7 @@ Tracker: `docs/superpowers/specs/2026-06-02-hermes-token-tuning-verification.md`
 - **Telegram logs success at INFO level** — only failures appear as WARNING/ERROR in docker logs; silence = success
 - **Discord error is expected** — `ERROR: No bot token configured` is normal if Discord not used
 - **`.htpasswd` permissions matter** — keep `nginx/.htpasswd` readable by nginx worker (`644`); deploy script already normalizes this on NAS
+- **v2026.7.1+ requires auth providers** for non-loopback dashboard binds — `--insecure` no longer bypasses. Fixed via `inject-dashboard-auth.sh` wrapper + vault-seeded env vars
 - **Old sessions store model per-session** — sessions created before config fix have empty model; new sessions use config
 
 ---
@@ -101,6 +117,7 @@ Tracker: `docs/superpowers/specs/2026-06-02-hermes-token-tuning-verification.md`
 
 | วันที่ | เรื่อง |
 |--------|--------|
+| 2026-07-02 | Fix dashboard crash loop on v2026.7.1: added `scripts/inject-dashboard-auth.sh` + `DASHBOARD_PASSWORD_HASH` env var via vault. Login: `fixhardez` / `REDACTED` |
 | 2026-06-02 | Approach A token tune: session_reset.idle_minutes 1440→15, agent.max_turns →20, agent.api_max_retries →1, image_input_mode →text, memory disabled (1-week trial), compression.threshold →0.80. Spec: `docs/superpowers/specs/2026-06-02-hermes-token-tuning-design.md`. Schema: `hermes-v2026.5.16-schema.md`. |
 | 2026-05-30 | Pinned `HERMES_REF=v2026.5.16` to dodge s6-overlay migration that broke entrypoint after that tag |
 | 2026-05-25 | Add `nginx:alpine` basic-auth sidecar on port 5063, dashboard moved to internal `9119` only |

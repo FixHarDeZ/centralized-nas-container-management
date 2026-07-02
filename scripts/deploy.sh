@@ -315,7 +315,7 @@ for stack in "${STACKS_TO_RESTART[@]}"; do
     "bash -lc \"echo '${NAS_SUDO_PASSWORD}' | sudo -S -p '' docker compose \
       --project-directory '${NAS_TARGET_PATH}/${stack}' \
       -f '${NAS_TARGET_PATH}/${stack}/docker-compose.yml' \
-      up -d --build --force-recreate 2>&1\"" </dev/null
+      up -d --build --force-recreate --remove-orphans 2>&1\"" </dev/null
   ok "$stack restarted"
 done
 

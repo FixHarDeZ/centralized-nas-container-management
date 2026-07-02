@@ -3,7 +3,7 @@ services:
     build:
       context: .
       args:
-        HERMES_REF: v2026.6.5
+        HERMES_REF: v2026.7.1
     image: hermes-agent
     container_name: hermes-gateway
     restart: unless-stopped
@@ -33,27 +33,17 @@ services:
       - HERMES_GID=${HERMES_GID:-100}
       - HERMES_HOME=/opt/data
       - TELEGRAM_BOT_TOKEN=${HERMES_TELEGRAM_BOT_TOKEN}
-    expose:
-      - "9119"
+      - DASHBOARD_BASIC_AUTH_USER=${DASHBOARD_BASIC_AUTH_USER:-fixhardez}
+      - DASHBOARD_PASSWORD_HASH=${DASHBOARD_PASSWORD_HASH}
+    ports:
+      - "5063:9119"
     volumes:
       - hermes_agent_data:/opt/data
+      - ./scripts/inject-dashboard-auth.sh:/opt/inject-dashboard-auth.sh:ro
     labels:
       - "com.centurylinklabs.watchtower.enable=false"
-    command: ["dashboard", "--host", "0.0.0.0", "--no-open", "--insecure"]
-
-  nginx:
-    image: nginx:alpine
-    container_name: hermes-nginx
-    restart: unless-stopped
-    ports:
-      - "5063:80"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./nginx/.htpasswd:/etc/nginx/.htpasswd:ro
-    environment:
-      - TZ=Asia/Bangkok
-    depends_on:
-      - hermes-dashboard
+    entrypoint: ["/opt/inject-dashboard-auth.sh", "/init", "/opt/hermes/docker/main-wrapper.sh"]
+    command: ["dashboard", "--host", "0.0.0.0", "--no-open"]
 
 volumes:
   hermes_agent_data:

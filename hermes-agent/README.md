@@ -9,20 +9,23 @@ LINE messaging is handled by the separate `line-secretary` stack.
 | Container | Role | Port |
 |---|---|---|
 | `hermes-gateway` | Gateway to Telegram + Discord (outbound polling) | — |
-| `hermes-dashboard` | Web UI for monitoring and config (internal only) | `9119` |
-| `hermes-nginx` | Basic-auth reverse proxy for dashboard | `5063` |
+| `hermes-dashboard` | Web UI for monitoring + config | `5063` |
+
+Dashboard has built-in basic auth (username/password configured via vault).
 
 ## Setup
 
 ### 1. Environment variables
 
-Copy and fill in `.env.example`:
+Secrets are managed via `secrets/vault.sops.yaml` (sops+age encrypted). Run `make secrets` to generate `.env`.
 
-```
-cp .env.example .env
-```
-
-Edit `.env`: fill in `OPENROUTER_API_KEY`, `TELEGRAM_BOT_TOKEN`, `DISCORD_BOT_TOKEN`
+Required vault keys under `stacks.hermes_agent`:
+- `openrouter_api_key` — OpenRouter LLM access
+- `telegram.bot_token` — Telegram bot token
+- `telegram.allowed_users` — Comma-separated allowed user IDs
+- `dashboard.basic_auth_user` — Dashboard login username
+- `dashboard.password_hash` — scrypt hash of dashboard password
+- `dashboard.basic_auth_password` — Plaintext password (for reference only)
 
 ### 2. Telegram bot
 
@@ -30,7 +33,7 @@ Edit `.env`: fill in `OPENROUTER_API_KEY`, `TELEGRAM_BOT_TOKEN`, `DISCORD_BOT_TO
 2. Copy the token → set as `TELEGRAM_BOT_TOKEN`
 3. Find your user ID (message @userinfobot) → set as `TELEGRAM_ALLOWED_USERS`
 
-### 3. Discord bot
+### 3. Discord bot (optional)
 
 1. Go to [discord.com/developers/applications](https://discord.com/developers/applications) → New Application
 2. Bot tab → Reset Token → copy → set as `DISCORD_BOT_TOKEN`
@@ -50,7 +53,7 @@ Hermes generates a default `config.yaml` on first run. To customise model or cha
 
 ```
 docker exec -it hermes-gateway vi /opt/data/config.yaml
-docker compose restart hermes-gateway
+docker compose -f hermes-agent/docker-compose.yml restart hermes-gateway
 ```
 
 ### 6. Verify
@@ -61,17 +64,17 @@ docker logs hermes-gateway
 
 Should show Telegram/Discord connected. Open dashboard at `http://<NAS_HOST>:5063`
 
-## Dashboard
+## Dashboard Auth
 
-Port `5063` is now served by an internal `nginx:alpine` sidecar with HTTP Basic Auth, proxying to `hermes-dashboard:9119` (including WebSocket upgrade headers for live dashboard traffic).
-Create `nginx/.htpasswd` before deploy (same format as homepage), then authenticate in the browser before accessing the dashboard.
+Since v2026.7.1, hermes requires auth providers when binding to non-loopback addresses. The stack uses a wrapper script (`scripts/inject-dashboard-auth.sh`) that reads `DASHBOARD_PASSWORD_HASH` from env vars and injects `dashboard.basic_auth` into `config.yaml` before startup.
+
+Login credentials are stored in `secrets/vault.sops.yaml`.
 
 ## Updating hermes-agent
 
-To pull a newer version, rebuild with the desired git ref:
+To pull a newer version, update `HERMES_REF` in `docker-compose.yml`:
 
 ```
-docker compose -f hermes-agent/docker-compose.yml build \
-  --build-arg HERMES_REF=v0.15.0 --no-cache
+docker compose -f hermes-agent/docker-compose.yml build --no-cache
 docker compose -f hermes-agent/docker-compose.yml up -d
 ```
