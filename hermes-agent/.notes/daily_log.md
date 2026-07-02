@@ -182,7 +182,7 @@ When upgrading to a newer tag in the future, check if they've completed the s6-o
 
 ### Status
 - Gateway running ✅
-- Telegram: JaFixHermesBot connected (token `REDACTED:...`)
+- Telegram: JaFixHermesBot connected
 - Model: `qwen/qwen3.6-plus` via OpenRouter
 
 ---

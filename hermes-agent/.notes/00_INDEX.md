@@ -37,7 +37,7 @@ Hermes v2026.7.1 requires auth providers when binding to non-loopback addresses.
 | `stacks.hermes_agent.dashboard.password_hash` | `DASHBOARD_PASSWORD_HASH` | scrypt hash for hermes dashboard auth |
 | `stacks.hermes_agent.dashboard.basic_auth_password` | — | Plaintext password (vault only, not in .env) |
 
-Login credentials: `fixhardez` / `REDACTED` (also behind nginx basic auth layer)
+Login credentials: see vault (`stacks.hermes_agent.dashboard.*`)
 
 ### Critical: HERMES_HOME
 
@@ -117,7 +117,7 @@ Tracker: `docs/superpowers/specs/2026-06-02-hermes-token-tuning-verification.md`
 
 | วันที่ | เรื่อง |
 |--------|--------|
-| 2026-07-02 | Fix dashboard crash loop on v2026.7.1: added `scripts/inject-dashboard-auth.sh` + `DASHBOARD_PASSWORD_HASH` env var via vault. Login: `fixhardez` / `REDACTED` |
+| 2026-07-02 | Fix dashboard crash loop on v2026.7.1: added `scripts/inject-dashboard-auth.sh` + `DASHBOARD_PASSWORD_HASH` env var via vault. Credentials in vault only. |
 | 2026-06-02 | Approach A token tune: session_reset.idle_minutes 1440→15, agent.max_turns →20, agent.api_max_retries →1, image_input_mode →text, memory disabled (1-week trial), compression.threshold →0.80. Spec: `docs/superpowers/specs/2026-06-02-hermes-token-tuning-design.md`. Schema: `hermes-v2026.5.16-schema.md`. |
 | 2026-05-30 | Pinned `HERMES_REF=v2026.5.16` to dodge s6-overlay migration that broke entrypoint after that tag |
 | 2026-05-25 | Add `nginx:alpine` basic-auth sidecar on port 5063, dashboard moved to internal `9119` only |
