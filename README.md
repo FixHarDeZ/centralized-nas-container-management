@@ -70,16 +70,24 @@ make secrets       # decrypts vault, writes <stack>/.env and .env.deploy
 
 ```bash
 make edit-vault       # open vault in $EDITOR (sops decrypts on read, re-encrypts on save)
+make sync-test-vault  # after adding/removing a key: mirror structure into test-vault
 make secrets          # regenerate all <stack>/.env + .env.deploy
 ./scripts/deploy.sh   # tar + ssh + restart
 ```
+
+> **Adding a new secret?** `make check` validates manifests against **both**
+> `vault.sops.yaml` and `test-vault.sops.yaml`. A key that exists only in the
+> real vault fails check with `manifest references missing vault path ...`.
+> After `make edit-vault`, run `make sync-test-vault` — it regenerates
+> `test-vault.sops.yaml` from the real vault's key tree with dummy
+> `test-<path>` values (its own age recipient), keeping structure in sync.
 
 ### File map
 
 ```text
 .sops.yaml                            # public age recipients (commit)
 secrets/vault.sops.yaml               # encrypted vault (commit)
-secrets/test-vault.sops.yaml          # CI dummy vault (commit)
+secrets/test-vault.sops.yaml          # CI dummy vault, mirrors real vault structure (commit; regen: make sync-test-vault)
 secrets/manifest.schema.json          # manifest JSON schema
 deploy.manifest.yaml                  # produces .env.deploy for deploy.sh
 <stack>/secrets.manifest.yaml         # per-stack vault → ENV mapping

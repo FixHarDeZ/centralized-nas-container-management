@@ -51,6 +51,7 @@ FastAPI stack ที่ให้ผู้ใช้ลงทะเบียน "t
 
 ## Gaps / TODOs
 
+- **เพิ่ม vault key ใหม่ ต้อง `make sync-test-vault`** ไม่งั้น `make check` fail `missing vault path` (validate ทั้ง real + test-vault). Repo-infra fix 2026-07-02 daily_log (3).
 - `nginx/.htpasswd` created manually, not via vault (`htpasswd -c nginx/.htpasswd <user>`).
 - Celebrity/people topic coverage on Wallhaven not yet smoke-tested against the live API — first few days of real usage should confirm whether e.g. "IU" returns enough SFW+portrait results to be useful.
 - Perceptual-hash near-dup detection deferred — revisit only if exact-ID dedup proves insufficient in practice.

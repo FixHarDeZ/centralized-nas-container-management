@@ -2,7 +2,7 @@ AGE_KEY ?= $(HOME)/.config/sops/age/keys.txt
 export SOPS_AGE_KEY_FILE = $(AGE_KEY)
 PY = .venv/bin/python
 
-.PHONY: secrets check edit-vault rotate-key clean-env test sync-shared lint format help
+.PHONY: secrets check edit-vault sync-test-vault rotate-key clean-env test sync-shared lint format help
 
 help:           ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -16,6 +16,9 @@ check:          ## Validate manifests + vault + test-vault consistency without w
 
 edit-vault:     ## Open vault in $$EDITOR (sops decrypts on read, re-encrypts on save)
 	@sops secrets/vault.sops.yaml
+
+sync-test-vault: ## Regenerate test-vault from real vault structure (dummy values). Run after adding/removing a vault key.
+	@$(PY) scripts/sync_test_vault.py
 
 rotate-key:     ## Re-encrypt vault for current .sops.yaml recipients
 	@sops updatekeys secrets/vault.sops.yaml

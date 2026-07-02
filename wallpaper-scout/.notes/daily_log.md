@@ -1,5 +1,24 @@
 # Daily Log — wallpaper-scout
 
+## 2026-07-02 (3) — `make check` fail: test-vault out of sync
+
+**Symptom:** `make check` → `manifest references missing vault path 'stacks.wallpaper_scout.photos_path'`.
+
+**Root cause:** `make check` validate 2 vault — real `vault.sops.yaml` (มี key ครบ) + `test-vault.sops.yaml` (ไม่มี block `wallpaper_scout` เลย). Manifest ref → `lookup()` None → RenderError. เป็น recurring trap ทุกครั้งเพิ่ม secret ใหม่ (test-vault ต้อง mirror structure).
+
+**Fix (durable):**
+- สร้าง `scripts/sync_test_vault.py` — decrypt real vault → walk tree → leaf ทุกตัว = `test-<dotted.path>` → re-encrypt เป็น test-vault (age recipient ของ test เอง ตาม `.sops.yaml`). Regenerate ทั้งไฟล์ = structure mirror เป๊ะเสมอ.
+- เพิ่ม `make sync-test-vault` target.
+- อัปเดต skill `~/.claude/skills/adding-vault-secret/SKILL.md` (step 4b, commit รวม test-vault, Common Mistakes row, Removing step).
+- อัปเดต root `README.md` (workflow block + callout + file-layout annotation).
+
+**Flow ใหม่เพิ่ม secret:** `make edit-vault` → `make sync-test-vault` → `make check` → `make secrets`.
+
+**Verify:** `make sync-test-vault` แล้ว `make check` exit 0, wallpaper_scout ครบ 9 key ใน test-vault. real vault ไม่โดนแตะ (มี key อยู่ก่อนแล้ว).
+
+**Files:** `scripts/sync_test_vault.py` (new), `Makefile` (+target), `secrets/test-vault.sops.yaml` (regenerated), root `README.md`.
+
+
 ## 2026-07-02 (2) — Reddit OAuth source (idol/real-person)
 
 **Task:** เพิ่ม reddit source สำหรับ idol topics (booru ครอบคลุมไม่ได้).
