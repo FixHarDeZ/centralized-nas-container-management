@@ -16,6 +16,8 @@
 
 **⏳ ค้าง:** ต้องลงทะเบียน reddit app (client_id+secret) → ใส่ vault → deploy → **live-probe จริงว่า idol search คืนรูปใช้ได้จริงไหม** (advisor flag: global search อาจ noisy, res filter อาจกรองจนเหลือน้อย). ถ้า garbage → restrict subreddits.
 
+**🚧 BLOCKED (2026-07-02):** reddit create-app **reCAPTCHA loop** — ลอง incognito + Safari + (แนะนำ verify email/ปิด VPN) ก็ไม่ผ่าน. เป็นฝั่ง reddit/account/IP. **ผู้ใช้ตัดสินใจข้ามไปก่อน — idol ใช้ wallhaven ตามเดิม.** reddit.py + wiring + tests คงไว้ (dormant, คืน `[]` ถ้าไม่มี creds). **ซ่อน reddit chip** ใน index.html (comment out) กัน dead option — re-enable บรรทัดนั้น + ใส่ vault creds เมื่อสร้าง app ได้. Reddit module **ยังไม่ deploy ขึ้น NAS** (commit 94199d0 + chip-hide อยู่ใน git main เฉยๆ; NAS รัน booru commit, ext-strip fix เป็น no-op สำหรับ wallhaven/booru).
+
 ## 2026-07-02 — Multi-source: add booru (yande.re + konachan.net)
 
 **Task:** source เดียว (Wallhaven) → รูปซ้ำ. เพิ่ม source ทางเลือก.

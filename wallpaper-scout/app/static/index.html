@@ -36,7 +36,10 @@
       <div class="chips">
         <label class="chip-check"><input type="checkbox" name="source" value="wallhaven" checked /> Wallhaven</label>
         <label class="chip-check"><input type="checkbox" name="source" value="booru" /> Booru (อนิเมะ/เกม)</label>
-        <label class="chip-check"><input type="checkbox" name="source" value="reddit" /> Reddit (ไอดอล/คนจริง)</label>
+        <!-- reddit chip hidden until a reddit app (client_id/secret) is registered —
+             reddit.py returns [] without creds, so a selectable chip would be a dead option.
+             Re-enable this line once vault stacks.wallpaper_scout.reddit.* is set. -->
+        <!-- <label class="chip-check"><input type="checkbox" name="source" value="reddit" /> Reddit (ไอดอล/คนจริง)</label> -->
       </div>
     </div>
     <div class="field narrow">
