@@ -600,3 +600,22 @@ Fix (`scheduler.py`):
 **Root cause:** `cover_url` ห่อด้วย proxy `images.weserv.nl?url=...img.messi-bearbit.xyz...`. weserv เพิ่งบล็อก domain นั้น → `400 {"status":"error","message":"Domain or TLD blocked by policy"}`. host จริง `img.messi-bearbit.xyz` เสิร์ฟตรงได้ (`200 image/jpeg`)
 **Fix:** `_unwrap_weserv()` ใน scraper.py — ถ้า cover_url เป็น weserv ดึง inner `url=` param มา fetch ตรง (แก้ที่ `fetch_cover_bytes` จุดเดียว ครอบทั้ง row เก่า+ใหม่)
 **Note:** inner เสิร์ฟรูป full-size (~1.2MB) — weserv เคย resize 200x280 ให้. หนักขึ้นแต่ใช้ได้. ถ้า bandwidth สำคัญค่อยหา proxy resize อื่น
+
+---
+
+## 2026-07-03 — Fix: download 502 อีกรอบ (bearbit ad-gate interstitial ใหม่)
+
+**อาการ:** ปุ่ม Download Local คืน `502 {"detail":"Failed to fetch torrent file from site"}` (อาการเดิม, สาเหตุใหม่)
+
+**Root cause (diagnose live บน NAS ผ่าน probe reuse authed session ของ scraper):**
+- bearbit เพิ่ม **ad-gate interstitial** ครอบ `downloadnew.php` — resolve URL คืน `200 text/html charset=windows-874` (~26KB) หน้า countdown แทน .torrent
+- หน้านั้นมีปุ่มเขียว `a#bbDlBtn` href = `downloadnew.php?...&adok=1&adt=<unlock_ts>.<hmac>` (token สดต่อ view)
+- countdown 5 วิ (Script 20) เป็น client-side อย่างเดียว **แต่ server บังคับ delay จริง** ผ่าน cookie `bb_vlast=<uid>|<ts>` ที่ตั้งตอนดูหน้า interstitial
+- ยิง adok URL ทันที (< 5 วิ) → คืน HTML หน้าเดิมซ้ำ. **รอ ≥5 วิ ระหว่าง GET interstitial กับ GET adok** → `application/x-bittorrent` len 1084159 `d8:announce` ✅
+- **adt timestamp เชื่อไม่ได้** — ทดสอบรอจน `now > adt` ก็ยัง fail ถ้า wall-clock ระหว่าง 2 request ห่างไม่ถึง 5 วิ. เกตคือ delta เวลา ไม่ใช่ absolute adt
+
+**Fix (`scraper.py`):** เพิ่ม helper `_fetch_via_gate(url, referer, allow_inbox=True)` + const `AD_GATE_WAIT_S = 7`. flow: GET resolved URL → ถ้าไม่ใช่ torrent หา `#bbDlBtn`/`a[href*=adok=1]` → `asyncio.sleep(7)` → GET ปุ่ม (Referer=interstitial URL) → torrent. ถ้าไม่เจอ ad-gate ตกไป inbox-gate เดิม (retry ครั้งเดียว allow_inbox=False กันลูป). `fetch_torrent_bytes` เรียก helper แทน block resolve+inbox เดิม
+
+**Verify:** deploy จริง → `GET /api/download/local/12184` (authed) ใน container → `HTTP 200 application/octet-stream size 19296 d8:announce` ✅ + function-level probe `fetch_torrent_bytes` → 1084159 bytes ✅
+
+**Gotcha ใหม่:** ดาวน์โหลดตอนนี้ **ช้าลง ~7 วิ/ไฟล์** เพราะต้องรอ ad-gate countdown. ทุก download ผ่าน interstitial แล้ว (ไม่ใช่ edge case). ถ้า bearbit ขยับ selector `#bbDlBtn` หรือเพิ่มเวลา countdown ต้อง re-probe live (sandbox บล็อก bearbit)

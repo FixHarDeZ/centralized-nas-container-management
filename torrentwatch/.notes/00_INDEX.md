@@ -154,7 +154,7 @@ COL_COMPLETED = 9    # completed/snatches count (best guess — verify via /api/
 COL_SEEDS     = 10   # <span class="green|red">N</span>
 COL_LEECHES   = 11
 ```
-Download URL: ~~`download.php?id={site_id}`~~ **ตายแล้ว (404, มิ.ย. 2026)**. bearbit ย้ายไป `downloadnew.php?id=X&genid=..&dltm=..&dlt=<token>&filename=..` — token สดต่อ session → ต้อง `resolve_download_url(detail_url)` ดึงลิงก์จากหน้า detail ทุกครั้ง (stored `torrent_url` ใช้ไม่ได้แล้ว). **⚠️ Download gate:** ถ้ามี inbox PM ที่ยังไม่อ่าน bearbit คืน HTML block page แทน .torrent → `fetch_torrent_bytes` ยิง `GET /inbox.php` เคลียร์ unread flag แล้ว retry (self-heal)
+Download URL: ~~`download.php?id={site_id}`~~ **ตายแล้ว (404, มิ.ย. 2026)**. bearbit ย้ายไป `downloadnew.php?id=X&genid=..&dltm=..&dlt=<token>&filename=..` — token สดต่อ session → ต้อง `resolve_download_url(detail_url)` ดึงลิงก์จากหน้า detail ทุกครั้ง (stored `torrent_url` ใช้ไม่ได้แล้ว). **⚠️ Download gates (2 ชั้น, handle ใน `_fetch_via_gate`):** (1) **ad-gate interstitial** (ก.ค. 2026) — `downloadnew.php` คืนหน้า HTML countdown, ปุ่มจริง `a#bbDlBtn` href มี `&adok=1&adt=..`, server บังคับรอ ≥5 วิ (cookie `bb_vlast`) → sleep `AD_GATE_WAIT_S=7` แล้วยิงปุ่ม; (2) **inbox PM gate** — ถ้าไม่ใช่ ad-gate + ไม่ใช่ torrent → `GET /inbox.php` เคลียร์ unread แล้ว retry ครั้งเดียว. ⚠️ download ช้าลง ~7 วิ/ไฟล์
 
 ### Filter Logic
 - `seeds == 0` → ทิ้งเสมอ

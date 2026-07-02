@@ -8,6 +8,7 @@ changes layout without touching other code. Use GET /api/debug/html?source_id=<i
 to inspect the raw HTML from a running container.
 """
 
+import asyncio
 import re
 from datetime import datetime
 from urllib.parse import parse_qs, urlencode, urljoin, urlparse, urlunparse
@@ -362,25 +363,48 @@ async def fetch_torrent_bytes(torrent_url: str, detail_url: str = "") -> bytes |
             print("[scraper] stored URL failed, resolving from detail page…")
             real_url = await resolve_download_url(detail_url)
             if real_url and real_url != torrent_url:
-                resp2 = await _client.get(real_url, headers={"Referer": detail_url})
-                ct2 = resp2.headers.get("content-type", "")
-                print(f"[scraper] resolved download → {resp2.status_code} {ct2}")
-                if resp2.status_code == 200 and _is_torrent_content(ct2, resp2.content):
-                    return resp2.content
-                # Bearbit gates downloads behind unread inbox PMs (system broadcasts),
-                # serving an HTML block page instead of the .torrent. Viewing inbox.php
-                # clears the unread flag — do it, then retry the resolved URL once.
-                print("[scraper] resolved URL returned non-torrent — clearing inbox gate and retrying")
-                await _client.get(f"{config.SITE_BASE_URL}/inbox.php")
-                resp3 = await _client.get(real_url, headers={"Referer": detail_url})
-                ct3 = resp3.headers.get("content-type", "")
-                print(f"[scraper] retry after inbox → {resp3.status_code} {ct3}")
-                if resp3.status_code == 200 and _is_torrent_content(ct3, resp3.content):
-                    return resp3.content
+                return await _fetch_via_gate(real_url, detail_url)
         return None
     except Exception as e:
         print(f"[scraper] torrent download error: {e}")
         return None
+
+
+# bearbit serves downloadnew.php as an HTML ad-gate: an interstitial with a ~5s
+# server-enforced countdown (tracked via the bb_vlast cookie). The real .torrent
+# link lives in the page's #bbDlBtn anchor (adok=1&adt=<token>) but is only
+# honoured once enough time has passed — so we view the interstitial, wait, then
+# follow the button. 5s countdown + margin.
+AD_GATE_WAIT_S = 7
+
+
+async def _fetch_via_gate(url: str, referer: str, allow_inbox: bool = True) -> bytes | None:
+    """GET a resolved bearbit download URL, passing the ad-gate interstitial if present."""
+    resp = await _client.get(url, headers={"Referer": referer})
+    ct = resp.headers.get("content-type", "")
+    print(f"[scraper] resolved download → {resp.status_code} {ct}")
+    if resp.status_code == 200 and _is_torrent_content(ct, resp.content):
+        return resp.content
+
+    soup = BeautifulSoup(resp.text, "html.parser")
+    btn = soup.find(id="bbDlBtn") or soup.find("a", href=re.compile(r"adok=1"))
+    if btn and btn.get("href"):
+        dl_url = urljoin(config.SITE_BASE_URL, btn["href"])
+        print(f"[scraper] ad-gate detected — waiting {AD_GATE_WAIT_S}s then following button")
+        await asyncio.sleep(AD_GATE_WAIT_S)
+        resp2 = await _client.get(dl_url, headers={"Referer": url})
+        ct2 = resp2.headers.get("content-type", "")
+        print(f"[scraper] ad-gate download → {resp2.status_code} {ct2}")
+        if resp2.status_code == 200 and _is_torrent_content(ct2, resp2.content):
+            return resp2.content
+
+    # Not the ad-gate (or it failed) — may be the inbox PM block page (unread system
+    # broadcasts). Viewing inbox.php clears the unread flag; retry the URL once.
+    if allow_inbox:
+        print("[scraper] non-torrent, no ad-gate — clearing inbox and retrying")
+        await _client.get(f"{config.SITE_BASE_URL}/inbox.php")
+        return await _fetch_via_gate(url, referer, allow_inbox=False)
+    return None
 
 
 async def probe_download_url(torrent_url: str) -> dict:
