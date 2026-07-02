@@ -22,10 +22,16 @@ from apscheduler.jobstores.base import JobLookupError
 import app.db as db
 import app.llm as llm
 import app.wallhaven as wallhaven
+import app.booru as booru
 from app.notify import Notifier, TgCreds
 import app.photos_albums as photos_albums
 
 logger = logging.getLogger(__name__)
+
+# Image sources by name (topic.sources selects which run). Each exposes the
+# same interface: search(terms, purpose, sorting) -> [{"id", "path"}] and
+# download_image(url) -> bytes. reddit is deferred (needs OAuth — see README).
+_SOURCES = {"wallhaven": wallhaven, "booru": booru}
 
 _TZ = ZoneInfo(os.environ.get("TZ", "Asia/Bangkok"))
 _PHOTOS_ROOT = Path(os.environ.get("PHOTOS_ROOT", "/photos_root"))
@@ -64,7 +70,7 @@ def run_topic_cycle(topic_id: int) -> int:
         if purpose not in wallhaven.PURPOSE_PRESETS:
             logger.warning("unknown purpose=%s topic=%s — skipping (removed preset or stale data)", purpose, topic_id)
             continue
-        downloaded += _run_purpose(topic_id, purpose, search_terms, sorting, topic["max_new_per_cycle"], slug)
+        downloaded += _run_purpose(topic_id, purpose, search_terms, sorting, topic["max_new_per_cycle"], slug, topic["sources"])
 
     # An empty toplist result is a valid, completed outcome (niche topics can
     # genuinely have nothing in Wallhaven's toplist window) — advance to
@@ -86,36 +92,54 @@ def _run_purpose(
     sorting: str,
     max_new: int,
     slug: str,
+    sources: list[str],
 ) -> int:
-    results = wallhaven.search(search_terms, purpose, sorting)
     new_count = 0
-    for item in results:
+    # max_new is a per-purpose cap shared across sources, filled in list order.
+    # ponytail: first source with fresh content wins the quota each cycle;
+    # once it's exhausted (download_exists skips it) the next source fills in.
+    # Add per-source sub-quotas here if a spammy source ever starves a good one.
+    for src_name in sources:
         if new_count >= max_new:
             break
-        wallhaven_id = item["id"]
-        if db.download_exists(topic_id, purpose, wallhaven_id):
+        src = _SOURCES.get(src_name)
+        if src is None:
+            logger.warning("unknown source=%s topic=%s — skipping", src_name, topic_id)
             continue
         try:
-            image_bytes = wallhaven.download_image(item["path"])
+            results = src.search(search_terms, purpose, sorting)
         except Exception as exc:
-            logger.warning("download failed topic=%s purpose=%s id=%s: %s", topic_id, purpose, wallhaven_id, exc)
+            logger.warning("search failed topic=%s purpose=%s source=%s: %s", topic_id, purpose, src_name, exc)
             continue
-        ext = item["path"].rsplit(".", 1)[-1]
-        dest_dir = _PHOTOS_ROOT / purpose / slug
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        # Touch parent dirs to trigger Synology Photos folder indexing.
-        # New folders created by the container aren't visible to Photos until touched.
-        for d in [dest_dir, dest_dir.parent, dest_dir.parent.parent]:
-            if d.exists() and d != Path("/"):
-                os.utime(d, None)
-        filename = f"{wallhaven_id}.{ext}"
-        dest_path = dest_dir / filename
-        dest_path.write_bytes(image_bytes)
-        # Touch file to trigger Synology Photos indexing (doesn't auto-index
-        # files written by the container — needs a filesystem mtime change).
-        os.utime(dest_path, None)
-        db.record_download(topic_id, purpose, wallhaven_id, filename)
-        new_count += 1
+        for item in results:
+            if new_count >= max_new:
+                break
+            image_id = item["id"]
+            if db.download_exists(topic_id, purpose, image_id):
+                continue
+            try:
+                image_bytes = src.download_image(item["path"])
+            except Exception as exc:
+                logger.warning("download failed topic=%s purpose=%s id=%s: %s", topic_id, purpose, image_id, exc)
+                continue
+            ext = item["path"].rsplit(".", 1)[-1]
+            dest_dir = _PHOTOS_ROOT / purpose / slug
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            # Touch parent dirs to trigger Synology Photos folder indexing.
+            # New folders created by the container aren't visible to Photos until touched.
+            for d in [dest_dir, dest_dir.parent, dest_dir.parent.parent]:
+                if d.exists() and d != Path("/"):
+                    os.utime(d, None)
+            # image_id may be namespaced ("yr:123"); ":" is legal on the volume
+            # but keep filenames clean with "-".
+            filename = f"{image_id.replace(':', '-')}.{ext}"
+            dest_path = dest_dir / filename
+            dest_path.write_bytes(image_bytes)
+            # Touch file to trigger Synology Photos indexing (doesn't auto-index
+            # files written by the container — needs a filesystem mtime change).
+            os.utime(dest_path, None)
+            db.record_download(topic_id, purpose, image_id, filename)
+            new_count += 1
     return new_count
 
 

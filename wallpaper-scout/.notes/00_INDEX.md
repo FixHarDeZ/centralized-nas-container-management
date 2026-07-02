@@ -1,11 +1,18 @@
 # Wallpaper Scout — Project Index (Memory Blueprint)
 
-> อัปเดตล่าสุด: 2026-07-01 (review album sync + dashboard redesign + per-purpose counts)
+> อัปเดตล่าสุด: 2026-07-02 (multi-source: เพิ่ม booru — yande.re + konachan.net)
 > ใช้ไฟล์นี้เป็น cold-start memory ก่อนเริ่มงานทุกครั้ง
 
 ## Overview
 
-FastAPI stack ที่ให้ผู้ใช้ลงทะเบียน "topic" (คำค้น เช่น "IU", "Wuthering Waves") พร้อมระบุ purpose (mobile/pc wallpaper), scrape รูปจาก Wallhaven API (SFW only) ตาม preset สัดส่วน/ความละเอียดคงที่ เขียนไฟล์ตรงเข้า `/volume1/homes/fixhardez/Photos/wallpapers/<purpose>/<topic>/` ให้ Synology Photos auto-index + sync เข้า Normal Albums อัตโนมัติ
+FastAPI stack ที่ให้ผู้ใช้ลงทะเบียน "topic" (คำค้น เช่น "IU", "Wuthering Waves") พร้อมระบุ purpose (mobile/pc wallpaper) + source(s), scrape รูปจากหลาย source (SFW only) ตาม preset สัดส่วน/ความละเอียด เขียนไฟล์ตรงเข้า `/volume1/homes/fixhardez/Photos/wallpapers/<purpose>/<topic>/` ให้ Synology Photos auto-index + sync เข้า Normal Albums อัตโนมัติ
+
+## Sources (per-topic multi-select, default `["wallhaven"]`)
+
+- **wallhaven** — real people/idols, photographic. Server-side ratio+res filter. Default.
+- **booru** (`app/booru.py`) — anime/game. yande.re + konachan.**net** (Moebooru, `rating:s`). **konachan.com = Cloudflare 403 → ใช้ .net + browser UA**. Client-side filter (pc floor 1920×1080, mobile 1080×1920 — booru corpus มี 1440p+ น้อย). yande.re เอียง portrait/mobile, konachan เอียง landscape/pc. `rating:s` ยังโผล่ tag ล่อแหลม.
+- **reddit** — *deferred*. Reddit ฆ่า unauth JSON API (403 ทุก endpoint แม้ browser UA จาก NAS). ต้อง OAuth (script app + client_id/secret vault). ยังไม่สร้าง. เดิมตั้งใจเป็น source ของ idol topics → ตอนนี้ idol ได้แค่ wallhaven.
+- **Dedup id namespaced:** wallhaven = bare id, booru = `yr:`/`kc:` prefix. `:` → `-` ใน filename. `max_new_per_cycle` = cap รวมต่อ purpose เติมตาม source list order.
 
 ## Tech Stack
 
@@ -13,7 +20,7 @@ FastAPI stack ที่ให้ผู้ใช้ลงทะเบียน "t
 |---|---|
 | Runtime | Python 3.12 · FastAPI · Uvicorn |
 | Database | SQLite — `/data/wallpaper-scout.db` |
-| Image source | Wallhaven public API (`https://wallhaven.cc/api/v1/search`) |
+| Image sources | Wallhaven (`api/v1/search`) + booru (`app/booru.py`: yande.re + konachan.net Moebooru). reddit deferred. See Sources section above. |
 | LLM | MiMo (`xiaomi/mimo-v2.5`) primary, Anthropic (`claude-sonnet-4-6`) fallback — text-only alias expansion, no vision |
 | Scheduler | APScheduler `BackgroundScheduler` — one `IntervalTrigger` job per topic + one daily `CronTrigger` summary job |
 | Frontend | Vanilla JS SPA |

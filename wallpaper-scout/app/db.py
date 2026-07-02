@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import os
 import sqlite3
@@ -18,7 +20,8 @@ def init_db() -> None:
             max_new_per_cycle INTEGER NOT NULL,
             enabled INTEGER NOT NULL DEFAULT 1,
             backfilled INTEGER NOT NULL DEFAULT 0,
-            search_terms TEXT
+            search_terms TEXT,
+            sources TEXT
         );
 
         CREATE TABLE IF NOT EXISTS downloads (
@@ -31,6 +34,12 @@ def init_db() -> None:
             UNIQUE(topic_id, purpose, wallhaven_id)
         );
         """)
+        # Migration: add `sources` to pre-existing topics tables. CREATE TABLE
+        # above only covers fresh DBs; a NAS DB from before multi-source needs
+        # the column added in place.
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(topics)").fetchall()}
+        if "sources" not in cols:
+            conn.execute("ALTER TABLE topics ADD COLUMN sources TEXT")
 
 
 @contextmanager
@@ -62,6 +71,8 @@ def _row_to_topic(row: sqlite3.Row) -> dict:
     d = dict(row)
     d["purposes"] = json.loads(d["purposes"])
     d["search_terms"] = json.loads(d["search_terms"]) if d["search_terms"] else None
+    # Legacy rows (and pre-migration NULLs) default to wallhaven-only.
+    d["sources"] = json.loads(d["sources"]) if d.get("sources") else ["wallhaven"]
     return d
 
 
@@ -70,11 +81,12 @@ def create_topic(
     purposes: list[str],
     frequency_per_day: int,
     max_new_per_cycle: int,
+    sources: list[str] | None = None,
 ) -> int:
     with _conn() as conn:
         cur = conn.execute(
-            "INSERT INTO topics (query, purposes, frequency_per_day, max_new_per_cycle) VALUES (?, ?, ?, ?)",
-            (query, json.dumps(purposes), frequency_per_day, max_new_per_cycle),
+            "INSERT INTO topics (query, purposes, frequency_per_day, max_new_per_cycle, sources) VALUES (?, ?, ?, ?, ?)",
+            (query, json.dumps(purposes), frequency_per_day, max_new_per_cycle, json.dumps(sources or ["wallhaven"])),
         )
         return cur.lastrowid
 
@@ -92,12 +104,14 @@ def list_topics() -> list[dict]:
 
 
 def update_topic(topic_id: int, **fields) -> None:
-    allowed_fields = {"query", "purposes", "frequency_per_day", "max_new_per_cycle", "enabled"}
+    allowed_fields = {"query", "purposes", "frequency_per_day", "max_new_per_cycle", "enabled", "sources"}
     fields = {k: v for k, v in fields.items() if k in allowed_fields}
     if not fields:
         return
     if "purposes" in fields:
         fields["purposes"] = json.dumps(fields["purposes"])
+    if "sources" in fields:
+        fields["sources"] = json.dumps(fields["sources"])
 
     with _conn() as conn:
         set_clause = ", ".join(f"{k} = ?" for k in fields.keys())

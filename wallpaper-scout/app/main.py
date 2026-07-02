@@ -37,6 +37,7 @@ class TopicCreate(BaseModel):
     frequency_per_day: int = 1
     max_new_per_cycle: int = 5
     search_terms: list[str] | None = None
+    sources: list[str] | None = None
 
 
 class TopicUpdate(BaseModel):
@@ -46,6 +47,7 @@ class TopicUpdate(BaseModel):
     max_new_per_cycle: int | None = None
     enabled: bool | None = None
     search_terms: list[str] | None = None
+    sources: list[str] | None = None
 
 
 def _with_today_count(topic: dict) -> dict:
@@ -72,7 +74,7 @@ def list_topics():
 
 @app.post("/api/topics", status_code=201)
 def create_topic(payload: TopicCreate):
-    topic_id = db.create_topic(payload.query, payload.purposes, payload.frequency_per_day, payload.max_new_per_cycle)
+    topic_id = db.create_topic(payload.query, payload.purposes, payload.frequency_per_day, payload.max_new_per_cycle, payload.sources)
     if payload.search_terms:
         db.set_search_terms(topic_id, payload.search_terms)
     topic = db.get_topic(topic_id)

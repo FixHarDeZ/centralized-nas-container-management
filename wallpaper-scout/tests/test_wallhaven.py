@@ -14,7 +14,7 @@ class _FakeResponse:
 
 
 def test_purpose_presets_has_fixed_keys():
-    assert set(wallhaven.PURPOSE_PRESETS) == {"mobile", "pc"}
+    assert set(wallhaven.PURPOSE_PRESETS) == {"mobile", "pc", "best"}
     assert wallhaven.PURPOSE_PRESETS["mobile"]["atleast"] == "1080x1920"
     assert wallhaven.PURPOSE_PRESETS["pc"]["atleast"] == "2560x1440"
 

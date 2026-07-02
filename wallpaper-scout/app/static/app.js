@@ -35,6 +35,9 @@ async function loadTopics() {
       ? `<div class="terms">🔎 ${escapeHtml(t.search_terms.join(", "))}</div>`
       : `<div class="terms ai">🔎 AI คิดให้</div>`;
 
+    const sources = (t.sources || ["wallhaven"]).map((s) => escapeHtml(s)).join(" + ");
+    const sourceLine = `<div class="terms">🌐 ${sources}</div>`;
+
     const card = document.createElement("div");
     card.className = "topic" + (t.enabled ? "" : " disabled");
     card.innerHTML = `
@@ -43,6 +46,7 @@ async function loadTopics() {
         <span class="badge ${t.enabled ? "on" : "off"}">${t.enabled ? "เปิด" : "หยุด"}</span>
       </div>
       ${terms}
+      ${sourceLine}
       <div class="purposes">${purposeChips}</div>
       <div class="meta">
         <span>รอบ/วัน <b>${t.frequency_per_day}</b></span>
@@ -74,6 +78,10 @@ function startEdit(id) {
   for (const c of document.querySelectorAll('input[name="purpose"]')) {
     c.checked = t.purposes.includes(c.value);
   }
+  const srcs = t.sources || ["wallhaven"];
+  for (const c of document.querySelectorAll('input[name="source"]')) {
+    c.checked = srcs.includes(c.value);
+  }
   document.getElementById("frequency").value = t.frequency_per_day;
   document.getElementById("max_new").value = t.max_new_per_cycle;
   setFormMode(true);
@@ -95,9 +103,15 @@ document.getElementById("topic-form").addEventListener("submit", async (e) => {
     alert("เลือกอย่างน้อย 1 purpose");
     return;
   }
+  const sources = Array.from(document.querySelectorAll('input[name="source"]:checked')).map((c) => c.value);
+  if (sources.length === 0) {
+    alert("เลือกอย่างน้อย 1 source");
+    return;
+  }
   const payload = {
     query: document.getElementById("query").value,
     purposes,
+    sources,
     frequency_per_day: Number(document.getElementById("frequency").value),
     max_new_per_cycle: Number(document.getElementById("max_new").value),
   };

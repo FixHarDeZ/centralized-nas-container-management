@@ -184,6 +184,49 @@ def test_unknown_purpose_is_skipped_not_crashed(env, mocker):
     assert db.download_exists(topic_id, "mobile", "abc") is True
 
 
+def test_default_source_is_wallhaven_only(env, mocker):
+    scheduler, db, photos_dir = env
+    topic_id = db.create_topic("IU", ["mobile"], frequency_per_day=1, max_new_per_cycle=5)
+    assert db.get_topic(topic_id)["sources"] == ["wallhaven"]
+
+    mocker.patch("app.scheduler.llm.expand_query", return_value=["IU"])
+    mocker.patch("app.scheduler.wallhaven.search", return_value=[])
+    booru_search = mocker.patch("app.scheduler.booru.search")
+
+    scheduler.run_topic_cycle(topic_id)
+    booru_search.assert_not_called()
+
+
+def test_multi_source_routes_and_shares_quota(env, mocker):
+    # Topic with both sources: wallhaven fills first (list order), booru fills
+    # the remainder of the shared per-purpose cap. Ids stay namespaced.
+    scheduler, db, photos_dir = env
+    topic_id = db.create_topic("Wuthering Waves", ["pc"], frequency_per_day=1, max_new_per_cycle=3, sources=["wallhaven", "booru"])
+    db.set_search_terms(topic_id, ["Wuthering Waves"])
+    db.mark_backfilled(topic_id)
+
+    mocker.patch("app.scheduler.wallhaven.search", return_value=[
+        {"id": "wh1", "path": "https://x/wh1.jpg"},
+        {"id": "wh2", "path": "https://x/wh2.jpg"},
+    ])
+    mocker.patch("app.scheduler.wallhaven.download_image", return_value=b"w")
+    mocker.patch("app.scheduler.booru.search", return_value=[
+        {"id": "yr:5", "path": "https://x/5.png"},
+        {"id": "kc:6", "path": "https://x/6.png"},
+    ])
+    mocker.patch("app.scheduler.booru.download_image", return_value=b"b")
+
+    downloaded = scheduler.run_topic_cycle(topic_id)
+
+    assert downloaded == 3  # 2 wallhaven + 1 booru (cap=3)
+    assert db.download_exists(topic_id, "pc", "wh1")
+    assert db.download_exists(topic_id, "pc", "wh2")
+    assert db.download_exists(topic_id, "pc", "yr:5")
+    assert not db.download_exists(topic_id, "pc", "kc:6")
+    # namespaced id -> colon replaced in filename
+    assert os.path.exists(os.path.join(photos_dir, "pc", "wuthering-waves", "yr-5.png"))
+
+
 def test_send_daily_summary_sends_aggregated_message(env, mocker):
     scheduler, db, photos_dir = env
     topic_id = db.create_topic("IU", ["mobile"], frequency_per_day=1, max_new_per_cycle=5)

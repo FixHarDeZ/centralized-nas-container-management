@@ -1,5 +1,25 @@
 # Daily Log — wallpaper-scout
 
+## 2026-07-02 — Multi-source: add booru (yande.re + konachan.net)
+
+**Task:** source เดียว (Wallhaven) → รูปซ้ำ. เพิ่ม source ทางเลือก.
+
+**Probe ก่อนสร้าง (จาก NAS = deploy env จริง, ไม่ใช่ workstation):**
+- yande.re → 200 (ไม่ต้อง UA)
+- konachan.**com** → 403 Cloudflare "Just a moment"; konachan.**net** → 200 ด้วย browser UA
+- reddit → 403 ทุก endpoint (search/subreddit/old.reddit) แม้ browser UA. Reddit ฆ่า unauth API แล้ว → ต้อง OAuth (script app + client_id/secret ใน vault). **Deferred** (ผู้ใช้เลือก "booru now, reddit OAuth later")
+- Unsplash/Pexels/Pixabay = ภาพถ่ายล้วน ไม่มี character topics → skip
+
+**สร้าง:** `app/booru.py` (Moebooru, yande.re+konachan.net, `rating:s`, order:score→id map จาก toplist→date_added, client-side aspect/res filter). Source registry `_SOURCES` ใน scheduler. Per-topic `sources` column (JSON, default `["wallhaven"]`, ALTER TABLE migration สำหรับ DB เก่า). Frontend source chips. Namespaced dedup id (`wh` bare / `yr:`/`kc:`) กัน id ชน — filename แทน `:` ด้วย `-`.
+
+**⚠️ db.py ขาด `from __future__ import annotations`** (module อื่นมีหมด) → `list[str] | None` พังบน py<3.10. เพิ่มเข้าไป.
+
+**Live smoke-test (NAS, term "genshin_impact"):** yande.re mobile-fit 30/pc-fit 7, konachan.net pc-fit 32/mobile-fit 0 → complementary, filter ไม่ได้กรองจนเหลือ 0.
+
+**Gotcha:** booru pc floor = 1920×1080 (ไม่ใช่ wallhaven 2560×1440) — corpus booru มี 1440p+ น้อย ถ้าใช้ floor เข้มจะเหลือน้อย. `rating:s` ยังโผล่ tag ล่อแหลม (bikini/cleavage) — SFW-legal แต่ไม่สะอาด, ทำ tag blacklist ทีหลังได้. Idol topics (IU) booru ช่วยไม่ได้ (อนิเมะ/เกมเท่านั้น) — ต้องรอ reddit OAuth.
+
+**Tests:** `test_booru.py` (7) + scheduler multi-source routing/quota/default. รวม 56 passed. **ยังไม่ deploy, ยังไม่ commit.**
+
 ## 2026-07-01 — Review mimo handoff + dashboard redesign
 
 **Task:** ตรวจท่าใหม่ (Photos album sync จาก mimo), แก้ให้ robust, redesign dashboard, โชว์ per-purpose ต่อ query
