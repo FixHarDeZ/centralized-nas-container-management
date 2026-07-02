@@ -62,11 +62,14 @@ def search(query_terms: list[str], purpose: str, sorting: str, page: int = 1) ->
                     headers={"User-Agent": _UA},
                     timeout=30.0,
                 )
+                posts = resp.json()
             except Exception:
-                # One site or alias failing (Cloudflare hiccup, bad tag) must not
-                # sink the rest — mirrors wallhaven's per-request resilience.
+                # One site or alias failing must not sink the rest — mirrors
+                # wallhaven's per-request resilience. .json() is inside the guard
+                # because konachan.net can return a 200 Cloudflare HTML page whose
+                # parse raises JSONDecodeError; that must be skipped, not fatal.
                 continue
-            for post in resp.json():
+            for post in posts:
                 url = post.get("file_url")
                 w, h = post.get("width"), post.get("height")
                 if not url or not w or not h or not fits(w, h):

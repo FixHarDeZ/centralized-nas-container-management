@@ -87,6 +87,23 @@ def test_search_survives_one_site_failing(mocker):
     assert {r["id"] for r in results} == {"kc:9"}
 
 
+def test_search_skips_site_returning_unparseable_json(mocker):
+    # konachan.net can answer 200 with a Cloudflare HTML page → resp.json()
+    # raises. That must skip the site, not crash the whole cycle (was a 502).
+    class _BadJson:
+        def json(self):
+            raise ValueError("Expecting value")
+
+    def fake_get(url, *, params=None, headers=None, timeout=None, **kwargs):
+        if "konachan" in url:
+            return _BadJson()
+        return _FakeResponse(json_data=[_post(7, 3840, 2160)])
+
+    mocker.patch("app.booru.http_client.get", side_effect=fake_get)
+    results = booru.search(["x"], "pc", "toplist")
+    assert {r["id"] for r in results} == {"yr:7"}
+
+
 def test_download_image_returns_bytes(mocker):
     mocker.patch("app.booru.http_client.get", return_value=_FakeResponse(content=b"img"))
     assert booru.download_image("https://x/1.jpg") == b"img"
