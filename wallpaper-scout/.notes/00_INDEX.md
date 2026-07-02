@@ -11,7 +11,7 @@ FastAPI stack ที่ให้ผู้ใช้ลงทะเบียน "t
 
 - **wallhaven** — real people/idols, photographic. Server-side ratio+res filter. Default.
 - **booru** (`app/booru.py`) — anime/game. yande.re + konachan.**net** (Moebooru, `rating:s`). **konachan.com = Cloudflare 403 → ใช้ .net + browser UA**. Client-side filter (pc floor 1920×1080, mobile 1080×1920 — booru corpus มี 1440p+ น้อย). yande.re เอียง portrait/mobile, konachan เอียง landscape/pc. `rating:s` ยังโผล่ tag ล่อแหลม.
-- **reddit** — *deferred*. Reddit ฆ่า unauth JSON API (403 ทุก endpoint แม้ browser UA จาก NAS). ต้อง OAuth (script app + client_id/secret vault). ยังไม่สร้าง. เดิมตั้งใจเป็น source ของ idol topics → ตอนนี้ idol ได้แค่ wallhaven.
+- **reddit** (`app/reddit.py`) — idol/คนจริง. OAuth **userless** (`grant_type=client_credentials`, HTTP-Basic client_id:secret → bearer, ไม่เก็บ user password). Token cache module-level. Global search `oauth.reddit.com/search` (`raw_json=1`, `include_over_18=off` + skip over_18, filter res/orientation เหมือน booru). id = `rd:`. คืน `[]` ถ้า creds ไม่ตั้ง. Vault: `stacks.wallpaper_scout.reddit.{client_id,client_secret}`. **⏳ pending: register app + vault creds + live-probe idol search quality** (global search อาจ noisy).
 - **Dedup id namespaced:** wallhaven = bare id, booru = `yr:`/`kc:` prefix. `:` → `-` ใน filename. `max_new_per_cycle` = cap รวมต่อ purpose เติมตาม source list order.
 
 ## Tech Stack

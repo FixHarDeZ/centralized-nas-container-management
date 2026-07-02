@@ -1,5 +1,21 @@
 # Daily Log — wallpaper-scout
 
+## 2026-07-02 (2) — Reddit OAuth source (idol/real-person)
+
+**Task:** เพิ่ม reddit source สำหรับ idol topics (booru ครอบคลุมไม่ได้).
+
+**Probe ก่อน (NAS):** token endpoint `www.reddit.com/api/v1/access_token` → 401 (reachable, ไม่โดน block เหมือน public API), `oauth.reddit.com/search` no-token → 403 (ต้อง bearer). OAuth path ใช้ได้.
+
+**สร้าง:** `app/reddit.py` — userless OAuth (`grant_type=client_credentials`, HTTP-Basic client_id:secret → bearer, ไม่เก็บ user password). Token cache module-level. Search `oauth.reddit.com/search` global (`sort=top`→toplist / `new`→date_added, `raw_json=1` กัน &amp; ใน preview url, `include_over_18=off` + skip `over_18`). Filter res/orientation เหมือน booru. id = `rd:`. `[]` ถ้า creds ไม่ตั้ง (topic เลือก reddit ได้ก่อน vault มา ไม่พัง).
+
+**Scheduler:** เพิ่ม reddit ใน `_SOURCES`. **Fix ext derivation** → strip query string ก่อน (`path.rsplit("?")[0].rsplit(".")[-1]`) ไม่งั้น reddit preview url `?width=...&s=...` เข้า filename.
+
+**Vault keys:** `stacks.wallpaper_scout.reddit.client_id` + `.client_secret` (manifest → `REDDIT_CLIENT_ID`/`REDDIT_CLIENT_SECRET`). env_file: .env ส่งเข้า container อัตโนมัติ.
+
+**Tests:** `test_reddit.py` (6) + scheduler ext-query-strip. รวม 64 passed.
+
+**⏳ ค้าง:** ต้องลงทะเบียน reddit app (client_id+secret) → ใส่ vault → deploy → **live-probe จริงว่า idol search คืนรูปใช้ได้จริงไหม** (advisor flag: global search อาจ noisy, res filter อาจกรองจนเหลือน้อย). ถ้า garbage → restrict subreddits.
+
 ## 2026-07-02 — Multi-source: add booru (yande.re + konachan.net)
 
 **Task:** source เดียว (Wallhaven) → รูปซ้ำ. เพิ่ม source ทางเลือก.

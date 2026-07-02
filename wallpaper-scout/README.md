@@ -10,7 +10,7 @@ Each topic selects one or more sources (multi-select on the dashboard). Adding s
 |---|---|---|
 | `wallhaven` | Real people / idols, photographic | Default. Server-side ratio+resolution filter. |
 | `booru` | Anime / game characters | yande.re + konachan.net (Moebooru). `rating:s` only. Client-side aspect+res filter (pc floor 1920×1080, mobile 1080×1920). konachan.**net** used — konachan.com is Cloudflare-walled; a browser User-Agent is sent. yande.re skews portrait/mobile, konachan skews landscape/pc — complementary. |
-| `reddit` | *(deferred)* Idol fan photos | Reddit killed its unauth JSON API (403 everywhere). Needs OAuth (script app + client_id/secret in vault). Not built yet. |
+| `reddit` | Idol / real-person fan photos | OAuth userless (client_credentials) — Reddit killed its unauth JSON API (403 everywhere). Needs `REDDIT_CLIENT_ID` + `REDDIT_CLIENT_SECRET` (vault `stacks.wallpaper_scout.reddit.*`). Returns `[]` if unset. Global search + resolution/orientation + `over_18` filter. |
 
 `rating:s` on booru is SFW-legal but still surfaces suggestive tags (bikini/cleavage) — add a tag blacklist later if it matters.
 

@@ -23,6 +23,7 @@ import app.db as db
 import app.llm as llm
 import app.wallhaven as wallhaven
 import app.booru as booru
+import app.reddit as reddit
 from app.notify import Notifier, TgCreds
 import app.photos_albums as photos_albums
 
@@ -30,8 +31,8 @@ logger = logging.getLogger(__name__)
 
 # Image sources by name (topic.sources selects which run). Each exposes the
 # same interface: search(terms, purpose, sorting) -> [{"id", "path"}] and
-# download_image(url) -> bytes. reddit is deferred (needs OAuth — see README).
-_SOURCES = {"wallhaven": wallhaven, "booru": booru}
+# download_image(url) -> bytes.
+_SOURCES = {"wallhaven": wallhaven, "booru": booru, "reddit": reddit}
 
 _TZ = ZoneInfo(os.environ.get("TZ", "Asia/Bangkok"))
 _PHOTOS_ROOT = Path(os.environ.get("PHOTOS_ROOT", "/photos_root"))
@@ -122,7 +123,9 @@ def _run_purpose(
             except Exception as exc:
                 logger.warning("download failed topic=%s purpose=%s id=%s: %s", topic_id, purpose, image_id, exc)
                 continue
-            ext = item["path"].rsplit(".", 1)[-1]
+            # Strip any query string before the extension — reddit preview URLs
+            # carry ?width=...&s=... which would otherwise land in the filename.
+            ext = item["path"].rsplit("?", 1)[0].rsplit(".", 1)[-1]
             dest_dir = _PHOTOS_ROOT / purpose / slug
             dest_dir.mkdir(parents=True, exist_ok=True)
             # Touch parent dirs to trigger Synology Photos folder indexing.

@@ -227,6 +227,24 @@ def test_multi_source_routes_and_shares_quota(env, mocker):
     assert os.path.exists(os.path.join(photos_dir, "pc", "wuthering-waves", "yr-5.png"))
 
 
+def test_reddit_query_string_url_yields_clean_extension(env, mocker):
+    # reddit preview URLs carry ?width=...&s=... — filename must be "<id>.jpg",
+    # not "<id>.jpg?width=...". Guards the ext-strip in _run_purpose.
+    scheduler, db, photos_dir = env
+    topic_id = db.create_topic("IU", ["mobile"], frequency_per_day=1, max_new_per_cycle=5, sources=["reddit"])
+    db.set_search_terms(topic_id, ["IU"])
+    db.mark_backfilled(topic_id)
+
+    mocker.patch("app.scheduler.reddit.search", return_value=[
+        {"id": "rd:abc", "path": "https://preview.redd.it/abc.jpg?width=1080&s=deadbeef"},
+    ])
+    mocker.patch("app.scheduler.reddit.download_image", return_value=b"pic")
+
+    scheduler.run_topic_cycle(topic_id)
+
+    assert os.path.exists(os.path.join(photos_dir, "mobile", "iu", "rd-abc.jpg"))
+
+
 def test_send_daily_summary_sends_aggregated_message(env, mocker):
     scheduler, db, photos_dir = env
     topic_id = db.create_topic("IU", ["mobile"], frequency_per_day=1, max_new_per_cycle=5)
