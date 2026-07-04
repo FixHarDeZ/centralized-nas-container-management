@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>log-medic</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 2rem; background: #111; color: #eee; }
+    table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
+    th, td { border: 1px solid #333; padding: 0.4rem 0.6rem; text-align: left; font-size: 0.9rem; }
+    button { cursor: pointer; }
+    .tabs button { margin-right: 0.5rem; padding: 0.4rem 1rem; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+  </style>
+</head>
+<body>
+  <h1>log-medic</h1>
+  <div class="tabs">
+    <button onclick="showTab('containers')">Containers</button>
+    <button onclick="showTab('events')">Events</button>
+    <button id="watcher-toggle" onclick="toggleWatcher()">Pause watcher</button>
+  </div>
+
+  <div id="containers" class="tab-content active">
+    <h2>Add container</h2>
+    <input id="add-name" placeholder="name" />
+    <input id="add-repo" placeholder="repo (blank = notify_only)" />
+    <input id="add-subdir" placeholder="subdir" />
+    <select id="add-maturity">
+      <option>dev</option><option>staging</option><option>stable</option>
+    </select>
+    <label><input type="checkbox" id="add-notify-only" /> notify_only</label>
+    <button onclick="addContainer()">Add</button>
+    <table id="containers-table">
+      <thead><tr><th>Name</th><th>Maturity</th><th>Notify only</th><th>Paused</th><th>Actions</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <div id="events" class="tab-content">
+    <table id="events-table">
+      <thead><tr><th>Time</th><th>Container</th><th>Fingerprint</th><th>Count</th><th>Status</th><th>Gate reason</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

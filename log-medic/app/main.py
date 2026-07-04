@@ -59,3 +59,16 @@ app.include_router(health.router)
 app.include_router(containers.router)
 app.include_router(events.router)
 app.include_router(watcher_control.router)
+
+from pathlib import Path
+
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+
+_static = Path(__file__).parent / "static"
+if _static.exists():
+    app.mount("/static", StaticFiles(directory=str(_static)), name="static")
+
+    @app.get("/")
+    async def _index() -> FileResponse:
+        return FileResponse(str(_static / "index.html"))
