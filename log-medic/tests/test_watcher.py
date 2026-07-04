@@ -163,13 +163,13 @@ def test_watch_once_preserves_real_started_at_on_first_attach_and_unchanged_imag
 
     # first attach: name not yet in last_image_id -> real StartedAt kept, not reset
     docker_client.containers.get.return_value = _make_mock_container("sha256:abc", started_at_iso)
-    watcher._watch_once(docker_client, row, conn, stop_event, last_image_id)
+    watcher._watch_once(docker_client, row, conn, stop_event, last_image_id, {})
     assert process_event_mock.call_args[0][5] == real_started_at
 
     # second call, same image id already tracked -> still the real one, no spurious reset
     process_event_mock.reset_mock()
     docker_client.containers.get.return_value = _make_mock_container("sha256:abc", started_at_iso)
-    watcher._watch_once(docker_client, row, conn, stop_event, last_image_id)
+    watcher._watch_once(docker_client, row, conn, stop_event, last_image_id, {})
     assert process_event_mock.call_args[0][5] == real_started_at
 
 
@@ -186,15 +186,26 @@ def test_watch_once_resets_started_at_on_genuine_image_change(conn, monkeypatch)
     last_image_id = {"x": "sha256:abc"}  # already tracked with a different image id
 
     docker_client.containers.get.return_value = _make_mock_container("sha256:def", started_at_iso)
-    watcher._watch_once(docker_client, row, conn, stop_event, last_image_id)
+    watcher._watch_once(docker_client, row, conn, stop_event, last_image_id, {})
     called_started_at = process_event_mock.call_args[0][5]
     assert abs((datetime.now(UTC) - called_started_at).total_seconds()) < 5
 
 
-def test_watcher_manager_default_docker_client_uses_bounded_timeout(monkeypatch):
+def test_cancel_closes_live_stream_and_clears_registries():
     import app.watcher as watcher
 
-    from_env_mock = MagicMock()
-    monkeypatch.setattr(watcher.docker, "from_env", from_env_mock)
-    watcher.WatcherManager()
-    from_env_mock.assert_called_once_with(timeout=watcher.WATCHER_STREAM_TIMEOUT_SECONDS)
+    mgr = watcher.WatcherManager(docker_client=MagicMock())
+    name = "x"
+    stop_event = threading.Event()
+    mgr._tasks[name] = MagicMock()
+    mgr._stop_events[name] = stop_event
+    stream_mock = MagicMock()
+    mgr._streams[name] = stream_mock
+
+    mgr._cancel(name)
+
+    stream_mock.close.assert_called_once()
+    assert stop_event.is_set()
+    assert name not in mgr._tasks
+    assert name not in mgr._stop_events
+    assert name not in mgr._streams

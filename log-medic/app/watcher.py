@@ -19,10 +19,6 @@ logger = logging.getLogger(__name__)
 
 RECONNECT_BACKOFF_SECONDS = 5
 HOT_RELOAD_INTERVAL_SECONDS = 30
-# ponytail: bounded stream timeout so cancelled watchers release their thread
-# within ~timeout s; per-container polling would be more precise but this
-# fits the existing reconnect-loop design.
-WATCHER_STREAM_TIMEOUT_SECONDS = 60
 
 DEFAULT_REGEX = re.compile(r"WARN|ERROR")
 
@@ -120,7 +116,7 @@ def _parse_started_at(iso: str) -> datetime:
     return datetime.strptime(trimmed, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=UTC)
 
 
-def _watch_once(docker_client, row, conn, stop_event: threading.Event, last_image_id: dict) -> None:
+def _watch_once(docker_client, row, conn, stop_event: threading.Event, last_image_id: dict, streams: dict) -> None:
     name = row["name"]
     container = docker_client.containers.get(name)
     image_id = container.image.id
@@ -132,23 +128,29 @@ def _watch_once(docker_client, row, conn, stop_event: threading.Event, last_imag
     pattern = re.compile(row["regex_override"]) if row["regex_override"] else DEFAULT_REGEX
     ring = RingBuffer()
 
-    for raw in container.logs(stream=True, follow=True, since=0):
-        if stop_event.is_set():
-            return
-        line = raw.decode(errors="replace").rstrip("\n")
-        if pattern.search(line):
-            fp = fingerprint(name, line)
-            excerpt = ring.capture(line, [])
-            process_event(conn, row, fp, excerpt, line, started_at)
-        ring.push(line)
+    stream = container.logs(stream=True, follow=True, since=0)
+    streams[name] = stream
+    try:
+        for raw in stream:
+            if stop_event.is_set():
+                return
+            line = raw.decode(errors="replace").rstrip("\n")
+            if pattern.search(line):
+                fp = fingerprint(name, line)
+                excerpt = ring.capture(line, [])
+                process_event(conn, row, fp, excerpt, line, started_at)
+            ring.push(line)
+    finally:
+        streams.pop(name, None)
 
 
 class WatcherManager:
     def __init__(self, docker_client=None):
-        self._docker = docker_client or docker.from_env(timeout=WATCHER_STREAM_TIMEOUT_SECONDS)
+        self._docker = docker_client or docker.from_env()
         self._tasks: dict[str, asyncio.Task] = {}
         self._stop_events: dict[str, threading.Event] = {}
         self._last_image_id: dict[str, str] = {}
+        self._streams: dict[str, object] = {}
         self._paused = False
 
     @property
@@ -178,9 +180,13 @@ class WatcherManager:
 
     def _cancel(self, name: str) -> None:
         self._stop_events[name].set()
+        stream = self._streams.get(name)
+        if stream is not None:
+            stream.close()
         self._tasks[name].cancel()
         del self._tasks[name]
         del self._stop_events[name]
+        self._streams.pop(name, None)
 
     async def _watch(self, row, stop_event: threading.Event) -> None:
         conn = db.get_conn()
@@ -188,7 +194,7 @@ class WatcherManager:
             while not stop_event.is_set():
                 try:
                     await asyncio.to_thread(
-                        _watch_once, self._docker, row, conn, stop_event, self._last_image_id
+                        _watch_once, self._docker, row, conn, stop_event, self._last_image_id, self._streams
                     )
                 except Exception:
                     logger.exception("watcher for %s crashed, reconnecting", row["name"])
