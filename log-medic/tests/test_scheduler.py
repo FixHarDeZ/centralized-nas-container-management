@@ -74,3 +74,4 @@ def test_setup_scheduler_registers_three_jobs(db_path):
     sched = scheduler.setup_scheduler(db_path)
     job_ids = {job.id for job in sched.get_jobs()}
     assert job_ids == {"daily_quota_reset", "breaker_auto_reset", "daily_digest"}
+    sched.shutdown(wait=False)

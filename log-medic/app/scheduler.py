@@ -48,4 +48,5 @@ def setup_scheduler(db_path: str | None = None) -> BackgroundScheduler:
     scheduler.add_job(_quota_reset_job, CronTrigger(hour=0, minute=0), id="daily_quota_reset", args=[db_path])
     scheduler.add_job(breaker_auto_reset_job, IntervalTrigger(minutes=30), id="breaker_auto_reset", args=[db_path])
     scheduler.add_job(daily_digest_job, CronTrigger(hour=18, minute=0), id="daily_digest", args=[db_path])
+    scheduler.start()
     return scheduler
