@@ -117,6 +117,8 @@ def run_fix(container_row, fingerprint: str, analysis: dict, workspace_dir: str)
 
     if reason:
         subprocess.run(["git", "checkout", "-B", "main", "origin/main"], cwd=workspace_dir, check=True)
+        subprocess.run(["git", "reset", "--hard", "origin/main"], cwd=workspace_dir, check=True)
+        subprocess.run(["git", "clean", "-fd"], cwd=workspace_dir, check=True)
         subprocess.run(["git", "branch", "-D", branch], cwd=workspace_dir, check=True)
         notify(f"🚫 Fix rejected for {name} (fingerprint {fingerprint}): {reason}")
         return None

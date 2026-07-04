@@ -1,3 +1,4 @@
+import subprocess
 from unittest.mock import MagicMock, patch
 
 
@@ -144,3 +145,42 @@ def test_run_fix_rejects_empty_diff(mock_run, mock_notify):
     calls = [c.args[0] for c in mock_run.call_args_list]
     assert not any(c[:2] == ["gh", "pr"] for c in calls)
     assert ["git", "checkout", "-B", "main", "origin/main"] in calls
+
+
+def test_rejection_cleanup_sequence_leaves_working_tree_clean(tmp_path):
+    """Real-git integration test: proves checkout -B / reset --hard / clean -fd
+    actually leaves a clean working tree after a no-op branch cut, which is the
+    exact scenario check_dirty_repo's `git status --porcelain` trips on.
+
+    No subprocess mocking here on purpose -- mocked-subprocess tests only prove
+    the commands were *called*, not that they clean the tree, which is how the
+    original bug slipped past the prior fix round's tests.
+    """
+    repo_dir = str(tmp_path)
+
+    def run(args):
+        subprocess.run(args, cwd=repo_dir, check=True, capture_output=True, text=True)
+
+    run(["git", "init", "-b", "main"])
+    run(["git", "config", "user.email", "test@example.com"])
+    run(["git", "config", "user.name", "Test"])
+    (tmp_path / "a.txt").write_text("original\n")
+    run(["git", "add", "-A"])
+    run(["git", "commit", "-m", "init"])
+
+    # Fix branch cut from main with zero commits (mirrors a fix branch cut
+    # from origin/main that Claude never committed to before rejection).
+    run(["git", "checkout", "-b", "fix/test"])
+    (tmp_path / "a.txt").write_text("claude edited this\n")  # dirty tracked file
+    (tmp_path / "b.txt").write_text("new file\n")  # untracked file
+
+    # The cleanup sequence under test.
+    run(["git", "checkout", "-B", "main", "main"])
+    run(["git", "reset", "--hard", "main"])
+    run(["git", "clean", "-fd"])
+    run(["git", "branch", "-D", "fix/test"])
+
+    status = subprocess.run(
+        ["git", "status", "--porcelain"], cwd=repo_dir, capture_output=True, text=True
+    ).stdout.strip()
+    assert status == ""
