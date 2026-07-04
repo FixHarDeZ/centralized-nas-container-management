@@ -106,10 +106,18 @@ def run_fix(container_row, fingerprint: str, analysis: dict, workspace_dir: str)
     )
 
     forbidden_hit = any(FORBIDDEN_FIX_FILES.search(f) for f in changed_files)
-    if forbidden_hit or diff_lines > MAX_DIFF_LINES:
-        subprocess.run(["git", "checkout", "origin/main"], cwd=workspace_dir)
-        subprocess.run(["git", "branch", "-D", branch], cwd=workspace_dir)
-        reason = "touched a forbidden file" if forbidden_hit else f"diff too large ({diff_lines} lines)"
+    if not changed_files:
+        reason = "claude produced no changes"
+    elif forbidden_hit:
+        reason = "touched a forbidden file"
+    elif diff_lines > MAX_DIFF_LINES:
+        reason = f"diff too large ({diff_lines} lines)"
+    else:
+        reason = None
+
+    if reason:
+        subprocess.run(["git", "checkout", "-B", "main", "origin/main"], cwd=workspace_dir, check=True)
+        subprocess.run(["git", "branch", "-D", branch], cwd=workspace_dir, check=True)
         notify(f"🚫 Fix rejected for {name} (fingerprint {fingerprint}): {reason}")
         return None
 
@@ -137,4 +145,5 @@ def run_fix(container_row, fingerprint: str, analysis: dict, workspace_dir: str)
         text=True,
         check=True,
     )
+    subprocess.run(["git", "checkout", "-B", "main", "origin/main"], cwd=workspace_dir, check=True)
     return result.stdout.strip()

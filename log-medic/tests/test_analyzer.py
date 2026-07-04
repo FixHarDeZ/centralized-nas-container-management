@@ -67,6 +67,7 @@ def test_run_fix_happy_path_creates_pr(mock_run, mock_notify):
     calls = [c.args[0] for c in mock_run.call_args_list]
     assert ["git", "fetch", "origin"] in calls
     assert any(c[:3] == ["git", "checkout", "-b"] and c[3] == "fix/fp123" for c in calls)
+    assert ["git", "checkout", "-B", "main", "origin/main"] in calls
 
 
 @patch("app.analyzer.notify")
@@ -91,6 +92,7 @@ def test_run_fix_rejects_forbidden_file(mock_run, mock_notify):
     mock_notify.assert_called_once()
     calls = [c.args[0] for c in mock_run.call_args_list]
     assert not any(c[:2] == ["gh", "pr"] for c in calls)
+    assert ["git", "checkout", "-B", "main", "origin/main"] in calls
 
 
 @patch("app.analyzer.notify")
@@ -115,3 +117,30 @@ def test_run_fix_rejects_oversized_diff(mock_run, mock_notify):
     pr_url = analyzer.run_fix(row, "fp123", analysis, "/workspaces/r/torrentwatch")
     assert pr_url is None
     mock_notify.assert_called_once()
+    calls = [c.args[0] for c in mock_run.call_args_list]
+    assert ["git", "checkout", "-B", "main", "origin/main"] in calls
+
+
+@patch("app.analyzer.notify")
+@patch("subprocess.run")
+def test_run_fix_rejects_empty_diff(mock_run, mock_notify):
+    import app.analyzer as analyzer
+
+    def side_effect(args, **kwargs):
+        if args[:2] == ["git", "diff"] and "--name-only" in args:
+            return MagicMock(stdout="")
+        if args[:2] == ["git", "diff"] and "--stat" in args:
+            return MagicMock(stdout="")
+        if args == ["git", "diff"]:
+            return MagicMock(stdout="")
+        return MagicMock(stdout="")
+
+    mock_run.side_effect = side_effect
+    row = {"name": "torrentwatch", "repo": "/workspaces/r", "subdir": "torrentwatch"}
+    analysis = {"text": "root cause X", "excerpt": "ERROR boom"}
+    pr_url = analyzer.run_fix(row, "fp123", analysis, "/workspaces/r/torrentwatch")
+    assert pr_url is None
+    mock_notify.assert_called_once()
+    calls = [c.args[0] for c in mock_run.call_args_list]
+    assert not any(c[:2] == ["gh", "pr"] for c in calls)
+    assert ["git", "checkout", "-B", "main", "origin/main"] in calls
