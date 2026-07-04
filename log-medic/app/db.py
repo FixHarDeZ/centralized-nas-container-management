@@ -135,8 +135,8 @@ def record_event(
     now = now or _now_iso()
     if event_exists(conn, fingerprint, container):
         conn.execute(
-            "UPDATE events SET last_seen=?, count=count+1 WHERE fingerprint=? AND container=?",
-            (now, fingerprint, container),
+            "UPDATE events SET last_seen=?, count=count+1, status=?, gate_reason=? WHERE fingerprint=? AND container=?",
+            (now, status, gate_reason, fingerprint, container),
         )
     else:
         conn.execute(
