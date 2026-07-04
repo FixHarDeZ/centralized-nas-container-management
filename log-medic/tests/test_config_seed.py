@@ -52,3 +52,20 @@ def test_does_not_reseed_when_table_has_rows(conn, config_file):
     rows = db.list_monitored_containers(conn)
     assert len(rows) == 1
     assert rows[0]["name"] == "manual-add"
+
+
+def test_handles_empty_container_entry(conn, tmp_path):
+    import app.config_seed as config_seed
+    import app.db as db
+    cfg = {
+        "containers": {
+            "bare-container": None,  # Empty entry, parsed as None
+        }
+    }
+    path = tmp_path / "config.yaml"
+    path.write_text(yaml.dump(cfg))
+    config_seed.seed_from_config_if_empty(conn, str(path))
+    rows = {r["name"]: r for r in db.list_monitored_containers(conn)}
+    assert "bare-container" in rows
+    assert rows["bare-container"]["maturity"] == "dev"
+    assert rows["bare-container"]["notify_only"] == 0

@@ -16,6 +16,7 @@ def seed_from_config_if_empty(conn: sqlite3.Connection, config_path: str) -> Non
     with open(config_path) as f:
         cfg = yaml.safe_load(f) or {}
     for name, entry in (cfg.get("containers") or {}).items():
+        entry = entry or {}
         db.upsert_monitored_container(
             conn,
             name,
