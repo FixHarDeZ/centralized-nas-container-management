@@ -45,6 +45,9 @@ def analyze(container_row, fingerprint: str, excerpt: str) -> dict:
         text=True,
         timeout=PHASE1_TIMEOUT_SECONDS,
     )
+    if result.returncode != 0:
+        raise RuntimeError(f"claude analyze failed (exit {result.returncode}): {result.stderr[:500]}")
+
     try:
         payload = json.loads(result.stdout or "{}")
         text = payload.get("result", result.stdout.strip())

@@ -28,3 +28,15 @@ def test_analyze_invokes_claude_readonly_and_parses_json(mock_run):
     assert "-p" in args
     assert "Edit" not in " ".join(args)
     assert "Write" not in " ".join(args)
+
+
+@patch("subprocess.run")
+def test_analyze_raises_on_nonzero_returncode(mock_run):
+    import app.analyzer as analyzer
+    import pytest
+    mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="auth error")
+    row = {"name": "torrentwatch", "repo": "/workspaces/r", "subdir": "torrentwatch"}
+    with pytest.raises(RuntimeError) as exc_info:
+        analyzer.analyze(row, "fp123", "ERROR boom")
+    assert "claude analyze failed" in str(exc_info.value)
+    assert "exit 1" in str(exc_info.value)
