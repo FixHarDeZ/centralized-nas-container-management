@@ -1,15 +1,15 @@
+from __future__ import annotations
+
 import os
 import sqlite3
 import subprocess
 from datetime import UTC, datetime, timedelta
 
-from app.db import event_exists, get_today_quota
-
-GRACE_PERIOD_MINUTES = int(os.getenv("GRACE_PERIOD_MINUTES", "15"))
-COOLDOWN_HOURS = int(os.getenv("COOLDOWN_HOURS", "6"))
-DAILY_QUOTA = int(os.getenv("DAILY_QUOTA", "50"))
-STORM_THRESHOLD_PER_HOUR = int(os.getenv("STORM_THRESHOLD_PER_HOUR", "10"))
-REPO_IDLE_HOURS = int(os.getenv("REPO_IDLE_HOURS", "24"))
+GRACE_PERIOD_MINUTES = int(os.environ.get("GRACE_PERIOD_MINUTES", "20"))
+COOLDOWN_HOURS = int(os.environ.get("COOLDOWN_HOURS", "6"))
+DAILY_QUOTA = int(os.environ.get("DAILY_QUOTA", "5"))
+STORM_THRESHOLD_PER_HOUR = int(os.environ.get("STORM_THRESHOLD_PER_HOUR", "10"))
+REPO_IDLE_HOURS = int(os.environ.get("REPO_IDLE_HOURS", "2"))
 
 
 def in_grace_period(started_at: datetime, now: datetime | None = None) -> bool:
@@ -66,63 +66,52 @@ def maybe_reset_breaker(conn: sqlite3.Connection, container: str, now: datetime 
 def in_cooldown(conn: sqlite3.Connection, fingerprint: str, container: str, now: datetime | None = None) -> bool:
     """Cooldown: suppress re-analysis of same fingerprint within N hours."""
     now = now or datetime.now(UTC)
-    if not event_exists(conn, fingerprint, container):
-        return False
     row = conn.execute(
-        "SELECT first_seen FROM events WHERE fingerprint=? AND container=?",
+        "SELECT last_seen FROM events WHERE fingerprint=? AND container=?",
         (fingerprint, container),
     ).fetchone()
     if not row:
         return False
-    first_seen = datetime.fromisoformat(row["first_seen"])
-    return (now - first_seen).total_seconds() < COOLDOWN_HOURS * 3600
+    last_seen = datetime.fromisoformat(row["last_seen"])
+    return now - last_seen < timedelta(hours=COOLDOWN_HOURS)
 
 
 def quota_exceeded(conn: sqlite3.Connection) -> bool:
     """Check if daily quota exceeded."""
-    return get_today_quota(conn) >= DAILY_QUOTA
+    from app import db
+
+    return db.get_today_quota(conn) >= DAILY_QUOTA
 
 
 def check_dirty_repo(workspace_dir: str, fingerprint: str, now: datetime | None = None) -> bool:
     """Check if repo is dirty (has uncommitted changes, recent commits, or active fix branch)."""
     now = now or datetime.now(UTC)
 
-    try:
-        status = subprocess.run(
-            ["git", "status", "--porcelain"], cwd=workspace_dir, capture_output=True, text=True, check=True
-        ).stdout.strip()
-        if status:
-            return True
-    except subprocess.CalledProcessError:
-        return False
+    status = subprocess.run(
+        ["git", "status", "--porcelain"], cwd=workspace_dir, capture_output=True, text=True, check=True
+    ).stdout
+    if status.strip():
+        return True
 
-    try:
-        branch = subprocess.run(
-            ["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=workspace_dir, capture_output=True, text=True, check=True
-        ).stdout.strip()
-        if branch != "main" and branch != "master":
-            return True
-    except subprocess.CalledProcessError:
-        return False
+    branch = subprocess.run(
+        ["git", "branch", "--show-current"], cwd=workspace_dir, capture_output=True, text=True, check=True
+    ).stdout.strip()
+    if branch not in ("main", "master"):
+        return True
 
-    try:
-        last_commit_ts = subprocess.run(
-            ["git", "log", "-1", "--format=%ct"], cwd=workspace_dir, capture_output=True, text=True, check=True
-        ).stdout.strip()
+    last_commit_ts = subprocess.run(
+        ["git", "log", "-1", "--format=%ct"], cwd=workspace_dir, capture_output=True, text=True, check=True
+    ).stdout.strip()
+    if last_commit_ts:
         last_commit_dt = datetime.fromtimestamp(int(last_commit_ts), tz=UTC)
-        if (now - last_commit_dt) < timedelta(hours=REPO_IDLE_HOURS):
+        if now - last_commit_dt < timedelta(hours=REPO_IDLE_HOURS):
             return True
-    except subprocess.CalledProcessError:
-        return False
 
-    try:
-        branches = subprocess.run(
-            ["git", "branch", "-a"], cwd=workspace_dir, capture_output=True, text=True, check=True
-        ).stdout
-        if f"fix/{fingerprint}" in branches:
-            return True
-    except subprocess.CalledProcessError:
-        pass
+    branches = subprocess.run(
+        ["git", "branch", "-a"], cwd=workspace_dir, capture_output=True, text=True, check=True
+    ).stdout
+    if f"fix/{fingerprint}" in branches:
+        return True
 
     return False
 

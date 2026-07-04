@@ -67,6 +67,18 @@ def test_cooldown(conn, monkeypatch):
     assert gate.in_cooldown(conn, "fp2", "c1", now=now) is False
 
 
+def test_cooldown_anchored_to_last_seen_not_first_seen(conn, monkeypatch):
+    monkeypatch.setenv("COOLDOWN_HOURS", "6")
+    import importlib
+    import app.gate as gate
+    import app.db as db
+    importlib.reload(gate)
+    now = datetime.now(UTC)
+    db.record_event(conn, "fp1", "c1", status="new", now=(now - timedelta(hours=7)).isoformat())
+    db.record_event(conn, "fp1", "c1", status="new", now=(now - timedelta(hours=1)).isoformat())
+    assert gate.in_cooldown(conn, "fp1", "c1", now=now) is True
+
+
 def test_quota_exceeded(conn, monkeypatch):
     monkeypatch.setenv("DAILY_QUOTA", "2")
     import importlib
