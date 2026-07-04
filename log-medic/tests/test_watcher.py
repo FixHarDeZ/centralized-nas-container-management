@@ -1,5 +1,6 @@
 import os
 import tempfile
+import threading
 from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
@@ -136,3 +137,64 @@ def test_watcher_manager_reload_starts_and_cancels_tasks(conn):
             t.cancel()
 
     asyncio.run(run())
+
+
+def _make_mock_container(image_id: str, started_at_iso: str):
+    container = MagicMock()
+    container.image.id = image_id
+    container.attrs = {"State": {"StartedAt": started_at_iso}}
+    container.logs.return_value = [b"ERROR boom"]
+    return container
+
+
+def test_watch_once_preserves_real_started_at_on_first_attach_and_unchanged_image(conn, monkeypatch):
+    import app.watcher as watcher
+
+    process_event_mock = MagicMock()
+    monkeypatch.setattr(watcher, "process_event", process_event_mock)
+
+    started_at_iso = "2020-01-01T00:00:00.000000000Z"
+    real_started_at = watcher._parse_started_at(started_at_iso)
+
+    docker_client = MagicMock()
+    row = {"name": "x", "regex_override": None}
+    stop_event = threading.Event()
+    last_image_id: dict = {}
+
+    # first attach: name not yet in last_image_id -> real StartedAt kept, not reset
+    docker_client.containers.get.return_value = _make_mock_container("sha256:abc", started_at_iso)
+    watcher._watch_once(docker_client, row, conn, stop_event, last_image_id)
+    assert process_event_mock.call_args[0][5] == real_started_at
+
+    # second call, same image id already tracked -> still the real one, no spurious reset
+    process_event_mock.reset_mock()
+    docker_client.containers.get.return_value = _make_mock_container("sha256:abc", started_at_iso)
+    watcher._watch_once(docker_client, row, conn, stop_event, last_image_id)
+    assert process_event_mock.call_args[0][5] == real_started_at
+
+
+def test_watch_once_resets_started_at_on_genuine_image_change(conn, monkeypatch):
+    import app.watcher as watcher
+
+    process_event_mock = MagicMock()
+    monkeypatch.setattr(watcher, "process_event", process_event_mock)
+
+    started_at_iso = "2020-01-01T00:00:00.000000000Z"
+    docker_client = MagicMock()
+    row = {"name": "x", "regex_override": None}
+    stop_event = threading.Event()
+    last_image_id = {"x": "sha256:abc"}  # already tracked with a different image id
+
+    docker_client.containers.get.return_value = _make_mock_container("sha256:def", started_at_iso)
+    watcher._watch_once(docker_client, row, conn, stop_event, last_image_id)
+    called_started_at = process_event_mock.call_args[0][5]
+    assert abs((datetime.now(UTC) - called_started_at).total_seconds()) < 5
+
+
+def test_watcher_manager_default_docker_client_uses_bounded_timeout(monkeypatch):
+    import app.watcher as watcher
+
+    from_env_mock = MagicMock()
+    monkeypatch.setattr(watcher.docker, "from_env", from_env_mock)
+    watcher.WatcherManager()
+    from_env_mock.assert_called_once_with(timeout=watcher.WATCHER_STREAM_TIMEOUT_SECONDS)

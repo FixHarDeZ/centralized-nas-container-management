@@ -19,6 +19,10 @@ logger = logging.getLogger(__name__)
 
 RECONNECT_BACKOFF_SECONDS = 5
 HOT_RELOAD_INTERVAL_SECONDS = 30
+# ponytail: bounded stream timeout so cancelled watchers release their thread
+# within ~timeout s; per-container polling would be more precise but this
+# fits the existing reconnect-loop design.
+WATCHER_STREAM_TIMEOUT_SECONDS = 60
 
 DEFAULT_REGEX = re.compile(r"WARN|ERROR")
 
@@ -121,7 +125,7 @@ def _watch_once(docker_client, row, conn, stop_event: threading.Event, last_imag
     container = docker_client.containers.get(name)
     image_id = container.image.id
     started_at = _parse_started_at(container.attrs["State"]["StartedAt"])
-    if last_image_id.get(name) != image_id:
+    if name in last_image_id and last_image_id[name] != image_id:
         started_at = datetime.now(UTC)  # image change resets the grace-period clock
     last_image_id[name] = image_id
 
@@ -141,7 +145,7 @@ def _watch_once(docker_client, row, conn, stop_event: threading.Event, last_imag
 
 class WatcherManager:
     def __init__(self, docker_client=None):
-        self._docker = docker_client or docker.from_env()
+        self._docker = docker_client or docker.from_env(timeout=WATCHER_STREAM_TIMEOUT_SECONDS)
         self._tasks: dict[str, asyncio.Task] = {}
         self._stop_events: dict[str, threading.Event] = {}
         self._last_image_id: dict[str, str] = {}
