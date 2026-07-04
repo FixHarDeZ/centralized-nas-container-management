@@ -58,6 +58,12 @@ log-medic/
 
 The `/workspaces/<repo>/` clone is separate from the tar-deployed runtime tree used by `deploy.sh`. It is a fresh `git clone` of the GitHub remote, set up once during log-medic's own deploy, never recreated by the app. Analyzer runs `git fetch` before every use; never `git clone` at runtime.
 
+**Dockerfile:** base image needs `python3.12`, `git`, `gh` CLI, and Node.js + `@anthropic-ai/claude-code` (npm global install) so `claude -p` is invokable. `mem_limit: 2g` on the `log-medic` service.
+
+**Watcher resilience:** each container's asyncio task auto-reconnects on container restart; an exception in one container's task never crashes the process or other containers' tasks.
+
+**Log context capture:** on regex match, `watcher.py` keeps a per-container ring buffer and captures the triggering line plus 30 lines before and 10 lines after it — this excerpt is what gets fingerprinted for context and shown in notifications/analyzer prompts (fingerprint hash itself still uses only the normalized trigger line, see Data Model).
+
 ---
 
 ## Data Model (SQLite at `/data/log-medic.db`)
@@ -112,19 +118,26 @@ CREATE TABLE audit_log (
 
 ## Watch → Gate → Act Pipeline
 
-One asyncio task per monitored, unpaused container: `container.logs(stream=True, follow=True)` via `docker-py`, matched against the container's regex (or default `WARN|ERROR`) line by line. On match, fingerprint = `sha256(container + normalized_message)[:12]` (normalize: strip timestamps/numbers before hashing so transient values don't fragment the fingerprint).
+One asyncio task per monitored, unpaused container: `container.logs(stream=True, follow=True)` via `docker-py`, matched against the container's regex (or default `WARN|ERROR`) line by line. On match, fingerprint = `sha256(container + normalized_message)[:12]` (normalize before hashing: strip timestamps, UUIDs, bare numbers, hex addresses, memory addresses, and machine-specific paths, replacing each with a fixed placeholder token so transient values don't fragment the fingerprint).
 
 **Hot reload:** every 30s, poll `monitored_containers`; diff against the running task set; start tasks for newly added/unpaused containers, cancel tasks for removed/paused ones. No service restart.
 
+**Global pause** (`POST /api/watcher/pause` / `/resume`) is not a per-event gate — it controls whether watcher tasks run at all. While paused, no asyncio tasks are streaming logs, so no events are generated in the first place.
+
 **Gate order, checked in this sequence per matched event:**
-1. **Period check** — is the watcher globally paused? If so, drop (still counted nowhere, per spec: global pause means don't process).
-2. **Circuit breaker** — is this container's breaker tripped? If so, record event with `gate_reason=circuit_breaker`, skip Claude/Telegram.
-3. **Cooldown / quota** — if fingerprint seen within last 6h, bump `count`/`last_seen`, no re-analyze. Else if `daily_quota.analyzed_count >= 5`, record event with `gate_reason=quota`, send a short Telegram notice, skip analyze.
-4. **Dirty repo** — (stable/staging only, skipped for notify_only) if `/workspaces/<repo>` has uncommitted changes, record event with `gate_reason=dirty_repo`, notify, skip analyze.
+1. **Maturity** — `dev`-maturity containers are logged to `events` and nothing else; never reach any later gate or Claude/Telegram.
+2. **Grace period** — if the container started or its image ID changed less than `GRACE_PERIOD_MINUTES` (default 20) ago (checked via `docker inspect` `State.StartedAt` / image ID, not a stored table), record event with `gate_reason=grace_period`, skip analyze/notify. Avoids noise storms from expected restart-time logging.
+3. **Circuit breaker** — is this container's breaker tripped? If so, record event with `gate_reason=circuit_breaker`, skip Claude/Telegram.
+4. **Cooldown / quota** — if fingerprint seen within last `COOLDOWN_HOURS` (default 6h), bump `count`/`last_seen`, no re-analyze. Else if `daily_quota.analyzed_count >= DAILY_QUOTA` (default 5), record event with `gate_reason=quota`, send a short Telegram notice, skip analyze.
+5. **Dirty repo** — (stable/staging only, skipped for notify_only) checked against `/workspaces/<repo>`, any of these trips it (`gate_reason=dirty_repo`, notify, skip analyze):
+   - `git status --porcelain` is non-empty (uncommitted changes)
+   - current branch is not `main`/`master`
+   - last commit is newer than `REPO_IDLE_HOURS` (default 2h) — someone else is actively developing
+   - a `fix/<fingerprint>` branch for this exact fingerprint already exists (local or `origin`) — don't duplicate an open fix
 
-If none of the gates trip, proceed to analyzer phase 1 — except for `notify_only` containers (e.g. jellyfin, which have no `repo`/`subdir`), which skip phases 1 and 2 entirely and go straight to a Telegram notification containing the raw log excerpt. `maturity` is ignored when `notify_only=1`.
+If none of the gates trip, proceed to analyzer phase 1 — except for `notify_only` containers (e.g. jellyfin, which have no `repo`/`subdir`), which skip phases 1 and 2 entirely and go straight to a Telegram notification containing the raw log excerpt. `maturity` is ignored when `notify_only=1` (skips gate 1 and gate 5 too, since there's no repo to check).
 
-**Circuit breaker trigger:** >10 new fingerprints for one container within a rolling 1h window trips that container's breaker (per-container, not system-wide). While tripped: Claude/Telegram calls for that container are skipped; events still land in `events` table. A daily digest at 18:00 summarizes tripped containers' fingerprint counts via Telegram regardless of breaker state. Breaker auto-resets when 6h pass with no new fingerprint for that container (checked by APScheduler job).
+**Circuit breaker trigger:** >`STORM_THRESHOLD_PER_HOUR` (default 10) new fingerprints for one container within a rolling 1h window trips that container's breaker (per-container, not system-wide). While tripped: Claude/Telegram calls for that container are skipped; events still land in `events` table. A daily digest at 18:00 summarizes tripped containers' fingerprint counts via Telegram regardless of breaker state. Breaker auto-resets when 6h pass with no new fingerprint for that container (checked by APScheduler job).
 
 ---
 
@@ -142,17 +155,18 @@ Result stored in `events.analysis`, status set to `analyzed`.
 
 ## Analyzer Phase 2 — fix + PR (stable only)
 
-Only runs after phase 1 succeeds for a `stable`-maturity container. In the persistent clone:
-1. `git checkout -b log-medic/fix-<fingerprint>` off current `HEAD` (never touches `main` directly)
-2. Re-invoke `claude -p` with `allowedTools` including `Edit, Write` this phase only, using phase 1's analysis as context
-3. `git add -A && git commit`
-4. `git push origin log-medic/fix-<fingerprint>`
-5. `gh pr create` — PR body includes fingerprint, container, root cause, log excerpt
-6. Store `pr_url` in `events`, status `pr_opened`, Telegram notification with the PR link
+Gated by two independent switches, both required: container `maturity=stable`, AND system-wide env flag `ENABLE_FIX_RUNNER=true` (default `false` — the code path exists but is off until an operator opts in, regardless of any container's maturity). In the persistent clone:
+1. `git fetch origin && git checkout -b fix/<fingerprint> origin/main` (never touches `main` directly, always branches from a freshly-fetched `origin/main`)
+2. Re-invoke `claude -p` with `allowedTools` including `Edit, Write` this phase only, using phase 1's analysis as context. Prompt explicitly forbids editing `.env*`, `docker-compose*.yml`, `*.db` files and forbids running any `docker`/`docker compose` commands. No Bash tool at all this phase beyond what `git`/`gh` steps below need directly (not via Claude).
+3. **Safety check before commit:** inspect the working tree diff — if it touches any forbidden file (`.env*`, `docker-compose*.yml`, `*.db`) or exceeds 200 changed lines, abort: discard the branch, record `gate_reason=fix_rejected` on the event, send a Telegram notice explaining why, do not commit/push/PR.
+4. `git add -A && git commit`
+5. `git push origin fix/<fingerprint>`
+6. `gh pr create` with label `auto-fix` — PR body includes: log excerpt, root cause, what changed, how to test
+7. Store `pr_url` in `events`, status `pr_opened`, Telegram notification with the PR link
 
-No auto-merge, ever — a human merges or closes the PR. This is the only phase where Edit/Write tools are allowed, and only for `stable` containers.
+No auto-merge, ever — a human merges or closes the PR. This is the only phase where Edit/Write tools are allowed, and only for `stable` containers with `ENABLE_FIX_RUNNER=true`.
 
-`staging`-maturity containers stop after phase 1: Telegram gets the root cause, no branch/PR.
+`staging`-maturity containers (or `stable` with `ENABLE_FIX_RUNNER=false`) stop after phase 1: Telegram gets the root cause, no branch/PR.
 
 ---
 
@@ -200,6 +214,18 @@ Add to `secrets/vault.sops.yaml` under `stacks.log_medic`:
 
 ---
 
+## Configuration (literals, `.env` defaults)
+
+Non-secret tunables, set as `literals:` in `secrets.manifest.yaml` (overridable per-deploy in `.env`):
+- `ENABLE_FIX_RUNNER=false` — master kill switch for analyzer phase 2, see above
+- `DAILY_QUOTA=5` — max phase-1 analyses per day, system-wide
+- `COOLDOWN_HOURS=6` — per-fingerprint re-analyze suppression window
+- `GRACE_PERIOD_MINUTES=20` — mute analyze/notify this long after a container starts/restarts or its image changes
+- `STORM_THRESHOLD_PER_HOUR=10` — new fingerprints/hour that trips a container's circuit breaker
+- `REPO_IDLE_HOURS=2` — dirty-repo gate treats a repo as "someone's actively developing" if last commit is newer than this
+
+---
+
 ## Seed Config Example (`config.yaml`)
 
 ```yaml
@@ -223,7 +249,7 @@ containers:
 `maturity` meaning:
 - `dev` — log only, no Claude/Telegram call
 - `staging` — phase 1 analyze + Telegram notify, no code edit
-- `stable` — phase 1 + phase 2 (fix + PR, human-merged)
+- `stable` — phase 1 + phase 2 (fix + PR, human-merged) — phase 2 additionally requires `ENABLE_FIX_RUNNER=true`
 
 ---
 
@@ -232,6 +258,12 @@ containers:
 - `docker compose up -d --build` → `GET /health` returns 200
 - Add a temporary `log-medic-test` container (`alpine sh -c "echo 'ERROR: explosion'; sleep 2"`), confirm event lands in SQLite and Telegram fires
 - `dev`-maturity container throwing errors → event logged, zero Claude/Telegram calls made (verify against DB / mocked call count, not just absence of visible output)
+- Container within `GRACE_PERIOD_MINUTES` of a (simulated) restart → event logged with `gate_reason=grace_period`, no Claude/Telegram call
+- Dirty workspace (uncommitted change, or non-main branch, or stale last-commit, or existing `fix/<fp>` branch) → event logged with `gate_reason=dirty_repo` per condition, notified, no analyze
 - `staging`-maturity container with a fixable error → analyzer runs, `gate_reason` is NULL, Telegram message contains root cause, no PR created
-- `stable`-maturity container → PR opened during the analyzer run, `events.pr_url` populated, branch is not `main`
+- `stable`-maturity container with `ENABLE_FIX_RUNNER=true` → PR opened during the analyzer run, `events.pr_url` populated, branch is `fix/<fingerprint>` off `origin/main`, not `main` itself
+- `stable`-maturity container with `ENABLE_FIX_RUNNER=false` (default) → stops after phase 1 like `staging`, no branch/PR
 - Add a container via the dashboard dropdown → appears in `monitored_containers` and the watcher picks it up within 30s without a service restart
+- `GET /api/containers` without Basic Auth → 401
+
+**Implementation branch policy:** all log-medic implementation commits go on `feat/log-medic`, never pushed directly to `main`; merge to `main` only once the DoD above passes end-to-end on the NAS.
