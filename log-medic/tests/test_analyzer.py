@@ -94,6 +94,8 @@ def test_run_fix_rejects_forbidden_file(mock_run, mock_notify):
     calls = [c.args[0] for c in mock_run.call_args_list]
     assert not any(c[:2] == ["gh", "pr"] for c in calls)
     assert ["git", "checkout", "-B", "main", "origin/main"] in calls
+    assert ["git", "reset", "--hard", "origin/main"] in calls
+    assert ["git", "clean", "-fd"] in calls
 
 
 @patch("app.analyzer.notify")
@@ -120,6 +122,8 @@ def test_run_fix_rejects_oversized_diff(mock_run, mock_notify):
     mock_notify.assert_called_once()
     calls = [c.args[0] for c in mock_run.call_args_list]
     assert ["git", "checkout", "-B", "main", "origin/main"] in calls
+    assert ["git", "reset", "--hard", "origin/main"] in calls
+    assert ["git", "clean", "-fd"] in calls
 
 
 @patch("app.analyzer.notify")
@@ -145,6 +149,8 @@ def test_run_fix_rejects_empty_diff(mock_run, mock_notify):
     calls = [c.args[0] for c in mock_run.call_args_list]
     assert not any(c[:2] == ["gh", "pr"] for c in calls)
     assert ["git", "checkout", "-B", "main", "origin/main"] in calls
+    assert ["git", "reset", "--hard", "origin/main"] in calls
+    assert ["git", "clean", "-fd"] in calls
 
 
 def test_rejection_cleanup_sequence_leaves_working_tree_clean(tmp_path):
