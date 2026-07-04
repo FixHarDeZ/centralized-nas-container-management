@@ -1,0 +1,15 @@
+containers:
+  torrentwatch:
+    repo: /workspaces/centralized-nas-container-management
+    subdir: torrentwatch
+    maturity: stable
+  news-feed:
+    repo: /workspaces/centralized-nas-container-management
+    subdir: news-feed
+    maturity: stable
+  secretary:
+    repo: /workspaces/centralized-nas-container-management
+    subdir: secretary
+    maturity: staging
+  jellyfin:
+    notify_only: true
