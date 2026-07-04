@@ -48,13 +48,13 @@ log-medic/
 ```
 
 **Docker Compose:**
-- 1 service: `log-medic`
-- Volumes: `log_medic_data:/data` (bind to `/volume2/docker/log-medic/data/`), `/var/run/docker.sock:/var/run/docker.sock:ro`, `/volume2/docker/log-medic/workspaces:/workspaces` (persistent git clones, read-write)
-- Port: `15070:5070`
+- 2 services: `log-medic` (app) + `log-medic-nginx` (reverse proxy + Basic Auth), following the `friendly-reminder` pattern
+- `log-medic` volumes: `log_medic_data:/data` (bind to `/volume2/docker/log-medic/data/`), `/var/run/docker.sock:/var/run/docker.sock:ro`, `/volume2/docker/log-medic/workspaces:/workspaces` (persistent git clones, read-write)
+- `log-medic-nginx` mounts `nginx/nginx.conf` + `nginx/.htpasswd` (generated via `htpasswd -c`, credentials from vault), proxies to `log-medic:5070`, enforces `auth_basic` on `/` and `/api/*`
+- Port: `15070` exposed on the nginx service, `log-medic` itself not host-published
 - `env_file: .env`
 - `restart: unless-stopped`
 - `TZ: Asia/Bangkok`
-- Basic Auth on dashboard + `/api/*` (nginx sidecar or in-app, following existing repo pattern — decide at implementation time based on how torrentwatch/friendly-reminder do it)
 
 The `/workspaces/<repo>/` clone is separate from the tar-deployed runtime tree used by `deploy.sh`. It is a fresh `git clone` of the GitHub remote, set up once during log-medic's own deploy, never recreated by the app. Analyzer runs `git fetch` before every use; never `git clone` at runtime.
 
@@ -67,7 +67,7 @@ CREATE TABLE monitored_containers (
     name            TEXT PRIMARY KEY,
     repo            TEXT,             -- e.g. /workspaces/centralized-nas-container-management, NULL if notify_only
     subdir          TEXT,             -- e.g. torrentwatch
-    maturity        TEXT NOT NULL,    -- dev | staging | stable
+    maturity        TEXT NOT NULL DEFAULT 'dev', -- dev | staging | stable; ignored when notify_only=1
     notify_only     INTEGER NOT NULL DEFAULT 0,
     paused          INTEGER NOT NULL DEFAULT 0,
     regex_override  TEXT,             -- NULL = default WARN|ERROR regex
@@ -122,7 +122,7 @@ One asyncio task per monitored, unpaused container: `container.logs(stream=True,
 3. **Cooldown / quota** — if fingerprint seen within last 6h, bump `count`/`last_seen`, no re-analyze. Else if `daily_quota.analyzed_count >= 5`, record event with `gate_reason=quota`, send a short Telegram notice, skip analyze.
 4. **Dirty repo** — (stable/staging only, skipped for notify_only) if `/workspaces/<repo>` has uncommitted changes, record event with `gate_reason=dirty_repo`, notify, skip analyze.
 
-If none of the gates trip, proceed to analyzer phase 1.
+If none of the gates trip, proceed to analyzer phase 1 — except for `notify_only` containers (e.g. jellyfin, which have no `repo`/`subdir`), which skip phases 1 and 2 entirely and go straight to a Telegram notification containing the raw log excerpt. `maturity` is ignored when `notify_only=1`.
 
 **Circuit breaker trigger:** >10 new fingerprints for one container within a rolling 1h window trips that container's breaker (per-container, not system-wide). While tripped: Claude/Telegram calls for that container are skipped; events still land in `events` table. A daily digest at 18:00 summarizes tripped containers' fingerprint counts via Telegram regardless of breaker state. Breaker auto-resets when 6h pass with no new fingerprint for that container (checked by APScheduler job).
 
@@ -172,7 +172,7 @@ No auto-merge, ever — a human merges or closes the PR. This is the only phase 
 
 Every mutating call writes a row to `audit_log` (ts, action, payload).
 
-**Security:** dashboard and all `/api/*` routes require HTTP Basic Auth (`DASHBOARD_USER`/`DASHBOARD_PASSWORD` from `.env`). This container holds a read-only docker socket and a GitHub PAT with repo push access — credential leak means repo compromise, so auth is non-negotiable even on the internal network.
+**Security:** enforced at the nginx layer (`auth_basic` + `.htpasswd`, credentials from vault `stacks.log_medic.dashboard.{user,password}`) in front of both the dashboard and `/api/*`. This container holds a read-only docker socket and a GitHub PAT with repo push access — credential leak means repo compromise, so auth is non-negotiable even on the internal network.
 
 ---
 
