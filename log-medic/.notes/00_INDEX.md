@@ -9,3 +9,12 @@
 ## Modules (as of Task 6)
 - `app/watcher.py`: `DEFAULT_REGEX`/`normalize_message`/`fingerprint`/`RingBuffer` (Task 4) + `process_event()` (gate/notify/analyze/fix routing), `WatcherManager` (hot-reload: `.reload(conn)` diffs `db.list_monitored_containers` against running asyncio tasks, `.pause()`/`.resume()`/`.is_paused`), `_watch_once()` (blocking docker-py log stream, run via `asyncio.to_thread`).
 - Requires `docker==7.1.0` (already in `requirements.txt`) — not preinstalled in the workstation's global Python env; had to `pip install --break-system-packages docker==7.1.0` locally to run tests.
+
+## Schema
+See `app/db.py` — `monitored_containers`, `events`, `daily_quota`, `circuit_breaker`, `audit_log`.
+
+## API
+`GET/POST /api/containers`, `PATCH/DELETE /api/containers/{name}`, `GET /api/events`,
+`POST /api/watcher/{pause,resume}`, `GET /health`. All behind nginx Basic Auth except
+health (also behind auth per spec — no public exception for log-medic, unlike
+friendly-reminder's LINE webhook).

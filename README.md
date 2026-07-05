@@ -10,6 +10,7 @@ Docker stacks for Synology DS925+ NAS, managed via Synology Container Manager.
 |---|---|---|---|
 | `homepage/` | Dashboard UI (gethomepage/homepage) | `3000` (Nginx + HTTPS inside) | `https://…:443` |
 | `jellyfin/` | Media server with NVIDIA GPU transcoding | `8096` | `https://…:18096` |
+| `log-medic/` | Docker log monitor — Claude-powered root-cause analysis + auto-fix PRs | `5070` | `https://…:15070` |
 | `maid-tracker/` | Household worker attendance & salary tracker | `5055` | `https://…:15055` |
 | `portainer/` | Docker management UI | `9000` | `https://…:19000` |
 | `uptime-kuma/` | Service health monitor | `3001` | `https://…:13001` |
