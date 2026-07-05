@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS events (
     gate_reason TEXT,
     analysis TEXT,
     pr_url TEXT,
+    verdict TEXT,
     PRIMARY KEY (fingerprint, container)
 );
 
@@ -62,6 +63,12 @@ def get_conn(db_path: str | None = None) -> sqlite3.Connection:
 
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(_SCHEMA)
+    # Migration: v1 DBs lack events.verdict. TABLE NOT EXISTS skips existing tables,
+    # so ALTER explicitly; swallow duplicate column error.
+    try:
+        conn.execute("ALTER TABLE events ADD COLUMN verdict TEXT")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
     conn.commit()
 
 
@@ -158,16 +165,18 @@ def update_event_status(
     gate_reason: str | None = None,
     analysis: str | None = None,
     pr_url: str | None = None,
+    verdict: str | None = None,
 ) -> None:
     conn.execute(
         """
         UPDATE events SET status=?,
         gate_reason=COALESCE(?, gate_reason),
         analysis=COALESCE(?, analysis),
-        pr_url=COALESCE(?, pr_url)
+        pr_url=COALESCE(?, pr_url),
+        verdict=COALESCE(?, verdict)
         WHERE fingerprint=? AND container=?
         """,
-        (status, gate_reason, analysis, pr_url, fingerprint, container),
+        (status, gate_reason, analysis, pr_url, verdict, fingerprint, container),
     )
     conn.commit()
 
@@ -182,6 +191,12 @@ def get_recent_events(
         ).fetchall()
     return conn.execute(
         "SELECT * FROM events ORDER BY last_seen DESC LIMIT ?", (limit,)
+    ).fetchall()
+
+
+def get_events_by_status(conn: sqlite3.Connection, status: str) -> list[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM events WHERE status=?", (status,)
     ).fetchall()
 
 
