@@ -119,6 +119,47 @@ def test_process_event_proceeds_to_analyze_and_notifies(conn, monkeypatch):
     assert notify_mock.called
 
 
+def test_process_event_infra_verdict_skips_fix_runner_on_stable(conn, monkeypatch):
+    import app.watcher as watcher
+    monkeypatch.setattr(watcher.gate, "evaluate", lambda *a, **k: None)
+    monkeypatch.setattr(watcher.gate, "maybe_trip_breaker", lambda *a, **k: None)
+    notify_mock = MagicMock()
+    monkeypatch.setattr(watcher, "notify", notify_mock)
+    monkeypatch.setattr(watcher.analyzer, "analyze", lambda *a, **k: {"text": "upstream 503", "excerpt": "E", "verdict": "infra"})
+    run_fix_mock = MagicMock()
+    monkeypatch.setattr(watcher.analyzer, "run_fix", run_fix_mock)
+    monkeypatch.setenv("ENABLE_FIX_RUNNER", "true")
+    row = {"name": "x", "notify_only": 0, "maturity": "stable", "repo": "/workspaces/r", "subdir": "sub"}
+    watcher.process_event(conn, row, "fp1", "excerpt", "ERROR boom", datetime.now(UTC))
+    run_fix_mock.assert_not_called()
+    import app.db as db
+    events = db.get_recent_events(conn)
+    assert events[0]["status"] == "analyzed"
+    assert events[0]["verdict"] == "infra"
+    assert "🌐 infra" in notify_mock.call_args_list[0].args[0]
+
+
+def test_process_event_code_verdict_runs_fix_on_stable(conn, monkeypatch):
+    import app.watcher as watcher
+    monkeypatch.setattr(watcher.gate, "evaluate", lambda *a, **k: None)
+    monkeypatch.setattr(watcher.gate, "maybe_trip_breaker", lambda *a, **k: None)
+    notify_mock = MagicMock()
+    monkeypatch.setattr(watcher, "notify", notify_mock)
+    monkeypatch.setattr(watcher.analyzer, "analyze", lambda *a, **k: {"text": "bad regex", "excerpt": "E", "verdict": "code"})
+    run_fix_mock = MagicMock(return_value="https://github.com/o/r/pull/7")
+    monkeypatch.setattr(watcher.analyzer, "run_fix", run_fix_mock)
+    monkeypatch.setenv("ENABLE_FIX_RUNNER", "true")
+    row = {"name": "x", "notify_only": 0, "maturity": "stable", "repo": "/workspaces/r", "subdir": "sub"}
+    watcher.process_event(conn, row, "fp2", "excerpt", "ERROR boom", datetime.now(UTC))
+    run_fix_mock.assert_called_once()
+    import app.db as db
+    events = db.get_recent_events(conn)
+    assert events[0]["status"] == "pr_opened"
+    assert events[0]["verdict"] == "code"
+    assert events[0]["pr_url"] == "https://github.com/o/r/pull/7"
+    assert "🐛 code" in notify_mock.call_args_list[0].args[0]
+
+
 def test_watcher_manager_reload_starts_and_cancels_tasks(conn):
     import asyncio
 
