@@ -113,11 +113,12 @@ COL_TITLE = 2  # <td width="900"> → <a href="details.php?id=X&hashinfo=Y"><b>t
 COL_FREE = 3  # ฟรี — free-leech percent ("100%" / "50%" / "No")
 COL_MULTIPLIER = 4  # คูณ — upload multiplier ("x6" / "No")
 COL_FILES = 5  # ไฟล์ — plain number
-COL_DATE = 7  # <nobr>DD-MM-YYYY<BR>HH:MM:SS</nobr>
-COL_SIZE = 8  # ขนาด — "2.63 GB" / "380.60 MB"
-COL_COMPLETED = 9  # ดาวน์โหลดเสร็จ — completed/snatched count
-COL_SEEDS = 10  # ปล่อย — <span class="green|red">N</span> or plain number
-COL_LEECHES = 11  # ดูด — plain number (may be inside <b><a>N</a></b>)
+COL_DATE = 6  # <nobr>DD-MM-YYYY<BR>HH:MM:SS</nobr>
+COL_SIZE = 7  # ขนาด — "2.63 GB" / "380.60 MB"
+COL_COMPLETED = 8  # เสร็จ — completed/snatched count
+COL_SEEDS = 9  # ปล่อย — <span class="green|red">N</span> or plain number
+COL_LEECHES = 10  # ดูด — plain number (may be inside <b><a>N</a></b>)
+# col 11 = ผู้ปล่อยไฟล์ (uploader name) — unused, new as of 2026-07-05
 
 # Download URL constructed from site_id (id= param in details.php URL)
 # Adjust if the server returns 403/redirect — may need dl.php or downloadlink.php

@@ -1,5 +1,21 @@
 # TorrentWatch — Daily Log
 
+## 2026-07-05 — Fix: card size badge showed "N คน" instead of file size
+
+**อาการ:** thumbnail overlay badge โชว์ "0คน"/"45คน" แทนขนาดไฟล์ (GB/MB)
+
+**Root cause (probe live บน NAS ผ่าน authed scraper session — sandbox บล็อก bearbit):** bearbit เพิ่มคอลัมน์ `ผู้ปล่อยไฟล์` (uploader) ต่อท้าย table แล้วดันทุกคอลัมน์ตั้งแต่ `วันลง` เป็นต้นไปเลื่อนซ้าย 1 ช่อง (col 6→11 แทน 7→11 เดิม) — `COL_SIZE` เดิม (8) จริงๆ ชี้ไปที่ col `เสร็จ` ("N คน" = completed count) แทน `ขนาด`, ส่งผลกระทบ `COL_COMPLETED`/`COL_SEEDS`/`COL_LEECHES` ด้วยเช่นกัน (ผิดทั้งชุด ไม่ใช่แค่ size)
+
+**Fix (`scraper.py`):** เลื่อนค่าคงที่ `COL_DATE/COL_SIZE/COL_COMPLETED/COL_SEEDS/COL_LEECHES` ลง 1 (7→6, 8→7, 9→8, 10→9, 11→10) ที่จุดเดียว — แก้ root cause ครอบทั้ง 4 field พร้อมกัน ไม่ใช่ patch เฉพาะ size
+
+**Verify:** probe script (`docker exec` python ยิง `viewbrsb.php` ผ่าน authed session) ยืนยัน column header ตรงกับ index ใหม่ + trigger manual scrape (`scheduler.trigger_now()` ตรงๆ ในคอนเทนเนอร์ ข้าม nginx basic auth) → 47 entries รีเฟรช → user ยืนยัน dashboard โชว์ขนาดไฟล์ถูกแล้ว
+
+**Gotcha ใหม่:**
+- Synology sshd ไม่รองรับ scp subsystem — ใช้ `ssh nas "cat > file" < local_file` แทน
+- `sudo` ผ่าน SSH ต้อง `-t` (allocate pty) ไม่งั้น "a terminal is required to read the password" แม้ pipe password เข้า stdin ก็ตาม (harness ไม่มี real TTY — ต้องส่งคำสั่งให้ user รันเองผ่าน `!`)
+- container internal `localhost:5070` HTTP call จาก `docker exec` python เจอ `OSError: Cannot assign requested address` — เลี่ยงด้วยเรียก `scheduler.trigger_now()` ตรงๆ แทนยิง HTTP เข้าตัวเอง
+- Non-fatal bug พบระหว่างทาง (ไม่ได้แก้ ไม่อยู่ใน scope): `sync_stickies error: 'sqlite3.Connection' object has no attribute 'rowcount'` ใน scheduler.py — sticky sync fail เงียบๆ ทุกรอบ scrape ที่มี sticky, ควรดูเพิ่มทีหลัง
+
 ## 2026-06-30 — Docker healthcheck
 - **Healthcheck** เพิ่มใน `docker-compose.yml` (service `torrentwatch`): stdlib urllib ยิง `GET http://localhost:8000/api/status` (public endpoint) `interval 30s / timeout 10s / retries 3 / start_period 30s`. Hung uvicorn → Docker auto-restart. Deploy + verified `(healthy)` บน NAS.
 - **⚠️ Regression แก้แล้ว:** PR #8 ลบ `torrentwatch/notify.py` ผิด (เข้าใจผิดว่า dead code). จริงๆ `line_notify.py` + `telegram_notify.py` ทำ `from notify import Notifier, LineCreds/TgCreds` (ดู INDEX banner) → **เป็น live dependency**. ตอน deploy รอดเพราะ build ใช้ cached `COPY` layer (ไฟล์ Jun 25 ยังอยู่ใน container) แต่ clean rebuild จะ ImportError. **Restore จาก git** (`git checkout b751a37 -- torrentwatch/notify.py`, identical กับ `shared/notify.py`). บทเรียน: เช็ค import ภายใน `line_notify`/`telegram_notify` เองด้วย ไม่ใช่ grep แล้ว filter ชื่อไฟล์ทิ้ง.

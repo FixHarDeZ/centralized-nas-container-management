@@ -148,12 +148,14 @@ COL_TITLE     = 2    # <a href="details.php?id=X&hashinfo=Y"><b>title</b></a>
 COL_FREE      = 3    # ฟรี — "100%"/"50%"/"No" → free_leech (keeps %-text, else "")
 COL_MULTIPLIER= 4    # คูณ — "x6"/"No" → multiplier (keeps xN, else "")
 COL_FILES     = 5    # file count
-COL_DATE      = 7    # <nobr>DD-MM-YYYY<BR>HH:MM:SS</nobr>
-COL_SIZE      = 8    # "2.63 GB" / "380.60 MB"
-COL_COMPLETED = 9    # completed/snatches count (best guess — verify via /api/debug/html)
-COL_SEEDS     = 10   # <span class="green|red">N</span>
-COL_LEECHES   = 11
+COL_DATE      = 6    # <nobr>DD-MM-YYYY<BR>HH:MM:SS</nobr>
+COL_SIZE      = 7    # "2.63 GB" / "380.60 MB"
+COL_COMPLETED = 8    # completed/snatches count ("N คน")
+COL_SEEDS     = 9    # <span class="green|red">N</span>
+COL_LEECHES   = 10
+# col 11 = ผู้ปล่อยไฟล์ (uploader name) — new col as of 2026-07-05, unused
 ```
+⚠️ **ทุกคอลัมน์ตั้งแต่ `วันลง` เลื่อนได้ทั้งชุดถ้า bearbit เพิ่ม/ลดคอลัมน์อีก** (เกิดแล้วรอบนี้ตอน 05-07-2026 — เพิ่ม uploader col ต่อท้าย ดันคอลัมน์ก่อนหน้าเลื่อนซ้าย 1) — ถ้าเจอ badge โชว์ค่าประหลาด (เช่น "N คน" แทนขนาดไฟล์) ให้ probe live ผ่าน authed session ก่อนแก้ (ดู `.notes/daily_log.md` 2026-07-05 สำหรับ probe script pattern)
 Download URL: ~~`download.php?id={site_id}`~~ **ตายแล้ว (404, มิ.ย. 2026)**. bearbit ย้ายไป `downloadnew.php?id=X&genid=..&dltm=..&dlt=<token>&filename=..` — token สดต่อ session → ต้อง `resolve_download_url(detail_url)` ดึงลิงก์จากหน้า detail ทุกครั้ง (stored `torrent_url` ใช้ไม่ได้แล้ว). **⚠️ Download gates (2 ชั้น, handle ใน `_fetch_via_gate`):** (1) **ad-gate interstitial** (ก.ค. 2026) — `downloadnew.php` คืนหน้า HTML countdown, ปุ่มจริง `a#bbDlBtn` href มี `&adok=1&adt=..`, server บังคับรอ ≥5 วิ (cookie `bb_vlast`) → sleep `AD_GATE_WAIT_S=7` แล้วยิงปุ่ม; (2) **inbox PM gate** — ถ้าไม่ใช่ ad-gate + ไม่ใช่ torrent → `GET /inbox.php` เคลียร์ unread แล้ว retry ครั้งเดียว. ⚠️ download ช้าลง ~7 วิ/ไฟล์
 
 ### Filter Logic
