@@ -190,3 +190,46 @@ def test_rejection_cleanup_sequence_leaves_working_tree_clean(tmp_path):
         ["git", "status", "--porcelain"], cwd=repo_dir, capture_output=True, text=True
     ).stdout.strip()
     assert status == ""
+
+
+def test_parse_verdict_code():
+    import app.analyzer as analyzer
+    verdict, text = analyzer.parse_verdict("VERDICT: code\nRoot cause: off-by-one in loop.")
+    assert verdict == "code"
+    assert text == "Root cause: off-by-one in loop."
+
+
+def test_parse_verdict_infra_case_insensitive():
+    import app.analyzer as analyzer
+    verdict, text = analyzer.parse_verdict("verdict: INFRA\nUpstream API returned 503.")
+    assert verdict == "infra"
+    assert text == "Upstream API returned 503."
+
+
+def test_parse_verdict_missing_defaults_to_infra():
+    import app.analyzer as analyzer
+    verdict, text = analyzer.parse_verdict("Root cause: something.")
+    assert verdict == "infra"
+    assert text == "Root cause: something."
+
+
+def test_parse_verdict_garbage_value_defaults_to_infra():
+    import app.analyzer as analyzer
+    verdict, text = analyzer.parse_verdict("VERDICT: maybe\nUnclear.")
+    assert verdict == "infra"
+    assert text == "VERDICT: maybe\nUnclear."
+
+
+def test_analyze_returns_verdict_key():
+    import app.analyzer as analyzer
+    with patch("subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(
+            stdout='VERDICT: code\nRoot cause: off-by-one in loop.',
+            returncode=0
+        )
+        row = {"name": "torrentwatch", "repo": "/workspaces/r", "subdir": "torrentwatch"}
+        result = analyzer.analyze(row, "fp123", "ERROR boom")
+        assert "verdict" in result
+        assert result["verdict"] == "code"
+        assert result["text"] == "Root cause: off-by-one in loop."
+        assert result["excerpt"] == "ERROR boom"

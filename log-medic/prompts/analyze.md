@@ -12,5 +12,16 @@ current code. Do NOT edit any files — this is read-only root-cause analysis.
 
 ## Task
 1. Identify the root cause of this error.
-2. Propose a fix as a description of the change (not an actual diff/patch).
-3. Respond concisely — a few sentences of root cause, followed by the proposed fix description.
+2. Classify root cause as:
+   - `code` — root cause lives in the service's source code in the repo; code change can fix it.
+   - `infra` — network failure, external API outage, rate limit, disk/permission problem, runtime configuration issue; code change cannot fix it.
+3. Propose a fix as a description of the change (not an actual diff/patch).
+4. Respond with **VERDICT line first**, then brief analysis.
+
+## Response format (mandatory)
+FIRST line of response exactly one of:
+
+VERDICT: code
+VERDICT: infra
+
+Followed by sentences on root cause, then proposed fix description.

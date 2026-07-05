@@ -14,6 +14,20 @@ PHASE2_TIMEOUT_SECONDS = 900
 FORBIDDEN_FIX_FILES = re.compile(r"(^|/)(\.env\S*|docker-compose\S*\.ya?ml|\S+\.db)$")
 MAX_DIFF_LINES = 200
 
+_VERDICT_RE = re.compile(r"^\s*VERDICT:\s*(code|infra)\s*$", re.IGNORECASE)
+
+
+def parse_verdict(raw_text: str) -> tuple[str, str]:
+    """Extract mandatory VERDICT first line. Fail-safe: anything
+    unparseable defaults to 'infra' so malformed response never triggers fix
+    runner; in case of error, text returned untouched so notification shows it."""
+    first, _, rest = raw_text.partition("\n")
+    m = _VERDICT_RE.match(first)
+    if m:
+        return m.group(1).lower(), rest.strip()
+    return "infra", raw_text.strip()
+
+
 _FIX_PROMPT_TEMPLATE = """You are fixing a bug in `{container}` based on this root-cause analysis:
 
 {analysis}
@@ -68,7 +82,8 @@ def analyze(container_row, fingerprint: str, excerpt: str) -> dict:
         text = payload.get("result", result.stdout.strip())
     except json.JSONDecodeError:
         text = result.stdout.strip()
-    return {"text": text, "excerpt": excerpt}
+    verdict, text = parse_verdict(text)
+    return {"text": text, "excerpt": excerpt, "verdict": verdict}
 
 
 def run_fix(container_row, fingerprint: str, analysis: dict, workspace_dir: str) -> str | None:
