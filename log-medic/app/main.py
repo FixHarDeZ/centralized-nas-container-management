@@ -51,6 +51,10 @@ async def lifespan(app: FastAPI):
     yield
 
     reload_task.cancel()
+    try:
+        await reload_task
+    except asyncio.CancelledError:
+        pass
     sched.shutdown(wait=False)
 
 

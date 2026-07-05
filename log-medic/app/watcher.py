@@ -128,7 +128,7 @@ def _watch_once(docker_client, row, conn, stop_event: threading.Event, last_imag
     pattern = re.compile(row["regex_override"]) if row["regex_override"] else DEFAULT_REGEX
     ring = RingBuffer()
 
-    stream = container.logs(stream=True, follow=True, since=0)
+    stream = container.logs(stream=True, follow=True, tail=0)
     streams[name] = stream
     try:
         for raw in stream:
@@ -196,6 +196,9 @@ class WatcherManager:
                     await asyncio.to_thread(
                         _watch_once, self._docker, row, conn, stop_event, self._last_image_id, self._streams
                     )
+                # Broad catch: treats permanent errors (bad config, docker API incompatibility) the same as
+                # transient disconnects — retries forever either way. A `since=0` bug like this one hid
+                # silently until found in review; consider narrowing if this recurs.
                 except Exception:
                     logger.exception("watcher for %s crashed, reconnecting", row["name"])
                 await asyncio.sleep(RECONNECT_BACKOFF_SECONDS)
