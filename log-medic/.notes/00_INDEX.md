@@ -1,13 +1,17 @@
 # log-medic — Index
 
 ## Gaps / TODOs
+Code complete (all 13 plan tasks) and merged to `main` (commit `76e9c0d`), pushed to origin.
+Not yet deployed to NAS — remaining gaps are manual one-time setup only:
 - `nginx/.htpasswd` not generated yet — run `htpasswd -c log-medic/nginx/.htpasswd <user>` before first deploy (same manual step as `friendly-reminder`).
 - Vault keys not added yet — run `make edit-vault`, add `stacks.log_medic.dashboard.{user,password}` and `stacks.log_medic.github_token`.
 - `/volume2/docker/log-medic/workspaces/<repo>/` must be `git clone`d once manually on the NAS before first use — the app only ever runs `git fetch` there.
-- `app/analyzer.py` is currently a stub (`analyze`/`run_fix` both `raise NotImplementedError`) added in Task 6 only so `from app import analyzer` resolves for `watcher.py`. Tasks 7/8 must implement it for real — `watcher.process_event` will crash on any non-`dev`-maturity, non-gated event until then.
+- On-NAS Definition-of-Done run still pending: `docker compose up -d --build`, `/health` 200, temp container emitting `ERROR: explosion` → SQLite event + Telegram notify. Flagged by final review as a hard pre-real-use gate since the one bug found (`since=0` crash, fixed) only ever surfaces against a real docker-py socket, never against mocks.
 
-## Modules (as of Task 6)
-- `app/watcher.py`: `DEFAULT_REGEX`/`normalize_message`/`fingerprint`/`RingBuffer` (Task 4) + `process_event()` (gate/notify/analyze/fix routing), `WatcherManager` (hot-reload: `.reload(conn)` diffs `db.list_monitored_containers` against running asyncio tasks, `.pause()`/`.resume()`/`.is_paused`), `_watch_once()` (blocking docker-py log stream, run via `asyncio.to_thread`).
+## Modules (final, post-merge)
+- `app/watcher.py`: `DEFAULT_REGEX`/`normalize_message`/`fingerprint`/`RingBuffer` + `process_event()` (gate/notify/analyze/fix routing), `WatcherManager` (hot-reload: `.reload(conn)` diffs `db.list_monitored_containers` against running asyncio tasks, `.pause()`/`.resume()`/`.is_paused`), `_watch_once()` (blocking docker-py log stream via `container.logs(stream=True, follow=True, tail=0)`, run via `asyncio.to_thread`). Note: `tail=0`, not `since=0` — docker-py 7.1.0 rejects `since=0` (`InvalidArgument`), caught in final review.
+- `app/analyzer.py`: `analyze()` (phase 1, read-only root-cause via headless `claude -p`) + `run_fix()` (phase 2, branch/edit/diff-check/PR via `gh pr create` — never `pr merge`).
+- `app/scheduler.py`, `app/api/*`, `app/main.py`, `app/static/*`: scheduler jobs, REST API, FastAPI wiring + hot-reload loop, dashboard SPA — all implemented, reviewed, tested (45 tests passing).
 - Requires `docker==7.1.0` (already in `requirements.txt`) — not preinstalled in the workstation's global Python env; had to `pip install --break-system-packages docker==7.1.0` locally to run tests.
 
 ## Schema

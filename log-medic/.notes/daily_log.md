@@ -1,5 +1,23 @@
 # log-medic — Daily Log
 
+## 2026-07-05 — Final review, critical fix, merged to main
+Final whole-branch review (base a99e2c7..0c3878d, 23 commits) found one Critical:
+`watcher.py` called `container.logs(..., since=0)` — docker-py 7.1.0 requires
+`since > 0`, so `since=0` raised `InvalidArgument` on every call. The broad
+`except Exception` in `_watch` swallowed it and retried forever every 5s —
+watcher never streamed a single log line, silently. No test caught it since
+all watcher tests mock `docker_client`. Fixed: `since=0` → `tail=0` (commit
+`76e9c0d`), also fixes historical-backlog replay on restart as a side effect.
+Also added await+CancelledError guard on `reload_task.cancel()` in main.py's
+lifespan teardown, and a comment documenting the broad-except tradeoff in
+watcher.py. Re-review clean, 45/45 tests passing. Merged feat/log-medic →
+main (fast-forward), pushed to origin. Branch + worktree deleted.
+**Still pending before real deployment (manual, on NAS/workstation):**
+vault secrets (`stacks.log_medic.dashboard.{user,password}`,
+`stacks.log_medic.github_token`), `nginx/.htpasswd` generation, persistent
+git clone at `/volume2/docker/log-medic/workspaces/`, and the on-NAS DoD
+run (temp container emitting `ERROR: explosion` → SQLite event + Telegram).
+
 ## 2026-07-05 — Initial implementation complete (feat/log-medic)
 Built the full stack per docs/superpowers/plans/2026-07-04-log-medic-implementation.md:
 db schema, vendored notify.py, config.yaml seeding, fingerprint normalization +
