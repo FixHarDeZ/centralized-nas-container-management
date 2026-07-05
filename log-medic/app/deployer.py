@@ -52,7 +52,7 @@ def deploy(conn, container_row, fingerprint: str, pr_url: str, docker_client=Non
         return False
 
     repo_root = _workspace_repo_root(container_row)
-    stack_dir = os.path.join(STACKS_ROOT, name)
+    stack_dir = os.path.join(STACKS_ROOT, subdir)
     step = "sync_workspace"
     try:
         subprocess.run(["git", "fetch", "origin"], cwd=repo_root, check=True, capture_output=True, text=True)

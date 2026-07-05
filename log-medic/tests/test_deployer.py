@@ -97,6 +97,36 @@ def test_deploy_happy_path(mock_run, mock_copy, mock_notify, tmp_path):
 @patch("app.deployer.notify")
 @patch("app.deployer.copy_tracked_files", return_value=3)
 @patch("subprocess.run")
+def test_deploy_uses_subdir_not_name_for_stack_dir(mock_run, mock_copy, mock_notify, tmp_path):
+    """Regression: name and subdir can diverge (container name != repo path).
+    stack_dir / --project-directory must use subdir, not the container name."""
+    from app import db, deployer
+    conn = db.get_conn(str(tmp_path / "t.db"))
+    db.init_db(conn)
+    db.record_event(conn, "fp2b", "tw-container", status="merged")
+
+    mock_run.return_value = MagicMock(returncode=0, stdout="")
+    docker_client = MagicMock()
+    container = MagicMock()
+    container.attrs = {"State": {"Running": True}, "RestartCount": 0}
+    docker_client.containers.get.return_value = container
+
+    row = _row(name="tw-container", subdir="torrentwatch")
+    ok = deployer.deploy(conn, row, "fp2b", "https://github.com/o/r/pull/13",
+                         docker_client=docker_client, sleep=lambda s: None)
+    assert ok is True
+
+    assert mock_copy.call_args.args[1] == "torrentwatch"
+
+    calls = [c.args[0] for c in mock_run.call_args_list]
+    compose_call = next(c for c in calls if c[:3] == ["docker", "compose", "--project-directory"])
+    assert compose_call[3] == "/stacks/torrentwatch"
+    assert "/stacks/tw-container" not in compose_call
+
+
+@patch("app.deployer.notify")
+@patch("app.deployer.copy_tracked_files", return_value=3)
+@patch("subprocess.run")
 def test_deploy_compose_failure_marks_deploy_failed(mock_run, mock_copy, mock_notify, tmp_path):
     from app import db, deployer
     conn = db.get_conn(str(tmp_path / "t.db"))
