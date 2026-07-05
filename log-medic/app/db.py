@@ -196,7 +196,7 @@ def get_recent_events(
 
 def get_events_by_status(conn: sqlite3.Connection, status: str) -> list[sqlite3.Row]:
     return conn.execute(
-        "SELECT * FROM events WHERE status=?", (status,)
+        "SELECT * FROM events WHERE status=? ORDER BY last_seen DESC", (status,)
     ).fetchall()
 
 
