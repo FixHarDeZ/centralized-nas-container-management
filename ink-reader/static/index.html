@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ink-reader</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #14151a; color: #e8e8ea;
+         font-family: system-ui, sans-serif; }
+  header { display: flex; gap: .5rem; align-items: center; padding: .75rem 1rem;
+           position: sticky; top: 0; background: #1c1d24; flex-wrap: wrap; }
+  header h1 { font-size: 1.1rem; margin: 0 auto 0 0; }
+  #stats { width: 100%; font-size: .8rem; color: #9a9aa4; }
+  button, .tab { border: 0; border-radius: 8px; padding: .5rem .9rem;
+                 background: #2a2b34; color: #e8e8ea; font-size: .9rem; }
+  .tab.active { background: #4f6ef7; }
+  #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+          gap: .75rem; padding: .75rem; }
+  .card { background: #1c1d24; border-radius: 10px; overflow: hidden;
+          display: flex; flex-direction: column; }
+  .card img { width: 100%; aspect-ratio: 3/4; object-fit: cover; background: #000; }
+  .card .body { padding: .5rem; display: flex; flex-direction: column; gap: .3rem;
+                flex: 1; }
+  .card .title { font-size: .85rem; line-height: 1.25; word-break: break-word; }
+  .card .meta { font-size: .72rem; color: #9a9aa4; }
+  .card .exp { font-size: .72rem; color: #f7b84f; }
+  .card .kept-badge { font-size: .72rem; color: #6fe08a; }
+  .actions { display: flex; gap: .4rem; margin-top: auto; }
+  .actions button { flex: 1; padding: .45rem 0; font-size: 1rem; }
+  .keep { background: #24402b; }
+  .del { background: #40242a; }
+</style>
+</head>
+<body>
+<header>
+  <h1>📚 ink-reader</h1>
+  <button class="tab active" data-f="">ทั้งหมด</button>
+  <button class="tab" data-f="new">ใหม่</button>
+  <button class="tab" data-f="kept">เก็บแล้ว</button>
+  <button id="scrape">🔄 Scrape</button>
+  <div id="stats"></div>
+</header>
+<div id="grid"></div>
+<script>
+let filter = "";
+
+function fmtSize(b) {
+  if (!b) return "";
+  return b > 1048576 ? (b / 1048576).toFixed(1) + " MB" : (b / 1024 | 0) + " KB";
+}
+
+function daysLeft(iso) {
+  if (!iso) return null;
+  return Math.max(0, Math.ceil((new Date(iso) - Date.now()) / 86400000));
+}
+
+async function loadStats() {
+  const s = (await (await fetch("/api/status")).json());
+  const st = s.stats;
+  const last = s.last_scrape;
+  document.getElementById("stats").textContent =
+    `ใหม่ ${st.new.count} (${fmtSize(st.new.size)}) · เก็บ ${st.kept.count} ` +
+    `(${fmtSize(st.kept.size)})` +
+    (last ? ` · scrape ล่าสุด ${last.run_at}${last.error ? " ⚠️ " + last.error : ""}` : "");
+}
+
+async function load() {
+  const q = filter ? "?status=" + filter : "";
+  const data = await (await fetch("/api/titles" + q)).json();
+  const grid = document.getElementById("grid");
+  grid.innerHTML = "";
+  for (const t of data.titles) {
+    if (t.status === "deleted") continue;
+    const card = document.createElement("div");
+    card.className = "card";
+    const dl = daysLeft(t.expires_at);
+    card.innerHTML = `
+      <img src="/covers/${t.id}.jpg" loading="lazy" alt="">
+      <div class="body">
+        <div class="title">${t.title}</div>
+        <div class="meta">${t.pages} หน้า · ${fmtSize(t.file_size)}</div>
+        ${t.status === "kept"
+          ? `<div class="kept-badge">❤️ เก็บถาวร</div>`
+          : `<div class="exp">⏳ เหลือ ${dl} วัน</div>`}
+        <div class="actions">
+          ${t.status === "new" ? `<button class="keep" data-a="keep" data-id="${t.id}">❤️</button>` : ""}
+          <button class="del" data-a="delete" data-id="${t.id}">🗑</button>
+        </div>
+      </div>`;
+    grid.appendChild(card);
+  }
+  loadStats();
+}
+
+document.getElementById("grid").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-a]");
+  if (!btn) return;
+  if (btn.dataset.a === "delete" && !confirm("ลบเรื่องนี้ทิ้งถาวร?")) return;
+  await fetch(`/api/titles/${btn.dataset.id}/${btn.dataset.a}`, { method: "POST" });
+  load();
+});
+
+document.querySelectorAll(".tab").forEach((b) =>
+  b.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach((x) => x.classList.remove("active"));
+    b.classList.add("active");
+    filter = b.dataset.f;
+    load();
+  })
+);
+
+document.getElementById("scrape").addEventListener("click", async () => {
+  await fetch("/api/scrape", { method: "POST" });
+  alert("เริ่ม scrape แล้ว รอสักครู่แล้วรีเฟรช");
+});
+
+load();
+</script>
+</body>
+</html>
