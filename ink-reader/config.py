@@ -1,10 +1,13 @@
 import os
-import zoneinfo
 
-SITE_BASE_URL = os.environ.get("INK_SITE_BASE_URL", "https://example.com")
-USER_AGENT = os.environ.get("INK_USER_AGENT", "Mozilla/5.0 (X11; Linux x86_64)")
+SITE_BASE_URL = os.environ.get("INK_SITE_BASE_URL", "https://doujin-th.com")
+USER_AGENT = os.environ.get(
+    "INK_USER_AGENT",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+)
 
-DATA_DIR = os.path.join(os.environ.get("INK_DATA_DIR", "/data"), "ink-reader")
+DATA_DIR = os.environ.get("DATA_DIR", "/data")
 DB_PATH = os.path.join(DATA_DIR, "ink.db")
 LIBRARY_DIR = os.path.join(DATA_DIR, "library")
 COVERS_DIR = os.path.join(DATA_DIR, "covers")

@@ -2,29 +2,28 @@ import os
 import sqlite3
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-from typing import Optional
 
 import config
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS titles (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    slug TEXT UNIQUE NOT NULL,
-    title TEXT NOT NULL,
-    tags TEXT DEFAULT '',
-    pages INTEGER DEFAULT 0,
-    file_size INTEGER,
-    status TEXT NOT NULL DEFAULT 'new',
-    source_url TEXT DEFAULT '',
-    downloaded_at TEXT NOT NULL,
-    expires_at TEXT
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  slug TEXT UNIQUE NOT NULL,
+  title TEXT NOT NULL,
+  tags TEXT DEFAULT '',
+  pages INTEGER DEFAULT 0,
+  file_size INTEGER,
+  status TEXT NOT NULL DEFAULT 'new',
+  source_url TEXT DEFAULT '',
+  downloaded_at TEXT NOT NULL,
+  expires_at TEXT
 );
 CREATE TABLE IF NOT EXISTS scrape_log (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    run_at TEXT NOT NULL,
-    found INTEGER DEFAULT 0,
-    downloaded INTEGER DEFAULT 0,
-    error TEXT
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  run_at TEXT NOT NULL,
+  found INTEGER DEFAULT 0,
+  downloaded INTEGER DEFAULT 0,
+  error TEXT
 );
 """
 
@@ -64,28 +63,27 @@ def add_title(slug, title, tags, pages, file_size, source_url) -> int:
     ).isoformat(timespec="seconds")
     with _connect() as conn:
         cur = conn.execute(
-            "INSERT INTO titles (slug, title, tags, pages, file_size, status, source_url, downloaded_at, expires_at) "
-            "VALUES (?, ?, ?, ?, ?, 'new', ?, ?, ?)",
+            "INSERT INTO titles (slug, title, tags, pages, file_size, source_url,"
+            " downloaded_at, expires_at) VALUES (?,?,?,?,?,?,?,?)",
             (slug, title, tags, pages, file_size, source_url, now_iso(), expires),
         )
-        conn.commit()
         return cur.lastrowid
 
 
-def get_title(tid: int) -> Optional[dict]:
+def get_title(tid: int) -> dict | None:
     with _connect() as conn:
-        row = conn.execute("SELECT * FROM titles WHERE id = ?", (tid,)).fetchone()
+        row = conn.execute("SELECT * FROM titles WHERE id=?", (tid,)).fetchone()
         return dict(row) if row else None
 
 
-def list_titles(status: Optional[str] = None) -> list:
+def list_titles(status: str | None = None) -> list[dict]:
+    q = "SELECT * FROM titles"
+    args: tuple = ()
+    if status:
+        q += " WHERE status=?"
+        args = (status,)
+    q += " ORDER BY downloaded_at DESC, id DESC"
     with _connect() as conn:
-        q = "SELECT * FROM titles"
-        args = []
-        if status:
-            q += " WHERE status = ?"
-            args.append(status)
-        q += " ORDER BY downloaded_at DESC, id DESC"
         return [dict(r) for r in conn.execute(q, args)]
 
 
@@ -95,12 +93,11 @@ def keep_title(tid: int) -> bool:
             "UPDATE titles SET status='kept', expires_at=NULL WHERE id=? AND status='new'",
             (tid,),
         )
-        conn.commit()
         return cur.rowcount > 0
 
 
 def purge_title(tid: int) -> bool:
-    """Delete files on disk and tombstone row."""
+    """Delete files from disk and tombstone the row."""
     for p in (cbz_path(tid), cover_path(tid)):
         try:
             os.remove(p)
@@ -108,10 +105,10 @@ def purge_title(tid: int) -> bool:
             pass
     with _connect() as conn:
         cur = conn.execute(
-            "UPDATE titles SET status='deleted', expires_at=NULL, file_size=NULL WHERE id=? AND status != 'deleted'",
+            "UPDATE titles SET status='deleted', expires_at=NULL, file_size=NULL"
+            " WHERE id=? AND status != 'deleted'",
             (tid,),
         )
-        conn.commit()
         return cur.rowcount > 0
 
 
@@ -124,16 +121,15 @@ def expired_ids() -> list[int]:
         return [r["id"] for r in rows]
 
 
-def log_scrape(found: int, downloaded: int, error: Optional[str] = None):
+def log_scrape(found: int, downloaded: int, error: str | None = None):
     with _connect() as conn:
         conn.execute(
             "INSERT INTO scrape_log (run_at, found, downloaded, error) VALUES (?,?,?,?)",
             (now_iso(), found, downloaded, error),
         )
-        conn.commit()
 
 
-def last_scrape() -> Optional[dict]:
+def last_scrape() -> dict | None:
     with _connect() as conn:
         row = conn.execute(
             "SELECT * FROM scrape_log ORDER BY id DESC LIMIT 1"
@@ -144,6 +140,10 @@ def last_scrape() -> Optional[dict]:
 def stats() -> dict:
     with _connect() as conn:
         rows = conn.execute(
-            "SELECT status, COUNT(*) count, COALESCE(SUM(file_size),0) size FROM titles GROUP BY status"
+            "SELECT status, COUNT(*) AS count, COALESCE(SUM(file_size),0) AS size"
+            " FROM titles GROUP BY status"
         )
-        return {r["status"]: {"count": r["count"], "size": r["size"]} for r in rows}
+        out = {s: {"count": 0, "size": 0} for s in ("new", "kept", "deleted")}
+        for r in rows:
+            out[r["status"]] = {"count": r["count"], "size": r["size"]}
+        return out

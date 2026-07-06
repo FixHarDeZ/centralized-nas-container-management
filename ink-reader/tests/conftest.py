@@ -1,20 +1,19 @@
-import tempfile
 import os
-import shutil
+
 import pytest
 
 import config
+import db
 
 
 @pytest.fixture
-def data_dir():
-    d = tempfile.mkdtemp(prefix="ink_")
-    orig = config.DATA_DIR
-    config.DATA_DIR = d
-    config.LIBRARY_DIR = os.path.join(d, "library")
-    config.COVERS_DIR = os.path.join(d, "covers")
-    config.BACKUP_DIR = os.path.join(d, "backups")
-    config.DB_PATH = os.path.join(d, "ink.db")
-    yield d
-    shutil.rmtree(d)
-    config.DATA_DIR = orig
+def data_dir(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(config, "DB_PATH", str(tmp_path / "ink.db"))
+    monkeypatch.setattr(config, "LIBRARY_DIR", str(tmp_path / "library"))
+    monkeypatch.setattr(config, "COVERS_DIR", str(tmp_path / "covers"))
+    monkeypatch.setattr(config, "BACKUP_DIR", str(tmp_path / "backups"))
+    os.makedirs(config.LIBRARY_DIR)
+    os.makedirs(config.COVERS_DIR)
+    db.init_db()
+    return tmp_path
