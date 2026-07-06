@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 
 RECONNECT_BACKOFF_SECONDS = 5
 HOT_RELOAD_INTERVAL_SECONDS = 30
+NOT_FOUND_GIVE_UP_AFTER = 3
 
 DEFAULT_REGEX = re.compile(r"WARN|ERROR")
 
@@ -158,6 +159,7 @@ class WatcherManager:
         self._last_image_id: dict[str, str] = {}
         self._streams: dict[str, object] = {}
         self._paused = False
+        self._not_found_count: dict[str, int] = {}
 
     @property
     def is_paused(self) -> bool:
@@ -175,11 +177,18 @@ class WatcherManager:
                 self._cancel(name)
             return
         rows = {r["name"]: r for r in db.list_monitored_containers(conn) if not r["paused"]}
+        # Clean up finished tasks (e.g. watcher gave up after repeated NotFound)
+        for name in list(self._tasks):
+            if self._tasks[name].done():
+                del self._tasks[name]
+                self._stop_events.pop(name, None)
+                self._streams.pop(name, None)
         for name in list(self._tasks):
             if name not in rows:
                 self._cancel(name)
+                self._not_found_count.pop(name, None)  # reset when user removes container
         for name, row in rows.items():
-            if name not in self._tasks:
+            if name not in self._tasks and self._not_found_count.get(name, 0) < NOT_FOUND_GIVE_UP_AFTER:
                 stop_event = threading.Event()
                 self._stop_events[name] = stop_event
                 self._tasks[name] = asyncio.create_task(self._watch(row, stop_event))
@@ -196,19 +205,26 @@ class WatcherManager:
 
     async def _watch(self, row, stop_event: threading.Event) -> None:
         conn = db.get_conn()
+        name = row["name"]
         try:
             while not stop_event.is_set():
                 try:
                     await asyncio.to_thread(
                         _watch_once, self._docker, row, conn, stop_event, self._last_image_id, self._streams
                     )
+                    self._not_found_count.pop(name, None)  # reset on success
                 except docker.errors.NotFound:
-                    logger.warning("container %s not found, will retry", row["name"])
+                    self._not_found_count[name] = self._not_found_count.get(name, 0) + 1
+                    if self._not_found_count[name] >= NOT_FOUND_GIVE_UP_AFTER:
+                        logger.warning("container %s not found %d times, will not retry until restarted",
+                                       name, self._not_found_count[name])
+                        return
+                    logger.warning("container %s not found, will retry", name)
                 # Broad catch: treats permanent errors (bad config, docker API incompatibility) the same as
                 # transient disconnects — retries forever either way. A `since=0` bug like this one hid
                 # silently until found in review; consider narrowing if this recurs.
                 except Exception:
-                    logger.exception("watcher for %s crashed, reconnecting", row["name"])
+                    logger.exception("watcher for %s crashed, reconnecting", name)
                 await asyncio.sleep(RECONNECT_BACKOFF_SECONDS)
         finally:
             conn.close()

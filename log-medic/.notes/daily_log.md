@@ -1,7 +1,9 @@
 # log-medic — Daily Log
 
-## 2026-07-06 — Fix watcher crash loop for missing containers
-Watcher crashes endlessly when a monitored container doesn't exist in Docker (e.g. "secretary" removed but still in `monitored_containers` DB). `_watch()` broad `except Exception` catch logged full traceback "crashed, reconnecting" every 5s, spamming logs. Fix: added specific `docker.errors.NotFound` catch before the broad handler — logs a clean one-line warning instead. Added `test_watch_handles_container_not_found_gracefully`. 69/69 tests passing.
+## 2026-07-06 — Fix watcher crash loop + orphan container deploy fix + give-up-after-N
+1. Watcher crashes endlessly when a monitored container doesn't exist in Docker (e.g. "secretary" removed but still in `monitored_containers` DB). `_watch()` broad `except Exception` catch logged full traceback "crashed, reconnecting" every 5s, spamming logs. Fix: added specific `docker.errors.NotFound` catch before the broad handler — logs a clean one-line warning instead.
+2. Even with the clean warning, watcher still retried every 5s forever for missing containers. Added `NOT_FOUND_GIVE_UP_AFTER=3` threshold: after3 consecutive NotFound failures, watcher returns and `reload()` stops recreating the task (checks `_not_found_count` before spawning). Count resets on successful attach. If user re-adds container via API, count is cleared on DB removal.
+3. Orphan containers persist after deploy because `docker compose up -d --build --remove-orphans` only cleans orphans within the same project scope. Fix: added `docker compose down --remove-orphans` before `up` in both `scripts/deploy.sh` and `log-medic/app/deployer.py`. 71/71 tests passing.
 
 ## 2026-07-05 — Close the loop (feat/log-medic-close-loop)
 Built per docs/superpowers/plans (spec + plan, tasks 1-6, `.superpowers/sdd/task-{1..6}-brief.md`).

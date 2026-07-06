@@ -64,11 +64,17 @@ def deploy(conn, container_row, fingerprint: str, pr_url: str, docker_client=Non
             step = "copy_files"
             copied = copy_tracked_files(repo_root, subdir, stack_dir)
 
+        step = "compose_down"
+        compose_args = ["docker", "compose", "--project-directory", stack_dir,
+                        "-f", os.path.join(stack_dir, "docker-compose.yml")]
+        subprocess.run(
+            [*compose_args, "down", "--remove-orphans"],
+            check=True, capture_output=True, text=True, timeout=COMPOSE_TIMEOUT_SECONDS,
+        )
+
         step = "compose_up"
         subprocess.run(
-            ["docker", "compose", "--project-directory", stack_dir,
-             "-f", os.path.join(stack_dir, "docker-compose.yml"),
-             "up", "-d", "--build"],
+            [*compose_args, "up", "-d", "--build"],
             check=True, capture_output=True, text=True, timeout=COMPOSE_TIMEOUT_SECONDS,
         )
 

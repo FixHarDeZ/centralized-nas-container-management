@@ -245,11 +245,70 @@ def test_watch_handles_container_not_found_gracefully(conn, monkeypatch):
         mgr = watcher.WatcherManager(docker_client=docker_client)
         db.upsert_monitored_container(conn, "secretary", None, None, "staging", 0, 0, None)
         await mgr.reload(conn)
-        # Let the watcher loop run briefly — it should log warning, not crash
-        await asyncio.sleep(0.1)
+        # Let the watcher run a few retry cycles — should log warnings, not crash
+        await asyncio.sleep(0.3)
         assert "secretary" in mgr._tasks
         for t in list(mgr._tasks.values()):
             t.cancel()
+
+    asyncio.run(run())
+
+
+def test_watch_gives_up_after_repeated_not_found(conn, monkeypatch):
+    import asyncio
+
+    import docker
+    import app.db as db
+    import app.watcher as watcher
+
+    async def run():
+        docker_client = MagicMock()
+        docker_client.containers.get.side_effect = docker.errors.NotFound("No such container: ghost")
+        mgr = watcher.WatcherManager(docker_client=docker_client)
+        db.upsert_monitored_container(conn, "ghost", None, None, "staging", 0, 0, None)
+        monkeypatch.setattr(watcher, "RECONNECT_BACKOFF_SECONDS", 0)
+        # reload spawns task, wait for it to exhaust retries and finish
+        await mgr.reload(conn)
+        await asyncio.sleep(1.0)
+        # Reload cleans up finished tasks; task should be gone
+        await mgr.reload(conn)
+        assert "ghost" not in mgr._tasks
+
+    asyncio.run(run())
+
+
+def test_not_found_count_resets_on_success(conn, monkeypatch):
+    import asyncio
+
+    import docker
+    import app.db as db
+    import app.watcher as watcher
+
+    async def run():
+        docker_client = MagicMock()
+        mgr = watcher.WatcherManager(docker_client=docker_client)
+        db.upsert_monitored_container(conn, "flaky", None, None, "staging", 0, 0, None)
+        monkeypatch.setattr(watcher, "RECONNECT_BACKOFF_SECONDS", 0)
+
+        # Simulate: 2 NotFound then 1 success then 2 NotFound
+        call_count = {"n": 0}
+
+        def mock_get(name):
+            call_count["n"] += 1
+            if call_count["n"] in (1, 2, 4, 5):
+                raise docker.errors.NotFound(name)
+            # Return a mock container that finishes immediately
+            c = MagicMock()
+            c.image.id = "sha256:aaa"
+            c.attrs = {"State": {"StartedAt": "2026-01-01T00:00:00.000000000Z"}}
+            c.logs.return_value = iter([])
+            return c
+
+        docker_client.containers.get.side_effect = mock_get
+        await mgr.reload(conn)
+        await asyncio.sleep(1.0)
+        # Count should have been reset after the success on call 3
+        assert mgr._not_found_count.get("flaky", 0) < watcher.NOT_FOUND_GIVE_UP_AFTER
 
     asyncio.run(run())
 
