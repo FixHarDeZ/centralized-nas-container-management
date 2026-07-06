@@ -17,7 +17,7 @@
 - Dependencies pinned exactly as `torrentwatch/requirements.txt`: `fastapi==0.115.5`, `uvicorn[standard]==0.32.1`, `httpx==0.28.1`, `beautifulsoup4==4.12.3`, `apscheduler==3.10.4`. No other runtime deps. `pytest` is dev-only (never in requirements.txt).
 - Vault keys: `stacks.ink_reader.dashboard.username` / `stacks.ink_reader.dashboard.password` — edit ONLY via `make edit-vault`, never edit `vault.sops.yaml` directly.
 - Never commit `.env`, `nginx/.htpasswd`, or real hostnames/credentials; use placeholders like `<NAS_HOST>` in docs.
-- ⚠️ doujin-th.com is unreachable from the workstation (sandbox MITM block). All scraper selectors are **best-guess placeholders marked `VERIFY-ON-NAS`**; Task 9 verifies against real HTML fetched via the NAS and updates parser + fixtures together.
+- doujin-th.com is unreachable from the workstation sandbox (MITM block) but was verified live via NAS SSH before implementation (2026-07-06). Real findings baked into Tasks 3-4: the site is SMF-forum-based; there is **no server-side zip/download** — the page's "Download" button only generates a PDF client-side in the browser (fetches already-visible reader images, builds PDF with jsPDF). The scraper's only path is: scrape reader-page image URLs from static HTML and build a CBZ directly — there is no zip-download branch. Reader images are hotlink-protected (403 without a `Referer` header set to the title page URL) — `fetch_bytes` takes an optional `referer` param. No login/PM gate exists. Task 9's live step is a redeploy confirmation, not a selector-discovery session.
 - Timezone `Asia/Bangkok` everywhere.
 - Run tests from repo root: `python3 -m pytest ink-reader/tests -v` (a top-level `conftest.py` in `ink-reader/` adds the stack dir to `sys.path`). If imports fail locally, install dev deps once: `python3 -m pip install -r ink-reader/requirements.txt pytest`.
 - CLAUDE.md rules apply: after finishing work write `ink-reader/.notes/daily_log.md` + `ink-reader/.notes/00_INDEX.md`.
@@ -384,28 +384,20 @@ git commit -m "feat(ink-reader): scaffold stack with config and SQLite catalog"
 **Interfaces:**
 - Consumes: nothing (pure functions, paths passed in)
 - Produces:
-  - `cbz.build_cbz(images: list[tuple[str, bytes]], cbz_dest: str, cover_dest: str) -> tuple[int, int]` — `images` is an ordered list of `(ext, data)` like `(".jpg", b"...")`; returns `(pages, file_size)`; raises `ValueError` on empty list. Writes `cbz_dest + ".part"` then `os.replace` (no half files).
-  - `cbz.normalize_zip_to_cbz(zip_bytes: bytes, cbz_dest: str, cover_dest: str) -> tuple[int, int]` — natural-sorts image entries, skips junk (`__MACOSX`, non-images), raises `ValueError` if zip has no images or is invalid.
+  - `cbz.build_cbz(images: list[tuple[str, bytes]], cbz_dest: str, cover_dest: str) -> tuple[int, int]` — `images` is an ordered list of `(ext, data)` like `(".jpg", b"...")`; returns `(pages, file_size)`; raises `ValueError` on empty list. Writes `cbz_dest + ".part"` then `os.replace` (no half files). Cover = first image's bytes.
+
+**Note:** the plan originally included a `normalize_zip_to_cbz` for a site-provided zip download. Live verification against doujin-th.com (2026-07-06) found the site has no server-side zip/download endpoint at all — only client-side PDF generation from images already on the page — so that function has no caller anywhere in this plan and is dropped (YAGNI).
 
 - [ ] **Step 1: Write the failing tests**
 
 `ink-reader/tests/test_cbz.py`:
 ```python
-import io
 import os
 import zipfile
 
 import pytest
 
 import cbz
-
-
-def _make_zip(names):
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as zf:
-        for n in names:
-            zf.writestr(n, b"img-" + n.encode())
-    return buf.getvalue()
 
 
 def test_build_cbz(tmp_path):
@@ -425,27 +417,6 @@ def test_build_cbz(tmp_path):
 def test_build_cbz_empty_raises(tmp_path):
     with pytest.raises(ValueError):
         cbz.build_cbz([], str(tmp_path / "o.cbz"), str(tmp_path / "c.jpg"))
-
-
-def test_normalize_natural_sort_and_junk(tmp_path):
-    z = _make_zip(["10.jpg", "2.jpg", "1.jpg", "__MACOSX/x.jpg", "info.txt"])
-    dest = str(tmp_path / "out.cbz")
-    pages, _ = cbz.normalize_zip_to_cbz(z, dest, str(tmp_path / "c.jpg"))
-    assert pages == 3
-    with zipfile.ZipFile(dest) as zf:
-        assert zf.read("001.jpg") == b"img-1.jpg"
-        assert zf.read("003.jpg") == b"img-10.jpg"
-
-
-def test_normalize_no_images_raises(tmp_path):
-    z = _make_zip(["readme.txt"])
-    with pytest.raises(ValueError):
-        cbz.normalize_zip_to_cbz(z, str(tmp_path / "o.cbz"), str(tmp_path / "c.jpg"))
-
-
-def test_normalize_bad_zip_raises(tmp_path):
-    with pytest.raises(ValueError):
-        cbz.normalize_zip_to_cbz(b"not a zip", str(tmp_path / "o.cbz"), str(tmp_path / "c.jpg"))
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -456,16 +427,8 @@ Expected: FAIL — `cbz` module missing.
 - [ ] **Step 3: Implement cbz.py**
 
 ```python
-import io
 import os
-import re
 import zipfile
-
-IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp", ".gif")
-
-
-def _natural_key(name: str):
-    return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", name)]
 
 
 def build_cbz(images: list[tuple[str, bytes]], cbz_dest: str, cover_dest: str) -> tuple[int, int]:
@@ -479,20 +442,6 @@ def build_cbz(images: list[tuple[str, bytes]], cbz_dest: str, cover_dest: str) -
     with open(cover_dest, "wb") as f:
         f.write(images[0][1])
     return len(images), os.path.getsize(cbz_dest)
-
-
-def normalize_zip_to_cbz(zip_bytes: bytes, cbz_dest: str, cover_dest: str) -> tuple[int, int]:
-    try:
-        zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
-    except zipfile.BadZipFile as e:
-        raise ValueError(f"bad zip: {e}") from e
-    names = [
-        n for n in zf.namelist()
-        if n.lower().endswith(IMAGE_EXTS) and not n.startswith("__MACOSX")
-    ]
-    names.sort(key=_natural_key)
-    images = [(os.path.splitext(n)[1].lower(), zf.read(n)) for n in names]
-    return build_cbz(images, cbz_dest, cover_dest)
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -504,12 +453,12 @@ Expected: all PASS.
 
 ```bash
 git add ink-reader/cbz.py ink-reader/tests/test_cbz.py
-git commit -m "feat(ink-reader): CBZ builder with zip normalization"
+git commit -m "feat(ink-reader): CBZ builder"
 ```
 
 ---
 
-### Task 3: Scraper parsers (fixtures, selectors VERIFY-ON-NAS)
+### Task 3: Scraper parsers (real doujin-th.com selectors, verified live 2026-07-06)
 
 **Files:**
 - Create: `ink-reader/scraper.py` (parsers + fetch only; cycle comes in Task 4)
@@ -520,11 +469,11 @@ git commit -m "feat(ink-reader): CBZ builder with zip normalization"
 **Interfaces:**
 - Consumes: `config.SITE_BASE_URL`, `config.USER_AGENT`
 - Produces:
-  - `scraper.fetch_bytes(url: str) -> bytes` (httpx GET, browser UA, follow redirects, `raise_for_status`)
+  - `scraper.fetch_bytes(url: str, referer: str | None = None) -> bytes` (httpx GET, browser UA, follow redirects, `raise_for_status`; sets `Referer` header when given — doujin-th.com's image CDN 403s without it)
   - `scraper.parse_listing(html: str, base_url: str) -> list[dict]` — `[{"slug", "title", "url"}]`, newest first, deduped
-  - `scraper.parse_title_page(html: str, base_url: str) -> dict` — `{"tags": list[str], "download_url": str | None, "image_urls": list[str]}`
+  - `scraper.parse_title_page(html: str, base_url: str) -> dict` — `{"tags": list[str], "image_urls": list[str]}` (no `download_url` — the site has no server-side download; see Task 4 note)
 
-**Note:** Fixture HTML mirrors the *assumed* site structure so the parser contract is locked by tests. Task 9 replaces fixtures with real saved HTML and adjusts selectors — tests must still pass afterwards.
+**Ground truth (verified live via `ssh nas "curl ..."` against the real site, 2026-07-06):** doujin-th.com is an SMF forum. Homepage `/` IS the listing — "new release" entries are `<a class="hentai-item">` / `<a class="doujin-item">` with `href="//doujin-th.com/forum/index.php?topic=NNNNN.0"` and a `title` attribute formatted `"ThaiTitle - OriginalTitle"`; slug = the numeric topic id. The same homepage also has unrelated recommendation links (`<a class="col-xs-6 ...">` with no `hentai-item`/`doujin-item` class) that must be excluded by the class selector, not just by container. Title pages have the Thai title in `h1.panel-title`, tags as `<a class="tag">tagname</a>` inside a "Tags:" line, and reader images as `<img class="img-responsive">` inside `div.col-xs-12.col-md-8` — some of those `<img>` are decorative UI assets (e.g. a grayscale-toggle icon) whose `src` contains `/image/other/` and must be filtered out. There is no download link/button in the HTML at all — the site's "Download" button is pure client-side JS that re-fetches the same on-page images and assembles a PDF in the browser (jsPDF), it is not a link the scraper can use.
 
 - [ ] **Step 1: Create fixture HTML**
 
@@ -532,17 +481,29 @@ git commit -m "feat(ink-reader): CBZ builder with zip normalization"
 ```html
 <!DOCTYPE html>
 <html><body>
-<main>
-  <article class="post">
-    <a href="https://doujin-th.example/story-one/"><h2>Story One</h2></a>
-  </article>
-  <article class="post">
-    <a href="/story-two/"><h2>Story Two</h2></a>
-  </article>
-  <article class="post">
-    <a href="/story-one/"><h2>Story One duplicate link</h2></a>
-  </article>
-</main>
+<div class="row layer_grid">
+<style type="text/css">
+#post_doujin_0 { background-image:url('https://cdn.example/covers/aaa-001.jpg'); }
+</style>
+<a href="//doujin-th.example/forum/index.php?topic=111.0" target="_blank" class="hentai-item" title="เรื่องหนึ่ง - Original Title One">
+  <div class="topic_new_mark"><span class="label label-danger">มาใหม่ !!</span></div>
+  <div id="post_doujin_0">
+    <div class="topic_new_name"><div class="well well-sm">เรื่องหนึ่ง</div></div>
+  </div>
+</a>
+<style type="text/css">
+#post_doujin_1 { background-image:url('https://cdn.example/covers/bbb-001.jpg'); }
+</style>
+<a href="//doujin-th.example/forum/index.php?topic=112.0" target="_blank" class="doujin-item" title="เรื่องสอง - Original Title Two">
+  <div class="topic_new_name"><div class="well well-sm">เรื่องสอง</div></div>
+</a>
+<a href="//doujin-th.example/forum/index.php?topic=111.0" target="_blank" class="hentai-item" title="เรื่องหนึ่ง - Original Title One">
+  <div class="topic_new_name"><div class="well well-sm">เรื่องหนึ่ง (duplicate link)</div></div>
+</a>
+<a href="//doujin-th.example/forum/index.php?topic=999.0" target="_blank" class="col-xs-6 col-sm-4 col-md-3 col-lg-2">
+  <div class="topic_new_name"><div class="well well-sm">Unrelated recommendation</div></div>
+</a>
+</div>
 </body></html>
 ```
 
@@ -550,18 +511,17 @@ git commit -m "feat(ink-reader): CBZ builder with zip normalization"
 ```html
 <!DOCTYPE html>
 <html><body>
-<article>
-  <h1>Story One</h1>
-  <div class="tags">
-    <a rel="tag" href="/tag/a/">TagA</a>
-    <a rel="tag" href="/tag/b/">TagB</a>
-  </div>
-  <a class="download" href="/download/story-one.zip">ดาวน์โหลด</a>
-  <div class="reader">
-    <img src="/images/story-one/1.jpg">
-    <img src="/images/story-one/2.jpg">
-  </div>
-</article>
+<div class="col-xs-12 col-md-8">
+  <h1 class="panel-title">เรื่องหนึ่ง</h1>
+  <h2 class="panel-title">Original Title One</h2>
+  <p>Tags: <span class="label label-danger">มาใหม่ !!</span>
+    <span class="label label-info"><a class="tag" href="https://doujin-th.example/forum/index.php?action=tags&amp;tagid=1">tag-a</a></span>
+    <span class="label label-info"><a class="tag" href="https://doujin-th.example/forum/index.php?action=tags&amp;tagid=2">tag-b</a></span>
+  </p>
+  <img class="img-responsive" src="https://cdn.example/pages/111-001.jpg">
+  <img class="img-responsive" src="https://cdn.example/pages/111-002.jpg">
+  <img class="img-responsive" src="https://cdn.example/image/other/change-to-bw.jpg">
+</div>
 </body></html>
 ```
 
@@ -582,26 +542,29 @@ def _read(name):
 
 def test_parse_listing():
     items = scraper.parse_listing(_read("listing.html"), "https://doujin-th.example")
-    assert [i["slug"] for i in items] == ["story-one", "story-two"]
-    assert items[0]["title"] == "Story One"
-    assert items[1]["url"] == "https://doujin-th.example/story-two/"
+    assert [i["slug"] for i in items] == ["111", "112"]
+    assert items[0]["title"] == "เรื่องหนึ่ง"
+    assert items[0]["url"] == "https://doujin-th.example/forum/index.php?topic=111.0"
+    assert items[1]["title"] == "เรื่องสอง"
+
+
+def test_parse_listing_ignores_links_without_item_class():
+    items = scraper.parse_listing(_read("listing.html"), "https://doujin-th.example")
+    assert "999" not in {i["slug"] for i in items}
 
 
 def test_parse_title_page():
     meta = scraper.parse_title_page(_read("title.html"), "https://doujin-th.example")
-    assert meta["tags"] == ["TagA", "TagB"]
-    assert meta["download_url"] == "https://doujin-th.example/download/story-one.zip"
+    assert meta["tags"] == ["tag-a", "tag-b"]
     assert meta["image_urls"] == [
-        "https://doujin-th.example/images/story-one/1.jpg",
-        "https://doujin-th.example/images/story-one/2.jpg",
+        "https://cdn.example/pages/111-001.jpg",
+        "https://cdn.example/pages/111-002.jpg",
     ]
 
 
-def test_parse_title_page_no_download():
-    html = _read("title.html").replace('class="download"', 'class="nope"')
-    meta = scraper.parse_title_page(html, "https://doujin-th.example")
-    assert meta["download_url"] is None
-    assert len(meta["image_urls"]) == 2
+def test_parse_title_page_filters_decorative_images():
+    meta = scraper.parse_title_page(_read("title.html"), "https://doujin-th.example")
+    assert not any("/image/other/" in u for u in meta["image_urls"])
 ```
 
 - [ ] **Step 3: Run tests to verify they fail**
@@ -614,12 +577,17 @@ Expected: FAIL — `scraper` module missing.
 ```python
 """doujin-th.com scraper.
 
-All CSS selectors below are best-guess placeholders — the site is unreachable
-from the workstation sandbox. VERIFY-ON-NAS: fetch real pages from the NAS,
-save them over tests/fixtures/*.html, fix selectors until tests pass again.
+Site is SMF-forum-based (verified live via NAS, 2026-07-06). There is no
+server-side zip/download endpoint — the page's "Download" button only builds
+a PDF client-side in the browser from the reader images already in the page.
+The scraper's only path is scraping those reader-page image URLs directly
+(see scrape_cycle in this file, added in Task 4). Reader images are
+hotlink-protected by the CDN: a direct GET returns 403 unless a `Referer`
+header pointing at the title page is sent.
 """
 
-from urllib.parse import urljoin, urlparse
+import re
+from urllib.parse import urljoin
 
 import httpx
 from bs4 import BeautifulSoup
@@ -628,27 +596,32 @@ import config
 
 HEADERS = {"User-Agent": config.USER_AGENT}
 
+_TOPIC_RE = re.compile(r"topic=(\d+)")
 
-def fetch_bytes(url: str) -> bytes:
-    with httpx.Client(headers=HEADERS, follow_redirects=True, timeout=60) as client:
+
+def fetch_bytes(url: str, referer: str | None = None) -> bytes:
+    headers = dict(HEADERS)
+    if referer:
+        headers["Referer"] = referer
+    with httpx.Client(headers=headers, follow_redirects=True, timeout=60) as client:
         resp = client.get(url)
         resp.raise_for_status()
         return resp.content
 
 
-def _slug_from_url(url: str) -> str:
-    return urlparse(url).path.strip("/").split("/")[-1]
-
-
 def parse_listing(html: str, base_url: str) -> list[dict]:
     soup = BeautifulSoup(html, "html.parser")
     items, seen = [], set()
-    for a in soup.select("article a[href]"):  # VERIFY-ON-NAS
+    for a in soup.select("a.hentai-item[href], a.doujin-item[href]"):
         url = urljoin(base_url, a["href"])
-        slug = _slug_from_url(url)
-        if not slug or slug in seen:
+        m = _TOPIC_RE.search(url)
+        if not m:
             continue
-        title = a.get_text(strip=True)
+        slug = m.group(1)
+        if slug in seen:
+            continue
+        title_attr = a.get("title", "")
+        title = title_attr.split(" - ", 1)[0].strip() if title_attr else a.get_text(strip=True)
         if not title:
             continue
         seen.add(slug)
@@ -658,14 +631,14 @@ def parse_listing(html: str, base_url: str) -> list[dict]:
 
 def parse_title_page(html: str, base_url: str) -> dict:
     soup = BeautifulSoup(html, "html.parser")
-    tags = [a.get_text(strip=True) for a in soup.select("a[rel=tag]")]  # VERIFY-ON-NAS
-    dl = soup.select_one("a.download[href]")  # VERIFY-ON-NAS
-    download_url = urljoin(base_url, dl["href"]) if dl else None
+    tags = [a.get_text(strip=True) for a in soup.select("a.tag")]
+    container = soup.select_one("div.col-xs-12.col-md-8") or soup
     image_urls = [
         urljoin(base_url, img["src"])
-        for img in soup.select(".reader img[src]")  # VERIFY-ON-NAS
+        for img in container.select("img.img-responsive[src]")
+        if "/image/other/" not in img["src"]
     ]
-    return {"tags": tags, "download_url": download_url, "image_urls": image_urls}
+    return {"tags": tags, "image_urls": image_urls}
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**
@@ -677,7 +650,7 @@ Expected: all PASS.
 
 ```bash
 git add ink-reader/scraper.py ink-reader/tests/
-git commit -m "feat(ink-reader): listing and title-page parsers with fixtures"
+git commit -m "feat(ink-reader): listing and title-page parsers with real doujin-th.com selectors"
 ```
 
 ---
@@ -689,45 +662,37 @@ git commit -m "feat(ink-reader): listing and title-page parsers with fixtures"
 - Test: `ink-reader/tests/test_cycle.py`
 
 **Interfaces:**
-- Consumes: `db.known_slugs/add_title/log_scrape`, `cbz.normalize_zip_to_cbz/build_cbz`, parsers from Task 3, `config.MAX_NEW_PER_CYCLE`, `config.REQUEST_DELAY_SECONDS`
+- Consumes: `db.known_slugs/add_title/log_scrape`, `cbz.build_cbz`, parsers from Task 3, `config.MAX_NEW_PER_CYCLE`, `config.REQUEST_DELAY_SECONDS`
 - Produces:
-  - `scraper.scrape_cycle(fetch=fetch_bytes) -> dict` — `{"found": int, "downloaded": int, "errors": list[str]}`. `fetch` injectable for tests. Always writes a `scrape_log` row (error text = joined errors or None). Per-title failures are skipped, never abort the cycle. Files are written to a temp path first; DB row inserted only after the CBZ exists, then files renamed to `{id}.cbz` / `{id}.jpg` — a failed title leaves no row, so it retries next cycle.
+  - `scraper.scrape_cycle(fetch=fetch_bytes) -> dict` — `{"found": int, "downloaded": int, "errors": list[str]}`. `fetch` injectable for tests, called as `fetch(url)` for HTML pages and `fetch(url, referer=item["url"])` for reader images (the CDN 403s without it — see Task 3). Always writes a `scrape_log` row (error text = joined errors or None). Per-title failures are skipped, never abort the cycle. Files are written to a temp path first; DB row inserted only after the CBZ exists, then files renamed to `{id}.cbz` / `{id}.jpg` — a failed title leaves no row, so it retries next cycle.
+
+**Note:** doujin-th.com has no server-side zip/download (see Task 3) — there is a single download path here, scraping the reader-page images, not a zip-then-fallback branch.
 
 - [ ] **Step 1: Write the failing tests**
 
 `ink-reader/tests/test_cycle.py`:
 ```python
-import io
 import os
-import zipfile
 
 import db
 import scraper
 
 LISTING = """
-<article><a href="/story-a/">Story A</a></article>
-<article><a href="/story-b/">Story B</a></article>
+<a class="hentai-item" href="/forum/index.php?topic=1.0" title="Story A - A">Story A</a>
+<a class="doujin-item" href="/forum/index.php?topic=2.0" title="Story B - B">Story B</a>
 """
-TITLE_ZIP = """
-<a rel="tag" href="/t/x/">X</a>
-<a class="download" href="/dl/{slug}.zip">dl</a>
+TITLE = """
+<div class="col-xs-12 col-md-8">
+<h1 class="panel-title">{title}</h1>
+<p>Tags: <span class="label label-info"><a class="tag" href="#">x</a></span></p>
+<img class="img-responsive" src="/i/{slug}/1.jpg">
+<img class="img-responsive" src="/i/{slug}/2.jpg">
+</div>
 """
-TITLE_IMGS = """
-<a rel="tag" href="/t/x/">X</a>
-<div class="reader"><img src="/i/1.jpg"><img src="/i/2.jpg"></div>
-"""
-
-
-def _zip_bytes():
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w") as zf:
-        zf.writestr("1.jpg", b"a")
-        zf.writestr("2.jpg", b"b")
-    return buf.getvalue()
 
 
 def _fake_fetch(pages):
-    def fetch(url):
+    def fetch(url, referer=None):
         for key, val in pages.items():
             if key in url:
                 return val() if callable(val) else val
@@ -735,17 +700,17 @@ def _fake_fetch(pages):
     return fetch
 
 
-def test_cycle_zip_path(data_dir):
+def test_cycle_downloads_new_titles(data_dir):
     fetch = _fake_fetch({
-        "/story-a/": TITLE_ZIP.format(slug="story-a").encode(),
-        "/story-b/": TITLE_ZIP.format(slug="story-b").encode(),
-        "/dl/": _zip_bytes(),
+        "topic=1.0": TITLE.format(title="Story A", slug="1").encode(),
+        "topic=2.0": TITLE.format(title="Story B", slug="2").encode(),
+        "/i/": b"imgdata",
         "doujin-th": LISTING.encode(),
     })
     result = scraper.scrape_cycle(fetch=fetch)
     assert result["downloaded"] == 2
     rows = db.list_titles()
-    assert {r["slug"] for r in rows} == {"story-a", "story-b"}
+    assert {r["slug"] for r in rows} == {"1", "2"}
     for r in rows:
         assert r["pages"] == 2
         assert os.path.exists(db.cbz_path(r["id"]))
@@ -753,58 +718,46 @@ def test_cycle_zip_path(data_dir):
     assert db.last_scrape()["downloaded"] == 2
 
 
-def test_cycle_image_fallback(data_dir):
+def test_cycle_skips_known_and_tombstones(data_dir):
+    tid = db.add_title("1", "A", "", 1, 1, "u")
+    db.purge_title(tid)  # tombstone
     fetch = _fake_fetch({
-        "/story-a/": TITLE_IMGS.encode(),
-        "/story-b/": TITLE_IMGS.encode(),
+        "topic=2.0": TITLE.format(title="Story B", slug="2").encode(),
         "/i/": b"imgdata",
         "doujin-th": LISTING.encode(),
     })
     result = scraper.scrape_cycle(fetch=fetch)
-    assert result["downloaded"] == 2
-    assert db.list_titles()[0]["pages"] == 2
-
-
-def test_cycle_skips_known_and_tombstones(data_dir):
-    tid = db.add_title("story-a", "A", "", 1, 1, "u")
-    db.purge_title(tid)  # tombstone
-    fetch = _fake_fetch({
-        "/story-b/": TITLE_ZIP.format(slug="story-b").encode(),
-        "/dl/": _zip_bytes(),
-        "doujin-th": LISTING.encode(),
-    })
-    result = scraper.scrape_cycle(fetch=fetch)
     assert result["downloaded"] == 1
-    assert {r["slug"] for r in db.list_titles(status="new")} == {"story-b"}
+    assert {r["slug"] for r in db.list_titles(status="new")} == {"2"}
 
 
 def test_cycle_title_failure_skips_and_logs(data_dir):
-    def fetch(url):
+    def fetch(url, referer=None):
         if "doujin-th" in url:
             return LISTING.encode()
-        if "/story-a/" in url:
+        if "topic=1.0" in url:
             raise RuntimeError("boom")
-        if "/story-b/" in url:
-            return TITLE_ZIP.format(slug="story-b").encode()
-        if "/dl/" in url:
-            return _zip_bytes()
+        if "topic=2.0" in url:
+            return TITLE.format(title="Story B", slug="2").encode()
+        if "/i/" in url:
+            return b"imgdata"
         raise RuntimeError(f"unexpected {url}")
 
     result = scraper.scrape_cycle(fetch=fetch)
     assert result["downloaded"] == 1
     assert len(result["errors"]) == 1
-    assert "story-a" in result["errors"][0]
+    assert "1" in result["errors"][0]
     assert db.last_scrape()["error"] is not None
-    # story-a left no row → retried next cycle
-    assert "story-a" not in db.known_slugs()
+    # story 1 left no row → retried next cycle
+    assert "1" not in db.known_slugs()
 
 
 def test_cycle_respects_max_per_cycle(data_dir, monkeypatch):
     import config
     monkeypatch.setattr(config, "MAX_NEW_PER_CYCLE", 1)
     fetch = _fake_fetch({
-        "/story-a/": TITLE_ZIP.format(slug="story-a").encode(),
-        "/dl/": _zip_bytes(),
+        "topic=1.0": TITLE.format(title="Story A", slug="1").encode(),
+        "/i/": b"imgdata",
         "doujin-th": LISTING.encode(),
     })
     result = scraper.scrape_cycle(fetch=fetch)
@@ -833,18 +786,13 @@ def _download_title(item: dict, meta: dict, fetch) -> None:
     tmp_cbz = os.path.join(config.LIBRARY_DIR, f".tmp-{uuid.uuid4().hex}.cbz")
     tmp_cover = tmp_cbz + ".cover.jpg"
     try:
-        if meta["download_url"]:
-            pages, size = cbz.normalize_zip_to_cbz(
-                fetch(meta["download_url"]), tmp_cbz, tmp_cover
-            )
-        elif meta["image_urls"]:
-            images = [
-                (os.path.splitext(u.split("?")[0])[1].lower() or ".jpg", fetch(u))
-                for u in meta["image_urls"]
-            ]
-            pages, size = cbz.build_cbz(images, tmp_cbz, tmp_cover)
-        else:
-            raise ValueError("no download link and no reader images")
+        if not meta["image_urls"]:
+            raise ValueError("no reader images found")
+        images = [
+            (os.path.splitext(u.split("?")[0])[1].lower() or ".jpg", fetch(u, referer=item["url"]))
+            for u in meta["image_urls"]
+        ]
+        pages, size = cbz.build_cbz(images, tmp_cbz, tmp_cover)
         tid = db.add_title(
             slug=item["slug"], title=item["title"], tags=",".join(meta["tags"]),
             pages=pages, file_size=size, source_url=item["url"],
@@ -896,7 +844,7 @@ Expected: all PASS.
 
 ```bash
 git add ink-reader/scraper.py ink-reader/tests/
-git commit -m "feat(ink-reader): scrape cycle with tombstone dedup and image fallback"
+git commit -m "feat(ink-reader): scrape cycle with tombstone dedup"
 ```
 
 ---
@@ -1630,7 +1578,7 @@ Use the `adding-vault-secret` skill flow:
 
 - [ ] **Step 6: Write docs**
 
-- `ink-reader/README.md`: purpose, architecture diagram (from spec), ports (5068/15068), env vars (`INK_*`), API + OPDS endpoints, KOReader setup steps (install APK → Search → OPDS catalog → add `http://<NAS_HOST>:5068/opds` + basic auth credentials), curation lifecycle, VERIFY-ON-NAS note about selectors.
+- `ink-reader/README.md`: purpose, architecture diagram (from spec), ports (5068/15068), env vars (`INK_*`), API + OPDS endpoints, KOReader setup steps (install APK → Search → OPDS catalog → add `http://<NAS_HOST>:5068/opds` + basic auth credentials), curation lifecycle.
 - `ink-reader/.notes/00_INDEX.md`: DB schema, endpoints, settings, gaps (selector verification status).
 - `ink-reader/.notes/daily_log.md`: first entry for the build.
 - Root `CLAUDE.md`: add row to the stacks table:
@@ -1653,22 +1601,13 @@ Confirm `git status` shows no `.env` or `.htpasswd` staged.
 ```
 Then restart just this stack per repo convention (deploy.sh handles upload; compose up for ink-reader). Container build happens on NAS.
 
-- [ ] **Step 9: VERIFY-ON-NAS — real site structure**
+- [ ] **Step 9: Live confirmation on NAS**
 
-The workstation cannot reach doujin-th.com; the NAS can. Fetch real HTML through the deployed container:
+Parser selectors were already verified against the real site before implementation (2026-07-06, via `ssh nas "curl ..."` — see Task 3's Ground Truth note), so this step is a confirmation, not a discovery session:
 
-```bash
-ssh -p 2222 <NAS_USER>@<NAS_HOST> "sudo /usr/local/bin/docker exec ink-reader python -c \"import scraper; open('/tmp/listing.html','wb').write(scraper.fetch_bytes('https://doujin-th.com/'))\""
-scp -P 2222 <NAS_USER>@<NAS_HOST>:/tmp/listing.html /tmp/  # if exec wrote inside container, docker cp first
-```
-(sudo needs TTY — hand these to the user via `!` prefix if the harness can't run them.)
-
-1. Inspect real listing HTML → fix `parse_listing` selectors + replace `tests/fixtures/listing.html` with a trimmed real sample (strip scripts/ads; keep structure).
-2. Same for a title page → fix `parse_title_page` (tags, download link, reader images) + `tests/fixtures/title.html`.
-3. Confirm the download link really serves a zip; if it needs an intermediate page or POST, adjust `_download_title` accordingly.
-4. `python3 -m pytest ink-reader/tests -v` → all PASS.
-5. Redeploy, then trigger one live cycle: `curl -u <user>:<pass> -X POST http://<NAS_HOST>:5068/api/scrape`, wait, check `curl -u ... http://<NAS_HOST>:5068/api/status` shows `downloaded > 0` and no error.
-6. Commit parser fixes: `git commit -m "fix(ink-reader): align parsers with live site structure"`.
+1. Trigger one live cycle against the deployed container: `curl -u <user>:<pass> -X POST http://<NAS_HOST>:5068/api/scrape`, wait, then `curl -u ... http://<NAS_HOST>:5068/api/status` and confirm `downloaded > 0` and no error.
+2. If it fails (site changed again since verification, or a selector edge case the fixtures didn't cover), fetch fresh HTML via `ssh nas "curl -sL -A '<UA>' https://doujin-th.com/"`, diff against `tests/fixtures/listing.html`/`title.html`, adjust the parser + fixtures, `python3 -m pytest ink-reader/tests -v`, redeploy, retry step 1.
+3. Commit any fixes: `git commit -m "fix(ink-reader): align parsers with live site structure"`.
 
 - [ ] **Step 10: End-to-end acceptance**
 
@@ -1683,4 +1622,4 @@ scp -P 2222 <NAS_USER>@<NAS_HOST>:/tmp/listing.html /tmp/  # if exec wrote insid
 
 - Spec coverage: scraper (Tasks 3-4), lifecycle/tombstone (1, 4, 6), dashboard (8), OPDS (5), scheduler+backup (6), deploy/auth/docs (9), live verification (9). Out-of-scope items from spec remain out.
 - Type consistency: `db.purge_title` used by API delete + expiry job; `scrape_cycle(fetch=...)` injectable everywhere; OPDS hrefs match `main.py` routes (`/files/{tid}.cbz`, `/covers/{tid}.jpg`).
-- Known deliberate risk: parser selectors are placeholders until Task 9 Step 9 — flagged in Global Constraints.
+- Parser selectors reflect real site structure verified live before implementation (Global Constraints, Task 3); Task 9 Step 9 is a deploy-time confirmation, not first discovery.
