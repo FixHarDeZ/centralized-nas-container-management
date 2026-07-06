@@ -9,39 +9,49 @@ LISTING = """
 """
 TITLE = """
 <div class="col-xs-12 col-md-8">
-  <img class="img-responsive" src="/image/other/foo.jpg">
-  <img class="img-responsive" src="{image_url}">
-  <a class="tag">Tag1</a>
-  <a class="tag">Tag2</a>
-  <img class="img-responsive" src="/image/other/bar.jpg">
-</div>
-<div class="reader">
-  <div><img src="{image_url}"></div>
+<h1 class="panel-title">{title}</h1>
+<p>Tags: <span class="label label-info"><a class="tag" href="#">x</a></span></p>
+<img class="img-responsive" src="/i/{slug}/1.jpg">
+<img class="img-responsive" src="/i/{slug}/2.jpg">
 </div>
 """
 
 
-def _fake_fetch(mapping):
+def _fake_fetch(pages):
     def fetch(url, referer=None):
-        for key, value in mapping.items():
+        for key, val in pages.items():
             if key in url:
-                return value
-        raise RuntimeError(f"unexpected {url}")
-
+                return val() if callable(val) else val
+        raise RuntimeError(f"unexpected url {url}")
     return fetch
 
 
-def test_cycle_with_tombstone_dedup(data_dir):
-    # Add title then tombstone it
-    db.add_title("1", "A", "", 1, 1, "u")
-    db.purge_title("1")  # tombstone
-    fetch = _fake_fetch(
-        {
-            "topic=2.0": TITLE.format(image_url="/i/img1.jpg").encode(),
-            "/i/": b"imgdata",
-            "doujin-th": LISTING.encode(),
-        }
-    )
+def test_cycle_downloads_new_titles(data_dir):
+    fetch = _fake_fetch({
+        "topic=1.0": TITLE.format(title="Story A", slug="1").encode(),
+        "topic=2.0": TITLE.format(title="Story B", slug="2").encode(),
+        "/i/": b"imgdata",
+        "doujin-th": LISTING.encode(),
+    })
+    result = scraper.scrape_cycle(fetch=fetch)
+    assert result["downloaded"] == 2
+    rows = db.list_titles()
+    assert {r["slug"] for r in rows} == {"1", "2"}
+    for r in rows:
+        assert r["pages"] == 2
+        assert os.path.exists(db.cbz_path(r["id"]))
+        assert os.path.exists(db.cover_path(r["id"]))
+    assert db.last_scrape()["downloaded"] == 2
+
+
+def test_cycle_skips_known_and_tombstones(data_dir):
+    tid = db.add_title("1", "A", "", 1, 1, "u")
+    db.purge_title(tid)  # tombstone
+    fetch = _fake_fetch({
+        "topic=2.0": TITLE.format(title="Story B", slug="2").encode(),
+        "/i/": b"imgdata",
+        "doujin-th": LISTING.encode(),
+    })
     result = scraper.scrape_cycle(fetch=fetch)
     assert result["downloaded"] == 1
     assert {r["slug"] for r in db.list_titles(status="new")} == {"2"}
@@ -49,12 +59,16 @@ def test_cycle_with_tombstone_dedup(data_dir):
 
 def test_cycle_title_failure_skips_and_logs(data_dir):
     def fetch(url, referer=None):
-        if "/i/" in url:
-            return b"imgdata"
+        # ponytail: "doujin-th" is a substring of every URL on this domain
+        # (including topic pages), so it must be checked last or it shadows
+        # the topic-specific branches below and every title fetch returns
+        # LISTING instead of TITLE/error.
         if "topic=1.0" in url:
             raise RuntimeError("boom")
         if "topic=2.0" in url:
-            return TITLE.format(image_url="/i/img1.jpg").encode()
+            return TITLE.format(title="Story B", slug="2").encode()
+        if "/i/" in url:
+            return b"imgdata"
         if "doujin-th" in url:
             return LISTING.encode()
         raise RuntimeError(f"unexpected {url}")
@@ -64,21 +78,18 @@ def test_cycle_title_failure_skips_and_logs(data_dir):
     assert len(result["errors"]) == 1
     assert "1" in result["errors"][0]
     assert db.last_scrape()["error"] is not None
-    # story 1 left no row, retried next cycle
+    # story 1 left no row → retried next cycle
     assert "1" not in db.known_slugs()
 
 
 def test_cycle_respects_max_per_cycle(data_dir, monkeypatch):
     import config
-
     monkeypatch.setattr(config, "MAX_NEW_PER_CYCLE", 1)
-    fetch = _fake_fetch(
-        {
-            "topic=1.0": TITLE.format(image_url="/i/img1.jpg").encode(),
-            "/i/": b"imgdata",
-            "doujin-th": LISTING.encode(),
-        }
-    )
+    fetch = _fake_fetch({
+        "topic=1.0": TITLE.format(title="Story A", slug="1").encode(),
+        "/i/": b"imgdata",
+        "doujin-th": LISTING.encode(),
+    })
     result = scraper.scrape_cycle(fetch=fetch)
     assert result["downloaded"] == 1
     assert result["found"] == 2

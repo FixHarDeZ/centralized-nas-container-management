@@ -70,37 +70,27 @@ def parse_title_page(html: str, base_url: str) -> dict:
 
 
 def _download_title(item: dict, meta: dict, fetch) -> None:
-    """Download images, build CBZ, add title to DB."""
-    # Create temp files with unique names
-    temp_cbz = os.path.join(config.LIBRARY_DIR, f"{uuid.uuid4()}.cbz.tmp")
-    temp_cover = os.path.join(config.COVERS_DIR, f"{uuid.uuid4()}.jpg.tmp")
-
-    # Download images
-    images = []
-    for url in meta["image_urls"]:
-        data = fetch(url, referer=item["url"])
-        # Determine extension from URL or default to .jpg
-        ext = os.path.splitext(url)[1] or ".jpg"
-        images.append((ext, data))
-
-    # Build CBZ to temp paths
-    pages, file_size = cbz.build_cbz(images, temp_cbz, temp_cover)
-
-    # Add title to DB (returns tid)
-    tid = db.add_title(
-        slug=item["slug"],
-        title=item["title"],
-        tags=",".join(meta["tags"]),
-        pages=pages,
-        file_size=file_size,
-        source_url=item["url"],
-    )
-
-    # Rename temp files to final paths
-    final_cbz = db.cbz_path(tid)
-    final_cover = db.cover_path(tid)
-    os.replace(temp_cbz, final_cbz)
-    os.replace(temp_cover, final_cover)
+    """Build CBZ in temp location, then insert DB row and move files into place."""
+    tmp_cbz = os.path.join(config.LIBRARY_DIR, f".tmp-{uuid.uuid4().hex}.cbz")
+    tmp_cover = tmp_cbz + ".cover.jpg"
+    try:
+        if not meta["image_urls"]:
+            raise ValueError("no reader images found")
+        images = [
+            (os.path.splitext(u.split("?")[0])[1].lower() or ".jpg", fetch(u, referer=item["url"]))
+            for u in meta["image_urls"]
+        ]
+        pages, size = cbz.build_cbz(images, tmp_cbz, tmp_cover)
+        tid = db.add_title(
+            slug=item["slug"], title=item["title"], tags=",".join(meta["tags"]),
+            pages=pages, file_size=size, source_url=item["url"],
+        )
+        os.replace(tmp_cbz, db.cbz_path(tid))
+        os.replace(tmp_cover, db.cover_path(tid))
+    finally:
+        for p in (tmp_cbz, tmp_cbz + ".part", tmp_cover):
+            if os.path.exists(p):
+                os.remove(p)
 
 
 def scrape_cycle(fetch=fetch_bytes) -> dict:
