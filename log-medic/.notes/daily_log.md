@@ -1,5 +1,28 @@
 # log-medic — Daily Log
 
+## 2026-07-05 — Close the loop (feat/log-medic-close-loop)
+Built per docs/superpowers/plans (spec + plan, tasks 1-6, `.superpowers/sdd/task-{1..6}-brief.md`).
+Closed the three gaps left after the initial merge: (1) no code/infra triage before
+opening a fix PR, (2) no automatic follow-up once a PR merged, (3) no deploy —
+merged fixes just sat there. Verdict: `prompts/analyze.md` now emits a mandatory
+`VERDICT: code`/`VERDICT: infra` first line, `analyzer.parse_verdict()` extracts it
+(fail-safe → `infra`), stored in new `events.verdict` column; fix runner now also
+gates on `verdict=="code"`. Merge poll: new `poll_pr_merges` scheduler job (every
+5 min, `gh pr view --json state,mergedAt`) — `MERGED` → auto-deploy, `CLOSED` →
+`pr_closed` + remote branch cleanup + Telegram. Auto deploy: new `app/deployer.py`
+syncs the workspace clone, copies only git-tracked files from the stack subdir
+into `/stacks/<stack>/` (additive-only), runs `docker compose up -d --build`
+via the mounted socket, verifies container health after 60s → `deployed`/
+`deploy_failed` (terminal, manual revert+merge to recover). Self-deploy guard:
+a merged log-medic PR is never auto-deployed (self-restart would kill the
+deploy), notifies for manual deploy instead. Infra: image gained docker CLI
+27.3.1 + compose plugin v2.32.4, compose gained `/volume2/docker:/stacks` rw
+mount, dashboard Events tab gained a Verdict column. Files touched: `prompts/analyze.md`,
+`app/analyzer.py`, `app/watcher.py`, `app/db.py`, `app/deployer.py` (new),
+`app/scheduler.py`, `app/static/{app.js,index.html}`, `Dockerfile`,
+`docker-compose.yml`, `secrets.manifest.yaml` (github_token key). 66/66
+tests passing (6 new `tests/test_deployer.py`). Docs (this task, Task 7) close out the plan.
+
 ## 2026-07-05 — Final review, critical fix, merged to main
 Final whole-branch review (base a99e2c7..0c3878d, 23 commits) found one Critical:
 `watcher.py` called `container.logs(..., since=0)` — docker-py 7.1.0 requires
