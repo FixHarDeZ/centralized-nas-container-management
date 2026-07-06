@@ -330,6 +330,10 @@ function cardHTML(t, readOnly) {
     t.completed > 0 ? `<span class="tw-stat-sep">·</span><span class="tw-stat-val tw-stat-completed">${fmt(t.completed)}</span><span class="tw-stat-lbl">dl</span>` : "",
   ].join("");
 
+  const uploaderHTML = t.uploader
+    ? `<div class="tw-card-uploader" title="ผู้ปล่อยไฟล์"><i class="bi bi-person-badge"></i><span class="tw-uploader-name">${escHtml(t.uploader)}</span></div>`
+    : "";
+
   const watchedStatus = t.watched_status || 0;
   const watchBadge = watchedStatus === 1
     ? `<span class="tw-badge tw-badge-watched"><i class="bi bi-eye-fill"></i> ดูแล้ว</span>`
@@ -375,6 +379,7 @@ function cardHTML(t, readOnly) {
       </div>
       <a class="tw-card-title tw-title-link" href="/api/detail/${t.id}" target="_blank" rel="noopener">${escHtml(t.title)}</a>
       <div class="tw-card-stats">${statsHTML}</div>
+      ${uploaderHTML}
       <div class="tw-card-dl-badges">${dlBadges}</div>
       ${actions}
     </div>

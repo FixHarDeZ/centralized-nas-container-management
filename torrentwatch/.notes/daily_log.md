@@ -1,5 +1,17 @@
 # TorrentWatch — Daily Log
 
+## 2026-07-06 — Feature: แสดงผู้ปล่อยไฟล์ (uploader) บน card
+
+**งาน:** user อยากเห็นเจ้าของ torrent ที่ปล่อยบน dashboard พร้อม design สวยๆ
+
+**Implementation (end-to-end):**
+- `scraper.py`: เปิดใช้ `COL_UPLOADER = 11` (เดิม note ไว้ unused) — parse anchor text ของ td col 12, fallback → img alt/title → cell text, cap 60 chars, เพิ่ม `"uploader"` ใน dict ที่ `_parse_row` คืน
+- `db.py`: เพิ่มคอลัมน์ `uploader TEXT DEFAULT ''` ใน CREATE TABLE + migration (`ALTER TABLE torrents ADD COLUMN`) + INSERT/UPDATE ใน `upsert_torrent`. UPDATE ใช้ `COALESCE(NULLIF(?, ''), uploader)` กันเขียนทับชื่อเดิมด้วยค่าว่างถ้า parse พลาดรอบถัดไป. `get_torrents`/`history`/`search` เป็น `SELECT *` อยู่แล้ว → ไหลไป API ฟรี
+- `static/app.js`: `uploaderHTML` chip (`bi-person-badge` + ชื่อ) render ใต้ stats row ใน `cardHTML` (แสดงเฉพาะเมื่อมี `t.uploader`)
+- `static/style.css`: `.tw-card-uploader` pill chip (accent-dim bg / accent text, rounded 999px, ellipsis overflow) — ใช้ CSS vars ปรับตาม theme
+
+**Verify:** parse logic ผ่าน throwaway test 4 เคส (username+icon, image-only→alt, anonymous ว่าง). Live NAS verify ผ่าน `/api/debug/html` หลัง deploy
+
 ## 2026-07-05 — Fix: card size badge showed "N คน" instead of file size
 
 **อาการ:** thumbnail overlay badge โชว์ "0คน"/"45คน" แทนขนาดไฟล์ (GB/MB)

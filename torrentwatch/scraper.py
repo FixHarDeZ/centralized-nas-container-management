@@ -118,7 +118,7 @@ COL_SIZE = 7  # ขนาด — "2.63 GB" / "380.60 MB"
 COL_COMPLETED = 8  # เสร็จ — completed/snatched count
 COL_SEEDS = 9  # ปล่อย — <span class="green|red">N</span> or plain number
 COL_LEECHES = 10  # ดูด — plain number (may be inside <b><a>N</a></b>)
-# col 11 = ผู้ปล่อยไฟล์ (uploader name) — unused, new as of 2026-07-05
+COL_UPLOADER = 11  # ผู้ปล่อยไฟล์ — <a>username</a> (may carry trailing icons/imgs)
 
 # Download URL constructed from site_id (id= param in details.php URL)
 # Adjust if the server returns 403/redirect — may need dl.php or downloadlink.php
@@ -751,6 +751,24 @@ def _parse_row(row, base_url: str, today: str, skip_sticky: bool = True) -> dict
     except Exception:
         leeches = 0
 
+    # ── Uploader (col 12: ผู้ปล่อยไฟล์) ──────────────────────────────────────
+    # Cell is a username link, often trailed by icons/banner images (TG, FB,
+    # decorative <img> for VIP uploaders). Take the anchor text; fall back to
+    # the anchor's img alt/title, then cell text. Empty → "" (Anonymous).
+    uploader = ""
+    try:
+        up_td = tds[COL_UPLOADER]
+        up_a = up_td.find("a")
+        node = up_a or up_td
+        uploader = node.get_text(strip=True)
+        if not uploader:
+            img = node.find("img")
+            if img:
+                uploader = (img.get("alt") or img.get("title") or "").strip()
+        uploader = uploader[:60]
+    except Exception:
+        uploader = ""
+
     if is_sticky:
         print(
             f"[scraper] _parse_row: STICKY parsed OK — site_id={site_id} title={title[:60]}",
@@ -774,6 +792,7 @@ def _parse_row(row, base_url: str, today: str, skip_sticky: bool = True) -> dict
         "completed": completed,
         "free_leech": free_leech,
         "multiplier": multiplier,
+        "uploader": uploader,
         "is_sticky": is_sticky,
     }
 

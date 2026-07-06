@@ -293,6 +293,13 @@ Bearbit block request ที่ Referer ไม่ใช่ bearbit URL:
 
 ## Recent Changes
 
+### 2026-07-06 (Uploader on card)
+
+1. **`scraper.py`** — `COL_UPLOADER = 11` parse (anchor→img alt→text, cap 60) → `uploader` in `_parse_row` dict
+2. **`db.py`** — `uploader` column (schema + migration) + upsert; UPDATE guards with `COALESCE(NULLIF(?,''), uploader)`
+3. **`static/app.js`** — `.tw-card-uploader` chip under stats row (only when `t.uploader`)
+4. **`static/style.css`** — `.tw-card-uploader` pill (accent-dim, ellipsis)
+
 ### 2026-05-18 (Source Reorder + Size Badge)
 
 1. **`db.py`** — `sort_order` column migration + backfill + `reorder_source()` + updated `get_sources()`/`add_source()`

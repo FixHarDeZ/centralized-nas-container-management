@@ -70,6 +70,7 @@ def init_db():
                 completed        INTEGER DEFAULT 0,
                 free_leech       TEXT DEFAULT '',
                 multiplier       TEXT DEFAULT '',
+                uploader         TEXT DEFAULT '',
                 first_seen_at    TEXT NOT NULL,
                 last_updated_at  TEXT NOT NULL,
                 downloaded_local INTEGER DEFAULT 0,
@@ -133,6 +134,7 @@ def init_db():
             "ALTER TABLE torrents ADD COLUMN completed      INTEGER DEFAULT 0",
             "ALTER TABLE torrents ADD COLUMN free_leech      TEXT DEFAULT ''",
             "ALTER TABLE torrents ADD COLUMN multiplier      TEXT DEFAULT ''",
+    "ALTER TABLE torrents ADD COLUMN uploader        TEXT DEFAULT ''",
             "ALTER TABLE torrents ADD COLUMN is_sticky       INTEGER DEFAULT 0",
             "ALTER TABLE torrents ADD COLUMN watched_status  INTEGER DEFAULT 0",
             "ALTER TABLE torrents ADD COLUMN sticky_notified INTEGER DEFAULT 0",
@@ -318,7 +320,9 @@ def upsert_torrent(source_id: int, site_id: str, data: dict) -> tuple[bool, int]
             c.execute(
                 """UPDATE torrents
                    SET seeds=?, leeches=?, completed=?, date_posted=?, category=?,
-                       free_leech=?, multiplier=?, is_sticky=?, last_updated_at=?
+                       free_leech=?, multiplier=?,
+                       uploader=COALESCE(NULLIF(?, ''), uploader),
+                       is_sticky=?, last_updated_at=?
                    WHERE id=?""",
                 (
                     data["seeds"],
@@ -328,6 +332,7 @@ def upsert_torrent(source_id: int, site_id: str, data: dict) -> tuple[bool, int]
                     data.get("category", ""),
                     data.get("free_leech", ""),
                     data.get("multiplier", ""),
+                    data.get("uploader", ""),
                     1 if data.get("is_sticky") else 0,
                     now,
                     existing["id"],
@@ -339,8 +344,8 @@ def upsert_torrent(source_id: int, site_id: str, data: dict) -> tuple[bool, int]
                    (source_id, site_id, title, detail_url, torrent_url, cover_url,
                     seeds, leeches, date_posted, posted_at, category,
                     file_count, file_size, completed, free_leech, multiplier,
-                    is_sticky, first_seen_at, last_updated_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    uploader, is_sticky, first_seen_at, last_updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 source_id,
                 site_id,
@@ -358,6 +363,7 @@ def upsert_torrent(source_id: int, site_id: str, data: dict) -> tuple[bool, int]
                 data.get("completed", 0),
                 data.get("free_leech", ""),
                 data.get("multiplier", ""),
+                data.get("uploader", ""),
                 1 if data.get("is_sticky") else 0,
                 now,
                 now,
