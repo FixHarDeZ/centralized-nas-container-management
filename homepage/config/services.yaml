@@ -63,6 +63,12 @@
           server: my-docker
           container: watchtower
 
+    - Log Medic:
+        icon: mdi-medical-bag
+        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15070"
+        description: Docker Log Monitor + Auto-fix
+        ping: "{{HOMEPAGE_VAR_DDNS_BASE_HTTP}}:5070"
+
 # ─── 📝 Tools & Notes ─────────────────────────────────────────────────────────
 - 📝 Tools & Notes:
     - News Feed:
