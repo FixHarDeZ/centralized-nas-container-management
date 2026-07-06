@@ -1,8 +1,8 @@
 # log-medic — Index
 
 ## Gaps / TODOs
-Code complete (all 13 plan tasks) and merged to `main` (commit `76e9c0d`), pushed to origin.
-Not yet deployed to NAS — remaining gaps are manual one-time setup only:
+v1 (13 plan tasks) merged to `main` (`76e9c0d`). Close-the-loop feature (verdict triage + merge poll + auto deploy) on branch `feat/log-medic-close-loop`, not yet merged/deployed.
+Remaining gaps are manual one-time setup only:
 - `nginx/.htpasswd` not generated yet — run `htpasswd -c log-medic/nginx/.htpasswd <user>` before first deploy (same manual step as `friendly-reminder`).
 - Vault keys not added yet — run `make edit-vault`, add `stacks.log_medic.dashboard.{user,password}` and `stacks.log_medic.github_token`.
 - `/volume2/docker/log-medic/workspaces/<repo>/` must be `git clone`d once manually on the NAS before first use — the app only ever runs `git fetch` there.
