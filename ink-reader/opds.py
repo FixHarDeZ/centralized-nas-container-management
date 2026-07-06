@@ -1,0 +1,44 @@
+from xml.etree.ElementTree import Element, SubElement, tostring
+
+import db
+
+ATOM = "http://www.w3.org/2005/Atom"
+ACQ_TYPE = "application/atom+xml;type=entry;profile=opds-catalog"
+
+
+def _feed(id: str, title: str):
+    feed = Element("feed", xmlns=ATOM)
+    SubElement(feed, "id").text = id
+    SubElement(feed, "title").text = title
+    SubElement(feed, "updated").text = db.now_iso()
+    return feed
+
+
+def _entry(feed, id: str, title: str, updated: str):
+    entry = SubElement(feed, "entry")
+    SubElement(entry, "id").text = id
+    SubElement(entry, "title").text = title
+    SubElement(entry, "updated").text = updated
+    return entry
+
+
+def root_feed() -> bytes:
+    feed = _feed("ink-reader:root", "ink-reader")
+    for path, name in (("/opds/new", "ใหม่ล่าสุด"), ("/opds/kept", "ที่เก็บไว้")):
+        entry = _entry(feed, f"ink-reader:{path}", name, db.now_iso())
+        SubElement(entry, "link", rel="subsection", href=path, type=ACQ_TYPE)
+    return tostring(feed, encoding="utf-8", xml_declaration=True)
+
+
+def titles_feed(status: str) -> bytes:
+    names = {"new": "ใหม่ล่าสุด", "kept": "ที่เก็บไว้"}
+    feed = _feed(f"ink-reader:{status}", names.get(status, status))
+    for row in db.list_titles(status=status):
+        entry = _entry(feed, f"ink-reader:title:{row['id']}", row["title"],
+                       row["downloaded_at"])
+        SubElement(entry, "link", rel="http://opds-spec.org/acquisition",
+                   href=f"/files/{row['id']}.cbz",
+                   type="application/vnd.comicbook+zip")
+        SubElement(entry, "link", rel="http://opds-spec.org/image",
+                   href=f"/covers/{row['id']}.jpg", type="image/jpeg")
+    return tostring(feed, encoding="utf-8", xml_declaration=True)
