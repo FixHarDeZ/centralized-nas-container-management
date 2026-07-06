@@ -232,6 +232,28 @@ def test_watch_once_resets_started_at_on_genuine_image_change(conn, monkeypatch)
     assert abs((datetime.now(UTC) - called_started_at).total_seconds()) < 5
 
 
+def test_watch_handles_container_not_found_gracefully(conn, monkeypatch):
+    import asyncio
+
+    import docker
+    import app.db as db
+    import app.watcher as watcher
+
+    async def run():
+        docker_client = MagicMock()
+        docker_client.containers.get.side_effect = docker.errors.NotFound("No such container: secretary")
+        mgr = watcher.WatcherManager(docker_client=docker_client)
+        db.upsert_monitored_container(conn, "secretary", None, None, "staging", 0, 0, None)
+        await mgr.reload(conn)
+        # Let the watcher loop run briefly — it should log warning, not crash
+        await asyncio.sleep(0.1)
+        assert "secretary" in mgr._tasks
+        for t in list(mgr._tasks.values()):
+            t.cancel()
+
+    asyncio.run(run())
+
+
 def test_cancel_closes_live_stream_and_clears_registries():
     import app.watcher as watcher
 

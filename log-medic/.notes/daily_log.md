@@ -1,5 +1,8 @@
 # log-medic — Daily Log
 
+## 2026-07-06 — Fix watcher crash loop for missing containers
+Watcher crashes endlessly when a monitored container doesn't exist in Docker (e.g. "secretary" removed but still in `monitored_containers` DB). `_watch()` broad `except Exception` catch logged full traceback "crashed, reconnecting" every 5s, spamming logs. Fix: added specific `docker.errors.NotFound` catch before the broad handler — logs a clean one-line warning instead. Added `test_watch_handles_container_not_found_gracefully`. 69/69 tests passing.
+
 ## 2026-07-05 — Close the loop (feat/log-medic-close-loop)
 Built per docs/superpowers/plans (spec + plan, tasks 1-6, `.superpowers/sdd/task-{1..6}-brief.md`).
 Closed the three gaps left after the initial merge: (1) no code/infra triage before

@@ -202,6 +202,8 @@ class WatcherManager:
                     await asyncio.to_thread(
                         _watch_once, self._docker, row, conn, stop_event, self._last_image_id, self._streams
                     )
+                except docker.errors.NotFound:
+                    logger.warning("container %s not found, will retry", row["name"])
                 # Broad catch: treats permanent errors (bad config, docker API incompatibility) the same as
                 # transient disconnects — retries forever either way. A `since=0` bug like this one hid
                 # silently until found in review; consider narrowing if this recurs.
