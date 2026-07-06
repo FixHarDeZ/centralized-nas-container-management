@@ -9,6 +9,7 @@ import time
 import docker
 
 from app import db
+from app.locks import workspace_lock
 from app.notifier import notify
 
 logger = logging.getLogger(__name__)
@@ -55,12 +56,13 @@ def deploy(conn, container_row, fingerprint: str, pr_url: str, docker_client=Non
     stack_dir = os.path.join(STACKS_ROOT, subdir)
     step = "sync_workspace"
     try:
-        subprocess.run(["git", "fetch", "origin"], cwd=repo_root, check=True, capture_output=True, text=True)
-        subprocess.run(["git", "checkout", "-B", "main", "origin/main"], cwd=repo_root, check=True, capture_output=True, text=True)
-        subprocess.run(["git", "reset", "--hard", "origin/main"], cwd=repo_root, check=True, capture_output=True, text=True)
+        with workspace_lock:
+            subprocess.run(["git", "fetch", "origin"], cwd=repo_root, check=True, capture_output=True, text=True)
+            subprocess.run(["git", "checkout", "-B", "main", "origin/main"], cwd=repo_root, check=True, capture_output=True, text=True)
+            subprocess.run(["git", "reset", "--hard", "origin/main"], cwd=repo_root, check=True, capture_output=True, text=True)
 
-        step = "copy_files"
-        copied = copy_tracked_files(repo_root, subdir, stack_dir)
+            step = "copy_files"
+            copied = copy_tracked_files(repo_root, subdir, stack_dir)
 
         step = "compose_up"
         subprocess.run(
@@ -85,9 +87,13 @@ def deploy(conn, container_row, fingerprint: str, pr_url: str, docker_client=Non
         db.update_event_status(conn, fingerprint, name, status="deploy_failed")
         notify(
             f"❌ Deploy failed for {name} at step {step}: {str(detail)[:300]}\n"
-            f"Recovery: git revert the fix commit and merge the revert PR."
+            f"Recovery: fix forward or revert on the workstation, then redeploy manually (./scripts/deploy.sh)."
         )
         return False
+
+    with workspace_lock:
+        subprocess.run(["git", "branch", "-D", f"fix/{fingerprint}"],
+                       cwd=repo_root, capture_output=True, text=True)  # best-effort local cleanup
 
     db.update_event_status(conn, fingerprint, name, status="deployed")
     notify(f"🚀 Deployed {name} ({copied} files) — PR merged: {pr_url}")

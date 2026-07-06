@@ -18,7 +18,7 @@ v1 pipeline ends at "PR opened". Three gaps versus the intended operator flow:
 |---|---|
 | How does log-medic learn a PR was merged? | **Poll GitHub** via `gh pr view` on a scheduler interval. No Telegram inbound — the operator merges on GitHub (the PR link is already in the Telegram message). |
 | How does merged code reach the runtime dir? | **Copy from the existing workspace clone** into `/volume2/docker/<stack>/`, then `docker compose up -d --build` through the already-mounted Docker socket. |
-| What happens if a deploy fails? | **Verify + notify only.** No auto-rollback. Recovery is manual: `git revert` + merge the revert PR → the same loop deploys the revert. |
+| What happens if a deploy fails? | **Verify + notify only.** No auto-rollback. Recovery is manual: fix forward or revert on the workstation, then redeploy manually (`./scripts/deploy.sh`). |
 
 ## Gap 1 — Triage verdict (`code` vs `infra`)
 
@@ -131,7 +131,8 @@ set status `merged` (terminal for this event) → return without deploying.
    - Success → status `deployed`, notify `🚀 Deployed <container> (PR merged: <url>)`.
    - Any step fails → status `deploy_failed`, notify
      `❌ Deploy failed for <container> at step <step>: <error excerpt>` with the
-     manual-recovery hint (revert + merge). No rollback.
+     manual-recovery hint (fix forward or revert on the workstation, then redeploy
+     manually). No rollback.
 
 ### Interaction with existing gates (free wins)
 

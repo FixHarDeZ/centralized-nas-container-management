@@ -58,6 +58,7 @@ def get_conn(db_path: str | None = None) -> sqlite3.Connection:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     conn = sqlite3.connect(path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout=5000")
     return conn
 
 
@@ -141,8 +142,18 @@ def record_event(
     isn't double-bumped."""
     now = now or _now_iso()
     if event_exists(conn, fingerprint, container):
+        # Preserve in-flight pipeline status: while a fix PR is open (pr_opened) or
+        # merged awaiting deploy (merged), the same error keeps recurring (fix not
+        # deployed yet). Recurrence must NOT reset status to gated/new, or
+        # poll_pr_merges (queries only status='pr_opened') never sees the merge and
+        # the container is never deployed. 'deployed' is intentionally NOT protected:
+        # post-deploy recurrence must re-enter the pipeline (cooldown/dirty-repo gated)
+        # so a fix that didn't work re-alerts.
         conn.execute(
-            "UPDATE events SET last_seen=?, count=count+1, status=?, gate_reason=? WHERE fingerprint=? AND container=?",
+            "UPDATE events SET last_seen=?, count=count+1, "
+            "status=CASE WHEN status IN ('pr_opened','merged') THEN status ELSE ? END, "
+            "gate_reason=CASE WHEN status IN ('pr_opened','merged') THEN gate_reason ELSE ? END "
+            "WHERE fingerprint=? AND container=?",
             (now, status, gate_reason, fingerprint, container),
         )
     else:

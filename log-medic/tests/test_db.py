@@ -99,6 +99,31 @@ def test_verdict_column_added_to_existing_db(tmp_path):
     assert row["verdict"] == "code"
 
 
+def test_record_event_preserves_pr_opened_on_recurrence(tmp_path):
+    import app.db as db
+    conn = db.get_conn(str(tmp_path / "t.db"))
+    db.init_db(conn)
+    db.record_event(conn, "fp1", "c1", status="new")
+    db.update_event_status(conn, "fp1", "c1", status="pr_opened", pr_url="https://x/pull/1")
+    # error recurs while PR is open -> process_event would call record_event with a gate status
+    db.record_event(conn, "fp1", "c1", status="gated", gate_reason="cooldown")
+    row = conn.execute("SELECT status, count, pr_url FROM events WHERE fingerprint='fp1'").fetchone()
+    assert row["status"] == "pr_opened"   # NOT clobbered to gated
+    assert row["count"] == 2              # occurrence still counted (2 record_event calls)
+    assert row["pr_url"] == "https://x/pull/1"
+
+
+def test_record_event_does_not_protect_deployed(tmp_path):
+    import app.db as db
+    conn = db.get_conn(str(tmp_path / "t.db"))
+    db.init_db(conn)
+    db.record_event(conn, "fp2", "c1", status="new")
+    db.update_event_status(conn, "fp2", "c1", status="deployed")
+    db.record_event(conn, "fp2", "c1", status="gated", gate_reason="cooldown")
+    row = conn.execute("SELECT status FROM events WHERE fingerprint='fp2'").fetchone()
+    assert row["status"] == "gated"   # post-deploy recurrence re-enters pipeline
+
+
 def test_get_events_by_status(conn):
     import app.db as db
     db.record_event(conn, "fp1", "c1", status="analyzed")
