@@ -2,46 +2,504 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>log-medic</title>
   <style>
-    body { font-family: system-ui, sans-serif; margin: 2rem; background: #111; color: #eee; }
-    table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
-    th, td { border: 1px solid #333; padding: 0.4rem 0.6rem; text-align: left; font-size: 0.9rem; }
-    button { cursor: pointer; }
-    .tabs button { margin-right: 0.5rem; padding: 0.4rem 1rem; }
-    .tab-content { display: none; }
+    :root {
+      --bg-base: #0f1117;
+      --bg-surface: #161822;
+      --bg-elevated: #1e2030;
+      --bg-hover: #252738;
+      --border: #2a2d3e;
+      --text-primary: #e2e4f0;
+      --text-secondary: #8b8fa8;
+      --text-muted: #5c6078;
+      --accent: #7c6af6;
+      --accent-hover: #9484ff;
+      --green: #34d399;
+      --green-bg: rgba(52,211,153,.1);
+      --amber: #fbbf24;
+      --amber-bg: rgba(251,191,36,.1);
+      --blue: #60a5fa;
+      --blue-bg: rgba(96,165,250,.1);
+      --red: #f87171;
+      --red-bg: rgba(248,113,113,.1);
+      --cyan: #22d3ee;
+      --radius: 10px;
+      --radius-sm: 6px;
+      --shadow: 0 2px 8px rgba(0,0,0,.3);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg-base);
+      color: var(--text-primary);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 1.5rem;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .header-left { display: flex; align-items: center; gap: 1rem; }
+    .header h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent), var(--cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .header-actions { display: flex; align-items: center; gap: .75rem; }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: .4rem;
+      padding: .45rem .9rem;
+      font-size: .82rem;
+      font-weight: 500;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      cursor: pointer;
+      transition: all .15s;
+      white-space: nowrap;
+    }
+    .btn:hover { background: var(--bg-hover); border-color: var(--accent); }
+    .btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-sm { padding: .3rem .6rem; font-size: .75rem; }
+    .btn-icon { padding: .4rem .5rem; }
+    .btn-ghost {
+      background: transparent;
+      border-color: transparent;
+      color: var(--text-secondary);
+    }
+    .btn-ghost:hover { color: var(--text-primary); background: var(--bg-hover); }
+    .btn-danger { border-color: var(--red); color: var(--red); }
+    .btn-danger:hover { background: var(--red-bg); }
+
+    /* ── Tabs ── */
+    .tabs {
+      display: flex;
+      gap: .25rem;
+      padding: .75rem 1.5rem 0;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border);
+    }
+    .tab-btn {
+      padding: .5rem 1rem;
+      font-size: .85rem;
+      font-weight: 500;
+      background: transparent;
+      border: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all .15s;
+      margin-bottom: -1px;
+    }
+    .tab-btn:hover { color: var(--text-primary); }
+    .tab-btn.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+
+    /* ── Tab content ── */
+    .tab-content { display: none; padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
     .tab-content.active { display: block; }
+
+    /* ── Cards ── */
+    .card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .card-header {
+      padding: .75rem 1rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .card-header h3 {
+      font-size: .9rem;
+      font-weight: 600;
+      color: var(--text-primary);
+    }
+    .card-body { padding: 1rem; }
+
+    /* ── Forms ── */
+    .form-row {
+      display: flex;
+      gap: .5rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .form-input, .form-select {
+      padding: .45rem .7rem;
+      font-size: .82rem;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      outline: none;
+      transition: border-color .15s;
+    }
+    .form-input:focus, .form-select:focus {
+      border-color: var(--accent);
+    }
+    .form-input::placeholder { color: var(--text-muted); }
+    .form-select { cursor: pointer; }
+    .form-input.wide { width: 200px; }
+
+    /* ── Table ── */
+    .table-wrap { overflow-x: auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: .82rem;
+    }
+    thead th {
+      padding: .6rem .75rem;
+      text-align: left;
+      font-weight: 600;
+      font-size: .75rem;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      color: var(--text-secondary);
+      background: var(--bg-elevated);
+      border-bottom: 1px solid var(--border);
+    }
+    tbody td {
+      padding: .6rem .75rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    tbody tr { transition: background .1s; }
+    tbody tr:hover { background: var(--bg-hover); }
+
+    /* ── Badges ── */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: .15rem .5rem;
+      font-size: .72rem;
+      font-weight: 600;
+      border-radius: 999px;
+      text-transform: uppercase;
+      letter-spacing: .03em;
+    }
+    .badge-dev { background: var(--amber-bg); color: var(--amber); }
+    .badge-staging { background: var(--blue-bg); color: var(--blue); }
+    .badge-stable { background: var(--green-bg); color: var(--green); }
+    .badge-new { background: var(--blue-bg); color: var(--blue); }
+    .badge-gated { background: var(--amber-bg); color: var(--amber); }
+    .badge-analyzed { background: var(--green-bg); color: var(--green); }
+    .badge-notified { background: rgba(34,211,238,.1); color: var(--cyan); }
+    .badge-pr_opened { background: rgba(124,106,246,.15); color: var(--accent); }
+    .badge-merged { background: var(--green-bg); color: var(--green); }
+    .badge-deployed { background: var(--green-bg); color: var(--green); }
+    .badge-deploy_failed { background: var(--red-bg); color: var(--red); }
+    .badge-verdict-code { background: var(--red-bg); color: var(--red); }
+    .badge-verdict-infra { background: var(--blue-bg); color: var(--blue); }
+    .badge-paused { background: var(--amber-bg); color: var(--amber); }
+    .badge-running { background: var(--green-bg); color: var(--green); }
+
+    /* ── Maturity select inline ── */
+    .maturity-select {
+      padding: .2rem .4rem;
+      font-size: .75rem;
+      background: var(--bg-base);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text-primary);
+      cursor: pointer;
+      outline: none;
+    }
+    .maturity-select:focus { border-color: var(--accent); }
+
+    /* ── Actions cell ── */
+    .actions { display: flex; gap: .35rem; align-items: center; }
+
+    /* ── Toast ── */
+    .toast-container {
+      position: fixed;
+      top: 1rem;
+      right: 1rem;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: .5rem;
+    }
+    .toast {
+      padding: .6rem 1rem;
+      border-radius: var(--radius-sm);
+      font-size: .82rem;
+      font-weight: 500;
+      box-shadow: var(--shadow);
+      animation: toast-in .25s ease-out;
+      display: flex;
+      align-items: center;
+      gap: .4rem;
+    }
+    .toast-success { background: #065f46; color: #a7f3d0; border: 1px solid #059669; }
+    .toast-error { background: #7f1d1d; color: #fecaca; border: 1px solid #dc2626; }
+    .toast-info { background: #1e3a5f; color: #bfdbfe; border: 1px solid #3b82f6; }
+    @keyframes toast-in {
+      from { opacity: 0; transform: translateX(1rem); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
+    /* ── Empty state ── */
+    .empty-state {
+      text-align: center;
+      padding: 3rem 1rem;
+      color: var(--text-muted);
+    }
+    .empty-state svg { margin-bottom: .75rem; opacity: .4; }
+
+    /* ── Checkbox toggle ── */
+    .toggle {
+      position: relative;
+      width: 36px;
+      height: 20px;
+      cursor: pointer;
+    }
+    .toggle input { display: none; }
+    .toggle-slider {
+      position: absolute;
+      inset: 0;
+      background: var(--bg-hover);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      transition: all .2s;
+    }
+    .toggle-slider::before {
+      content: '';
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      left: 2px;
+      top: 2px;
+      background: var(--text-muted);
+      border-radius: 50%;
+      transition: all .2s;
+    }
+    .toggle input:checked + .toggle-slider {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+    .toggle input:checked + .toggle-slider::before {
+      transform: translateX(16px);
+      background: #fff;
+    }
+
+    /* ── Watcher status pill ── */
+    .watcher-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: .35rem;
+      padding: .3rem .7rem;
+      border-radius: 999px;
+      font-size: .75rem;
+      font-weight: 600;
+    }
+    .watcher-pill .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    .watcher-pill.running .dot { background: var(--green); }
+    .watcher-pill.running { background: var(--green-bg); color: var(--green); }
+    .watcher-pill.paused .dot { background: var(--amber); animation: none; }
+    .watcher-pill.paused { background: var(--amber-bg); color: var(--amber); }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: .4; }
+    }
+
+    /* ── Checkbox label ── */
+    .check-label {
+      display: inline-flex;
+      align-items: center;
+      gap: .35rem;
+      font-size: .82rem;
+      color: var(--text-secondary);
+      cursor: pointer;
+    }
+
+    /* ── Maturity legend ── */
+    .maturity-legend {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-bottom: 1rem;
+    }
+    .maturity-item {
+      display: flex;
+      align-items: flex-start;
+      gap: .6rem;
+      flex: 1;
+      min-width: 220px;
+      padding: .7rem .85rem;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+    }
+    .maturity-item .badge { flex-shrink: 0; margin-top: .1rem; }
+    .maturity-info { display: flex; flex-direction: column; gap: .1rem; }
+    .maturity-info .label { font-size: .8rem; font-weight: 600; color: var(--text-primary); }
+    .maturity-info .desc { font-size: .73rem; color: var(--text-secondary); line-height: 1.4; }
   </style>
 </head>
 <body>
-  <h1>log-medic</h1>
+  <!-- Toast container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <h1>log-medic</h1>
+      <span id="watcher-status" class="watcher-pill running">
+        <span class="dot"></span>
+        <span id="watcher-label">running</span>
+      </span>
+    </div>
+    <div class="header-actions">
+      <button class="btn" id="btn-test-noti" onclick="testNotification()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        Test Noti
+      </button>
+      <button class="btn" id="watcher-toggle" onclick="toggleWatcher()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+        Pause
+      </button>
+    </div>
+  </div>
+
+  <!-- Tabs -->
   <div class="tabs">
-    <button onclick="showTab('containers')">Containers</button>
-    <button onclick="showTab('events')">Events</button>
-    <button id="watcher-toggle" onclick="toggleWatcher()">Pause watcher</button>
+    <button class="tab-btn active" onclick="showTab('containers')">Containers</button>
+    <button class="tab-btn" onclick="showTab('events')">Events</button>
   </div>
 
+  <!-- Containers tab -->
   <div id="containers" class="tab-content active">
-    <h2>Add container</h2>
-    <input id="add-name" placeholder="name" />
-    <input id="add-repo" placeholder="repo (blank = notify_only)" />
-    <input id="add-subdir" placeholder="subdir" />
-    <select id="add-maturity">
-      <option>dev</option><option>staging</option><option>stable</option>
-    </select>
-    <label><input type="checkbox" id="add-notify-only" /> notify_only</label>
-    <button onclick="addContainer()">Add</button>
-    <table id="containers-table">
-      <thead><tr><th>Name</th><th>Maturity</th><th>Notify only</th><th>Paused</th><th>Actions</th></tr></thead>
-      <tbody></tbody>
-    </table>
+    <div class="card" style="margin-bottom: 1rem;">
+      <div class="card-header">
+        <h3>Add container</h3>
+      </div>
+      <div class="card-body">
+        <div class="form-row">
+          <input class="form-input wide" id="add-name" placeholder="container name" />
+          <input class="form-input wide" id="add-repo" placeholder="repo URL (opt)" />
+          <input class="form-input" id="add-subdir" placeholder="subdir (opt)" style="width:120px" />
+          <select class="form-select" id="add-maturity">
+            <option value="dev">dev</option>
+            <option value="staging">staging</option>
+            <option value="stable">stable</option>
+          </select>
+          <label class="check-label">
+            <input type="checkbox" id="add-notify-only" /> notify only
+          </label>
+          <button class="btn btn-primary" onclick="addContainer()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Maturity legend -->
+    <div class="maturity-legend">
+      <div class="maturity-item">
+        <span class="badge badge-dev">dev</span>
+        <div class="maturity-info">
+          <span class="label">Development</span>
+          <span class="desc">Log events only — no gates, no analysis, no notifications. Safe for noisy containers.</span>
+        </div>
+      </div>
+      <div class="maturity-item">
+        <span class="badge badge-staging">staging</span>
+        <div class="maturity-info">
+          <span class="label">Staging</span>
+          <span class="desc">Full gate chain + Claude root-cause analysis. No auto-fix PR — review the analysis first.</span>
+        </div>
+      </div>
+      <div class="maturity-item">
+        <span class="badge badge-stable">stable</span>
+        <div class="maturity-info">
+          <span class="label">Stable</span>
+          <span class="desc">Full pipeline + auto-fix PRs (if ENABLE_FIX_RUNNER=true and verdict=code). Production-ready containers.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3>Monitored containers</h3>
+      </div>
+      <div class="table-wrap">
+        <table id="containers-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Maturity</th>
+              <th>Notify only</th>
+              <th>Paused</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
+  <!-- Events tab -->
   <div id="events" class="tab-content">
-    <table id="events-table">
-      <thead><tr><th>Time</th><th>Container</th><th>Fingerprint</th><th>Count</th><th>Status</th><th>Verdict</th><th>Gate reason</th></tr></thead>
-      <tbody></tbody>
-    </table>
+    <div class="card">
+      <div class="card-header">
+        <h3>Recent events</h3>
+      </div>
+      <div class="table-wrap">
+        <table id="events-table">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Container</th>
+              <th>Fingerprint</th>
+              <th>Count</th>
+              <th>Status</th>
+              <th>Verdict</th>
+              <th>Gate reason</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <script src="/static/app.js"></script>

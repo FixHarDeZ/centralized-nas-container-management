@@ -59,3 +59,17 @@ def test_watcher_pause_resume(client):
     assert resp.status_code == 200
     resp = client.post("/api/watcher/resume")
     assert resp.status_code == 200
+
+
+def test_notify_test_success(client, monkeypatch):
+    monkeypatch.setattr("app.api.notify_test.notify", lambda text: [])
+    resp = client.post("/api/notify/test")
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True}
+
+
+def test_notify_test_failure(client, monkeypatch):
+    monkeypatch.setattr("app.api.notify_test.notify", lambda text: ["send failed"])
+    resp = client.post("/api/notify/test")
+    assert resp.status_code == 502
+    assert "errors" in resp.json()["detail"]

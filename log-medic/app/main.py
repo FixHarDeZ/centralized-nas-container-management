@@ -9,7 +9,7 @@ import docker
 from fastapi import FastAPI
 
 from app import config_seed, db, scheduler as scheduler_module
-from app.api import containers, events, health, watcher_control
+from app.api import containers, events, health, notify_test, watcher_control
 from app.watcher import HOT_RELOAD_INTERVAL_SECONDS, WatcherManager
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -62,6 +62,7 @@ app = FastAPI(title="log-medic", lifespan=lifespan)
 app.include_router(health.router)
 app.include_router(containers.router)
 app.include_router(events.router)
+app.include_router(notify_test.router)
 app.include_router(watcher_control.router)
 
 from pathlib import Path

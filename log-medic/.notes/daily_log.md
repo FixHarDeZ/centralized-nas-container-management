@@ -1,5 +1,12 @@
 # log-medic — Daily Log
 
+## 2026-07-06 — Dashboard UI redesign + edit maturity + test notification
+1. **UI redesign**: complete overhaul of `index.html` + `app.js` — dark professional theme with CSS variables, card layout, badges for maturity/status/verdict, toggle switches for notify_only/paused, toast notification system, watcher status pill with animation, SVG icons.
+2. **Edit existing containers**: containers table now has inline `<select>` dropdown for maturity (dev/staging/stable) — changes PATCH directly to API. Previously only editable at add time.
+3. **Test notification button**: new `POST /api/notify/test` endpoint (`app/api/notify_test.py`) + button in header bar — sends `"🧪 log-medic: test notification"` to Telegram, shows success/error toast. 2 new tests in `test_api.py`.
+4. **Quick add**: discovered (unmonitored) containers shown with "Add" button for one-click add with default `dev` maturity.
+73/73 tests passing.
+
 ## 2026-07-06 — Fix watcher crash loop + orphan container deploy fix + give-up-after-N
 1. Watcher crashes endlessly when a monitored container doesn't exist in Docker (e.g. "secretary" removed but still in `monitored_containers` DB). `_watch()` broad `except Exception` catch logged full traceback "crashed, reconnecting" every 5s, spamming logs. Fix: added specific `docker.errors.NotFound` catch before the broad handler — logs a clean one-line warning instead.
 2. Even with the clean warning, watcher still retried every 5s forever for missing containers. Added `NOT_FOUND_GIVE_UP_AFTER=3` threshold: after3 consecutive NotFound failures, watcher returns and `reload()` stops recreating the task (checks `_not_found_count` before spawning). Count resets on successful attach. If user re-adds container via API, count is cleared on DB removal.
