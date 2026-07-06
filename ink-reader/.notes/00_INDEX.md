@@ -88,13 +88,24 @@ Dashboard/OPDS credentials are nginx-only: vault
 ## Gaps / Known Risk
 
 - Parser selectors (`scraper.py`) were built against fixture HTML captured
-  from a live pull before implementation (workstation cannot reach the site
-  directly — outbound blocked). Task 9 Step 9 does a live confirmation pass
-  against the deployed NAS container; if the site has changed again since
-  the fixture capture, selectors need adjusting there, not here.
+  from a live pull before implementation. **Verified live 2026-07-06**
+  against the deployed NAS container: `found=11, downloaded=10, error=null`
+  — zero drift from the fixtures, no parser changes needed.
 - No read-progress sync — KOReader tracks progress locally on the M8 only
   (explicitly out of scope, see spec).
 - Single source only (doujin-th.com) — multi-source explicitly out of scope.
+- DSM reverse proxy 15068→5068 not yet added (only needed for outside-LAN
+  dashboard access) — user's manual DSM step, not done.
+- KOReader-on-M8 setup/read test not yet done — user's manual device step,
+  not done.
+
+## Deploy Status
+
+- Deployed 2026-07-06, both `ink-reader` + `ink-reader-nginx` containers
+  healthy. `ink-reader` added to `scripts/deploy.sh`'s `ALL_STACKS` array.
+- Port 5068 is intentionally LAN-only (no public HTTPS proxy configured yet);
+  verification/administration from off-LAN needs SSH to the NAS + curl to
+  `localhost:5068`, same as any other LAN-only stack in this repo.
 
 ## Related
 
