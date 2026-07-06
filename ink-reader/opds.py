@@ -3,20 +3,20 @@ from xml.etree.ElementTree import Element, SubElement, tostring
 import db
 
 ATOM = "http://www.w3.org/2005/Atom"
-ACQ_TYPE = "application/atom+xml;type=entry;profile=opds-catalog"
+ACQ_TYPE = "application/atom+xml;profile=opds-catalog;kind=acquisition"
 
 
-def _feed(id: str, title: str):
+def _feed(feed_id: str, title: str) -> Element:
     feed = Element("feed", xmlns=ATOM)
-    SubElement(feed, "id").text = id
+    SubElement(feed, "id").text = feed_id
     SubElement(feed, "title").text = title
     SubElement(feed, "updated").text = db.now_iso()
     return feed
 
 
-def _entry(feed, id: str, title: str, updated: str):
+def _entry(feed: Element, entry_id: str, title: str, updated: str) -> Element:
     entry = SubElement(feed, "entry")
-    SubElement(entry, "id").text = id
+    SubElement(entry, "id").text = entry_id
     SubElement(entry, "title").text = title
     SubElement(entry, "updated").text = updated
     return entry
