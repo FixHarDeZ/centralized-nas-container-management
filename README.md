@@ -20,6 +20,7 @@ Docker stacks for Synology DS925+ NAS, managed via Synology Container Manager.
 | `torrentwatch/` | Daily torrent monitor for bearbit.org — scrapes, filters, LINE alerts | `5059` | `https://…:15059` |
 | `news-feed/` | AI & IT news feed bot — Thai summaries via Claude/DeepSeek, digest to LINE + Telegram, dashboard | `5064` | `https://…:15064` |
 | `wallpaper-scout/` | Wallpaper research/curation — Wallhaven API + LLM alias expansion, writes into Synology Photos folders by purpose/topic | `5067` | — (LAN-only, no public HTTPS proxy) |
+| `ink-reader/` | Doujin library + OPDS catalog for Meebook M8 — scrapes doujin-th.com, converts to CBZ, curation dashboard | `5068` | `https://…:15068` |
 
 ### Reverse Proxy Summary
 
@@ -37,6 +38,7 @@ All stacks except `watchtower` are exposed externally via **Synology Reverse Pro
 | torrentwatch | `https://…:15059` | `http://localhost:5059` |
 | Hermes | `https://…:15063` | `http://localhost:5063` |
 | news-feed | `https://…:15064` | `http://localhost:5064` |
+| ink-reader | `https://…:15068` | `http://localhost:5068` |
 
 > Your router must forward each **external port → NAS** so traffic reaches Synology Reverse Proxy. Homepage is the only exception — it has its own Nginx inside the container that handles TLS, so Synology RP simply forwards `:443` to port `3000` unencrypted and lets Nginx take over from there.
 

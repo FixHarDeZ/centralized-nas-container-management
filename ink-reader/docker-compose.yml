@@ -1,0 +1,36 @@
+services:
+  ink-reader:
+    build: .
+    container_name: ink-reader
+    restart: unless-stopped
+    expose:
+      - "8000"
+    env_file: .env
+    environment:
+      - TZ=Asia/Bangkok
+      - DATA_DIR=/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/status', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    volumes:
+      - ink_reader_data:/data
+
+  nginx:
+    image: nginx:alpine
+    container_name: ink-reader-nginx
+    restart: unless-stopped
+    ports:
+      - "5068:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/.htpasswd:/etc/nginx/.htpasswd:ro
+    environment:
+      - TZ=Asia/Bangkok
+    depends_on:
+      - ink-reader
+
+volumes:
+  ink_reader_data:
