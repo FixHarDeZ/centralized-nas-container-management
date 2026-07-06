@@ -20,6 +20,7 @@ services:
       - log_medic_data:/data
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - /volume2/docker/log-medic/workspaces:/workspaces
+      - /volume2/docker:/stacks
 
   log-medic-nginx:
     image: nginx:alpine

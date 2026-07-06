@@ -10,6 +10,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && curl -fsSL -o /tmp/gh.tar.gz https://github.com/cli/cli/releases/download/v2.63.2/gh_2.63.2_linux_amd64.tar.gz \
     && tar -xz -C /usr/local --strip-components=2 -f /tmp/gh.tar.gz gh_2.63.2_linux_amd64/bin/gh \
     && rm -f /tmp/gh.tar.gz \
+    && curl -fsSL -o /tmp/docker.tgz https://download.docker.com/linux/static/stable/x86_64/docker-27.3.1.tgz \
+    && tar -xz -C /usr/local/bin --strip-components=1 -f /tmp/docker.tgz docker/docker \
+    && rm -f /tmp/docker.tgz \
+    && mkdir -p /usr/local/lib/docker/cli-plugins \
+    && curl -fsSL -o /usr/local/lib/docker/cli-plugins/docker-compose \
+       https://github.com/docker/compose/releases/download/v2.32.4/docker-compose-linux-x86_64 \
+    && chmod +x /usr/local/lib/docker/cli-plugins/docker-compose \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

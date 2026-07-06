@@ -63,7 +63,7 @@ async function loadEvents() {
   tbody.innerHTML = "";
   for (const e of rows) {
     const tr = document.createElement("tr");
-    tr.innerHTML = `<td>${e.last_seen}</td><td>${e.container}</td><td>${e.fingerprint}</td><td>${e.count}</td><td>${e.status}</td><td>${e.gate_reason ?? "-"}</td>`;
+    tr.innerHTML = `<td>${e.last_seen}</td><td>${e.container}</td><td>${e.fingerprint}</td><td>${e.count}</td><td>${e.status}</td><td>${e.verdict ?? "-"}</td><td>${e.gate_reason ?? "-"}</td>`;
     tbody.appendChild(tr);
   }
 }
