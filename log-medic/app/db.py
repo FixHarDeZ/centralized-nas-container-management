@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS events (
     gate_reason TEXT,
     analysis TEXT,
     pr_url TEXT,
+    verdict TEXT,
     PRIMARY KEY (fingerprint, container)
 );
 
@@ -57,11 +58,18 @@ def get_conn(db_path: str | None = None) -> sqlite3.Connection:
     os.makedirs(os.path.dirname(path), exist_ok=True)
     conn = sqlite3.connect(path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout=5000")
     return conn
 
 
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(_SCHEMA)
+    # Migration: v1 DBs lack events.verdict. TABLE NOT EXISTS skips existing tables,
+    # so ALTER explicitly; swallow duplicate column error.
+    try:
+        conn.execute("ALTER TABLE events ADD COLUMN verdict TEXT")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
     conn.commit()
 
 
@@ -134,8 +142,18 @@ def record_event(
     isn't double-bumped."""
     now = now or _now_iso()
     if event_exists(conn, fingerprint, container):
+        # Preserve in-flight pipeline status: while a fix PR is open (pr_opened) or
+        # merged awaiting deploy (merged), the same error keeps recurring (fix not
+        # deployed yet). Recurrence must NOT reset status to gated/new, or
+        # poll_pr_merges (queries only status='pr_opened') never sees the merge and
+        # the container is never deployed. 'deployed' is intentionally NOT protected:
+        # post-deploy recurrence must re-enter the pipeline (cooldown/dirty-repo gated)
+        # so a fix that didn't work re-alerts.
         conn.execute(
-            "UPDATE events SET last_seen=?, count=count+1, status=?, gate_reason=? WHERE fingerprint=? AND container=?",
+            "UPDATE events SET last_seen=?, count=count+1, "
+            "status=CASE WHEN status IN ('pr_opened','merged') THEN status ELSE ? END, "
+            "gate_reason=CASE WHEN status IN ('pr_opened','merged') THEN gate_reason ELSE ? END "
+            "WHERE fingerprint=? AND container=?",
             (now, status, gate_reason, fingerprint, container),
         )
     else:
@@ -158,16 +176,18 @@ def update_event_status(
     gate_reason: str | None = None,
     analysis: str | None = None,
     pr_url: str | None = None,
+    verdict: str | None = None,
 ) -> None:
     conn.execute(
         """
         UPDATE events SET status=?,
         gate_reason=COALESCE(?, gate_reason),
         analysis=COALESCE(?, analysis),
-        pr_url=COALESCE(?, pr_url)
+        pr_url=COALESCE(?, pr_url),
+        verdict=COALESCE(?, verdict)
         WHERE fingerprint=? AND container=?
         """,
-        (status, gate_reason, analysis, pr_url, fingerprint, container),
+        (status, gate_reason, analysis, pr_url, verdict, fingerprint, container),
     )
     conn.commit()
 
@@ -182,6 +202,12 @@ def get_recent_events(
         ).fetchall()
     return conn.execute(
         "SELECT * FROM events ORDER BY last_seen DESC LIMIT ?", (limit,)
+    ).fetchall()
+
+
+def get_events_by_status(conn: sqlite3.Connection, status: str) -> list[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM events WHERE status=? ORDER BY last_seen DESC", (status,)
     ).fetchall()
 
 

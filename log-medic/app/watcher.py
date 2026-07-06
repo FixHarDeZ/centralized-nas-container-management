@@ -97,11 +97,17 @@ def process_event(conn, container_row, fp: str, excerpt: str, trigger_line: str,
         return
 
     analysis = analyzer.analyze(container_row, fp, excerpt)
-    db.update_event_status(conn, fp, name, status="analyzed", analysis=analysis["text"])
+    verdict = analysis.get("verdict", "infra")
+    db.update_event_status(conn, fp, name, status="analyzed", analysis=analysis["text"], verdict=verdict)
     db.increment_quota(conn)
-    notify(f"🔎 {name}\nRoot cause: {analysis['text']}")
+    icon = "🐛" if verdict == "code" else "🌐"
+    notify(f"🔎 {name} [{icon} {verdict}]\nRoot cause: {analysis['text']}")
 
-    if container_row["maturity"] == "stable" and os.environ.get("ENABLE_FIX_RUNNER", "false").lower() == "true":
+    if (
+        container_row["maturity"] == "stable"
+        and os.environ.get("ENABLE_FIX_RUNNER", "false").lower() == "true"
+        and verdict == "code"
+    ):
         pr_url = analyzer.run_fix(container_row, fp, analysis, workspace_dir)
         if pr_url:
             db.update_event_status(conn, fp, name, status="pr_opened", pr_url=pr_url)
