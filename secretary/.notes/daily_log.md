@@ -1,5 +1,10 @@
 # Secretary Stack — Daily Log
 
+## 2026-07-07 — Fix secretary-n8n crash loop (permission denied on n8n_data volume)
+1. **Root cause**: n8n container runs as `node` (UID 1000:1000) but n8n_data volume at `/volume2/docker/secretary/n8n_data/` is owned by `fixhardez` (UID 1026:100). The `config` file had `-rw-------` permissions → n8n couldn't read/write its own config → crash loop with `EACCES: permission denied, open '/home/node/.n8n/config'`.
+2. **Immediate fix**: `chmod 644` on the config file via SSH.
+3. **Long-term fix**: Added `user: "1026:100"` to the n8n service in `docker-compose.yml`. This ensures n8n runs as `fixhardez:users`, matching the volume ownership. Future n8n updates won't cause permission issues because the container user always matches the volume owner.
+
 ## 2026-06-12 — Table cells with soft line-breaks lost during ingest (wuwa topup not retrievable)
 
 ### Problem

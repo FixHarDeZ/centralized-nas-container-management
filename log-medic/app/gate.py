@@ -84,12 +84,16 @@ def quota_exceeded(conn: sqlite3.Connection) -> bool:
 
 
 def check_dirty_repo(workspace_dir: str, fingerprint: str, now: datetime | None = None) -> bool:
-    """Check if repo is dirty (has uncommitted changes, recent commits, or active fix branch)."""
+    """Check if repo is dirty (has uncommitted changes, recent commits, or active fix branch).
+    Returns False if workspace is not a git repo (e.g. container has no repo configured)."""
     now = now or datetime.now(UTC)
 
-    status = subprocess.run(
-        ["git", "status", "--porcelain"], cwd=workspace_dir, capture_output=True, text=True, check=True
-    ).stdout
+    try:
+        status = subprocess.run(
+            ["git", "status", "--porcelain"], cwd=workspace_dir, capture_output=True, text=True, check=True
+        ).stdout
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
     if status.strip():
         return True
 

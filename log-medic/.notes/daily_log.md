@@ -1,5 +1,10 @@
 # log-medic — Daily Log
 
+## 2026-07-07 — Fix watcher crash for containers without repo configured
+1. **Root cause**: `check_dirty_repo()` in `gate.py` ran `git status --porcelain` with `check=True` on containers without a `repo` set (e.g. `secretary-n8n`). The workspace dir resolves to `/workspaces/` which isn't a git repo → `CalledProcessError` (exit 128). This exception propagated through `process_event()` before `db.record_event()` was called, so events were never recorded and no notifications were sent. The watcher entered an infinite crash-reconnect loop (crash → 5s backoff → reconnect → detect ERROR → crash again).
+2. **Fix**: `check_dirty_repo()` now catches `CalledProcessError` and `FileNotFoundError` on the initial `git status` call and returns `False` (not dirty). This allows the gate pipeline to proceed for all containers regardless of whether they have a workspace configured.
+3. **Impact**: affected all containers without repo — `log-medic`, `hermes-dashboard`, `hermes-gateway`, `uptime-kuma`, `secretary-n8n`, and others. 73/73 tests passing.
+
 ## 2026-07-06 — Dashboard UI redesign + edit maturity + test notification
 1. **UI redesign**: complete overhaul of `index.html` + `app.js` — dark professional theme with CSS variables, card layout, badges for maturity/status/verdict, toggle switches for notify_only/paused, toast notification system, watcher status pill with animation, SVG icons.
 2. **Edit existing containers**: containers table now has inline `<select>` dropdown for maturity (dev/staging/stable) — changes PATCH directly to API. Previously only editable at add time.
