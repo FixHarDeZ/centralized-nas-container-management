@@ -1,6 +1,6 @@
 # ink-reader — Project Index (Memory Blueprint)
 
-> อัปเดตล่าสุด: 2026-07-06 (OPDS cover fix)
+> อัปเดตล่าสุด: 2026-07-07 (Multi-source architecture + dashboard redesign)
 > ใช้ไฟล์นี้เป็น cold-start memory ก่อนเริ่มงานทุกครั้ง
 
 ---
@@ -14,15 +14,25 @@ directly — avoiding the ad-heavy, badly-laid-out source site. Single FastAPI
 container + APScheduler + SQLite, same shape as `torrentwatch/`, with an
 nginx sidecar owning basic auth.
 
+## Sources
+
+| Source | Type | Slug prefix | Content |
+|---|---|---|---|
+| doujin-th.com | SMF forum | `doujinth-` | Thai-translated doujin |
+
+Source parsers live in `sources/` directory. Each implements the `Source`
+abstract class with `parse_listing()`, `parse_title_page()`, `listing_url()`.
+โดจินแปลไทย.com was removed — domain expired and parked by Sedo (Oct 2025).
+
 ## Tech Stack
 
 | Component | Detail |
 |---|---|
 | Runtime | Python 3.12 · FastAPI · Uvicorn |
 | Database | SQLite — `/data/ink.db` |
-| Scraper | httpx client + BeautifulSoup4 |
+| Scraper | httpx client + BeautifulSoup4 (multi-source plugins) |
 | Scheduler | APScheduler `BackgroundScheduler` |
-| Frontend | Vanilla JS, no build step, Thai UI |
+| Frontend | Vanilla JS, no build step, Thai UI (modern dark theme) |
 | Auth | nginx sidecar basic auth (not in-app) |
 
 ## DB Schema (`titles` table)
@@ -30,20 +40,21 @@ nginx sidecar owning basic auth.
 ```sql
 CREATE TABLE titles (
   id INTEGER PRIMARY KEY,
-  slug TEXT UNIQUE NOT NULL,        -- source ID from doujin-th
+  slug TEXT UNIQUE NOT NULL,        -- namespaced: <source>-<id>
   title TEXT NOT NULL,
   tags TEXT,                        -- comma-separated
   pages INTEGER,
   file_size INTEGER,                -- bytes, NULL after delete
   status TEXT NOT NULL DEFAULT 'new',  -- new | kept | deleted
   source_url TEXT,
+  source TEXT DEFAULT 'doujinth',   -- doujinth | dojintplthai
   downloaded_at TEXT NOT NULL,
   expires_at TEXT                   -- NULL when kept/deleted
 );
 ```
 
 `slug` is the dedup key — deleted rows stay as tombstones so a title is never
-re-downloaded.
+re-downloaded. `source` tracks which scraper found the title.
 
 ## Ports
 
@@ -59,13 +70,18 @@ re-downloaded.
 ink-reader/
 ├── main.py             — FastAPI app: API + file/cover serving + OPDS routes
 ├── config.py           — env var reads (INK_*, DATA_DIR)
-├── db.py                — SQLite CRUD + lifecycle (keep/purge/expired_ids/stats)
+├── db.py                — SQLite CRUD + lifecycle + source_stats()
 ├── cbz.py               — CBZ build/normalize from downloaded pages
-├── scraper.py           — listing + title parsers, scrape_cycle orchestration
+├── scraper.py           — multi-source scraper orchestration
+├── sources/
+│   ├── __init__.py
+│   ├── base.py          — abstract Source class
+│   ├── doujinth.py      — doujin-th.com parsers
+│   └── dojintplthai.py  — โดจินแปลไทย.com parsers
 ├── opds.py              — Atom/OPDS XML feed builder (stdlib xml.etree)
 ├── scheduler.py         — APScheduler jobs: scrape / expiry / backup
 ├── sqlite_backup.py     — verbatim copy of torrentwatch/sqlite_backup.py
-├── static/index.html    — curation dashboard (vanilla JS)
+├── static/index.html    — curation dashboard (modern dark UI, vanilla JS)
 ├── Dockerfile
 ├── docker-compose.yml
 ├── nginx/nginx.conf     — basic-auth reverse proxy → ink-reader:8000
@@ -85,29 +101,30 @@ Dashboard/OPDS credentials are nginx-only: vault
 `stacks.ink_reader.dashboard.{username,password}` → baked into
 `nginx/.htpasswd` at deploy time (never an app env var).
 
+## API
+
+| Route | Method | Purpose |
+|---|---|---|
+| `/api/titles?status=&source=` | GET | List titles, optional filters |
+| `/api/status` | GET | Stats + per-source counts + last scrape |
+
 ## Gaps / Known Risk
 
-- Parser selectors (`scraper.py`) were built against fixture HTML captured
-  from a live pull before implementation. **Verified live 2026-07-06**
-  against the deployed NAS container: `found=11, downloaded=10, error=null`
-  — zero drift from the fixtures, no parser changes needed.
-- OPDS cover display fixed 2026-07-06: absolute URLs + `thumbnail` relation.
-  Requires redeploy to pick up the fix.
+- Parser selectors for doujin-th.com verified live 2026-07-06, no drift
+  expected.
+- HTTPS reverse proxy support: OPDS feed URLs detect scheme from
+  `X-Forwarded-Proto` header. Requires redeploy.
 - No read-progress sync — KOReader tracks progress locally on the M8 only
   (explicitly out of scope, see spec).
-- Single source only (doujin-th.com) — multi-source explicitly out of scope.
-- DSM reverse proxy 15068→5068 not yet added (only needed for outside-LAN
-  dashboard access) — user's manual DSM step, not done.
-- KOReader-on-M8 setup/read test not yet done — user's manual device step,
-  not done.
+- KOReader-on-M8 setup/read test not yet done — user's manual device step.
+- Multi-source architecture ready (sources/ + namespaced slugs) — adding a
+  new source only needs a new parser module in sources/.
 
 ## Deploy Status
 
-- Deployed 2026-07-06, both `ink-reader` + `ink-reader-nginx` containers
-  healthy. `ink-reader` added to `scripts/deploy.sh`'s `ALL_STACKS` array.
-- Port 5068 is intentionally LAN-only (no public HTTPS proxy configured yet);
-  verification/administration from off-LAN needs SSH to the NAS + curl to
-  `localhost:5068`, same as any other LAN-only stack in this repo.
+- Last deploy: 2026-07-06 (pre-multi-source). Redeploy needed for
+  multi-source + dashboard redesign.
+- Port 5068 is intentionally LAN-only.
 
 ## Related
 

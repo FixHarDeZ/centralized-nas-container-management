@@ -36,8 +36,8 @@ def index():
 
 
 @app.get("/api/titles")
-def api_titles(status: str | None = None):
-    return {"titles": db.list_titles(status=status)}
+def api_titles(status: str | None = None, source: str | None = None):
+    return {"titles": db.list_titles(status=status, source=source)}
 
 
 @app.post("/api/titles/{tid}/keep")
@@ -62,7 +62,11 @@ def api_scrape():
 
 @app.get("/api/status")
 def api_status():
-    return {"stats": db.stats(), "last_scrape": db.last_scrape()}
+    return {
+        "stats": db.stats(),
+        "last_scrape": db.last_scrape(),
+        "sources": db.source_stats(),
+    }
 
 
 def _file_response(path: str, media_type: str, filename: str | None = None):
@@ -85,15 +89,21 @@ def get_cover(tid: int):
     return _file_response(db.cover_path(tid), "image/jpeg")
 
 
+def _opds_base_url(request: Request) -> str:
+    proto = request.headers.get("x-forwarded-proto", "http")
+    host = request.headers.get("host", "localhost")
+    return f"{proto}://{host}"
+
+
 @app.get("/opds")
 def opds_root(request: Request):
-    base_url = f"http://{request.headers.get('host', 'localhost')}"
-    return Response(opds.root_feed(base_url), media_type="application/atom+xml")
+    return Response(opds.root_feed(_opds_base_url(request)),
+                    media_type="application/atom+xml")
 
 
 @app.get("/opds/{status}")
 def opds_titles(status: str, request: Request):
     if status not in ("new", "kept"):
         raise HTTPException(404)
-    base_url = f"http://{request.headers.get('host', 'localhost')}"
-    return Response(opds.titles_feed(status, base_url), media_type="application/atom+xml")
+    return Response(opds.titles_feed(status, _opds_base_url(request)),
+                    media_type="application/atom+xml")

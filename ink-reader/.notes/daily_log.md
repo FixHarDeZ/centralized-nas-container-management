@@ -63,3 +63,60 @@ Changes:
   thumbnail relation assertion.
 
 Deploy needed: `./scripts/deploy.sh -s ink-reader -y` to pick up the fix.
+
+## 2026-07-07 — Multi-source architecture + dashboard redesign
+
+Refactored scraper from single-source to multi-source plugin architecture
+and redesigned dashboard.
+
+### Source architecture
+- New `sources/` directory with abstract `Source` class (`base.py`)
+- `sources/doujinth.py`: extracted parsers from old scraper.py
+- Slugs namespaced: `doujinth-<id>` for doujin-th.com
+- โดจินแปลไทย.com attempted but removed — domain expired, parked by Sedo
+
+### Scraper refactor
+- `scraper.py` now uses source plugins, iterates all sources in `scrape_cycle()`
+- `_scrape_source()` handles per-source listing → filter → download flow
+- Shared `_download_title()` pipeline (CBZ build + DB insert)
+
+### DB changes
+- New `source TEXT` column on `titles` table (default `'doujinth'`, migration auto-runs)
+- New `source TEXT` column on `scrape_log` table
+- `add_title()` now accepts `source` parameter
+- New `source_stats()` function returns per-source counts/sizes
+
+### API changes
+- `/api/status` now includes `"sources": {name: {count, size}}` in response
+- `/api/titles` now supports `?source=` filter parameter
+
+### Dashboard redesign
+- Modern dark UI with CSS custom properties, subtle shadows, transitions
+- Source health indicators (colored dots in header)
+- Per-source filter tabs ("doujin-th", "โดจินแปลไทย")
+- Source badge on each card
+- Responsive design, hover effects on cards
+- Refresh button, improved scrape button with loading state
+
+### Config
+- New `INK_DOJINTPLTHAI_URL` env var (default `https://โดจินแปลไทย.com`)
+
+### Tests
+- All 34 tests pass
+- New fixtures: `dojintplthai_listing.html`, `dojintplthai_title.html`
+- Updated test_scraper.py, test_cycle.py, test_api.py for multi-source
+
+## 2026-07-07 — HTTPS reverse proxy support for remote OPDS access
+
+OPDS feed URLs were hardcoded with `http://` scheme, breaking KOReader access
+when the NAS is reached via DSM reverse proxy (HTTPS :15068).
+
+Changes:
+- `main.py`: Extracted `_opds_base_url()` helper — reads `X-Forwarded-Proto`
+  header to determine scheme (`http`/`https`) instead of hardcoding.
+- `nginx/nginx.conf`: Changed `X-Forwarded-Proto` to `$http_x_forwarded_proto`
+  so the header from DSM reverse proxy is passed through correctly.
+- `tests/test_api.py`: Added `test_opds_https_scheme` — verifies feed links use
+  `https://` when request includes `x-forwarded-proto: https`.
+
+Deploy needed: `./scripts/deploy.sh -s ink-reader -y` to pick up the fix.

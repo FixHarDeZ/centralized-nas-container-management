@@ -80,6 +80,8 @@ NAS_SSH_KEY="${NAS_SSH_KEY:-${HOME}/.ssh/id_ed25519}"
 NAS_SUDO_PASSWORD="${NAS_SUDO_PASSWORD:-}"
 # Optional: set NAS_SSH_ALIAS=nas in .env to use your ssh config alias
 NAS_SSH_ALIAS="${NAS_SSH_ALIAS:-}"
+NAS_FILE_OWNER="${NAS_FILE_OWNER:-fixhardez}"
+NAS_FILE_GROUP="${NAS_FILE_GROUP:-users}"
 
 # ── Dependency check ─────────────────────────────────────────────────────────
 for dep in ssh; do
@@ -202,11 +204,12 @@ if [[ "$RESTART_ONLY" == false ]]; then
     # silences GNU tar's per-file noise about the com.apple.provenance xattr macOS adds.
     log "Extracting on NAS ..."
     TAR_X="tar --warning=no-unknown-keyword -xzf '${TMP_TAR}' -C '${NAS_TARGET_PATH}' --no-same-permissions --no-same-owner"
+    CHOWN_X="chown -R ${NAS_FILE_OWNER}:${NAS_FILE_GROUP} '${NAS_TARGET_PATH}'"
     if [[ -n "${NAS_SUDO_PASSWORD}" ]]; then
-      EXTRACT_CMD="mkdir -p '${NAS_TARGET_PATH}' && echo '${NAS_SUDO_PASSWORD}' | sudo -S -p '' ${TAR_X} && rm -f '${TMP_TAR}'"
+      EXTRACT_CMD="mkdir -p '${NAS_TARGET_PATH}' && echo '${NAS_SUDO_PASSWORD}' | sudo -S -p '' ${TAR_X} && echo '${NAS_SUDO_PASSWORD}' | sudo -S -p '' ${CHOWN_X} && rm -f '${TMP_TAR}'"
     else
       warn "NAS_SUDO_PASSWORD not set — extracting without sudo (root-owned files will fail)."
-      EXTRACT_CMD="mkdir -p '${NAS_TARGET_PATH}' && ${TAR_X} && rm -f '${TMP_TAR}'"
+      EXTRACT_CMD="mkdir -p '${NAS_TARGET_PATH}' && ${TAR_X} && ${CHOWN_X} && rm -f '${TMP_TAR}'"
     fi
     ssh $SSH_OPTS "${SSH_DEST}" "bash -lc \"${EXTRACT_CMD}\"" </dev/null
 
@@ -233,6 +236,14 @@ if [[ "$RESTART_ONLY" == false ]]; then
         dim "$rel_env"
       done < <(find "${PROJECT_ROOT}/${stack}" -name '.env' 2>/dev/null)
     done
+
+    # Fix ownership: the tar extract + sudo install leave everything root-owned.
+    # Restore to fixhardez:users so containers (which run as this user) can write.
+    log "Fixing file ownership ..."
+    if [[ -n "${NAS_SUDO_PASSWORD}" ]]; then
+      ssh $SSH_OPTS "${SSH_DEST}" \
+        "bash -lc \"echo '${NAS_SUDO_PASSWORD}' | sudo -S -p '' chown -R ${NAS_FILE_OWNER}:${NAS_FILE_GROUP} '${NAS_TARGET_PATH}'\"" </dev/null 2>/dev/null || true
+    fi
 
     # nginx .htpasswd files must be world-readable (644) so the nginx worker
     # process can open them. The sudo extract above leaves them root-owned 600,

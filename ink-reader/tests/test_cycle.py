@@ -36,8 +36,11 @@ def test_cycle_downloads_new_titles(data_dir):
     result = scraper.scrape_cycle(fetch=fetch)
     assert result["downloaded"] == 2
     rows = db.list_titles()
-    assert {r["slug"] for r in rows} == {"1", "2"}
+    slugs = {r["slug"] for r in rows}
+    assert "doujinth-1" in slugs
+    assert "doujinth-2" in slugs
     for r in rows:
+        assert r["source"] == "doujinth"
         assert r["pages"] == 2
         assert os.path.exists(db.cbz_path(r["id"]))
         assert os.path.exists(db.cover_path(r["id"]))
@@ -45,7 +48,7 @@ def test_cycle_downloads_new_titles(data_dir):
 
 
 def test_cycle_skips_known_and_tombstones(data_dir):
-    tid = db.add_title("1", "A", "", 1, 1, "u")
+    tid = db.add_title("doujinth-1", "A", "", 1, 1, "u", source="doujinth")
     db.purge_title(tid)  # tombstone
     fetch = _fake_fetch({
         "topic=2.0": TITLE.format(title="Story B", slug="2").encode(),
@@ -54,15 +57,11 @@ def test_cycle_skips_known_and_tombstones(data_dir):
     })
     result = scraper.scrape_cycle(fetch=fetch)
     assert result["downloaded"] == 1
-    assert {r["slug"] for r in db.list_titles(status="new")} == {"2"}
+    assert {r["slug"] for r in db.list_titles(status="new")} == {"doujinth-2"}
 
 
 def test_cycle_title_failure_skips_and_logs(data_dir):
     def fetch(url, referer=None):
-        # ponytail: "doujin-th" is a substring of every URL on this domain
-        # (including topic pages), so it must be checked last or it shadows
-        # the topic-specific branches below and every title fetch returns
-        # LISTING instead of TITLE/error.
         if "topic=1.0" in url:
             raise RuntimeError("boom")
         if "topic=2.0" in url:
@@ -76,10 +75,9 @@ def test_cycle_title_failure_skips_and_logs(data_dir):
     result = scraper.scrape_cycle(fetch=fetch)
     assert result["downloaded"] == 1
     assert len(result["errors"]) == 1
-    assert "1" in result["errors"][0]
+    assert "doujinth/1" in result["errors"][0]
     assert db.last_scrape()["error"] is not None
-    # story 1 left no row → retried next cycle
-    assert "1" not in db.known_slugs()
+    assert "doujinth-1" not in db.known_slugs()
 
 
 def test_cycle_respects_max_per_cycle(data_dir, monkeypatch):

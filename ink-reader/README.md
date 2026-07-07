@@ -6,7 +6,7 @@ OPDS catalog so KOReader can browse and download directly.
 
 ## Why
 
-Reading doujin-th.com directly in a browser means heavy ads and a bad reading
+Reading doujin sites directly in a browser means heavy ads and a bad reading
 layout — especially painful on an e-ink device. ink-reader pulls titles onto
 the NAS as plain CBZ files, so any e-reader with OPDS support (KOReader on the
 Meebook M8) gets a clean catalog and offline reading.
@@ -62,11 +62,11 @@ Dashboard/OPDS auth is **not** an app env var — it lives in the nginx
 | Route | Method | Purpose |
 |---|---|---|
 | `/` | GET | Curation dashboard (static HTML) |
-| `/api/titles?status=` | GET | List titles, optional `new`/`kept`/`deleted` filter |
+| `/api/titles?status=&source=` | GET | List titles, optional `status`/`source` filter |
 | `/api/titles/{id}/keep` | POST | Mark title `kept` (permanent, no expiry) |
 | `/api/titles/{id}/delete` | POST | Remove CBZ+cover, mark `deleted` (tombstone) |
-| `/api/scrape` | POST | Trigger a scrape cycle now (background thread) |
-| `/api/status` | GET | Stats per status + last scrape result |
+| `/api/scrape` | POST | Trigger a scrape cycle now (background thread, all sources) |
+| `/api/status` | GET | Stats + per-source counts/sizes + last scrape result |
 | `/files/{id}.cbz` | GET | Download the CBZ |
 | `/covers/{id}.jpg` | GET | Cover thumbnail |
 
