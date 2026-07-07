@@ -122,7 +122,7 @@ if ! ssh $SSH_OPTS "${SSH_DEST}" "echo OK" &>/dev/null; then
 fi
 ok "Connection OK"
 
-ALL_STACKS=(secretary news-feed torrentwatch my-secretary homepage jellyfin maid-tracker portainer uptime-kuma watchtower hermes-agent friendly-reminder wallpaper-scout log-medic ink-reader)
+ALL_STACKS=(secretary news-feed torrentwatch homepage jellyfin maid-tracker portainer uptime-kuma watchtower hermes-agent friendly-reminder wallpaper-scout log-medic ink-reader)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # UPLOAD
@@ -239,10 +239,13 @@ if [[ "$RESTART_ONLY" == false ]]; then
 
     # Fix ownership: the tar extract + sudo install leave everything root-owned.
     # Restore to fixhardez:users so containers (which run as this user) can write.
+    # Then fix volumes that need different ownership (n8n_data must be UID 1000:1000
+    # because the n8n image runs as node:node, not fixhardez).
     log "Fixing file ownership ..."
     if [[ -n "${NAS_SUDO_PASSWORD}" ]]; then
       ssh $SSH_OPTS "${SSH_DEST}" \
-        "bash -lc \"echo '${NAS_SUDO_PASSWORD}' | sudo -S -p '' chown -R ${NAS_FILE_OWNER}:${NAS_FILE_GROUP} '${NAS_TARGET_PATH}'\"" </dev/null 2>/dev/null || true
+        "bash -lc \"echo '${NAS_SUDO_PASSWORD}' | sudo -S -p '' chown -R ${NAS_FILE_OWNER}:${NAS_FILE_GROUP} '${NAS_TARGET_PATH}' && \
+         echo '${NAS_SUDO_PASSWORD}' | sudo -S -p '' chown -R 1000:1000 '${NAS_TARGET_PATH}/secretary/n8n_data'\"" </dev/null 2>/dev/null || true
     fi
 
     # nginx .htpasswd files must be world-readable (644) so the nginx worker
