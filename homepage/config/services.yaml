@@ -34,6 +34,26 @@
           url: "{{HOMEPAGE_VAR_NAS_URL}}"
           username: "{{HOMEPAGE_VAR_NAS_USERNAME}}"
           password: "{{HOMEPAGE_VAR_NAS_PASSWORD}}"
+    
+    - ink-reader:
+        icon: mdi-book-open-page-variant
+        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15068"
+        description: Library for E-Reader (OPDS)
+        ping: "{{HOMEPAGE_VAR_INK_READER_URL}}"
+        widget:
+          type: customapi
+          url: "{{HOMEPAGE_VAR_INK_READER_URL}}/api/status"
+          refreshInterval: 60000
+          mappings:
+            - field: stats.new.count
+              label: New
+              format: number
+            - field: stats.kept.count
+              label: Kept
+              format: number
+            - field: last_scrape.downloaded
+              label: Last Scrape
+              format: number
 
     - Portainer:
         icon: portainer.png
@@ -67,27 +87,7 @@
         icon: mdi-medical-bag
         href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15070"
         description: Docker Log Monitor + Auto-fix
-        ping: "{{HOMEPAGE_VAR_DDNS_BASE_HTTP}}:5070"
-
-    - ink-reader:
-        icon: mdi-book-open-page-variant
-        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15068"
-        description: Library for Meebook M8 (OPDS)
-        ping: "{{HOMEPAGE_VAR_INK_READER_URL}}"
-        widget:
-          type: customapi
-          url: "{{HOMEPAGE_VAR_INK_READER_URL}}/api/status"
-          refreshInterval: 60000
-          mappings:
-            - field: stats.new.count
-              label: New
-              format: number
-            - field: stats.kept.count
-              label: Kept
-              format: number
-            - field: last_scrape.downloaded
-              label: Last Scrape
-              format: number
+        ping: "{{HOMEPAGE_VAR_DDNS_BASE_HTTP}}:5070"              
 
 # ─── 📝 Tools & Notes ─────────────────────────────────────────────────────────
 - 📝 Tools & Notes:
