@@ -2,7 +2,7 @@ import os
 import threading
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 
 import config
@@ -86,12 +86,14 @@ def get_cover(tid: int):
 
 
 @app.get("/opds")
-def opds_root():
-    return Response(opds.root_feed(), media_type="application/atom+xml")
+def opds_root(request: Request):
+    base_url = f"http://{request.headers.get('host', 'localhost')}"
+    return Response(opds.root_feed(base_url), media_type="application/atom+xml")
 
 
 @app.get("/opds/{status}")
-def opds_titles(status: str):
+def opds_titles(status: str, request: Request):
     if status not in ("new", "kept"):
         raise HTTPException(404)
-    return Response(opds.titles_feed(status), media_type="application/atom+xml")
+    base_url = f"http://{request.headers.get('host', 'localhost')}"
+    return Response(opds.titles_feed(status, base_url), media_type="application/atom+xml")

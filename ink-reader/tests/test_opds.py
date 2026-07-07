@@ -13,6 +13,14 @@ def test_root_feed(data_dir):
     assert hrefs == ["/opds/new", "/opds/kept"]
 
 
+def test_root_feed_absolute_urls(data_dir):
+    root = ET.fromstring(opds.root_feed("http://192.168.1.100:5068"))
+    hrefs = [l.get("href") for e in root.findall(f"{ATOM}entry")
+             for l in e.findall(f"{ATOM}link")]
+    assert hrefs == ["http://192.168.1.100:5068/opds/new",
+                     "http://192.168.1.100:5068/opds/kept"]
+
+
 def test_titles_feed(data_dir):
     tid = db.add_title("s1", "Story One", "a,b", 20, 1000, "u")
     root = ET.fromstring(opds.titles_feed("new"))
@@ -22,7 +30,17 @@ def test_titles_feed(data_dir):
     acq = links["http://opds-spec.org/acquisition"]
     assert acq.get("href") == f"/files/{tid}.cbz"
     assert acq.get("type") == "application/vnd.comicbook+zip"
-    assert links["http://opds-spec.org/image"].get("href") == f"/covers/{tid}.jpg"
+    assert links["http://opds-spec.org/thumbnail"].get("href") == f"/covers/{tid}.jpg"
+
+
+def test_titles_feed_absolute_urls(data_dir):
+    tid = db.add_title("s1", "Story One", "a,b", 20, 1000, "u")
+    base = "http://192.168.1.100:5068"
+    root = ET.fromstring(opds.titles_feed("new", base))
+    entries = root.findall(f"{ATOM}entry")
+    links = {l.get("rel"): l for l in entries[0].findall(f"{ATOM}link")}
+    assert links["http://opds-spec.org/acquisition"].get("href") == f"{base}/files/{tid}.cbz"
+    assert links["http://opds-spec.org/thumbnail"].get("href") == f"{base}/covers/{tid}.jpg"
 
 
 def test_titles_feed_filters_status(data_dir):

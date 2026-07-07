@@ -46,3 +46,20 @@ Deploy + live verification (Task 9 Steps 8-9), 2026-07-06:
   15068→5068 (only if outside-LAN dashboard access wanted), and KOReader
   setup/read test on the physical Meebook M8 — both are the user's own
   action, not automatable from here.
+
+## 2026-07-06 — Fix OPDS cover display for KOReader
+
+KOReader on Meebook M8 showed only title text in the OPDS catalog — no cover
+thumbnails. Root cause: relative URLs + wrong relation type.
+
+Changes:
+- `opds.py`: Added `base_url` parameter to `root_feed()` and `titles_feed()`.
+  All hrefs now use absolute URLs when base_url is provided. Changed image
+  relation from `http://opds-spec.org/image` to `http://opds-spec.org/thumbnail`
+  (KOReader-compatible).
+- `main.py`: Extract `base_url` from request's `Host` header and pass to OPDS
+  feed builders. No new env var needed — URL is derived automatically.
+- `tests/test_opds.py`: Added tests for absolute URL mode and updated
+  thumbnail relation assertion.
+
+Deploy needed: `./scripts/deploy.sh -s ink-reader -y` to pick up the fix.

@@ -1,6 +1,6 @@
 # ink-reader — Project Index (Memory Blueprint)
 
-> อัปเดตล่าสุด: 2026-07-06 (initial build, Task 9)
+> อัปเดตล่าสุด: 2026-07-06 (OPDS cover fix)
 > ใช้ไฟล์นี้เป็น cold-start memory ก่อนเริ่มงานทุกครั้ง
 
 ---
@@ -91,6 +91,8 @@ Dashboard/OPDS credentials are nginx-only: vault
   from a live pull before implementation. **Verified live 2026-07-06**
   against the deployed NAS container: `found=11, downloaded=10, error=null`
   — zero drift from the fixtures, no parser changes needed.
+- OPDS cover display fixed 2026-07-06: absolute URLs + `thumbnail` relation.
+  Requires redeploy to pick up the fix.
 - No read-progress sync — KOReader tracks progress locally on the M8 only
   (explicitly out of scope, see spec).
 - Single source only (doujin-th.com) — multi-source explicitly out of scope.
