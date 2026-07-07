@@ -2,6 +2,21 @@
 
 ---
 
+## 2026-07-07 — เพิ่ม ink-reader widget
+
+เพิ่ม ink-reader (Doujin Library, port 5068/15068) เข้า dashboard:
+
+**ไฟล์ที่เปลี่ยน:**
+- `config/services.yaml` — เพิ่ม ink-reader tile ใน 📥 Downloads & Monitoring
+  (customapi widget แสดง New/Kept/Last Scrape จาก `/api/status`)
+- `secrets.manifest.yaml` — เพิ่ม `HOMEPAGE_VAR_INK_READER_URL`
+
+**Vault key ที่ต้องเพิ่ม:**
+- `stacks.homepage.var_ink_reader_url` = `http://192.168.50.200:5068`
+- ใช้ `make edit-vault` → เพิ่ม key → `make secrets && make sync-test-vault`
+
+---
+
 ## 2026-06-07 — ลบ Glances sidecar ออกจาก stack
 
 ผู้ใช้ตัดสินใจไม่ใช้ Glances แล้ว ลบออกทั้งหมด:

@@ -53,6 +53,7 @@ Basic auth ผ่าน nginx:
 
 ## Change Log
 
+- **2026-07-07** — เพิ่ม ink-reader widget (Doujin Library, port 5068/15068)
 - **2026-06-07** — ลบ glances sidecar ออกจาก stack + widgets.yaml ทั้งหมด
 - **2026-05-24** — ย้ายกลับ basic auth; ลบ Authelia forward-auth + auth_net dependency ทั้งหมด
 - **2026-05-23** — migrate ไป Authelia forward-auth (auth stack session)
