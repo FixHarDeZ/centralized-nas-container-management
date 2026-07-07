@@ -17,5 +17,14 @@ SCRAPE_INTERVAL_HOURS = int(os.environ.get("INK_SCRAPE_INTERVAL_HOURS", "6"))
 MAX_NEW_PER_CYCLE = int(os.environ.get("INK_MAX_NEW_PER_CYCLE", "10"))
 RETENTION_DAYS = int(os.environ.get("INK_RETENTION_DAYS", "30"))
 REQUEST_DELAY_SECONDS = float(os.environ.get("INK_REQUEST_DELAY_SECONDS", "2"))
+LISTING_PAGES = int(os.environ.get("INK_LISTING_PAGES", "3"))
+
+# Source-specific base URLs
+HENTAITHAI_BASE_URL = os.environ.get(
+    "INK_HENTAITHAI_BASE_URL", "https://hentaithai.net"
+)
+MIKUDOUJIN_BASE_URL = os.environ.get(
+    "INK_MIKUDOUJIN_BASE_URL", "https://miku-doujin.com"
+)
 
 TZ = "Asia/Bangkok"

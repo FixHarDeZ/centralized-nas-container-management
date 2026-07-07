@@ -1,6 +1,6 @@
 # ink-reader — Project Index (Memory Blueprint)
 
-> อัปเดตล่าสุด: 2026-07-07 (Multi-source architecture + dashboard redesign)
+> อัปเดตล่าสุด: 2026-07-07 (3 sources + multi-page listing)
 > ใช้ไฟล์นี้เป็น cold-start memory ก่อนเริ่มงานทุกครั้ง
 
 ---
@@ -19,9 +19,13 @@ nginx sidecar owning basic auth.
 | Source | Type | Slug prefix | Content |
 |---|---|---|---|
 | doujin-th.com | SMF forum | `doujinth-` | Thai-translated doujin |
+| hentaithai.net | Custom CMS | `hentaithai-` | Thai-translated doujin |
+| miku-doujin.com | Custom CMS | `mikudoujin-` | Thai-translated doujin (multi-episode) |
 
 Source parsers live in `sources/` directory. Each implements the `Source`
 abstract class with `parse_listing()`, `parse_title_page()`, `listing_url()`.
+Multi-episode sources (mikudoujin) also implement `parse_episode_page()`
+and set `needs_episode_fetch = True`.
 โดจินแปลไทย.com was removed — domain expired and parked by Sedo (Oct 2025).
 
 ## Tech Stack
@@ -47,7 +51,7 @@ CREATE TABLE titles (
   file_size INTEGER,                -- bytes, NULL after delete
   status TEXT NOT NULL DEFAULT 'new',  -- new | kept | deleted
   source_url TEXT,
-  source TEXT DEFAULT 'doujinth',   -- doujinth | dojintplthai
+  source TEXT DEFAULT 'doujinth',   -- doujinth | hentaithai | mikudoujin
   downloaded_at TEXT NOT NULL,
   expires_at TEXT                   -- NULL when kept/deleted
 );
@@ -75,9 +79,10 @@ ink-reader/
 ├── scraper.py           — multi-source scraper orchestration
 ├── sources/
 │   ├── __init__.py
-│   ├── base.py          — abstract Source class
+│   ├── base.py          — abstract Source class (needs_episode_fetch, parse_episode_page)
 │   ├── doujinth.py      — doujin-th.com parsers
-│   └── dojintplthai.py  — โดจินแปลไทย.com parsers
+│   ├── hentaithai.py    — hentaithai.net parsers
+│   └── mikudoujin.py    — miku-doujin.com parsers (multi-episode)
 ├── opds.py              — Atom/OPDS XML feed builder (stdlib xml.etree)
 ├── scheduler.py         — APScheduler jobs: scrape / expiry / backup
 ├── sqlite_backup.py     — verbatim copy of torrentwatch/sqlite_backup.py
@@ -95,7 +100,9 @@ ink-reader/
 
 See root `ink-reader/README.md` "Environment variables" table —
 `INK_SITE_BASE_URL`, `INK_USER_AGENT`, `DATA_DIR`, `INK_SCRAPE_INTERVAL_HOURS`,
-`INK_MAX_NEW_PER_CYCLE`, `INK_RETENTION_DAYS`, `INK_REQUEST_DELAY_SECONDS`.
+`INK_MAX_NEW_PER_CYCLE`, `INK_RETENTION_DAYS`, `INK_REQUEST_DELAY_SECONDS`,
+`INK_LISTING_PAGES` (default 3), `INK_HENTAITHAI_BASE_URL`,
+`INK_MIKUDOUJIN_BASE_URL`.
 
 Dashboard/OPDS credentials are nginx-only: vault
 `stacks.ink_reader.dashboard.{username,password}` → baked into
@@ -112,6 +119,8 @@ Dashboard/OPDS credentials are nginx-only: vault
 
 - Parser selectors for doujin-th.com verified live 2026-07-06, no drift
   expected.
+- Parser selectors for hentaithai.net and miku-doujin.com verified live
+  2026-07-07 against real HTML.
 - HTTPS reverse proxy support: OPDS feed URLs detect scheme from
   `X-Forwarded-Proto` header. Requires redeploy.
 - No read-progress sync — KOReader tracks progress locally on the M8 only

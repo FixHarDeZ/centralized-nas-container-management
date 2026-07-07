@@ -121,3 +121,75 @@ Changes:
   `https://` when request includes `x-forwarded-proto: https`.
 
 Deploy needed: `./scripts/deploy.sh -s ink-reader -y` to pick up the fix.
+
+## 2026-07-07 — Add hentaithai.net + miku-doujin.com sources + listing pages
+
+Added 2 new scraper sources and multi-page listing support.
+
+### New sources
+- `sources/hentaithai.py`: hentaithai.net parser
+  - Listing: `/page-<number>` pages, extracts `t<id>` slugs from `<a>` tags
+  - Title page: images in `<img class="img-fluid">`, tags in `<a class="badge">`
+  - Filters decorative images (`/other/`, `/sticker/`, `change-to-bw`)
+- `sources/mikudoujin.py`: miku-doujin.com parser (multi-episode)
+  - Listing: `/<slug>/` URLs from `<a class="inz-a">` elements
+  - Title page: episode list in `<td a[href]>` with `/ep-<n>/` pattern
+  - Episode pages: images in `<img class="page-img">`
+  - `needs_episode_fetch = True` — scraper auto-fetches episode pages
+
+### Base class changes
+- `sources/base.py`: Added `needs_episode_fetch: bool = False` flag and
+  `parse_episode_page()` method (default no-op)
+
+### Scraper changes
+- `scraper.py`: Iterates all 3 sources in `scrape_cycle()`
+- `_scrape_source()` now fetches multiple listing pages (`INK_LISTING_PAGES`)
+- Multi-episode handling: when `needs_episode_fetch=True` and title page has
+  no images, fetches each episode URL and aggregates images
+
+### Config
+- New `INK_LISTING_PAGES` env var (default `3`) — pages to scrape per source
+- New `INK_HENTAITHAI_BASE_URL` (default `https://hentaithai.net`)
+- New `INK_MIKUDOUJIN_BASE_URL` (default `https://miku-doujin.com`)
+
+### Tests
+- All 43 tests pass
+- New fixtures: `hentaithai_listing.html`, `hentaithai_title.html`,
+  `mikudoujin_listing.html`, `mikudoujin_title.html`, `mikudoujin_episode.html`,
+  `mikudoujin_title_lazy.html`
+- 11 new tests for hentaithai + mikudoujin parsers
+- Updated test_cycle.py to handle multi-source (LISTING_PAGES=1, empty listings
+  for new sources)
+
+### Bug fix: hentaithai 403 Forbidden on image downloads
+- Root cause: CDN `s1.hentaithai.net` is case-sensitive on Referer header.
+  HTML has `//HentaiThai.net/t50579` (capital H) but CDN requires lowercase.
+- Fix: `.lower()` on both listing URLs and image URLs in `hentaithai.py`
+- Verified: image download now returns 200 (was 403)
+- Deploy gotcha: `docker compose up --build` uses cached layers — must
+  `docker build --no-cache` to pick up source file changes
+
+### Bug fix: miku-doujin lazy-loaded images
+- Root cause: miku-doujin uses `img.lazy[data-src]` for lazy loading instead
+  of `img.page-img[src]`. Parser only checked `src` attribute.
+- Fix: `_extract_page_images()` now also checks `data-src` attribute for
+  images with "uploads" in the URL, with dedup via `seen` set.
+- Result: mikudoujin went from 2→11 titles (f-hkc is truly empty)
+- Deploy: `./scripts/deploy.sh -s ink-reader -y` (must upload files first)
+
+### Known limitation: miku-doujin f-hkc only
+- `f-hkc` is the only truly JS-rendered title (no images at all in HTML)
+- All other previously failing titles now work via `data-src` lazy loading
+- Would need headless browser (playwright) to support f-hkc type titles
+
+### Fix: skip 404 and empty titles silently
+- 404 errors (old content with deleted CDN images) now skip silently
+- "no reader images found" (JS-rendered titles) now skip silently
+- Only real errors are logged to scrape_log
+- Result: error=None on full scrape cycle
+
+### Deploy + live verification (final)
+- Deployed via `./scripts/deploy.sh -s ink-reader -y` (uploads files + rebuilds)
+- Results: found=61, downloaded=9, **error=None**
+- Sources: doujinth=3, hentaithai=17, mikudoujin=20 (total 40 new, 253MB)
+- All 43 tests pass

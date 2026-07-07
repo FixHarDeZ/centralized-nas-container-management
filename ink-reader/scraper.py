@@ -14,6 +14,8 @@ import cbz
 import config
 import db
 from sources.doujinth import DoujintSource
+from sources.hentaithai import HentaiThaiSource
+from sources.mikudoujin import MikuDoujinSource
 
 HEADERS = {"User-Agent": config.USER_AGENT}
 
@@ -59,17 +61,50 @@ def _scrape_source(source, fetch) -> tuple[int, int, list[str]]:
     downloaded = 0
     found = 0
     try:
-        listing_html = fetch(source.listing_url()).decode("utf-8", "replace")
-        items = source.parse_listing(listing_html)
+        # Fetch multiple listing pages
+        all_items = []
+        for page in range(1, config.LISTING_PAGES + 1):
+            try:
+                listing_html = fetch(source.listing_url(page)).decode("utf-8", "replace")
+                items = source.parse_listing(listing_html)
+                all_items.extend(items)
+                if not items:
+                    break  # no more pages
+            except Exception:
+                break  # page fetch failed, stop pagination
+            time.sleep(config.REQUEST_DELAY_SECONDS)
+
         known = db.known_slugs()
-        fresh = [i for i in items if f"{source.name}-{i['slug']}" not in known]
+        fresh = [i for i in all_items if f"{source.name}-{i['slug']}" not in known]
         found = len(fresh)
         for item in fresh[: config.MAX_NEW_PER_CYCLE]:
             try:
                 html = fetch(item["url"]).decode("utf-8", "replace")
                 meta = source.parse_title_page(html)
+
+                # Multi-episode sources: fetch episode pages for images
+                if source.needs_episode_fetch and not meta["image_urls"]:
+                    episode_urls = meta.get("episode_urls", [])
+                    all_images = []
+                    for ep_url in episode_urls:
+                        ep_html = fetch(ep_url).decode("utf-8", "replace")
+                        ep_meta = source.parse_episode_page(ep_html)
+                        all_images.extend(ep_meta["image_urls"])
+                        time.sleep(config.REQUEST_DELAY_SECONDS)
+                    meta["image_urls"] = all_images
+
                 _download_title(item, meta, source.name, fetch)
                 downloaded += 1
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 404:
+                    pass  # image deleted from CDN, skip silently
+                else:
+                    errors.append(f"{source.name}/{item['slug']}: {e}")
+            except ValueError as e:
+                if "no reader images" in str(e):
+                    pass  # JS-rendered or empty title, skip silently
+                else:
+                    errors.append(f"{source.name}/{item['slug']}: {e}")
             except Exception as e:
                 errors.append(f"{source.name}/{item['slug']}: {e}")
             time.sleep(config.REQUEST_DELAY_SECONDS)
@@ -80,7 +115,11 @@ def _scrape_source(source, fetch) -> tuple[int, int, list[str]]:
 
 def scrape_cycle(fetch=fetch_bytes) -> dict:
     """Orchestrate a single scrape cycle across all sources."""
-    sources = [DoujintSource(config.SITE_BASE_URL)]
+    sources = [
+        DoujintSource(config.SITE_BASE_URL),
+        HentaiThaiSource(config.HENTAITHAI_BASE_URL),
+        MikuDoujinSource(config.MIKUDOUJIN_BASE_URL),
+    ]
     total_found, total_downloaded = 0, 0
     all_errors: list[str] = []
     for source in sources:
