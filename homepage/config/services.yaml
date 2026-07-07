@@ -72,7 +72,7 @@
     - ink-reader:
         icon: mdi-book-open-page-variant
         href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15068"
-        description: Doujin Library for Meebook M8 (OPDS)
+        description: Library for Meebook M8 (OPDS)
         ping: "{{HOMEPAGE_VAR_INK_READER_URL}}"
         widget:
           type: customapi

@@ -67,7 +67,7 @@ Deploy needed: `./scripts/deploy.sh -s ink-reader -y` to pick up the fix.
 ## 2026-07-07 — Multi-source architecture + dashboard redesign
 
 Refactored scraper from single-source to multi-source plugin architecture
-and redesigned dashboard.
+and redesigned dashboard. Added ink-reader widget to homepage dashboard.
 
 ### Source architecture
 - New `sources/` directory with abstract `Source` class (`base.py`)
@@ -99,7 +99,8 @@ and redesigned dashboard.
 - Refresh button, improved scrape button with loading state
 
 ### Config
-- New `INK_DOJINTPLTHAI_URL` env var (default `https://โดจินแปลไทย.com`)
+- New `INK_DOJINTPLTHAI_URL` env var (removed — domain expired)
+- nginx: `/api/status` public (no auth) for homepage widget integration
 
 ### Tests
 - All 34 tests pass
