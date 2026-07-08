@@ -1,5 +1,7 @@
 import os
 
+from PIL import Image
+
 import config
 import db
 
@@ -9,6 +11,24 @@ def _add(slug="s1", **kw):
                 file_size=1000, source_url="https://x/s1/")
     args.update(kw)
     return db.add_title(**args)
+
+
+def _checkerboard(cell=4):
+    size = 16
+    return [255 if (x // cell + y // cell) % 2 == 0 else 0
+            for y in range(size) for x in range(size)]
+
+
+def _stripes(width=2):
+    size = 16
+    return [255 if (x // width) % 2 == 0 else 0
+            for y in range(size) for x in range(size)]
+
+
+def _write_cover(tid, pixels):
+    img = Image.new("L", (16, 16))
+    img.putdata(pixels)
+    img.convert("RGB").save(db.cover_path(tid))
 
 
 def test_add_and_get(data_dir):
@@ -75,3 +95,64 @@ def test_scrape_log(data_dir):
     last = db.last_scrape()
     assert last["found"] == 2
     assert last["error"] == "boom"
+
+
+def test_dedupe_skips_when_cover_missing(data_dir):
+    """Same title, no cover to confirm with -> skip, don't delete on text alone."""
+    a = _add("a", title="รักแรกพบ")
+    b = _add("b", title="รัก แรก-พบ")
+    assert db.dedupe_titles() == []
+    assert db.get_title(a)["status"] == "new"
+    assert db.get_title(b)["status"] == "new"
+
+
+def test_dedupe_purges_visually_similar_covers(data_dir):
+    a = _add("a", title="Same Title")
+    b = _add("b", title="Same Title")
+    _write_cover(a, _checkerboard())
+    _write_cover(b, _checkerboard())
+    purged = db.dedupe_titles()
+    assert purged == [b]
+    assert db.get_title(a)["status"] == "new"
+    assert db.get_title(b)["status"] == "deleted"
+
+
+def test_dedupe_skips_visually_different_covers(data_dir):
+    """Same title but clearly different art -> not a real duplicate."""
+    a = _add("a", title="Same Title")
+    b = _add("b", title="Same Title")
+    _write_cover(a, _checkerboard())
+    _write_cover(b, _stripes())
+    assert db.dedupe_titles() == []
+    assert db.get_title(a)["status"] == "new"
+    assert db.get_title(b)["status"] == "new"
+
+
+def test_dedupe_prefers_kept_as_keeper(data_dir):
+    a = _add("a", title="Same Title")
+    b = _add("b", title="Same Title")
+    _write_cover(a, _checkerboard())
+    _write_cover(b, _checkerboard())
+    db.keep_title(b)
+    purged = db.dedupe_titles()
+    assert purged == [a]
+    assert db.get_title(b)["status"] == "kept"
+
+
+def test_dedupe_never_purges_second_kept_row(data_dir):
+    """Two rows both explicitly kept -> never auto-delete either."""
+    a = _add("a", title="Same Title")
+    b = _add("b", title="Same Title")
+    _write_cover(a, _checkerboard())
+    _write_cover(b, _checkerboard())
+    db.keep_title(a)
+    db.keep_title(b)
+    assert db.dedupe_titles() == []
+    assert db.get_title(a)["status"] == "kept"
+    assert db.get_title(b)["status"] == "kept"
+
+
+def test_dedupe_leaves_distinct_titles(data_dir):
+    _add("a", title="Title One")
+    _add("b", title="Title Two")
+    assert db.dedupe_titles() == []

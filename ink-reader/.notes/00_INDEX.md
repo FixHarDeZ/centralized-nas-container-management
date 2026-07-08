@@ -1,6 +1,6 @@
 # ink-reader — Project Index (Memory Blueprint)
 
-> อัปเดตล่าสุด: 2026-07-07 (3 sources + multi-page listing)
+> อัปเดตล่าสุด: 2026-07-08 (dashboard: go-top button, pagination, auto-dedupe)
 > ใช้ไฟล์นี้เป็น cold-start memory ก่อนเริ่มงานทุกครั้ง
 
 ---
@@ -35,8 +35,9 @@ and set `needs_episode_fetch = True`.
 | Runtime | Python 3.12 · FastAPI · Uvicorn |
 | Database | SQLite — `/data/ink.db` |
 | Scraper | httpx client + BeautifulSoup4 (multi-source plugins) |
+| Dedup | Pillow (cover average-hash) — title-normalize match + image confirm |
 | Scheduler | APScheduler `BackgroundScheduler` |
-| Frontend | Vanilla JS, no build step, Thai UI (modern dark theme) |
+| Frontend | Vanilla JS, no build step, Thai UI (modern dark theme), client-side pagination (60/page), go-to-top button |
 | Auth | nginx sidecar basic auth (not in-app) |
 
 ## DB Schema (`titles` table)
@@ -59,6 +60,15 @@ CREATE TABLE titles (
 
 `slug` is the dedup key — deleted rows stay as tombstones so a title is never
 re-downloaded. `source` tracks which scraper found the title.
+
+`db.dedupe_titles()` runs after every scrape cycle to catch cross-source
+re-uploads (same title scraped from two different sites, different slug):
+groups non-deleted rows by normalized title text, confirms with cover
+average-hash (Pillow, Hamming distance ≤10), purges losers via the normal
+`purge_title()` tombstone path. Keeper = existing `kept` row if any, else
+earliest `downloaded_at`. Safety: never auto-deletes a row that's itself
+`kept`, and skips (doesn't delete) when either cover can't be hashed —
+title-text match alone is never sufficient to delete.
 
 ## Ports
 
@@ -132,7 +142,8 @@ Dashboard/OPDS credentials are nginx-only: vault
 ## Deploy Status
 
 - Last deploy: 2026-07-06 (pre-multi-source). Redeploy needed for
-  multi-source + dashboard redesign.
+  multi-source + dashboard redesign + 2026-07-08 dashboard/dedupe changes
+  (new Pillow dep requires image rebuild, not just file sync).
 - Port 5068 is intentionally LAN-only.
 
 ## Related

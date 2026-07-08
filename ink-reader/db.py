@@ -1,7 +1,10 @@
 import os
+import re
 import sqlite3
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
+
+from PIL import Image
 
 import config
 
@@ -183,6 +186,62 @@ def stats() -> dict:
         for r in rows:
             out[r["status"]] = {"count": r["count"], "size": r["size"]}
         return out
+
+
+def _normalize_title(title: str) -> str:
+    t = title.lower()
+    return re.sub(r"[\s\-_.,!?()\[\]【】「」『』:：]+", "", t)
+
+
+def _ahash(path: str, hash_size: int = 8) -> int | None:
+    """Average-hash of cover image for cheap visual similarity check."""
+    try:
+        img = Image.open(path).convert("L").resize((hash_size, hash_size), Image.LANCZOS)
+    except Exception:
+        return None
+    pixels = list(img.getdata())
+    avg = sum(pixels) / len(pixels)
+    bits = 0
+    for p in pixels:
+        bits = (bits << 1) | (1 if p >= avg else 0)
+    return bits
+
+
+def dedupe_titles(hash_threshold: int = 10) -> list[int]:
+    """Purge titles that share a normalized name + a visually similar cover
+    with an earlier (or already-kept) title. Cross-source re-uploads are the
+    main case (same doujin scraped from two sites under the same Thai title).
+    Returns purged ids.
+    """
+    with _connect() as conn:
+        rows = [
+            dict(r) for r in conn.execute(
+                "SELECT id, title, status, downloaded_at FROM titles"
+                " WHERE status != 'deleted' ORDER BY downloaded_at ASC"
+            )
+        ]
+    groups: dict[str, list[dict]] = {}
+    for r in rows:
+        groups.setdefault(_normalize_title(r["title"]), []).append(r)
+
+    purged = []
+    for group in groups.values():
+        if len(group) < 2:
+            continue
+        keeper = next((r for r in group if r["status"] == "kept"), group[0])
+        keeper_hash = _ahash(cover_path(keeper["id"]))
+        for r in group:
+            if r["id"] == keeper["id"] or r["status"] == "kept":
+                continue  # never auto-delete a title the user explicitly kept
+            h = _ahash(cover_path(r["id"]))
+            # can't confirm visually (cover missing/unreadable) -> skip rather
+            # than delete on title text alone
+            if keeper_hash is None or h is None:
+                continue
+            if bin(keeper_hash ^ h).count("1") <= hash_threshold:
+                if purge_title(r["id"]):
+                    purged.append(r["id"])
+    return purged
 
 
 def source_stats() -> dict:

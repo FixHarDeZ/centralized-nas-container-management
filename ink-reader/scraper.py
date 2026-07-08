@@ -128,4 +128,5 @@ def scrape_cycle(fetch=fetch_bytes) -> dict:
         total_downloaded += downloaded
         all_errors.extend(errors)
     db.log_scrape(total_found, total_downloaded, "; ".join(all_errors) if all_errors else None)
-    return {"found": total_found, "downloaded": total_downloaded, "errors": all_errors}
+    purged = db.dedupe_titles()
+    return {"found": total_found, "downloaded": total_downloaded, "errors": all_errors, "duplicates_purged": len(purged)}

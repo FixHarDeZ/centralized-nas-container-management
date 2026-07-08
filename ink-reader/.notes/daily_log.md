@@ -193,3 +193,33 @@ Added 2 new scraper sources and multi-page listing support.
 - Results: found=61, downloaded=9, **error=None**
 - Sources: doujinth=3, hentaithai=17, mikudoujin=20 (total 40 new, 253MB)
 - All 43 tests pass
+
+## 2026-07-08 — Dashboard: go-top button, pagination, auto-dedupe
+
+- **Go-to-top button**: copied torrentwatch's `#btn-go-top` pattern
+  (fixed circle button, fades in past 200px scroll, smooth-scrolls to top).
+- **Pagination**: client-side, `PAGE_SIZE=60` per page — no backend change
+  since `/api/titles` dataset is small enough to fetch whole and slice in
+  JS. Pager buttons render only when >1 page; resets to page 1 on tab
+  switch.
+- **Auto-dedupe on scrape**: `db.dedupe_titles()` (new, `db.py`) runs at the
+  end of every `scraper.scrape_cycle()` (manual + scheduled). Groups
+  non-deleted titles by normalized title (lowercase, punctuation/whitespace
+  stripped) — catches the same doujin re-uploaded under an identical Thai
+  title on a different source. Within a group, confirms via cover-image
+  average-hash (Pillow, 8x8, Hamming distance ≤10) before purging. Keeper =
+  existing `status='kept'` row if any, else the earliest `downloaded_at`.
+  Losers go through the existing `db.purge_title()` tombstone path (files
+  removed, slug stays known so it's never re-downloaded). Safety guards
+  (added after advisor review caught the first draft inverting these): a
+  `kept` row is never auto-deleted even as a "loser", and if either side's
+  cover can't be hashed (missing/unreadable) the pair is **skipped, not
+  deleted** — title text alone is never sufficient grounds to delete.
+- Added `Pillow==11.0.0` to `requirements.txt` (only new dep needed).
+- 6 dedupe tests in `tests/test_db.py`: missing-cover skip, visually-similar
+  covers purge (real Pillow-generated checkerboard images, Hamming distance
+  0), visually-different covers skip (checkerboard vs stripes, distance 32),
+  kept-row-wins-as-keeper, second-kept-row-never-purged, distinct titles
+  untouched. Full suite (49 tests) green in a venv.
+- **Not deployed yet** — needs `./scripts/deploy.sh -s ink-reader -y` to
+  rebuild the image (new Pillow dep) and ship the updated `static/index.html`.

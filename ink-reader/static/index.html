@@ -147,6 +147,30 @@
     #grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 0.75rem; padding: 0.75rem; }
     header { padding: 0.6rem 0.75rem; }
   }
+
+  /* Pager */
+  .pager {
+    display: flex; align-items: center; justify-content: center; gap: 0.75rem;
+    padding: 1rem; color: var(--text-dim); font-size: 0.85rem;
+  }
+  .pager button {
+    border: 1px solid var(--border); background: var(--surface); color: var(--text);
+    border-radius: var(--radius-sm); padding: 0.4rem 0.9rem; cursor: pointer;
+  }
+  .pager button:disabled { opacity: 0.4; cursor: default; }
+
+  /* Go-to-top button */
+  #btn-go-top {
+    position: fixed; bottom: 22px; right: 18px;
+    width: 42px; height: 42px; border-radius: 50%;
+    background: var(--accent); color: #fff; border: none; cursor: pointer;
+    display: grid; place-items: center; font-size: 18px;
+    box-shadow: 0 8px 22px -4px var(--accent-glow), 0 2px 4px rgba(0,0,0,.3);
+    opacity: 0; transform: translateY(12px); pointer-events: none;
+    transition: opacity .2s, transform .2s, filter .15s; z-index: 200;
+  }
+  #btn-go-top.visible { opacity: 1; transform: translateY(0); pointer-events: auto; }
+  #btn-go-top:hover { filter: brightness(1.15); }
 </style>
 </head>
 <body>
@@ -167,9 +191,14 @@
   <div class="stats-row" id="stats"></div>
 </header>
 <div id="grid"></div>
+<div class="pager" id="pager"></div>
+
+<button id="btn-go-top" title="กลับขึ้นบน" aria-label="Go to top">↑</button>
 
 <script>
 let filter = "";
+let page = 1;
+const PAGE_SIZE = 60;
 
 const SOURCE_LABELS = { doujinth: "doujin-th" };
 
@@ -224,7 +253,10 @@ async function load() {
   const data = await (await fetch("/api/titles" + q)).json();
   const grid = document.getElementById("grid");
   grid.innerHTML = "";
-  const titles = (data.titles || []).filter(t => t.status !== "deleted");
+  const all = (data.titles || []).filter(t => t.status !== "deleted");
+  const totalPages = Math.max(1, Math.ceil(all.length / PAGE_SIZE));
+  page = Math.min(page, totalPages);
+  const titles = all.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   if (!titles.length) {
     grid.innerHTML = '<div class="empty"><p>No titles found</p></div>';
   }
@@ -251,7 +283,19 @@ async function load() {
       </div>`;
     grid.appendChild(card);
   }
+  renderPager(totalPages);
   loadStats();
+}
+
+function renderPager(totalPages) {
+  const pager = document.getElementById("pager");
+  if (totalPages <= 1) { pager.innerHTML = ""; return; }
+  pager.innerHTML = `
+    <button id="pg-prev" ${page <= 1 ? "disabled" : ""}>← ก่อนหน้า</button>
+    <span>หน้า ${page} / ${totalPages}</span>
+    <button id="pg-next" ${page >= totalPages ? "disabled" : ""}>ถัดไป →</button>`;
+  document.getElementById("pg-prev")?.addEventListener("click", () => { page--; load(); window.scrollTo({ top: 0 }); });
+  document.getElementById("pg-next")?.addEventListener("click", () => { page++; load(); window.scrollTo({ top: 0 }); });
 }
 
 document.getElementById("grid").addEventListener("click", async (e) => {
@@ -267,6 +311,7 @@ document.querySelectorAll(".tab").forEach(b =>
     document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
     b.classList.add("active");
     filter = b.dataset.f;
+    page = 1;
     load();
   })
 );
@@ -280,6 +325,14 @@ document.getElementById("scrape").addEventListener("click", async () => {
 });
 
 document.getElementById("refresh").addEventListener("click", () => load());
+
+(function () {
+  const btn = document.getElementById("btn-go-top");
+  window.addEventListener("scroll", () => {
+    btn.classList.toggle("visible", window.scrollY > 200);
+  }, { passive: true });
+  btn.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+})();
 
 load();
 </script>
