@@ -153,6 +153,8 @@ def compute_monthly_leave_balance(
     monthly_leave_days: float,
     max_leave_carry: float | None,
     up_to: date | None = None,
+    monthly_start_date: date | None = None,
+    first_month_leave_days: float = 0.0,
 ) -> dict:
     """For 'monthly' holiday mode.
 
@@ -191,12 +193,20 @@ def compute_monthly_leave_balance(
     cur_y, cur_m = start_date.year, start_date.month
 
     while (cur_y, cur_m) <= (end.year, end.month):
-        # Credit at start of month — cap prevents over-accrual
+        # Credit at start of month — use first_month_leave_days for the
+        # transition month (same calendar month as monthly_start_date),
+        # regular monthly_leave_days for all other months.
+        is_first_month = (
+            monthly_start_date is not None
+            and cur_y == monthly_start_date.year
+            and cur_m == monthly_start_date.month
+        )
+        month_credit = first_month_leave_days if is_first_month else monthly_leave_days
         if max_leave_carry is not None and max_leave_carry >= 0:
             headroom = max(0.0, max_leave_carry - balance)
-            accrual = min(monthly_leave_days, headroom)
+            accrual = min(month_credit, headroom)
         else:
-            accrual = monthly_leave_days
+            accrual = month_credit
 
         balance += accrual
         total_accrued += accrual
@@ -428,6 +438,8 @@ def compute_resign_summary(
     holiday_mode: str = "sunday",
     monthly_leave_days: float = 0.0,
     max_leave_carry: float | None = None,
+    monthly_start_date: date | None = None,
+    first_month_leave_days: float = 0.0,
 ) -> dict:
     """Compute resignation settlement:
     - Prorated last-month salary (from 1st-of-month or start_date to end_date)
@@ -450,6 +462,8 @@ def compute_resign_summary(
             monthly_leave_days,
             max_leave_carry,
             up_to=end_date,
+            monthly_start_date=monthly_start_date,
+            first_month_leave_days=first_month_leave_days,
         )
         balance = lb["balance"]
         total_comp = 0.0

@@ -1,6 +1,18 @@
 # Daily Log
 
-## 2026-06-30 (3) — i18n km typo fix
+## 2026-07-10 — First-month leave days on pass-probation
+
+**Feature:** กดผ่านทดลองงาน → popup ถาม "จำนวนวันหยุดเดือนแรก" → เดือนแรก (transition month) ได้ตามจำนวนที่กรอก, เดือนถัดไปได้ `monthly_leave_days` ปกติ. Default = 0 (ไม่กรอก = ไม่ได้วันหยุดเดือนแรก).
+
+**ไฟล์ที่แก้:**
+- `calc.py`: `compute_monthly_leave_balance` + `compute_resign_summary` — เพิ่ม params `monthly_start_date`, `first_month_leave_days`. Transition month (เดือนเดียวกับ monthly_start_date) ใช้ `first_month_leave_days`, เดือนอื่นใช้ `monthly_leave_days` ปกติ
+- `main.py`: migration `first_month_leave_days REAL DEFAULT 0`, `PassProbationRequest` เพิ่ม field, `pass_probation` endpoint เก็บลง DB, call sites ทั้ง 4 จุดส่ง params ครบ (leave-balance, get_summary, resign-summary, notify_resign)
+- `line_notify.py`: `notify_resign` เพิ่ม params ส่งต่อให้ `compute_resign_summary` ครบ
+- `static/app.js`: `passProbation` เพิ่ม prompt ถามจำนวนวันหลัง confirm pass_date, i18n key `firstMonthLeavePrompt` (TH/EN)
+- `tests/conftest.py`: เพิ่ม column `first_month_leave_days` ใน test schema
+- `tests/test_probation.py`: 3 tests ใหม่ (transition month, next month, zero default)
+
+**Test:** 36 passed (เดิม 33 + ใหม่ 3)
 
 - `i18n._STATUS['km']['compensatory']`: `🟢 ថ្ងៃសងសង` → `🟢 ថ្ងៃសង` (พยางค์ `សង` ซ้ำผิด, high confidence). best-effort review my/lo/km: **lo โอเคหมด**; **my flag 2 จุดยังไม่แก้** (`kind_pos="အကြွေး"` semantics น่าจะกลับ pos/neg; comp label `အပိုဆောင်းရက်` แปลกๆ) — ต้อง native พม่าจริงดู, disclaimer คงไว้.
 

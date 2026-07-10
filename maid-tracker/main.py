@@ -335,6 +335,11 @@ def init_db():
             c.execute(f"ALTER TABLE employees ADD COLUMN {col} {definition}")
         except Exception:
             pass
+    # First month leave days (probation → active transition)
+    try:
+        c.execute("ALTER TABLE employees ADD COLUMN first_month_leave_days REAL DEFAULT 0")
+    except Exception:
+        pass
     # Slip path on monthly payments
     try:
         c.execute("ALTER TABLE salary_payments ADD COLUMN slip_path TEXT")
@@ -685,6 +690,7 @@ def update_employee(emp_id: int, emp: EmployeeCreate):
 
 class PassProbationRequest(BaseModel):
     pass_date: str  # YYYY-MM-DD
+    first_month_leave_days: float = 0  # leave days for the transition month
 
 
 @app.post("/api/employees/{emp_id}/pass-probation")
@@ -702,8 +708,8 @@ def pass_probation(emp_id: int, req: PassProbationRequest):
         conn.close()
         raise HTTPException(400, "pass_date before start_date")
     conn.execute(
-        "UPDATE employees SET employment_status='active', monthly_start_date=? WHERE id=?",
-        (req.pass_date, emp_id),
+        "UPDATE employees SET employment_status='active', monthly_start_date=?, first_month_leave_days=? WHERE id=?",
+        (req.pass_date, req.first_month_leave_days, emp_id),
     )
     conn.commit()
     conn.close()
@@ -773,6 +779,11 @@ def resign_employee(emp_id: int, req: ResignRequest):
     conn.commit()
     conn.close()
 
+    anchor = (
+        date.fromisoformat(emp["monthly_start_date"])
+        if emp.get("monthly_start_date")
+        else date.fromisoformat(emp["start_date"])
+    )
     line_notify.notify_resign(
         emp_id=emp_id,
         emp_name=emp["name"],
@@ -783,6 +794,11 @@ def resign_employee(emp_id: int, req: ResignRequest):
         employment_status=emp.get("employment_status"),
         probation_daily_rate=emp.get("probation_daily_rate") or 0.0,
         language=emp.get("notify_language", "th"),
+        holiday_mode=emp.get("holiday_mode", "sunday"),
+        monthly_leave_days=emp.get("monthly_leave_days") or 0.0,
+        max_leave_carry=emp.get("max_leave_carry"),
+        monthly_start_date=anchor,
+        first_month_leave_days=emp.get("first_month_leave_days") or 0.0,
     )
 
     return {"message": "resigned"}
@@ -865,6 +881,8 @@ def get_resign_summary(emp_id: int):
         holiday_mode=emp.get("holiday_mode", "sunday"),
         monthly_leave_days=emp.get("monthly_leave_days") or 0.0,
         max_leave_carry=emp.get("max_leave_carry"),
+        monthly_start_date=anchor,
+        first_month_leave_days=emp.get("first_month_leave_days") or 0.0,
     )
 
     return {
@@ -1070,6 +1088,8 @@ def get_leave_balance(emp_id: int):
         anchor,
         emp.get("monthly_leave_days") or 0.0,
         emp.get("max_leave_carry"),
+        monthly_start_date=anchor,
+        first_month_leave_days=emp.get("first_month_leave_days") or 0.0,
     )
     return lb
 
@@ -1679,12 +1699,15 @@ def get_summary(emp_id: int, year: int, month: int):
         monthly_leave_days = emp.get("monthly_leave_days") or 0.0
         # Balance up through end of this month (or today, whichever earlier)
         up_to_date = min(date(year, month, n), today)
+        first_month_leave_days = emp.get("first_month_leave_days") or 0.0
         lb = compute_monthly_leave_balance(
             emp_id,
             anchor,
             monthly_leave_days,
             max_leave_carry=max_carry,
             up_to=up_to_date,
+            monthly_start_date=anchor,
+            first_month_leave_days=first_month_leave_days,
         )
         # Balance at start of this month (for carryover display)
         prev_end = date(year, month, 1) - timedelta(days=1)
@@ -1695,6 +1718,8 @@ def get_summary(emp_id: int, year: int, month: int):
                 monthly_leave_days,
                 max_leave_carry=max_carry,
                 up_to=prev_end,
+                monthly_start_date=anchor,
+                first_month_leave_days=first_month_leave_days,
             )
             carryover_balance = lb_prev["balance"]
         else:
@@ -1880,6 +1905,8 @@ def get_overall(emp_id: int):
             emp.get("monthly_leave_days") or 0.0,
             emp.get("max_leave_carry"),
             up_to=end,
+            monthly_start_date=anchor,
+            first_month_leave_days=emp.get("first_month_leave_days") or 0.0,
         )
         return {
             "start_date": emp["start_date"],

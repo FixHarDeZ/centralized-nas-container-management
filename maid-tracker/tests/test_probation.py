@@ -113,3 +113,86 @@ def test_resign_during_probation_unpaid_only(db, monkeypatch):
     # owed = 06-02 (1) + 06-04 (1) = 2.0  (06-01 paid, 06-03 absent)
     assert r["total_days"] == 2.0
     assert r["final_amount"] == 800.0
+
+
+def test_first_month_leave_days_transition_month(db, monkeypatch):
+    """Transition month (same month as monthly_start_date) uses first_month_leave_days."""
+    calc = _calc(monkeypatch)
+    eid = add_emp(
+        db,
+        name="E",
+        start_date="2026-05-01",
+        monthly_salary=15000,
+        employment_status="active",
+        holiday_mode="monthly",
+        monthly_leave_days=2.0,
+        monthly_start_date="2026-06-20",
+        first_month_leave_days=1.0,
+    )
+    # June (transition month) should accrue 1.0 (first_month_leave_days), not 2.0
+    lb = calc.compute_monthly_leave_balance(
+        eid,
+        date(2026, 6, 20),
+        2.0,  # monthly_leave_days
+        None,
+        up_to=date(2026, 6, 30),
+        monthly_start_date=date(2026, 6, 20),
+        first_month_leave_days=1.0,
+    )
+    assert lb["total_accrued"] == 1.0
+    assert lb["balance"] == 1.0
+
+
+def test_first_month_leave_days_next_month_uses_normal(db, monkeypatch):
+    """Months after the transition month use regular monthly_leave_days."""
+    calc = _calc(monkeypatch)
+    eid = add_emp(
+        db,
+        name="F",
+        start_date="2026-05-01",
+        monthly_salary=15000,
+        employment_status="active",
+        holiday_mode="monthly",
+        monthly_leave_days=2.0,
+        monthly_start_date="2026-06-20",
+        first_month_leave_days=1.0,
+    )
+    # July = normal month → accrue 2.0
+    lb = calc.compute_monthly_leave_balance(
+        eid,
+        date(2026, 6, 20),
+        2.0,
+        None,
+        up_to=date(2026, 7, 31),
+        monthly_start_date=date(2026, 6, 20),
+        first_month_leave_days=1.0,
+    )
+    # June = 1.0 (first_month) + July = 2.0 (normal) = 3.0
+    assert lb["total_accrued"] == 3.0
+
+
+def test_first_month_leave_days_zero_default(db, monkeypatch):
+    """When first_month_leave_days=0, transition month gets 0 leave."""
+    calc = _calc(monkeypatch)
+    eid = add_emp(
+        db,
+        name="G",
+        start_date="2026-05-01",
+        monthly_salary=15000,
+        employment_status="active",
+        holiday_mode="monthly",
+        monthly_leave_days=2.0,
+        monthly_start_date="2026-06-20",
+        first_month_leave_days=0.0,
+    )
+    lb = calc.compute_monthly_leave_balance(
+        eid,
+        date(2026, 6, 20),
+        2.0,
+        None,
+        up_to=date(2026, 6, 30),
+        monthly_start_date=date(2026, 6, 20),
+        first_month_leave_days=0.0,
+    )
+    assert lb["total_accrued"] == 0.0
+    assert lb["balance"] == 0.0

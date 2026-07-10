@@ -107,6 +107,7 @@ const TRANSLATIONS = {
     dailyPayHint: "ยังไม่มีวันทำงาน — ไปที่ปฏิทินเพื่อลงเวลาทำงานก่อน",
     passProbationPrompt: (n) => `วันที่ ${n} ผ่านทดลองงาน (YYYY-MM-DD):`,
     passProbationConfirm: (n, d) => `ยืนยันให้ "${n}" ผ่านทดลองงานวันที่ ${d}?`,
+    firstMonthLeavePrompt: "จำนวนวันหยุดเดือนแรก (0 = ไม่มี):",
     btnResign: "แจ้งลาออก", btnCancelResign: "ยกเลิกลาออก",
     resignSummaryTitle: (d) => `สรุปการลาออก — ${d}`,
     resignLastMonth: "เงินเดือนเดือนสุดท้าย",
@@ -300,6 +301,7 @@ const TRANSLATIONS = {
     dailyPayHint: "No work days yet — open the calendar to mark attendance first",
     passProbationPrompt: (n) => `Pass-probation date for ${n} (YYYY-MM-DD):`,
     passProbationConfirm: (n, d) => `Confirm "${n}" passes probation on ${d}?`,
+    firstMonthLeavePrompt: "First-month leave days (0 = none):",
     btnResign: "Record Resignation", btnCancelResign: "Cancel Resignation",
     resignSummaryTitle: (d) => `Resignation Summary — ${d}`,
     resignLastMonth: "Last Month Salary",
@@ -2185,8 +2187,14 @@ async function passProbation(id, name) {
     return;
   }
   if (!confirm(t("passProbationConfirm", name, formatDate(dateStr)))) return;
+  // Ask for first-month leave days
+  const leaveStr = prompt(t("firstMonthLeavePrompt"), "0");
+  const firstMonthLeave = Math.max(0, parseFloat(leaveStr) || 0);
   try {
-    await api.post(`/api/employees/${id}/pass-probation`, { pass_date: dateStr });
+    await api.post(`/api/employees/${id}/pass-probation`, {
+      pass_date: dateStr,
+      first_month_leave_days: firstMonthLeave,
+    });
     await render();
   } catch (e) {
     alert(t("errSave") + e.message);

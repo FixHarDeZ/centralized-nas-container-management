@@ -384,6 +384,11 @@ def notify_resign(
     employment_status: str | None = None,
     probation_daily_rate: float = 0.0,
     language: str = "th",
+    holiday_mode: str = "sunday",
+    monthly_leave_days: float = 0.0,
+    max_leave_carry: float | None = None,
+    monthly_start_date: date | None = None,
+    first_month_leave_days: float = 0.0,
 ) -> None:
     """Call after recording a resignation."""
     if not TOKEN or not GROUP_ID:
@@ -418,7 +423,14 @@ def notify_resign(
             send_line(msg)
             return
 
-        s = compute_resign_summary(emp_id, start_date, end_date, monthly_salary)
+        s = compute_resign_summary(
+            emp_id, start_date, end_date, monthly_salary,
+            holiday_mode=holiday_mode,
+            monthly_leave_days=monthly_leave_days,
+            max_leave_carry=max_leave_carry,
+            monthly_start_date=monthly_start_date,
+            first_month_leave_days=first_month_leave_days,
+        )
 
         balance = s["cumulative_balance"]
         bal_amt = s["balance_amount"]

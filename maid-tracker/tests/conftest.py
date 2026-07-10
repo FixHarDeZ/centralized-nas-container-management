@@ -21,7 +21,8 @@ def db(monkeypatch):
             monthly_leave_days REAL DEFAULT 0,
             employment_status TEXT DEFAULT 'active',
             probation_daily_rate REAL, monthly_start_date TEXT,
-            payment_method TEXT DEFAULT 'cash', end_date TEXT
+            payment_method TEXT DEFAULT 'cash', end_date TEXT,
+            first_month_leave_days REAL DEFAULT 0
         );
         CREATE TABLE attendance (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

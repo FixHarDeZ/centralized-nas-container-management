@@ -1,6 +1,6 @@
 # maid-tracker — Index (Memory File)
 
-อัปเดตล่าสุด: 2026-06-30
+อัปเดตล่าสุด: 2026-07-10
 
 ---
 
@@ -61,6 +61,7 @@ employees (
   employment_status TEXT DEFAULT 'active',  -- 'probation' (จ่ายรายวัน, ลาปิด) | 'active'
   probation_daily_rate REAL,                -- เรตรายวันช่วงโปร
   monthly_start_date TEXT,                  -- = วันผ่านโปร; NULL ระหว่างโปร. monthly calc anchor = monthly_start_date or start_date
+  first_month_leave_days REAL DEFAULT 0,    -- วันหยุดเดือนแรกที่ผ่านโปร (transition month). เดือนถัดไปใช้ monthly_leave_days ปกติ
   payment_method TEXT DEFAULT 'cash',       -- 'cash' | 'transfer' (transfer → แนบ slip ได้)
   notify_language TEXT DEFAULT 'th'          -- 'th'|'my'|'en'|'lo'|'km' — non-Thai → แนบคำแปลใต้ข้อความ LINE
 )
@@ -136,6 +137,7 @@ working_days_in_month = จำนวนวัน "ทั้งเดือน" (
 - **Transition month** (เดือนที่ผ่านโปร): วัน `< pass_date` = daily (`get_daily_payments` cap `work_date < monthly_start_date`), วัน `>= pass_date` = monthly pro-rate. ไม่ double-pay/orphan. ถ้า pass_date หลังวันที่ 15 → period 1 skip, period 2 = full prorated base.
 - **Resign ระหว่างโปร** = Σ **unpaid** work days × rate (วันที่ toggle paid แล้วไม่นับซ้ำ). ไม่มี monthly base.
 - **Summary/Overall ระหว่างโปร** (`get_summary`/`get_overall` มี probation branch): นับเฉพาะวัน mark work (ไม่ default-fill), **ไม่มี holiday/leave/เงินเดือนรายเดือน**. คืน `employment_status='probation'` + `total_earned`/`total_paid`/`total_unpaid` (work × daily_rate). `export_payslip` ออก CSV รายวันสำหรับ probation. Frontend (detail/summary/list/payments) render daily-pay framing เมื่อ probation. **เหตุผล:** เดิม summary/overall ใช้ `default_status` (sunday) → probation ได้ holiday + เงินเดือนเต็มผิด.
+- **First-month leave days** (`first_month_leave_days`): กดผ่านโปร → popup ถามจำนวนวันหยุดเดือนแรก (transition month). `compute_monthly_leave_balance` ใช้ `first_month_leave_days` สำหรับเดือนเดียวกับ `monthly_start_date`, เดือนอื่นใช้ `monthly_leave_days` ปกติ. Default = 0 (ไม่กรอก = ไม่ได้วันหยุดเดือนแรก).
 
 ### Slip / Documents (file upload)
 - `payment_method='transfer'` → แนบ slip ได้ทุก payment (daily + monthly period). เก็บ `/data/slips/`.
@@ -228,7 +230,7 @@ final = base_salary_last_month + (cumulative_balance × daily_rate)
 | GET | `/api/employees/{id}/leave-balance` | ยอดวันหยุดสะสม (monthly mode) |
 | GET | `/api/employees/{id}/payments?year=&month=` | ข้อมูลจ่ายเงิน |
 | POST | `/api/employees/{id}/payments/{period}/toggle?year=&month=&paid_by=` | บันทึก/ยกเลิกจ่าย (`paid_by`=ผู้จ่าย ฟิก/ปุ๊ก, clear ตอน unmark) |
-| POST | `/api/employees/{id}/pass-probation` | ผ่านโปร (body `pass_date`) → active + set monthly_start_date |
+| POST | `/api/employees/{id}/pass-probation` | ผ่านโปร (body `pass_date`, `first_month_leave_days`) → active + set monthly_start_date + first_month_leave_days |
 | DELETE | `/api/employees/{id}/pass-probation` | ยกเลิกผ่านโปร (กลับ probation) |
 | GET | `/api/employees/{id}/daily-payments?year=&month=` | รายการจ่ายรายวันช่วงโปร (cap < monthly_start_date) |
 | POST | `/api/employees/{id}/daily-payments/{work_date}/toggle?paid_by=&amount=` | บันทึก/ยกเลิกจ่ายรายวัน (`paid_by`=ผู้จ่าย, `amount`=override จำนวนเงิน optional `>0`, ไม่ส่ง=คำนวณ `rate×frac`) |
