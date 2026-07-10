@@ -223,3 +223,14 @@ Added 2 new scraper sources and multi-page listing support.
   untouched. Full suite (49 tests) green in a venv.
 - **Not deployed yet** — needs `./scripts/deploy.sh -s ink-reader -y` to
   rebuild the image (new Pillow dep) and ship the updated `static/index.html`.
+
+## 2026-07-09 — Add CBZ download button to dashboard
+
+- Added download button (⬇️) to every card's actions row in `static/index.html`
+- Uses `<a>` tag with `href="/files/{id}.cbz"` and `download` attribute so
+  mobile Chrome triggers a direct file download instead of opening in-browser
+- Shows on all statuses (new + kept) — users can download before expiry
+- CSS class `.dl-btn` styled as accent-colored ghost button, same flex sizing
+  as keep/delete buttons
+- No backend changes needed — `/files/{tid}.cbz` endpoint already serves CBZ
+  with `Content-Disposition: filename="{title}.cbz"`

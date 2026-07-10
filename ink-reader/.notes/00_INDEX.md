@@ -1,6 +1,6 @@
 # ink-reader — Project Index (Memory Blueprint)
 
-> อัปเดตล่าสุด: 2026-07-08 (dashboard: go-top button, pagination, auto-dedupe)
+> อัปเดตล่าสุด: 2026-07-09 (dashboard: download button per card)
 > ใช้ไฟล์นี้เป็น cold-start memory ก่อนเริ่มงานทุกครั้ง
 
 ---

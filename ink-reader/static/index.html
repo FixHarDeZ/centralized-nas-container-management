@@ -134,6 +134,13 @@
   .actions button:hover { opacity: 0.85; }
   .keep { background: var(--green-dim); color: var(--green); }
   .del { background: rgba(239, 68, 68, 0.12); color: var(--red); }
+  .dl-btn {
+    flex: 1; padding: 0.4rem 0; font-size: 0.9rem; border: none;
+    border-radius: var(--radius-sm); cursor: pointer; transition: opacity 0.15s;
+    background: rgba(99, 102, 241, 0.12); color: var(--accent);
+    text-align: center; text-decoration: none; display: block;
+  }
+  .dl-btn:hover { opacity: 0.85; }
 
   /* Empty state */
   .empty {
@@ -277,6 +284,7 @@ async function load() {
           ? `<div class="kept-badge">❤️ เก็บถาวร</div>`
           : `<div class="exp">⏳ เหลือ ${dl} วัน</div>`}
         <div class="actions">
+          <a class="dl-btn" href="/files/${t.id}.cbz" download title="Download CBZ">⬇️</a>
           ${t.status === "new" ? `<button class="keep" data-a="keep" data-id="${t.id}">❤️</button>` : ""}
           <button class="del" data-a="delete" data-id="${t.id}">🗑</button>
         </div>
