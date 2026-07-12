@@ -68,6 +68,23 @@ def _backup_db() -> str | None:
     )
 
 
+def _promote_pending():
+    """Flip probation→active once the scheduled monthly start date has arrived.
+    A passed maid stays in probation (daily pay) through the tail of the pass month;
+    this promotes them on/after their monthly_start_date (always a 1st).
+    The NOT NULL guard keeps not-yet-passed maids (NULL anchor) in probation.
+    """
+    conn = get_db()
+    conn.execute(
+        "UPDATE employees SET employment_status='active' "
+        "WHERE employment_status='probation' AND monthly_start_date IS NOT NULL "
+        "AND monthly_start_date <= ?",
+        (date.today().isoformat(),),
+    )
+    conn.commit()
+    conn.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Fire every minute so each reminder's send_time can be matched exactly
@@ -80,6 +97,8 @@ async def lifespan(app: FastAPI):
     )
     # Daily SQLite backup at 03:00 local time
     _scheduler.add_job(_backup_db, CronTrigger(hour=3, minute=0), id="daily_backup")
+    _promote_pending()  # heal any promotion missed while the app was down
+    _scheduler.add_job(_promote_pending, CronTrigger(hour=0, minute=10), id="promote_probation")
     _scheduler.start()
     yield
     _scheduler.shutdown(wait=False)
@@ -694,7 +713,6 @@ def update_employee(emp_id: int, emp: EmployeeCreate):
 
 class PassProbationRequest(BaseModel):
     pass_date: str  # YYYY-MM-DD
-    first_month_leave_days: float = 0  # leave days for the transition month
 
 
 @app.post("/api/employees/{emp_id}/pass-probation")
@@ -707,17 +725,28 @@ def pass_probation(emp_id: int, req: PassProbationRequest):
     if emp["employment_status"] != "probation":
         conn.close()
         raise HTTPException(400, "Employee is not in probation")
-    # validate pass_date: not before start_date
     if req.pass_date < emp["start_date"]:
         conn.close()
         raise HTTPException(400, "pass_date before start_date")
+    # Monthly pay starts on the 1st: the whole pass-month stays daily, the monthly
+    # lump begins the 1st of the next month (or this month if passed on the 1st).
+    pd = date.fromisoformat(req.pass_date)
+    if pd.day == 1:
+        anchor = pd
+    elif pd.month == 12:
+        anchor = date(pd.year + 1, 1, 1)
+    else:
+        anchor = date(pd.year, pd.month + 1, 1)
+    # Transition month is now always a full month → credit full monthly_leave_days.
     conn.execute(
-        "UPDATE employees SET employment_status='active', monthly_start_date=?, first_month_leave_days=? WHERE id=?",
-        (req.pass_date, req.first_month_leave_days, emp_id),
+        "UPDATE employees SET monthly_start_date=?, first_month_leave_days=? WHERE id=?",
+        (anchor.isoformat(), emp["monthly_leave_days"] or 0.0, emp_id),
     )
     conn.commit()
     conn.close()
-    return {"message": "passed", "monthly_start_date": req.pass_date}
+    # Flip to active now if the anchor is already here (passed on the 1st / backdated).
+    _promote_pending()
+    return {"message": "passed", "monthly_start_date": anchor.isoformat()}
 
 
 @app.delete("/api/employees/{emp_id}/pass-probation")
