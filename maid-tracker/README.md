@@ -55,9 +55,10 @@ TLS is terminated by Synology Reverse Proxy — the nginx sidecar handles Authel
 - **Leave cap deduction row** appears when max leave carry is configured and exceeded
 
 ### 💰 Salary Payment
-- Split into **2 periods/month**: Period 1 (15th) and Period 2 (last day of month)
-- Period 1 = salary ÷ 2; Period 2 = remaining half (± leave cap deduction if configured)
-- **Period 2 shows a deduction breakdown** when leave exceeds the max carry limit
+- Each employee has a **payment schedule** (`payment_schedule`, set on the employee form): **`biweekly`** (default) or **`monthly`**
+  - `biweekly` — split into **2 periods/month**: Period 1 (15th) = salary ÷ 2; Period 2 (last day of month) = remaining half (± leave cap deduction if configured)
+  - `monthly` — **1 round only**, paid at month-end for the **full salary** (no Period 1 at all)
+- **Period 2 shows a deduction breakdown** when leave exceeds the max carry limit (biweekly only)
 - Mark paid / unmark with timestamp
 - Alert showing pending unpaid periods
 
@@ -65,16 +66,18 @@ TLS is terminated by Synology Reverse Proxy — the nginx sidecar handles Authel
 - Start a new employee in **probation** (`employment_status='probation'`) — pay is **daily** at a fixed `probation_daily_rate` set at creation
 - During probation: **leave / compensatory / holiday are disabled** (calendar shows unmarked days; API + LINE webhook reject leave); only explicitly-marked `work` days count
 - Pay tracked per work day in the **Daily Pay** view — toggle each day paid (amount snapshot at the daily rate)
-- **Pass probation** button → set the pass date → employee switches to monthly salary mode **immediately**; leave + monthly periods turn on
-- The **transition month** is split at the pass date: days before = daily pay, days from the pass date on = monthly salary **pro-rated** (`monthly_salary ÷ calendar days × calendar days from pass date`). No double-pay, no gap
-- Monthly logic anchors on `monthly_start_date or start_date`, so leave accrual and proration begin at the pass date — not the original start date. Existing (non-probation) employees are unaffected
+- **Pass probation** button → set the pass date → employee **stays on daily pay through the end of that month** (the pass-month); monthly salary starts on the **1st of the next month** (or the pass date itself if it's already the 1st). This is because monthly pay always starts on a 1st — there's no more mid-month partial monthly period
+  - The badge shows amber "Probation" before passing, then green **"Passed probation — monthly from `<date>`"** during the daily-pay tail after passing, until the anchor date arrives
+  - A background job (`_promote_pending`, daily at 00:10, plus on app startup and right after pressing the button) flips the employee from `probation` to `active` once `monthly_start_date` is reached — no manual step needed
+- Monthly logic anchors on `monthly_start_date or start_date`, so leave accrual and proration begin at the anchor date — not the original start date. Existing (non-probation) employees are unaffected
+- The transition month's leave allowance (`first_month_leave_days`) is now always set equal to the normal `monthly_leave_days` (no prompt) — the first monthly month is always a full calendar month
 - Resign during probation settles only **unpaid** work days × daily rate (no monthly base)
 
 ### 💳 Payment Method, Slips & Payer
 - Each employee has a **payment method**: `cash` or `transfer`
 - For `transfer`, an **attach-slip** button appears on every payment (daily probation days + monthly periods) — uploads an image/PDF stored under `/data/slips`
 - Slips are served behind the stack's basic auth
-- **Payer dropdown:** when marking a period/day as paid, pick who paid it (ฟิก / ปุ๊ก). The choice (`paid_by`) is stored and shown as a *"Paid by X"* badge; unmarking clears it. Payer list is the `PAYERS` const in `static/app.js`
+- **Payer dropdown:** when marking a period/day as paid, pick who paid it (ฟิก / ปุ๊ก / ฟิก + ปุ๊ก for jointly-paid). The choice (`paid_by`) is stored and shown as a *"Paid by X"* badge; unmarking clears it. Payer list is the `PAYERS` const in `static/app.js`
 
 ### 🪪 Documents (ID / Passport / Other)
 - Upload **multiple** images/PDFs per employee (added at edit time), stored under `/data/documents`
@@ -467,10 +470,17 @@ reminders (
 - ยอดยกมาจากเดือนก่อน + ยอดสะสมรวม
 
 ### 💰 ระบบจ่ายเงินเดือน
-- แบ่งจ่าย **2 รอบ/เดือน**: รอบแรก (วันที่ 15) และรอบสอง (วันสุดท้ายเดือน)
-- แต่ละรอบ = เงินเดือน ÷ 2 (ไม่มีการหักลา/ชดเชยรายเดือน)
+- แต่ละคนตั้ง **รอบจ่ายเงินเดือน** (`payment_schedule`) ได้จากฟอร์มข้อมูลแม่บ้าน: **`biweekly`** (default) หรือ **`monthly`**
+  - `biweekly` — แบ่งจ่าย **2 รอบ/เดือน**: รอบแรก (วันที่ 15) = เงินเดือน ÷ 2, รอบสอง (วันสุดท้ายเดือน) = ครึ่งที่เหลือ (± หักลาเกินถ้าตั้ง max leave carry)
+  - `monthly` — **รอบเดียว** จ่ายสิ้นเดือน = **เต็มเงินเดือน** (ไม่มีรอบแรกเลย)
 - กดบันทึกว่าจ่ายแล้ว / ยกเลิก พร้อมแสดงเวลาที่จ่าย
 - แสดง alert แจ้งรอบที่ยังค้างจ่าย
+
+### 🧪 โหมดทดลองงาน (จ่ายรายวัน)
+- แม่บ้านใหม่เริ่มที่ `employment_status='probation'` — จ่ายรายวันตามอัตรา `probation_daily_rate`; ลา/ชดเชย/วันหยุดปิดหมดระหว่างโปร
+- **กดผ่านโปร** กลางเดือน → **ยังจ่ายรายวันต่อจนสิ้นเดือนที่กด**, เงินเดือนรายเดือนเริ่ม **วันที่ 1 ของเดือนถัดไป** เท่านั้น (เพราะรายเดือนต้องเริ่มวันที่ 1 เสมอ) — badge เหลือง "ทดลองงาน" ก่อนกด, เขียว "ผ่านโปรแล้ว — รายเดือนเริ่ม `<date>`" ระหว่างรอ anchor
+- ระบบสลับสถานะเป็น `active` ให้อัตโนมัติเมื่อถึงวันที่ anchor (job รายวัน 00:10 + ตอนเปิดแอป + ตอนกดผ่านโปร) ไม่ต้องทำอะไรเพิ่ม
+- เดือนแรกที่เป็นรายเดือนเต็ม (ไม่มี partial month แล้ว) ได้วันหยุดเท่ากับ `monthly_leave_days` ปกติเสมอ
 
 ### 🚪 ระบบลาออก
 - บันทึกวันที่ลาออก + เหตุผล

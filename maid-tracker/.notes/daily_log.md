@@ -1,5 +1,23 @@
 # Daily Log
 
+## 2026-07-12 — Per-maid payment schedule + pass-probation month-boundary rework + payer "both"
+
+**3 feature areas บน branch `feat/maid-passprobation-payment-schedule`:**
+
+1. **Per-maid payment schedule** (`payment_schedule`): เพิ่ม column `payment_schedule TEXT DEFAULT 'biweekly'` บน `employees` — `'biweekly'` (default, 2 รอบ: 15 + สิ้นเดือน) หรือ `'monthly'` (1 รอบ สิ้นเดือน = เต็มเงินเดือน, `get_payments` ข้าม period 1). ตั้งค่าได้ตอนสร้าง/แก้ไขข้อมูล (dropdown ในฟอร์ม).
+2. **Pass-probation month-boundary rework:** กดผ่านโปรกลางเดือน → **ไม่ active ทันทีแล้ว** — จ่ายรายวันต่อจนสิ้นเดือนที่กด (pass-month), รายเดือนเริ่มวันที่ 1 ของเดือนถัดไปเท่านั้น (`monthly_start_date` = anchor นั้น). ยังคง `employment_status='probation'` จนกว่า `_promote_pending()` จะ flip ให้เมื่อถึง anchor — เรียกตอนกดผ่านโปร (backdate/กดวันที่ 1), ตอน app startup (`lifespan`, heal การพลาด), และ **job ใหม่ `promote_probation` ทุกวัน 00:10**. `first_month_leave_days` ตอนนี้ set = `monthly_leave_days` เสมอ (transition month กลายเป็น full month ของ anchor เดือนถัดไป ไม่ใช่ partial) — **ลบ popup ถามจำนวนวันหยุดเดือนแรกออกแล้ว**. `get_summary` เพิ่ม guard `month_all_daily`: เดือนที่อยู่ก่อน anchor ทั้งเดือนยังคง daily framing แม้ status โดน flip เป็น active ไปแล้ว (กัน pass-month โดนรายงานเป็นเงินเดือนเต็มผิด เวลาดูย้อนหลัง). `get_overall` ยังไม่แก้ — known limitation (all-time dashboard ยัง rough).
+3. **Payer "ฟิก + ปุ๊ก":** `PAYERS` const ใน `app.js` เพิ่มตัวเลือกที่ 3 สำหรับกรณีจ่ายร่วมกัน — เก็บเป็น string ตรงๆ ใน `paid_by` เดิม ไม่ต้องแก้ schema.
+
+**ไฟล์ที่แก้ (4 commits):**
+- `main.py`: migration `payment_schedule`, `EmployeeCreate` field, create/update employee INSERT/UPDATE, `get_payments` schedule branch; `_promote_pending()` helper + เรียกใน `lifespan`/`pass_probation`/daily job `promote_probation` (00:10); `pass_probation` endpoint เปลี่ยนมาคำนวณ anchor = วันที่ 1 เดือนถัดไป (ไม่ set `employment_status='active'` ตรงๆ อีกต่อไป, ลบ `first_month_leave_days` ออกจาก request body); `get_summary` เพิ่ม `month_all_daily` guard
+- `static/app.js`: `PAYERS` array, ฟอร์มพนักงานเพิ่ม `payment_schedule` select + i18n keys (TH/EN), badge สถานะ (เขียว "ผ่านโปรแล้ว — รายเดือนเริ่ม `<date>`" ระหว่าง tail vs เหลือง "ทดลองงาน"), ปุ่ม "ผ่านโปร" ซ่อนเมื่อ anchor ถูก set แล้ว, `passProbation()` ตัด prompt ถามวันหยุดเดือนแรกออก
+- `static/index.html`: cache-bust `app.js?v=20260712`
+- Tests ใหม่: `tests/test_payment_schedule.py` (schedule branch), `tests/test_pass_probation_boundary.py` (anchor calc, `_promote_pending`, daily-through-month-end, month_all_daily guard)
+
+**Test:** 48 passed (เดิม 36 + ใหม่ 12 จาก `test_payment_schedule.py` + `test_pass_probation_boundary.py`, 3 commits แรก)
+
+**ค้าง/flag:** `get_overall` (all-time dashboard) ยังไม่มี `month_all_daily`-เทียบเท่า guard — ถ้าดู "ภาพรวมทั้งหมด" ของแม่บ้านที่เพิ่งผ่านโปรช่วง pass-month อาจเห็นเลขหยาบผิดเล็กน้อย จงใจไม่แก้รอบนี้ (scope เฉพาะ summary/payslip รายเดือนตาม spec).
+
 ## 2026-07-10 — First-month leave days on pass-probation
 
 **Feature:** กดผ่านทดลองงาน → popup ถาม "จำนวนวันหยุดเดือนแรก" → เดือนแรก (transition month) ได้ตามจำนวนที่กรอก, เดือนถัดไปได้ `monthly_leave_days` ปกติ. Default = 0 (ไม่กรอก = ไม่ได้วันหยุดเดือนแรก).

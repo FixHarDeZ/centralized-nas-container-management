@@ -1,6 +1,6 @@
 # maid-tracker — Index (Memory File)
 
-อัปเดตล่าสุด: 2026-07-10
+อัปเดตล่าสุด: 2026-07-12
 
 ---
 
@@ -60,9 +60,10 @@ employees (
   -- probation mode (axis แยกจาก holiday_mode):
   employment_status TEXT DEFAULT 'active',  -- 'probation' (จ่ายรายวัน, ลาปิด) | 'active'
   probation_daily_rate REAL,                -- เรตรายวันช่วงโปร
-  monthly_start_date TEXT,                  -- = วันผ่านโปร; NULL ระหว่างโปร. monthly calc anchor = monthly_start_date or start_date
-  first_month_leave_days REAL DEFAULT 0,    -- วันหยุดเดือนแรกที่ผ่านโปร (transition month). เดือนถัดไปใช้ monthly_leave_days ปกติ
+  monthly_start_date TEXT,                  -- = วันที่ 1 ที่ monthly เริ่มจ่ายจริง (1 ของเดือนถัดจาก pass_date, หรือ pass_date เองถ้ากดวันที่ 1). NULL ระหว่างโปร (ยังไม่กดผ่าน). monthly calc anchor = monthly_start_date or start_date
+  first_month_leave_days REAL DEFAULT 0,    -- วันหยุดเดือนของ transition month — ตอนนี้ set = monthly_leave_days เสมอตอนกดผ่านโปร (เดือนนั้นเป็น full month แล้วเพราะ daily คุมจนสิ้นเดือน pass). เดือนถัดไปใช้ monthly_leave_days ปกติ
   payment_method TEXT DEFAULT 'cash',       -- 'cash' | 'transfer' (transfer → แนบ slip ได้)
+  payment_schedule TEXT DEFAULT 'biweekly', -- 'biweekly' (2 รอบ: 15 + สิ้นเดือน, ปกติ) | 'monthly' (รอบเดียวสิ้นเดือน = เต็มเงินเดือน, ไม่มี period 1)
   notify_language TEXT DEFAULT 'th'          -- 'th'|'my'|'en'|'lo'|'km' — non-Thai → แนบคำแปลใต้ข้อความ LINE
 )
 
@@ -123,8 +124,13 @@ working_days_in_month = จำนวนวัน "ทั้งเดือน" (
 **เหตุผล:** วันหยุดเราให้หยุดแต่จ่ายเงินเดือนให้ด้วย → วันหยุดต้องอยู่ใน denominator. ⚠️ ชื่อ fn `working_days_in_month` ยังคงเดิม (API/JSON-key stability) แต่ตอนนี้นับ "ทุกวัน" ไม่ใช่แค่ จ-ส. **Invariant:** full month → จ่ายเต็มเสมอ (dr × วันทั้งเดือน = salary) เพราะ billable ทุกจุดนับทุกวันเช่นกัน (ลบ filter `weekday()!=6` ออก 5 จุด: calc divisor+resign, get_payments, summary, pass-probation transition). หัก excess-leave ใช้ dr ใหม่ (ต่อวันน้อยลง = salary/30 แทน salary/26). ใช้กับ **ทั้งสอง holiday_mode**. วันอาทิตย์ยัง = holiday ในปฏิทิน/attendance เหมือนเดิม (เปลี่ยนแค่ money math ไม่แตะ default_status/Sunday rules).
 
 ### เงินเดือนรายเดือน (พื้นฐาน)
-- จ่าย **2 รอบ**: Period 1 วันที่ 15 = `salary / 2`, Period 2 สิ้นเดือน = `salary / 2`
+- จ่าย **2 รอบ** (default, `payment_schedule='biweekly'`): Period 1 วันที่ 15 = `salary / 2`, Period 2 สิ้นเดือน = `salary / 2`
 - เดือนแรกที่เริ่มงาน (partial month) → pro-rate **ทุกวัน** (รวมวันหยุด) ตั้งแต่ **anchor** ถึงสิ้นเดือน
+
+### Payment Schedule (`payment_schedule`, per-maid)
+- **`'biweekly'`** (default): 2 รอบต่อเดือนตามปกติด้านบน (period 1 วันที่ 15 + period 2 สิ้นเดือน)
+- **`'monthly'`**: **1 รอบ** สิ้นเดือน = เต็มเงินเดือน (`base_salary`, ไม่หาร 2) — `get_payments` ข้าม period 1 ไปเลย ไม่สร้าง entry. ตั้งค่าได้ตอนสร้าง/แก้ไขข้อมูลแม่บ้าน (dropdown ในฟอร์ม)
+- ไม่กระทบ leave/holiday/probation/pass-probation logic — ใช้แค่คำนวณจำนวนรอบ+จำนวนเงินใน `get_payments`
 
 ### Probation mode (จ่ายรายวัน — axis `employment_status`)
 - **`employment_status='probation'`**: จ่ายรายวัน, **ลา/ชดเชย/holiday ปิด** (attendance default = `unmarked`, POST + LINE webhook reject leave). `get_payments` คืน `[]` (ไม่มีงวดเดือน).
@@ -132,12 +138,15 @@ working_days_in_month = จำนวนวัน "ทั้งเดือน" (
 - **Mark absence (UI):** ปุ่ม "ลงเวลาทำงาน" บนหน้า detail → ปฏิทิน `/attendance`. ช่วงโปร cell toggle **work ↔ ขาด** (ขาดถาม full/half; คลิกกลับ work = DELETE row คืน default). comp/holiday ปิด. `get_attendance` คืน `work` เป็น default ทุกวัน ≤ วันนี้.
 - **จ่ายรายวัน** ผ่าน `daily_payments` (toggle paid ต่อวัน, `amount` snapshot). `get_daily_payments` iterate วัน default-present (frac>0) ใน window (cap < `monthly_start_date`). จ่ายวัน default ได้แม้ไม่มี attendance row. จ่ายวันขาดไม่ได้ (400).
 - **ยอดค้างจ่าย (amount-based)** = `calc.compute_probation_unpaid()` → Σ `max(0, day_rate − day_paid)` ต่อวัน (overpay/ทิปวันหนึ่งไม่ลดวันอื่น). **single source** ใช้ร่วม `get_overall` (dashboard ค้างจ่าย), `notify_balance_query`, monthly report → ไม่ drift. ต่างจาก `compute_probation_resign` (presence-based unpaid×rate).
-- **กดผ่านโปร** (`POST pass-probation` body `pass_date`): set `monthly_start_date=pass_date`, `employment_status='active'` → เปิด leave + monthly ทันที.
-- **Monthly anchor** = `monthly_start_date or start_date`. ทุก monthly/leave calc (payments, summary, overall, leave-balance, resign) ใช้ anchor → pro-rate/leave accrual เริ่มที่วันผ่านโปร ไม่ใช่ start_date. แถวเก่า (monthly_start_date NULL) fallback = start_date (behavior เดิม).
-- **Transition month** (เดือนที่ผ่านโปร): วัน `< pass_date` = daily (`get_daily_payments` cap `work_date < monthly_start_date`), วัน `>= pass_date` = monthly pro-rate. ไม่ double-pay/orphan. ถ้า pass_date หลังวันที่ 15 → period 1 skip, period 2 = full prorated base.
+- **กดผ่านโปร** (`POST pass-probation` body `pass_date` เท่านั้น — ไม่มี `first_month_leave_days` แล้ว): คำนวณ **anchor** = วันที่ 1 ของเดือนถัดจาก `pass_date` (หรือ `pass_date` เองถ้ากดวันที่ 1 พอดี) → set `monthly_start_date=anchor`, `first_month_leave_days=monthly_leave_days` **แต่ยังไม่เปลี่ยน `employment_status`** — คงเป็น `'probation'` (จ่ายรายวันต่อ) จนกว่า `_promote_pending()` จะ flip ให้เมื่อถึง anchor.
+- **Month-boundary rule (2026-07-12 rework):** กดผ่านโปรกลางเดือน → **จ่ายรายวันต่อจนสิ้นเดือนที่กด (pass-month)**, รายเดือนเริ่ม **วันที่ 1 ของเดือนถัดไป**. เหตุผล: จ่ายรายเดือนต้องเริ่มที่วันที่ 1 เสมอ (ไม่มี partial-month monthly). ถ้ากดผ่านโปรวันที่ 1 พอดี → anchor = วันนั้นเลย (ไม่ต้องรอเดือนถัดไป).
+- **`_promote_pending()`** (helper ใน `main.py`): `UPDATE employees SET employment_status='active' WHERE employment_status='probation' AND monthly_start_date IS NOT NULL AND monthly_start_date <= today`. เรียก 3 จุด: (1) ท้าย `pass_probation` endpoint (flip ทันทีถ้า anchor = วันนี้/อดีต เช่นกดวันที่ 1 หรือ backdate), (2) `lifespan` ตอน startup (heal การ promote ที่พลาดตอนแอปดับ), (3) **daily job `promote_probation` เวลา 00:10** (ดู Scheduled Jobs) — คุมกรณี anchor เป็นอนาคตตอนกด แล้วมาถึงวันจริงระหว่างแอปรันอยู่.
+- **Monthly anchor** = `monthly_start_date or start_date`. ทุก monthly/leave calc (payments, summary, overall, leave-balance, resign) ใช้ anchor → pro-rate/leave accrual เริ่มที่ anchor ไม่ใช่ start_date. แถวเก่า (monthly_start_date NULL) fallback = start_date (behavior เดิม).
+- **Transition month** (เดือนที่ผ่านโปร = pass-month): **ทั้งเดือนยังเป็น daily** (`get_daily_payments` cap `work_date < monthly_start_date` = ยังไม่ถึง anchor). รายเดือนรอบแรกจริงคือเดือนของ anchor (เดือนถัดไป) — เดือนนั้นเป็น **full month เสมอ** (ไม่มี partial-month prorate สำหรับ monthly แล้ว เพราะ anchor คือวันที่ 1).
 - **Resign ระหว่างโปร** = Σ **unpaid** work days × rate (วันที่ toggle paid แล้วไม่นับซ้ำ). ไม่มี monthly base.
 - **Summary/Overall ระหว่างโปร** (`get_summary`/`get_overall` มี probation branch): นับเฉพาะวัน mark work (ไม่ default-fill), **ไม่มี holiday/leave/เงินเดือนรายเดือน**. คืน `employment_status='probation'` + `total_earned`/`total_paid`/`total_unpaid` (work × daily_rate). `export_payslip` ออก CSV รายวันสำหรับ probation. Frontend (detail/summary/list/payments) render daily-pay framing เมื่อ probation. **เหตุผล:** เดิม summary/overall ใช้ `default_status` (sunday) → probation ได้ holiday + เงินเดือนเต็มผิด.
-- **First-month leave days** (`first_month_leave_days`): กดผ่านโปร → popup ถามจำนวนวันหยุดเดือนแรก (transition month). `compute_monthly_leave_balance` ใช้ `first_month_leave_days` สำหรับเดือนเดียวกับ `monthly_start_date`, เดือนอื่นใช้ `monthly_leave_days` ปกติ. Default = 0 (ไม่กรอก = ไม่ได้วันหยุดเดือนแรก).
+  - **`get_summary` guard `month_all_daily`** (2026-07-12): เดือนที่อยู่ **ก่อน** `monthly_start_date` ทั้งเดือน (`month_end < monthly_start_date`) ยังคง daily framing แม้ `employment_status` โดน `_promote_pending()` flip เป็น `'active'` ไปแล้ว (เช่นดู summary ย้อนหลังของ pass-month หลังผ่านมาหลายเดือน) — กัน pass-month โดนรายงานเป็นเงินเดือนเต็มผิดๆ. `get_overall` **ยังไม่แก้** (all-time dashboard ยัง rough) — known limitation, ไม่ critical เพราะเป็นแค่ยอดรวมภาพกว้าง.
+- **First-month leave days** (`first_month_leave_days`): ไม่มี popup ถามแล้ว — กดผ่านโปร set ให้อัตโนมัติ = `monthly_leave_days` เสมอ (transition month ตอนนี้คือ full month ของ anchor เดือนถัดไป ไม่ใช่ partial เดือนที่กด จึงไม่ต้องถามจำนวนวันหยุดเป็นพิเศษ). `compute_monthly_leave_balance` ยัง branch ตาม field นี้เหมือนเดิม (เดือนของ anchor ใช้ `first_month_leave_days`, เดือนอื่นใช้ `monthly_leave_days`) แต่ค่าตอนนี้เท่ากันเสมอสำหรับ maid ที่ผ่านโปรผ่าน flow ใหม่.
 
 ### Slip / Documents (file upload)
 - `payment_method='transfer'` → แนบ slip ได้ทุก payment (daily + monthly period). เก็บ `/data/slips/`.
@@ -145,7 +154,7 @@ working_days_in_month = จำนวนวัน "ทั้งเดือน" (
 - **⚠️ 413 Request Entity Too Large** ตอน upload รูปใหญ่ = nginx `client_max_body_size` (default 1MB). ตั้ง `25m` ใน `nginx/nginx.conf` (> app cap 10MB เพื่อให้ app ตอบ error สวยแทน nginx 413). หาก 413 ยังขึ้นหลัง deploy = DSM reverse proxy cap ของมันเอง.
 
 ### Payer (ผู้จ่าย)
-- `paid_by` (ฟิก/ปุ๊ก) บน `salary_payments` + `daily_payments`. เลือกจาก dropdown ตอนกด "บันทึกจ่ายแล้ว" → ส่ง query `paid_by=`. Unmark → clear เป็น NULL. รายชื่อ payer = const `PAYERS` ใน app.js (แก้ที่เดียว). แสดงเป็น badge "จ่ายโดย X" บนงวด/วันที่จ่ายแล้ว.
+- `paid_by` บน `salary_payments` + `daily_payments`. เลือกจาก dropdown ตอนกด "บันทึกจ่ายแล้ว" → ส่ง query `paid_by=`. Unmark → clear เป็น NULL. รายชื่อ payer = const `PAYERS = ["ฟิก", "ปุ๊ก", "ฟิก + ปุ๊ก"]` ใน app.js (แก้ที่เดียว) — เพิ่ม `"ฟิก + ปุ๊ก"` (2026-07-12) สำหรับกรณีจ่ายร่วมกัน, เก็บเป็น string ตรงๆ column เดิมไม่ต้องแก้ schema. แสดงเป็น badge "จ่ายโดย X" บนงวด/วันที่จ่ายแล้ว.
 
 ### Reminder Translation (static dict, ไม่ใช่ LLM แล้ว)
 - **เปลี่ยนจาก MiMo LLM → static dict** (2026-06-25): reminder text เป็น free-text แต่ในทางปฏิบัติมีแค่ ~2-10 ข้อความคงที่ที่ owner ใช้จริง (แทบไม่เปลี่ยน) — เรียก LLM ทุกครั้งคือ over-engineering ที่มี failure mode (token truncation เคยทำให้พม่าหาย), latency, ต้องดูแล secrets โดยไม่จำเป็น.
@@ -230,7 +239,7 @@ final = base_salary_last_month + (cumulative_balance × daily_rate)
 | GET | `/api/employees/{id}/leave-balance` | ยอดวันหยุดสะสม (monthly mode) |
 | GET | `/api/employees/{id}/payments?year=&month=` | ข้อมูลจ่ายเงิน |
 | POST | `/api/employees/{id}/payments/{period}/toggle?year=&month=&paid_by=` | บันทึก/ยกเลิกจ่าย (`paid_by`=ผู้จ่าย ฟิก/ปุ๊ก, clear ตอน unmark) |
-| POST | `/api/employees/{id}/pass-probation` | ผ่านโปร (body `pass_date`, `first_month_leave_days`) → active + set monthly_start_date + first_month_leave_days |
+| POST | `/api/employees/{id}/pass-probation` | ผ่านโปร (body `pass_date` เท่านั้น) → set `monthly_start_date` = วันที่ 1 ของเดือนถัดไป (หรือ pass_date ถ้าเป็นวันที่ 1) + `first_month_leave_days=monthly_leave_days`; ยังคง `employment_status='probation'` จนกว่า anchor มาถึง (ดู `_promote_pending`) |
 | DELETE | `/api/employees/{id}/pass-probation` | ยกเลิกผ่านโปร (กลับ probation) |
 | GET | `/api/employees/{id}/daily-payments?year=&month=` | รายการจ่ายรายวันช่วงโปร (cap < monthly_start_date) |
 | POST | `/api/employees/{id}/daily-payments/{work_date}/toggle?paid_by=&amount=` | บันทึก/ยกเลิกจ่ายรายวัน (`paid_by`=ผู้จ่าย, `amount`=override จำนวนเงิน optional `>0`, ไม่ส่ง=คำนวณ `rate×frac`) |
@@ -272,3 +281,4 @@ final = base_salary_last_month + (cumulative_balance × daily_rate)
 |-----|---------|--------|
 | `check_reminders` | ทุก 1 นาที | ตรวจ reminders ที่ enabled และส่ง LINE |
 | `monthly_report` | วันสุดท้ายของเดือน เวลา `MONTHLY_REPORT_TIME` | ส่งสรุปรายเดือนทาง LINE. แต่ละคนแนบ block แปลภาษา (`notify_language`) ใต้บล็อกไทย. **Probation** → แสดงแค่ `ค้างจ่าย ฿X` / `ไม่มียอดค้างจ่าย` (ไม่มี comp/leave). **Active** → balance เดิม resolve anchor=`monthly_start_date or start_date`. `line_notify._monthly_entry()` |
+| `promote_probation` | ทุกวัน เวลา `00:10` | เรียก `_promote_pending()` — flip `employment_status` จาก `probation`→`active` ให้แม่บ้านที่ `monthly_start_date` (anchor) มาถึงแล้ว. เสริมการเรียกตอน pass-probation endpoint + app startup (`lifespan`) — คุมกรณี anchor เป็นอนาคตตอนกดแล้วมาถึงวันจริงระหว่างแอปรันค้างอยู่ |
