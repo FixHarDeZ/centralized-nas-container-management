@@ -67,6 +67,9 @@ const TRANSLATIONS = {
     fieldPaymentMethod: "วิธีการจ่ายเงิน",
     paymentMethodCash: "เงินสด",
     paymentMethodTransfer: "เงินโอน",
+    fieldPaymentSchedule: "รอบจ่ายเงินเดือน",
+    scheduleBiweekly: "2 รอบ (วันที่ 15 + สิ้นเดือน)",
+    scheduleMonthly: "รอบเดียว (สิ้นเดือน)",
     probationLockedNote: "สถานะการจ้างถูกกำหนดโดยระบบหลังสร้างแล้ว (แก้ไขผ่านปุ่ม \"ผ่านโปร\")",
     docsTitle: "เอกสาร",
     docTypeIdCard: "บัตรประชาชน",
@@ -94,6 +97,7 @@ const TRANSLATIONS = {
     btnCalendar: "ปฏิทินการทำงาน", btnMonthlySummary: "สรุปรายเดือน", btnPayment: "จ่ายเงินเดือน",
     // Probation (detail)
     probationBadge: "ทดลองงาน",
+    passedBadge: (d) => `ผ่านโปรแล้ว — รายเดือนเริ่ม ${d}`,
     btnPassProbation: "ผ่านโปร",
     btnMarkAttendance: "ลงเวลาทำงาน",
     statusUnmarked: "ยังไม่ลง",
@@ -261,6 +265,9 @@ const TRANSLATIONS = {
     fieldPaymentMethod: "Payment method",
     paymentMethodCash: "Cash",
     paymentMethodTransfer: "Transfer",
+    fieldPaymentSchedule: "Payroll schedule",
+    scheduleBiweekly: "2 rounds (15th + end)",
+    scheduleMonthly: "Single round (end of month)",
     probationLockedNote: "Employment status is system-managed after creation (change it via the \"Pass probation\" button)",
     docsTitle: "Documents",
     docTypeIdCard: "ID Card",
@@ -288,6 +295,7 @@ const TRANSLATIONS = {
     btnCalendar: "Work Calendar", btnMonthlySummary: "Monthly Summary", btnPayment: "Pay Salary",
     // Probation (detail)
     probationBadge: "Probation",
+    passedBadge: (d) => `Passed probation — monthly from ${d}`,
     btnPassProbation: "Pass probation",
     btnMarkAttendance: "Mark attendance",
     statusUnmarked: "Unmarked",
@@ -446,7 +454,7 @@ function switchLang() {
 const ROOT = document.getElementById("app");
 
 // Who paid an installment (the two employers). Extend here if more payers are added.
-const PAYERS = ["ฟิก", "ปุ๊ก"];
+const PAYERS = ["ฟิก", "ปุ๊ก", "ฟิก + ปุ๊ก"];
 
 // Nationality display mapping (DB stores Thai strings)
 const NAT_DISPLAY = {
@@ -582,7 +590,11 @@ async function viewList() {
               <div class="flex-grow-1 overflow-hidden">
                 <div class="fw-bold fs-5 text-truncate" style="color:var(--text)">
                   ${e.name}
-                  ${e.employment_status === "probation" ? `<span class="badge ms-1" style="font-size:0.62rem;background:#fef3c7;color:#b45309">${t("probationBadge")}</span>` : ""}
+                  ${e.employment_status === "probation"
+                    ? (e.monthly_start_date
+                        ? `<span class="badge ms-1" style="font-size:0.62rem;background:#dcfce7;color:#15803d">${t("passedBadge", formatDate(e.monthly_start_date))}</span>`
+                        : `<span class="badge ms-1" style="font-size:0.62rem;background:#fef3c7;color:#b45309">${t("probationBadge")}</span>`)
+                    : ""}
                   ${resigned ? `<span class="badge ms-1" style="font-size:0.62rem;background:#e2e8f0;color:#64748b">${t("resignedBadge")}</span>` : ""}
                 </div>
                 <div class="small" style="color:var(--text-muted)">${dispNat(e.nationality)}${e.age ? " · " + e.age + (currentLang === "th" ? " ปี" : " yrs") : ""}</div>
@@ -686,6 +698,14 @@ async function viewEmployeeForm(id) {
               <select class="form-select" name="payment_method">
                 <option value="cash" ${(emp?.payment_method || "cash") === "cash" ? "selected" : ""}>${t("paymentMethodCash")}</option>
                 <option value="transfer" ${emp?.payment_method === "transfer" ? "selected" : ""}>${t("paymentMethodTransfer")}</option>
+              </select>
+            </div>
+            <!-- Payment schedule -->
+            <div class="col-6">
+              <label class="form-label fw-semibold">${t("fieldPaymentSchedule")}</label>
+              <select class="form-select" name="payment_schedule">
+                <option value="biweekly" ${(emp?.payment_schedule || "biweekly") === "biweekly" ? "selected" : ""}>${t("scheduleBiweekly")}</option>
+                <option value="monthly" ${emp?.payment_schedule === "monthly" ? "selected" : ""}>${t("scheduleMonthly")}</option>
               </select>
             </div>
             <!-- Notification language (appended translation for non-Thai maids) -->
@@ -868,6 +888,7 @@ async function viewEmployeeForm(id) {
       holiday_mode:       mode,
       monthly_leave_days: mode === "monthly" ? +(fd.get("monthly_leave_days") || 0) : 0,
       payment_method:     fd.get("payment_method") || "cash",
+      payment_schedule:   fd.get("payment_schedule") || "biweekly",
       notify_language:    fd.get("notify_language") || "th",
       probation_daily_rate: fd.get("probation_daily_rate") !== "" && fd.get("probation_daily_rate") != null
                               ? +fd.get("probation_daily_rate") : null,
@@ -1007,7 +1028,11 @@ async function viewEmployeeDetail(id) {
           </div>
           <div class="flex-grow-1">
             <h4 class="fw-bold mb-1" style="letter-spacing:-.02em">${emp.name}
-              ${emp.employment_status === "probation" ? `<span class="badge ms-2" style="font-size:.65rem;background:#fef3c7;color:#b45309;border-radius:6px"><i class="bi bi-hourglass-split me-1"></i>${t("probationBadge")}</span>` : ""}
+              ${emp.employment_status === "probation"
+                ? (emp.monthly_start_date
+                    ? `<span class="badge ms-2" style="font-size:.65rem;background:#dcfce7;color:#15803d;border-radius:6px"><i class="bi bi-check-circle me-1"></i>${t("passedBadge", formatDate(emp.monthly_start_date))}</span>`
+                    : `<span class="badge ms-2" style="font-size:.65rem;background:#fef3c7;color:#b45309;border-radius:6px"><i class="bi bi-hourglass-split me-1"></i>${t("probationBadge")}</span>`)
+                : ""}
               ${resigned ? `<span class="badge ms-2" style="font-size:.65rem;background:#e2e8f0;color:#64748b;border-radius:6px">${t("resignedBadge")}</span>` : ""}
             </h4>
             <div class="mb-2" style="color:var(--text-muted)">${dispNat(emp.nationality)}${emp.age ? " · " + emp.age + (currentLang === "th" ? " ปี" : " yrs") : ""}</div>
@@ -1021,7 +1046,7 @@ async function viewEmployeeDetail(id) {
             <button class="btn btn-sm btn-outline-primary" style="border-radius:8px" onclick="navigate('/employee/${id}/edit')">
               <i class="bi bi-pencil me-1"></i>${t("edit")}
             </button>
-            ${emp.employment_status === "probation" && !resigned
+            ${emp.employment_status === "probation" && !resigned && !emp.monthly_start_date
               ? `<button class="btn btn-sm btn-outline-success" style="border-radius:8px" onclick="passProbation(${id}, '${escHtml(emp.name)}')">
                    <i class="bi bi-check2-circle me-1"></i>${t("btnPassProbation")}
                  </button>`
@@ -2187,14 +2212,8 @@ async function passProbation(id, name) {
     return;
   }
   if (!confirm(t("passProbationConfirm", name, formatDate(dateStr)))) return;
-  // Ask for first-month leave days
-  const leaveStr = prompt(t("firstMonthLeavePrompt"), "0");
-  const firstMonthLeave = Math.max(0, parseFloat(leaveStr) || 0);
   try {
-    await api.post(`/api/employees/${id}/pass-probation`, {
-      pass_date: dateStr,
-      first_month_leave_days: firstMonthLeave,
-    });
+    await api.post(`/api/employees/${id}/pass-probation`, { pass_date: dateStr });
     await render();
   } catch (e) {
     alert(t("errSave") + e.message);
