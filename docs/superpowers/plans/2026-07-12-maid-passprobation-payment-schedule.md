@@ -357,7 +357,39 @@ def test_undo_pass_reverts(client):
     emp = c.get(f"/api/employees/{eid}").json()
     assert emp["employment_status"] == "probation"
     assert emp["monthly_start_date"] is None
+
+
+def test_stays_probation_during_tail(client):
+    """Core of option 2: pass THIS month → anchor is next-month-1st (future) →
+    NOT promoted → status stays probation through the tail, pass-month pay is []."""
+    import datetime as _dt
+
+    c, _ = client
+    today = _dt.date.today()
+    start = today.replace(day=1)
+    r = c.post(
+        "/api/employees",
+        json={
+            "name": "T",
+            "start_date": start.isoformat(),
+            "monthly_salary": 15400,
+            "employment_status": "probation",
+            "probation_daily_rate": 500,
+            "holiday_mode": "sunday",
+            "monthly_leave_days": 2,
+        },
+    )
+    eid = r.json()["id"]
+    c.post(f"/api/employees/{eid}/pass-probation", json={"pass_date": today.isoformat()})
+    emp = c.get(f"/api/employees/{eid}").json()
+    assert emp["employment_status"] == "probation"  # NOT promoted — anchor future
+    nxt = (start.replace(day=28) + _dt.timedelta(days=7)).replace(day=1)
+    assert emp["monthly_start_date"] == nxt.isoformat()
+    p = c.get(f"/api/employees/{eid}/payments?year={today.year}&month={today.month}").json()
+    assert p == []
 ```
+
+Note: if `today` is itself the 1st, this test's anchor equals today → promoted immediately; that's a rare CI edge — the assertion `status == "probation"` would fail only when the suite runs on the 1st of a month. Acceptable (documented); the 2025-dated tests cover the promoted path deterministically.
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -445,7 +477,7 @@ In `lifespan`, alongside the existing `_scheduler.add_job(...)` calls, add:
     _scheduler.add_job(_promote_pending, CronTrigger(hour=0, minute=10), id="promote_probation")
 ```
 
-(Place the `_promote_pending()` call before `_scheduler.start()`.)
+(Place the `_promote_pending()` call before `_scheduler.start()`. `init_db()` runs at module import time — `main.py:392`, not inside `lifespan` — so the schema exists before this startup call. Safe.)
 
 - [ ] **Step 7: Run tests to verify they pass**
 
@@ -464,7 +496,90 @@ git commit -m "feat(maid-tracker): pass-probation keeps daily to month-end, mont
 
 ---
 
-### Task 3: Frontend — payer "both", schedule radio, remove leave prompt, passed badge
+### Task 3: Pass-month keeps daily framing in summary/payslip after promotion
+
+After a maid is promoted (`probation→active` on the 1st), viewing the summary/payslip of
+the **pass-month** (which lies entirely before `monthly_start_date`) currently hits the
+active branch with a next-month anchor → reports the full monthly salary for a month that
+was actually paid daily. `export_payslip` reuses `get_summary`, so its pass-month CSV is
+wrong too. Fix: a month lying entirely before the anchor keeps daily framing regardless of
+stored status.
+
+**Files:**
+- Modify: `maid-tracker/main.py` — `get_summary` (~1584-1594, add the `month_all_daily` guard)
+- Test: `maid-tracker/tests/test_pass_probation_boundary.py` (append)
+
+**Interfaces:**
+- Consumes: `_promote_pending`/anchor behavior from Task 2.
+- Produces: `get_summary` returns the probation (daily) shape for any month `< monthly_start_date`, even when `employment_status == 'active'`. `export_payslip` inherits this (no change needed there).
+
+Scope note: `get_overall` (all-time dashboard) is NOT changed — it aggregates across all
+months and stays a rough figure after promotion. Documented, out of scope for this guard.
+
+- [ ] **Step 1: Write the failing test**
+
+Append to `maid-tracker/tests/test_pass_probation_boundary.py`:
+
+```python
+def test_pass_month_summary_stays_daily_after_promotion(client):
+    c, _ = client
+    eid = _mk_prob(client)  # start 2025-02-01, probation, daily rate 500
+    c.post(f"/api/employees/{eid}/pass-probation", json={"pass_date": "2025-02-10"})
+    # Now active (anchor 2025-03-01 <= today). Look BACK at Feb (the pass month).
+    s = c.get(f"/api/employees/{eid}/summary?year=2025&month=2").json()
+    assert s["employment_status"] == "probation"  # daily framing, not monthly
+    assert s["daily_rate"] == 500.0
+    assert s["base_salary"] != 15400.0            # NOT full monthly salary
+    # March = first full monthly month → monthly framing
+    s2 = c.get(f"/api/employees/{eid}/summary?year=2025&month=3").json()
+    assert s2.get("employment_status") != "probation"
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `cd maid-tracker && pytest tests/test_pass_probation_boundary.py::test_pass_month_summary_stays_daily_after_promotion -v`
+Expected: FAIL — Feb summary reports active framing / `base_salary == 15400.0`.
+
+- [ ] **Step 3: Add the `month_all_daily` guard**
+
+In `get_summary`, after `anchor` is computed and before the probation branch
+(`if emp.get("employment_status") == "probation":`), add:
+
+```python
+    # A month entirely before the monthly anchor was paid daily (probation framing),
+    # even after the maid was promoted to active — keep daily framing when looking back.
+    _, _n_g = calendar.monthrange(year, month)
+    anchor_set = emp.get("monthly_start_date")
+    month_all_daily = bool(anchor_set) and date(year, month, _n_g) < date.fromisoformat(anchor_set)
+```
+
+Then change the probation-branch condition:
+
+```python
+    if emp.get("employment_status") == "probation" or month_all_daily:
+```
+
+(The daily branch uses `emp["probation_daily_rate"]`, which is retained after promotion, and
+the `start_date` window — so it computes correctly for a promoted maid viewing the pass-month.)
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `cd maid-tracker && pytest tests/test_pass_probation_boundary.py -v`
+Expected: PASS (all, including the new test).
+
+- [ ] **Step 5: Full suite + commit**
+
+Run: `cd maid-tracker && pytest tests/ -q && python -m py_compile main.py`
+Expected: all pass.
+
+```bash
+git add maid-tracker/main.py maid-tracker/tests/test_pass_probation_boundary.py
+git commit -m "fix(maid-tracker): pass-month summary/payslip keeps daily framing after promotion"
+```
+
+---
+
+### Task 4: Frontend — payer "both", schedule radio, remove leave prompt, passed badge
 
 **Files:**
 - Modify: `maid-tracker/static/app.js` — `PAYERS` (~449), employee form (~686 payment-method block), submit body builder (~869), `passProbation` (~2181), list badge (~585), detail badge (~1010) + pass button (~1025), i18n dicts (TH ~30-160, EN ~280-320)
@@ -596,7 +711,7 @@ git commit -m "feat(maid-tracker): schedule radio, payer both, passed badge, dro
 
 ---
 
-### Task 4: Cache-bust + docs
+### Task 5: Cache-bust + docs
 
 **Files:**
 - Modify: `maid-tracker/static/index.html` (cache-bust `?v=` on `app.js`)
@@ -634,11 +749,11 @@ git commit -m "docs(maid-tracker): payment schedule + pass-probation boundary + 
 ## Self-Review
 
 **Spec coverage:**
-- Req 1 (daily through pass-month, monthly next month) → Task 2. `first_month_leave_days` removal → Task 2 step 4/5 + Task 3 step 5. Badge UX → Task 3 steps 6-7.
-- Req 2a (payment schedule) → Task 1 + Task 3 steps 2-4.
-- Req 2b (payer "both") → Task 3 step 1.
-- Docs/`/release` → Task 4.
+- Req 1 (daily through pass-month, monthly next month) → Task 2. Pass-month framing after promotion (summary/payslip) → Task 3. `first_month_leave_days` removal → Task 2 step 4/5 + Task 4 step 5. Badge UX → Task 4 steps 6-7.
+- Req 2a (payment schedule) → Task 1 + Task 4 steps 2-4.
+- Req 2b (payer "both") → Task 4 step 1.
+- Docs/`/release` → Task 5.
 
-**Placeholder scan:** No TBD/TODO; every code step shows full code. Task 3 step 7 references the exact detail-button condition — verify the surrounding ternary shape when editing (only note left, code guard explicit).
+**Placeholder scan:** No TBD/TODO; every code step shows full code. Task 4 step 7 references the exact detail-button condition — read the surrounding ternary at `static/app.js:~1024` before editing (guard code is explicit; only the ternary shape needs confirming).
 
 **Type consistency:** `payment_schedule` values `'biweekly'|'monthly'` consistent across migration, model, `get_payments`, and JS. `_promote_pending()` name consistent in helper def, lifespan, daily job, and Task 2 test. `monthly_start_date` used identically in backend anchor + JS badge/button guards.
