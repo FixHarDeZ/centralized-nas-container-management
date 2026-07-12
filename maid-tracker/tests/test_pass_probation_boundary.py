@@ -139,3 +139,17 @@ def test_stays_probation_during_tail(client):
     assert emp["monthly_start_date"] == nxt.isoformat()
     p = c.get(f"/api/employees/{eid}/payments?year={today.year}&month={today.month}").json()
     assert p == []
+
+
+def test_pass_month_summary_stays_daily_after_promotion(client):
+    c, _ = client
+    eid = _mk_prob(client)  # start 2025-02-01, probation, daily rate 500
+    c.post(f"/api/employees/{eid}/pass-probation", json={"pass_date": "2025-02-10"})
+    # Now active (anchor 2025-03-01 <= today). Look BACK at Feb (the pass month).
+    s = c.get(f"/api/employees/{eid}/summary?year=2025&month=2").json()
+    assert s["employment_status"] == "probation"  # daily framing, not monthly
+    assert s["daily_rate"] == 500.0
+    assert s["base_salary"] != 15400.0            # NOT full monthly salary
+    # March = first full monthly month → monthly framing
+    s2 = c.get(f"/api/employees/{eid}/summary?year=2025&month=3").json()
+    assert s2.get("employment_status") != "probation"

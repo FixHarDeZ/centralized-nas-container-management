@@ -1628,8 +1628,14 @@ def get_summary(emp_id: int, year: int, month: int):
     holiday_mode = emp.get("holiday_mode") or "sunday"
     today = date.today()
 
+    # A month entirely before the monthly anchor was paid daily (probation framing),
+    # even after the maid was promoted to active — keep daily framing when looking back.
+    _, _n_g = calendar.monthrange(year, month)
+    anchor_set = emp.get("monthly_start_date")
+    month_all_daily = bool(anchor_set) and date(year, month, _n_g) < date.fromisoformat(anchor_set)
+
     # ── Probation: daily pay only — no holiday/leave/monthly salary ──
-    if emp.get("employment_status") == "probation":
+    if emp.get("employment_status") == "probation" or month_all_daily:
         rate = emp.get("probation_daily_rate") or 0.0
         _, n_p = calendar.monthrange(year, month)
         m_start = max(date(year, month, 1), start_date)
