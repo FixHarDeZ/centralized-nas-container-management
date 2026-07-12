@@ -330,6 +330,7 @@ def init_db():
         ("monthly_start_date", "TEXT"),
         ("payment_method", "TEXT DEFAULT 'cash'"),
         ("notify_language", "TEXT DEFAULT 'th'"),
+        ("payment_schedule", "TEXT DEFAULT 'biweekly'"),
     ]:
         try:
             c.execute(f"ALTER TABLE employees ADD COLUMN {col} {definition}")
@@ -560,6 +561,7 @@ class EmployeeCreate(BaseModel):
     probation_daily_rate: float | None = None
     payment_method: str = "cash"  # 'cash' | 'transfer'
     notify_language: str = "th"  # 'th'|'my'|'en'|'lo'|'km' — appended translation
+    payment_schedule: str = "biweekly"  # 'biweekly' (15th+end) | 'monthly' (single lump at end)
 
 
 class AttendanceUpdate(BaseModel):
@@ -610,8 +612,8 @@ def create_employee(emp: EmployeeCreate):
     c = conn.cursor()
     c.execute(
         "INSERT INTO employees (name,age,birth_date,nationality,phone,line_id,facebook,start_date,monthly_salary,"
-        "max_leave_carry,holiday_mode,monthly_leave_days,employment_status,probation_daily_rate,payment_method,notify_language) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "max_leave_carry,holiday_mode,monthly_leave_days,employment_status,probation_daily_rate,payment_method,notify_language,payment_schedule) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
             emp.name,
             emp.age,
@@ -629,6 +631,7 @@ def create_employee(emp: EmployeeCreate):
             emp.probation_daily_rate,
             emp.payment_method,
             emp.notify_language,
+            emp.payment_schedule,
         ),
     )
     new_id = c.lastrowid
@@ -660,7 +663,7 @@ def update_employee(emp_id: int, emp: EmployeeCreate):
     c = conn.cursor()
     c.execute(
         "UPDATE employees SET name=?,age=?,birth_date=?,nationality=?,phone=?,line_id=?,facebook=?,start_date=?,monthly_salary=?,"
-        "max_leave_carry=?,holiday_mode=?,monthly_leave_days=?,probation_daily_rate=?,payment_method=?,notify_language=? WHERE id=?",
+        "max_leave_carry=?,holiday_mode=?,monthly_leave_days=?,probation_daily_rate=?,payment_method=?,notify_language=?,payment_schedule=? WHERE id=?",
         (
             emp.name,
             emp.age,
@@ -677,6 +680,7 @@ def update_employee(emp_id: int, emp: EmployeeCreate):
             emp.probation_daily_rate,
             emp.payment_method,
             emp.notify_language,
+            emp.payment_schedule,
             emp_id,
         ),
     )
@@ -1168,10 +1172,15 @@ def get_payments(emp_id: int, year: int, month: int):
     # Policy: no monthly deduction — always pay full base salary.
     # If the employee started after the 15th their first month, period 1 is skipped,
     # so period 2 should pay the entire prorated base salary (not base - half).
+    schedule = emp.get("payment_schedule") or "biweekly"
     first_month_after_15 = (
         anchor.year == year and anchor.month == month and anchor > mid_day
     )
-    period2_amount = base_salary if first_month_after_15 else base_salary - half_salary
+    # 'monthly' schedule = one lump at end of month = full base salary (no period 1).
+    if schedule == "monthly" or first_month_after_15:
+        period2_amount = base_salary
+    else:
+        period2_amount = base_salary - half_salary
 
     # Leave deduction for period 2 (applied when max_leave_carry is configured)
     max_carry = emp.get("max_leave_carry")
@@ -1191,8 +1200,8 @@ def get_payments(emp_id: int, year: int, month: int):
 
     result = []
 
-    # Period 1 (15th) — skip if employee started after 15th or resigned before 15th
-    if anchor <= mid_day and (end_date is None or end_date >= mid_day):
+    # Period 1 (15th) — skip for 'monthly' schedule, or if started after 15th / resigned before 15th
+    if schedule == "biweekly" and anchor <= mid_day and (end_date is None or end_date >= mid_day):
         result.append(
             {
                 "period": 1,
