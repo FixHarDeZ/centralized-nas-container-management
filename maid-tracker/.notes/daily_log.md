@@ -1,5 +1,16 @@
 # Daily Log
 
+## 2026-07-13 — แก้วันผ่านโปรได้หลังกดผ่านแล้ว
+
+**ฟีเจอร์:** ปุ่ม "แก้วันผ่านโปร" บนหน้า detail โผล่เมื่อ `monthly_start_date` set & !resigned (ทั้ง probation-tail และ active). `editPassProbation()` = reuse endpoints เดิม: `DELETE /pass-probation` (กลับ probation+NULL) → `POST /pass-probation {new pass_date}` (recompute anchor + re-promote ถ้าถึง). **0 backend change** — POST ต้องการ status probation ซึ่ง DELETE คืนให้ก่อนแล้ว.
+
+**Trade-off (ยอมรับ, single-user household):** DELETE→POST ไม่ atomic; ถ้าเดือนแรกรายเดือนถูก mark paid แล้วเลื่อน boundary → salary_payments row เก่า orphan (มองไม่เห็นผ่าน get_payments) — inherent กับการเปลี่ยน boundary, เกิดกับ undo+repass มือเหมือนกัน. เป็น correction action.
+
+**ไฟล์:** `static/app.js` (ปุ่ม detail + `editPassProbation()` + i18n `btnEditPassDate` TH/EN), `static/index.html` (cache-bust `?v=20260713`). prefill prompt = วันนี้ (pass_date เดิมไม่เก็บ; ผลขึ้นกับ "เดือน" เท่านั้น).
+
+**Verify:** node --check OK; TestClient re-pass sequence (Feb-10→anchor Mar-01 → edit Mar-20→anchor Apr-01, del/post 200); 48/48 suite (backend unchanged).
+
+
 ## 2026-07-12 — Per-maid payment schedule + pass-probation month-boundary rework + payer "both"
 
 **3 feature areas บน branch `feat/maid-passprobation-payment-schedule`:**

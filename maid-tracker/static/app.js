@@ -99,6 +99,7 @@ const TRANSLATIONS = {
     probationBadge: "ทดลองงาน",
     passedBadge: (d) => `ผ่านโปรแล้ว — รายเดือนเริ่ม ${d}`,
     btnPassProbation: "ผ่านโปร",
+    btnEditPassDate: "แก้วันผ่านโปร",
     btnMarkAttendance: "ลงเวลาทำงาน",
     statusUnmarked: "ยังไม่ลง",
     statusAbsent: "ขาด", statusAbsentHalf: "ขาดครึ่งวัน",
@@ -297,6 +298,7 @@ const TRANSLATIONS = {
     probationBadge: "Probation",
     passedBadge: (d) => `Passed probation — monthly from ${d}`,
     btnPassProbation: "Pass probation",
+    btnEditPassDate: "Edit pass date",
     btnMarkAttendance: "Mark attendance",
     statusUnmarked: "Unmarked",
     statusAbsent: "Absent", statusAbsentHalf: "Half-day absent",
@@ -1049,6 +1051,11 @@ async function viewEmployeeDetail(id) {
             ${emp.employment_status === "probation" && !resigned && !emp.monthly_start_date
               ? `<button class="btn btn-sm btn-outline-success" style="border-radius:8px" onclick="passProbation(${id}, '${escHtml(emp.name)}')">
                    <i class="bi bi-check2-circle me-1"></i>${t("btnPassProbation")}
+                 </button>`
+              : ""}
+            ${!resigned && emp.monthly_start_date
+              ? `<button class="btn btn-sm btn-outline-success" style="border-radius:8px" onclick="editPassProbation(${id}, '${escHtml(emp.name)}')">
+                   <i class="bi bi-calendar-check me-1"></i>${t("btnEditPassDate")}
                  </button>`
               : ""}
             ${resigned
@@ -2213,6 +2220,27 @@ async function passProbation(id, name) {
   }
   if (!confirm(t("passProbationConfirm", name, formatDate(dateStr)))) return;
   try {
+    await api.post(`/api/employees/${id}/pass-probation`, { pass_date: dateStr });
+    await render();
+  } catch (e) {
+    alert(t("errSave") + e.message);
+  }
+}
+
+// Change the pass-probation date after it was already set. Reuses the existing
+// endpoints: undo (→ back to probation, NULL anchor) then re-pass with the new
+// date, which recomputes the monthly anchor and re-promotes if it's already due.
+async function editPassProbation(id, name) {
+  const today = new Date().toISOString().split("T")[0];
+  const dateStr = prompt(t("passProbationPrompt", name), today);
+  if (!dateStr) return;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    alert(t("confirmResignInvalid"));
+    return;
+  }
+  if (!confirm(t("passProbationConfirm", name, formatDate(dateStr)))) return;
+  try {
+    await api.del(`/api/employees/${id}/pass-probation`);
     await api.post(`/api/employees/${id}/pass-probation`, { pass_date: dateStr });
     await render();
   } catch (e) {
