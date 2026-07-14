@@ -234,11 +234,8 @@ def last_scrape() -> dict:
             "SELECT * FROM scrape_log ORDER BY id DESC LIMIT 1"
         ).fetchone()
         if row:
-            d = dict(row)
-            if d["run_at"]:
-                d["run_at"] = int(datetime.fromisoformat(d["run_at"]).timestamp())
-            return d
-        return {"run_at": 0, "found": 0, "downloaded": 0, "error": None, "source": "all"}
+            return dict(row)
+        return {"run_at": now_iso(), "found": 0, "downloaded": 0, "error": None, "source": "all"}
 
 
 def stats() -> dict:
