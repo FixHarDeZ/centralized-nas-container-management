@@ -294,3 +294,24 @@ Added 2 new scraper sources and multi-page listing support.
   job hadn't fired yet. Triggered `/api/scrape` inside the container:
   new row id=37 (13:03) → found=48, error=NULL. No UNIQUE errors, found no
   longer 3×-inflated. `doujinth-50627` confirmed present as `status=new`.
+
+## 2026-07-14 — Homepage widget fixes + stack cleanup
+
+**Commits:** `19b0012`, `69a4ade`, `d0a6627`, `23156a2`, `35a27a1`
+
+- Removed `log-medic` and `wallpaper-scout` stacks entirely (directories,
+  docs, homepage widgets, deploy.sh, vault keys). User had already stopped
+  containers and cleaned NAS files manually.
+- Fixed ink-reader homepage widget:
+  - Replaced `stats.kept.count` → `stats.long.count` (titles with pages ≥
+    min_pages). `kept` feature was removed 2026-07-13.
+  - `db.stats()` now queries long-page count using runtime `min_pages` setting.
+  - Fixed "Last Scrape" display: was showing raw epoch number (1784008775)
+    because `relativeTime` format not supported in customapi widget. Changed
+    to format `run_at` as `"14 Jul 12:59"` string in backend, widget uses
+    `format: string`.
+  - `db.last_scrape()` returns default dict instead of `None` when scrape_log
+    is empty.
+- Vault fix: Direct edits to sops-encrypted files broke MAC. Restored from
+  git, used sops decrypt → edit → re-encrypt cycle properly. Regenerated
+  test-vault via `make sync-test-vault`. CI validation passes.
