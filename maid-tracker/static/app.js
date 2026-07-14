@@ -163,6 +163,12 @@ const TRANSLATIONS = {
     dailyPayFraction: "สัดส่วน",
     dailyPayAmount: "จำนวนเงิน",
     dailyPayTotal: "รวมจ่ายรายวัน",
+    payAllBtn: "จ่ายค้างทั้งหมด",
+    payAllConfirm: (p) => `จ่ายทุกวันที่ค้างอยู่ (รวมเดือนก่อนหน้าถ้ามี) โดย "${p}"?`,
+    payAllDone: (d, a) => `จ่ายแล้ว ${d} วัน — รวม ${a} บาท`,
+    payAllNone: "ไม่มีวันค้างจ่าย",
+    payAllPeriodsBtn: "จ่ายทุกรอบที่ค้าง",
+    payAllPeriodsConfirm: (n, a, p) => `จ่าย ${n} รอบที่ค้าง รวม ${a} บาท โดย "${p}"?`,
     slipUploadBtn: "แนบสลิป",
     slipViewBtn: "ดูสลิป",
     slipPickFirst: "กรุณาเลือกไฟล์สลิปก่อน",
@@ -362,6 +368,12 @@ const TRANSLATIONS = {
     dailyPayFraction: "Fraction",
     dailyPayAmount: "Amount",
     dailyPayTotal: "Daily pay total",
+    payAllBtn: "Pay all outstanding",
+    payAllConfirm: (p) => `Pay every outstanding day (including previous months) — paid by "${p}"?`,
+    payAllDone: (d, a) => `Paid ${d} day(s) — total ${a} Baht`,
+    payAllNone: "Nothing outstanding",
+    payAllPeriodsBtn: "Pay all pending",
+    payAllPeriodsConfirm: (n, a, p) => `Pay ${n} pending period(s), total ${a} Baht — paid by "${p}"?`,
     slipUploadBtn: "Attach slip",
     slipViewBtn: "View slip",
     slipPickFirst: "Please choose a slip file first",
@@ -559,6 +571,11 @@ async function render() {
       case "payments":       await viewPayments(route.id); break;
       default:               await viewList();
     }
+    // Re-trigger the entrance animation on route change only (in-view refreshes
+    // call the view functions directly and skip this, avoiding flicker).
+    ROOT.classList.remove("view-enter");
+    void ROOT.offsetWidth;
+    ROOT.classList.add("view-enter");
   } catch (e) {
     ROOT.innerHTML = `<div class="alert alert-danger mt-4">${t("errGeneral")}${e.message}</div>`;
   }
@@ -1983,12 +2000,23 @@ async function viewPayments(id) {
 
   const isProb = emp.employment_status === "probation";
   const dailyTotal = dailyPayments.reduce((s, d) => s + d.amount, 0);
+  const dailyUnpaid = dailyPayments.filter(d => !d.paid);
+  // One-click settle for every outstanding day (whole probation window,
+  // including previous months — handled server-side by /pay-all).
+  const payAllBar = dailyUnpaid.length === 0 ? "" : `
+    <div class="pay-all-bar d-flex align-items-center gap-2 px-3 py-2 border-top">
+      ${payerSelect("payer_dall")}
+      <button class="btn btn-sm btn-success flex-shrink-0" onclick="payAllDaily(${id})">
+        <i class="bi bi-lightning-charge-fill me-1"></i>${t("payAllBtn")}
+      </button>
+    </div>`;
   // Show the daily-pay section whenever there are rows OR the employee is in probation
   // (so the daily-pay system is clearly present even before any day is marked).
   const dailySection = (dailyPayments.length === 0 && !isProb) ? "" : `
     <div class="card border-0 shadow-sm mb-4">
       <div class="card-header bg-warning bg-opacity-25 fw-bold py-2 d-flex align-items-center gap-2">
         <i class="bi bi-hourglass-split text-warning"></i>${t("dailyPayTitle")}
+        ${dailyUnpaid.length ? `<span class="badge bg-warning text-dark ms-auto">${dailyUnpaid.length}</span>` : ""}
       </div>
       <div class="card-body p-0">
         ${dailyPayments.length === 0 ? `<div class="text-muted small p-3"><i class="bi bi-info-circle me-1"></i>${t("dailyPayHint")}</div>` : `
@@ -1996,7 +2024,8 @@ async function viewPayments(id) {
         <div class="d-flex justify-content-between align-items-center px-3 py-2 border-top fw-bold" style="background:var(--surface-3)">
           <span>${t("dailyPayTotal")}</span>
           <span>${fmtMoney(dailyTotal)} ${t("baht")}</span>
-        </div>`}
+        </div>
+        ${payAllBar}`}
       </div>
     </div>`;
 
@@ -2092,7 +2121,16 @@ async function viewPayments(id) {
     ${dailySection}
 
     ${allPaid ? `<div class="alert alert-success d-flex align-items-center gap-2 mb-3"><i class="bi bi-check-circle-fill fs-5"></i> ${t("alertAllPaid")}</div>` : ""}
-    ${pending.length > 0 ? `<div class="alert alert-warning d-flex align-items-center gap-2 mb-3"><i class="bi bi-clock fs-5"></i> ${t("alertPending", pending.length, pending.reduce((s, p) => s + p.amount, 0))}</div>` : ""}
+    ${pending.length > 0 ? `<div class="alert alert-warning d-flex align-items-center gap-2 mb-3 flex-wrap">
+        <i class="bi bi-clock fs-5"></i> ${t("alertPending", pending.length, pending.reduce((s, p) => s + p.amount, 0))}
+        ${pending.length > 1 ? `<span class="d-flex align-items-center gap-2 ms-auto">
+          ${payerSelect("payer_pall")}
+          <button class="btn btn-sm btn-success flex-shrink-0"
+                  onclick="payAllPeriods(${id}, ${year}, ${month}, [${pending.map(p => p.period)}], ${pending.reduce((s, p) => s + p.amount, 0)})">
+            <i class="bi bi-lightning-charge-fill me-1"></i>${t("payAllPeriodsBtn")}
+          </button>
+        </span>` : ""}
+      </div>` : ""}
 
     ${periodCards}
     ${emptyState}
@@ -2144,6 +2182,34 @@ async function toggleDailyPayment(empId, workDate, btn, isPaid, computed) {
   } catch (e) {
     alert(t("errSave") + e.message);
     btn.disabled = false;
+  }
+}
+
+// One-click settle: every outstanding probation day, whole window (server-side).
+async function payAllDaily(empId) {
+  const payer = document.getElementById("payer_dall")?.value || "";
+  if (!confirm(t("payAllConfirm", payer))) return;
+  try {
+    const r = await api.post(`/api/employees/${empId}/daily-payments/pay-all?paid_by=${encodeURIComponent(payer)}`, {});
+    alert(r.paid_days > 0 ? t("payAllDone", r.paid_days, fmtMoney(r.total)) : t("payAllNone"));
+    await viewPayments(empId);
+  } catch (e) {
+    alert(t("errSave") + e.message);
+  }
+}
+
+// One-click settle for all pending monthly periods of the month on screen.
+async function payAllPeriods(empId, year, month, periods, total) {
+  const payer = document.getElementById("payer_pall")?.value || "";
+  if (!confirm(t("payAllPeriodsConfirm", periods.length, fmtMoney(total), payer))) return;
+  try {
+    for (const period of periods) {
+      await api.post(`/api/employees/${empId}/payments/${period}/toggle?year=${year}&month=${month}&paid_by=${encodeURIComponent(payer)}`, {});
+    }
+    await viewPayments(empId);
+  } catch (e) {
+    alert(t("errSave") + e.message);
+    await viewPayments(empId);
   }
 }
 

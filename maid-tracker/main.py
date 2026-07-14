@@ -262,6 +262,20 @@ def get_db():
     return conn
 
 
+def _fetch_emp(conn, emp_id: int) -> dict:
+    """Fetch employee row as dict, or close conn and raise 404."""
+    row = conn.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
+    if not row:
+        conn.close()
+        raise HTTPException(404, "Employee not found")
+    return dict(row)
+
+
+def _anchor_of(emp: dict) -> date:
+    """Monthly calc anchor: monthly_start_date (set on pass-probation) or start_date."""
+    return date.fromisoformat(emp.get("monthly_start_date") or emp["start_date"])
+
+
 def init_db():
     conn = get_db()
     c = conn.cursor()
@@ -718,10 +732,7 @@ class PassProbationRequest(BaseModel):
 @app.post("/api/employees/{emp_id}/pass-probation")
 def pass_probation(emp_id: int, req: PassProbationRequest):
     conn = get_db()
-    emp = conn.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
-    if not emp:
-        conn.close()
-        raise HTTPException(404, "Employee not found")
+    emp = _fetch_emp(conn, emp_id)
     if emp["employment_status"] != "probation":
         conn.close()
         raise HTTPException(400, "Employee is not in probation")
@@ -746,6 +757,17 @@ def pass_probation(emp_id: int, req: PassProbationRequest):
     conn.close()
     # Flip to active now if the anchor is already here (passed on the 1st / backdated).
     _promote_pending()
+    # Congratulate via LINE (Thai + maid's own language) with next-month benefits.
+    line_notify.notify_pass_probation(
+        emp_name=emp["name"],
+        pass_date=req.pass_date,
+        monthly_start_date=anchor,
+        monthly_salary=emp["monthly_salary"],
+        payment_schedule=emp.get("payment_schedule") or "biweekly",
+        holiday_mode=emp.get("holiday_mode") or "sunday",
+        monthly_leave_days=emp.get("monthly_leave_days") or 0.0,
+        language=emp.get("notify_language") or "th",
+    )
     return {"message": "passed", "monthly_start_date": anchor.isoformat()}
 
 
@@ -800,11 +822,7 @@ def delete_employee(emp_id: int):
 @app.post("/api/employees/{emp_id}/resign")
 def resign_employee(emp_id: int, req: ResignRequest):
     conn = get_db()
-    emp = conn.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
-    if not emp:
-        conn.close()
-        raise HTTPException(404, "Employee not found")
-    emp = dict(emp)
+    emp = _fetch_emp(conn, emp_id)
     conn.execute(
         "UPDATE employees SET end_date=?, resign_note=? WHERE id=?",
         (req.end_date, req.resign_note, emp_id),
@@ -812,11 +830,7 @@ def resign_employee(emp_id: int, req: ResignRequest):
     conn.commit()
     conn.close()
 
-    anchor = (
-        date.fromisoformat(emp["monthly_start_date"])
-        if emp.get("monthly_start_date")
-        else date.fromisoformat(emp["start_date"])
-    )
+    anchor = _anchor_of(emp)
     line_notify.notify_resign(
         emp_id=emp_id,
         emp_name=emp["name"],
@@ -862,21 +876,13 @@ def cancel_resign(emp_id: int):
 @app.get("/api/employees/{emp_id}/resign-summary")
 def get_resign_summary(emp_id: int):
     conn = get_db()
-    emp = conn.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
-    if not emp:
-        conn.close()
-        raise HTTPException(404, "Employee not found")
-    emp = dict(emp)
+    emp = _fetch_emp(conn, emp_id)
     if not emp.get("end_date"):
         conn.close()
         raise HTTPException(400, "ยังไม่ได้แจ้งลาออก")
 
     start_date = date.fromisoformat(emp["start_date"])
-    anchor = (
-        date.fromisoformat(emp["monthly_start_date"])
-        if emp.get("monthly_start_date")
-        else start_date
-    )
+    anchor = _anchor_of(emp)
     end_date = date.fromisoformat(emp["end_date"])
     conn.close()
 
@@ -942,11 +948,7 @@ def get_resign_summary(emp_id: int):
 @app.get("/api/employees/{emp_id}/attendance")
 def get_attendance(emp_id: int, year: int, month: int):
     conn = get_db()
-    row = conn.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
-    if not row:
-        conn.close()
-        raise HTTPException(404, "Employee not found")
-    emp = dict(row)
+    emp = _fetch_emp(conn, emp_id)
     start_date = date.fromisoformat(emp["start_date"])
     holiday_mode = emp.get("holiday_mode") or "sunday"
     is_probation = emp.get("employment_status") == "probation"
@@ -1008,11 +1010,7 @@ def upsert_attendance(emp_id: int, att: AttendanceUpdate):
     if att.status not in ("work", "leave", "holiday", "compensatory"):
         raise HTTPException(400, "Invalid status")
     conn = get_db()
-    emp = conn.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
-    if not emp:
-        conn.close()
-        raise HTTPException(404, "Employee not found")
-    emp = dict(emp)
+    emp = _fetch_emp(conn, emp_id)
     # Probation: 'leave' is repurposed as "ขาด/absent" (unpaid that day). Comp/holiday N/A.
     if emp.get("employment_status") == "probation" and att.status in (
         "compensatory",
@@ -1102,20 +1100,12 @@ def delete_attendance(emp_id: int, work_date: str):
 def get_leave_balance(emp_id: int):
     """Monthly-mode: return current accumulated leave balance."""
     conn = get_db()
-    emp = conn.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
-    if not emp:
-        conn.close()
-        raise HTTPException(404, "Employee not found")
-    emp = dict(emp)
+    emp = _fetch_emp(conn, emp_id)
     conn.close()
     if (emp.get("holiday_mode") or "sunday") != "monthly":
         raise HTTPException(400, "leave-balance only applies to monthly holiday mode")
     start_date = date.fromisoformat(emp["start_date"])
-    anchor = (
-        date.fromisoformat(emp["monthly_start_date"])
-        if emp.get("monthly_start_date")
-        else start_date
-    )
+    anchor = _anchor_of(emp)
     lb = compute_monthly_leave_balance(
         emp_id,
         anchor,
@@ -1148,22 +1138,14 @@ def get_leaves(emp_id: int):
 @app.get("/api/employees/{emp_id}/payments")
 def get_payments(emp_id: int, year: int, month: int):
     conn = get_db()
-    emp = conn.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
-    if not emp:
-        conn.close()
-        raise HTTPException(404, "Employee not found")
-    emp = dict(emp)
+    emp = _fetch_emp(conn, emp_id)
 
     start_date = date.fromisoformat(emp["start_date"])
     # Still in probation → no monthly periods at all (pay is daily via daily-payments)
     if emp.get("employment_status") == "probation":
         conn.close()
         return []
-    anchor = (
-        date.fromisoformat(emp["monthly_start_date"])
-        if emp.get("monthly_start_date")
-        else start_date
-    )
+    anchor = _anchor_of(emp)
     end_date = date.fromisoformat(emp["end_date"]) if emp.get("end_date") else None
 
     _, n = calendar.monthrange(year, month)
@@ -1178,64 +1160,19 @@ def get_payments(emp_id: int, year: int, month: int):
     paid_map = {r["period"]: r["paid_at"] for r in paid_rows}
     slip_map = {r["period"]: r["slip_path"] for r in paid_rows}
     payer_map = {r["period"]: r["paid_by"] for r in paid_rows}
-
-    # Attendance for this month (to calculate actual_pay for period 2)
-    att_rows = conn.execute(
-        "SELECT work_date, status FROM attendance WHERE employee_id=? AND work_date LIKE ?",
-        (emp_id, f"{year}-{month:02d}-%"),
-    ).fetchall()
     conn.close()
 
-    wd_month = working_days_in_month(year, month)
-    dr = emp["monthly_salary"] / wd_month if wd_month else 0
-    half_salary = emp["monthly_salary"] / 2
-
-    # Base salary for this month (prorated if first month).
-    # Count every day in the range — holidays are paid too.
-    if anchor.year == year and anchor.month == month:
-        billable = n - anchor.day + 1
-        base_salary = dr * billable
-    else:
-        base_salary = emp["monthly_salary"]
-
-    # Policy: no monthly deduction — always pay full base salary.
-    # If the employee started after the 15th their first month, period 1 is skipped,
-    # so period 2 should pay the entire prorated base salary (not base - half).
     schedule = emp.get("payment_schedule") or "biweekly"
-    first_month_after_15 = (
-        anchor.year == year and anchor.month == month and anchor > mid_day
-    )
-    # 'monthly' schedule = one lump at end of month = full base salary (no period 1).
-    if schedule == "monthly" or first_month_after_15:
-        period2_amount = base_salary
-    else:
-        period2_amount = base_salary - half_salary
-
-    # Leave deduction for period 2 (applied when max_leave_carry is configured)
-    max_carry = emp.get("max_leave_carry")
-    p2_deduction_days = 0.0
-    p2_deduction_amount = 0.0
-    if max_carry is not None and max_carry >= 0:
-        ded = compute_leave_deduction(
-            emp_id,
-            year,
-            month,
-            max_carry,
-            emp["monthly_salary"],
-            anchor,
-        )
-        p2_deduction_days = ded["deduction_days"]
-        p2_deduction_amount = ded["deduction_amount"]
-
     result = []
 
     # Period 1 (15th) — skip for 'monthly' schedule, or if started after 15th / resigned before 15th
     if schedule == "biweekly" and anchor <= mid_day and (end_date is None or end_date >= mid_day):
+        p1_amount, _, _ = _compute_period_amount(emp, year, month, 1)
         result.append(
             {
                 "period": 1,
                 "due_date": mid_day.isoformat(),
-                "amount": round(half_salary, 2),
+                "amount": p1_amount,
                 "leave_deduction_days": 0.0,
                 "deduction_amount": 0.0,
                 "paid": bool(paid_map.get(1)),
@@ -1251,13 +1188,16 @@ def get_payments(emp_id: int, year: int, month: int):
         period2_due = end_date
 
     if anchor <= last_day and (end_date is None or end_date >= date(year, month, 1)):
+        p2_amount, p2_ded_days, p2_ded_amount = _compute_period_amount(
+            emp, year, month, 2,
+        )
         result.append(
             {
                 "period": 2,
                 "due_date": period2_due.isoformat(),
-                "amount": round(period2_amount - p2_deduction_amount, 2),
-                "leave_deduction_days": round(p2_deduction_days, 2),
-                "deduction_amount": round(p2_deduction_amount, 2),
+                "amount": p2_amount,
+                "leave_deduction_days": round(p2_ded_days, 2),
+                "deduction_amount": round(p2_ded_amount, 2),
                 "paid": bool(paid_map.get(2)),
                 "paid_at": paid_map.get(2),
                 "slip_path": slip_map.get(2),
@@ -1386,11 +1326,7 @@ def toggle_payment(emp_id: int, period: int, year: int, month: int, paid_by: str
     if period not in (1, 2):
         raise HTTPException(400, "Invalid period")
     conn = get_db()
-    emp = conn.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
-    if not emp:
-        conn.close()
-        raise HTTPException(404, "Employee not found")
-    emp = dict(emp)
+    emp = _fetch_emp(conn, emp_id)
     start_date = date.fromisoformat(emp["start_date"])
 
     existing = conn.execute(
@@ -1452,11 +1388,7 @@ def toggle_payment(emp_id: int, period: int, year: int, month: int, paid_by: str
 @app.get("/api/employees/{emp_id}/daily-payments")
 def get_daily_payments(emp_id: int, year: int, month: int):
     conn = get_db()
-    emp = conn.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
-    if not emp:
-        conn.close()
-        raise HTTPException(404, "Employee not found")
-    emp = dict(emp)
+    emp = _fetch_emp(conn, emp_id)
     rate = emp.get("probation_daily_rate") or 0
     start_date = date.fromisoformat(emp["start_date"])
     today = date.today()
@@ -1514,11 +1446,7 @@ def toggle_daily_payment(
     emp_id: int, work_date: str, paid_by: str = "", amount: float | None = None
 ):
     conn = get_db()
-    emp = conn.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
-    if not emp:
-        conn.close()
-        raise HTTPException(404, "Employee not found")
-    emp = dict(emp)
+    emp = _fetch_emp(conn, emp_id)
     # Guard: cannot toggle daily-payment on/after monthly_start_date (those days = monthly salary)
     cap = emp.get("monthly_start_date")
     if cap and work_date >= cap:
@@ -1608,23 +1536,86 @@ def set_daily_amount(emp_id: int, work_date: str, amount: float):
     return {"amount": round(amount, 2)}
 
 
+@app.post("/api/employees/{emp_id}/daily-payments/pay-all")
+def pay_all_daily_payments(emp_id: int, paid_by: str = ""):
+    """Mark every outstanding probation day as paid in one shot.
+
+    Covers the whole daily-pay window (start_date → today, capped before
+    monthly_start_date / end_date), not just the month on screen. Days already
+    paid — even with an overridden amount — are left untouched.
+    """
+    conn = get_db()
+    emp = _fetch_emp(conn, emp_id)
+    cap = emp.get("monthly_start_date")
+    if emp.get("employment_status") != "probation" and not cap:
+        conn.close()
+        raise HTTPException(400, "Employee has no daily-pay period")
+    rate = emp.get("probation_daily_rate") or 0
+    start_date = date.fromisoformat(emp["start_date"])
+    win_end = date.today()
+    if cap:
+        win_end = min(win_end, date.fromisoformat(cap) - timedelta(days=1))
+    if emp.get("end_date"):
+        win_end = min(win_end, date.fromisoformat(emp["end_date"]))
+
+    att = {
+        r["work_date"]: {"status": r["status"], "half_day": bool(r["half_day"])}
+        for r in conn.execute(
+            "SELECT work_date, status, half_day FROM attendance WHERE employee_id=?",
+            (emp_id,),
+        ).fetchall()
+    }
+    already_paid = {
+        r["work_date"]
+        for r in conn.execute(
+            "SELECT work_date FROM daily_payments WHERE employee_id=? AND paid_at IS NOT NULL",
+            (emp_id,),
+        ).fetchall()
+    }
+
+    payer = (paid_by or "").strip()[:40] or None
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    days = 0.0
+    total = 0.0
+    d = start_date
+    while d <= win_end:
+        ds = d.isoformat()
+        frac = probation_worked_fraction(att.get(ds))
+        if frac > 0 and ds not in already_paid:
+            amount = round(rate * frac, 2)
+            conn.execute(
+                "INSERT INTO daily_payments (employee_id, work_date, amount, paid_at, paid_by) VALUES (?,?,?,?,?) "
+                "ON CONFLICT(employee_id, work_date) DO UPDATE SET amount=excluded.amount, paid_at=excluded.paid_at, paid_by=excluded.paid_by",
+                (emp_id, ds, amount, now, payer),
+            )
+            days += frac
+            total += amount
+        d += timedelta(days=1)
+    conn.commit()
+    conn.close()
+
+    total = round(total, 2)
+    if days > 0:
+        line_notify.notify_daily_pay_all(
+            emp_name=emp["name"],
+            days=days,
+            total=total,
+            paid_at=now,
+            paid_by=payer,
+            language=emp.get("notify_language") or "th",
+        )
+    return {"paid_days": days, "total": total}
+
+
 # ---------- Summary endpoints ----------
 
 
 @app.get("/api/employees/{emp_id}/summary")
 def get_summary(emp_id: int, year: int, month: int):
     conn = get_db()
-    emp = conn.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
-    if not emp:
-        conn.close()
-        raise HTTPException(404, "Employee not found")
-    emp = dict(emp)
+    emp = _fetch_emp(conn, emp_id)
     start_date = date.fromisoformat(emp["start_date"])
-    anchor = (
-        date.fromisoformat(emp["monthly_start_date"])
-        if emp.get("monthly_start_date")
-        else start_date
-    )
+    anchor = _anchor_of(emp)
     holiday_mode = emp.get("holiday_mode") or "sunday"
     today = date.today()
 
@@ -1872,17 +1863,9 @@ def get_summary(emp_id: int, year: int, month: int):
 @app.get("/api/employees/{emp_id}/overall")
 def get_overall(emp_id: int):
     conn = get_db()
-    emp = conn.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
-    if not emp:
-        conn.close()
-        raise HTTPException(404, "Employee not found")
-    emp = dict(emp)
+    emp = _fetch_emp(conn, emp_id)
     start_date = date.fromisoformat(emp["start_date"])
-    anchor = (
-        date.fromisoformat(emp["monthly_start_date"])
-        if emp.get("monthly_start_date")
-        else start_date
-    )
+    anchor = _anchor_of(emp)
     today = date.today()
     end = date.fromisoformat(emp["end_date"]) if emp.get("end_date") else today
 
@@ -2116,17 +2099,13 @@ def _compute_period_amount(
     period: int,
 ) -> tuple[float, float, float]:
     """Return (net_amount, deduction_days, deduction_amount) for the given period.
-    Respects first-month proration and max_leave_carry deduction for period 2.
+    Respects payment_schedule, first-month proration and max_leave_carry
+    deduction for period 2. Single source for get_payments / toggle / webhook.
     """
     wd_month = working_days_in_month(year, month)
     dr = emp["monthly_salary"] / wd_month if wd_month else 0
     half_salary = emp["monthly_salary"] / 2
-    start_date = date.fromisoformat(emp["start_date"])
-    anchor = (
-        date.fromisoformat(emp["monthly_start_date"])
-        if emp.get("monthly_start_date")
-        else start_date
-    )
+    anchor = _anchor_of(emp)
     _, n = calendar.monthrange(year, month)
 
     if anchor.year == year and anchor.month == month:
@@ -2135,15 +2114,20 @@ def _compute_period_amount(
     else:
         base_salary = emp["monthly_salary"]
 
+    if period == 1:
+        return round(half_salary, 2), 0.0, 0.0
+
     mid_day = date(year, month, 15)
     first_month_after15 = (
         anchor.year == year and anchor.month == month and anchor > mid_day
     )
-
-    if period == 1:
-        return round(half_salary, 2), 0.0, 0.0
-
-    gross = base_salary if first_month_after15 else base_salary - half_salary
+    schedule = emp.get("payment_schedule") or "biweekly"
+    # 'monthly' schedule = one lump at month end; a first month starting after
+    # the 15th also pays everything in period 2 (period 1 was skipped).
+    if schedule == "monthly" or first_month_after15:
+        gross = base_salary
+    else:
+        gross = base_salary - half_salary
     deduction_days, deduction_amount = 0.0, 0.0
     max_carry = emp.get("max_leave_carry")
     if max_carry is not None and max_carry >= 0:
@@ -2472,11 +2456,7 @@ async def line_webhook(request: Request):
 @app.get("/api/employees/{emp_id}/export/attendance")
 def export_attendance(emp_id: int):
     conn = get_db()
-    emp = conn.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
-    if not emp:
-        conn.close()
-        raise HTTPException(404, "Employee not found")
-    emp = dict(emp)
+    emp = _fetch_emp(conn, emp_id)
     start_date = date.fromisoformat(emp["start_date"])
     holiday_mode = emp.get("holiday_mode") or "sunday"
     end_date = (

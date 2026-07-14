@@ -1,5 +1,10 @@
 # Secretary Stack — Daily Log
 
+## 2026-07-10 — Fix secretary-n8n crash loop (JavaScript heap OOM)
+1. **Root cause**: n8n container had 1G memory limit but V8 heap was hitting its default ~256 MB limit, causing `Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory` crash loop. RestartCount reached 330.
+2. **Fix**: Increased n8n memory limit from 1G → 1536M (1.5G) and added `NODE_OPTIONS=--max-old-space-size=1024` to let V8 use more of the container's memory.
+3. **Verified**: RestartCount reset to 0, status running, OOMKilled false, n8n ready on port 5678.
+
 ## 2026-07-07 — Fix secretary-n8n crash loop (permission denied on n8n_data volume)
 1. **Root cause**: n8n container runs as `node` (UID 1000:1000) but n8n_data volume at `/volume2/docker/secretary/n8n_data/` is owned by `fixhardez` (UID 1026:100). The `config` file had `-rw-------` permissions → n8n couldn't read/write its own config → crash loop with `EACCES: permission denied, open '/home/node/.n8n/config'`.
 2. **Immediate fix**: `chmod 644` on the config file via SSH.

@@ -32,12 +32,13 @@ services:
       - WEBHOOK_URL=${N8N_WEBHOOK_URL}
       - GENERIC_TIMEZONE=Asia/Bangkok
       - TZ=Asia/Bangkok
+      - NODE_OPTIONS=--max-old-space-size=1024
     volumes:
       - n8n_data:/home/node/.n8n
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 1536M
         reservations:
           memory: 256M
     logging:

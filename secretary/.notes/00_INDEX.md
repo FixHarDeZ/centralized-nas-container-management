@@ -18,7 +18,7 @@ n8n (:15678) → Telegram bot
 | Service | Container | Port | RAM / OMP | Notes |
 |---|---|---|---|---|
 | qdrant | secretary-qdrant | 6333 (internal) | 1.5G | Collection: `secretary_notes`, named vectors `dense`+`sparse` |
-| n8n | secretary-n8n | 15678→5678 | 1G | Webhook: `/webhook/telegram`. Basic auth via root `.env` |
+| n8n | secretary-n8n | 15678→5678 | 1.5G | Webhook: `/webhook/telegram`. Basic auth via root `.env`. `NODE_OPTIONS=--max-old-space-size=1024` |
 | secretary-query | secretary-query | 15065→5065 | 6G / OMP=2 | FastAPI RAG. LLM provider switchable via `LLM_PROVIDER` env. **`/ingest-trigger` spawns ingest.py subprocess inside this container** — needed 6G headroom because subprocess loads its own BGE-M3 on top of parent's resident BGE-M3 (see below) |
 | secretary-ingest | secretary-ingest | — | 6G / OMP=3 | `restart: "no"`. Run: `docker compose run --rm secretary-ingest`. **Use this path for table-heavy re-ingests** |
 

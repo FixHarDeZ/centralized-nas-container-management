@@ -1,6 +1,6 @@
 # maid-tracker — Index (Memory File)
 
-อัปเดตล่าสุด: 2026-07-12
+อัปเดตล่าสุด: 2026-07-13
 
 ---
 
@@ -130,7 +130,8 @@ working_days_in_month = จำนวนวัน "ทั้งเดือน" (
 ### Payment Schedule (`payment_schedule`, per-maid)
 - **`'biweekly'`** (default): 2 รอบต่อเดือนตามปกติด้านบน (period 1 วันที่ 15 + period 2 สิ้นเดือน)
 - **`'monthly'`**: **1 รอบ** สิ้นเดือน = เต็มเงินเดือน (`base_salary`, ไม่หาร 2) — `get_payments` ข้าม period 1 ไปเลย ไม่สร้าง entry. ตั้งค่าได้ตอนสร้าง/แก้ไขข้อมูลแม่บ้าน (dropdown ในฟอร์ม)
-- ไม่กระทบ leave/holiday/probation/pass-probation logic — ใช้แค่คำนวณจำนวนรอบ+จำนวนเงินใน `get_payments`
+- ไม่กระทบ leave/holiday/probation/pass-probation logic — ใช้แค่คำนวณจำนวนรอบ+จำนวนเงิน
+- **(2026-07-13 refactor)** จำนวนเงินต่อ period มี single source = `_compute_period_amount()` (schedule-aware แล้ว) ใช้ร่วมทั้ง `get_payments` / toggle / LINE webhook — แก้ bug เดิมที่ toggle/webhook แจ้งยอด `monthly` schedule เป็นครึ่งเดียว. Helper กลาง: `_fetch_emp(conn, id)` (fetch-or-404) + `_anchor_of(emp)` (`monthly_start_date or start_date`) แทน pattern ซ้ำ ~14/7 จุดใน main.py
 
 ### Probation mode (จ่ายรายวัน — axis `employment_status`)
 - **`employment_status='probation'`**: จ่ายรายวัน, **ลา/ชดเชย/holiday ปิด** (attendance default = `unmarked`, POST + LINE webhook reject leave). `get_payments` คืน `[]` (ไม่มีงวดเดือน).
@@ -239,11 +240,12 @@ final = base_salary_last_month + (cumulative_balance × daily_rate)
 | GET | `/api/employees/{id}/leave-balance` | ยอดวันหยุดสะสม (monthly mode) |
 | GET | `/api/employees/{id}/payments?year=&month=` | ข้อมูลจ่ายเงิน |
 | POST | `/api/employees/{id}/payments/{period}/toggle?year=&month=&paid_by=` | บันทึก/ยกเลิกจ่าย (`paid_by`=ผู้จ่าย ฟิก/ปุ๊ก, clear ตอน unmark) |
-| POST | `/api/employees/{id}/pass-probation` | ผ่านโปร (body `pass_date` เท่านั้น) → set `monthly_start_date` = วันที่ 1 ของเดือนถัดไป (หรือ pass_date ถ้าเป็นวันที่ 1) + `first_month_leave_days=monthly_leave_days`; ยังคง `employment_status='probation'` จนกว่า anchor มาถึง (ดู `_promote_pending`) |
+| POST | `/api/employees/{id}/pass-probation` | ผ่านโปร (body `pass_date` เท่านั้น) → set `monthly_start_date` = วันที่ 1 ของเดือนถัดไป (หรือ pass_date ถ้าเป็นวันที่ 1) + `first_month_leave_days=monthly_leave_days`; ยังคง `employment_status='probation'` จนกว่า anchor มาถึง (ดู `_promote_pending`). **ส่ง LINE แสดงความยินดี** (`notify_pass_probation`): ไทย + บล็อกภาษาแม่บ้าน (`i18n.pass_probation_block`, dict แยก `_PASS_PROBATION` เพราะมี sub-line รอบจ่าย/วันหยุด) แจ้งวันเริ่มเงินเดือน, เงินเดือน, รอบจ่าย, วันหยุด + tail "ยังจ่ายรายวันถึงสิ้นเดือน" เมื่อกดกลางเดือน |
 | DELETE | `/api/employees/{id}/pass-probation` | ยกเลิกผ่านโปร (กลับ probation) |
 | GET | `/api/employees/{id}/daily-payments?year=&month=` | รายการจ่ายรายวันช่วงโปร (cap < monthly_start_date) |
 | POST | `/api/employees/{id}/daily-payments/{work_date}/toggle?paid_by=&amount=` | บันทึก/ยกเลิกจ่ายรายวัน (`paid_by`=ผู้จ่าย, `amount`=override จำนวนเงิน optional `>0`, ไม่ส่ง=คำนวณ `rate×frac`) |
 | POST | `/api/employees/{id}/daily-payments/{work_date}/amount?amount=` | แก้จำนวนเงินของวันที่จ่ายแล้ว (in-place, ยังคง paid) |
+| POST | `/api/employees/{id}/daily-payments/pay-all?paid_by=` | **จ่ายค้างรายวันทั้งหมดทีเดียว** — ทุกวันค้างทั้ง window โปร (start→today, cap ก่อน `monthly_start_date`/`end_date`, ข้ามวันขาด+วันจ่ายแล้ว) amount=rate×frac, LINE notify สรุปครั้งเดียว (`notify_daily_pay_all` + i18n `daily_pay_all`). guard: 400 ถ้าไม่ใช่ probation และไม่มี `monthly_start_date` |
 | POST | `/api/employees/{id}/daily-payments/{work_date}/slip` | upload slip รายวัน (multipart) |
 | POST | `/api/employees/{id}/payments/{period}/slip?year=&month=` | upload slip งวดเดือน (multipart) |
 | GET | `/api/slips/{fname}` | serve slip |

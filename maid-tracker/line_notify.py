@@ -309,6 +309,107 @@ def notify_daily_payment(
         print(f"[LINE] notify_daily_payment error: {e}")
 
 
+def notify_daily_pay_all(
+    emp_name: str,
+    days: float,
+    total: float,
+    paid_at: str,
+    paid_by: str | None = None,
+    language: str = "th",
+) -> None:
+    """Call after bulk-paying all outstanding probation daily wages."""
+    if not TOKEN or not GROUP_ID:
+        return
+
+    payer_line = f"\n  ผู้จ่าย: {paid_by}" if paid_by else ""
+    try:
+        msg = (
+            f"💰 จ่ายค้างรายวันทั้งหมดแล้ว — {emp_name}\n"
+            f"📅 {_fmt_days(days)} วัน\n"
+            f"💵 รวม ฿{_fmt(total)}{payer_line}\n"
+            f"\n"
+            f"🕒 {paid_at}"
+        )
+        msg = _append_tr(
+            msg, "daily_pay_all", language,
+            name=emp_name, days=_fmt_days(days), amount=_fmt(total), paid_by=paid_by,
+        )
+        send_line(msg)
+    except Exception as e:
+        print(f"[LINE] notify_daily_pay_all error: {e}")
+
+
+def notify_pass_probation(
+    emp_name: str,
+    pass_date: str,
+    monthly_start_date: date,
+    monthly_salary: float,
+    payment_schedule: str = "biweekly",
+    holiday_mode: str = "sunday",
+    monthly_leave_days: float = 0.0,
+    language: str = "th",
+) -> None:
+    """Congratulate the maid on passing probation and describe what she gets next.
+
+    Thai message first, then a block in the maid's own language (like other
+    notifies). Mentions that daily pay continues until the monthly anchor when
+    the pass date is mid-month.
+    """
+    if not TOKEN or not GROUP_ID:
+        return
+
+    try:
+        start_str = (
+            f"1 {THAI_MONTHS[monthly_start_date.month]} {monthly_start_date.year + 543}"
+        )
+        sched_line = (
+            "💳 รอบจ่าย: เดือนละครั้ง สิ้นเดือน"
+            if payment_schedule == "monthly"
+            else "💳 รอบจ่าย: เดือนละ 2 ครั้ง (วันที่ 15 + สิ้นเดือน)"
+        )
+        leave_line = (
+            f"🌴 วันหยุด: เดือนละ {_fmt_days(monthly_leave_days)} วัน (ได้ค่าจ้าง)"
+            if holiday_mode == "monthly"
+            else "🌴 วันหยุด: ทุกวันอาทิตย์ (ได้ค่าจ้าง)"
+        )
+        daily_until_start = date.fromisoformat(pass_date) < monthly_start_date
+        tail = (
+            "\n⏳ ช่วงที่เหลือของเดือนนี้ยังจ่ายรายวันตามเดิมนะคะ"
+            if daily_until_start
+            else ""
+        )
+        msg = (
+            f"🎉 ยินดีด้วยนะคะ {emp_name} ผ่านทดลองงานแล้ว! 🎊\n"
+            f"✅ วันที่ผ่านทดลองงาน: {pass_date}\n"
+            f"📅 เริ่มรับเงินเดือนประจำ: {start_str}\n"
+            f"\n"
+            f"สิ่งที่จะได้รับ:\n"
+            f"💰 เงินเดือน ฿{_fmt(monthly_salary)}/เดือน\n"
+            f"{sched_line}\n"
+            f"{leave_line}"
+            f"{tail}\n"
+            f"\n"
+            f"🕒 {_now_str()}"
+        )
+        block = i18n.pass_probation_block(
+            language,
+            name=emp_name,
+            pass_date=pass_date,
+            # numeric date for translated block (Thai month names stay Thai-only)
+            start=monthly_start_date.strftime("%d/%m/%Y"),
+            salary=_fmt(monthly_salary),
+            schedule=payment_schedule,
+            holiday_mode=holiday_mode,
+            leave_days=_fmt_days(monthly_leave_days),
+            daily_until_start=daily_until_start,
+        )
+        if block:
+            msg += _TR_SEP + block
+        send_line(msg)
+    except Exception as e:
+        print(f"[LINE] notify_pass_probation error: {e}")
+
+
 def notify_slip_image(
     emp_name: str, slip_fname: str, label: str, language: str = "th"
 ) -> None:

@@ -1,5 +1,22 @@
 # Daily Log
 
+## 2026-07-13 — จ่ายค้างทั้งหมดทีเดียว + noti ยินดีผ่านโปร + refactor + UI polish
+
+**4 งาน:**
+
+1. **Pay-all ค้างจ่าย:**
+   - `POST /api/employees/{id}/daily-payments/pay-all?paid_by=` — จ่ายทุกวันค้างทั้ง window โปร (start→today, cap ก่อน `monthly_start_date`/`end_date`, ข้ามวันขาด+วันที่จ่ายแล้วรวม override amount), amount=rate×frac, LINE สรุปครั้งเดียว (`notify_daily_pay_all` + i18n key `daily_pay_all` ครบ 4 ภาษา). guard 400 ถ้า active แท้ (ไม่เคยมี daily window). UI: ปุ่ม "จ่ายค้างทั้งหมด" (`payAllDaily`) + payer select ใน bar สีเขียว (`.pay-all-bar`) ท้าย section จ่ายรายวัน + badge จำนวนวันค้างบน header.
+   - รายเดือน: alert ค้างจ่าย >1 รอบ มีปุ่ม "จ่ายทุกรอบที่ค้าง" (`payAllPeriods` — loop toggle เดิมทีละ period, payer เดียวกัน).
+2. **Noti ยินดีผ่านโปร:** `pass_probation` endpoint เรียก `line_notify.notify_pass_probation` — ไทย + บล็อกภาษาแม่บ้าน (`i18n.pass_probation_block`, dict `_PASS_PROBATION` แยกจาก `_MSG` เพราะมี sub-line: รอบจ่าย biweekly/monthly, วันหยุด monthly/sunday, tail "ยังจ่ายรายวันถึงสิ้นเดือน" เมื่อ pass_date < anchor). วันที่ในบล็อกแปลใช้ numeric `DD/MM/YYYY` (ไทยใช้ชื่อเดือน พ.ศ.). my/lo/km machine-generated ยังไม่ผ่าน native review.
+3. **Refactor main.py:** `_fetch_emp(conn,id)` fetch-or-404 (แทน ~14 จุด), `_anchor_of(emp)` (แทน 7 จุด), `_compute_period_amount` เป็น single source ของยอดต่อ period (get_payments เลิกคำนวณเอง) + **แก้ bug: toggle/LINE webhook แจ้งยอด period 2 ของ `payment_schedule='monthly'` เป็นครึ่งเดียว** (ไม่รู้จัก schedule มาก่อน — จอแสดงถูกแต่ notify ผิด).
+4. **UI polish:** view entrance animation (`#app.view-enter`, respect reduced-motion, เฉพาะ route change — refresh ในหน้าไม่ animate), ambient radial gradient background, navbar glass (`color-mix` + fallback), `.btn-primary` gradient+shadow, `.btn-success` token-based. cache-bust `?v=20260714` ทั้ง css+js.
+
+**Test:** `tests/test_pay_all_and_pass_notify.py` ใหม่ 6 เคส (pay-all จ่ายเฉพาะวันค้าง/idempotent/reject active, notify ถูกเรียกพร้อม anchor, `_compute_period_amount` monthly vs biweekly, i18n blocks) — รวม 54 passed. Smoke จริงผ่าน TestClient: ข้อความ LINE ไทย+พม่า render ถูก.
+
+**ไฟล์:** `main.py`, `line_notify.py`, `i18n.py`, `static/app.js`, `static/style.css`, `static/index.html`, `tests/test_pay_all_and_pass_notify.py`, `README.md`, `.notes/00_INDEX.md`
+
+---
+
 ## 2026-07-13 — แก้วันผ่านโปรได้หลังกดผ่านแล้ว
 
 **ฟีเจอร์:** ปุ่ม "แก้วันผ่านโปร" บนหน้า detail โผล่เมื่อ `monthly_start_date` set & !resigned (ทั้ง probation-tail และ active). `editPassProbation()` = reuse endpoints เดิม: `DELETE /pass-probation` (กลับ probation+NULL) → `POST /pass-probation {new pass_date}` (recompute anchor + re-promote ถ้าถึง). **0 backend change** — POST ต้องการ status probation ซึ่ง DELETE คืนให้ก่อนแล้ว.
