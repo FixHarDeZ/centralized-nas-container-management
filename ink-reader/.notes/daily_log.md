@@ -234,3 +234,63 @@ Added 2 new scraper sources and multi-page listing support.
   as keep/delete buttons
 - No backend changes needed — `/files/{tid}.cbz` endpoint already serves CBZ
   with `Content-Disposition: filename="{title}.cbz"`
+
+## 2026-07-13 — Runtime settings, kept feature removed, "หน้าเยอะ" filter, dashboard redesign
+
+- **Settings in DB** (new `settings` key-value table): `retention_days`
+  (seeded from `INK_RETENTION_DAYS`, default 30) and `min_pages` (default 30).
+  `GET/PUT /api/settings` with validation (retention 1-3650, min_pages
+  1-1000; unknown keys ignored). Changing `retention_days` recomputes
+  `expires_at` for every `status='new'` row (Python-side, keeps ISO+07:00
+  format — SQLite `datetime()` would silently convert to UTC and break string
+  comparisons with `now_iso()`).
+- `db.add_title()` now reads retention from settings, not `config`.
+- **Kept feature removed** per user request: `keep_title()` deleted,
+  `/api/titles/{id}/keep` endpoint deleted, ❤️ button gone. `init_db()`
+  migrates existing `kept` rows → `new` with fresh expiry window (not instant
+  purge). `dedupe_titles()` simplified — keeper = earliest download, no kept
+  special-casing. `stats()` returns new/deleted only.
+- **"หน้าเยอะ" category**: dashboard tab (client-side filter
+  `pages >= min_pages`) + OPDS feed `/opds/long` (replaces `/opds/kept` slot
+  in root feed) so KOReader sees the long-titles section too.
+- **Dashboard redesigned** (`static/index.html` rewritten): mobile-first
+  (2-col grid on <480px, 40px+ touch targets, safe-area insets), refreshed
+  dark palette (indigo/violet accent), pages badge on cover (highlighted when
+  ≥ min_pages), expiry turns red at ≤3 days, native `<dialog>` settings modal
+  (gear icon). Kept: client-side pagination 60/page, go-to-top, scrape button.
+- Tests updated: kept tests removed, added settings roundtrip/validation,
+  retention-recompute, kept→new migration, `/opds/long` filter. 52 tests
+  green (`uv run pytest`).
+- Docs updated: stack README (settings table, API/OPDS routes, lifecycle) +
+  root CLAUDE.md ink-reader row.
+- **Not deployed yet** — file-only change (no new deps), needs
+  `./scripts/deploy.sh -s ink-reader -y`.
+
+## 2026-07-13 (2) — Fix UNIQUE constraint error in scrape cycle
+
+- Prod error after first multi-source deploy:
+  `doujinth/50627: UNIQUE constraint failed: titles.slug` (twice per cycle).
+- **Root cause:** `DoujintSource.listing_url()` ignores the `page` argument
+  (doujin-th has no listing pagination) → `_scrape_source` fetched the same
+  listing `LISTING_PAGES=3` times → every item appeared 3× in `all_items`.
+  The `fresh` filter only checked DB `known_slugs()`, not within-cycle
+  duplicates → first occurrence inserted fine, occurrences 2-3 hit the slug
+  UNIQUE constraint. Pre-existing since multi-source work (2026-07-07);
+  surfaced only now because that code was first deployed today. Tests missed
+  it because they all monkeypatch `LISTING_PAGES=1`.
+- **Fix (shared pipeline, covers all sources):** cross-page slug dedup in
+  `_scrape_source` — `seen` set across listing pages; a page that is all
+  repeats now also breaks pagination early (doujinth stops after 1 fetch
+  instead of 3). Paginated sources benefit too (sticky topics / listing
+  shifting between page fetches).
+- New regression test `test_cycle_dedupes_items_across_listing_pages`
+  (LISTING_PAGES=3, identical listing every page → 2 downloads, 0 errors,
+  found=2 not 6). Reproduced 4 UNIQUE errors before fix. Suite: 53 green.
+- No data damage on NAS — first insert of 50627 succeeded; the errors were
+  noise from the duplicate attempts.
+- **Live verification (post-deploy):** the "still failing" report was a stale
+  display — dashboard shows the latest `scrape_log` row, which was the
+  pre-fix 10:28 cycle; the fixed container started 12:58 and the 6h interval
+  job hadn't fired yet. Triggered `/api/scrape` inside the container:
+  new row id=37 (13:03) → found=48, error=NULL. No UNIQUE errors, found no
+  longer 3×-inflated. `doujinth-50627` confirmed present as `status=new`.

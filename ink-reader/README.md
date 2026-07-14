@@ -20,7 +20,7 @@ M8 (KOReader)
 ┌──────── ink-reader (FastAPI, port 5068) ───────┐
 │ scraper ─▶ CBZ files (/data/library)           │
 │ SQLite catalog (/data/ink.db)                  │
-│ dashboard: ❤️ keep / 🗑 delete (grid of covers)│
+│ dashboard: browse / 🗑 delete / ⚙️ settings     │
 │ OPDS feed /opds                                │
 │ scheduler: scrape cycle + auto-expire + backup │
 └────────────────────────────────────────────────┘
@@ -50,8 +50,18 @@ All read by `config.py`, all optional (sane defaults shown):
 | `DATA_DIR` | `/data` | Root for db/library/covers/backups |
 | `INK_SCRAPE_INTERVAL_HOURS` | `6` | Scrape cycle frequency |
 | `INK_MAX_NEW_PER_CYCLE` | `10` | New titles downloaded per cycle |
-| `INK_RETENTION_DAYS` | `30` | Days a `new` title survives before auto-expiry |
+| `INK_RETENTION_DAYS` | `30` | Default retention — seed only, runtime value lives in DB settings |
 | `INK_REQUEST_DELAY_SECONDS` | `2` | Delay between requests to the source site |
+
+## Runtime settings (dashboard ⚙️)
+
+Stored in the SQLite `settings` table, editable from the dashboard gear icon
+(`GET`/`PUT /api/settings`). Env vars above only seed the defaults.
+
+| Setting | Default | Purpose |
+|---|---|---|
+| `retention_days` | `INK_RETENTION_DAYS` (30) | Days before a title auto-expires. Changing it recomputes `expires_at` for every live title. |
+| `min_pages` | `30` | Page threshold for the "หน้าเยอะ" filter tab and `/opds/long` feed |
 
 Dashboard/OPDS auth is **not** an app env var — it lives in the nginx
 `.htpasswd` sidecar, generated from vault credentials
@@ -63,10 +73,10 @@ Dashboard/OPDS auth is **not** an app env var — it lives in the nginx
 |---|---|---|
 | `/` | GET | Curation dashboard (static HTML) |
 | `/api/titles?status=&source=` | GET | List titles, optional `status`/`source` filter |
-| `/api/titles/{id}/keep` | POST | Mark title `kept` (permanent, no expiry) |
 | `/api/titles/{id}/delete` | POST | Remove CBZ+cover, mark `deleted` (tombstone) |
 | `/api/scrape` | POST | Trigger a scrape cycle now (background thread, all sources) |
 | `/api/status` | GET | Stats + per-source counts/sizes + last scrape result |
+| `/api/settings` | GET/PUT | Runtime settings (`retention_days`, `min_pages`) |
 | `/files/{id}.cbz` | GET | Download the CBZ |
 | `/covers/{id}.jpg` | GET | Cover thumbnail |
 
@@ -74,9 +84,9 @@ Dashboard/OPDS auth is **not** an app env var — it lives in the nginx
 
 | Route | Feed |
 |---|---|
-| `/opds` | Root navigation feed ("ใหม่ล่าสุด" / "ที่เก็บไว้") |
-| `/opds/new` | Acquisition feed, `status=new`, newest first |
-| `/opds/kept` | Acquisition feed, `status=kept` |
+| `/opds` | Root navigation feed ("ใหม่ล่าสุด" / "หน้าเยอะ") |
+| `/opds/new` | Acquisition feed, all live titles, newest first |
+| `/opds/long` | Acquisition feed, titles with `pages >= min_pages` setting |
 
 All routes are unauthenticated inside the app — the nginx sidecar owns basic
 auth for everything on port 5068.
@@ -92,10 +102,12 @@ auth for everything on port 5068.
 
 ## Curation lifecycle
 
-- New download → `status=new`, expires in `INK_RETENTION_DAYS` (default 30).
-- ❤️ keep (dashboard or API) → `status=kept`, never expires.
+- New download → `status=new`, expires in `retention_days` (dashboard
+  setting, default 30).
 - 🗑 delete (dashboard or API) → CBZ + cover removed, `status=deleted`
   tombstone stays so the slug is never re-downloaded.
+- The old ❤️ keep feature was removed (2026-07-13); existing `kept` rows are
+  migrated back to `new` with a fresh expiry window on startup.
 - Daily job (04:00 Asia/Bangkok) auto-expires `new` titles past `expires_at`
   the same way as a manual delete.
 - Daily SQLite backup (03:00 Asia/Bangkok) → `/data/backups/`, matching the

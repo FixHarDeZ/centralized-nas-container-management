@@ -61,15 +61,22 @@ def _scrape_source(source, fetch) -> tuple[int, int, list[str]]:
     downloaded = 0
     found = 0
     try:
-        # Fetch multiple listing pages
+        # Fetch multiple listing pages. Dedup slugs across pages: sources
+        # without real pagination (doujinth) return the same listing every
+        # page, and paginated ones can repeat items (sticky topics, listing
+        # shifting between fetches) — duplicates here caused UNIQUE
+        # constraint errors on insert.
         all_items = []
+        seen: set[str] = set()
         for page in range(1, config.LISTING_PAGES + 1):
             try:
                 listing_html = fetch(source.listing_url(page)).decode("utf-8", "replace")
-                items = source.parse_listing(listing_html)
+                items = [i for i in source.parse_listing(listing_html)
+                         if i["slug"] not in seen]
+                seen.update(i["slug"] for i in items)
                 all_items.extend(items)
                 if not items:
-                    break  # no more pages
+                    break  # no more pages (or page was all repeats)
             except Exception:
                 break  # page fetch failed, stop pagination
             time.sleep(config.REQUEST_DELAY_SECONDS)

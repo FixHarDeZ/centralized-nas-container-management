@@ -40,13 +40,6 @@ def api_titles(status: str | None = None, source: str | None = None):
     return {"titles": db.list_titles(status=status, source=source)}
 
 
-@app.post("/api/titles/{tid}/keep")
-def api_keep(tid: int):
-    if not db.keep_title(tid):
-        raise HTTPException(404)
-    return {"ok": True}
-
-
 @app.post("/api/titles/{tid}/delete")
 def api_delete(tid: int):
     if not db.purge_title(tid):
@@ -67,6 +60,19 @@ def api_status():
         "last_scrape": db.last_scrape(),
         "sources": db.source_stats(),
     }
+
+
+@app.get("/api/settings")
+def api_settings():
+    return db.get_settings()
+
+
+@app.put("/api/settings")
+def api_update_settings(payload: dict):
+    try:
+        return db.update_settings(payload)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 def _file_response(path: str, media_type: str, filename: str | None = None):
@@ -101,9 +107,9 @@ def opds_root(request: Request):
                     media_type="application/atom+xml")
 
 
-@app.get("/opds/{status}")
-def opds_titles(status: str, request: Request):
-    if status not in ("new", "kept"):
+@app.get("/opds/{section}")
+def opds_titles(section: str, request: Request):
+    if section not in ("new", "long"):
         raise HTTPException(404)
-    return Response(opds.titles_feed(status, _opds_base_url(request)),
+    return Response(opds.titles_feed(section, _opds_base_url(request)),
                     media_type="application/atom+xml")

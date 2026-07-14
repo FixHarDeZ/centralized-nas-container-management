@@ -30,7 +30,62 @@ CREATE TABLE IF NOT EXISTS scrape_log (
   error TEXT,
   source TEXT DEFAULT 'all'
 );
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
 """
+
+# Runtime-tunable settings (dashboard). Env vars only seed the defaults.
+DEFAULT_SETTINGS = {
+    "retention_days": config.RETENTION_DAYS,
+    "min_pages": 30,
+}
+SETTING_LIMITS = {
+    "retention_days": (1, 3650),
+    "min_pages": (1, 1000),
+}
+
+
+def get_settings() -> dict:
+    with _connect() as conn:
+        stored = dict(conn.execute("SELECT key, value FROM settings"))
+    return {k: int(stored.get(k, d)) for k, d in DEFAULT_SETTINGS.items()}
+
+
+def update_settings(changes: dict) -> dict:
+    """Validate + persist settings. Changing retention_days recomputes
+    expires_at for every live title so the new window applies retroactively."""
+    updates = {}
+    for key, (lo, hi) in SETTING_LIMITS.items():
+        if key not in changes:
+            continue
+        try:
+            val = int(changes[key])
+        except (TypeError, ValueError):
+            raise ValueError(f"{key} must be an integer")
+        if not lo <= val <= hi:
+            raise ValueError(f"{key} must be between {lo} and {hi}")
+        updates[key] = val
+    old = get_settings()
+    with _connect() as conn:
+        for k, v in updates.items():
+            conn.execute(
+                "INSERT INTO settings (key, value) VALUES (?,?)"
+                " ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (k, str(v)),
+            )
+        if updates.get("retention_days") not in (None, old["retention_days"]):
+            days = updates["retention_days"]
+            rows = conn.execute(
+                "SELECT id, downloaded_at FROM titles WHERE status='new'"
+            ).fetchall()
+            for r in rows:
+                exp = (
+                    datetime.fromisoformat(r["downloaded_at"]) + timedelta(days=days)
+                ).isoformat(timespec="seconds")
+                conn.execute("UPDATE titles SET expires_at=? WHERE id=?", (exp, r["id"]))
+    return get_settings()
 
 
 def _connect():
@@ -76,6 +131,19 @@ def init_db():
                 conn.execute("DELETE FROM titles WHERE slug=?", (slug,))
             else:
                 conn.execute("UPDATE titles SET slug=? WHERE slug=?", (ns, slug))
+        # Migration: kept feature removed — kept rows go back to 'new' with a
+        # fresh expiry window instead of expiring immediately.
+        row = conn.execute(
+            "SELECT value FROM settings WHERE key='retention_days'"
+        ).fetchone()
+        days = int(row[0]) if row else config.RETENTION_DAYS
+        expires = (
+            datetime.now(ZoneInfo(config.TZ)) + timedelta(days=days)
+        ).isoformat(timespec="seconds")
+        conn.execute(
+            "UPDATE titles SET status='new', expires_at=? WHERE status='kept'",
+            (expires,),
+        )
 
 
 def cbz_path(tid: int) -> str:
@@ -93,7 +161,8 @@ def known_slugs() -> set[str]:
 
 def add_title(slug, title, tags, pages, file_size, source_url, source="doujinth") -> int:
     expires = (
-        datetime.now(ZoneInfo(config.TZ)) + timedelta(days=config.RETENTION_DAYS)
+        datetime.now(ZoneInfo(config.TZ))
+        + timedelta(days=get_settings()["retention_days"])
     ).isoformat(timespec="seconds")
     with _connect() as conn:
         cur = conn.execute(
@@ -124,15 +193,6 @@ def list_titles(status: str | None = None, source: str | None = None) -> list[di
     q += " ORDER BY downloaded_at DESC, id DESC"
     with _connect() as conn:
         return [dict(r) for r in conn.execute(q, args)]
-
-
-def keep_title(tid: int) -> bool:
-    with _connect() as conn:
-        cur = conn.execute(
-            "UPDATE titles SET status='kept', expires_at=NULL WHERE id=? AND status='new'",
-            (tid,),
-        )
-        return cur.rowcount > 0
 
 
 def purge_title(tid: int) -> bool:
@@ -168,23 +228,35 @@ def log_scrape(found: int, downloaded: int, error: str | None = None):
         )
 
 
-def last_scrape() -> dict | None:
+def last_scrape() -> dict:
     with _connect() as conn:
         row = conn.execute(
             "SELECT * FROM scrape_log ORDER BY id DESC LIMIT 1"
         ).fetchone()
-        return dict(row) if row else None
+        if row:
+            d = dict(row)
+            if d["run_at"]:
+                d["run_at"] = int(datetime.fromisoformat(d["run_at"]).timestamp())
+            return d
+        return {"run_at": 0, "found": 0, "downloaded": 0, "error": None, "source": "all"}
 
 
 def stats() -> dict:
+    min_pages = get_settings()["min_pages"]
     with _connect() as conn:
         rows = conn.execute(
             "SELECT status, COUNT(*) AS count, COALESCE(SUM(file_size),0) AS size"
             " FROM titles GROUP BY status"
         )
-        out = {s: {"count": 0, "size": 0} for s in ("new", "kept", "deleted")}
+        out = {s: {"count": 0, "size": 0} for s in ("new", "deleted")}
         for r in rows:
             out[r["status"]] = {"count": r["count"], "size": r["size"]}
+        long_row = conn.execute(
+            "SELECT COUNT(*) AS count FROM titles"
+            " WHERE status != 'deleted' AND pages >= ?",
+            (min_pages,),
+        ).fetchone()
+        out["long"] = {"count": long_row["count"], "size": 0}
         return out
 
 
@@ -209,14 +281,14 @@ def _ahash(path: str, hash_size: int = 8) -> int | None:
 
 def dedupe_titles(hash_threshold: int = 10) -> list[int]:
     """Purge titles that share a normalized name + a visually similar cover
-    with an earlier (or already-kept) title. Cross-source re-uploads are the
-    main case (same doujin scraped from two sites under the same Thai title).
+    with an earlier title. Cross-source re-uploads are the main case (same
+    doujin scraped from two sites under the same Thai title).
     Returns purged ids.
     """
     with _connect() as conn:
         rows = [
             dict(r) for r in conn.execute(
-                "SELECT id, title, status, downloaded_at FROM titles"
+                "SELECT id, title, downloaded_at FROM titles"
                 " WHERE status != 'deleted' ORDER BY downloaded_at ASC"
             )
         ]
@@ -228,11 +300,9 @@ def dedupe_titles(hash_threshold: int = 10) -> list[int]:
     for group in groups.values():
         if len(group) < 2:
             continue
-        keeper = next((r for r in group if r["status"] == "kept"), group[0])
+        keeper = group[0]  # earliest download wins
         keeper_hash = _ahash(cover_path(keeper["id"]))
-        for r in group:
-            if r["id"] == keeper["id"] or r["status"] == "kept":
-                continue  # never auto-delete a title the user explicitly kept
+        for r in group[1:]:
             h = _ahash(cover_path(r["id"]))
             # can't confirm visually (cover missing/unreadable) -> skip rather
             # than delete on title text alone

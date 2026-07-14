@@ -10,7 +10,7 @@ def test_root_feed(data_dir):
     root = ET.fromstring(opds.root_feed())
     hrefs = [l.get("href") for e in root.findall(f"{ATOM}entry")
              for l in e.findall(f"{ATOM}link")]
-    assert hrefs == ["/opds/new", "/opds/kept"]
+    assert hrefs == ["/opds/new", "/opds/long"]
 
 
 def test_root_feed_absolute_urls(data_dir):
@@ -18,7 +18,7 @@ def test_root_feed_absolute_urls(data_dir):
     hrefs = [l.get("href") for e in root.findall(f"{ATOM}entry")
              for l in e.findall(f"{ATOM}link")]
     assert hrefs == ["http://192.168.1.100:5068/opds/new",
-                     "http://192.168.1.100:5068/opds/kept"]
+                     "http://192.168.1.100:5068/opds/long"]
 
 
 def test_titles_feed(data_dir):
@@ -43,7 +43,10 @@ def test_titles_feed_absolute_urls(data_dir):
     assert links["http://opds-spec.org/thumbnail"].get("href") == f"{base}/covers/{tid}.jpg"
 
 
-def test_titles_feed_filters_status(data_dir):
-    db.add_title("s1", "One", "", 1, 1, "u")
-    root = ET.fromstring(opds.titles_feed("kept"))
-    assert root.findall(f"{ATOM}entry") == []
+def test_long_feed_filters_by_min_pages(data_dir):
+    db.add_title("s1", "Short", "", 5, 1, "u")
+    tid = db.add_title("s2", "Long", "", 45, 1, "u")
+    root = ET.fromstring(opds.titles_feed("long"))
+    entries = root.findall(f"{ATOM}entry")
+    assert len(entries) == 1
+    assert entries[0].find(f"{ATOM}id").text == f"ink-reader:title:{tid}"

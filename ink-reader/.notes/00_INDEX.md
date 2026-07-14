@@ -1,6 +1,6 @@
 # ink-reader — Project Index (Memory Blueprint)
 
-> อัปเดตล่าสุด: 2026-07-09 (dashboard: download button per card)
+> อัปเดตล่าสุด: 2026-07-13 (runtime settings, kept removed, "หน้าเยอะ" filter, dashboard redesign)
 > ใช้ไฟล์นี้เป็น cold-start memory ก่อนเริ่มงานทุกครั้ง
 
 ---
@@ -37,10 +37,10 @@ and set `needs_episode_fetch = True`.
 | Scraper | httpx client + BeautifulSoup4 (multi-source plugins) |
 | Dedup | Pillow (cover average-hash) — title-normalize match + image confirm |
 | Scheduler | APScheduler `BackgroundScheduler` |
-| Frontend | Vanilla JS, no build step, Thai UI (modern dark theme), client-side pagination (60/page), go-to-top button |
+| Frontend | Vanilla JS, no build step, Thai UI (mobile-first dark theme, redesigned 2026-07-13), tabs ทั้งหมด/หน้าเยอะ, `<dialog>` settings modal, client-side pagination (60/page), go-to-top button |
 | Auth | nginx sidecar basic auth (not in-app) |
 
-## DB Schema (`titles` table)
+## DB Schema
 
 ```sql
 CREATE TABLE titles (
@@ -50,25 +50,35 @@ CREATE TABLE titles (
   tags TEXT,                        -- comma-separated
   pages INTEGER,
   file_size INTEGER,                -- bytes, NULL after delete
-  status TEXT NOT NULL DEFAULT 'new',  -- new | kept | deleted
+  status TEXT NOT NULL DEFAULT 'new',  -- new | deleted (kept removed 2026-07-13)
   source_url TEXT,
   source TEXT DEFAULT 'doujinth',   -- doujinth | hentaithai | mikudoujin
   downloaded_at TEXT NOT NULL,
-  expires_at TEXT                   -- NULL when kept/deleted
+  expires_at TEXT                   -- NULL when deleted
 );
+CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 ```
 
 `slug` is the dedup key — deleted rows stay as tombstones so a title is never
 re-downloaded. `source` tracks which scraper found the title.
 
+**Kept feature removed (2026-07-13)** — `init_db()` migrates any leftover
+`kept` rows → `new` with a fresh expiry window.
+
+**Runtime settings** (`settings` table, edited via dashboard ⚙️ /
+`PUT /api/settings`): `retention_days` (seed = `INK_RETENTION_DAYS`, default
+30) and `min_pages` (default 30, drives "หน้าเยอะ" tab + `/opds/long`).
+Changing `retention_days` recomputes `expires_at` on all live rows in Python
+(not SQLite `datetime()` — that would flip ISO+07:00 strings to UTC and break
+comparison with `now_iso()`).
+
 `db.dedupe_titles()` runs after every scrape cycle to catch cross-source
 re-uploads (same title scraped from two different sites, different slug):
 groups non-deleted rows by normalized title text, confirms with cover
 average-hash (Pillow, Hamming distance ≤10), purges losers via the normal
-`purge_title()` tombstone path. Keeper = existing `kept` row if any, else
-earliest `downloaded_at`. Safety: never auto-deletes a row that's itself
-`kept`, and skips (doesn't delete) when either cover can't be hashed —
-title-text match alone is never sufficient to delete.
+`purge_title()` tombstone path. Keeper = earliest `downloaded_at`. Skips
+(doesn't delete) when either cover can't be hashed — title-text match alone
+is never sufficient to delete.
 
 ## Ports
 
@@ -123,9 +133,18 @@ Dashboard/OPDS credentials are nginx-only: vault
 | Route | Method | Purpose |
 |---|---|---|
 | `/api/titles?status=&source=` | GET | List titles, optional filters |
+| `/api/titles/{id}/delete` | POST | Purge files + tombstone |
+| `/api/settings` | GET/PUT | Runtime settings (`retention_days`, `min_pages`) |
 | `/api/status` | GET | Stats + per-source counts + last scrape |
+| `/opds` · `/opds/new` · `/opds/long` | GET | OPDS feeds (`long` = pages ≥ `min_pages`) |
 
 ## Gaps / Known Risk
+
+- `_scrape_source` dedups slugs across listing pages (2026-07-13) — required
+  because `DoujintSource.listing_url()` ignores `page` (site has no listing
+  pagination) and paginated sources can repeat items between page fetches.
+  Removing that `seen` guard re-introduces
+  `UNIQUE constraint failed: titles.slug` in prod.
 
 - Parser selectors for doujin-th.com verified live 2026-07-06, no drift
   expected.
@@ -141,9 +160,9 @@ Dashboard/OPDS credentials are nginx-only: vault
 
 ## Deploy Status
 
-- Last deploy: 2026-07-06 (pre-multi-source). Redeploy needed for
-  multi-source + dashboard redesign + 2026-07-08 dashboard/dedupe changes
-  (new Pillow dep requires image rebuild, not just file sync).
+- Last deploy: 2026-07-13 ~12:58 (+07) — includes multi-source, dashboard
+  redesign, runtime settings, kept-removal, and the cross-page listing dedup
+  fix. Verified live: scrape cycle id=37 (13:03) clean, no UNIQUE errors.
 - Port 5068 is intentionally LAN-only.
 
 ## Related

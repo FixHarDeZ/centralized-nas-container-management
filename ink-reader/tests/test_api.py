@@ -38,14 +38,22 @@ def test_titles_filter_by_source(client):
     assert titles[0]["source"] == "doujinth"
 
 
-def test_keep_and_delete(client):
+def test_delete(client):
     tid = _seed()
-    assert client.post(f"/api/titles/{tid}/keep").json() == {"ok": True}
-    assert db.get_title(tid)["status"] == "kept"
     assert client.post(f"/api/titles/{tid}/delete").json() == {"ok": True}
     assert db.get_title(tid)["status"] == "deleted"
     assert not os.path.exists(db.cbz_path(tid))
-    assert client.post("/api/titles/999/keep").status_code == 404
+    assert client.post("/api/titles/999/delete").status_code == 404
+
+
+def test_settings_roundtrip(client):
+    r = client.get("/api/settings")
+    assert r.status_code == 200
+    assert r.json()["min_pages"] == 30
+    r = client.put("/api/settings", json={"retention_days": 14, "min_pages": 40})
+    assert r.status_code == 200
+    assert r.json() == {"retention_days": 14, "min_pages": 40}
+    assert client.put("/api/settings", json={"retention_days": 0}).status_code == 400
 
 
 def test_file_and_cover(client):
@@ -60,11 +68,11 @@ def test_file_and_cover(client):
 
 def test_opds_routes(client):
     _seed()
-    for path in ("/opds", "/opds/new", "/opds/kept"):
+    for path in ("/opds", "/opds/new", "/opds/long"):
         r = client.get(path)
         assert r.status_code == 200
         assert r.headers["content-type"].startswith("application/atom+xml")
-    assert b"s1" not in client.get("/opds/kept").content
+    assert client.get("/opds/kept").status_code == 404
 
 
 def test_opds_https_scheme(client):

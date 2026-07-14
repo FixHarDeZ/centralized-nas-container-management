@@ -46,14 +46,6 @@ def test_known_slugs_includes_deleted(data_dir):
     assert db.known_slugs() == {"s1", "s2"}
 
 
-def test_keep_clears_expiry(data_dir):
-    tid = _add()
-    assert db.keep_title(tid)
-    row = db.get_title(tid)
-    assert row["status"] == "kept"
-    assert row["expires_at"] is None
-
-
 def test_purge_removes_files_and_tombstones(data_dir):
     tid = _add()
     open(db.cbz_path(tid), "wb").write(b"x")
@@ -71,21 +63,19 @@ def test_expired_ids(data_dir):
     with db._connect() as conn:
         conn.execute("UPDATE titles SET expires_at='2000-01-01T00:00:00+07:00' WHERE id=?", (tid,))
     _add("fresh")
-    kept = _add("kept-old")
-    db.keep_title(kept)
     assert db.expired_ids() == [tid]
 
 
 def test_list_filter_and_stats(data_dir):
     _add("a")
     tid = _add("b")
-    db.keep_title(tid)
+    db.purge_title(tid)
     assert len(db.list_titles()) == 2
-    assert [r["slug"] for r in db.list_titles(status="kept")] == ["b"]
+    assert [r["slug"] for r in db.list_titles(status="new")] == ["a"]
     s = db.stats()
     assert s["new"]["count"] == 1
-    assert s["kept"]["count"] == 1
-    assert s["kept"]["size"] == 1000
+    assert s["new"]["size"] == 1000
+    assert s["deleted"]["count"] == 1
 
 
 def test_scrape_log(data_dir):
@@ -128,31 +118,53 @@ def test_dedupe_skips_visually_different_covers(data_dir):
     assert db.get_title(b)["status"] == "new"
 
 
-def test_dedupe_prefers_kept_as_keeper(data_dir):
-    a = _add("a", title="Same Title")
-    b = _add("b", title="Same Title")
-    _write_cover(a, _checkerboard())
-    _write_cover(b, _checkerboard())
-    db.keep_title(b)
-    purged = db.dedupe_titles()
-    assert purged == [a]
-    assert db.get_title(b)["status"] == "kept"
-
-
-def test_dedupe_never_purges_second_kept_row(data_dir):
-    """Two rows both explicitly kept -> never auto-delete either."""
-    a = _add("a", title="Same Title")
-    b = _add("b", title="Same Title")
-    _write_cover(a, _checkerboard())
-    _write_cover(b, _checkerboard())
-    db.keep_title(a)
-    db.keep_title(b)
-    assert db.dedupe_titles() == []
-    assert db.get_title(a)["status"] == "kept"
-    assert db.get_title(b)["status"] == "kept"
-
-
 def test_dedupe_leaves_distinct_titles(data_dir):
     _add("a", title="Title One")
     _add("b", title="Title Two")
     assert db.dedupe_titles() == []
+
+
+def test_settings_defaults(data_dir):
+    s = db.get_settings()
+    assert s == {"retention_days": config.RETENTION_DAYS, "min_pages": 30}
+
+
+def test_settings_update_and_persist(data_dir):
+    s = db.update_settings({"retention_days": 14, "min_pages": 50})
+    assert s == {"retention_days": 14, "min_pages": 50}
+    assert db.get_settings() == {"retention_days": 14, "min_pages": 50}
+
+
+def test_settings_rejects_bad_values(data_dir):
+    import pytest
+    with pytest.raises(ValueError):
+        db.update_settings({"retention_days": 0})
+    with pytest.raises(ValueError):
+        db.update_settings({"min_pages": "abc"})
+    # unknown keys are ignored, not stored
+    assert "bogus" not in db.update_settings({"bogus": 1})
+
+
+def test_retention_change_recomputes_expiry(data_dir):
+    tid = _add()
+    db.update_settings({"retention_days": 7})
+    row = db.get_title(tid)
+    from datetime import datetime, timedelta
+    exp = datetime.fromisoformat(row["expires_at"])
+    dl = datetime.fromisoformat(row["downloaded_at"])
+    assert exp - dl == timedelta(days=7)
+    # new titles use the updated retention too
+    row2 = db.get_title(_add("s2"))
+    exp2 = datetime.fromisoformat(row2["expires_at"])
+    dl2 = datetime.fromisoformat(row2["downloaded_at"])
+    assert exp2 - dl2 == timedelta(days=7)
+
+
+def test_init_db_migrates_kept_to_new(data_dir):
+    tid = _add()
+    with db._connect() as conn:
+        conn.execute("UPDATE titles SET status='kept', expires_at=NULL WHERE id=?", (tid,))
+    db.init_db()
+    row = db.get_title(tid)
+    assert row["status"] == "new"
+    assert row["expires_at"] is not None

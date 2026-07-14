@@ -54,6 +54,25 @@ def test_cycle_downloads_new_titles(data_dir, monkeypatch):
     assert db.last_scrape()["downloaded"] == 2
 
 
+def test_cycle_dedupes_items_across_listing_pages(data_dir, monkeypatch):
+    """doujinth listing_url ignores page number, so every 'page' returns the
+    same items — each title must still be downloaded exactly once, without
+    UNIQUE-constraint errors from re-inserting the same slug."""
+    import config
+    monkeypatch.setattr(config, "LISTING_PAGES", 3)
+    fetch = _fake_fetch({
+        "topic=1.0": TITLE.format(title="Story A", slug="1").encode(),
+        "topic=2.0": TITLE.format(title="Story B", slug="2").encode(),
+        "/i/": b"imgdata",
+        "doujin-th": LISTING.encode(),  # identical listing on every page
+    })
+    result = scraper.scrape_cycle(fetch=fetch)
+    assert result["errors"] == []
+    assert result["downloaded"] == 2
+    assert result["found"] == 2  # not 6
+    assert len(db.list_titles(status="new")) == 2
+
+
 def test_cycle_skips_known_and_tombstones(data_dir, monkeypatch):
     import config
     monkeypatch.setattr(config, "LISTING_PAGES", 1)

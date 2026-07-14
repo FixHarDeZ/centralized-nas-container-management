@@ -48,12 +48,12 @@
             - field: stats.new.count
               label: New
               format: number
-            - field: stats.kept.count
-              label: Kept
+            - field: stats.long.count
+              label: Long
               format: number
-            - field: last_scrape.downloaded
+            - field: last_scrape.run_at
               label: Last Scrape
-              format: number
+              format: relativeTime
 
     - Portainer:
         icon: portainer.png
