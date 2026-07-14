@@ -83,12 +83,6 @@
           server: my-docker
           container: watchtower
 
-    - Log Medic:
-        icon: mdi-medical-bag
-        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15070"
-        description: Docker Log Monitor + Auto-fix
-        ping: "{{HOMEPAGE_VAR_DDNS_BASE_HTTP}}:5070"              
-
 # ─── 📝 Tools & Notes ─────────────────────────────────────────────────────────
 - 📝 Tools & Notes:
     - News Feed:
@@ -119,11 +113,6 @@
         icon: mdi-calendar-clock
         href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15066"
         description: ระบบติดตามการผ่อนชำระรายเดือน
-
-    - Wallpaper Scout:
-        icon: mdi-image-multiple-outline
-        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15067"
-        description: Wallpaper Research & Curation (Wallhaven)
 
     - Synology Note Station:
         icon: synology-note-station.png

@@ -4,7 +4,7 @@
 
 **Goal:** New `ink-reader/` stack — scrapes doujin-th.com latest releases to CBZ files on the NAS, serves a keep/delete curation dashboard and an OPDS feed for KOReader on a Meebook M8.
 
-**Architecture:** Single FastAPI container (flat-file layout copied from `torrentwatch/`) + nginx basic-auth sidecar (copied from `wallpaper-scout/`). SQLite catalog with `new → kept | deleted` lifecycle; `deleted` rows are tombstones that block re-download. APScheduler runs scrape/expiry/backup jobs.
+**Architecture:** Single FastAPI container (flat-file layout copied from `torrentwatch/`) + nginx basic-auth sidecar. SQLite catalog with `new → kept | deleted` lifecycle; `deleted` rows are tombstones that block re-download. APScheduler runs scrape/expiry/backup jobs.
 
 **Tech Stack:** Python 3.12-slim, FastAPI, uvicorn, httpx, beautifulsoup4, APScheduler, SQLite (stdlib), nginx:alpine sidecar.
 
