@@ -13,7 +13,12 @@ RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/wh
 
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY main.py llm_client.py nous_auth.py .
+# Build-time: download BGE-M3 ONNX export + quantize to int8 (~600MB baked in).
+# Non-fatal on failure — encoder.py falls back to torch/FlagEmbedding at runtime.
+COPY export_onnx.py .
+RUN python export_onnx.py || echo "WARN: ONNX export failed; runtime will use torch fallback"
+
+COPY main.py llm_client.py nous_auth.py encoder.py .
 
 EXPOSE 5065
 

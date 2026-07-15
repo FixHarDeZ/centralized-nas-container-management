@@ -10,7 +10,7 @@ import llm_client
 import nous_auth
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
-from FlagEmbedding import BGEM3FlagModel
+from encoder import load_encoder
 from pydantic import BaseModel
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import (
@@ -49,14 +49,37 @@ Rules:
 async def lifespan(app: FastAPI):
     global qdrant
     provider = os.getenv("LLM_PROVIDER", "anthropic")
-    log.info("Loading BGEM3FlagModel (BAAI/bge-m3)…")
-    app.state.model = BGEM3FlagModel("BAAI/bge-m3")
-    log.info("BGE-M3 loaded")
+    log.info("Loading BGE-M3 encoder…")
+    app.state.model, backend = load_encoder()
+    log.info("BGE-M3 loaded (backend=%s)", backend)
+
+    # Keep-warm: periodic dummy encode so model pages stay resident in RAM
+    # (cold query after idle was ~152s due to swap-out on the NAS).
+    warm_interval = int(os.getenv("WARM_INTERVAL_SEC", "300"))
+
+    async def _keep_warm():
+        while True:
+            await asyncio.sleep(warm_interval)
+            try:
+                t = time.monotonic()
+                await asyncio.to_thread(
+                    app.state.model.encode,
+                    ["ping"],
+                    return_dense=True,
+                    return_sparse=True,
+                )
+                log.debug("keep-warm encode: %.0f ms", (time.monotonic() - t) * 1000)
+            except Exception as exc:
+                log.warning("keep-warm failed: %s", exc)
+
+    warm_task = asyncio.create_task(_keep_warm()) if warm_interval > 0 else None
     log.info("LLM provider: %s | model: %s", provider, _active_model_name(provider))
     if COHERE_API_KEY:
         app.state.cohere = cohere.AsyncClientV2(api_key=COHERE_API_KEY)
     qdrant = AsyncQdrantClient(url=QDRANT_URL)
     yield
+    if warm_task:
+        warm_task.cancel()
     await qdrant.close()
 
 
@@ -83,7 +106,7 @@ class QueryRequest(BaseModel):
 async def query(req: QueryRequest):
     t0 = time.monotonic()
 
-    model: BGEM3FlagModel = app.state.model
+    model = app.state.model
 
     # Encode runs on CPU — run in thread to avoid blocking the event loop
     out = await asyncio.to_thread(
@@ -92,6 +115,9 @@ async def query(req: QueryRequest):
         return_dense=True,
         return_sparse=True,
     )
+
+    t_embed = time.monotonic()
+    log.info("stage=embed ms=%d", int((t_embed - t0) * 1000))
 
     dense_vec = out["dense_vecs"][0].tolist()
 
@@ -113,6 +139,9 @@ async def query(req: QueryRequest):
 
     hits = results.points
 
+    t_retrieve = time.monotonic()
+    log.info("stage=retrieve ms=%d hits=%d", int((t_retrieve - t_embed) * 1000), len(hits))
+
     retrieval_method = "hybrid"
     if COHERE_API_KEY:
         co: cohere.AsyncClientV2 = app.state.cohere
@@ -131,6 +160,9 @@ async def query(req: QueryRequest):
     else:
         hits = hits[: req.top_k_final]
 
+    t_rerank = time.monotonic()
+    log.info("stage=rerank ms=%d method=%s", int((t_rerank - t_retrieve) * 1000), retrieval_method)
+
     context_blocks = []
     for i, h in enumerate(hits, start=1):
         breadcrumb = h.payload.get("breadcrumb", "")
@@ -146,6 +178,9 @@ async def query(req: QueryRequest):
         log.error("LLM call failed: %s", exc)
         return JSONResponse(status_code=502, content={"error": str(exc)})
 
+    t_llm = time.monotonic()
+    log.info("stage=llm ms=%d", int((t_llm - t_rerank) * 1000))
+
     cited_indices = sorted({int(m) - 1 for m in re.findall(r"\[(\d+)\]", answer)})
     cited_hits = [hits[i] for i in cited_indices if i < len(hits)]
     sources = [
@@ -158,6 +193,14 @@ async def query(req: QueryRequest):
     ]
 
     latency_ms = int((time.monotonic() - t0) * 1000)
+    log.info(
+        "stage=total ms=%d (embed=%d retrieve=%d rerank=%d llm=%d)",
+        latency_ms,
+        int((t_embed - t0) * 1000),
+        int((t_retrieve - t_embed) * 1000),
+        int((t_rerank - t_retrieve) * 1000),
+        int((t_llm - t_rerank) * 1000),
+    )
     return {
         "answer": answer,
         "sources": sources,

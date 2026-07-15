@@ -59,12 +59,18 @@ services:
       - ./query/.env
       - ./ingest/.env
     environment:
-      # Cap BGE-M3 / PyTorch thread count so it respects the cpus limit below.
-      # Without this, torch reads /proc/cpuinfo (8) and spawns 8 OpenMP threads
-      # → CPU saturation on the NAS even though cgroups would throttle anyway.
-      - OMP_NUM_THREADS=2
-      - MKL_NUM_THREADS=2
+      # 6 of 8 cores for query-path embedding (was 2 → embed stage took ~10s).
+      # Leaves 2 cores of headroom for DSM / other stacks. Query traffic is a
+      # single interactive user, so short bursts at 6 threads are fine.
+      - OMP_NUM_THREADS=6
+      - MKL_NUM_THREADS=6
       - TOKENIZERS_PARALLELISM=false
+      # onnx = int8-quantized BGE-M3 via onnxruntime (2-4x faster on CPU).
+      # Set to "torch" to fall back to FlagEmbedding.
+      - EMBEDDING_BACKEND=onnx
+      # Keep-warm: re-encode a dummy query every N seconds so the model stays
+      # resident in RAM (cold start was 152s due to swap-out).
+      - WARM_INTERVAL_SEC=300
     volumes:
       - hf_cache:/root/.cache/huggingface
       - /volume2/docker/secretary/query-data:/data
