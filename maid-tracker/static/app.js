@@ -2369,6 +2369,14 @@ function describeSchedule(r) {
 }
 
 async function viewReminders() {
+  // Remove any modal from a previous render that was moved to <body>,
+  // otherwise duplicate IDs make getElementById hit the stale copy.
+  document.querySelectorAll("body > #reminderModal").forEach(el => el.remove());
+  document.querySelectorAll(".modal-backdrop").forEach(el => el.remove());
+  document.body.classList.remove("modal-open");
+  document.body.style.removeProperty("overflow");
+  document.body.style.removeProperty("padding-right");
+
   _remindersCache = await api.get("/api/reminders");
   const wdNames = WEEKDAY_NAMES[currentLang];
 
@@ -2553,7 +2561,15 @@ async function viewReminders() {
       });
     }
 
-    if (!_bsModal) _bsModal = new bootstrap.Modal(document.getElementById("reminderModal"));
+    if (!_bsModal) {
+      // Move the modal out of #app: the view-enter animation puts a
+      // `transform` on #app, which turns it into the containing block for
+      // position:fixed. The modal then stacks BELOW the body-level backdrop
+      // → every click hits the backdrop and the page appears frozen.
+      const modalEl = document.getElementById("reminderModal");
+      document.body.appendChild(modalEl);
+      _bsModal = new bootstrap.Modal(modalEl);
+    }
     _bsModal.show();
   };
 
@@ -2587,7 +2603,14 @@ async function viewReminders() {
     try {
       if (_editingId) await api.put(`/api/reminders/${_editingId}`, body);
       else             await api.post("/api/reminders", body);
-      _bsModal.hide();
+      // Wait for modal to fully hide before re-render, otherwise the modal
+      // element is destroyed mid-transition and Bootstrap never cleans up the
+      // backdrop / modal-open / focus trap → page freezes.
+      const modalEl = document.getElementById("reminderModal");
+      await new Promise(resolve => {
+        modalEl.addEventListener("hidden.bs.modal", resolve, { once: true });
+        _bsModal.hide();
+      });
       await viewReminders();
     } catch (err) {
       alert(t("errSave") + err.message);
