@@ -9,6 +9,9 @@
   `com.centurylinklabs.watchtower.enable=false` กับตัวเองเพื่อไม่ให้อัปเดตตัวเอง.
 - `watchtower-notifier` sidecar (Python 3.12-slim) อ่าน Docker socket แบบ raw `socket`
   (ไม่ใช้ docker CLI/requests) แล้วส่งสรุปการอัปเดตเข้า LINE + Telegram.
+- `major_watch_loop` (daemon thread ใน notifier): poll GitHub `releases/latest` ของ repo ใน
+  `MAJOR_WATCH` วันละครั้ง แจ้งเตือนเมื่อมี **major ใหม่** ที่ watchtower ข้ามให้ไม่ได้
+  (tag N แข็งเมื่อ vN+1 ออก). ดู daily_log 2026-07-24.
 
 ## Env (notifier)
 

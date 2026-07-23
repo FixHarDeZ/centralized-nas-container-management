@@ -61,6 +61,13 @@ The sidecar connects to `/var/run/docker.sock` directly (no `docker` CLI needed)
 | Container updated | `msg="Creating /container"` log line |
 | Session summary | `msg="Session done"` log line |
 | Error | `level=error` or `level=fatal` log line |
+| **Major-version bump** | Daily GitHub poll finds a pinned repo's latest stable release with `major > pinned` |
+
+### Major-version watch
+
+Watchtower follows a moving tag (`:2`, `:latest`) but **never crosses a major** — tag `N` freezes once `vN+1` ships (this is exactly what left `louislam/uptime-kuma:latest` stuck on v1 while v2 shipped under tag `2`). A daemon thread polls each pinned upstream's GitHub `releases/latest` once a day and alerts (LINE + Telegram) when a new major appears, so you can bump the tag + back up the DB deliberately. Alerts fire once per new major (in-memory dedupe; re-nags after a container restart until you act).
+
+Add a repo to watch by appending one line to `MAJOR_WATCH` in `notifier/notifier.py`. Poll cadence via `MAJOR_CHECK_INTERVAL_HOURS` (default 24).
 
 ## Configuration (in root `.env`)
 
