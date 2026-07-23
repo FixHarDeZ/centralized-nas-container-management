@@ -7,7 +7,10 @@ import json
 import os
 import re
 import socket
+import threading
 import time
+import urllib.error
+import urllib.request
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -22,6 +25,18 @@ DOCKER_SOCKET = os.environ.get("DOCKER_SOCKET", "/var/run/docker.sock")
 TZ = ZoneInfo(os.environ.get("TZ", "Asia/Bangkok"))
 TELEGRAM_BOT_TOKEN = os.environ.get("WATCHTOWER_TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
+
+# ─── Major-version watch ───────────────────────────────────────────────────
+# Watchtower follows a moving tag (:2, :latest) but can NEVER cross a major:
+# tag N freezes at vN once vN+1 ships (louislam/uptime-kuma:latest froze at v1
+# in 2025-10). Nothing alerts you to the new major. This poller closes that gap
+# by watching GitHub's latest *stable* release and pinging when major > pinned.
+# Add a stack = one line here (same place you'd bump the pin).
+MAJOR_WATCH = [
+    {"repo": "louislam/uptime-kuma", "current": 2, "label": "Uptime Kuma"},
+]
+MAJOR_CHECK_INTERVAL_H = float(os.environ.get("MAJOR_CHECK_INTERVAL_HOURS", "24"))
+_alerted_majors: set[tuple[str, int]] = set()  # in-memory dedupe; nag resets on restart
 
 # ─── Watchtower 1.7.x structured log patterns ──────────────────────────────
 # ตัวอย่าง log จริง:
@@ -255,10 +270,67 @@ def handle_line(log_line: str) -> None:
         notify(f"🔴 Watchtower พบ Error!\n📋 {extract_msg(log_line)[:200]}\n🕒 {now()}")
 
 
+# ─── Major-version poller ──────────────────────────────────────────────────
+def newer_major(latest_tag: str, current_major: int) -> int | None:
+    """Return the upstream major if it's ahead of the pinned one, else None.
+
+    Tolerates a leading 'v' (v3.0.0). Prereleases are already excluded upstream
+    by GitHub's /releases/latest, so beta tags never reach here.
+    """
+    tag = latest_tag.lstrip("vV")
+    try:
+        major = int(tag.split(".", 1)[0])
+    except (ValueError, IndexError):
+        return None
+    return major if major > current_major else None
+
+
+def github_latest_major(repo: str) -> int | None:
+    """Fetch the latest stable release major from GitHub. None on any failure."""
+    req = urllib.request.Request(
+        f"https://api.github.com/repos/{repo}/releases/latest",
+        headers={"User-Agent": "nas-watchtower-notifier", "Accept": "application/vnd.github+json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            tag = json.loads(resp.read()).get("tag_name", "")
+    except (urllib.error.URLError, json.JSONDecodeError, TimeoutError) as exc:
+        print(f"[{now()}] major-watch: fetch {repo} failed: {exc}")
+        return None
+    m = re.match(r"v?(\d+)", tag)
+    return int(m.group(1)) if m else None
+
+
+def major_watch_loop() -> None:
+    """Daily-ish poll of pinned upstreams; alert once per new major (in-memory dedupe)."""
+    while True:
+        for w in MAJOR_WATCH:
+            try:
+                latest = github_latest_major(w["repo"])
+                if latest is None:
+                    continue
+                key = (w["repo"], latest)
+                if latest > w["current"] and key not in _alerted_majors:
+                    _alerted_majors.add(key)
+                    notify(
+                        f"🆙 มี Major version ใหม่!\n"
+                        f"📦 {w['label']} (v{w['current']} → v{latest})\n"
+                        f"⚠️ Watchtower อัปเดตข้าม major ให้ไม่ได้ — ต้อง bump tag :{latest} + backup DB เอง\n"
+                        f"🔗 https://github.com/{w['repo']}/releases\n"
+                        f"🕒 {now()}",
+                    )
+            except Exception as exc:  # a bad entry must not kill the thread
+                print(f"[{now()}] major-watch: {w.get('repo')} error: {exc}")
+        time.sleep(MAJOR_CHECK_INTERVAL_H * 3600)
+
+
 # ─── Main loop ─────────────────────────────────────────────────────────────
 def main() -> None:
     print(f"[{now()}] Notifier starting (Docker socket API mode)")
     print(f"[{now()}] Socket: {DOCKER_SOCKET} | Container: {WATCHTOWER_CONTAINER}")
+
+    threading.Thread(target=major_watch_loop, daemon=True).start()
+    print(f"[{now()}] Major-watch thread started ({len(MAJOR_WATCH)} repo, every {MAJOR_CHECK_INTERVAL_H}h)")
 
     docker = DockerSocketSession(DOCKER_SOCKET)
 
