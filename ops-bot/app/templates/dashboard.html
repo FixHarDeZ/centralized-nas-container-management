@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ops-bot Dashboard</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #eee; padding: 20px; }
+        h1 { color: #00d4ff; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; background: #16213e; border-radius: 8px; overflow: hidden; }
+        th { background: #0f3460; padding: 12px; text-align: left; }
+        td { padding: 10px 12px; border-bottom: 1px solid #1a1a2e; }
+        tr:hover { background: #1a3a5c; }
+        .badge { padding: 2px 8px; border-radius: 4px; font-size: 0.85em; }
+        .badge-down { background: #e74c3c; color: white; }
+        .badge-up { background: #27ae60; color: white; }
+        .badge-watchtower { background: #f39c12; color: white; }
+        a { color: #00d4ff; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <h1>ops-bot Dashboard</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Service</th>
+                <th>Container</th>
+                <th>Status</th>
+                <th>Watchtower</th>
+                <th>Time</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for inc in incidents %}
+            <tr>
+                <td><a href="/dashboard/incident/{{ inc[0] }}">#{{ inc[0] }}</a></td>
+                <td>{{ inc[1] }}</td>
+                <td>{{ inc[2] or '-' }}</td>
+                <td><span class="badge badge-{{ inc[3] }}">{{ inc[3] }}</span></td>
+                <td>{% if inc[4] %}<span class="badge badge-watchtower">watchtower</span>{% else %}-{% endif %}</td>
+                <td>{{ inc[5] }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>

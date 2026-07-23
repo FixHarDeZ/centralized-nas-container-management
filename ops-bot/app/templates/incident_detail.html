@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Incident #{{ incident[0] }} — ops-bot</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #eee; padding: 20px; }
+        h1, h2 { color: #00d4ff; margin: 20px 0 10px; }
+        .card { background: #16213e; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+        .severity-critical { color: #e74c3c; }
+        .severity-warning { color: #f39c12; }
+        .severity-info { color: #3498db; }
+        pre { background: #0d1b2a; padding: 12px; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; }
+        .back { color: #00d4ff; text-decoration: none; }
+        .back:hover { text-decoration: underline; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 8px; text-align: left; border-bottom: 1px solid #1a1a2e; }
+        th { background: #0f3460; }
+        .success { color: #27ae60; }
+        .fail { color: #e74c3c; }
+    </style>
+</head>
+<body>
+    <a class="back" href="/dashboard">← กลับ</a>
+    <h1>Incident #{{ incident[0] }}</h1>
+
+    <div class="card">
+        <strong>Service:</strong> {{ incident[1] }}<br>
+        <strong>Container:</strong> {{ incident[2] or '-' }}<br>
+        <strong>Status:</strong> {{ incident[3] }}<br>
+        <strong>Watchtower:</strong> {% if incident[5] %}ใช่{% else %}ไม่{% endif %}<br>
+        <strong>Time:</strong> {{ incident[6] }}
+    </div>
+
+    {% if analysis %}
+    <h2>ผลวิเคราะห์</h2>
+    <div class="card">
+        <strong>Root Cause:</strong> {{ analysis[0] }}<br>
+        <strong>Severity:</strong> <span class="severity-{{ analysis[1] }}">{{ analysis[1] }}</span><br>
+        <strong>แนะนำ:</strong> {{ analysis[2] }}<br>
+        <strong>LLM Tokens:</strong> {{ analysis[4] }}
+    </div>
+    {% endif %}
+
+    {% if diagnostics %}
+    <h2>Diagnostic Details</h2>
+    {% for diag in diagnostics %}
+    <div class="card">
+        <strong>{{ diag[0] }}</strong>
+        <pre>{{ diag[1] }}</pre>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    {% if actions %}
+    <h2>Actions</h2>
+    <table>
+        <tr><th>Type</th><th>Commands</th><th>Result</th><th>Success</th><th>Time</th></tr>
+        {% for act in actions %}
+        <tr>
+            <td>{{ act[0] }}</td>
+            <td><pre>{{ act[1] }}</pre></td>
+            <td><pre>{{ act[2][:500] }}</pre></td>
+            <td class="{{ 'success' if act[3] else 'fail' }}">{{ '✅' if act[3] else '❌' }}</td>
+            <td>{{ act[4] }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% endif %}
+</body>
+</html>
