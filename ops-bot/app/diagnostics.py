@@ -1,5 +1,6 @@
 # ops-bot/app/diagnostics.py
 import logging
+from typing import Optional, Tuple
 
 from app.ssh_client import get_ssh_client
 
@@ -49,7 +50,7 @@ DIAGNOSTIC_STEPS = [
 ]
 
 
-async def find_compose_file(container_name: str) -> tuple[str, str] | None:
+async def find_compose_file(container_name: str) -> Optional[Tuple[str, str]]:
     ssh = get_ssh_client()
 
     # Get compose project dir from container label

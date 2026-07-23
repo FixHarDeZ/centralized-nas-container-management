@@ -2,6 +2,7 @@
 import json
 import logging
 from dataclasses import dataclass
+from typing import Optional
 
 from openai import AsyncOpenAI
 
@@ -85,7 +86,7 @@ class LLMClient:
             )
 
 
-_llm_client: LLMClient | None = None
+_llm_client: Optional[LLMClient] = None
 
 
 def get_llm_client() -> LLMClient:
