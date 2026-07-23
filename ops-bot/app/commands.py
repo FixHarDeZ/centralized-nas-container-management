@@ -9,7 +9,6 @@ import httpx
 
 from app.config import get_config
 from app.db import get_db
-from app.orchestrator import execute_fix
 from app.ssh_client import get_ssh_client
 from app.telegram_bot import get_telegram_bot
 
@@ -129,7 +128,7 @@ async def _handle_logs(service_name: str):
 
 
 async def _handle_callback(callback_query: dict):
-    """Handle InlineKeyboard callback (fix/restart/logs buttons)."""
+    """Handle InlineKeyboard callback (logs only — read-only mode)."""
     data = callback_query.get("data", "")
     callback_id = callback_query["id"]
 
@@ -143,9 +142,7 @@ async def _handle_callback(callback_query: dict):
     action_type, incident_id_str = parts
     incident_id = int(incident_id_str)
 
-    if action_type in ("fix", "restart"):
-        success, output = await execute_fix(incident_id, action_type)
-    elif action_type == "logs":
+    if action_type == "logs":
         db = await get_db()
         cursor = await db.execute(
             "SELECT container_name FROM incidents WHERE id = ?",

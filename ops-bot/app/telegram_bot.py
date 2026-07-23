@@ -52,19 +52,8 @@ def format_incident_message(
 def _build_inline_keyboard(incident_id: int, analysis: LLMAnalysis) -> dict:
     buttons = []
 
-    if analysis.fix_commands:
-        buttons.append({
-            "text": "🔧 Fix อัตโนมัติ",
-            "callback_data": f"fix:{incident_id}",
-        })
-
     buttons.append({
-        "text": "🔄 Restart Container",
-        "callback_data": f"restart:{incident_id}",
-    })
-
-    buttons.append({
-        "text": "📋 Compose Logs",
+        "text": "📋 ดู Logs เพิ่มเติม",
         "callback_data": f"logs:{incident_id}",
     })
 

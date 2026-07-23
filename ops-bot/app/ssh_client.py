@@ -1,7 +1,9 @@
 # ops-bot/app/ssh_client.py
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
 from collections import namedtuple
 from functools import partial
 from typing import Optional
@@ -14,13 +16,12 @@ logger = logging.getLogger(__name__)
 
 SSHResult = namedtuple("SSHResult", ["stdout", "stderr", "exit_code"])
 
+# READ-ONLY commands only — no restart, no fix, no modifications
 ALLOWED_PREFIXES = [
     "docker ps",
     "docker logs",
     "docker inspect",
-    "docker restart",
     "docker compose logs",
-    "docker compose restart",
     "docker network inspect",
     "docker port",
     "df ",
@@ -30,6 +31,11 @@ ALLOWED_PREFIXES = [
     "cat /proc/meminfo",
     "curl ",
     "docker logs watchtower",
+    "top -b",
+    "iostat",
+    "cat /proc/cpuinfo",
+    "hostname",
+    "uname",
 ]
 
 
@@ -46,6 +52,13 @@ class SSHClient:
             return self._client
 
         cfg = get_config()
+
+        if not os.path.exists(cfg.ssh_key_path):
+            raise FileNotFoundError(
+                f"SSH key not found at {cfg.ssh_key_path}. "
+                f"Mount your SSH key into the container."
+            )
+
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
@@ -53,24 +66,23 @@ class SSHClient:
             "hostname": cfg.ssh_host,
             "port": cfg.ssh_port,
             "username": cfg.ssh_user,
+            "key_filename": cfg.ssh_key_path,
             "timeout": 10,
         }
 
-        # Try SSH key first, fall back to password
-        import os
-        if os.path.exists(cfg.ssh_key_path):
-            connect_kwargs["key_filename"] = cfg.ssh_key_path
-        elif cfg.ssh_password:
-            connect_kwargs["password"] = cfg.ssh_password
-
         await self._run_in_executor(client.connect, **connect_kwargs)
         self._client = client
+        logger.info(f"SSH connected to {cfg.ssh_host} as {cfg.ssh_user}")
         return client
 
     async def execute_command(self, command: str, timeout: int = 30) -> SSHResult:
         if not self.is_allowed(command):
             logger.warning(f"Blocked disallowed command: {command}")
-            return SSHResult(stdout="", stderr=f"Command not allowed: {command}", exit_code=-1)
+            return SSHResult(
+                stdout="",
+                stderr=f"Command not allowed (read-only mode): {command}",
+                exit_code=-1,
+            )
 
         try:
             client = await self._connect()
@@ -92,7 +104,6 @@ class SSHClient:
 
     @staticmethod
     async def _run_in_executor(func, *args, **kwargs):
-        import asyncio
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(None, partial(func, *args, **kwargs))
 

@@ -15,10 +15,9 @@ class Settings(BaseSettings):
     telegram_bot_token: str = ""
     telegram_chat_id: str = ""
 
-    # SSH
+    # SSH (key-only, no password)
     ssh_host: str = ""
     ssh_user: str = ""
-    ssh_password: str = ""
     ssh_key_path: str = "/app/data/ssh/id_ed25519"
     ssh_port: int = 22
 

@@ -10,6 +10,7 @@ services:
       - "5070:8000"
     volumes:
       - ops_bot_data:/app/data
+      - ${SSH_KEY_PATH:-~/.ssh/id_ed25519}:/app/data/ssh/id_ed25519:ro
     labels:
       - "com.centurylinklabs.watchtower.enable=false"
 
