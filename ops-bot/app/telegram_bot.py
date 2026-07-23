@@ -41,6 +41,7 @@ def format_incident_message(
         f"{severity_emoji} ระดับ: {severity_thai}\n\n"
         f"🔍 **Root Cause:** {analysis.root_cause}\n\n"
         f"💡 **แนะนำ:** {analysis.suggested_fix}\n\n"
+        f"⚠️ **{analysis.safety_note}**\n\n"
         f"📊 **ข้อมูล diagnostic:**\n"
         f"```\n{container_info}\n```"
     )
@@ -115,6 +116,13 @@ class TelegramBot:
                 f"{self.base_url}/answerCallbackQuery",
                 json={"callback_query_id": callback_query_id, "text": text},
             )
+
+    async def send_recovery_notification(self, service_name: str) -> None:
+        msg = (
+            f"🟢 **{service_name} กลับมาทำงานปกติแล้ว!**\n"
+            f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        )
+        await self.send_message(msg)
 
 
 _telegram_bot: Optional[TelegramBot] = None

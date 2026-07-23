@@ -36,6 +36,7 @@ async def test_handle_incident_runs_full_pipeline():
         "severity": "critical",
         "suggested_fix": "เพิ่ม mem_limit",
         "fix_commands": ["cmd1"],
+        "safety_note": "⚠️ confirm ก่อน",
         "tokens_used": 100,
     })()
 

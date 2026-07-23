@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     # Watchtower
     watchtower_grace_minutes: int = 5
 
+    # Webhook security
+    kuma_webhook_secret: str = ""
+
+    # Debounce
+    debounce_minutes: int = 15
+
     # Dashboard
     dashboard_basic_auth_user: str = "admin"
     dashboard_basic_auth_password: str = ""

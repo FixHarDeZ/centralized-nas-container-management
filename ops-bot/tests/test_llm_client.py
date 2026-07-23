@@ -24,6 +24,7 @@ def test_llm_analysis_dataclass():
         severity="critical",
         suggested_fix="เพิ่ม mem_limit",
         fix_commands=["docker compose up -d"],
+        safety_note="⚠️ confirm ก่อน",
         tokens_used=500,
     )
     assert a.severity == "critical"
@@ -42,7 +43,8 @@ async def test_analyze_diagnostic_returns_analysis(mock_config):
                     "fix_commands": [
                         "sed -i 's/mem_limit: 3g/mem_limit: 5g/' ~/outliner/docker-compose.yml",
                         "cd ~/outliner && docker compose up -d outliner"
-                    ]
+                    ],
+                    "safety_note": "⚠️ confirm ก่อนรัน"
                 })
             }
         }],
@@ -62,7 +64,8 @@ async def test_analyze_diagnostic_returns_analysis(mock_config):
                             "fix_commands": [
                                 "sed -i 's/mem_limit: 3g/mem_limit: 5g/' ~/outliner/docker-compose.yml",
                                 "cd ~/outliner && docker compose up -d outliner"
-                            ]
+                            ],
+                            "safety_note": "⚠️ confirm ก่อนรัน"
                         })
                     })()
                 })()],

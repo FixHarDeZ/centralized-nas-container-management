@@ -12,20 +12,33 @@ logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """คุณเป็น AI ops engineer ที่เชี่ยวชาญ Docker container diagnostics บน Synology NAS
 
+═══════════════════════════════════════════
+🔒 โหมด READ-ONLY เท่านั้น — ห้ามทำอะไรนอกจากวิเคราะห์
+═══════════════════════════════════════════
+
+คุณอยู่ในโหมด READ-ONLY เท่านั้น:
+- ✅ อนุญาต: วิเคราะห์ข้อมูล, หา root cause, เสนอแนะ
+- ❌ ห้าม: restart container, เปลี่ยน config, ลบไฟล์, รันคำสั่งแก้ไข
+- ❌ ห้าม: แนะนำคำสั่งที่เป็นอันตราย (rm, drop, truncate, kill)
+- ⚠️ fix_commands เป็น "ข้อเสนอแนะ" เท่านั้น — user ต้อง confirm ก่อนเสมอ
+
 เมื่อได้รับผล diagnostic ให้วิเคราะห์ root cause และตอบเป็น JSON format เท่านั้น:
 
 {
   "root_cause": "คำอธิบายสาเหตุเป็นภาษาไทย",
   "severity": "critical หรือ warning หรือ info",
-  "suggested_fix": "คำแนะนำการแก้ไขเป็นภาษาไทย",
-  "fix_commands": ["คำสั่งที่ใช้แก้ไข 1", "คำสั่งที่ใช้แก้ไข 2"]
+  "suggested_fix": "คำแนะนำการแก้ไขเป็นภาษาไทย (เน้นว่าต้อง confirm ก่อน)",
+  "fix_commands": ["คำสั่งที่แนะนำ — user ต้อง confirm ก่อนรัน"],
+  "safety_note": "คำเตือนด้านความปลอดภัยก่อนรัน fix_commands"
 }
 
 กฎสำคัญ:
 - ตอบเป็น JSON เท่านั้น ห้ามมีข้อความอื่น
-- fix_commands ต้องเป็นคำสั่งที่รันได้จริง
+- fix_commands เป็น "ข้อเสนอแนะ" เท่านั้น ไม่ใช่คำสั่งที่จะรันอัตโนมัติ
+- ห้ามแนะนำคำสั่งที่ทำลายข้อมูล (rm -rf, DROP TABLE, etc.)
 - ทุกข้อความต้องเป็นภาษาไทย
-- severity: critical = บริการล่ม, warning = ทำงานผิดปกติ, info = ข้อมูลทั่วไป"""
+- severity: critical = บริการล่ม, warning = ทำงานผิดปกติ, info = ข้อมูลทั่วไป
+- safety_note: ต้องมีเสมอ เตือน user ว่า fix_commands ต้อง confirm ก่อน"""
 
 
 @dataclass
@@ -34,6 +47,7 @@ class LLMAnalysis:
     severity: str
     suggested_fix: str
     fix_commands: list[str]
+    safety_note: str
     tokens_used: int
 
 
@@ -73,6 +87,7 @@ class LLMClient:
                 severity=data["severity"],
                 suggested_fix=data["suggested_fix"],
                 fix_commands=data["fix_commands"],
+                safety_note=data.get("safety_note", "⚠️ กรุณา confirm ก่อนรัน fix_commands เสมอ"),
                 tokens_used=tokens_used,
             )
         except (json.JSONDecodeError, KeyError) as e:
@@ -82,6 +97,7 @@ class LLMClient:
                 severity="warning",
                 suggested_fix="กรุณาตรวจสอบ manual",
                 fix_commands=[],
+                safety_note="⚠️ กรุณาตรวจสอบ manual ก่อนทำอะไร",
                 tokens_used=tokens_used,
             )
 

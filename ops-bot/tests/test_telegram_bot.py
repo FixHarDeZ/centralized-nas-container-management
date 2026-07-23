@@ -23,6 +23,7 @@ def test_format_incident_message():
         severity="critical",
         suggested_fix="เพิ่ม mem_limit จาก 3g เป็น 5g",
         fix_commands=["sed -i 's/3g/5g/' docker-compose.yml"],
+        safety_note="⚠️ กรุณา confirm ก่อนรัน",
         tokens_used=500,
     )
     diagnostic_results = {

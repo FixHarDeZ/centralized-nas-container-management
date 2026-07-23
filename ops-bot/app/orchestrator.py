@@ -71,6 +71,13 @@ async def handle_incident(
     return incident_id
 
 
+async def handle_recovery(service_name: str) -> None:
+    """Handle service recovery notification."""
+    logger.info(f"Service recovered: {service_name}")
+    tg = get_telegram_bot()
+    await tg.send_recovery_notification(service_name)
+
+
 async def execute_fix(incident_id: int, action_type: str) -> tuple[bool, str]:
     """Execute a fix action for an incident. Returns (success, output)."""
     from app.ssh_client import get_ssh_client
