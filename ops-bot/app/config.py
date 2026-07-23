@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import Optional
+
 from pydantic_settings import BaseSettings
 
 
@@ -31,7 +35,7 @@ class Settings(BaseSettings):
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
 
-_config: Settings | None = None
+_config: Optional[Settings] = None
 
 
 def get_config() -> Settings:

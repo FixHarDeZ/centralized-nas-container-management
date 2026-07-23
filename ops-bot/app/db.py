@@ -1,8 +1,12 @@
+from __future__ import annotations
+
+from typing import Optional
+
 import aiosqlite
 
 from app.config import get_config
 
-_db: aiosqlite.Connection | None = None
+_db: Optional[aiosqlite.Connection] = None
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS incidents (
