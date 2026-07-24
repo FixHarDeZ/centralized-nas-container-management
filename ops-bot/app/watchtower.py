@@ -13,11 +13,14 @@ async def is_watchtower_update(container_name: str) -> bool:
     ssh = get_ssh_client()
 
     minutes = cfg.watchtower_grace_minutes
+    # Filter in Python, not via `| grep`: the read-only SSH whitelist rejects
+    # pipes, and interpolating container_name into a shell command is an
+    # injection surface. Fetch the logs, match here.
     result = await ssh.execute_command(
-        f"docker logs watchtower --since {minutes}m 2>&1 | grep -i '{container_name}'"
+        f"docker logs watchtower --since {minutes}m 2>&1"
     )
 
-    if result.exit_code == 0 and result.stdout.strip():
+    if result.exit_code == 0 and container_name.lower() in result.stdout.lower():
         logger.info(
             f"Watchtower recently updated {container_name}, "
             f"skipping alert (grace period: {minutes}m)"

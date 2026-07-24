@@ -79,6 +79,18 @@ def test_allowed_llm_diagnostic_commands():
     assert client.is_allowed("curl -s http://localhost:5064/") is True
 
 
+def test_allowed_internal_caller_commands():
+    # Commands the app itself issues (watchtower check, /status, /logs) must
+    # survive the hardened whitelist — unit tests for those callers mock
+    # execute_command and would not catch a whitelist regression.
+    client = SSHClient()
+    assert client.is_allowed("docker logs watchtower --since 5m 2>&1") is True
+    assert client.is_allowed(
+        "docker ps -a --format 'table {{.Names}}\\t{{.Status}}\\t{{.Image}}'"
+    ) is True
+    assert client.is_allowed("docker logs --tail 50 news-feed 2>&1") is True
+
+
 def test_blocked_shell_escape_commands():
     client = SSHClient()
     assert client.is_allowed("docker ps; rm -rf /volume2/docker/x") is False
