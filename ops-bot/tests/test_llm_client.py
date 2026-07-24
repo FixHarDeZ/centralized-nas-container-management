@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.llm_client import (
-    AgenticReport, FixOption, TOOLS, parse_report, LLMClient,
+    AgenticReport, FixOption, TOOLS, parse_report, LLMClient, MAX_ITERS,
 )
 
 
@@ -113,12 +113,14 @@ async def test_diagnose_agentic_cap_returns_truncated(mock_config):
     async def narrate(text): pass
 
     with patch("app.llm_client.AsyncOpenAI") as MockClient:
-        MockClient.return_value.chat.completions.create = AsyncMock(return_value=loop_resp)
+        mock_create = AsyncMock(return_value=loop_resp)
+        MockClient.return_value.chat.completions.create = mock_create
         client = LLMClient()
         report = await client.diagnose_agentic("S", "c", "down", execute=execute, narrate=narrate)
 
     assert report.truncated is True
     assert report.severity == "warning"
+    assert mock_create.call_count == MAX_ITERS
 
 
 @pytest.mark.asyncio
@@ -130,4 +132,4 @@ async def test_diagnose_agentic_mimo_error_returns_fallback(mock_config):
         client = LLMClient()
         report = await client.diagnose_agentic("S", "c", "down", execute=execute, narrate=narrate)
     assert report.truncated is True
-    assert "boom" in report.summary or report.summary != ""
+    assert "boom" in report.summary

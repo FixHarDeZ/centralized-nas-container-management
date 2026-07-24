@@ -160,70 +160,71 @@ class LLMClient:
         tokens = 0
         findings: list = []
 
-        try:
-            for _ in range(MAX_ITERS):
+        for _ in range(MAX_ITERS):
+            try:
                 resp = await self.client.chat.completions.create(
                     model=self.model, messages=messages, tools=TOOLS,
                     tool_choice="auto", temperature=0.1, max_tokens=1200,
                 )
-                tokens += resp.usage.total_tokens if resp.usage else 0
-                msg = resp.choices[0].message
-                tool_calls = msg.tool_calls or []
+            except Exception as e:
+                logger.error(f"diagnose_agentic mimo call failed: {e}")
+                return AgenticReport(
+                    summary=f"วิเคราะห์ไม่ได้: {e}",
+                    severity="warning", evidence=[], machine_status="",
+                    fix_options=[], tokens_used=tokens, findings=findings, truncated=True,
+                )
 
-                if not tool_calls:
-                    # model answered without a tool — nudge it to use tools
-                    messages.append({"role": "assistant", "content": msg.content or ""})
-                    messages.append({"role": "user", "content": "กรุณาใช้ tool submit_report เมื่อวินิจฉัยเสร็จ"})
-                    continue
+            tokens += resp.usage.total_tokens if resp.usage else 0
+            msg = resp.choices[0].message
+            tool_calls = msg.tool_calls or []
+
+            if not tool_calls:
+                # model answered without a tool — nudge it to use tools
+                messages.append({"role": "assistant", "content": msg.content or ""})
+                messages.append({"role": "user", "content": "กรุณาใช้ tool submit_report เมื่อวินิจฉัยเสร็จ"})
+                continue
+
+            messages.append({
+                "role": "assistant",
+                "content": msg.content or "",
+                "tool_calls": [
+                    {"id": tc.id, "type": "function",
+                     "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
+                    for tc in tool_calls
+                ],
+            })
+
+            for tc in tool_calls:
+                name = tc.function.name
+                try:
+                    args = json.loads(tc.function.arguments or "{}")
+                except json.JSONDecodeError:
+                    args = {}
+
+                if name == "submit_report":
+                    return parse_report(args, tokens_used=tokens, findings=findings, truncated=False)
+
+                if name == "run_diagnostic":
+                    out = await execute(args.get("cmd", ""))
+                    result = out
+                elif name == "note_finding":
+                    text = args.get("text", "")
+                    findings.append(text)
+                    await narrate(text)
+                    result = "ok"
+                else:
+                    result = f"unknown tool: {name}"
 
                 messages.append({
-                    "role": "assistant",
-                    "content": msg.content or "",
-                    "tool_calls": [
-                        {"id": tc.id, "type": "function",
-                         "function": {"name": tc.function.name, "arguments": tc.function.arguments}}
-                        for tc in tool_calls
-                    ],
+                    "role": "tool", "tool_call_id": tc.id, "content": result[:4000],
                 })
 
-                for tc in tool_calls:
-                    name = tc.function.name
-                    try:
-                        args = json.loads(tc.function.arguments or "{}")
-                    except json.JSONDecodeError:
-                        args = {}
-
-                    if name == "submit_report":
-                        return parse_report(args, tokens_used=tokens, findings=findings, truncated=False)
-
-                    if name == "run_diagnostic":
-                        out = await execute(args.get("cmd", ""))
-                        result = out
-                    elif name == "note_finding":
-                        text = args.get("text", "")
-                        findings.append(text)
-                        await narrate(text)
-                        result = "ok"
-                    else:
-                        result = f"unknown tool: {name}"
-
-                    messages.append({
-                        "role": "tool", "tool_call_id": tc.id, "content": result[:4000],
-                    })
-
-            # cap reached without submit_report
-            return AgenticReport(
-                summary="วิเคราะห์ไม่ครบ — ถึงเพดานรอบการตรวจ",
-                severity="warning", evidence=[], machine_status="",
-                fix_options=[], tokens_used=tokens, findings=findings, truncated=True,
-            )
-        except Exception as e:
-            logger.error(f"diagnose_agentic failed: {e}")
-            return AgenticReport(
-                summary=f"วิเคราะห์ไม่ได้: {e}",
-                severity="warning", evidence=[], machine_status="",
-                fix_options=[], tokens_used=tokens, findings=findings, truncated=True,
-            )
+        # cap reached without submit_report
+        return AgenticReport(
+            summary="วิเคราะห์ไม่ครบ — ถึงเพดานรอบการตรวจ",
+            severity="warning", evidence=[], machine_status="",
+            fix_options=[], tokens_used=tokens, findings=findings, truncated=True,
+        )
 
 
 _llm_client: Optional[LLMClient] = None

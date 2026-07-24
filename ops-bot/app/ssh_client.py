@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import time
 from collections import namedtuple
 from functools import partial
@@ -16,6 +17,11 @@ from app.config import get_config
 logger = logging.getLogger(__name__)
 
 SSHResult = namedtuple("SSHResult", ["stdout", "stderr", "exit_code"])
+
+# Commands come from the LLM now (not fixed dev templates) — this whitelist is
+# the sole security boundary, must reject shell escapes, not just prefixes.
+_SAFE_REDIRECTS = ("2>&1", "2>/dev/null", ">/dev/null")
+_CONTROL_OPERATORS = re.compile(r"&&|\|\||;|\||&")
 
 # READ-ONLY commands only — no restart, no fix, no modifications
 ALLOWED_PREFIXES = [
@@ -45,8 +51,31 @@ class SSHClient:
         self._client: Optional[paramiko.SSHClient] = None
 
     def is_allowed(self, command: str) -> bool:
-        cmd_stripped = command.strip()
-        return any(cmd_stripped.startswith(prefix) for prefix in ALLOWED_PREFIXES)
+        if not command or not command.strip():
+            return False
+        # No command/process substitution — these run arbitrary shell inline
+        if "`" in command or "$(" in command or "${" in command:
+            return False
+        # No embedded newlines — remote login shell would run them as new commands
+        if "\n" in command or "\r" in command:
+            return False
+        # Only the three known-safe diagnostic redirects are permitted; strip
+        # them out, then any remaining > or < means a file write/read redirect
+        cleaned = command
+        for safe in _SAFE_REDIRECTS:
+            cleaned = cleaned.replace(safe, "")
+        if ">" in cleaned or "<" in cleaned:
+            return False
+        # Split on shell control operators — every segment must independently
+        # start with an allowed prefix (chaining two allowed reads is fine;
+        # chaining an allowed prefix with anything else is the attack)
+        for segment in _CONTROL_OPERATORS.split(cleaned):
+            segment = segment.strip()
+            if not segment:
+                continue
+            if not any(segment.startswith(prefix) for prefix in ALLOWED_PREFIXES):
+                return False
+        return True
 
     async def _connect(self) -> paramiko.SSHClient:
         if self._client is not None:

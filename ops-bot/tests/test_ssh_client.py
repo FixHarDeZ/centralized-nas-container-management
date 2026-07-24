@@ -62,6 +62,37 @@ def test_blocked_write_commands():
     assert client.is_allowed("apt install nginx") is False
 
 
+def test_allowed_llm_diagnostic_commands():
+    client = SSHClient()
+    assert client.is_allowed("docker ps -a") is True
+    assert client.is_allowed(
+        "docker ps -a --filter 'name=news-feed' --format 'table {{.Names}}'"
+    ) is True
+    assert client.is_allowed(
+        "docker inspect news-feed --format '{{json .State}}'"
+    ) is True
+    assert client.is_allowed("docker logs --tail 100 news-feed 2>&1") is True
+    assert client.is_allowed("df -h / /volume2 2>/dev/null") is True
+    assert client.is_allowed("free -m") is True
+    assert client.is_allowed("uptime") is True
+    assert client.is_allowed("cat /proc/loadavg") is True
+    assert client.is_allowed("curl -s http://localhost:5064/") is True
+
+
+def test_blocked_shell_escape_commands():
+    client = SSHClient()
+    assert client.is_allowed("docker ps; rm -rf /volume2/docker/x") is False
+    assert client.is_allowed("docker ps && docker restart news-feed") is False
+    assert client.is_allowed("docker ps || reboot") is False
+    assert client.is_allowed("docker logs x | sh") is False
+    assert client.is_allowed("docker ps $(rm -rf /)") is False
+    assert client.is_allowed("docker ps `id`") is False
+    assert client.is_allowed("df -h > /etc/passwd") is False
+    assert client.is_allowed("cat /etc/shadow > /tmp/x") is False
+    assert client.is_allowed("docker ps\nrm -rf /") is False
+    assert client.is_allowed("docker restart news-feed") is False
+
+
 @pytest.mark.asyncio
 async def test_execute_blocked_command(mock_config):
     client = SSHClient()
