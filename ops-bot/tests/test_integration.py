@@ -1,9 +1,8 @@
 """Integration test: simulate full webhook → diagnose → LLM → Telegram flow."""
 from __future__ import annotations
 
-import json
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, patch
 from httpx import AsyncClient, ASGITransport
 
 
@@ -27,87 +26,46 @@ def mock_env(monkeypatch):
 
 @pytest.fixture
 def mock_ssh():
-    """Mock SSH client that returns realistic diagnostic output."""
-    mock = AsyncMock()
-    responses = {
-        "docker ps": type("R", (), {
-            "stdout": "outliner-outline-1   Restarting (137)   2 minutes ago\n",
-            "stderr": "", "exit_code": 0
-        })(),
-        "docker inspect": type("R", (), {
-            "stdout": json.dumps({
-                "OOMKilled": True,
-                "ExitCode": 137,
-                "Running": False,
-                "Restarting": True,
-                "StartedAt": "2026-07-23T07:40:00Z"
-            }),
-            "stderr": "", "exit_code": 0
-        })(),
-        "docker logs": type("R", (), {
-            "stdout": "2026-07-23 07:40:00 Starting Outline Wiki...\n2026-07-23 07:40:05 OOMKilled\n",
-            "stderr": "", "exit_code": 0
-        })(),
-        "df": type("R", (), {
-            "stdout": "Filesystem      Size  Used Avail Use% Mounted on\n/dev/vda1       100G   53G   47G  53% /\n",
-            "stderr": "", "exit_code": 0
-        })(),
-        "free": type("R", (), {
-            "stdout": "              total        used        free      shared  buff/cache   available\nMem:          12900        8200        2100         300        2600        4400\n",
-            "stderr": "", "exit_code": 0
-        })(),
-        "uptime": type("R", (), {
-            "stdout": " 07:41:00 up 30 days,  1:23,  1 user,  load average: 1.37, 0.95, 0.82\n",
-            "stderr": "", "exit_code": 0
-        })(),
-        "curl": type("R", (), {
-            "stdout": "000",
-            "stderr": "curl: (7) Failed to connect to localhost port 3000: Connection refused",
-            "exit_code": 7
-        })(),
-        "docker network": type("R", (), {
-            "stdout": json.dumps({"outliner_default": {"Driver": "bridge"}}),
-            "stderr": "", "exit_code": 0
-        })(),
-        "docker port": type("R", (), {
-            "stdout": "3000/tcp -> 0.0.0.0:3000\n",
-            "stderr": "", "exit_code": 0
-        })(),
-        "compose logs": type("R", (), {
-            "stdout": "outliner-1  | Starting...\noutliner-1  | OOMKilled\n",
-            "stderr": "", "exit_code": 0
-        })(),
-    }
-
-    def side_effect(cmd, **kwargs):
-        # Watchtower returns empty (no recent update)
-        if "watchtower" in cmd:
-            return type("R", (), {"stdout": "", "stderr": "", "exit_code": 1})()
-        for key, resp in responses.items():
-            if key in cmd:
-                return resp
-        return type("R", (), {"stdout": "", "stderr": "", "exit_code": 0})()
-
-    mock.execute_command = AsyncMock(side_effect=side_effect)
+    """Mock SSH client used by the orchestrator's `execute` callback."""
+    ssh_result = type("R", (), {"stdout": "out", "stderr": "", "exit_code": 0})()
+    mock = type("S", (), {"execute_command": AsyncMock(return_value=ssh_result)})()
     return mock
 
 
 @pytest.fixture
 def mock_llm():
-    """Mock LLM client that returns realistic analysis."""
-    from app.llm_client import LLMAnalysis
-    mock = AsyncMock()
-    mock.analyze_diagnostic = AsyncMock(return_value=LLMAnalysis(
-        root_cause="OOM Kill — container ใช้ RAM เกิน 3GB limit (mem_limit: 3g)",
+    """Mock LLM client whose diagnose_agentic returns a real AgenticReport,
+    exercising the injected execute/narrate callbacks once."""
+    from app.llm_client import AgenticReport, FixOption
+
+    report = AgenticReport(
+        summary="OOM Kill — container ใช้ RAM เกิน 3GB limit (mem_limit: 3g)",
         severity="critical",
-        suggested_fix="เพิ่ม mem_limit จาก 3g เป็น 5g (เครื่องมี RAM ว่าง ~12.9GB)",
-        fix_commands=[
-            "sed -i 's/mem_limit: 3g/mem_limit: 5g/' ~/outliner/docker-compose.yml",
-            "cd ~/outliner && docker compose up -d outliner"
+        evidence=[{"factor": "OOMKilled", "value": "true"}],
+        machine_status="ปกติ",
+        fix_options=[
+            FixOption(
+                title="เพิ่ม mem_limit",
+                recommended=True,
+                detail="เพิ่ม mem_limit จาก 3g เป็น 5g (เครื่องมี RAM ว่าง ~12.9GB)",
+                commands=[
+                    "sed -i 's/mem_limit: 3g/mem_limit: 5g/' ~/outliner/docker-compose.yml",
+                    "cd ~/outliner && docker compose up -d outliner",
+                ],
+            )
         ],
-        safety_note="⚠️ fix_commands เป็นข้อเสนอแนะเท่านั้น — กรุณา confirm ก่อนรันเสมอ",
         tokens_used=450,
-    ))
+        findings=["เจอ restart-loop"],
+        truncated=False,
+    )
+
+    async def fake_diagnose(service_name, container_name, alert_message, *, execute, narrate):
+        # exercise the injected callbacks like the real agentic loop would
+        await execute("docker ps -a")
+        await narrate("เจอ restart-loop")
+        return report
+
+    mock = type("C", (), {"diagnose_agentic": AsyncMock(side_effect=fake_diagnose)})()
     return mock
 
 
@@ -125,7 +83,7 @@ def mock_telegram():
 
 @pytest.mark.asyncio
 async def test_full_down_alert_flow(mock_env, mock_ssh, mock_llm, mock_telegram):
-    """Simulate: Kuma DOWN → webhook → SSH diagnostics → LLM analysis → Telegram notify."""
+    """Simulate: Kuma DOWN → webhook → agentic diagnosis → LLM report → Telegram notify."""
     import app.config
     app.config._config = None
 
@@ -133,8 +91,8 @@ async def test_full_down_alert_flow(mock_env, mock_ssh, mock_llm, mock_telegram)
     fastapi_app = app.main.app
 
     with (
-        patch("app.diagnostics.get_ssh_client", return_value=mock_ssh),
-        patch("app.watchtower.get_ssh_client", return_value=mock_ssh),
+        patch("app.orchestrator.is_watchtower_update", new_callable=AsyncMock, return_value=False),
+        patch("app.orchestrator.get_ssh_client", return_value=mock_ssh),
         patch("app.orchestrator.get_llm_client", return_value=mock_llm),
         patch("app.orchestrator.get_telegram_bot", return_value=mock_telegram),
         patch("app.webhook.get_telegram_bot", return_value=mock_telegram),
@@ -169,36 +127,27 @@ async def test_full_down_alert_flow(mock_env, mock_ssh, mock_llm, mock_telegram)
             import asyncio
             await asyncio.sleep(0.5)
 
-            # Verify SSH diagnostics were called
-            assert mock_ssh.execute_command.call_count >= 5
-            calls = [str(c) for c in mock_ssh.execute_command.call_args_list]
-            assert any("docker ps" in c for c in calls), "Should run docker ps"
-            assert any("docker inspect" in c for c in calls), "Should run docker inspect"
-            assert any("docker logs" in c for c in calls), "Should run docker logs"
-            assert any("df" in c for c in calls), "Should run df"
-            assert any("free" in c for c in calls), "Should run free"
-
-            # Verify LLM was called with diagnostic results
-            mock_llm.analyze_diagnostic.assert_called_once()
-            llm_args = mock_llm.analyze_diagnostic.call_args
-            assert llm_args[0][0] == "Outline Wiki"  # service_name
-            assert isinstance(llm_args[0][1], dict)  # diagnostic_results
+            # Verify the agentic loop was invoked with the diagnostic callbacks
+            mock_llm.diagnose_agentic.assert_called_once()
+            call_args = mock_llm.diagnose_agentic.call_args
+            assert call_args.args[0] == "Outline Wiki"  # service_name
+            assert call_args.args[1] == "outliner-outline-1"  # container_name
+            assert mock_ssh.execute_command.call_count >= 1  # execute callback exercised
 
             # Verify Telegram notification was sent
             mock_telegram.send_incident_report.assert_called_once()
             tg_args = mock_telegram.send_incident_report.call_args
             assert tg_args[0][0] == "Outline Wiki"  # service_name
-            analysis = tg_args[0][1]
-            assert "OOM" in analysis.root_cause
-            assert analysis.severity == "critical"
-            assert analysis.safety_note  # safety_note must be present
-            assert len(analysis.fix_commands) > 0
+            report = tg_args[0][1]
+            assert "OOM" in report.summary
+            assert report.severity == "critical"
+            assert len(report.fix_options) > 0
 
             print("\n✅ FULL DOWN FLOW PASSED:")
             print(f"   Webhook → accepted")
-            print(f"   SSH diagnostics → {mock_ssh.execute_command.call_count} commands")
-            print(f"   LLM analysis → {analysis.root_cause}")
-            print(f"   Telegram → sent with safety_note: {analysis.safety_note[:40]}...")
+            print(f"   Agentic diagnosis → invoked with callbacks")
+            print(f"   LLM report → {report.summary}")
+            print(f"   Telegram → sent")
 
 
 @pytest.mark.asyncio
@@ -262,8 +211,8 @@ async def test_debounce_blocks_duplicate(mock_env, mock_ssh, mock_llm, mock_tele
     app.webhook._last_alert = {}
 
     with (
-        patch("app.diagnostics.get_ssh_client", return_value=mock_ssh),
-        patch("app.watchtower.get_ssh_client", return_value=mock_ssh),
+        patch("app.orchestrator.is_watchtower_update", new_callable=AsyncMock, return_value=False),
+        patch("app.orchestrator.get_ssh_client", return_value=mock_ssh),
         patch("app.orchestrator.get_llm_client", return_value=mock_llm),
         patch("app.orchestrator.get_telegram_bot", return_value=mock_telegram),
         patch("app.webhook.get_telegram_bot", return_value=mock_telegram),
@@ -287,7 +236,7 @@ async def test_debounce_blocks_duplicate(mock_env, mock_ssh, mock_llm, mock_tele
             assert resp2.json()["status"] == "debounced"
 
             # Verify only one incident was processed
-            assert mock_llm.analyze_diagnostic.call_count == 1
+            assert mock_llm.diagnose_agentic.call_count == 1
 
             print("\n✅ DEBOUNCE FLOW PASSED:")
             print(f"   1st alert → accepted (processed)")

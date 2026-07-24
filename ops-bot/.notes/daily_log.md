@@ -1,5 +1,17 @@
 # ops-bot Daily Log
 
+## 2026-07-24 (agentic diagnosis)
+
+### Replaced fixed-diagnostic path with agentic tool-use loop
+- `app/llm_client.py`: `LLMClient.diagnose_agentic()` drives an agent loop against mimo (native OpenAI-style function-calling), replacing the old fixed `DIAGNOSTIC_STEPS` sequence + separate `analyze_diagnostic()` pass
+- Three tools exposed to the model: `run_diagnostic(cmd)` (routes through existing `ssh.execute_command`, whitelist unchanged — still read-only), `note_finding(text)` (live Thai-language narration, streamed to Telegram as it happens), `submit_report(...)` (final structured report, called once)
+- Loop capped at `MAX_ITERS = 10`; if the model never calls `submit_report`, returns a truncated/partial `AgenticReport` instead of hanging or erroring
+- New `AgenticReport` / `FixOption` dataclasses hold the structured result: `summary`, `severity`, `evidence`, `machine_status`, `fix_options` — stored as `report_json` on `analyses` (plus back-compat columns `root_cause`/`suggested_fix`/`fix_commands` still populated for old dashboard/Telegram code paths)
+- `app/orchestrator.py` calls `diagnose_agentic(execute=, narrate=)` — `narrate` callback pushes each `note_finding` straight to Telegram so the incident channel shows live progress, not just a final blob
+- Telegram + dashboard render the new structured report (summary/severity/evidence/machine_status/fix_options) instead of the old single root_cause/suggested_fix text
+- Deleted `app/diagnostics.py` (old `run_diagnostics`/`DIAGNOSTIC_STEPS`/`find_compose_file`) and `tests/test_diagnostics.py` — no remaining importers (verified via grep), full suite (31 tests) passes, `import app.main` clean
+- Commits: `refactor(ops-bot): remove fixed-diagnostic module (replaced by agentic loop)`
+
 ## 2026-07-24 (afternoon — verify + fix session)
 
 ### Bugs found via incident pages #4/#5

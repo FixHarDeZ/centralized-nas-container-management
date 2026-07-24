@@ -6,7 +6,6 @@ from typing import Optional
 import httpx
 
 from app.config import get_config
-from app.llm_client import LLMAnalysis
 
 logger = logging.getLogger(__name__)
 
@@ -23,41 +22,30 @@ SEVERITY_THAI = {
 }
 
 
-def format_incident_message(
-    service_name: str,
-    analysis: LLMAnalysis,
-    diagnostic_results: dict[str, str],
-) -> str:
-    severity_emoji = SEVERITY_EMOJI.get(analysis.severity, "⚪")
-    severity_thai = SEVERITY_THAI.get(analysis.severity, analysis.severity)
-
-    # Extract key diagnostic info for summary
-    container_info = diagnostic_results.get("container_status", "")[:300]
-    resources_info = diagnostic_results.get("system_resources", "")[:200]
-
-    msg = (
-        f"🤖 **แจ้งเตือน: {service_name} ล่ม!**\n"
-        f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
-        f"{severity_emoji} ระดับ: {severity_thai}\n\n"
-        f"🔍 **Root Cause:** {analysis.root_cause}\n\n"
-        f"💡 **แนะนำ:** {analysis.suggested_fix}\n\n"
-        f"⚠️ **{analysis.safety_note}**\n\n"
-        f"📊 **ข้อมูล diagnostic:**\n"
-        f"```\n{container_info}\n```"
-    )
-
-    return msg
-
-
-def _build_inline_keyboard(incident_id: int, analysis: LLMAnalysis) -> dict:
-    buttons = []
-
-    buttons.append({
-        "text": "📋 ดู Logs เพิ่มเติม",
-        "callback_data": f"logs:{incident_id}",
-    })
-
-    return {"inline_keyboard": [buttons]}
+def format_report_message(service_name: str, report) -> str:
+    emoji = SEVERITY_EMOJI.get(report.severity, "⚪")
+    thai = SEVERITY_THAI.get(report.severity, report.severity)
+    lines = [
+        f"📋 **ผลการวินิจฉัย — {service_name}**",
+        f"{emoji} ระดับ: {thai}\n",
+        f"**สรุปสาเหตุ:** {report.summary}",
+    ]
+    if report.evidence:
+        rows = "\n".join(f"{e.get('factor','')}: {e.get('value','')}" for e in report.evidence)
+        lines.append(f"\n**ปัจจัย:**\n```\n{rows}\n```")
+    if report.machine_status:
+        lines.append(f"\n**สถานะเครื่อง:** {report.machine_status}")
+    if report.fix_options:
+        lines.append("\n**ขั้นตอนแก้ (รออนุมัติจากคุณ):**")
+        for o in report.fix_options:
+            star = "⭐ " if o.recommended else ""
+            lines.append(f"{star}**{o.title}** — {o.detail}")
+            if o.commands:
+                cmds = "\n".join(o.commands)
+                lines.append(f"```\n{cmds}\n```")
+    if report.truncated:
+        lines.append("\n⚠️ วิเคราะห์ไม่ครบ (ถึงเพดานรอบ)")
+    return "\n".join(lines)
 
 
 class TelegramBot:
@@ -87,15 +75,9 @@ class TelegramBot:
                 return {"ok": False}
             return resp.json()
 
-    async def send_incident_report(
-        self,
-        service_name: str,
-        analysis: LLMAnalysis,
-        diagnostic_results: dict[str, str],
-        incident_id: int,
-    ) -> None:
-        msg = format_incident_message(service_name, analysis, diagnostic_results)
-        keyboard = _build_inline_keyboard(incident_id, analysis)
+    async def send_incident_report(self, service_name: str, report, incident_id: int) -> None:
+        msg = format_report_message(service_name, report)
+        keyboard = {"inline_keyboard": [[{"text": "📋 ดู Logs เพิ่มเติม", "callback_data": f"logs:{incident_id}"}]]}
         await self.send_message(msg, reply_markup=keyboard)
 
     async def send_fix_confirmation(

@@ -5,8 +5,8 @@ import json
 import logging
 
 from app.db import get_db
-from app.diagnostics import run_diagnostics
 from app.llm_client import get_llm_client
+from app.ssh_client import get_ssh_client
 from app.telegram_bot import get_telegram_bot
 from app.watchtower import is_watchtower_update
 
@@ -39,35 +39,56 @@ async def handle_incident(
         logger.info(f"Incident {incident_id}: watchtower update detected, skipping alert")
         return incident_id
 
-    # Run diagnostics
-    logger.info(f"Incident {incident_id}: running diagnostics for {container_name}")
-    diagnostic_results = await run_diagnostics(container_name)
+    ssh = get_ssh_client()
+    tg = get_telegram_bot()
+    await tg.send_message(f"🔧 กำลังตรวจสอบ {service_name} แบบ read-only...")
 
-    # Save diagnostics to DB
-    for step_name, output in diagnostic_results.items():
+    async def execute(cmd: str) -> str:
+        res = await ssh.execute_command(cmd)
+        output = res.stdout
+        if res.stderr:
+            output += f"\n[stderr] {res.stderr}"
         await db.execute(
             "INSERT INTO diagnostics (incident_id, step_name, raw_output) VALUES (?, ?, ?)",
-            (incident_id, step_name, output),
+            (incident_id, cmd, f"$ {cmd}\n{output}"),
         )
-    await db.commit()
+        await db.commit()
+        return output or res.stderr or "(no output)"
 
-    # LLM analysis
-    logger.info(f"Incident {incident_id}: analyzing with LLM")
+    async def narrate(text: str) -> None:
+        await tg.send_message(text)
+
+    logger.info(f"Incident {incident_id}: running agentic diagnosis for {container_name}")
     llm = get_llm_client()
-    analysis = await llm.analyze_diagnostic(service_name, diagnostic_results)
+    report = await llm.diagnose_agentic(
+        service_name, container_name, alert_message, execute=execute, narrate=narrate,
+    )
 
-    # Save analysis to DB
+    recommended = next((o for o in report.fix_options if o.recommended), None)
     await db.execute(
-        "INSERT INTO analyses (incident_id, root_cause, severity, suggested_fix, fix_commands, llm_tokens_used) VALUES (?, ?, ?, ?, ?, ?)",
-        (incident_id, analysis.root_cause, analysis.severity, analysis.suggested_fix, json.dumps(analysis.fix_commands), analysis.tokens_used),
+        "INSERT INTO analyses (incident_id, root_cause, severity, suggested_fix, fix_commands, report_json, llm_tokens_used) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (
+            incident_id, report.summary, report.severity,
+            recommended.detail if recommended else "",
+            json.dumps(recommended.commands if recommended else []),
+            json.dumps({
+                "summary": report.summary, "severity": report.severity,
+                "evidence": report.evidence, "machine_status": report.machine_status,
+                "fix_options": [
+                    {"title": o.title, "recommended": o.recommended, "detail": o.detail, "commands": o.commands}
+                    for o in report.fix_options
+                ],
+                "findings": report.findings,
+                "truncated": report.truncated,
+            }, ensure_ascii=False),
+            report.tokens_used,
+        ),
     )
     await db.commit()
 
-    # Send Telegram notification
-    logger.info(f"Incident {incident_id}: sending Telegram notification")
-    tg = get_telegram_bot()
-    await tg.send_incident_report(service_name, analysis, diagnostic_results, incident_id)
-
+    logger.info(f"Incident {incident_id}: sending Telegram report")
+    await tg.send_incident_report(service_name, report, incident_id)
     return incident_id
 
 
