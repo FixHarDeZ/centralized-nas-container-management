@@ -4,7 +4,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-import re
 import time
 from collections import namedtuple
 from functools import partial
@@ -21,7 +20,44 @@ SSHResult = namedtuple("SSHResult", ["stdout", "stderr", "exit_code"])
 # Commands come from the LLM now (not fixed dev templates) — this whitelist is
 # the sole security boundary, must reject shell escapes, not just prefixes.
 _SAFE_REDIRECTS = ("2>&1", "2>/dev/null", ">/dev/null")
-_CONTROL_OPERATORS = re.compile(r"&&|\|\||;|\||&")
+
+
+def _split_shell_segments(command: str) -> list:
+    """Split on shell control operators (; | || && &) that are OUTSIDE quotes.
+    A regex split would break on operators inside a quoted argument such as
+    grep -i "error\\|warn" — the `|` there is data, not a pipe."""
+    segments = []
+    buf = []
+    quote = None
+    i = 0
+    n = len(command)
+    while i < n:
+        c = command[i]
+        if quote:
+            buf.append(c)
+            if c == quote:
+                quote = None
+            i += 1
+            continue
+        if c in ("'", '"'):
+            quote = c
+            buf.append(c)
+            i += 1
+            continue
+        if command[i:i + 2] in ("&&", "||"):
+            segments.append("".join(buf))
+            buf = []
+            i += 2
+            continue
+        if c in (";", "|", "&"):
+            segments.append("".join(buf))
+            buf = []
+            i += 1
+            continue
+        buf.append(c)
+        i += 1
+    segments.append("".join(buf))
+    return segments
 
 # READ-ONLY commands only — no restart, no fix, no modifications
 ALLOWED_PREFIXES = [
@@ -43,6 +79,22 @@ ALLOWED_PREFIXES = [
     "cat /proc/cpuinfo",
     "hostname",
     "uname",
+    # read-only inspectors the agent needs to diagnose real incidents
+    "docker top",
+    "docker network ls",
+    "docker stats --no-stream",
+    "docker compose ls",
+    "ls ",
+    "cat ",
+    # read-only pipe filters — a segment after `|` must be one of these
+    "grep ",
+    "tail ",
+    "head ",
+    "wc ",
+    "sort",
+    "uniq",
+    "jq ",
+    "python3 -m json.tool",
 ]
 
 
@@ -71,7 +123,7 @@ class SSHClient:
         # Split on shell control operators — every segment must independently
         # start with an allowed prefix (chaining two allowed reads is fine;
         # chaining an allowed prefix with anything else is the attack)
-        for segment in _CONTROL_OPERATORS.split(cleaned):
+        for segment in _split_shell_segments(cleaned):
             segment = segment.strip()
             if not segment:
                 continue

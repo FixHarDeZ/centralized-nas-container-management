@@ -79,6 +79,36 @@ def test_allowed_llm_diagnostic_commands():
     assert client.is_allowed("curl -s http://localhost:5064/") is True
 
 
+def test_allowed_readonly_pipes_and_inspectors():
+    # middle-path whitelist: read-only pipe filters + inspectors the agent uses.
+    client = SSHClient()
+    assert client.is_allowed("docker logs homepage 2>&1 | grep -i error") is True
+    assert client.is_allowed(
+        "docker inspect homepage --format '{{json .State}}' 2>&1 | python3 -m json.tool"
+    ) is True
+    # pipe with a `|` INSIDE the grep pattern (quoted) must not mis-split
+    assert client.is_allowed(
+        'docker logs homepage-nginx 2>&1 | grep -i "error\\|warn\\|fail" | tail -30'
+    ) is True
+    assert client.is_allowed("ls -la /volume2/docker/homepage/config/") is True
+    assert client.is_allowed("cat /volume2/docker/homepage/nginx/nginx.conf") is True
+    assert client.is_allowed("docker network ls") is True
+    assert client.is_allowed("docker top homepage") is True
+
+
+def test_blocked_even_with_readonly_filters():
+    # exec runs arbitrary code in a container — still blocked despite new filters
+    client = SSHClient()
+    assert client.is_allowed("docker exec homepage curl http://x") is False
+    # piping an allowed read into a shell/non-whitelisted command is still blocked
+    assert client.is_allowed("docker logs x | sh") is False
+    assert client.is_allowed("docker ps | bash -c 'rm -rf /'") is False
+    # grep is allowed, but a write redirect after it is not
+    assert client.is_allowed("grep -rn pass /volume2 > /tmp/out") is False
+    # chaining an allowed read with a mutation is still blocked
+    assert client.is_allowed("docker logs x | grep e; docker restart x") is False
+
+
 def test_allowed_internal_caller_commands():
     # Commands the app itself issues (watchtower check, /status, /logs) must
     # survive the hardened whitelist — unit tests for those callers mock
