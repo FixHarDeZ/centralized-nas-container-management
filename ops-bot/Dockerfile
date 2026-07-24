@@ -1,5 +1,8 @@
 FROM python:3.12-slim
 
+# tzdata: without it TZ=Asia/Bangkok is ignored and SQLite 'localtime' = UTC
+RUN apt-get update && apt-get install -y --no-install-recommends tzdata && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 COPY requirements.txt .

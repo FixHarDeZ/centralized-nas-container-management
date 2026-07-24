@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
 from collections import namedtuple
 from functools import partial
 from typing import Optional
@@ -84,18 +85,38 @@ class SSHClient:
                 exit_code=-1,
             )
 
+        # Synology: non-login SSH PATH lacks /usr/local/bin and docker.sock is
+        # root-only — requires NOPASSWD sudoers entry for /usr/local/bin/docker
+        if command.strip().startswith("docker"):
+            command = "sudo -n /usr/local/bin/" + command.strip()
+
         try:
             client = await self._connect()
-            _, stdout, stderr = await self._run_in_executor(
-                client.exec_command, command, timeout=timeout
+            # Whole exec runs in the executor — recv_exit_status/read are
+            # blocking; on the event loop they freeze the entire app if a
+            # remote command hangs (e.g. docker inspect on a wedged container).
+            return await self._run_in_executor(
+                self._exec_blocking, client, command, timeout
             )
-            exit_code = stdout.channel.recv_exit_status()
-            out = stdout.read().decode("utf-8", errors="replace")
-            err = stderr.read().decode("utf-8", errors="replace")
-            return SSHResult(stdout=out, stderr=err, exit_code=exit_code)
         except Exception as e:
             logger.error(f"SSH command failed: {command} — {e}")
             return SSHResult(stdout="", stderr=str(e), exit_code=-1)
+
+    @staticmethod
+    def _exec_blocking(client: paramiko.SSHClient, command: str, timeout: int) -> SSHResult:
+        _, stdout, stderr = client.exec_command(command, timeout=timeout)
+        # recv_exit_status ignores the channel timeout — enforce a hard
+        # deadline by polling so a hung remote command can't block forever
+        deadline = time.time() + timeout
+        while not stdout.channel.exit_status_ready():
+            if time.time() > deadline:
+                stdout.channel.close()
+                raise TimeoutError(f"SSH command timed out after {timeout}s: {command}")
+            time.sleep(0.2)
+        exit_code = stdout.channel.recv_exit_status()
+        out = stdout.read().decode("utf-8", errors="replace")
+        err = stderr.read().decode("utf-8", errors="replace")
+        return SSHResult(stdout=out, stderr=err, exit_code=exit_code)
 
     async def close(self):
         if self._client:

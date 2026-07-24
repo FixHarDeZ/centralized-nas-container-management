@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     # DB
     db_path: str = "/app/data/ops_bot.db"
 
-    model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
+    model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 
 
 _config: Optional[Settings] = None

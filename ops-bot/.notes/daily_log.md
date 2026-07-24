@@ -1,5 +1,48 @@
 # ops-bot Daily Log
 
+## 2026-07-24 (afternoon — verify + fix session)
+
+### Bugs found via incident pages #4/#5
+- Dashboard incident detail: `SELECT *` returns 8 cols (kuma_event_id at idx 1) but template indexed as 7 → Service=None, Time=0, Watchtower read alert_message. Fixed: named row access (`incident['service_name']`)
+- SSH diagnostics all failed `docker: command not found`: non-login SSH PATH lacks `/usr/local/bin`, and docker.sock is root:root. Fixed: ssh_client rewrites `docker ...` → `sudo -n /usr/local/bin/docker ...` (after whitelist check) + installed `/etc/sudoers.d/ops-bot-docker` NOPASSWD entry on NAS
+- Diagnostics Go templates broken: `.format()` collapsed `{{.Names}}` → `{.Names}`. Fixed: `str.replace("{container}", ...)` instead
+- Event loop freeze: `recv_exit_status`/`read` ran on loop thread — hung `docker inspect` froze whole app (dashboard dead). Fixed: full exec in executor + hard deadline poll on `exit_status_ready`
+- Webhook: `{"invalid": "data"}` returned `test_ok` (both fields default None). Fixed: reject payloads with neither `heartbeat` nor `monitor` key. Also deleted 45 lines dead duplicated code after `return`
+- Timezone still UTC despite `datetime('now','localtime')`: python:3.12-slim lacks tzdata → TZ ignored. Fixed: apt install tzdata in Dockerfile. Rows ≤ #13 remain UTC (cosmetic)
+- Tests: added `tests/conftest.py` — isolate from rendered `.env` (real KUMA secret caused 401s, SSH_PORT=2222 broke defaults) + close global aiosqlite conn (non-daemon thread hung pytest exit). `Settings` got `extra: "ignore"` (HOST_SSH_KEY_PATH in .env tripped pydantic-settings forbid). 46 tests pass
+
+### Real infra incident found + fixed during verify
+- news-feed container wedged 3 weeks (unhealthy): containerd shim alive with zero children — `docker inspect news-feed` hung forever (this is what Kuma's "timeout of 48000ms" DOWN alerts were about, and what froze ops-bot). 12 hung `docker inspect` processes piled up (Kuma + ops-bot)
+- Fix: pkill hung inspects, kill -9 shim → still wedged daemon-side → `synopkg restart ContainerManager` (all containers restarted cleanly) → `docker start news-feed` → healthy
+- E2E verified on incident #13: correct header, real docker output in all diagnostic steps, sensible LLM analysis (7517 tokens), dashboard responsive throughout
+
+## 2026-07-24
+
+### SSH Port + README Update
+- Added `SSH_PORT` to `secrets.manifest.yaml` → maps to `stacks.ops_bot.ssh.port` in vault
+- Updated README to reflect actual architecture:
+  - Key-based auth only (not password as previously documented)
+  - Custom SSH port support (default 22, NAS uses 2222)
+  - Added debounce, dashboard auth, webhook security sections
+  - Added architecture diagram and security notes
+- Vault key needed: `stacks.ops_bot.ssh.port` = `2222`
+- Added `SSH_KEY_PATH` as literal in manifest → `/var/services/homes/fixhardez/.ssh/id_ed25519`
+- Fixed: container start failed because SSH key wasn't mounted (default path `/root/.ssh/id_ed25519` didn't exist on NAS)
+- Fixed: Uptime Kuma test notification 422 error — Kuma sends `{"heartbeat": null, "monitor": null}` for test, Pydantic model now accepts Optional fields
+- Added test case for null heartbeat/monitor (test notification)
+- Fixed: production DOWN alerts returning 422 — switched from Pydantic auto-validation to manual `Request` body parsing with error logging
+- Now logs raw body for debugging when validation fails
+- Fixed: SSH key mount — removed broken `~/.ssh` default fallback, requires `SSH_KEY_PATH` in `.env`
+- Fixed: timezone — changed `CURRENT_TIMESTAMP` → `datetime('now', 'localtime')` in all DB schemas
+- Known issue: `MIMO_BASE_URL` in vault is `/anthropic` (404), should be `/v1`
+- Fixed: Kuma Docker Container monitor sends `hostname: null` and `port: null` — made fields Optional in KumaMonitor model
+- Added test case for null hostname/port
+- Fixed: LLM response markdown-wrapped JSON (````json ... ````) — added regex strip before json.loads
+- Fixed: Telegram 400 error crashes app — now retries without Markdown parse_mode, logs error instead of raising
+- Added SERVICE_CONTAINER_MAP for all known services (News Feed, Homepage, Ink Reader, etc.)
+- Fixed: SSH key mount collision — `SSH_KEY_PATH` env var was overriding pydantic config `ssh_key_path` field, making it point to host path instead of container path (`/app/data/ssh/id_ed25519`)
+- Renamed to `HOST_SSH_KEY_PATH` for docker-compose volume mount, pydantic config uses default `/app/data/ssh/id_ed25519`
+
 ## 2026-07-23
 
 ### Task 3: LLM Client (DONE)

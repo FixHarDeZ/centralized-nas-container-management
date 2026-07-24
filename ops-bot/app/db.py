@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS incidents (
     status TEXT NOT NULL,
     alert_message TEXT,
     is_watchtower_update BOOLEAN DEFAULT FALSE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT (datetime('now', 'localtime'))
 );
 
 CREATE TABLE IF NOT EXISTS diagnostics (
@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS diagnostics (
     incident_id INTEGER REFERENCES incidents(id),
     step_name TEXT NOT NULL,
     raw_output TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT (datetime('now', 'localtime'))
 );
 
 CREATE TABLE IF NOT EXISTS analyses (
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS analyses (
     suggested_fix TEXT,
     fix_commands TEXT,
     llm_tokens_used INTEGER,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT (datetime('now', 'localtime'))
 );
 
 CREATE TABLE IF NOT EXISTS actions (
@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS actions (
     commands_executed TEXT,
     result_output TEXT,
     success BOOLEAN,
-    executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    executed_at TIMESTAMP DEFAULT (datetime('now', 'localtime'))
 );
 """
 

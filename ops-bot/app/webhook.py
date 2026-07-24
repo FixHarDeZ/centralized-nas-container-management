@@ -6,7 +6,7 @@ import logging
 import time
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from app.config import get_config
@@ -27,19 +27,28 @@ class KumaHeartbeat(BaseModel):
 class KumaMonitor(BaseModel):
     name: str
     url: str = ""
-    hostname: str = ""
-    port: str = ""
+    hostname: Optional[str] = ""
+    port: Optional[str] = ""
 
 
 class KumaWebhook(BaseModel):
-    heartbeat: KumaHeartbeat
-    monitor: KumaMonitor
+    heartbeat: Optional[KumaHeartbeat] = None
+    monitor: Optional[KumaMonitor] = None
 
 
 # Map service name to container name (configurable)
 SERVICE_CONTAINER_MAP = {
     "Outline Wiki": "outliner-outline-1",
-    # Add more mappings as needed
+    "News Feed": "news-feed",
+    "Homepage": "homepage",
+    "Ink Reader": "ink-reader",
+    "Maid Tracker": "maid-tracker",
+    "My Secretary": "my-secretary",
+    "Portainer": "portainer",
+    "Torrent Watch": "torrentwatch",
+    "Watchtower": "watchtower",
+    "Hermes Gateway": "hermes-agent",
+    "Ops Bot": "ops-bot",
 }
 
 # Debounce: track last alert time per monitor
@@ -89,12 +98,40 @@ def _record_alert(monitor_name: str) -> None:
 
 @router.post("/webhook/uptime-kuma")
 async def uptime_kuma_webhook(
-    data: KumaWebhook,
+    request: Request,
     background_tasks: BackgroundTasks,
     secret: Optional[str] = Query(None, alias="secret"),
 ):
-    # Verify webhook secret
+    # Verify webhook secret first
     _verify_secret(secret)
+
+    # Parse raw body for debugging
+    raw_body = await request.body()
+    try:
+        import json
+        body = json.loads(raw_body)
+        logger.info(f"Raw webhook body: {json.dumps(body, default=str)[:500]}")
+    except Exception:
+        logger.warning(f"Non-JSON body: {raw_body[:200]}")
+        return {"status": "error", "message": "Invalid JSON"}
+
+    # Parse into model
+    try:
+        data = KumaWebhook.model_validate(body)
+    except Exception as e:
+        logger.error(f"Validation error: {e}")
+        logger.error(f"Body was: {json.dumps(body, default=str)[:1000]}")
+        return {"status": "error", "message": str(e)}
+
+    # Unknown payload shape (no Kuma keys at all)
+    if "heartbeat" not in body and "monitor" not in body:
+        logger.warning(f"Unrecognized webhook payload: {json.dumps(body, default=str)[:200]}")
+        return {"status": "error", "message": "Not an Uptime Kuma payload"}
+
+    # Handle test notification from Uptime Kuma (null heartbeat/monitor)
+    if data.heartbeat is None or data.monitor is None:
+        logger.info("Received test notification from Uptime Kuma")
+        return {"status": "test_ok", "message": "Webhook endpoint is reachable"}
 
     service_name = data.monitor.name
     status = data.heartbeat.status

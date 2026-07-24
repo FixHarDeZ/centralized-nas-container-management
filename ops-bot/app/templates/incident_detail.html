@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Incident #{{ incident[0] }} — ops-bot</title>
+    <title>Incident #{{ incident['id'] }} — ops-bot</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #eee; padding: 20px; }
@@ -24,14 +24,14 @@
 </head>
 <body>
     <a class="back" href="/dashboard">← กลับ</a>
-    <h1>Incident #{{ incident[0] }}</h1>
+    <h1>Incident #{{ incident['id'] }}</h1>
 
     <div class="card">
-        <strong>Service:</strong> {{ incident[1] }}<br>
-        <strong>Container:</strong> {{ incident[2] or '-' }}<br>
-        <strong>Status:</strong> {{ incident[3] }}<br>
-        <strong>Watchtower:</strong> {% if incident[5] %}ใช่{% else %}ไม่{% endif %}<br>
-        <strong>Time:</strong> {{ incident[6] }}
+        <strong>Service:</strong> {{ incident['service_name'] }}<br>
+        <strong>Container:</strong> {{ incident['container_name'] or '-' }}<br>
+        <strong>Status:</strong> {{ incident['status'] }}<br>
+        <strong>Watchtower:</strong> {% if incident['is_watchtower_update'] %}ใช่{% else %}ไม่{% endif %}<br>
+        <strong>Time:</strong> {{ incident['created_at'] }}
     </div>
 
     {% if analysis %}

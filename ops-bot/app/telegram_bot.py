@@ -78,7 +78,13 @@ class TelegramBot:
 
         async with httpx.AsyncClient() as client:
             resp = await client.post(f"{self.base_url}/sendMessage", json=payload)
-            resp.raise_for_status()
+            if resp.status_code != 200:
+                logger.error(f"Telegram send failed ({resp.status_code}), retrying without Markdown")
+                payload.pop("parse_mode", None)
+                resp = await client.post(f"{self.base_url}/sendMessage", json=payload)
+            if resp.status_code != 200:
+                logger.error(f"Telegram send failed again: {resp.status_code} — {resp.text[:200]}")
+                return {"ok": False}
             return resp.json()
 
     async def send_incident_report(

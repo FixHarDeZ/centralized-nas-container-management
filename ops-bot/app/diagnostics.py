@@ -6,6 +6,8 @@ from app.ssh_client import get_ssh_client
 
 logger = logging.getLogger(__name__)
 
+# NOTE: templates use str.replace, not str.format — docker's Go template
+# braces ({{.Names}}) must reach the shell verbatim.
 DIAGNOSTIC_STEPS = [
     {
         "name": "container_status",
@@ -78,7 +80,7 @@ async def run_diagnostics(container_name: str) -> dict[str, str]:
     for step in DIAGNOSTIC_STEPS:
         step_outputs = []
         for cmd_template in step["commands"]:
-            cmd = cmd_template.format(container=container_name)
+            cmd = cmd_template.replace("{container}", container_name)
             result = await ssh.execute_command(cmd)
             output = result.stdout
             if result.stderr:

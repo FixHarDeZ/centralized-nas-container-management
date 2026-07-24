@@ -77,3 +77,25 @@ async def test_execute_blocked_restart(mock_config):
     result = await client.execute_command("docker restart mycontainer")
     assert result.exit_code == -1
     assert "not allowed" in result.stderr.lower()
+
+
+@pytest.mark.asyncio
+async def test_docker_rewritten_to_sudo_full_path(mock_config):
+    client = SSHClient()
+    chan = MagicMock()
+    chan.recv_exit_status.return_value = 0
+    stdout = MagicMock()
+    stdout.channel = chan
+    stdout.read.return_value = b"ok"
+    stderr = MagicMock()
+    stderr.read.return_value = b""
+    ssh = MagicMock()
+    ssh.exec_command.return_value = (MagicMock(), stdout, stderr)
+    with patch.object(client, "_connect", new=AsyncMock(return_value=ssh)):
+        await client.execute_command("docker ps -a")
+        sent = ssh.exec_command.call_args[0][0]
+        assert sent == "sudo -n /usr/local/bin/docker ps -a"
+
+        await client.execute_command("free -m")
+        sent = ssh.exec_command.call_args[0][0]
+        assert sent == "free -m"

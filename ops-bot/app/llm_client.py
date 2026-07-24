@@ -80,8 +80,13 @@ class LLMClient:
         content = response.choices[0].message.content
         tokens_used = response.usage.total_tokens if response.usage else 0
 
+        # Strip markdown code block wrapping if present
+        import re
+        content_clean = re.sub(r"^```(?:json)?\s*\n?", "", content.strip())
+        content_clean = re.sub(r"\n?```\s*$", "", content_clean).strip()
+
         try:
-            data = json.loads(content)
+            data = json.loads(content_clean)
             return LLMAnalysis(
                 root_cause=data["root_cause"],
                 severity=data["severity"],
