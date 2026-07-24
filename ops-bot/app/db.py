@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS analyses (
     severity TEXT,
     suggested_fix TEXT,
     fix_commands TEXT,
+    report_json TEXT,
     llm_tokens_used INTEGER,
     created_at TIMESTAMP DEFAULT (datetime('now', 'localtime'))
 );
