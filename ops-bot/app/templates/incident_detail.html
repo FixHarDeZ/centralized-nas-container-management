@@ -34,13 +34,43 @@
         <strong>Time:</strong> {{ incident['created_at'] }}
     </div>
 
-    {% if analysis %}
+    {% if report %}
+    <h2>ผลการวินิจฉัย</h2>
+    <div class="card">
+        <strong>สรุปสาเหตุ:</strong> {{ report.summary }}<br>
+        <strong>Severity:</strong> <span class="severity-{{ report.severity }}">{{ report.severity }}</span>
+        {% if report.truncated %}<br><em>⚠️ วิเคราะห์ไม่ครบ (ถึงเพดานรอบ)</em>{% endif %}
+    </div>
+    {% if report.evidence %}
+    <div class="card">
+        <strong>ปัจจัย</strong>
+        <table>
+            <tr><th>ปัจจัย</th><th>ค่า</th></tr>
+            {% for e in report.evidence %}
+            <tr><td>{{ e.factor }}</td><td>{{ e.value }}</td></tr>
+            {% endfor %}
+        </table>
+    </div>
+    {% endif %}
+    {% if report.machine_status %}
+    <div class="card"><strong>สถานะเครื่อง:</strong> {{ report.machine_status }}</div>
+    {% endif %}
+    {% if report.fix_options %}
+    <h2>ขั้นตอนแก้ (รออนุมัติ)</h2>
+    {% for o in report.fix_options %}
+    <div class="card">
+        <strong>{% if o.recommended %}⭐ {% endif %}{{ o.title }}</strong><br>
+        {{ o.detail }}
+        {% if o.commands %}<pre>{{ o.commands | join('\n') }}</pre>{% endif %}
+    </div>
+    {% endfor %}
+    {% endif %}
+    {% elif analysis %}
     <h2>ผลวิเคราะห์</h2>
     <div class="card">
         <strong>Root Cause:</strong> {{ analysis[0] }}<br>
         <strong>Severity:</strong> <span class="severity-{{ analysis[1] }}">{{ analysis[1] }}</span><br>
-        <strong>แนะนำ:</strong> {{ analysis[2] }}<br>
-        <strong>LLM Tokens:</strong> {{ analysis[4] }}
+        <strong>แนะนำ:</strong> {{ analysis[2] }}
     </div>
     {% endif %}
 

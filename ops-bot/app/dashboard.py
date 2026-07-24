@@ -43,10 +43,15 @@ async def dashboard_incident(request: Request, incident_id: int):
     diagnostics = await cursor.fetchall()
 
     cursor = await db.execute(
-        "SELECT root_cause, severity, suggested_fix, fix_commands, llm_tokens_used, created_at FROM analyses WHERE incident_id = ?",
+        "SELECT root_cause, severity, suggested_fix, fix_commands, llm_tokens_used, created_at, report_json "
+        "FROM analyses WHERE incident_id = ?",
         (incident_id,),
     )
     analysis = await cursor.fetchone()
+
+    report = None
+    if analysis and analysis[6]:
+        report = json.loads(analysis[6])
 
     cursor = await db.execute(
         "SELECT action_type, commands_executed, result_output, success, executed_at FROM actions WHERE incident_id = ?",
@@ -59,6 +64,7 @@ async def dashboard_incident(request: Request, incident_id: int):
         "incident": incident,
         "diagnostics": diagnostics,
         "analysis": analysis,
+        "report": report,
         "actions": actions,
         "fix_commands": json.loads(analysis[3]) if analysis and analysis[3] else [],
     })
