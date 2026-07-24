@@ -7,10 +7,10 @@ AI-powered incident response bot: receives Uptime Kuma alerts, auto-diagnoses vi
 Single FastAPI container (port 5070→8000) with:
 - Webhook endpoint for Uptime Kuma alerts
 - SSH client (Paramiko) for NAS diagnostics
-- LLM client (OpenAI SDK → mimo-v2.5-pro) for root cause analysis
-- Telegram Bot for notifications + InlineKeyboard fix confirmation
+- LLM client (OpenAI SDK → mimo-v2.5-pro) driving an **agentic diagnosis loop** (native mimo function-calling) — replaced the old fixed `DIAGNOSTIC_STEPS` path (`app/diagnostics.py` removed 2026-07-24)
+- Telegram Bot for notifications + live findings narration + InlineKeyboard fix confirmation
 - SQLite for incident/diagnostic/analysis/action history
-- Web dashboard for viewing past incidents
+- Web dashboard for viewing past incidents (structured report render)
 
 ## Tech Stack
 Python 3.12, FastAPI, Paramiko, OpenAI SDK, python-telegram-bot, aiosqlite, Jinja2, uvicorn
@@ -19,7 +19,10 @@ Python 3.12, FastAPI, Paramiko, OpenAI SDK, python-telegram-bot, aiosqlite, Jinj
 - `get_config() -> Settings` (pydantic-settings, env from .env)
 - `init_db() -> None`, `get_db() -> aiosqlite.Connection`
 - `SSHClient.execute_command(command) -> SSHResult` (with command whitelist)
-- `LLMClient.analyze_diagnostic(service_name, diagnostic_results) -> LLMAnalysis`
+- `LLMClient.diagnose_agentic(service_name, execute, narrate) -> AgenticReport` — agent tool-use loop (mimo native function-calling), `MAX_ITERS = 10` cap, replaces old `analyze_diagnostic`/`LLMAnalysis`
+  - Tools: `run_diagnostic(cmd)` (via `execute` → `ssh.execute_command`, whitelist enforced, read-only), `note_finding(text)` (→ `narrate` callback, live Telegram narration), `submit_report(...)` (final structured report, called once)
+  - `AgenticReport` / `FixOption` dataclasses: `summary`, `severity`, `evidence`, `machine_status`, `fix_options` — stored as `analyses.report_json` (JSON), back-compat `root_cause`/`suggested_fix`/`fix_commands` columns still populated
+  - If cap reached without `submit_report`: returns truncated/partial report instead of hanging
 - `is_watchtower_update(container_name) -> bool`
 - `handle_incident(service_name, container_name, status, alert_message) -> int`
 - `execute_fix(incident_id, action_type) -> tuple[bool, str]`
@@ -39,6 +42,7 @@ Python 3.12, FastAPI, Paramiko, OpenAI SDK, python-telegram-bot, aiosqlite, Jinj
 - [x] Task 8: Webhook + Commands (commit: 327dad8)
 - [x] Task 9: Dashboard (commit: 38b7b20)
 - [x] Task 10: README + Deploy Prep (2026-07-24)
+- [x] Agentic diagnosis: replaced fixed `DIAGNOSTIC_STEPS` with tool-use loop; `app/diagnostics.py` deleted (2026-07-24, commit: ef5da19)
 
 ## Deployment Fixes (2026-07-24)
 - SSH key mount: `HOST_SSH_KEY_PATH` env var for volume mount, pydantic uses default `/app/data/ssh/id_ed25519`
