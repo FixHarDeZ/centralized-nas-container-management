@@ -31,3 +31,29 @@ async def test_analyses_has_report_json_column(monkeypatch, tmp_path):
     db = await app.db.get_db()
     cols = [r[1] for r in await (await db.execute("PRAGMA table_info(analyses)")).fetchall()]
     assert "report_json" in cols
+
+
+@pytest.mark.asyncio
+async def test_migrate_adds_report_json_to_legacy_analyses(monkeypatch, tmp_path):
+    """A DB created before report_json existed must gain the column on init."""
+    import aiosqlite, app.config, app.db
+    dbfile = tmp_path / "legacy.db"
+    # Build a legacy analyses table WITHOUT report_json
+    conn = await aiosqlite.connect(str(dbfile))
+    await conn.execute(
+        "CREATE TABLE analyses (id INTEGER PRIMARY KEY, incident_id INTEGER, "
+        "root_cause TEXT, severity TEXT, suggested_fix TEXT, fix_commands TEXT, "
+        "llm_tokens_used INTEGER)"
+    )
+    await conn.commit()
+    await conn.close()
+
+    monkeypatch.setenv("DB_PATH", str(dbfile))
+    app.config._config = None
+    app.db._db = None
+    await app.db.init_db()
+    db = await app.db.get_db()
+    cols = [r[1] for r in await (await db.execute("PRAGMA table_info(analyses)")).fetchall()]
+    assert "report_json" in cols
+    await app.db.close_db()
+    app.config._config = None

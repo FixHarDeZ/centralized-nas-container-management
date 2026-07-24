@@ -58,7 +58,18 @@ async def init_db() -> None:
     _db = await aiosqlite.connect(cfg.db_path)
     _db.row_factory = aiosqlite.Row
     await _db.executescript(SCHEMA)
+    await _migrate(_db)
     await _db.commit()
+
+
+async def _migrate(db: aiosqlite.Connection) -> None:
+    """CREATE TABLE IF NOT EXISTS never adds columns to a table that predates
+    a schema change — an existing deployment keeps the old columns. Add
+    columns introduced after first deploy here, idempotently."""
+    cursor = await db.execute("PRAGMA table_info(analyses)")
+    cols = [row[1] for row in await cursor.fetchall()]
+    if "report_json" not in cols:
+        await db.execute("ALTER TABLE analyses ADD COLUMN report_json TEXT")
 
 
 async def get_db() -> aiosqlite.Connection:
