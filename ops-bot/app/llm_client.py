@@ -1,8 +1,10 @@
 # ops-bot/app/llm_client.py
+from __future__ import annotations
+
 import json
 import logging
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Awaitable, Callable, Optional
 
 from openai import AsyncOpenAI
 
@@ -10,43 +12,134 @@ from app.config import get_config
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """คุณเป็น AI ops engineer ที่เชี่ยวชาญ Docker container diagnostics บน Synology NAS
+MAX_ITERS = 10
 
-═══════════════════════════════════════════
-🔒 โหมด READ-ONLY เท่านั้น — ห้ามทำอะไรนอกจากวิเคราะห์
-═══════════════════════════════════════════
+SYSTEM_PROMPT = """คุณเป็น AI ops engineer เชี่ยวชาญ Docker diagnostics บน Synology NAS
 
-คุณอยู่ในโหมด READ-ONLY เท่านั้น:
-- ✅ อนุญาต: วิเคราะห์ข้อมูล, หา root cause, เสนอแนะ
-- ❌ ห้าม: restart container, เปลี่ยน config, ลบไฟล์, รันคำสั่งแก้ไข
-- ❌ ห้าม: แนะนำคำสั่งที่เป็นอันตราย (rm, drop, truncate, kill)
-- ⚠️ fix_commands เป็น "ข้อเสนอแนะ" เท่านั้น — user ต้อง confirm ก่อนเสมอ
+โหมด READ-ONLY เท่านั้น — ห้าม restart/แก้ config/ลบ. วินิจฉัยด้วยการเรียก tool:
 
-เมื่อได้รับผล diagnostic ให้วิเคราะห์ root cause และตอบเป็น JSON format เท่านั้น:
+- run_diagnostic(cmd): รันคำสั่ง read-only (docker ps/inspect/logs, df, free, uptime, curl ฯลฯ). ระบบมี whitelist กัน — ถ้าคำสั่งถูก block ให้เปลี่ยนไปใช้คำสั่งอื่น
+- note_finding(text): เมื่อเจอเบาะแสสำคัญ ให้เรียกด้วยข้อความไทยสั้นๆ ก่อนตรวจต่อ (เช่น "เจอแล้ว — restart-loop exit 137")
+- submit_report(...): เมื่อวินิจฉัยเสร็จ เรียกครั้งเดียวเพื่อส่งรายงานสรุป
 
-{
-  "root_cause": "คำอธิบายสาเหตุเป็นภาษาไทย",
-  "severity": "critical หรือ warning หรือ info",
-  "suggested_fix": "คำแนะนำการแก้ไขเป็นภาษาไทย (เน้นว่าต้อง confirm ก่อน)",
-  "fix_commands": ["คำสั่งที่แนะนำ — user ต้อง confirm ก่อนรัน"],
-  "safety_note": "คำเตือนด้านความปลอดภัยก่อนรัน fix_commands"
-}
+ขั้นตอน: ดู container ที่เกี่ยวข้อง → ดู log/inspect หาสาเหตุ → เช็คทรัพยากรเครื่อง → สรุป.
+fix_options เป็นข้อเสนอเท่านั้น (ผู้ใช้ต้อง confirm เอง). ทุกข้อความเป็นภาษาไทย."""
 
-กฎสำคัญ:
-- ตอบเป็น JSON เท่านั้น ห้ามมีข้อความอื่น
-- fix_commands เป็น "ข้อเสนอแนะ" เท่านั้น ไม่ใช่คำสั่งที่จะรันอัตโนมัติ
-- ห้ามแนะนำคำสั่งที่ทำลายข้อมูล (rm -rf, DROP TABLE, etc.)
-- ทุกข้อความต้องเป็นภาษาไทย
-- severity: critical = บริการล่ม, warning = ทำงานผิดปกติ, info = ข้อมูลทั่วไป
-- safety_note: ต้องมีเสมอ เตือน user ว่า fix_commands ต้อง confirm ก่อน"""
+TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "run_diagnostic",
+            "description": "รันคำสั่ง diagnostic แบบ read-only บน NAS ผ่าน SSH",
+            "parameters": {
+                "type": "object",
+                "properties": {"cmd": {"type": "string", "description": "คำสั่ง shell read-only"}},
+                "required": ["cmd"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "note_finding",
+            "description": "แจ้งเบาะแสสำคัญที่เจอ ให้ผู้ใช้เห็นแบบ real-time",
+            "parameters": {
+                "type": "object",
+                "properties": {"text": {"type": "string", "description": "ข้อความไทยสั้นๆ"}},
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "submit_report",
+            "description": "ส่งรายงานวินิจฉัยฉบับสมบูรณ์ (เรียกครั้งเดียวตอนจบ)",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "summary": {"type": "string"},
+                    "severity": {"type": "string", "enum": ["critical", "warning", "info"]},
+                    "evidence": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {"factor": {"type": "string"}, "value": {"type": "string"}},
+                            "required": ["factor", "value"],
+                        },
+                    },
+                    "machine_status": {"type": "string"},
+                    "fix_options": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "title": {"type": "string"},
+                                "recommended": {"type": "boolean"},
+                                "detail": {"type": "string"},
+                                "commands": {"type": "array", "items": {"type": "string"}},
+                            },
+                            "required": ["title", "detail"],
+                        },
+                    },
+                },
+                "required": ["summary", "severity"],
+            },
+        },
+    },
+]
 
 
+@dataclass
+class FixOption:
+    title: str
+    recommended: bool
+    detail: str
+    commands: list
+
+
+@dataclass
+class AgenticReport:
+    summary: str
+    severity: str
+    evidence: list
+    machine_status: str
+    fix_options: list
+    tokens_used: int
+    findings: list = field(default_factory=list)
+    truncated: bool = False
+
+
+def parse_report(args: dict, *, tokens_used: int, findings: list, truncated: bool) -> AgenticReport:
+    fix_options = [
+        FixOption(
+            title=o.get("title", ""),
+            recommended=bool(o.get("recommended", False)),
+            detail=o.get("detail", ""),
+            commands=o.get("commands", []) or [],
+        )
+        for o in (args.get("fix_options") or [])
+    ]
+    return AgenticReport(
+        summary=args.get("summary", ""),
+        severity=args.get("severity", "warning"),
+        evidence=args.get("evidence") or [],
+        machine_status=args.get("machine_status", ""),
+        fix_options=fix_options,
+        tokens_used=tokens_used,
+        findings=findings,
+        truncated=truncated,
+    )
+
+
+# transitional: telegram_bot.py still imports this until Task 5 removes it.
+# Keeping it keeps the module import chain intact between tasks. Delete in Task 5.
 @dataclass
 class LLMAnalysis:
     root_cause: str
     severity: str
     suggested_fix: str
-    fix_commands: list[str]
+    fix_commands: list
     safety_note: str
     tokens_used: int
 
@@ -60,51 +153,7 @@ class LLMClient:
         )
         self.model = cfg.mimo_model
 
-    async def analyze_diagnostic(
-        self, service_name: str, diagnostic_results: dict[str, str]
-    ) -> LLMAnalysis:
-        user_msg = f"## บริการ: {service_name}\n\n"
-        for step_name, output in diagnostic_results.items():
-            user_msg += f"### {step_name}\n```\n{output}\n```\n\n"
-
-        response = await self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_msg},
-            ],
-            temperature=0.1,
-            max_tokens=1000,
-        )
-
-        content = response.choices[0].message.content
-        tokens_used = response.usage.total_tokens if response.usage else 0
-
-        # Strip markdown code block wrapping if present
-        import re
-        content_clean = re.sub(r"^```(?:json)?\s*\n?", "", content.strip())
-        content_clean = re.sub(r"\n?```\s*$", "", content_clean).strip()
-
-        try:
-            data = json.loads(content_clean)
-            return LLMAnalysis(
-                root_cause=data["root_cause"],
-                severity=data["severity"],
-                suggested_fix=data["suggested_fix"],
-                fix_commands=data["fix_commands"],
-                safety_note=data.get("safety_note", "⚠️ กรุณา confirm ก่อนรัน fix_commands เสมอ"),
-                tokens_used=tokens_used,
-            )
-        except (json.JSONDecodeError, KeyError) as e:
-            logger.error(f"Failed to parse LLM response: {content} — {e}")
-            return LLMAnalysis(
-                root_cause=f"ไม่สามารถวิเคราะห์ได้: {content[:200]}",
-                severity="warning",
-                suggested_fix="กรุณาตรวจสอบ manual",
-                fix_commands=[],
-                safety_note="⚠️ กรุณาตรวจสอบ manual ก่อนทำอะไร",
-                tokens_used=tokens_used,
-            )
+    # ponytail: body filled in Task 3 (agentic tool-call loop). Placeholder keeps module importable.
 
 
 _llm_client: Optional[LLMClient] = None
