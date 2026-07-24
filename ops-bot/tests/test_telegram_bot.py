@@ -2,8 +2,7 @@
 import pytest
 from unittest.mock import AsyncMock, patch
 
-from app.telegram_bot import TelegramBot, format_incident_message
-from app.llm_client import LLMAnalysis
+from app.telegram_bot import TelegramBot
 
 
 @pytest.fixture
@@ -17,23 +16,20 @@ def mock_config(monkeypatch):
     app.config._config = None
 
 
-def test_format_incident_message():
-    analysis = LLMAnalysis(
-        root_cause="OOM Kill — container ใช้ RAM เกิน 3GB limit",
-        severity="critical",
-        suggested_fix="เพิ่ม mem_limit จาก 3g เป็น 5g",
-        fix_commands=["sed -i 's/3g/5g/' docker-compose.yml"],
-        safety_note="⚠️ กรุณา confirm ก่อนรัน",
-        tokens_used=500,
+def test_format_report_message_has_sections():
+    from app.llm_client import AgenticReport, FixOption
+    from app.telegram_bot import format_report_message
+    report = AgenticReport(
+        summary="OOM Kill", severity="critical",
+        evidence=[{"factor": "OOMKilled", "value": "true"}, {"factor": "Exit", "value": "137"}],
+        machine_status="เครื่องปกติ — disk 53%",
+        fix_options=[FixOption(title="เพิ่ม mem_limit", recommended=True, detail="3g→5g", commands=["docker compose up -d"])],
+        tokens_used=300,
     )
-    diagnostic_results = {
-        "container_status": "$ docker ps\noutliner-outline-1 Restarting",
-        "system_resources": "$ free -m\nMem: 12900",
-    }
-
-    msg = format_incident_message("Outline Wiki", analysis, diagnostic_results)
-
-    assert "Outline Wiki" in msg
-    assert "OOM" in msg
-    assert "critical" in msg.lower() or "วิกฤต" in msg
-    assert "mem_limit" in msg
+    msg = format_report_message("Outline Wiki", report)
+    assert "OOM Kill" in msg
+    assert "OOMKilled" in msg and "137" in msg      # evidence table
+    assert "เครื่องปกติ" in msg                       # machine_status
+    assert "เพิ่ม mem_limit" in msg                    # fix option
+    assert "⭐" in msg                                 # recommended marker
+    assert "docker compose up -d" in msg              # command

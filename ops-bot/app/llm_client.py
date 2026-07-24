@@ -132,18 +132,6 @@ def parse_report(args: dict, *, tokens_used: int, findings: list, truncated: boo
     )
 
 
-# transitional: telegram_bot.py still imports this until Task 5 removes it.
-# Keeping it keeps the module import chain intact between tasks. Delete in Task 5.
-@dataclass
-class LLMAnalysis:
-    root_cause: str
-    severity: str
-    suggested_fix: str
-    fix_commands: list
-    safety_note: str
-    tokens_used: int
-
-
 class LLMClient:
     def __init__(self):
         cfg = get_config()
