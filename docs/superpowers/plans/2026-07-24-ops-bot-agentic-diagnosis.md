@@ -306,9 +306,24 @@ def parse_report(args: dict, *, tokens_used: int, findings: list, truncated: boo
         findings=findings,
         truncated=truncated,
     )
+
+
+# transitional: telegram_bot.py still imports this until Task 5 removes it.
+# Keeping it keeps the module import chain intact between tasks. Delete in Task 5.
+@dataclass
+class LLMAnalysis:
+    root_cause: str
+    severity: str
+    suggested_fix: str
+    fix_commands: list
+    safety_note: str
+    tokens_used: int
 ```
 
-Delete the old `analyze_diagnostic` method and the old `SYSTEM_PROMPT` (they are removed by the replacement above and Task 3). Keep the `LLMClient.__init__`, `get_llm_client`, and `_llm_client` singleton — Task 3 fills `LLMClient` body.
+**Keep the transitional `LLMAnalysis` dataclass** shown above — `telegram_bot.py` imports it at module level and would break the whole import chain if removed now. It is deleted in Task 5. Delete the old `analyze_diagnostic` method and the old `SYSTEM_PROMPT` (removed by the replacement above and Task 3). Keep `LLMClient.__init__`, `get_llm_client`, and the `_llm_client` singleton — Task 3 fills the `LLMClient` body.
+
+Do NOT delete the old `test_analyze_diagnostic_returns_analysis` / `test_llm_analysis_dataclass` tests by hand — the Step 1 rewrite of `tests/test_llm_client.py` already replaces the whole file, so they are gone. Confirm after Step 3 that the app still imports:
+`cd ops-bot && python3 -c "import app.main"` → must print nothing and exit 0.
 
 - [ ] **Step 4: Run tests, verify pass**
   Run: `cd ops-bot && python3 -m pytest tests/test_llm_client.py -v`
@@ -782,15 +797,24 @@ Then change `send_incident_report`:
 
 Delete the now-unused `format_incident_message` and `_build_inline_keyboard` functions and the `from app.llm_client import LLMAnalysis` import (replace with nothing — `report` is duck-typed).
 
-- [ ] **Step 4: Run tests, verify pass**
+- [ ] **Step 4: Remove the transitional `LLMAnalysis` shim**
+
+Now that telegram_bot no longer imports it, delete the transitional `LLMAnalysis` dataclass (and its `# transitional:` comment) from `app/llm_client.py`. Confirm zero importers remain and the app still imports:
+
+```bash
+cd ops-bot && grep -rn "LLMAnalysis" app/ tests/    # expect: no matches
+cd ops-bot && python3 -c "import app.main"           # expect: exit 0, no output
+```
+
+- [ ] **Step 5: Run tests, verify pass**
   Run: `cd ops-bot && python3 -m pytest tests/test_telegram_bot.py -v`
   Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add ops-bot/app/telegram_bot.py ops-bot/tests/test_telegram_bot.py
-git commit -m "feat(ops-bot): structured report formatter for Telegram"
+git add ops-bot/app/telegram_bot.py ops-bot/app/llm_client.py ops-bot/tests/test_telegram_bot.py
+git commit -m "feat(ops-bot): structured report formatter for Telegram; drop LLMAnalysis"
 ```
 
 ---
@@ -911,10 +935,10 @@ git commit -m "feat(ops-bot): dashboard renders structured agentic report"
 Run:
 
 ```bash
-cd ops-bot && grep -rn "diagnostics import\|import diagnostics\|run_diagnostics\|find_compose_file" app/ tests/
+cd ops-bot && grep -rn "diagnostics import\|import diagnostics\|run_diagnostics\|find_compose_file\|LLMAnalysis" app/ tests/
 ```
 
-Expected: no matches (orchestrator import removed in Task 4). If any match remains, remove it before deleting.
+Expected: no matches (orchestrator import removed in Task 4; `LLMAnalysis` removed in Task 5). If any match remains, remove it before deleting. Then confirm the app still imports: `cd ops-bot && python3 -c "import app.main"` → exit 0.
 
 - [ ] **Step 2: Delete the module and its test**
 
