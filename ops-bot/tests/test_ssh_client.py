@@ -87,6 +87,9 @@ def test_blocked_shell_escape_commands():
     assert client.is_allowed("docker logs x | sh") is False
     assert client.is_allowed("docker ps $(rm -rf /)") is False
     assert client.is_allowed("docker ps `id`") is False
+    assert client.is_allowed("docker ps ${IFS}reboot") is False
+    assert client.is_allowed("docker ps $'\\x3b reboot'") is False
+    assert client.is_allowed("docker ps $HOME") is False
     assert client.is_allowed("df -h > /etc/passwd") is False
     assert client.is_allowed("cat /etc/shadow > /tmp/x") is False
     assert client.is_allowed("docker ps\nrm -rf /") is False

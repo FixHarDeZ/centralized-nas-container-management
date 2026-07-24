@@ -53,8 +53,10 @@ class SSHClient:
     def is_allowed(self, command: str) -> bool:
         if not command or not command.strip():
             return False
-        # No command/process substitution — these run arbitrary shell inline
-        if "`" in command or "$(" in command or "${" in command:
+        # No command/process substitution or any $-expansion — backticks, $(),
+        # ${}, and ANSI-C $'\x3b' can all inject shell. No legit read-only
+        # diagnostic needs `$` (docker uses {{...}}, paths/URLs are literal).
+        if "`" in command or "$" in command:
             return False
         # No embedded newlines — remote login shell would run them as new commands
         if "\n" in command or "\r" in command:
