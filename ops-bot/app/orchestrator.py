@@ -79,6 +79,7 @@ async def handle_incident(
                     {"title": o.title, "recommended": o.recommended, "detail": o.detail, "commands": o.commands}
                     for o in report.fix_options
                 ],
+                "findings": report.findings,
                 "truncated": report.truncated,
             }, ensure_ascii=False),
             report.tokens_used,
