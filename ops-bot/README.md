@@ -112,9 +112,39 @@ Uptime Kuma → POST /webhook/uptime-kuma
   → SQLite incident record
 ```
 
+## Fix-as-PR
+
+When an incident diagnosis is complete, the bot offers `🔧 เปิด PR` buttons in Telegram for proposed config or source fixes. Tapping a button:
+
+1. Creates a new Git branch from `main`
+2. Commits the suggested file changes
+3. Opens a pull request on GitHub (via REST API)
+4. Sends the PR URL back to Telegram
+
+A human reviews, merges, and deploys with:
+```bash
+make secrets
+./scripts/deploy.sh -s <stack>
+```
+
+**Read-only guarantee:** The bot never executes fixes on the NAS — it only proposes them as PRs. All changes are staged in Git and require human approval before any deployment.
+
+### Vault Configuration
+
+Fix-as-PR requires two GitHub secrets:
+
+- `stacks.ops_bot.github.token` — fine-grained personal access token with scopes:
+  - `contents:write` (commit + branch creation)
+  - `pull_requests:write` (PR creation)
+  - Limited to this repository only
+- `stacks.ops_bot.github.repo` — GitHub repo in format `<owner>/<repo>` (e.g., `FixHarDeZ/centralized-nas-container-management`)
+
+Add these via `make edit-vault`, then `make secrets && ./scripts/deploy.sh -s ops-bot`.
+
 ## Security
 
 - SSH commands are whitelisted (read-only: `docker ps`, `docker logs`, `df`, `free`, etc.)
 - Webhook supports optional secret verification
 - Dashboard behind basic auth
 - Watchtower label disables self-update
+- Fix-as-PR uses GitHub fine-grained PAT with minimal scopes (this repo only)

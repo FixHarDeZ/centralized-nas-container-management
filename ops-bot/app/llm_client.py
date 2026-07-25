@@ -23,7 +23,9 @@ SYSTEM_PROMPT = """คุณเป็น AI ops engineer เชี่ยวช�
 - submit_report(...): เมื่อวินิจฉัยเสร็จ เรียกครั้งเดียวเพื่อส่งรายงานสรุป
 
 ขั้นตอน: ดู container ที่เกี่ยวข้อง → ดู log/inspect หาสาเหตุ → เช็คทรัพยากรเครื่อง → สรุป.
-fix_options เป็นข้อเสนอเท่านั้น (ผู้ใช้ต้อง confirm เอง). ทุกข้อความเป็นภาษาไทย."""
+fix_options เป็นข้อเสนอเท่านั้น (ผู้ใช้ต้อง confirm เอง). ทุกข้อความเป็นภาษาไทย.
+
+เมื่อ fix เป็นการแก้ config/source (เช่น mem_limit, env, compose): ให้ cat ไฟล์สดก่อน แล้วใส่ file_changes ใน fix_option — path เป็น repo-relative (NAS /volume2/docker/<stack>/xxx = repo <stack>/xxx), find = ข้อความเดิมเป๊ะ, replace = ข้อความใหม่. ห้ามใช้ sed/คำสั่ง shell แก้ไฟล์บน NAS (deploy ครั้งหน้าจะ overwrite). fix ที่เป็น runtime อย่างเดียว (เช่น restart) ไม่ต้องมี file_changes."""
 
 TOOLS = [
     {
@@ -78,6 +80,18 @@ TOOLS = [
                                 "recommended": {"type": "boolean"},
                                 "detail": {"type": "string"},
                                 "commands": {"type": "array", "items": {"type": "string"}},
+                                "file_changes": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "path": {"type": "string"},
+                                            "find": {"type": "string"},
+                                            "replace": {"type": "string"},
+                                        },
+                                        "required": ["path", "find", "replace"],
+                                    },
+                                },
                             },
                             "required": ["title", "detail"],
                         },
@@ -96,6 +110,7 @@ class FixOption:
     recommended: bool
     detail: str
     commands: list
+    file_changes: list
 
 
 @dataclass
@@ -117,6 +132,7 @@ def parse_report(args: dict, *, tokens_used: int, findings: list, truncated: boo
             recommended=bool(o.get("recommended", False)),
             detail=o.get("detail", ""),
             commands=o.get("commands", []) or [],
+            file_changes=o.get("file_changes", []) or [],
         )
         for o in (args.get("fix_options") or [])
     ]
