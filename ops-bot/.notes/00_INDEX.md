@@ -81,7 +81,7 @@ Via `secrets.manifest.yaml`:
 
 ## Fix-as-PR Interfaces
 - `create_fix_pr(incident_id, title, file_changes) -> (ok: bool, url_or_err: str)` — GitHub REST API client, creates branch from main, commits file changes, opens PR, returns PR URL or error message
-- `FixOption` dataclass: now includes `file_changes` field (dict of `{path: new_content}` for config/source files)
+- `FixOption` dataclass: now includes `file_changes` field — a **list** of `{path, find, replace}` dicts (repo-relative path, exact string to find, replacement) for config/source fixes; empty for advisory/runtime-only options
 - `build_report_keyboard(report, incident_id)` — builds Telegram InlineKeyboard with:
   - `🔍 Logs` button → `/logs` command (callback: `logs:{incident_id}`)
   - `🔧 เปิด PR` buttons for each FixOption with `file_changes` → (callback: `pr:{incident_id}:{fix_idx}`)
