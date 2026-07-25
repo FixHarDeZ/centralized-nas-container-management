@@ -9,7 +9,7 @@ from app.llm_client import (
 
 
 def test_fixoption_dataclass():
-    f = FixOption(title="เพิ่ม mem_limit", recommended=True, detail="แก้ compose", commands=["docker compose up -d"])
+    f = FixOption(title="เพิ่ม mem_limit", recommended=True, detail="แก้ compose", commands=["docker compose up -d"], file_changes=[])
     assert f.recommended is True
     assert f.commands == ["docker compose up -d"]
 
@@ -45,6 +45,35 @@ def test_parse_report_missing_fields_falls_back():
     assert r.evidence == []
     assert r.fix_options == []
     assert r.truncated is True
+
+
+def test_fixoption_has_file_changes():
+    from app.llm_client import FixOption
+    f = FixOption(
+        title="bump mem", recommended=True, detail="3g→5g",
+        commands=[], file_changes=[{"path": "homepage/docker-compose.yml", "find": "mem_limit: 3g", "replace": "mem_limit: 5g"}],
+    )
+    assert f.file_changes[0]["path"] == "homepage/docker-compose.yml"
+
+
+def test_parse_report_reads_file_changes():
+    from app.llm_client import parse_report
+    args = {
+        "summary": "OOM", "severity": "critical",
+        "fix_options": [{
+            "title": "bump", "recommended": True, "detail": "d", "commands": [],
+            "file_changes": [{"path": "x/y.yml", "find": "a", "replace": "b"}],
+        }],
+    }
+    r = parse_report(args, tokens_used=1, findings=[], truncated=False)
+    assert r.fix_options[0].file_changes == [{"path": "x/y.yml", "find": "a", "replace": "b"}]
+
+
+def test_parse_report_defaults_file_changes_empty():
+    from app.llm_client import parse_report
+    args = {"summary": "s", "severity": "info", "fix_options": [{"title": "t", "detail": "d"}]}
+    r = parse_report(args, tokens_used=0, findings=[], truncated=False)
+    assert r.fix_options[0].file_changes == []
 
 
 def _mk_toolcall(call_id, name, args):

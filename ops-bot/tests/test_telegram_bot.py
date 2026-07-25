@@ -23,7 +23,7 @@ def test_format_report_message_has_sections():
         summary="OOM Kill", severity="critical",
         evidence=[{"factor": "OOMKilled", "value": "true"}, {"factor": "Exit", "value": "137"}],
         machine_status="เครื่องปกติ — disk 53%",
-        fix_options=[FixOption(title="เพิ่ม mem_limit", recommended=True, detail="3g→5g", commands=["docker compose up -d"])],
+        fix_options=[FixOption(title="เพิ่ม mem_limit", recommended=True, detail="3g→5g", commands=["docker compose up -d"], file_changes=[])],
         tokens_used=300,
     )
     msg = format_report_message("Outline Wiki", report)

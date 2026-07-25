@@ -52,6 +52,7 @@ def mock_llm():
                     "sed -i 's/mem_limit: 3g/mem_limit: 5g/' ~/outliner/docker-compose.yml",
                     "cd ~/outliner && docker compose up -d outliner",
                 ],
+                file_changes=[],
             )
         ],
         tokens_used=450,

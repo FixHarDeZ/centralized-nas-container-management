@@ -31,7 +31,7 @@ async def test_handle_incident_runs_agentic_pipeline():
     report = AgenticReport(
         summary="OOM", severity="critical", evidence=[{"factor": "OOMKilled", "value": "true"}],
         machine_status="ปกติ",
-        fix_options=[FixOption(title="เพิ่ม mem", recommended=True, detail="3g→5g", commands=["c"])],
+        fix_options=[FixOption(title="เพิ่ม mem", recommended=True, detail="3g→5g", commands=["c"], file_changes=[])],
         tokens_used=300, findings=["เจอ restart-loop"], truncated=False,
     )
 
