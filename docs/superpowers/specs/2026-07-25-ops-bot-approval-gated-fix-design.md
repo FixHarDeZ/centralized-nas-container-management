@@ -1,144 +1,141 @@
-# ops-bot Approval-Gated Fix Execution — Design Spec (Phase 2)
+# ops-bot Fix-as-PR — Design Spec (Phase 2)
 
 **Date:** 2026-07-25
 **Stack:** `ops-bot/`
 **Status:** Approved design, pending implementation plan
 **Builds on:** Phase 1 agentic diagnosis (`2026-07-24-ops-bot-agentic-diagnosis-design.md`)
 
+> **Supersedes** the earlier execute-on-NAS draft of this spec. The bot does NOT
+> execute fix commands on the NAS. It proposes fixes as **GitHub pull requests**;
+> a human reviews, merges, and deploys. The bot stays read-only on the NAS.
+
 ## Goal
 
-Let the operator execute an incident's suggested fix from Telegram — running the
-LLM's `fix_options[].commands` — but with a human confirming **every write
-command** before it runs. Read-only verification commands auto-run; mutating
-commands pause for explicit approval; catastrophic commands are refused outright.
+Let the operator turn an incident's suggested fix into a reviewable **GitHub PR**
+from Telegram. The bot reads the live config during diagnosis, produces a
+repo-relative source change, opens a PR via the GitHub REST API, and replies with
+the PR URL. The human reviews + merges on GitHub, then deploys with the normal
+`make secrets` / `deploy.sh` flow.
 
-Target UX (from user screenshots): the diagnosis report shows fix options
-("ตัวเลือก 1 ⭐", "ตัวเลือก 2"); tapping one steps through its commands, running
-reads automatically and asking `✅ รัน / ❌ ข้าม / ⛔ ยกเลิก` before each write
-(e.g. edit compose `mem_limit 3g→5g`, then `docker compose up -d`).
+## Why PR-based, not execute-on-NAS
+
+`deploy.sh` tars the git repo over the NAS files, so a fix applied directly on the
+NAS (e.g. `sed -i` on a live `docker-compose.yml`) is **ephemeral** — the next
+deploy reverts it, and the live NAS drifts from git. Persistent config/source
+fixes must go through git. Runtime-only actions (restart) are intentionally out of
+scope — the operator does those manually; they are not a source change.
 
 ## Decisions (from brainstorming)
 
-1. **What can execute:** the LLM's `fix_options[].commands` directly (option C) —
-   full flexibility, but **every write command requires per-command human
-   confirmation**.
-2. **Read vs write:** a command that passes the existing read-only whitelist
-   (`SSHClient.is_allowed`) auto-runs; anything else is a write and must be
-   confirmed. Reuses the Phase-1 hardened whitelist as the read/write classifier.
-3. **Confirmation UX:** sequential, one Telegram prompt per write command, with
-   the command shown and `✅ รัน / ❌ ข้าม / ⛔ ยกเลิกทั้งหมด` buttons. Each
-   command's result is shown before the next is offered.
-4. **Catastrophic deny-list:** irreversible commands are blocked outright — no
-   confirm button offered — as defense-in-depth against LLM hallucination and
-   fat-finger.
-5. **Fix option selection:** one Telegram button per `fix_option`; the operator
-   picks which option to run.
+1. **Fix model:** git-PR only. No command execution on the NAS. Bot remains
+   read-only there (Phase 1 whitelist unchanged).
+2. **Delivery:** a real GitHub PR (not a Telegram patch) — branch + commit(s) +
+   PR via GitHub REST API; human merges + deploys.
+3. **Repo access:** pure GitHub REST API over httpx (existing dep). No local
+   checkout, no `git` binary, no age key in the container.
+4. **New capability:** opening a PR on one repo. Human merge is the gate. No
+   push-to-main, no auto-merge, no auto-deploy.
 
 ## Architecture
 
-### Trigger (`telegram_bot.py`)
+### New secret (add via `adding-vault-secret` skill)
 
-`send_incident_report` keyboard gains one button per `fix_option`:
-- `🔧 ทำตัวเลือก {n}{" ⭐" if recommended}` → `callback_data = "fix:{incident_id}:{option_idx}"`
-- The existing `📋 ดู Logs เพิ่มเติม` button (`logs:{incident_id}`) stays.
+- `stacks.ops_bot.github.token` — fine-grained PAT scoped to this repo only:
+  `contents:write` + `pull_requests:write`. Nothing else.
+- `stacks.ops_bot.github.repo` — `owner/repo`.
 
-### Fix session (`fix_executor.py`, new module)
+Config (`config.py`): `github_token: str = ""`, `github_repo: str = ""`.
+Manifest (`secrets.manifest.yaml`): `GITHUB_TOKEN`, `GITHUB_REPO`.
 
-In-memory session state (mirrors the `_last_alert` debounce dict pattern):
+### Report schema change (`llm_client.py`)
 
-```python
-_fix_sessions: dict[str, dict] = {}   # sid -> {incident_id, container, commands, index}
+`FixOption` gains a `file_changes` field:
+
+```
+file_changes: [{path: str, find: str, replace: str}]
 ```
 
-- `sid` is a short unique id (e.g. `f"{incident_id}-{option_idx}-{short_uuid}"`),
-  kept small enough that `frun:{sid}` fits Telegram's 64-byte callback_data.
-- `start_fix_session(incident_id, option_idx) -> sid | None`: load the incident's
-  `report_json` from `analyses`, take `fix_options[option_idx].commands`, create a
-  session, then drive it to the first stopping point.
-- `step_session(sid)`: advance from `index` through the command list:
-  - **catastrophic** (`is_catastrophic(cmd)`) → send "❌ ปฏิเสธอัตโนมัติ", record an
-    `actions` row (success=False), **abort the whole session**.
-  - **read-only** (`ssh.is_allowed(cmd)`) → `execute_command`, show result, record
-    action, continue.
-  - **write** → send the per-command confirm prompt, store `index`, **pause**
-    (return; wait for a callback).
-  - end of list → send "✅ เสร็จสิ้น", clear session.
-- `run_confirmed(sid)`: `execute_write` the current command, show result, record
-  action, advance (`index += 1`), then `step_session`.
-- `skip_current(sid)`: record a skipped action, advance, `step_session`.
-- `cancel_session(sid)`: clear session, send "⛔ ยกเลิกแล้ว".
+- `path` — repo-relative (e.g. `homepage/docker-compose.yml`).
+- `find` — the exact current substring in that file.
+- `replace` — the new substring.
 
-### Write-execution path (`ssh_client.py`)
+The existing `commands` field stays for display/context but is never executed. A
+fix_option that carries `file_changes` is "PR-able"; one without is advisory only
+(shown as text, no PR button — e.g. "restart the container yourself").
 
-New method `execute_write(command, timeout=30) -> SSHResult`, distinct from the
-read-only `execute_command`:
+`submit_report`'s tool schema adds `file_changes` (array of {path, find, replace},
+all optional) inside each fix_option. `parse_report` maps it onto `FixOption`.
 
-1. `is_catastrophic(command)` → if True, return `SSHResult("", "blocked: catastrophic", -1)` without touching SSH.
-2. sudo-rewrite `docker …` → `sudo -n /usr/local/bin/docker …` (the NOPASSWD
-   sudoers entry already permits any docker subcommand, including `restart` /
-   `compose up`). Non-docker writes (e.g. `sed -i`) run unprivileged as the SSH
-   user `fixhardez`, who owns `/volume2/docker/*` but cannot touch root-owned
-   files — a real privilege boundary.
-3. exec via the existing `_exec_blocking` (executor thread + hard timeout).
+### Diagnosis prompt update (`llm_client.py` SYSTEM_PROMPT)
 
-`execute_write` does **not** call `is_allowed` — that gate is read-only. Its
-guards are the deny-list plus the human confirmation upstream.
+Instruct the model: when a fix is a config/source change, `cat` the live file
+first (read-only, already whitelisted), then express the fix as `file_changes`
+with a **repo-relative** path and an exact find/replace — NOT as a `sed`/shell
+command on the NAS. Give the mapping: NAS `/volume2/docker/<x>/…` ⇄ repo `<x>/…`.
 
-### Deny-list (`fix_executor.py` or `ssh_client.py`)
+### GitHub client (`github_client.py`, new)
 
-`is_catastrophic(command) -> bool` — matches irreversible/destructive patterns,
-blocked regardless of confirmation:
+`create_fix_pr(incident_id: int, title: str, file_changes: list) -> tuple[bool, str]`
+returns `(success, pr_url_or_error_message)`. Pure REST via httpx, base
+`https://api.github.com/repos/{owner}/{repo}`, auth `Authorization: Bearer <token>`:
 
-- `rm -rf` targeting a volume root or `/` or `~` (`/`, `/volume1`, `/volume2`, `~`, `$HOME`)
-- `dd `, `mkfs`, `fdisk`, `parted`, disk format
-- fork bomb `:(){`, `shutdown`, `reboot`, `halt`, `poweroff`, `init 0`, `init 6`
-- writes to devices: `> /dev/`, `of=/dev/`
-- recursive perm/owner on root: `chmod -R 777 /`, `chown -R … /`
-- `docker volume rm`, `docker system prune`, `docker rmi` (image/volume deletion)
-- `truncate`, `mv … /dev/null`, `:> ` device/root clobber
-- command substitution `$(`, backtick, `${` (block obfuscation on the write path too)
+1. GET `/git/ref/heads/{default_branch}` → base sha. (Default branch from GET
+   `/repos/{owner}/{repo}` or config; use `main`.)
+2. POST `/git/refs` → create branch `fix/incident-{id}-{shortslug}` at base sha.
+3. For each change: GET `/contents/{path}?ref={branch}` → current content (base64)
+   + blob sha. Decode, verify `find` is present (else abort with a clear error),
+   apply `find`→`replace`, PUT `/contents/{path}` with the new content, the blob
+   sha, and `branch` → one commit per file.
+4. POST `/pulls` (head=branch, base=default) → PR. Return `html_url`.
 
-Fixes that are allowed (reversible) and only need confirmation: `docker restart`,
-`docker compose up -d`, `docker start/stop`, `sed -i` value edits, `docker exec`.
+Errors (find-not-found, file 404, API 401/403/rate-limit) return
+`(False, <thai message>)` and open no PR (best-effort: a partially-created branch
+is harmless — left for cleanup or reuse).
+
+### Telegram flow (`telegram_bot.py`)
+
+`send_incident_report` keyboard: one button per fix_option **that has
+`file_changes`** — `🔧 เปิด PR: {title}` → `callback_data = "pr:{incident_id}:{idx}"`.
+Options without `file_changes` get no button. The existing
+`📋 ดู Logs เพิ่มเติม` button stays.
 
 ### Callback routing (`commands.py`)
 
-`_handle_callback` (currently handles only `logs:`) gains:
-- `fix:{incident_id}:{option_idx}` → `start_fix_session(...)`
-- `frun:{sid}` → `run_confirmed(sid)`
-- `fskip:{sid}` → `skip_current(sid)`
-- `fcxl:{sid}` → `cancel_session(sid)`
-
-Authorization is unchanged — `_handle_update` already ignores callbacks from any
-chat other than the whitelisted `telegram_chat_id`.
+`_handle_callback` gains `pr:{incident_id}:{idx}`: load the incident's
+`report_json`, take `fix_options[idx]`, call
+`create_fix_pr(incident_id, title=option.title, file_changes=option.file_changes)`,
+reply `✅ เปิด PR แล้ว: {url}` or `❌ {error}`. Authorization is unchanged
+(`_handle_update` already restricts to the whitelisted `telegram_chat_id`).
 
 ### Audit (`db.py` — no schema change)
 
-Every executed command (auto-run read, confirmed write, skipped, or catastrophic
-refusal) writes an `actions` row: `action_type` ("fix_read" | "fix_write" |
-"fix_skipped" | "fix_denied"), `commands_executed`, `result_output`, `success`.
+Each PR attempt writes an `actions` row: `action_type="open_pr"`,
+`commands_executed` = JSON of the file_changes, `result_output` = PR URL or error,
+`success`.
 
 ## Testing
 
-`tests/test_fix_executor.py` (new) + additions to `tests/test_ssh_client.py`:
+`tests/test_github_client.py` (new) + updates to `test_llm_client.py`,
+`test_telegram_bot.py`, `test_commands.py` (or `test_webhook.py` if that's where
+callback tests live):
 
-- `is_catastrophic`: True for `rm -rf /`, `rm -rf /volume2`, `dd if=…`, `mkfs…`,
-  `shutdown`, `docker volume rm x`, `docker system prune`, `$(…)`; False for
-  `docker restart x`, `docker compose up -d`, `sed -i 's/3g/5g/' x`.
-- `execute_write`: catastrophic → `exit_code == -1`, SSH never called (mock);
-  docker command → sudo-rewritten; non-docker command → run as-is.
-- session stepper (mock `execute_command`/`execute_write`/telegram/db):
-  - read-only command auto-runs and advances;
-  - write command pauses and emits a confirm prompt;
-  - catastrophic command mid-list aborts the session;
-  - `run_confirmed` executes via `execute_write`, records an action, advances;
-  - two consecutive writes each require their own confirm.
-- callback routing: `fix:5:0` starts a session; `frun:<sid>` runs; `fcxl:<sid>` aborts.
+- `create_fix_pr` with httpx mocked:
+  - happy path: ref → create-branch → get-contents → put-contents → create-pr →
+    returns `(True, html_url)`; assert the branch/PR calls carry the right sha/branch.
+  - `find` not present in fetched content → `(False, msg)`, no PUT, no PR.
+  - file 404 → `(False, msg)`.
+  - multi-file change → one PUT per file, single PR.
+  - API 401 → `(False, msg)`.
+- `FixOption` parses `file_changes`; `submit_report` schema accepts it;
+  `parse_report` tolerates fix_options with no `file_changes` (advisory).
+- Telegram: a PR button appears only for options with `file_changes`; the callback
+  data is `pr:{id}:{idx}`.
+- callback routing: `pr:5:0` → `create_fix_pr` called with option 0's title +
+  file_changes; an `actions` row is written.
 
 ## Out of scope (YAGNI / later)
 
-- Automatic rollback on failure.
-- Dry-run / diff preview before execution.
-- Triggering fixes from the web dashboard (Telegram only).
-- Persisting fix-session state across container restarts (in-memory; restart
-  mid-fix → operator restarts the fix).
+- Executing anything on the NAS (dropped entirely).
+- Auto-merge, auto-deploy after merge, rollback.
+- Multi-repo, GitHub Actions/CI wiring.
+- Branch cleanup of abandoned fix branches.
