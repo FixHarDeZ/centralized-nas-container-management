@@ -131,3 +131,54 @@
 - Created `app/templates/incident_detail.html` — incident detail with diagnostic cards, analysis, action history
 - Added `from __future__ import annotations` for Python 3.9 compat
 - Commit: `38b7b20 feat(ops-bot): add web dashboard for incident history`
+
+## 2026-07-26 — nginx basic-auth sidecar + DSM reverse proxy diagnosis
+
+**Problem reported:** `https://<NAS_DOMAIN>:15070/dashboard` unreachable while
+`http://192.168.50.200:5070/dashboard` worked.
+
+**Root cause (two defects in one DSM RP entry):**
+1. Hostname typo — entry said `fixhardez.sysnology.me`. DSM generates
+   `if ( $host !~ "(^<hostname>$)" ) { return 404; }` at the top of every RP
+   server block, so every path 404'd with a healthy backend. Proven by curling
+   with the *misspelled* host via `--resolve` → 200.
+2. Frontend port was `15071`, not `15070`. Nothing ever listened on 15070
+   (`rp15070root=000`), so the "root works" observation was the app's own 404
+   on `/` seen over LAN, not proof the proxy worked.
+
+Inspect RP entries from the NAS shell (root-read; `/usr/syno/etc/www/ReverseProxy.json`
+is empty on DSM 7.4):
+`sudo grep -E 'listen |proxy_pass' /etc/nginx/sites-enabled/server.ReverseProxy.conf`
+Fix in the GUI only — DSM regenerates that file. DSM firewall is off
+(`firewall_settings.json` = `status:false`), so WAN reach depends only on the
+router port-forward. LAN has no hairpin NAT, so `<NAS_DOMAIN>:<port>` from
+inside always gives `Connection refused` — only mobile data tests it.
+
+**Blocker found while answering:** the dashboard had *no auth at all* despite
+the README claiming otherwise — compose published 5070 straight to the app, and
+`POST /webhook/uptime-kuma` was world-writable. Exposing it to WAN would have
+published SSH diagnostic output, container names, and LLM fix commands, and let
+anyone forge incidents (SSH runs + LLM spend + Telegram spam).
+
+**Fix shipped:**
+- `nginx/nginx.conf` — nginx:alpine sidecar `ops-bot-nginx`, basic auth on `/`,
+  `location = /webhook/uptime-kuma` exempt (Kuma's webhook notification can't
+  send basic auth; app already verifies `?secret=` in constant time). Same split
+  friendly-reminder uses for its LINE webhook.
+- `nginx/.htpasswd` — apr1, generated from `.env` (`stacks.ops_bot.dashboard.*`,
+  already in the vault/manifest but previously unused by anything).
+- `docker-compose.yml` — app `ports: 5070:8000` → `expose: 8000`; nginx holds
+  `5070:80`; watchtower disabled on the sidecar too.
+
+**Verified on NAS after deploy:** `noauth_dash=401`, `auth_dash=200`,
+`webhook_nosecret=401`, `webhook_secret=200`.
+
+**Not broken by this:** every Uptime Kuma monitor is `type=docker`, none HTTP —
+checked `monitor` table in `/volume2/docker/uptime-kuma/kuma.db`. No homepage
+widget hits 5070 either.
+
+**Left to the user (GUI/router, can't be done over SSH):** fix the RP entry
+hostname + port to `<NAS_DOMAIN>` / `15070`, rebind a cert covering that
+hostname (the existing `ReverseProxy_2979f8fa-…` cert was issued while the
+hostname was misspelled), forward TCP 15070 on the router, then test from mobile
+data. Also update the Kuma webhook URL to include `?secret=…` if it doesn't.

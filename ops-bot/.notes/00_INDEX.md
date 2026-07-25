@@ -4,7 +4,15 @@
 AI-powered incident response bot: receives Uptime Kuma alerts, auto-diagnoses via SSH, analyzes with LLM (mimo-v2.5-pro), notifies Telegram with fix suggestions.
 
 ## Architecture
-Single FastAPI container (port 5070→8000) with:
+Two containers: `ops-bot-nginx` (nginx:alpine) publishes host port 5070→80 and
+reverse-proxies to `ops-bot`, which only `expose`s 8000 and is never published.
+Basic auth (`nginx/.htpasswd`, apr1, from vault `stacks.ops_bot.dashboard.*`) on
+every path **except** `location = /webhook/uptime-kuma` — Uptime Kuma's webhook
+notification cannot send basic auth, so that path is guarded by
+`KUMA_WEBHOOK_SECRET` (`?secret=`, constant-time compare) instead. Keep that
+vault key non-empty: `_verify_secret()` allows everyone when it is blank.
+
+The FastAPI app itself has:
 - Webhook endpoint for Uptime Kuma alerts
 - SSH client (Paramiko) for NAS diagnostics
 - LLM client (OpenAI SDK → mimo-v2.5-pro) driving an **agentic diagnosis loop** (native mimo function-calling) — replaced the old fixed `DIAGNOSTIC_STEPS` path (`app/diagnostics.py` removed 2026-07-24)
@@ -61,6 +69,18 @@ Python 3.12, FastAPI, Paramiko, OpenAI SDK, python-telegram-bot, aiosqlite, Jinj
 - End-to-end: Kuma webhook → SSH diagnostics (real docker output) → LLM analysis → dashboard (incident #13)
 - `MIMO_BASE_URL` fixed to `/v1` in vault
 - Timezone: tzdata added to Dockerfile — SQLite `localtime` now GMT+7 (incidents ≤13 stored in UTC, cosmetic)
+
+## External Access (2026-07-26)
+DSM Control Panel → Login Portal → Advanced → Reverse Proxy: `<NAS_DOMAIN>:15070`
+(HTTPS) → `localhost:5070` (HTTP). DSM firewall is off, so WAN reach needs only
+the router forward for TCP 15070. Gotchas: DSM prepends
+`if ( $host !~ "(^<hostname>$)" ) { return 404; }` to each generated block, so a
+hostname typo 404s every path and `curl https://localhost:15070/...` proves
+nothing — test with `--resolve <NAS_DOMAIN>:15070:127.0.0.1`. LAN has no hairpin
+NAT, so from inside the house the domain always gives `Connection refused`.
+Inventory of live RP entries:
+`sudo grep -E 'listen |proxy_pass' /etc/nginx/sites-enabled/server.ReverseProxy.conf`
+(never hand-edit — DSM regenerates it).
 
 ## Known Gotchas
 - SSH exec has hard timeout (poll `exit_status_ready`, default 30s) — a wedged container's `docker inspect` can hang forever daemon-side; without the timeout it froze the whole event loop (recv_exit_status used to run on loop thread)

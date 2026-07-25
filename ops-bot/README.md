@@ -6,7 +6,8 @@ AI-powered incident response bot. Receives alerts from Uptime Kuma, auto-diagnos
 
 | Component | Role | Port |
 |---|---|---|
-| ops-bot | FastAPI webhook + Telegram bot + dashboard | 5070 |
+| ops-bot | FastAPI webhook + Telegram bot + dashboard | 8000 (internal only) |
+| ops-bot-nginx | Basic-auth reverse proxy | 5070 → 80 |
 
 ## Features
 
@@ -59,16 +60,31 @@ Uses mimo-v2.5-pro via Xiaomi subscription:
 
 ### 4. Dashboard Auth
 
-Basic auth for the web dashboard:
+Basic auth lives in the nginx sidecar, not the app. Credentials come from vault:
 
 - `stacks.ops_bot.dashboard.basic_auth_user` — username
 - `stacks.ops_bot.dashboard.basic_auth_password` — password
 
+`make secrets` renders them into `.env`; `nginx/.htpasswd` is generated from
+there (gitignored, regenerate on a fresh clone):
+
+```bash
+cd ops-bot
+U=$(awk -F= '/^DASHBOARD_BASIC_AUTH_USER=/{print $2}' .env)
+P=$(awk -F= '{if(/^DASHBOARD_BASIC_AUTH_PASSWORD=/){sub(/^[^=]*=/,"");print}}' .env)
+printf '%s:%s\n' "$U" "$(openssl passwd -apr1 "$P")" > nginx/.htpasswd
+chmod 644 nginx/.htpasswd
+```
+
 ### 5. Webhook Security
 
-Optional secret for Uptime Kuma webhook verification:
+`/webhook/uptime-kuma` is the one path nginx leaves open — Uptime Kuma's webhook
+notification can't send basic auth. It is guarded by a shared secret instead:
 
 - `stacks.ops_bot.kuma_webhook_secret` — shared secret (query param `?secret=...`)
+
+Keep this key non-empty. With it unset, `_verify_secret()` allows every caller,
+and the open path lets anyone forge incidents (SSH diagnostics + LLM spend).
 
 ### 6. Deploy
 
@@ -85,8 +101,28 @@ scripts/deploy.sh -s ops-bot
 
 1. Open Uptime Kuma → Settings → Notifications
 2. Add Notification → Webhook
-3. URL: `http://<NAS_IP>:5070/webhook/uptime-kuma`
+3. URL: `http://<NAS_IP>:5070/webhook/uptime-kuma?secret=<KUMA_WEBHOOK_SECRET>`
 4. Method: POST
+
+### 7b. External Access (DSM Reverse Proxy)
+
+Control Panel → Login Portal → Advanced → Reverse Proxy:
+
+| Field | Value |
+|---|---|
+| Source | HTTPS · `<NAS_DOMAIN>` · port `15070` |
+| Destination | HTTP · `localhost` · port `5070` |
+
+Then bind a certificate covering `<NAS_DOMAIN>` in Security → Certificate →
+Configure, and forward TCP `15070` on the router. Verify from the NAS shell —
+`https://localhost:15070` always 404s because DSM's generated block starts with
+`if ($host !~ "^<NAS_DOMAIN>$") { return 404; }`, so pass the real hostname:
+
+```bash
+curl -s --resolve <NAS_DOMAIN>:15070:127.0.0.1 \
+  -u '<user>:<pass>' -o /dev/null -w '%{http_code}\n' \
+  https://<NAS_DOMAIN>:15070/dashboard
+```
 
 ### 8. Service-Container Mapping
 
@@ -144,7 +180,9 @@ Add these via `make edit-vault`, then `make secrets && ./scripts/deploy.sh -s op
 ## Security
 
 - SSH commands are whitelisted (read-only: `docker ps`, `docker logs`, `df`, `free`, etc.)
-- Webhook supports optional secret verification
-- Dashboard behind basic auth
+- Dashboard + everything except the Kuma webhook path is behind nginx basic auth
+  (`nginx/.htpasswd`); the app itself is never published on the host
+- `/webhook/uptime-kuma` is exempt from basic auth and guarded by
+  `KUMA_WEBHOOK_SECRET` (constant-time compare) — required before exposing 5070
 - Watchtower label disables self-update
 - Fix-as-PR uses GitHub fine-grained PAT with minimal scopes (this repo only)

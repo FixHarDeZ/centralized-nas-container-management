@@ -6,11 +6,27 @@ services:
     env_file: .env
     environment:
       - TZ=Asia/Bangkok
-    ports:
-      - "5070:8000"
+    expose:
+      - "8000"
     volumes:
       - ops_bot_data:/app/data
       - ${HOST_SSH_KEY_PATH}:/app/data/ssh/id_ed25519:ro
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+
+  nginx:
+    image: nginx:alpine
+    container_name: ops-bot-nginx
+    restart: unless-stopped
+    ports:
+      - "5070:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/.htpasswd:/etc/nginx/.htpasswd:ro
+    environment:
+      - TZ=Asia/Bangkok
+    depends_on:
+      - ops-bot
     labels:
       - "com.centurylinklabs.watchtower.enable=false"
 
