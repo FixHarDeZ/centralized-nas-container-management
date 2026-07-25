@@ -29,7 +29,7 @@ Upload via `deploy.sh` from your local machine and register the stack in Contain
 | `/data/movies` | `/volume1/Movies` | read-only |
 | `/data/series` | `/volume1/Series` | read-only |
 | `/data/concerts` | `/volume1/Concerts` | read-only |
-| `/data/private` | `/volume1/private_media/porn` | read-only |
+| `/data/private` | `/volume1/private_media/<library>` | read-only |
 | `/config` | `/volume2/docker/jellyfin/config` | read-write |
 | `/cache` | `/volume2/docker/jellyfin/cache` | read-write |
 

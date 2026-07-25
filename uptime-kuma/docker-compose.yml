@@ -10,6 +10,9 @@ services:
     volumes:
       # อ้างอิงตาม Path ในรูปภาพของคุณ
       - ${NAS_VOLUME_ROOT}/docker/uptime-kuma:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    group_add:
+      - "998"  # docker group on Synology
     environment:
       - UPTIME_KUMA_IS_CONTAINER=1
       - TZ=Asia/Bangkok

@@ -167,7 +167,7 @@
         # Media Folders (ตั้งเป็น Read-Only ตามต้นฉบับของคุณ)
         - /volume1/Movies:/data/movies:ro
         - /volume1/Series:/data/series:ro
-        - /volume1/private_media/porn:/data/private:ro
+        - /volume1/private_media/<library>:/data/private:ro
         - /volume1/Concerts:/data/concerts:ro
   ```
 
@@ -180,7 +180,7 @@
         # Media Folders (ตั้งเป็น Read-Only ตามต้นฉบับของคุณ)
         - ${NAS_VOLUME_ROOT}/Movies:/data/movies:ro
         - ${NAS_VOLUME_ROOT}/Series:/data/series:ro
-        - ${NAS_VOLUME_ROOT}/private_media/porn:/data/private:ro
+        - ${NAS_VOLUME_ROOT}/private_media/<library>:/data/private:ro
         - ${NAS_VOLUME_ROOT}/Concerts:/data/concerts:ro
   ```
 

@@ -55,6 +55,11 @@
               label: Last Scrape
               format: string
 
+    - dupe-sweeper:
+        icon: mdi-content-duplicate
+        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15069"
+        description: หา+ลบวิดีโอซ้ำตามรหัส
+
     - Portainer:
         icon: portainer.png
         href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:19000"
