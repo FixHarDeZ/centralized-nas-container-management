@@ -1,5 +1,21 @@
 # ops-bot Daily Log
 
+## 2026-07-25 (fix-as-PR feature)
+
+### Completed fix-as-PR workflow (Tasks 1–5 committed)
+- Agentic report now emits structured `FixOption` objects with optional `file_changes` field (dict of file paths → proposed content for config/source fixes)
+- Telegram report keyboard includes `🔧 เปิด PR` buttons for fixes with file_changes
+- `create_fix_pr(incident_id, title, file_changes)` REST API client (GitHub fine-grained PAT) creates feature branch from main, commits file changes atomically, opens PR, returns URL
+- Callback handler routes `pr:{id}:{idx}` to create_fix_pr, sends result URL back to Telegram
+- DB audit row: `actions(action_type='open_pr', result_output=url)` for each PR opened
+- Read-only constraint unchanged: bot has no SSH execution capability for fixes, stays read-only on NAS
+- Tasks 1–5: Config + DB schema (Task 1), agentic report FixOption (Task 2), create_fix_pr REST impl + tests (Task 3), Telegram buttons (Task 4), callback + audit (Task 5)
+
+### Docs Phase (Task 6, this session)
+- Updated README: added "Fix-as-PR" section explaining the flow, deployment, vault keys
+- Updated `.notes/00_INDEX.md`: added github secrets (GITHUB_TOKEN, GITHUB_REPO) and fix-as-PR interfaces (create_fix_pr signature, FixOption.file_changes, build_report_keyboard, pr: callback, actions audit)
+- Updated root CLAUDE.md ops-bot row: appended "Fix-as-PR: proposes config fixes as GitHub PRs (read-only on NAS)" note
+
 ## 2026-07-24 (agentic diagnosis)
 
 ### Replaced fixed-diagnostic path with agentic tool-use loop
