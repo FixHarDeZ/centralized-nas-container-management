@@ -60,6 +60,11 @@
         href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15069"
         description: หา+ลบวิดีโอซ้ำตามรหัส
 
+    - ops-bot:
+        icon: mdi-robot-love
+        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15070/dashboard"
+        description: AI Incident Response Bot
+
     - Portainer:
         icon: portainer.png
         href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:19000"
