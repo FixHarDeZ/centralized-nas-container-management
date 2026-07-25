@@ -133,6 +133,13 @@ async def _handle_callback(callback_query: dict):
     data = callback_query.get("data", "")
     callback_id = callback_query["id"]
 
+    # Same chat-id whitelist the /command path enforces — a callback (esp. `pr:`,
+    # which writes a branch/PR to the repo) must not run from an unauthorized chat.
+    cfg = get_config()
+    chat_id = str(callback_query.get("message", {}).get("chat", {}).get("id", ""))
+    if chat_id != cfg.telegram_chat_id:
+        return
+
     tg = get_telegram_bot()
     await tg.answer_callback(callback_id, "กำลังดำเนินการ...")
 
@@ -165,7 +172,7 @@ async def _handle_callback(callback_query: dict):
             return
         report = json.loads(row[0])
         options = report.get("fix_options", [])
-        if idx >= len(options):
+        if idx < 0 or idx >= len(options):
             await tg.send_message("❌ ไม่พบ fix option นี้")
             return
         opt = options[idx]
