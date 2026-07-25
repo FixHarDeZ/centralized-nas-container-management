@@ -83,6 +83,8 @@ Inventory of live RP entries:
 (never hand-edit — DSM regenerates it).
 
 ## Known Gotchas
+- nginx `location = /webhook/uptime-kuma` is an **exact** match. Kuma's stored `webhookURL` (in `kuma.db`, `notification.config` JSON) has no trailing slash, so it hits. A trailing slash or any path drift falls through to `location /`, gets basic auth, and 401s **silently** — Kuma just logs a failed notification and incidents stop arriving. Relax to a prefix match if that URL ever changes.
+- `KUMA_WEBHOOK_SECRET` rides in a query param, so it lands in DSM's reverse-proxy access log in cleartext. Rotate it (`sops set` on `stacks.ops_bot.kuma_webhook_secret`, `make secrets`, redeploy) **and** update Kuma's notification config in the same pass, or the webhook 401s. Kuma has no API for this: stop the container, `sqlite3 ... UPDATE notification SET config = replace(...)`, start it.
 - SSH exec has hard timeout (poll `exit_status_ready`, default 30s) — a wedged container's `docker inspect` can hang forever daemon-side; without the timeout it froze the whole event loop (recv_exit_status used to run on loop thread)
 - Diagnostics templates use `str.replace("{container}", ...)`, NOT `.format()` — `.format()` collapsed docker Go templates `{{.Names}}` → `{.Names}`
 - `Settings` needs `extra: "ignore"` — pydantic-settings forbids unknown keys in `.env` (`HOST_SSH_KEY_PATH`) otherwise
