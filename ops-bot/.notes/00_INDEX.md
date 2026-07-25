@@ -78,6 +78,11 @@ the router forward for TCP 15070. Gotchas: DSM prepends
 hostname typo 404s every path and `curl https://localhost:15070/...` proves
 nothing — test with `--resolve <NAS_DOMAIN>:15070:127.0.0.1`. LAN has no hairpin
 NAT, so from inside the house the domain always gives `Connection refused`.
+Status: **live and verified from WAN** (2026-07-26) — the entry originally had
+two defects, a `sysnology` hostname typo and frontend port 15071 instead of
+15070; both fixed in the GUI by the user. Cert is shared with the 15066
+(friendly-reminder) entry. A tile now exists in `homepage/config/services.yaml`
+(no `ping` key — basic auth returns 401, which homepage would render as down).
 Inventory of live RP entries:
 `sudo grep -E 'listen |proxy_pass' /etc/nginx/sites-enabled/server.ReverseProxy.conf`
 (never hand-edit — DSM regenerates it).
