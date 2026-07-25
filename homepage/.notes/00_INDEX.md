@@ -53,6 +53,7 @@ Basic auth ผ่าน nginx:
 
 ## Change Log
 
+- **2026-07-26** — เพิ่ม tile ops-bot (AI Incident Response Bot, port 5070/15070) — href ต้องมี `/dashboard` (app ไม่มี route ที่ `/`), ไม่ใส่ ping/widget เพราะอยู่หลัง basic auth (401 = ขึ้นเป็น down)
 - **2026-07-07** — เพิ่ม ink-reader widget (Doujin Library, port 5068/15068)
 - **2026-06-07** — ลบ glances sidecar ออกจาก stack + widgets.yaml ทั้งหมด
 - **2026-05-24** — ย้ายกลับ basic auth; ลบ Authelia forward-auth + auth_net dependency ทั้งหมด

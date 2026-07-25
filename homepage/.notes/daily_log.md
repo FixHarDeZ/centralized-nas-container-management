@@ -113,3 +113,24 @@
 **Fix ทันที:** `sudo chmod 644 /volume2/docker/homepage/nginx/.htpasswd` + `docker restart homepage-nginx`
 
 **Fix ถาวร:** เพิ่ม chmod loop ใน `scripts/deploy.sh` — หลัง upload ทุกครั้งจะ `chmod 644` ทุก `nginx/.htpasswd` ใน stacks อัตโนมัติ
+
+---
+
+## 2026-07-26 — เพิ่ม tile ops-bot
+
+`homepage/config/services.yaml` — เพิ่มรายการใน group `📥 Downloads & Monitoring` (วางไว้เหนือ Portainer):
+
+```yaml
+- ops-bot:
+    icon: mdi-robot-love
+    href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15070/dashboard"
+    description: AI Incident Response Bot
+```
+
+**ทำไม href ต้องมี `/dashboard`:** app ไม่มี route ที่ `/` — เข้า root แล้ว 404 จริงๆ (ไม่ใช่ bug)
+
+**ทำไมไม่ใส่ `ping` และไม่ใส่ widget:** ops-bot อยู่หลัง nginx basic auth ทุก path (ยกเว้น `/webhook/uptime-kuma`) → ping จะได้ 401 แล้ว homepage แสดงเป็น down สีแดง เหมือนเหตุผลที่ dupe-sweeper กับ friendly-reminder ก็ไม่ใส่ ping
+
+ไม่ต้องเพิ่ม `HOMEPAGE_VAR_*` ใหม่ — ใช้ `DDNS_BASE_HTTPS` ที่มีอยู่แล้ว
+
+**Deploy:** `scripts/deploy.sh -s homepage -y` — verify ด้วย `docker exec homepage grep -A3 ops-bot /app/config/services.yaml` + เช็ค log ไม่มี error
