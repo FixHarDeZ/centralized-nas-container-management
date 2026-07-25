@@ -122,7 +122,7 @@ if ! ssh $SSH_OPTS "${SSH_DEST}" "echo OK" &>/dev/null; then
 fi
 ok "Connection OK"
 
-ALL_STACKS=(secretary news-feed torrentwatch homepage jellyfin maid-tracker portainer uptime-kuma watchtower hermes-agent friendly-reminder ink-reader)
+ALL_STACKS=(secretary news-feed torrentwatch homepage jellyfin maid-tracker portainer uptime-kuma watchtower hermes-agent friendly-reminder ink-reader dupe-sweeper ops-bot)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # UPLOAD

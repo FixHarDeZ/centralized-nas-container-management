@@ -1,0 +1,41 @@
+services:
+  dupe-sweeper:
+    build: .
+    container_name: dupe-sweeper
+    restart: unless-stopped
+    expose:
+      - "8000"
+    env_file: .env
+    environment:
+      - TZ=Asia/Bangkok
+      - DATA_DIR=/data
+      - SCAN_ROOTS=/media/porn
+      - TRASH_DIR=/media/porn/.dupe-sweeper-trash
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/status', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    volumes:
+      - dupe_sweeper_data:/data
+      # media mounted read-write so files can be recycled; same-volume trash
+      # lives at /media/porn/.dupe-sweeper-trash so os.rename stays atomic.
+      - /volume1/private_media/porn:/media/porn
+
+  nginx:
+    image: nginx:alpine
+    container_name: dupe-sweeper-nginx
+    restart: unless-stopped
+    ports:
+      - "5069:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/.htpasswd:/etc/nginx/.htpasswd:ro
+    environment:
+      - TZ=Asia/Bangkok
+    depends_on:
+      - dupe-sweeper
+
+volumes:
+  dupe_sweeper_data:

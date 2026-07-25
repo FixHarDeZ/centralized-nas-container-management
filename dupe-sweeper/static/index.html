@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>dupe-sweeper</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">◑</span>
+      <div>
+        <h1>dupe-sweeper</h1>
+        <p class="sub">Find and recycle duplicate video files by code</p>
+      </div>
+    </div>
+    <button id="theme-toggle" class="icon-btn" title="Toggle theme" aria-label="Toggle theme">🌙</button>
+  </header>
+
+  <main>
+    <section class="panel scan-panel">
+      <div class="field">
+        <label for="root">Scan root</label>
+        <select id="root"></select>
+      </div>
+      <div class="field grow">
+        <label for="subpath">Subfolder <span class="hint">(optional)</span></label>
+        <input id="subpath" type="text" placeholder="e.g. 2024 / uncensored">
+      </div>
+      <button id="scan-btn" class="btn primary">Scan</button>
+    </section>
+
+    <nav class="tabs">
+      <button class="tab active" data-tab="dupes">Duplicates</button>
+      <button class="tab" data-tab="masked">Masked</button>
+      <button class="tab" data-tab="recycle">Recycle</button>
+      <button class="tab" data-tab="history">History</button>
+      <div class="recycle-bar">
+        <span id="recycle-info" class="recycle-info">Recycle: —</span>
+        <button id="empty-btn" class="btn danger sm" disabled>Empty</button>
+      </div>
+    </nav>
+
+    <div id="tab-dupes">
+      <div id="status" class="status" hidden></div>
+      <section id="results"></section>
+      <div id="empty" class="empty" hidden><p>No duplicate groups found.</p></div>
+    </div>
+
+    <div id="tab-masked" hidden>
+      <section id="masked-list"></section>
+      <div id="masked-empty" class="empty" hidden><p>Nothing masked yet.</p></div>
+    </div>
+
+    <div id="tab-recycle" hidden>
+      <section id="recycle-list"></section>
+      <div id="recycle-empty" class="empty" hidden><p>Recycle folder is empty.</p></div>
+    </div>
+
+    <div id="tab-history" hidden>
+      <section id="history-list"></section>
+      <div id="history-empty" class="empty" hidden><p>No deletions yet.</p></div>
+    </div>
+  </main>
+
+  <button id="to-top" class="to-top" title="Jump to top" aria-label="Jump to top" hidden>↑</button>
+
+  <!-- generic confirm modal -->
+  <div id="modal" class="modal" hidden>
+    <div class="modal-card">
+      <h3 id="modal-title">Confirm</h3>
+      <p id="modal-sub" class="modal-sub"></p>
+      <ul id="modal-list" class="modal-list"></ul>
+      <div class="modal-actions">
+        <button id="modal-cancel" class="btn">Cancel</button>
+        <button id="modal-confirm" class="btn danger">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
