@@ -182,3 +182,8 @@ hostname + port to `<NAS_DOMAIN>` / `15070`, rebind a cert covering that
 hostname (the existing `ReverseProxy_2979f8fa-…` cert was issued while the
 hostname was misspelled), forward TCP 15070 on the router, then test from mobile
 data. Also update the Kuma webhook URL to include `?secret=…` if it doesn't.
+
+### Follow-ups (same day)
+- Verified Kuma's stored `webhookURL` from `/volume2/docker/uptime-kuma/kuma.db` (`SELECT name, config FROM notification;`) — it is `http://<NAS_IP>:5070/webhook/uptime-kuma?secret=...`, no trailing slash, so the exact-match `location = /webhook/uptime-kuma` still catches it (query string is not part of nginx location matching). If the URL ever gains a trailing slash the request falls through to `location /` and 401s silently; relax to a prefix match then.
+- Dropped `com.centurylinklabs.watchtower.enable=false` from the nginx sidecar (44c1906) — it belongs on the app container only; on `nginx:alpine` it just blocks security patches. dupe-sweeper's sidecar has no such label. Redeployed and re-verified: noauth=401, auth=200, hook_nosec=401, hook_sec=200.
+- Pushed main to origin (fix-as-PR diffs remote main, so local-ahead would break `create_fix_pr` string matching against the new compose/README).
