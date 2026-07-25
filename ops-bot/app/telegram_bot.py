@@ -48,6 +48,16 @@ def format_report_message(service_name: str, report) -> str:
     return "\n".join(lines)
 
 
+def build_report_keyboard(report, incident_id: int) -> dict:
+    rows = []
+    for idx, o in enumerate(report.fix_options):
+        if getattr(o, "file_changes", None):
+            star = " ⭐" if o.recommended else ""
+            rows.append([{"text": f"🔧 เปิด PR: {o.title}{star}", "callback_data": f"pr:{incident_id}:{idx}"}])
+    rows.append([{"text": "📋 ดู Logs เพิ่มเติม", "callback_data": f"logs:{incident_id}"}])
+    return {"inline_keyboard": rows}
+
+
 class TelegramBot:
     def __init__(self):
         cfg = get_config()
@@ -77,7 +87,7 @@ class TelegramBot:
 
     async def send_incident_report(self, service_name: str, report, incident_id: int) -> None:
         msg = format_report_message(service_name, report)
-        keyboard = {"inline_keyboard": [[{"text": "📋 ดู Logs เพิ่มเติม", "callback_data": f"logs:{incident_id}"}]]}
+        keyboard = build_report_keyboard(report, incident_id)
         await self.send_message(msg, reply_markup=keyboard)
 
     async def send_fix_confirmation(
