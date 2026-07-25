@@ -1,4 +1,5 @@
 # centralized-nas-container-management
+<!-- fix-as-PR e2e (auto, safe to close) -->
 
 Docker stacks for Synology DS925+ NAS, managed via Synology Container Manager.
 
