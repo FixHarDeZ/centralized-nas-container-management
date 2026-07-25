@@ -27,8 +27,6 @@ services:
       - TZ=Asia/Bangkok
     depends_on:
       - ops-bot
-    labels:
-      - "com.centurylinklabs.watchtower.enable=false"
 
 volumes:
   ops_bot_data:
