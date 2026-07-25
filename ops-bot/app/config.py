@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     # Webhook security
     kuma_webhook_secret: str = ""
 
+    # GitHub (fix-as-PR)
+    github_token: str = ""
+    github_repo: str = ""  # owner/repo
+
     # Debounce
     debounce_minutes: int = 15
 

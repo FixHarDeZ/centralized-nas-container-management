@@ -17,3 +17,21 @@ def test_settings_from_env(monkeypatch):
     s = Settings()
     assert s.mimo_api_key == "test-key"
     assert s.telegram_bot_token == "test-token"
+
+
+def test_github_settings_default_empty(monkeypatch):
+    import app.config
+    app.config._config = None
+    s = app.config.Settings()
+    assert s.github_token == ""
+    assert s.github_repo == ""
+
+
+def test_github_settings_from_env(monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "tok")
+    monkeypatch.setenv("GITHUB_REPO", "owner/repo")
+    import app.config
+    app.config._config = None
+    s = app.config.Settings()
+    assert s.github_token == "tok"
+    assert s.github_repo == "owner/repo"
