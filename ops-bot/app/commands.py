@@ -9,6 +9,7 @@ import httpx
 
 from app.config import get_config
 from app.db import get_db
+from app.github_client import create_fix_pr
 from app.ssh_client import get_ssh_client
 from app.telegram_bot import get_telegram_bot
 
@@ -128,7 +129,7 @@ async def _handle_logs(service_name: str):
 
 
 async def _handle_callback(callback_query: dict):
-    """Handle InlineKeyboard callback (logs only — read-only mode)."""
+    """Handle InlineKeyboard callbacks: logs (read-only) and pr (open a fix PR)."""
     data = callback_query.get("data", "")
     callback_id = callback_query["id"]
 
@@ -136,20 +137,48 @@ async def _handle_callback(callback_query: dict):
     await tg.answer_callback(callback_id, "กำลังดำเนินการ...")
 
     parts = data.split(":")
-    if len(parts) != 2:
-        return
+    action = parts[0] if parts else ""
 
-    action_type, incident_id_str = parts
-    incident_id = int(incident_id_str)
-
-    if action_type == "logs":
+    if action == "logs" and len(parts) == 2:
+        incident_id = int(parts[1])
         db = await get_db()
         cursor = await db.execute(
-            "SELECT container_name FROM incidents WHERE id = ?",
-            (incident_id,),
+            "SELECT container_name FROM incidents WHERE id = ?", (incident_id,)
         )
         row = await cursor.fetchone()
         if row:
             ssh = get_ssh_client()
             result = await ssh.execute_command(f"docker logs --tail 50 {row[0]} 2>&1")
             await tg.send_message(f"📋 **Logs ({row[0]}):**\n```\n{result.stdout[-3000:]}\n```")
+        return
+
+    if action == "pr" and len(parts) == 3:
+        incident_id = int(parts[1])
+        idx = int(parts[2])
+        db = await get_db()
+        cursor = await db.execute(
+            "SELECT report_json FROM analyses WHERE incident_id = ?", (incident_id,)
+        )
+        row = await cursor.fetchone()
+        if not row or not row[0]:
+            await tg.send_message("❌ ไม่พบข้อมูล fix ของ incident นี้")
+            return
+        report = json.loads(row[0])
+        options = report.get("fix_options", [])
+        if idx >= len(options):
+            await tg.send_message("❌ ไม่พบ fix option นี้")
+            return
+        opt = options[idx]
+        ok, result = await create_fix_pr(
+            incident_id=incident_id,
+            title=opt.get("title", "fix"),
+            file_changes=opt.get("file_changes", []),
+        )
+        await db.execute(
+            "INSERT INTO actions (incident_id, action_type, commands_executed, result_output, success) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (incident_id, "open_pr", json.dumps(opt.get("file_changes", [])), result, ok),
+        )
+        await db.commit()
+        await tg.send_message(f"✅ เปิด PR แล้ว: {result}" if ok else f"❌ {result}")
+        return
