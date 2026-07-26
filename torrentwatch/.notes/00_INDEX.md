@@ -208,6 +208,8 @@ Bug fix 2026-05-20: viewno18sbx.php ใช้ text "Auto Sticky:" แทน imag
 | `cleanup` | ทุกวัน 03:00 + ตอน startup | ลบ records > `retention_days` วัน (default 7) |
 | `hr_check` | ทุกวัน 09:10 + 21:10 | อ่าน myhr.php → push LINE+Telegram ไฟล์เสี่ยง H&R (dedup ด้วย `hr_last_digest`) |
 
+**⚠️ Cron coroutine = คนละ event loop:** job ของ APScheduler รันใน thread ของตัวเอง (`_run_async` → `asyncio.run()`) ส่วน `scraper._client` ถูกสร้างใน loop ของ FastAPI ตอน startup → request แรกในงาน cron ตาย `Event loop is closed`. ทุก coroutine ที่ยิงเน็ตจาก cron ต้อง `await scraper.relogin()` ก่อน (`_do_scrape` และ `check_hr` ทำแล้ว)
+
 ตารางเวลา **ไม่ configurable** ผ่าน UI (hardcoded)
 
 ---

@@ -615,7 +615,7 @@ async function loadSettings() {
   document.getElementById("cfg-telegram-notify").checked = settings.telegram_notify_keyword_enabled === "1";
   document.getElementById("cfg-sticky-notify").checked = settings.notify_sticky_enabled === "1";
   document.getElementById("cfg-hr-notify").checked = settings.hr_notify_enabled === "1";
-  document.getElementById("cfg-hr-slack").value = settings.hr_slack_hours ?? 24;
+  document.getElementById("cfg-hr-slack").value = settings.hr_slack_hours || 24;
 
   const hint = document.getElementById("line-status-hint");
   if (hint) {
