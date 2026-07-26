@@ -213,7 +213,7 @@ Bug fix 2026-05-20: viewno18sbx.php ใช้ text "Auto Sticky:" แทน imag
 
 **⚠️ auto-fix/cleared ต้องอยู่เหนือ dedup:** `check_hr()` มี early-return เมื่อ `hr_last_digest` ไม่เปลี่ยน — set เสี่ยงนิ่งเป็นวันๆ ดังนั้นอะไรที่วางใต้บรรทัดนั้นจะไม่รันเลยใน production (force=True ตอนเทสต์จะผ่าน หลอกได้). `hr_fix.check_cleared()` + `hr_fix.scan_and_prompt()` เลยเรียกทันทีหลัง `summarize()`
 
-**ตาราง `hr_fixes`** — สถานะ auto-fix ต่อ site_id: `pending` (ถาม Telegram แล้วรอกด) → `fixed` (โหลด .torrent ลง watch folder แล้ว) → `cleared` (seed ครบ แจ้งแล้ว) · `skipped` (กดข้าม) · `expired` (ไม่กดเกิน 12 ชม.) · `failed`. ปุ่มใช้ได้ครั้งเดียว (เช็ค `status == pending`) และรับเฉพาะ callback ที่ `chat_id` ตรง `TORRENTWATCH_TELEGRAM_CHAT_ID`
+**ตาราง `hr_fixes`** — สถานะ auto-fix ต่อ site_id: `pending` (ถาม Telegram แล้วรอกด) → `fixed` (โหลด .torrent ลง watch folder แล้ว) → `cleared` (seed ครบ แจ้งแล้ว) · `stalled` (กด fix แล้วแต่ 24 ชม. ผ่านไป DS ยังไม่รับงาน → รอบถัดไปถามใหม่) · `skipped` (กดข้าม) · `expired` (ไม่กดเกิน 12 ชม.) · `failed`. ปุ่มใช้ได้ครั้งเดียว (เช็ค `status == pending`) และรับเฉพาะ callback ที่ `chat_id` ตรง `TORRENTWATCH_TELEGRAM_CHAT_ID`
 
 **⚠️ Cron coroutine = คนละ event loop:** job ของ APScheduler รันใน thread ของตัวเอง (`_run_async` → `asyncio.run()`) ส่วน `scraper._client` ถูกสร้างใน loop ของ FastAPI ตอน startup → request แรกในงาน cron ตาย `Event loop is closed`. ทุก coroutine ที่ยิงเน็ตจาก cron ต้อง `await scraper.relogin()` ก่อน (`_do_scrape` และ `check_hr` ทำแล้ว)
 

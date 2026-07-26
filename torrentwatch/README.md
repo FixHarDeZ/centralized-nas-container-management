@@ -222,7 +222,11 @@ Once a fixed file reaches `seeded_h >= target_h`, the next round pushes a
 **พ้น Hit & Run** notice to LINE **and** Telegram. A row merely disappearing from the
 page does not count as cleared.
 
-State lives in the `hr_fixes` table (`pending|fixed|skipped|expired|cleared|failed`);
+A `fixed` row that Download Station never picked up (still not seeding 24h after the
+confirm) flips to `stalled`, so the next round asks again instead of letting the file
+drift silently into a violation.
+
+State lives in the `hr_fixes` table (`pending|fixed|stalled|skipped|expired|cleared|failed`);
 unanswered prompts expire after 12h so a stale button can never trigger a download.
 Button presses arrive over a `getUpdates` long-poll started in the app lifespan —
 callbacks from any chat other than `TORRENTWATCH_TELEGRAM_CHAT_ID` are rejected.

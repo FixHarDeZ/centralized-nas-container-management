@@ -701,3 +701,16 @@ Fix (`scheduler.py`):
 
 **ยังไม่ได้ทำ — ลบ torrent ใน DSM หลังพ้น H&R (ที่ขอไว้)**
 ติดของจริง 2 อย่าง: (1) vault ไม่มี DSM API credential เลย มีแต่ `shared.nas.*` (ssh key + sudo password) (2) `sudo -n /usr/syno/bin/synowebapi` บน NAS ตอบ `sudo: a password is required` — passwordless sudo ครอบแค่ `/usr/local/bin/docker`. ต้องรู้ก่อนว่า DS task list ให้ `destination` + key อะไรผูกกับไฟล์จริง (title ล้วนๆ ใช้ตัดสินใจ `rm` ไม่ได้) ค่อยออกแบบ — ทางที่จะไปคือ SSH + paramiko แบบ ops-bot ไม่ใช่ DSM API (CLAUDE.md มีเคส container โดน DSM auto-block)
+
+### 2026-07-27 (รอบ 2) — hardening auto-fix หลัง review
+
+- **ยืนยัน mount จริง**: `docker exec torrentwatch sh -c "echo hi > /downloads/.mount-check"` แล้วเห็นไฟล์ที่ `/volume1/homes/fixhardez/Torrents_Watch/.mount-check` บน host (ลบทิ้งแล้ว) — พิสูจน์ว่า `apply_fix` เขียนลง watch folder จริง ไม่ใช่เขียนลม (ทดสอบด้วยไฟล์ `.torrent` ไม่ได้ เพราะแยกไม่ออกว่า DS ดูดไปหรือ mount พัง)
+- **บั๊ก `is_cleared`**: `(row["remaining_h"] or 0) <= 0` ทำให้ `remaining_h=None` (cell parse ไม่ได้) กลายเป็น "seed ครบ" → ยิง noti ผิด. แก้เป็นเช็ค `is not None` ก่อน
+- **บั๊ก sort ใน `fix_candidates`**: key `(slack is None, slack)` ถ้ามี 2 แถว slack=None จะเทียบ `None < None` → `TypeError` แล้ว `_hr_job` กลืน exception = รอบ H&R ตายเงียบทั้งรอบ. แก้เป็น `float("inf")`
+- **self-check เพิ่ม 3 แถว** (รวม 10): 2 แถว finished parse ไม่ได้ (slack=None ทั้งคู่) + 1 แถว remaining parse ไม่ได้ → คุมทั้งสองบั๊กข้างบน
+- **`fixed` ไม่เคย escalate**: ถ้า DS ไม่รับ .torrent (watch folder ปิด / task error) แถวจะค้าง `fixed` ตลอด ไม่ถูกถามซ้ำ (`scan_and_prompt` ข้าม pending/fixed/skipped) แล้วไหลไป `hit`. เพิ่มใน `check_cleared`: `fixed` + ไม่ seeding + `decided_at` เก่ากว่า 24 ชม. → `stalled` (รอบถัดไปถามใหม่)
+- **ทดสอบ callback path จริง** (ก่อนหน้านี้ไม่เคยรัน — ปุ่ม 3 อันยังไม่ถูกกด): ยัด row ปลอม `999999999` แล้วเรียก `_handle_callback` ใน container ได้ครบ 3 กรณี → `['ไม่ได้รับอนุญาต', 'ข้ามแล้ว', 'ปุ่มนี้ใช้ไปแล้ว (skipped)']` = chat_id guard ทำงาน, transition pending→skipped ทำงาน, ปุ่มใช้ซ้ำไม่ได้. ลบ row ปลอมออกแล้ว (เหลือ 3 pending ของจริง)
+- Deploy: `✔ All done (330s)` · log ยืนยัน `[hr_fix] telegram callback poller started`
+
+**หมายเหตุ deploy**: `deploy.sh` ที่รันแบบ background ผ่าน `&`/`nohup` ตายกลางคัน (log ค้างที่ "Uploading project files") — ต้องรัน foreground พร้อม timeout ยาว
+

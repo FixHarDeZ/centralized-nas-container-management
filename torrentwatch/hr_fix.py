@@ -9,6 +9,8 @@ bandwidth and may re-download the payload, so it is never automatic.
 """
 
 import asyncio
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 import config
@@ -20,10 +22,19 @@ import telegram_notify
 
 _PROMPT_TTL_H = 12.0  # a button older than this is stale — state has moved on
 _MAX_PROMPTS_PER_ROUND = 3
+_TZ = ZoneInfo(config.TZ)
+_FIX_GRACE_H = 24.0  # DS should have picked the .torrent up long before this
 
 
 def _fmt(v) -> str:
     return "?" if v is None else f"{v:.1f}"
+
+
+def _older_than(ts: str | None, hours: float) -> bool:
+    try:
+        return datetime.fromisoformat(ts) < datetime.now(_TZ) - timedelta(hours=hours)
+    except (TypeError, ValueError):
+        return False
 
 
 def _detail_url(site_id: str) -> str:
@@ -111,7 +122,14 @@ async def check_cleared(rows: list[dict]) -> int:
     done = 0
     for fix in db.hr_fix_by_status("fixed"):
         row = by_id.get(fix["site_id"])
-        if row is None or not hr.is_cleared(row):
+        if row is None:
+            continue
+        if not hr.is_cleared(row):
+            # DS never picked it up (watch folder off, task errored). Left as
+            # "fixed" the row would never be re-prompted and would drift to hit.
+            if not row.get("seeding_now") and _older_than(fix["decided_at"], _FIX_GRACE_H):
+                db.hr_fix_set_status(fix["site_id"], "stalled", "DS ไม่รับงานภายใน 24 ชม.")
+                print(f"[hr_fix] {fix['site_id']} stalled — will re-prompt")
             continue
         body = (
             f"✅ พ้น Hit & Run แล้ว\n\n"
