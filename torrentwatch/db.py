@@ -21,6 +21,8 @@ _DEFAULT_SETTINGS = {
     "retention_days": "7",  # days to keep torrent records before weekly cleanup
     "scrape_interval_night": "30",  # minutes between scrapes 19:00–01:00 (15/20/30/60)
     "scrape_interval_day": "60",  # minutes between scrapes 06:00–19:00 (15/20/30/60)
+    "hr_notify_enabled": "0",  # "1" = daily Hit & Run risk push (LINE + Telegram)
+    "hr_slack_hours": "24",  # alert when a file has < N hours of leeway left
 }
 
 

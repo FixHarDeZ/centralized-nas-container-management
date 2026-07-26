@@ -647,3 +647,25 @@ Fix (`scheduler.py`):
 **Verify:** deploy จริง → `GET /api/download/local/12184` (authed) ใน container → `HTTP 200 application/octet-stream size 19296 d8:announce` ✅ + function-level probe `fetch_torrent_bytes` → 1084159 bytes ✅
 
 **Gotcha ใหม่:** ดาวน์โหลดตอนนี้ **ช้าลง ~7 วิ/ไฟล์** เพราะต้องรอ ad-gate countdown. ทุก download ผ่าน interstitial แล้ว (ไม่ใช่ edge case). ถ้า bearbit ขยับ selector `#bbDlBtn` หรือเพิ่มเวลา countdown ต้อง re-probe live (sandbox บล็อก bearbit)
+
+---
+
+## 2026-07-26 — Feature: Hit & Run monitor (แจ้ง LINE + Telegram)
+
+**บริบท:** bearbit เปิดระบบ H&R — ทุกไฟล์ที่โหลดต้อง seed **48.0 ชม.** ภายในกรอบ 168 ชม. (24 ชม.แรก = ผ่อนผัน → เตือน → ผิด). ค้างผิดครบ **18 ไฟล์ = ล็อกการโหลด**. บัญชีตอนเริ่มงาน: ผิดแล้ว 2, เตือน 12, กำลัง seed 3
+
+**Root cause ที่ทำให้โดน (ไม่ใช่บั๊ก torrentwatch):** Download Station (transmission) บน NAS ตั้ง `"ratio-limit": 0` + `"ratio-limit-enabled": true` → task หยุด seed ทันทีที่โหลดเสร็จ, `idle-seeding-limit-enabled`/`interval-seeding-limit-enabled` = false, DS `download_seeding_interval=-1`, `resume/` ว่าง = ไม่มีอะไร seed อยู่เลย. **ฝั่ง DSM ผู้ใช้จัดการเอง** (ตั้ง seeding interval ~3000 นาที ผ่าน DSM UI ไม่ใช่แก้ settings.json ตรงๆ เพราะ transmission เขียนทับตอน stop package)
+
+**ที่ทำในรอบนี้ — monitor ฝั่ง torrentwatch:**
+- `hr.py` (ใหม่): `parse_hr()` อ่าน `table.t` ของ myhr.php → td0 ชื่อ+`details.php?id=` · td1 เวลาโหลดเสร็จ · td2 `"3.0 ชม. / 48.0 ชม."` · td3 ที่ยังขาด · td4 `"180.4 ชม. ที่แล้ว"` · td5 `span.bd.<state>` (`hit`/`warn`/`ok`/`pause`)
+- **slack** = `(finished_at + 168h - now) - remaining_h` = เวลาเหลือจริง ติดลบ = ต่อให้เริ่ม seed เดี๋ยวนี้ก็ไม่ทัน. `summarize()` ตัด `ok` ออกเสมอ, `warn`/`pause` เตือนเฉพาะ slack < `hr_slack_hours` (default 24) — ถ้าเตือนตาม state เฉยๆ 12 แถวจะยิงซ้ำทุกวัน 5 วันติดจนโดนมองข้าม
+- `scraper.fetch_hr_html()` — แยกจาก `_fetch()` เพราะ **myhr.php เสิร์ฟ windows-874 แต่ httpx รายงาน encoding=utf-8** → `resp.text` เป็น mojibake. ต้อง `resp.content.decode("cp874")` (**Python ไม่รู้จักชื่อ `windows-874`** → `LookupError`). หน้า listing เดิม decode ปกติอยู่แล้ว จึงไม่แตะ `_fetch()`
+- `scheduler.check_hr()` + job `hr_check` 09:10/21:10 — dedup ด้วย `hr_last_digest` (sha1 ของ set `site_id:state`) ยิงเฉพาะตอน set เปลี่ยน
+- `line_notify.notify_hr()` / `telegram_notify.notify_hr()` — body ร่วมจาก `hr.format_message()` แนบ `ระบบเห็นล่าสุด` ต่อไฟล์ (เป็นตัวยืนยันว่า client announce อยู่จริงไหม)
+- settings ใหม่ `hr_notify_enabled` / `hr_slack_hours` + toggle ในแท็บตั้งค่า + ปุ่ม "ส่งสรุป H&R เดี๋ยวนี้"
+- API: `GET /api/hr`, `POST /api/hr/notify`
+- Self-check: `python hr.py` — หน้าเทียม cp874 ครบ 4 state, assert `remaining == target - seeded` (จับ column สลับ) + assert ว่า `ok`/`pause` ไม่เข้า risky
+
+**Verify (บน NAS จริง):** parse myhr.php สด → `17 rows, hit 2, risky 3, seeding 3` ข้อความไทยถูกต้อง ✅ · `POST /api/hr/notify` → `{"ok":true,"total":17,"risky":3,"hits":2,"seeding":3,"sent":true}` ส่งเข้า LINE+Telegram จริง ✅ · เปิด `hr_notify_enabled=1` ไว้บน NAS แล้ว
+
+**ตั้งใจไม่ทำ:** ไม่ให้ monitor ปิด `auto_download_nas` เองเมื่อใกล้ครบ 18 — เงียบๆ ไปแก้ setting ให้ผู้ใช้ไม่ใช่หน้าที่ตัวเอง แสดงเลข `ผิดแล้ว N/18` ในข้อความแทน. ยังไม่มีแท็บ H&R บน dashboard (มี `/api/hr` รอไว้แล้ว ถ้าอยากได้ค่อยต่อ)

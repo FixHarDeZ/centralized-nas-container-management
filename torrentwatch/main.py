@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 import config
 import db
+import hr
 import line_notify
 import scheduler
 import scraper
@@ -367,6 +368,35 @@ async def api_scrape(background_tasks: BackgroundTasks):
 @app.get("/api/status")
 def api_status():
     return scheduler.status()
+
+
+# ─── Hit & Run ───────────────────────────────────────────────────────────────
+
+
+@app.get("/api/hr")
+async def api_hr():
+    """Live myhr.php snapshot — rows plus the at-risk split used for notifications."""
+    html = await scraper.fetch_hr_html()
+    if html is None:
+        raise HTTPException(502, "Failed to fetch myhr.php — check login credentials")
+    settings = db.get_settings()
+    summary = hr.summarize(
+        hr.parse_hr(html),
+        float(settings.get("hr_slack_hours", 24)),
+    )
+    return {
+        "rows": summary["rows"],
+        "risky_ids": [r["site_id"] for r in summary["risky"]],
+        "hit_count": summary["hit_count"],
+        "seeding_count": summary["seeding_count"],
+        "cap": summary["cap"],
+    }
+
+
+@app.post("/api/hr/notify")
+async def api_hr_notify():
+    """Force-send the H&R digest now (ignores the enable flag and dedup)."""
+    return await scheduler.check_hr(force=True)
 
 
 # ─── Debug ───────────────────────────────────────────────────────────────────

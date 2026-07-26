@@ -124,6 +124,8 @@ COL_UPLOADER = 11  # ผู้ปล่อยไฟล์ — <a>username</a> (m
 # Adjust if the server returns 403/redirect — may need dl.php or downloadlink.php
 DOWNLOAD_URL_TPL = f"{config.SITE_BASE_URL}/download.php?id={{site_id}}"
 
+HR_URL = f"{config.SITE_BASE_URL}/myhr.php"
+
 LOGIN_URL_MARKERS = ["login.php", "/login", "signin", "register.php"]
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -235,6 +237,30 @@ async def relogin() -> bool:
 async def fetch_raw_html(url: str) -> str | None:
     """For /api/debug/html — returns the raw page HTML."""
     return await _fetch(url)
+
+
+async def fetch_hr_html() -> str | None:
+    """Fetch myhr.php (Hit & Run status page).
+
+    Kept separate from _fetch(): this page is served as windows-874 but httpx
+    reports encoding=utf-8, so resp.text is mojibake. Python's codec name is
+    cp874 — "windows-874" raises LookupError.
+    """
+    global _login_ok
+    headers = {"Referer": f"{config.SITE_BASE_URL}/"}
+    for attempt in (1, 2):
+        try:
+            resp = await _client.get(HR_URL, headers=headers)
+            html = resp.content.decode("cp874", errors="replace")
+            if not _is_login_page(html, str(resp.url)):
+                return html
+            print("[scraper] hr: session expired — re-logging in")
+        except Exception as e:
+            print(f"[scraper] hr fetch error (attempt {attempt}): {e}")
+        _login_ok = await _login()
+        if not _login_ok:
+            return None
+    return None
 
 
 async def fetch_login_page_html() -> str | None:

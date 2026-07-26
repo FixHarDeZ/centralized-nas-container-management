@@ -614,6 +614,8 @@ async function loadSettings() {
   document.getElementById("cfg-line-notify").checked = settings.line_notify_keyword_enabled === "1";
   document.getElementById("cfg-telegram-notify").checked = settings.telegram_notify_keyword_enabled === "1";
   document.getElementById("cfg-sticky-notify").checked = settings.notify_sticky_enabled === "1";
+  document.getElementById("cfg-hr-notify").checked = settings.hr_notify_enabled === "1";
+  document.getElementById("cfg-hr-slack").value = settings.hr_slack_hours ?? 24;
 
   const hint = document.getElementById("line-status-hint");
   if (hint) {
@@ -784,6 +786,8 @@ document.getElementById("btn-save-settings").addEventListener("click", async () 
     telegram_notify_keyword_enabled: document.getElementById("cfg-telegram-notify").checked ? "1" : "0",
     auto_download_nas:               document.getElementById("cfg-auto-dl").checked ? "1" : "0",
     notify_sticky_enabled:           document.getElementById("cfg-sticky-notify").checked ? "1" : "0",
+    hr_notify_enabled:               document.getElementById("cfg-hr-notify").checked ? "1" : "0",
+    hr_slack_hours:                  document.getElementById("cfg-hr-slack").value,
     retention_days:              document.getElementById("cfg-retention").value,
     scrape_interval_night:       document.getElementById("cfg-interval-night").value,
     scrape_interval_day:         document.getElementById("cfg-interval-day").value,
@@ -793,6 +797,28 @@ document.getElementById("btn-save-settings").addEventListener("click", async () 
     toast("บันทึกแล้ว", "success");
   } catch (e) {
     toast("บันทึกไม่สำเร็จ: " + e.message, "error");
+  }
+});
+
+// ─── H&R digest (manual send) ─────────────────────────────────────────────────
+document.getElementById("btn-hr-test").addEventListener("click", async () => {
+  const btn = document.getElementById("btn-hr-test");
+  btn.disabled = true;
+  btn.innerHTML = '<i class="bi bi-hourglass-split"></i> กำลังเช็ค...';
+  try {
+    const r = await api("POST", "/hr/notify");
+    if (!r.ok) {
+      toast("เช็คไม่สำเร็จ: " + (r.error || "unknown"), "error");
+    } else if (r.sent) {
+      toast(`ส่งแล้ว — เสี่ยง ${r.risky} รายการ, ผิดแล้ว ${r.hits}`, "success");
+    } else {
+      toast(`ไม่มีรายการเสี่ยง (กำลัง seed ${r.seeding} จาก ${r.total})`, "success");
+    }
+  } catch (e) {
+    toast("เช็คไม่สำเร็จ: " + e.message, "error");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-send"></i> ส่งสรุป H&R เดี๋ยวนี้';
   }
 });
 

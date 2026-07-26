@@ -16,6 +16,7 @@ from zoneinfo import ZoneInfo
 
 import config
 import db
+import hr
 import line_notify
 import scraper
 import telegram_notify
@@ -250,6 +251,60 @@ async def _maybe_notify_all_free(today: str, rows_today: int, free_today: int):
     print(f"[scheduler] all-free notify sent ({rows_today} today rows all 100% free)")
 
 
+async def check_hr(force: bool = False) -> dict:
+    """Fetch myhr.php, push LINE+Telegram when files are close to a H&R violation.
+
+    De-duped on the actionable set (hr.digest) so the same at-risk files don't
+    generate an identical push every day. force=True skips both the enable flag
+    and the dedup — used by the manual API trigger.
+    """
+    settings = db.get_settings()
+    if not force and settings.get("hr_notify_enabled", "0") != "1":
+        return {"ok": False, "error": "hr_notify_enabled=0"}
+
+    html = await scraper.fetch_hr_html()
+    if not html:
+        return {"ok": False, "error": "fetch myhr.php failed"}
+
+    rows = hr.parse_hr(html)
+    summary = hr.summarize(rows, float(settings.get("hr_slack_hours", 24)))
+    fingerprint = hr.digest(summary)
+    result = {
+        "ok": True,
+        "total": len(rows),
+        "risky": len(summary["risky"]),
+        "hits": summary["hit_count"],
+        "seeding": summary["seeding_count"],
+        "sent": False,
+    }
+
+    if not summary["risky"] and not summary["hits"]:
+        db.set_meta("hr_last_digest", "")
+        return result
+    if not force and db.get_meta("hr_last_digest") == fingerprint:
+        print(f"[scheduler] H&R unchanged ({fingerprint}) — no push")
+        return result
+
+    body = hr.format_message(summary)
+    if config.LINE_ACCESS_TOKEN and config.LINE_USER_ID:
+        await line_notify.notify_hr(body)
+    if config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID:
+        await telegram_notify.notify_hr(body)
+    db.set_meta("hr_last_digest", fingerprint)
+    result["sent"] = True
+    print(
+        f"[scheduler] H&R push sent — {result['risky']} risky, {result['hits']}/{hr.HR_CAP} violations",
+    )
+    return result
+
+
+def _hr_job():
+    try:
+        _run_async(check_hr())
+    except Exception as e:
+        print(f"[scheduler] H&R check error: {e}")
+
+
 def _update_progress(
     source_label: str,
     source_idx: int,
@@ -351,6 +406,14 @@ def start():
         _backup_job,
         CronTrigger(hour=3, minute=0, timezone=config.TZ),
         id="backup",
+        replace_existing=True,
+    )
+    # H&R check twice a day — the digest dedup keeps repeats silent, so the second
+    # run only costs a push when the at-risk set actually changed since morning.
+    _scheduler.add_job(
+        _hr_job,
+        CronTrigger(hour="9,21", minute=10, timezone=config.TZ),
+        id="hr_check",
         replace_existing=True,
     )
     _scheduler.start()

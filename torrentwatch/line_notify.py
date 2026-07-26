@@ -83,6 +83,11 @@ async def notify_all_free(count: int):
     )
 
 
+async def notify_hr(body: str):
+    """Push the Hit & Run risk digest (body built by hr.format_message)."""
+    await _push(f"{body}\n\n🕒 {_now()}")
+
+
 async def send_test_message() -> dict:
     """Send a test push and return {"ok": bool, "error": str}. Checks response directly."""
     if not config.LINE_ACCESS_TOKEN or not config.LINE_USER_ID:

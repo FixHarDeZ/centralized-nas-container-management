@@ -53,7 +53,8 @@ torrentwatch/
 ├── config.py        — env var reads (SITE_*, DATA_DIR, BASIC_AUTH_*, LINE_*)
 ├── db.py            — SQLite CRUD: sources, torrents, keywords, settings, cleanup
 ├── scraper.py       — async httpx scraper: login, fetch, parse, paginate
-├── scheduler.py     — APScheduler jobs: scrape + weekly cleanup
+├── scheduler.py     — APScheduler jobs: scrape + weekly cleanup + H&R check
+├── hr.py            — myhr.php (Hit & Run) parser + risk split + push body
 ├── line_notify.py   — LINE Messaging API push (⚠️ NOT wired to scheduler yet)
 ├── Dockerfile
 ├── docker-compose.yml
@@ -124,8 +125,11 @@ Default settings:
 - `scrape_interval_night = "30"` — interval (นาที) ช่วง 19:00–01:00 (15/20/30/60)
 - `scrape_interval_day = "60"` — interval (นาที) ช่วง 06:00–19:00 (15/20/30/60)
 - `notify_sticky_enabled = "0"` — push LINE+Telegram เมื่อพบ sticky/pinned torrent ที่ยังไม่เคย notify (sticky_notified=0)
+- `hr_notify_enabled = "0"` — push Hit & Run digest (default "0" แต่บน NAS เปิด "1" ไว้แล้วตั้งแต่ 2026-07-26)
+- `hr_slack_hours = "24"` — เตือนเมื่อ slack (เวลาเหลือหลังหัก seed ที่ยังขาด) ต่ำกว่านี้
 
 **Internal meta keys** (settings table, ไม่ผ่าน UI, อ่าน/เขียนด้วย `get_meta`/`set_meta`):
+- `hr_last_digest` — sha1 (16 ตัว) ของ set ที่ actionable (risky+hit) รอบล่าสุด — เท่ากันแปลว่าไม่มีอะไรเปลี่ยน ข้าม push. เคลียร์เป็น "" เมื่อไม่มีรายการเสี่ยงเลย
 - `free_all_notified_date` — วันที่ push "ทุก torrent ฟรี 100%" ไปแล้ว (กัน notify ซ้ำต่อวัน). Sitewide-free notify ทำงานเสมอ (ไม่มี toggle): scheduler นับ pre-filter `today_total`/`today_free` ต่อรอบ scrape → ยิงเมื่อ `today_free == today_total > 0`
 
 Index: `idx_torrents_source_date ON torrents(source_id, date_posted)`
@@ -202,6 +206,7 @@ Bug fix 2026-05-20: viewno18sbx.php ใช้ text "Auto Sticky:" แทน imag
 | `scrape_night` | 19:00–01:00 ทุก 30 นาที | scrape รอบกลางคืน (เวลา active) |
 | `scrape_day` | 06:00–19:00 ทุก 60 นาที | scrape รอบกลางวัน |
 | `cleanup` | ทุกวัน 03:00 + ตอน startup | ลบ records > `retention_days` วัน (default 7) |
+| `hr_check` | ทุกวัน 09:10 + 21:10 | อ่าน myhr.php → push LINE+Telegram ไฟล์เสี่ยง H&R (dedup ด้วย `hr_last_digest`) |
 
 ตารางเวลา **ไม่ configurable** ผ่าน UI (hardcoded)
 
@@ -229,6 +234,8 @@ Bug fix 2026-05-20: viewno18sbx.php ใช้ text "Auto Sticky:" แทน imag
 | `/api/download/local/{id}` | GET | Proxy .torrent to browser (RFC 5987 Thai filename) |
 | `/api/download/nas/{id}` | POST | Save .torrent to `/downloads` |
 | `/api/detail/{id}` | GET | Proxy bearbit detail page (bypass anti-hotlink) |
+| `/api/hr` | GET | myhr.php snapshot สด (rows + risky_ids + hit_count/cap) |
+| `/api/hr/notify` | POST | บังคับส่ง H&R digest เดี๋ยวนี้ (ข้าม toggle + dedup) |
 | `/api/debug/html` | GET | Raw scraped HTML |
 | `/api/debug/login-page` | GET | Raw bearbit login page |
 | `/api/debug/relogin` | POST | Force re-login |

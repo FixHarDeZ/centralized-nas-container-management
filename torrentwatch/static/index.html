@@ -253,6 +253,21 @@
               </label>
             </div>
             <p class="tw-hint">แจ้งเตือนเมื่อพบ sticky/pinned ใหม่ (ผ่าน LINE + Telegram ที่ตั้งค่าไว้, ต้องเปิด "รวม sticky/pinned" ด้วย)</p>
+
+            <div class="tw-field-row" style="margin-top:14px">
+              <label for="cfg-hr-notify">⚠️ H&amp;R Notify</label>
+              <label class="tw-toggle-row">
+                <input type="checkbox" class="tw-toggle" id="cfg-hr-notify">
+              </label>
+            </div>
+            <div class="tw-field-row" style="margin-top:8px">
+              <label for="cfg-hr-slack">H&amp;R เตือนเมื่อเหลือ (ชม.)</label>
+              <input type="number" id="cfg-hr-slack" min="1" max="168" step="1">
+            </div>
+            <p class="tw-hint">เช็ค myhr.php วันละ 2 รอบ (09:10 / 21:10) แจ้ง LINE + Telegram เมื่อมีไฟล์เสี่ยงโดน Hit &amp; Run — "เหลือ" = เวลาที่ยังพอ seed ให้ครบ 48 ชม. ก่อนหมด 168 ชม.</p>
+            <button class="tw-btn-secondary" id="btn-hr-test" style="width:100%;margin-top:8px">
+              <i class="bi bi-send"></i> ส่งสรุป H&amp;R เดี๋ยวนี้
+            </button>
           </div>
         </div>
 

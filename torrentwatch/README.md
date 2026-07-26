@@ -28,6 +28,7 @@ A daily torrent monitor that scrapes [bearbit.org](https://bearbit.org) on a sch
 - **LINE notification** — push to LINE when new keyword-matched torrents are found (configure via Settings UI)
 - **Telegram notification** — push to Telegram Bot when new keyword-matched torrents are found; built-in Chat ID discovery helper in Settings UI
 - **Sticky notification** — push to LINE + Telegram when a new sticky/pinned torrent is first discovered; toggle in Settings UI
+- **Hit & Run monitor** — reads bearbit `myhr.php` twice a day (09:10 / 21:10) and pushes LINE + Telegram when a downloaded file is about to miss its 48h seed requirement; see [Hit & Run monitor](#hit--run-monitor)
 - **HTTP Basic Auth** — web UI protected via `NGINX_BASIC_AUTH_USER` / `NGINX_BASIC_AUTH_PASS`
 - **Weekly cleanup** — deletes records older than 7 days every Sunday at 03:00
 
@@ -124,6 +125,8 @@ Router must forward external port `15059 → NAS`.
 | เก็บประวัติ | `7` days | Retention period; older records deleted on Sunday 03:00 |
 | LINE notification | off | Push to LINE when new keyword-matched torrents are found |
 | Telegram notification | off | Push to Telegram Bot when new keyword-matched torrents are found |
+| H&R Notify | off | Push the Hit & Run risk digest to LINE + Telegram (09:10 / 21:10) |
+| H&R เตือนเมื่อเหลือ | `24` h | Alert a file once its remaining leeway (slack) drops below this |
 
 **Auto-scrape schedule** is fixed (not configurable):
 
@@ -151,6 +154,8 @@ Router must forward external port `15059 → NAS`.
 | `POST /api/line/test` | Send a test LINE message to verify configuration |
 | `POST /api/telegram/test` | Send a test Telegram message to verify configuration |
 | `GET /api/telegram/get-chat-id` | Call `getUpdates` to discover your Telegram chat ID |
+| `GET /api/hr` | Live `myhr.php` snapshot — parsed rows + at-risk split |
+| `POST /api/hr/notify` | Force-send the H&R digest now (ignores enable flag + dedup) |
 | `GET /api/debug/html?source_id=…` | Raw scraped HTML — for selector tuning |
 | `GET /api/debug/login-page` | Raw bearbit login page |
 | `POST /api/debug/relogin` | Force re-login |
@@ -164,6 +169,36 @@ Bearbit blocks any request whose `Referer` header isn't a bearbit URL — both f
 
 - **Scraper** sends `Referer: https://bearbit.org/...` on every backend request
 - **Title click** opens `/api/detail/{id}` — the backend fetches the bearbit detail page with a proper Referer, then serves the HTML through our domain (with `<base href="https://bearbit.org/">` injected so images/CSS still resolve)
+
+## Hit & Run monitor
+
+Bearbit requires every downloaded file to seed **48.0 hours**. The clock per file is
+download-done → 24h ผ่อนผัน (`pause`) → เตือน (`warn`) → ผิด (`hit`) once 168h have
+passed. **18 pending violations lock downloading.**
+
+`hr.py` parses `myhr.php` and computes, per file:
+
+```
+deadline = finished_at + 168h
+slack    = (deadline - now) - remaining_seed_hours
+```
+
+`slack` is the leeway left: negative means the deadline can no longer be met even
+if the client starts announcing right now. Files in `ok` (still seeding) are never
+alerted; `warn`/`pause` are alerted only once slack drops under the configured
+threshold — otherwise a dozen rows sit in `warn` for five days and the push becomes
+noise. Repeat pushes are suppressed by hashing the actionable set into
+`hr_last_digest` (meta table), so a message only arrives when the set changes.
+
+The message includes `ระบบเห็นล่าสุด` (last announce) per file — the direct read on
+whether the BitTorrent client is announcing at all.
+
+> ⚠️ `myhr.php` is served as **windows-874** while httpx reports `encoding=utf-8`,
+> so `resp.text` is mojibake. `scraper.fetch_hr_html()` decodes `resp.content` with
+> **`cp874`** (Python has no `windows-874` codec name).
+
+Self-check: `python hr.py` parses a synthetic cp874 page covering all four badge
+states and asserts the risk split.
 
 ## Scraper Selectors
 
