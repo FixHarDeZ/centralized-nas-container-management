@@ -382,7 +382,7 @@ async def api_hr():
     settings = db.get_settings()
     summary = hr.summarize(
         hr.parse_hr(html),
-        float(settings.get("hr_slack_hours", 24)),
+        float(settings.get("hr_slack_hours") or 24),
     )
     return {
         "rows": summary["rows"],

@@ -668,4 +668,8 @@ Fix (`scheduler.py`):
 
 **Verify (บน NAS จริง):** parse myhr.php สด → `17 rows, hit 2, risky 3, seeding 3` ข้อความไทยถูกต้อง ✅ · `POST /api/hr/notify` → `{"ok":true,"total":17,"risky":3,"hits":2,"seeding":3,"sent":true}` ส่งเข้า LINE+Telegram จริง ✅ · เปิด `hr_notify_enabled=1` ไว้บน NAS แล้ว
 
+**Follow-up รอบเดียวกัน (hardening หลัง review):**
+- **cross-event-loop:** job cron รันใน thread ของ APScheduler ผ่าน `asyncio.run()` = คนละ loop กับที่สร้าง `scraper._client` → `fetch_hr_html()` attempt 1 ตาย `Event loop is closed` (retry ใน loop ช่วยกู้ได้ แต่กินโควตา retry ฟรีๆ). เพิ่ม `await scraper.relogin()` ต้น `check_hr()` ให้ตรงกับ `_do_scrape()` ที่ทำแบบนี้อยู่แล้ว. **พิสูจน์ด้วย `asyncio.run()` สองรอบซ้อนในคอนเทนเนอร์** (รอบแรก `scraper.init()` รอบสองเรียก fetch) = จำลอง app-loop→scheduler-loop เป๊ะ
+- `float(settings.get("hr_slack_hours", 24))` → `float(... or 24)` ทั้งใน `check_hr` และ `/api/hr` — ล้างช่องตัวเลขแล้วกดบันทึกจะเก็บ `""` ไม่ใช่ค่าหาย, `.get` default ไม่ทำงาน, `float("")` โยน แล้วโดน try/except ของ `_hr_job` กลืน = แจ้งเตือนเงียบไปเฉยๆ. verify ด้วยการ PUT ค่าว่างจริงแล้วยิง `/api/hr` (ยังคืน 200) ก่อนคืนค่า 24
+
 **ตั้งใจไม่ทำ:** ไม่ให้ monitor ปิด `auto_download_nas` เองเมื่อใกล้ครบ 18 — เงียบๆ ไปแก้ setting ให้ผู้ใช้ไม่ใช่หน้าที่ตัวเอง แสดงเลข `ผิดแล้ว N/18` ในข้อความแทน. ยังไม่มีแท็บ H&R บน dashboard (มี `/api/hr` รอไว้แล้ว ถ้าอยากได้ค่อยต่อ)

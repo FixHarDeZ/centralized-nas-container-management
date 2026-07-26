@@ -262,12 +262,15 @@ async def check_hr(force: bool = False) -> dict:
     if not force and settings.get("hr_notify_enabled", "0") != "1":
         return {"ok": False, "error": "hr_notify_enabled=0"}
 
+    # Same as _do_scrape: the cron job runs in its own event loop, so the client
+    # built in the app loop is dead here — relogin rebuilds it.
+    await scraper.relogin()
     html = await scraper.fetch_hr_html()
     if not html:
         return {"ok": False, "error": "fetch myhr.php failed"}
 
     rows = hr.parse_hr(html)
-    summary = hr.summarize(rows, float(settings.get("hr_slack_hours", 24)))
+    summary = hr.summarize(rows, float(settings.get("hr_slack_hours") or 24))
     fingerprint = hr.digest(summary)
     result = {
         "ok": True,
