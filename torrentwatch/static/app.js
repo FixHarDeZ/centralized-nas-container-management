@@ -616,6 +616,8 @@ async function loadSettings() {
   document.getElementById("cfg-sticky-notify").checked = settings.notify_sticky_enabled === "1";
   document.getElementById("cfg-hr-notify").checked = settings.hr_notify_enabled === "1";
   document.getElementById("cfg-hr-slack").value = settings.hr_slack_hours || 24;
+  document.getElementById("cfg-hr-autofix").checked = settings.hr_autofix_enabled === "1";
+  document.getElementById("cfg-hr-stale").value = settings.hr_fix_stale_hours || 24;
 
   const hint = document.getElementById("line-status-hint");
   if (hint) {
@@ -788,6 +790,8 @@ document.getElementById("btn-save-settings").addEventListener("click", async () 
     notify_sticky_enabled:           document.getElementById("cfg-sticky-notify").checked ? "1" : "0",
     hr_notify_enabled:               document.getElementById("cfg-hr-notify").checked ? "1" : "0",
     hr_slack_hours:                  document.getElementById("cfg-hr-slack").value,
+    hr_autofix_enabled:              document.getElementById("cfg-hr-autofix").checked ? "1" : "0",
+    hr_fix_stale_hours:              document.getElementById("cfg-hr-stale").value,
     retention_days:              document.getElementById("cfg-retention").value,
     scrape_interval_night:       document.getElementById("cfg-interval-night").value,
     scrape_interval_day:         document.getElementById("cfg-interval-day").value,

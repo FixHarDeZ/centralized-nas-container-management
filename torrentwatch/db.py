@@ -23,6 +23,8 @@ _DEFAULT_SETTINGS = {
     "scrape_interval_day": "60",  # minutes between scrapes 06:00–19:00 (15/20/30/60)
     "hr_notify_enabled": "0",  # "1" = daily Hit & Run risk push (LINE + Telegram)
     "hr_slack_hours": "24",  # alert when a file has < N hours of leeway left
+    "hr_autofix_enabled": "0",  # "1" = ask on Telegram before re-adding stale H&R files
+    "hr_fix_stale_hours": "24",  # tracker hasn't seen us for N hours = DS task is gone
 }
 
 
@@ -92,6 +94,16 @@ def init_db():
             CREATE TABLE IF NOT EXISTS settings (
                 key   TEXT PRIMARY KEY,
                 value TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS hr_fixes (
+                site_id      TEXT PRIMARY KEY,
+                title        TEXT NOT NULL DEFAULT '',
+                status       TEXT NOT NULL,  -- pending|fixed|skipped|expired|cleared|failed
+                requested_at TEXT,
+                decided_at   TEXT,
+                message_id   INTEGER,
+                note         TEXT NOT NULL DEFAULT ''
             );
 
             CREATE INDEX IF NOT EXISTS idx_torrents_source_date
@@ -599,6 +611,57 @@ def set_meta(key: str, value: str):
             "INSERT OR REPLACE INTO settings(key, value) VALUES (?, ?)",
             (key, value),
         )
+
+
+# ─── Hit & Run auto-fix ───────────────────────────────────────────────────────
+
+
+def hr_fix_get(site_id: str) -> dict | None:
+    with _conn() as c:
+        row = c.execute("SELECT * FROM hr_fixes WHERE site_id=?", (site_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def hr_fix_by_status(status: str) -> list[dict]:
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT * FROM hr_fixes WHERE status=? ORDER BY requested_at", (status,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def hr_fix_add_pending(site_id: str, title: str, message_id: int | None):
+    with _conn() as c:
+        c.execute(
+            """INSERT OR REPLACE INTO hr_fixes
+               (site_id, title, status, requested_at, decided_at, message_id, note)
+               VALUES (?, ?, 'pending', ?, NULL, ?, '')""",
+            (site_id, title, datetime.now(_TZ).isoformat(timespec="seconds"), message_id),
+        )
+
+
+def hr_fix_set_status(site_id: str, status: str, note: str = ""):
+    with _conn() as c:
+        c.execute(
+            "UPDATE hr_fixes SET status=?, decided_at=?, note=? WHERE site_id=?",
+            (status, datetime.now(_TZ).isoformat(timespec="seconds"), note, site_id),
+        )
+
+
+def hr_fix_expire_pending(max_age_h: float = 12.0) -> list[str]:
+    """Time out prompts nobody answered — a stale button must not fire a download."""
+    cutoff = (datetime.now(_TZ) - timedelta(hours=max_age_h)).isoformat(timespec="seconds")
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT site_id FROM hr_fixes WHERE status='pending' AND requested_at < ?",
+            (cutoff,),
+        ).fetchall()
+        c.execute(
+            "UPDATE hr_fixes SET status='expired', decided_at=? "
+            "WHERE status='pending' AND requested_at < ?",
+            (datetime.now(_TZ).isoformat(timespec="seconds"), cutoff),
+        )
+        return [r["site_id"] for r in rows]
 
 
 # ─── Utilities ────────────────────────────────────────────────────────────────

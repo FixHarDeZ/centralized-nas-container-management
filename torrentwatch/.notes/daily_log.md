@@ -673,3 +673,31 @@ Fix (`scheduler.py`):
 - `float(settings.get("hr_slack_hours", 24))` → `float(... or 24)` ทั้งใน `check_hr` และ `/api/hr` — ล้างช่องตัวเลขแล้วกดบันทึกจะเก็บ `""` ไม่ใช่ค่าหาย, `.get` default ไม่ทำงาน, `float("")` โยน แล้วโดน try/except ของ `_hr_job` กลืน = แจ้งเตือนเงียบไปเฉยๆ. verify ด้วยการ PUT ค่าว่างจริงแล้วยิง `/api/hr` (ยังคืน 200) ก่อนคืนค่า 24
 
 **ตั้งใจไม่ทำ:** ไม่ให้ monitor ปิด `auto_download_nas` เองเมื่อใกล้ครบ 18 — เงียบๆ ไปแก้ setting ให้ผู้ใช้ไม่ใช่หน้าที่ตัวเอง แสดงเลข `ผิดแล้ว N/18` ในข้อความแทน. ยังไม่มีแท็บ H&R บน dashboard (มี `/api/hr` รอไว้แล้ว ถ้าอยากได้ค่อยต่อ)
+
+---
+
+## 2026-07-27 — Feature: H&R auto-fix (Telegram confirm) + แจ้งเตือนตอนพ้น H&R
+
+**สิ่งที่ทำ**
+- `hr.py`: เพิ่มฟิลด์ `seeding_now` (`"กำลังนับ" in td4`) แยกจาก `last_seen_h=None` — เพราะ None ยังหมายถึง "parse ไม่ได้" ด้วย ถ้าเอา None มาแทน "หลุดแล้ว" วันไหน site เปลี่ยน format จะยิง fix มั่วเงียบๆ. เพิ่ม `fix_candidates()` (state=warn + ไม่ announce + last_seen > stale_h + remaining > 0, เรียงตาม slack, cap) และ `is_cleared()` (seeded >= target)
+- `hr_fix.py` (ใหม่): `scan_and_prompt()` ส่ง InlineKeyboard ถาม Telegram (สูงสุด 3 ต่อรอบ), `apply_fix()` re-check row สดก่อนแล้วโหลด .torrent ผ่าน ad-gate เขียนลง `/downloads` (= watch folder `/volume1/homes/<user>/Torrents_Watch` mount อยู่แล้ว ไม่ต้องแก้ compose), `check_cleared()` ยิง LINE+Telegram เมื่อ seed ครบ, `poll_loop()` long-poll getUpdates
+- `db.py`: ตาราง `hr_fixes` + settings `hr_autofix_enabled`, `hr_fix_stale_hours`; prompt ค้างเกิน 12 ชม. กลายเป็น `expired` (ปุ่มเก่าห้ามยิงโหลด)
+- `scheduler.py`: เรียก `check_cleared()` + `scan_and_prompt()` **ก่อน** บรรทัด dedup `hr_last_digest`
+- `main.py`: start poller ใน lifespan; `/api/telegram/get-chat-id` ปฏิเสธเมื่อ poller ทำงาน (getUpdates มี consumer เดียว ชนกันได้ 409 + offset หาย)
+- Dashboard: toggle "H&R Auto-fix" + ช่อง "ถือว่าหลุดเมื่อไม่เห็นเกิน (ชม.)"
+
+**กับดักที่เจอ/กันไว้**
+- **dedup ฆ่าฟีเจอร์เงียบ:** ถ้าวาง scan ไว้หลัง `if db.get_meta("hr_last_digest") == fingerprint: return` จะไม่เคยรันจริง เพราะ set เสี่ยงนิ่งเป็นวันๆ — ทดสอบด้วย force=True จะผ่าน แต่ production ตายสนิท. ยืนยันของจริง: รอบทดสอบวันนี้ `risky:0` แต่ prompt ยังส่งได้ 3 ใบ = ลำดับถูก
+- **callback = trust boundary:** flow นี้เขียนไฟล์ลง NAS ใครก็ยิง callback ใส่บอทได้ ถ้ารู้ชื่อบอท — เช็ค `chat_id == TELEGRAM_CHAT_ID` ทุกครั้ง และปุ่มใช้ได้ครั้งเดียว (`status != pending` = ปฏิเสธ)
+- **หายจากหน้า ≠ seed ครบ:** `parse_hr()` คืน `[]` เมื่อ table หาย — `check_cleared()` เลยนับเฉพาะ row ที่ยังอยู่และ `seeded >= target` เท่านั้น
+- **re-check ตอนกด:** เวลาระหว่างส่ง prompt กับกดปุ่มอาจหลายชั่วโมง — `apply_fix()` ดึง myhr.php ใหม่ทุกครั้ง ถ้ากลับมา announce เองแล้ว/seed ครบแล้ว จะไม่โหลดซ้ำ
+
+**Verify (บน NAS จริง)**
+- `python hr.py` self-check ผ่าน (เพิ่มเคส `กำลังนับอยู่` + stale warn + fully-seeded)
+- deploy แล้ว log ขึ้น `[hr_fix] telegram callback poller started`
+- เปิด `hr_autofix_enabled=1`, `hr_fix_stale_hours=24` บน NAS แล้ว
+- `POST /api/hr/notify` → `{"ok":true,"total":15,"risky":0,"hits":0,"seeding":6}` + log `[hr_fix] 3 auto-fix prompt(s) sent` = prompt เข้า Telegram จริง 3 ใบ
+- ตัวเลข risky ลดจาก 3 เหลือ 0 และ seeding เพิ่มจาก 3 เป็น 6 หลัง fix ฝั่ง DSM
+
+**ยังไม่ได้ทำ — ลบ torrent ใน DSM หลังพ้น H&R (ที่ขอไว้)**
+ติดของจริง 2 อย่าง: (1) vault ไม่มี DSM API credential เลย มีแต่ `shared.nas.*` (ssh key + sudo password) (2) `sudo -n /usr/syno/bin/synowebapi` บน NAS ตอบ `sudo: a password is required` — passwordless sudo ครอบแค่ `/usr/local/bin/docker`. ต้องรู้ก่อนว่า DS task list ให้ `destination` + key อะไรผูกกับไฟล์จริง (title ล้วนๆ ใช้ตัดสินใจ `rm` ไม่ได้) ค่อยออกแบบ — ทางที่จะไปคือ SSH + paramiko แบบ ops-bot ไม่ใช่ DSM API (CLAUDE.md มีเคส container โดน DSM auto-block)

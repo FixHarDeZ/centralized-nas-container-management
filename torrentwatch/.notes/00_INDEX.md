@@ -127,8 +127,11 @@ Default settings:
 - `notify_sticky_enabled = "0"` — push LINE+Telegram เมื่อพบ sticky/pinned torrent ที่ยังไม่เคย notify (sticky_notified=0)
 - `hr_notify_enabled = "0"` — push Hit & Run digest (default "0" แต่บน NAS เปิด "1" ไว้แล้วตั้งแต่ 2026-07-26)
 - `hr_slack_hours = "24"` — เตือนเมื่อ slack (เวลาเหลือหลังหัก seed ที่ยังขาด) ต่ำกว่านี้
+- `hr_autofix_enabled = "0"` — ถาม Telegram ก่อน re-add ไฟล์ H&R ที่ task ใน DS หายไป (บน NAS เปิด "1" ไว้แล้วตั้งแต่ 2026-07-27)
+- `hr_fix_stale_hours = "24"` — tracker ไม่เห็น client เกินนี้ = ถือว่า task ใน Download Station หายแล้ว
 
 **Internal meta keys** (settings table, ไม่ผ่าน UI, อ่าน/เขียนด้วย `get_meta`/`set_meta`):
+- `tg_last_update_id` — offset ล่าสุดของ getUpdates long-poll (hr_fix.poll_loop)
 - `hr_last_digest` — sha1 (16 ตัว) ของ set ที่ actionable (risky+hit) รอบล่าสุด — เท่ากันแปลว่าไม่มีอะไรเปลี่ยน ข้าม push. เคลียร์เป็น "" เมื่อไม่มีรายการเสี่ยงเลย
 - `free_all_notified_date` — วันที่ push "ทุก torrent ฟรี 100%" ไปแล้ว (กัน notify ซ้ำต่อวัน). Sitewide-free notify ทำงานเสมอ (ไม่มี toggle): scheduler นับ pre-filter `today_total`/`today_free` ต่อรอบ scrape → ยิงเมื่อ `today_free == today_total > 0`
 
@@ -206,7 +209,11 @@ Bug fix 2026-05-20: viewno18sbx.php ใช้ text "Auto Sticky:" แทน imag
 | `scrape_night` | 19:00–01:00 ทุก 30 นาที | scrape รอบกลางคืน (เวลา active) |
 | `scrape_day` | 06:00–19:00 ทุก 60 นาที | scrape รอบกลางวัน |
 | `cleanup` | ทุกวัน 03:00 + ตอน startup | ลบ records > `retention_days` วัน (default 7) |
-| `hr_check` | ทุกวัน 09:10 + 21:10 | อ่าน myhr.php → push LINE+Telegram ไฟล์เสี่ยง H&R (dedup ด้วย `hr_last_digest`) |
+| `hr_check` | ทุกวัน 09:10 + 21:10 | อ่าน myhr.php → เช็คไฟล์ที่พ้น H&R + ถาม auto-fix → push LINE+Telegram ไฟล์เสี่ยง (dedup ด้วย `hr_last_digest`) |
+
+**⚠️ auto-fix/cleared ต้องอยู่เหนือ dedup:** `check_hr()` มี early-return เมื่อ `hr_last_digest` ไม่เปลี่ยน — set เสี่ยงนิ่งเป็นวันๆ ดังนั้นอะไรที่วางใต้บรรทัดนั้นจะไม่รันเลยใน production (force=True ตอนเทสต์จะผ่าน หลอกได้). `hr_fix.check_cleared()` + `hr_fix.scan_and_prompt()` เลยเรียกทันทีหลัง `summarize()`
+
+**ตาราง `hr_fixes`** — สถานะ auto-fix ต่อ site_id: `pending` (ถาม Telegram แล้วรอกด) → `fixed` (โหลด .torrent ลง watch folder แล้ว) → `cleared` (seed ครบ แจ้งแล้ว) · `skipped` (กดข้าม) · `expired` (ไม่กดเกิน 12 ชม.) · `failed`. ปุ่มใช้ได้ครั้งเดียว (เช็ค `status == pending`) และรับเฉพาะ callback ที่ `chat_id` ตรง `TORRENTWATCH_TELEGRAM_CHAT_ID`
 
 **⚠️ Cron coroutine = คนละ event loop:** job ของ APScheduler รันใน thread ของตัวเอง (`_run_async` → `asyncio.run()`) ส่วน `scraper._client` ถูกสร้างใน loop ของ FastAPI ตอน startup → request แรกในงาน cron ตาย `Event loop is closed`. ทุก coroutine ที่ยิงเน็ตจาก cron ต้อง `await scraper.relogin()` ก่อน (`_do_scrape` และ `check_hr` ทำแล้ว)
 
@@ -237,7 +244,7 @@ Bug fix 2026-05-20: viewno18sbx.php ใช้ text "Auto Sticky:" แทน imag
 | `/api/download/nas/{id}` | POST | Save .torrent to `/downloads` |
 | `/api/detail/{id}` | GET | Proxy bearbit detail page (bypass anti-hotlink) |
 | `/api/hr` | GET | myhr.php snapshot สด (rows + risky_ids + hit_count/cap) |
-| `/api/hr/notify` | POST | บังคับส่ง H&R digest เดี๋ยวนี้ (ข้าม toggle + dedup) |
+| `/api/hr/notify` | POST | บังคับส่ง H&R digest เดี๋ยวนี้ (ข้าม toggle + dedup) + รัน auto-fix scan |
 | `/api/debug/html` | GET | Raw scraped HTML |
 | `/api/debug/login-page` | GET | Raw bearbit login page |
 | `/api/debug/relogin` | POST | Force re-login |

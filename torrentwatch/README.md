@@ -127,6 +127,8 @@ Router must forward external port `15059 → NAS`.
 | Telegram notification | off | Push to Telegram Bot when new keyword-matched torrents are found |
 | H&R Notify | off | Push the Hit & Run risk digest to LINE + Telegram (09:10 / 21:10) |
 | H&R เตือนเมื่อเหลือ | `24` h | Alert a file once its remaining leeway (slack) drops below this |
+| H&R Auto-fix | off | Ask on Telegram before re-adding a stale H&R file to the watch folder |
+| ถือว่าหลุดเมื่อไม่เห็นเกิน | `24` h | Tracker hasn't seen our client for this long = the DS task is gone |
 
 **Auto-scrape schedule** is fixed (not configurable):
 
@@ -199,6 +201,35 @@ whether the BitTorrent client is announcing at all.
 
 Self-check: `python hr.py` parses a synthetic cp874 page covering all four badge
 states and asserts the risk split.
+
+
+### Auto-fix (Telegram confirm)
+
+When `hr_autofix_enabled` is on, every H&R round looks for **stale warned files**:
+state `warn`, still savable (`remaining_h > 0`), and the tracker has not seen our
+client for more than `hr_fix_stale_hours` — which means the Download Station task is
+gone, so the seed clock will never advance on its own.
+
+Those files are **not** re-added automatically. The bot sends a Telegram message with
+`✅ fix เลย` / `❌ ข้าม` buttons (max 3 per round). On confirm it re-checks the row live,
+downloads the `.torrent` through the ad-gate, and writes it into `/downloads` — which is
+the DSM watch folder, so Download Station picks it up and resumes seeding.
+
+Rows showing `กำลังนับอยู่` are announcing right now and are never candidates
+(`seeding_now`, parsed as its own field so it can't be confused with an unparseable cell).
+
+Once a fixed file reaches `seeded_h >= target_h`, the next round pushes a
+**พ้น Hit & Run** notice to LINE **and** Telegram. A row merely disappearing from the
+page does not count as cleared.
+
+State lives in the `hr_fixes` table (`pending|fixed|skipped|expired|cleared|failed`);
+unanswered prompts expire after 12h so a stale button can never trigger a download.
+Button presses arrive over a `getUpdates` long-poll started in the app lifespan —
+callbacks from any chat other than `TORRENTWATCH_TELEGRAM_CHAT_ID` are rejected.
+
+⚠️ The scan and the cleared-check run **before** the `hr_last_digest` early-return in
+`check_hr()`: the at-risk set is unchanged for days at a time, so anything behind the
+dedup would never run in production.
 
 ## Scraper Selectors
 

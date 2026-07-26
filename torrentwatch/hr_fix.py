@@ -1,0 +1,195 @@
+"""Hit & Run auto-fix: ask on Telegram, re-add the .torrent, report when cleared.
+
+A file goes stale on myhr.php when its Download Station task is gone — the tracker
+stops seeing us and the 48h seed requirement never completes. Dropping the .torrent
+back into the watch folder (already mounted at /downloads) makes DSM pick it up.
+
+Nothing downloads without an explicit Telegram confirm: re-adding a task costs
+bandwidth and may re-download the payload, so it is never automatic.
+"""
+
+import asyncio
+from pathlib import Path
+
+import config
+import db
+import hr
+import line_notify
+import scraper
+import telegram_notify
+
+_PROMPT_TTL_H = 12.0  # a button older than this is stale — state has moved on
+_MAX_PROMPTS_PER_ROUND = 3
+
+
+def _fmt(v) -> str:
+    return "?" if v is None else f"{v:.1f}"
+
+
+def _detail_url(site_id: str) -> str:
+    return f"{config.SITE_BASE_URL}/details.php?id={site_id}"
+
+
+async def scan_and_prompt(rows: list[dict], settings: dict) -> int:
+    """Ask about stale warned files. Returns how many prompts were sent."""
+    if settings.get("hr_autofix_enabled", "0") != "1":
+        return 0
+    if not (config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID):
+        return 0
+
+    for expired in db.hr_fix_expire_pending(_PROMPT_TTL_H):
+        print(f"[hr_fix] prompt expired for {expired}")
+
+    stale_h = float(settings.get("hr_fix_stale_hours") or 24)
+    sent = 0
+    for row in hr.fix_candidates(rows, stale_h, limit=_MAX_PROMPTS_PER_ROUND * 2):
+        prev = db.hr_fix_get(row["site_id"])
+        # pending = still waiting on an answer, fixed = already re-added and not yet
+        # seen by the tracker, skipped = user said no. None of those re-ask.
+        if prev and prev["status"] in ("pending", "fixed", "skipped"):
+            continue
+        text = (
+            f"🛠 H&R auto-fix?\n\n"
+            f"🎬 {row['title'][:80]}\n"
+            f"⏳ seed {_fmt(row['seeded_h'])}/{_fmt(row['target_h'])} ชม."
+            f" · ขาดอีก {_fmt(row['remaining_h'])} ชม.\n"
+            f"📡 ระบบเห็นล่าสุด {_fmt(row['last_seen_h'])} ชม. ที่แล้ว (งานใน DS น่าจะหายไปแล้ว)\n"
+            f"⌛ เหลือเวลา {_fmt(row['slack_h'])} ชม. (ครบกำหนด {row['deadline']})\n\n"
+            f"โหลด .torrent ใส่ watch folder ให้ Download Station seed ต่อไหม?"
+        )
+        message_id = await telegram_notify.send_buttons(
+            text,
+            [[
+                {"text": "✅ fix เลย", "callback_data": f"hrfix:y:{row['site_id']}"},
+                {"text": "❌ ข้าม", "callback_data": f"hrfix:n:{row['site_id']}"},
+            ]],
+        )
+        if message_id is None:
+            continue
+        db.hr_fix_add_pending(row["site_id"], row["title"], message_id)
+        sent += 1
+        if sent >= _MAX_PROMPTS_PER_ROUND:
+            break
+    if sent:
+        print(f"[hr_fix] {sent} auto-fix prompt(s) sent")
+    return sent
+
+
+async def apply_fix(site_id: str) -> tuple[bool, str]:
+    """Re-check the row, then write its .torrent into the watch folder."""
+    await scraper.relogin()
+    html = await scraper.fetch_hr_html()
+    if not html:
+        return False, "ดึง myhr.php ไม่สำเร็จ"
+
+    row = next((r for r in hr.parse_hr(html) if r["site_id"] == site_id), None)
+    if row is None:
+        return False, "ไม่เจอรายการนี้ใน myhr.php แล้ว"
+    if row.get("seeding_now"):
+        return False, "ตอนนี้ระบบเห็น client กำลัง seed อยู่แล้ว ไม่ต้อง fix"
+    if hr.is_cleared(row):
+        return False, "seed ครบแล้ว ไม่ต้อง fix"
+
+    data = await scraper.fetch_torrent_bytes("", _detail_url(site_id))
+    if not data:
+        return False, "โหลดไฟล์ .torrent ไม่สำเร็จ"
+
+    dest = Path(config.NAS_DOWNLOADS_DIR) / db.torrent_filename(row["title"])
+    dest.write_bytes(data)
+    return True, f"{dest.name} ({len(data):,} bytes)"
+
+
+async def check_cleared(rows: list[dict]) -> int:
+    """Notify LINE+Telegram for fixed files that have now seeded their full 48h.
+
+    Only rows still present on the page count — parse_hr returns [] when the table
+    is missing, and a disappearing row is not proof of success.
+    """
+    if not rows:
+        return 0
+    by_id = {r["site_id"]: r for r in rows}
+    done = 0
+    for fix in db.hr_fix_by_status("fixed"):
+        row = by_id.get(fix["site_id"])
+        if row is None or not hr.is_cleared(row):
+            continue
+        body = (
+            f"✅ พ้น Hit & Run แล้ว\n\n"
+            f"🎬 {row['title'][:80]}\n"
+            f"⏳ seed {_fmt(row['seeded_h'])}/{_fmt(row['target_h'])} ชม. ครบตามกำหนด"
+        )
+        if config.LINE_ACCESS_TOKEN and config.LINE_USER_ID:
+            await line_notify.notify_hr(body)
+        if config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID:
+            await telegram_notify.notify_hr(body)
+        db.hr_fix_set_status(fix["site_id"], "cleared")
+        done += 1
+    if done:
+        print(f"[hr_fix] {done} file(s) cleared H&R")
+    return done
+
+
+async def _handle_callback(cb: dict):
+    data = cb.get("data") or ""
+    cb_id = cb.get("id") or ""
+    message = cb.get("message") or {}
+    chat_id = str((message.get("chat") or {}).get("id") or "")
+    message_id = message.get("message_id")
+
+    # This flow writes files to the NAS — only the configured chat may drive it.
+    if chat_id != str(config.TELEGRAM_CHAT_ID):
+        await telegram_notify.answer_callback(cb_id, "ไม่ได้รับอนุญาต")
+        print(f"[hr_fix] callback from unexpected chat {chat_id} ignored")
+        return
+    if not data.startswith("hrfix:"):
+        await telegram_notify.answer_callback(cb_id)
+        return
+
+    _, action, site_id = data.split(":", 2)
+    fix = db.hr_fix_get(site_id)
+    if fix is None or fix["status"] != "pending":
+        state = fix["status"] if fix else "ไม่พบ"
+        await telegram_notify.answer_callback(cb_id, f"ปุ่มนี้ใช้ไปแล้ว ({state})")
+        return
+
+    if action == "n":
+        db.hr_fix_set_status(site_id, "skipped")
+        await telegram_notify.answer_callback(cb_id, "ข้ามแล้ว")
+        if message_id:
+            await telegram_notify.edit_message(message_id, f"❌ ข้าม — {fix['title'][:80]}")
+        return
+
+    await telegram_notify.answer_callback(cb_id, "กำลังโหลด .torrent ...")
+    ok, detail = await apply_fix(site_id)
+    db.hr_fix_set_status(site_id, "fixed" if ok else "failed", detail)
+    icon = "✅" if ok else "⚠️"
+    head = "ส่งเข้า watch folder แล้ว" if ok else "fix ไม่สำเร็จ"
+    if message_id:
+        await telegram_notify.edit_message(
+            message_id,
+            f"{icon} {head} — {fix['title'][:80]}\n{detail}",
+        )
+    print(f"[hr_fix] apply {site_id}: ok={ok} {detail}")
+
+
+async def poll_loop():
+    """Long-poll Telegram for button presses. Started from the app lifespan."""
+    if not (config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID):
+        print("[hr_fix] telegram not configured — poller off")
+        return
+    telegram_notify.POLLER_ACTIVE = True
+    print("[hr_fix] telegram callback poller started")
+    while True:
+        try:
+            offset = int(db.get_meta("tg_last_update_id") or 0)
+            updates = await telegram_notify.poll_callbacks(offset + 1 if offset else 0)
+            for u in updates:
+                db.set_meta("tg_last_update_id", str(u["update_id"]))
+                if "callback_query" in u:
+                    await _handle_callback(u["callback_query"])
+        except asyncio.CancelledError:
+            telegram_notify.POLLER_ACTIVE = False
+            raise
+        except Exception as e:
+            print(f"[hr_fix] poll error: {e}")
+            await asyncio.sleep(15)

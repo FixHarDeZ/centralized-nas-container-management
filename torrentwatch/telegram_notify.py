@@ -135,3 +135,74 @@ async def get_updates() -> dict:
         return {"ok": True, "chats": chats, "raw_count": len(data.get("result", []))}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+
+# ─── Interactive (inline buttons + long-poll) ─────────────────────────────────
+# Used by hr_fix for the auto-fix confirm flow. Kept on httpx (async) rather than
+# the stdlib Notifier because these need the JSON response back.
+
+POLLER_ACTIVE = False  # getUpdates is single-consumer; see main.api_telegram_updates
+
+
+async def send_buttons(text: str, buttons: list[list[dict]]) -> int | None:
+    """Send a message with an InlineKeyboard. Returns message_id (None on failure)."""
+    if not config.TELEGRAM_BOT_TOKEN or not config.TELEGRAM_CHAT_ID:
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=15) as c:
+            resp = await c.post(
+                _url("sendMessage"),
+                json={
+                    "chat_id": config.TELEGRAM_CHAT_ID,
+                    "text": f"{text}\n\n🕒 {_now()}",
+                    "reply_markup": {"inline_keyboard": buttons},
+                },
+            )
+        return (resp.json().get("result") or {}).get("message_id")
+    except Exception as e:
+        print(f"[telegram] send_buttons error: {e}")
+        return None
+
+
+async def answer_callback(callback_id: str, text: str = ""):
+    try:
+        async with httpx.AsyncClient(timeout=10) as c:
+            await c.post(
+                _url("answerCallbackQuery"),
+                json={"callback_query_id": callback_id, "text": text[:180]},
+            )
+    except Exception as e:
+        print(f"[telegram] answer_callback error: {e}")
+
+
+async def edit_message(message_id: int, text: str):
+    """Rewrite a prompt after it is answered — also drops its buttons."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as c:
+            await c.post(
+                _url("editMessageText"),
+                json={
+                    "chat_id": config.TELEGRAM_CHAT_ID,
+                    "message_id": message_id,
+                    "text": f"{text}\n\n🕒 {_now()}",
+                },
+            )
+    except Exception as e:
+        print(f"[telegram] edit_message error: {e}")
+
+
+async def poll_callbacks(offset: int, timeout: int = 45) -> list[dict]:
+    """Long-poll getUpdates for callback_query only. Raises on transport errors."""
+    async with httpx.AsyncClient(timeout=timeout + 15) as c:
+        resp = await c.get(
+            _url("getUpdates"),
+            params={
+                "offset": offset,
+                "timeout": timeout,
+                "allowed_updates": '["callback_query"]',
+            },
+        )
+    data = resp.json()
+    if not data.get("ok"):
+        raise RuntimeError(f"getUpdates: {str(data)[:150]}")
+    return data.get("result", [])

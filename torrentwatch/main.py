@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import os
 import re
@@ -11,6 +12,7 @@ from zoneinfo import ZoneInfo
 import config
 import db
 import hr
+import hr_fix
 import line_notify
 import scheduler
 import scraper
@@ -32,7 +34,9 @@ async def lifespan(app: FastAPI):
     db.seed_default_sources(config.DEFAULT_URLS)
     await scraper.init()
     scheduler.start()
+    poller = asyncio.create_task(hr_fix.poll_loop())
     yield
+    poller.cancel()
     scheduler.stop()
     await scraper.close()
 
@@ -471,6 +475,13 @@ async def api_telegram_test():
 @app.get("/api/telegram/get-chat-id")
 async def api_telegram_get_chat_id():
     """Call getUpdates to help user discover their Telegram chat_id."""
+    # getUpdates has a single consumer: calling it here while the H&R callback
+    # poller is long-polling gives 409 Conflict and eats its offset.
+    if telegram_notify.POLLER_ACTIVE:
+        return {
+            "ok": False,
+            "error": "chat_id ตั้งค่าไว้แล้วและ poller กำลังทำงานอยู่ — ปิด/แก้ค่าใน .env แทน",
+        }
     return await telegram_notify.get_updates()
 
 

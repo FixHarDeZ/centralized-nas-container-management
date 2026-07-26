@@ -17,6 +17,7 @@ from zoneinfo import ZoneInfo
 import config
 import db
 import hr
+import hr_fix
 import line_notify
 import scraper
 import telegram_notify
@@ -271,6 +272,11 @@ async def check_hr(force: bool = False) -> dict:
 
     rows = hr.parse_hr(html)
     summary = hr.summarize(rows, float(settings.get("hr_slack_hours") or 24))
+    # Both phases run before the dedup early-return below: the at-risk set stays
+    # identical for days, so anything behind the digest check would never fire.
+    await hr_fix.check_cleared(rows)
+    await hr_fix.scan_and_prompt(rows, settings)
+
     fingerprint = hr.digest(summary)
     result = {
         "ok": True,

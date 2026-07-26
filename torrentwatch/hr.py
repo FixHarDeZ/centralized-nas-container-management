@@ -74,6 +74,7 @@ def parse_hr(html: str) -> list[dict]:
         except ValueError:
             pass
 
+        last_seen_txt = tds[4].get_text(strip=True)
         progress = tds[2].get_text(" ", strip=True)
         seeded_h, _, target_h = progress.partition("/")
         remaining_h = _num(tds[3].get_text(strip=True))
@@ -94,7 +95,10 @@ def parse_hr(html: str) -> list[dict]:
                 "seeded_h": _num(seeded_h),
                 "target_h": _num(target_h),
                 "remaining_h": remaining_h,
-                "last_seen_h": _num(tds[4].get_text(strip=True)),
+                "last_seen_h": _num(last_seen_txt),
+                # "กำลังนับอยู่" = client is announcing right now. Distinct from an
+                # unparseable cell, which also yields last_seen_h=None.
+                "seeding_now": "กำลังนับ" in last_seen_txt,
                 "state": state,
                 "state_label": STATE_LABELS.get(state, state),
                 "deadline": deadline.strftime("%d/%m %H:%M") if deadline else "",
@@ -158,6 +162,35 @@ def format_message(summary: dict) -> str:
     return "\n".join(lines)
 
 
+def fix_candidates(rows: list[dict], stale_h: float = 24.0, limit: int = 5) -> list[dict]:
+    """Rows worth re-adding to Download Station: warned, still savable, and the
+    tracker has not seen our client for `stale_h` hours (= the DS task is gone).
+
+    seeding_now rows are announcing right now — re-adding them would duplicate a
+    live task. A None last_seen_h with seeding_now=False means the cell did not
+    parse, which is not proof of staleness, so it never qualifies either.
+    """
+    out = [
+        r
+        for r in rows
+        if r["state"] == "warn"
+        and not r.get("seeding_now")
+        and r["last_seen_h"] is not None
+        and r["last_seen_h"] > stale_h
+        and (r["remaining_h"] or 0) > 0
+        and r["site_id"]
+    ]
+    out.sort(key=lambda r: (r["slack_h"] is None, r["slack_h"]))
+    return out[:limit]
+
+
+def is_cleared(row: dict) -> bool:
+    """True once the file has seeded its full requirement."""
+    if row["seeded_h"] is None or row["target_h"] is None:
+        return False
+    return row["seeded_h"] >= row["target_h"] or (row["remaining_h"] or 0) <= 0
+
+
 def digest(summary: dict) -> str:
     """Stable fingerprint of the actionable set — used to skip identical daily pushes."""
     key = "|".join(
@@ -181,6 +214,12 @@ if __name__ == "__main__":
         (_ago(160), "23.5 ชม. / 48.0 ชม.", "24.5 ชม.", "0.3 ชม. ที่แล้ว", "warn"),
         (_ago(100), "10.0 ชม. / 48.0 ชม.", "38.0 ชม.", "0.2 ชม. ที่แล้ว", "ok"),
         (_ago(2), "1.0 ชม. / 48.0 ชม.", "47.0 ชม.", "0.1 ชม. ที่แล้ว", "pause"),
+        # stale warn = DS task gone, the auto-fix target
+        (_ago(160), "23.5 ชม. / 48.0 ชม.", "24.5 ชม.", "30.0 ชม. ที่แล้ว", "warn"),
+        # same numbers but the client is announcing — must never be re-added
+        (_ago(160), "23.5 ชม. / 48.0 ชม.", "24.5 ชม.", "กำลังนับอยู่", "warn"),
+        # fully seeded, waiting to drop off the page
+        (_ago(60), "48.0 ชม. / 48.0 ชม.", "0.0 ชม.", "0.1 ชม. ที่แล้ว", "ok"),
     ]
     _rows = [(f"200000{i + 1}", *r) for i, r in enumerate(_rows)]
     _html = '<table class="t"><tr><th>ชื่อ</th><th>เสร็จ</th><th>seed</th><th>ขาด</th><th>เห็นล่าสุด</th><th>สถานะ</th></tr>'
@@ -193,8 +232,8 @@ if __name__ == "__main__":
     _html += "</table>"
     _parsed = parse_hr(_html.encode("cp874").decode("cp874"))
 
-    assert len(_parsed) == 4, _parsed
-    assert [r["state"] for r in _parsed] == ["hit", "warn", "ok", "pause"]
+    assert len(_parsed) == 7, _parsed
+    assert [r["state"] for r in _parsed[:4]] == ["hit", "warn", "ok", "pause"]
     assert _parsed[0]["site_id"] == "2000001"
     assert "เรื่องทดสอบ" in _parsed[0]["title"], _parsed[0]["title"]
     # Column sanity: remaining == target - seeded, catches column reordering
@@ -203,9 +242,17 @@ if __name__ == "__main__":
 
     _s = summarize(_parsed, slack_threshold_h=24.0)
     assert _s["hit_count"] == 1
-    assert _s["seeding_count"] == 1
+    assert _s["seeding_count"] == 2
     # ok is never risky; pause with 47h to seed and a fresh 168h window has slack
-    assert [r["site_id"] for r in _s["risky"]] == ["2000002"], _s["risky"]
+    assert {r["site_id"] for r in _s["risky"]} == {"2000002", "2000005", "2000006"}, _s["risky"]
+
+    _c = fix_candidates(_parsed, stale_h=24.0)
+    # only the stale warn row: 2000002 was seen 0.3h ago, 2000006 is announcing,
+    # 2000001 already violated, 2000004 is still in the grace window
+    assert [r["site_id"] for r in _c] == ["2000005"], _c
+    assert _parsed[5]["seeding_now"] is True and _parsed[5]["last_seen_h"] is None
+    assert _parsed[4]["seeding_now"] is False
+    assert is_cleared(_parsed[6]) and not is_cleared(_parsed[1])
     assert digest(_s) == digest(summarize(parse_hr(_html)))
     assert "H&R" in format_message(_s)
     print("hr self-check OK:", {k: _s[k] for k in ("hit_count", "seeding_count")})
