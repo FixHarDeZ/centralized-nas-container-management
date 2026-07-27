@@ -85,6 +85,15 @@ async def _do_delete(target: dict) -> tuple[bool, str]:
     """Delete the DS task first, then the payload. Task-first avoids DS rewriting it."""
     try:
         async with dsm.Dsm() as d:
+            # The confirm button can sit in Telegram for weeks. Re-stat so the
+            # second press is a check, not a replay of a stale snapshot.
+            info = await d.stat(target["path"])
+            if (
+                info is None
+                or info.get("real_path") != target["real_path"]
+                or info.get("size") != target["size"]
+            ):
+                return False, "ไฟล์เปลี่ยนไปจากตอนยืนยัน — ไม่ลบ"
             await d.delete_task(target["task_id"])
             await d.delete_path(target["path"])
     except dsm.DsmError as e:

@@ -745,3 +745,19 @@ Fix (`scheduler.py`):
 - `hr_delete_enabled` ยัง off — เปิดเองในแดชบอร์ดเมื่อพร้อม
 - path ลบจริงยังไม่เคยรัน (ตั้งใจ) — จะรันจริงครั้งแรกตอนผู้ใช้กดยืนยันรอบสอง
 - DSM account ที่ใช้ = ตัวเดียวกับ homepage widget ตอนนี้มีสิทธิ์ลบไฟล์ผ่าน torrentwatch ด้วย
+
+### 2026-07-27 (รอบ 4) — hardening ทางลบจริง
+
+Review เจอ 4 จุดบนเส้นทาง destructive ที่ dry-run รอบก่อนจับไม่ได้ (เพราะหยุดก่อนกด `go`):
+
+1. **target เป็น snapshot ไม่เคยเช็คซ้ำ** — `_resolve` stat ตอนกดปุ่มแรก แล้ว `_do_delete` ลบตาม path เดิมเลย ไม่มีอะไร expire `del_confirm` (มีแค่ `hr_fix_expire_pending` ที่แตะ `pending`) ปุ่มค้างใน Telegram 3 สัปดาห์ก็ยังยิงได้ → `_do_delete` re-stat ก่อนลบ ถ้า `real_path`/`size` ไม่ตรงกับตอนยืนยัน ตอบ "ไฟล์เปลี่ยนไปจากตอนยืนยัน — ไม่ลบ"
+2. **จับแต่ `DsmError`** — `httpx.ReadTimeout` หลุดไปถึง `poll_loop` ที่ `except Exception` แล้วเงียบ สถานะค้าง `del_confirm` ผู้ใช้ไม่เห็นอะไร กดซ้ำได้บนต้นไม้ที่ลบไปครึ่งหนึ่งแล้ว → `_call`/`__aenter__` ห่อ `httpx.HTTPError` เป็น `DsmError`
+3. **`FileStation.Delete` เป็น synchronous variant** — โฟลเดอร์หลาย GB เกิน timeout 20s → `_DELETE_TIMEOUT = 300` เฉพาะ call นั้น
+4. **408 = ไม่มีไฟล์แล้ว** ถูกรายงานเป็น `del_failed` ทั้งที่ DS อาจลบ payload ไปพร้อม task = สำเร็จอยู่แล้ว → กลืน 408 เท่านั้น error อื่น raise ต่อ
+
+Verify (ไม่ลบอะไรจริง):
+- `python /app/dsm.py` → `dsm self-check OK` (self-check เพิ่ม fake `_call` พิสูจน์ 408 กลืน / 407 raise)
+- `_do_delete` ยิงจริงบน task ตัวแรกใน DS 2 เคส: size เพี้ยน 1 byte และ path ปลอม → ทั้งคู่ตอบ `(False, 'ไฟล์เปลี่ยนไปจากตอนยืนยัน — ไม่ลบ')` ไม่แตะ `delete_task`/`delete_path`
+- settings round-trip: `PUT /api/settings {"hr_delete_enabled":"1"}` → GET คืน `1` → คืนค่าเดิม `0` (ผ่าน basic auth ใน container, app มี middleware เอง ไม่ใช่แค่ nginx)
+
+ยังไม่เคยรันเส้นทางลบจริงสักครั้ง — `hr_delete_enabled` ยัง off default

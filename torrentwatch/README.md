@@ -253,9 +253,17 @@ If the path does not resolve, the request is abandoned (`del_failed`) — a mult
 torrent with no wrapper folder writes straight into `destination`, and deleting
 `destination` would take unrelated files with it. The path is never guessed.
 
+The second button re-stats the path before touching anything and refuses if the real
+path or size moved since the confirmation was shown — a button can sit unread in
+Telegram for weeks, and nothing expires `del_confirm`. A FileStation "no such file"
+(408) on the payload counts as success: Download Station may already have taken it
+out with the task.
+
 DSM credentials come from `TORRENTWATCH_DSM_*`; login happens per operation and is
 never retried in a loop, because repeated DSM login failures get the container IP
-auto-blocked.
+auto-blocked. Every httpx failure inside `dsm.py` is re-raised as `DsmError`, so a
+timeout mid-delete surfaces as `del_failed` instead of being swallowed by the
+callback poller.
 
 ## Scraper Selectors
 

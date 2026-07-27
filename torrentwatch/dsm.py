@@ -17,6 +17,7 @@ import config
 import httpx
 
 _TIMEOUT = 20
+_DELETE_TIMEOUT = 300
 
 
 class DsmError(RuntimeError):
@@ -36,18 +37,22 @@ class Dsm:
 
     async def __aenter__(self) -> "Dsm":
         self._client = httpx.AsyncClient(base_url=config.DSM_URL, timeout=_TIMEOUT)
-        r = await self._client.post(
-            "/webapi/auth.cgi",
-            data={
-                "api": "SYNO.API.Auth",
-                "version": "3",
-                "method": "login",
-                "account": config.DSM_USERNAME,
-                "passwd": config.DSM_PASSWORD,
-                "session": "torrentwatch",
-                "format": "sid",
-            },
-        )
+        try:
+            r = await self._client.post(
+                "/webapi/auth.cgi",
+                data={
+                    "api": "SYNO.API.Auth",
+                    "version": "3",
+                    "method": "login",
+                    "account": config.DSM_USERNAME,
+                    "passwd": config.DSM_PASSWORD,
+                    "session": "torrentwatch",
+                    "format": "sid",
+                },
+            )
+        except httpx.HTTPError as e:
+            await self._client.aclose()
+            raise DsmError(f"DSM unreachable: {e}") from e
         body = r.json()
         if not body.get("success"):
             await self._client.aclose()
@@ -71,9 +76,15 @@ class Dsm:
             pass
         await self._client.aclose()
 
-    async def _call(self, endpoint: str, **params) -> dict:
+    async def _call(self, endpoint: str, timeout: float | None = None, **params) -> dict:
         params["_sid"] = self._sid
-        r = await self._client.post(f"/webapi/{endpoint}", data=params)
+        try:
+            # Anything httpx raises must come back out as DsmError: the callback
+            # poller swallows stray exceptions, so a bare timeout mid-delete would
+            # leave the user staring at a button that silently did something.
+            r = await self._client.post(f"/webapi/{endpoint}", data=params, timeout=timeout or _TIMEOUT)
+        except httpx.HTTPError as e:
+            raise DsmError(f"{params.get('api')}.{params.get('method')}: {e}") from e
         body = r.json()
         if not body.get("success"):
             raise DsmError(f"{params.get('api')}.{params.get('method')}: {body.get('error')}")
@@ -122,14 +133,23 @@ class Dsm:
         }
 
     async def delete_path(self, share_path: str):
-        await self._call(
-            "entry.cgi",
-            api="SYNO.FileStation.Delete",
-            version="2",
-            method="delete",
-            path=json.dumps([share_path]),
-            recursive="true",
-        )
+        try:
+            await self._call(
+                "entry.cgi",
+                # method=delete is the blocking variant, and a recursive multi-GB
+                # folder outlives the normal timeout.
+                timeout=_DELETE_TIMEOUT,
+                api="SYNO.FileStation.Delete",
+                version="2",
+                method="delete",
+                path=json.dumps([share_path]),
+                recursive="true",
+            )
+        except DsmError as e:
+            # 408 = no such file. Download Station may already have taken the
+            # payload out with the task, and "gone" is the outcome we asked for.
+            if "408" not in str(e):
+                raise
 
 
 def task_payload_path(task: dict) -> str:
@@ -176,4 +196,21 @@ if __name__ == "__main__":
     assert task_payload_path(_tasks[1]) == "/Movies/Western/Troy - Director's Cut (2004).mkv"
     # a task with no destination must not produce a path that deletes a share root
     assert task_payload_path({"title": "x", "additional": {}}) == "/x"
+
+    import asyncio
+
+    class _Fake(Dsm):
+        def __init__(self, err):
+            self._err = err
+
+        async def _call(self, endpoint, timeout=None, **params):
+            raise DsmError(self._err)
+
+    # "already gone" is the outcome we wanted; any other DSM error must surface
+    asyncio.run(_Fake("SYNO.FileStation.Delete: {'code': 408}").delete_path("/x"))
+    try:
+        asyncio.run(_Fake("SYNO.FileStation.Delete: {'code': 407}").delete_path("/x"))
+        raise AssertionError("non-408 delete error must propagate")
+    except DsmError:
+        pass
     print("dsm self-check OK")
