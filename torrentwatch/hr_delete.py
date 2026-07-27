@@ -95,7 +95,12 @@ async def _do_delete(target: dict) -> tuple[bool, str]:
             ):
                 return False, "ไฟล์เปลี่ยนไปจากตอนยืนยัน — ไม่ลบ"
             await d.delete_task(target["task_id"])
-            await d.delete_path(target["path"])
+            try:
+                await d.delete_path(target["path"])
+            except dsm.DsmError as e:
+                # Half-done is the one outcome the bot cannot retry: pressing the
+                # button again re-resolves through a task that no longer exists.
+                return False, f"ลบ task ใน DS แล้ว แต่ลบไฟล์ไม่สำเร็จ — ต้องลบเองที่ {target['real_path']}\nDSM error: {e}"
     except dsm.DsmError as e:
         return False, f"DSM error: {e}"
     return True, f"ลบแล้ว: {target['real_path']}"

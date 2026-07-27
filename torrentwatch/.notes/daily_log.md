@@ -761,3 +761,5 @@ Verify (ไม่ลบอะไรจริง):
 - settings round-trip: `PUT /api/settings {"hr_delete_enabled":"1"}` → GET คืน `1` → คืนค่าเดิม `0` (ผ่าน basic auth ใน container, app มี middleware เอง ไม่ใช่แค่ nginx)
 
 ยังไม่เคยรันเส้นทางลบจริงสักครั้ง — `hr_delete_enabled` ยัง off default
+
+เช็คเพิ่ม (read-only): stat ซ้ำสองรอบทั้ง 6 task ใน DS ค่าตรงกันหมดรวม payload ที่เป็นโฟลเดอร์ (getinfo คืน size ของ inode ไม่ใช่ recursive จึงนิ่ง) แปลว่า guard ไม่ false-trip ตอนกดยืนยันจริง. เพิ่มข้อความกรณีลบครึ่งทาง (ลบ task สำเร็จ แต่ลบไฟล์พัง) ให้บอก path ที่ต้องไปลบเอง เพราะกดปุ่มซ้ำไม่ได้แล้ว (task หายไปแล้ว)
