@@ -374,6 +374,17 @@ def api_status():
     return scheduler.status()
 
 
+@app.get("/api/runs")
+def api_runs(limit: int = 40, job: str = ""):
+    """Job history + the H&R actions behind it. Behind auth: exposes scrape internals."""
+    return {
+        "runs": db.get_runs(limit=min(limit, 200), job=job),
+        "counters": db.run_counters(),
+        "hr_fixes": db.hr_fix_recent(20),
+        "status": scheduler.status(),
+    }
+
+
 # ─── Hit & Run ───────────────────────────────────────────────────────────────
 
 

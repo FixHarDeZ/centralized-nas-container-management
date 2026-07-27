@@ -763,3 +763,20 @@ Verify (ไม่ลบอะไรจริง):
 ยังไม่เคยรันเส้นทางลบจริงสักครั้ง — `hr_delete_enabled` ยัง off default
 
 เช็คเพิ่ม (read-only): stat ซ้ำสองรอบทั้ง 6 task ใน DS ค่าตรงกันหมดรวม payload ที่เป็นโฟลเดอร์ (getinfo คืน size ของ inode ไม่ใช่ recursive จึงนิ่ง) แปลว่า guard ไม่ false-trip ตอนกดยืนยันจริง. เพิ่มข้อความกรณีลบครึ่งทาง (ลบ task สำเร็จ แต่ลบไฟล์พัง) ให้บอก path ที่ต้องไปลบเอง เพราะกดปุ่มซ้ำไม่ได้แล้ว (task หายไปแล้ว)
+
+### 2026-07-27 (รอบ 5) — แท็บ Run Detail ในแดชบอร์ด
+
+โจทย์: "เพิ่ม run detail ใน dashboard ออกแบบให้สวยและมีประโยชน์"
+
+ของเดิมมีแค่ `status()` (last_scrape/next_scrape/progress) ที่เป็น **module global** — deploy ทีนึงหายหมด และ deploy รอบนึงกินเวลา ~500-600s เพราะงั้น run log ต้องลง SQLite ไม่ใช่ขยาย status dict
+
+- `runs` table (`job, started_at, duration_s, ok, summary JSON, error`) + `add_run/get_runs/run_counters/cleanup_old_runs` + `hr_fix_recent`
+- `scheduler._record(job, trigger)` contextmanager ครอบ 4 job — วางไว้**ข้างใน** job function ไม่ใช่รอบ `_run_async` เพราะ `_run_async` กลืน exception เป็น `print` (รอบที่ล้มจะไม่เหลือแถว). `_do_scrape` แยกเป็น `_do_scrape` (wrapper) + `_scrape_once(box)`; `check_hr` แยกเป็น wrapper + `_check_hr_once`
+- `check_hr` เช็ค `hr_notify_enabled` **ก่อน** เข้า `_record` — ไม่งั้น toggle ปิดไว้จะได้แถว fail ปลอมวันละ 2 แถวกลบของจริง
+- retention เกาะ `retention_days` เดิม (floor 14 วัน) ตัดใน `_cleanup_job` 03:00 ไม่เพิ่ม cron
+- `GET /api/runs` (หลัง basic auth ไม่ใส่ `_AUTH_BYPASS_PATHS` เพราะเปิด internal ของ scrape)
+- แท็บใหม่ "รอบทำงาน": การ์ดสรุป 4 ใบ (รอบ 7 วัน / ล้มเหลว / เฉลี่ยวินาที / รอบถัดไป) + บล็อก **"รอพี่กดใน Telegram"** (hr_fixes ที่ยังเป็น `pending`/`del_asked`/`del_confirm`) + timeline รอบล่าสุดพร้อม chips จาก summary + H&R actions ล่าสุด. ใช้คลาส `tw-stats-*` เดิม เพิ่มแค่ `tw-run-*` (~80 บรรทัด) bump `?v=` ทั้ง css/js
+
+Verify บน NAS: `_record` ทดสอบทั้งเส้นสำเร็จและเส้น raise → ได้ `ok=1 {'trigger':'auto','found':3}` กับ `ok=0 error='RuntimeError: boom'` exception ไม่หลุด (ลบแถว selftest ทิ้งแล้ว); `GET /api/runs` คืน 4 key ครบ; ยิง `POST /api/scrape` จริง ได้แถว `scrape … {'trigger':'manual','sources':2,'found':27,'new':2,'source_errors':0,'rows_today':105,'free_today':1}` 4.8s
+
+ยังไม่ได้เปิดดูหน้าเว็บจริงด้วยตา — โครง HTML/JS ล้อแท็บ "สถิติ" ตัวเดิม

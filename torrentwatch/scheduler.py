@@ -9,6 +9,7 @@ Daily cleanup runs 03:00 (and once at startup to enforce retention after restart
 """
 
 import asyncio
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
@@ -45,7 +46,40 @@ def _run_async(coro):
         print(f"[scheduler] async run error: {e}")
 
 
-async def _do_scrape():
+@contextmanager
+def _record(job: str, trigger: str = "auto"):
+    """Persist one job run, however it ends.
+
+    Everything the dashboard used to show about runs lived in module globals that
+    a deploy wipes, so the row goes to SQLite. The exception is caught here rather
+    than re-raised because APScheduler jobs already swallow, and a failed run that
+    leaves no row is exactly the one worth seeing.
+    """
+    started = datetime.now(_TZ)
+    box: dict = {"trigger": trigger}
+    error = ""
+    try:
+        yield box
+    except Exception as e:
+        error = f"{type(e).__name__}: {e}"
+        print(f"[scheduler] {job} failed: {error}")
+    error = error or str(box.pop("error", ""))
+    db.add_run(
+        job,
+        started.strftime("%Y-%m-%d %H:%M:%S"),
+        (datetime.now(_TZ) - started).total_seconds(),
+        not error,
+        box,
+        error,
+    )
+
+
+async def _do_scrape(trigger: str = "auto"):
+    with _record("scrape", trigger) as box:
+        await _scrape_once(box)
+
+
+async def _scrape_once(box: dict):
     global _last_scrape, _scrape_status, _scrape_progress
 
     _scrape_status = "running"
@@ -77,6 +111,8 @@ async def _do_scrape():
 
     sources = db.get_enabled_sources()
     total_found = 0
+    total_new = 0
+    source_errors = 0
     free_today = 0  # pre-filter count of today's non-sticky rows that are 100% free
     rows_today = (
         0  # pre-filter count of all today's non-sticky rows (sitewide-free signal)
@@ -86,6 +122,7 @@ async def _do_scrape():
         # Re-login each cycle to recover from stale connections after long idle periods
         if not await scraper.relogin():
             print("[scheduler] relogin failed — scrape aborted")
+            box["error"] = "relogin failed — scrape aborted"
             return
 
         for i, source in enumerate(sources):
@@ -131,6 +168,7 @@ async def _do_scrape():
             except Exception as e:
                 print(f"[scheduler] scrape error {source_url}: {e}")
                 entries, seen_sticky_ids = [], set()
+                source_errors += 1
 
             new_keyword_matches: list[dict] = []
             for entry in entries:
@@ -140,6 +178,8 @@ async def _do_scrape():
                         entry["site_id"],
                         entry,
                     )
+                    if is_new:
+                        total_new += 1
                     if is_new and entry.get("keyword_match"):
                         new_keyword_matches.append({**entry, "id": torrent_id})
                 except Exception as e:
@@ -232,6 +272,14 @@ async def _do_scrape():
     finally:
         _scrape_status = "idle"
         _scrape_progress = {}
+        box.update(
+            sources=len(sources),
+            found=total_found,
+            new=total_new,
+            source_errors=source_errors,
+            rows_today=rows_today,
+            free_today=free_today,
+        )
         print(
             f"[scheduler] scrape done — {total_found} entries across {len(sources)} sources",
         )
@@ -253,6 +301,20 @@ async def _maybe_notify_all_free(today: str, rows_today: int, free_today: int):
 
 
 async def check_hr(force: bool = False) -> dict:
+    """Run the H&R check and log it. See _check_hr_once for what it actually does."""
+    if not force and db.get_settings().get("hr_notify_enabled", "0") != "1":
+        # Turned off is not a run — logging it twice a day would bury the real ones.
+        return {"ok": False, "error": "hr_notify_enabled=0"}
+    result = {"ok": False, "error": "unknown"}
+    with _record("hr", "manual" if force else "auto") as box:
+        result = await _check_hr_once(force)
+        box.update({k: v for k, v in result.items() if k != "ok"})
+        if not result.get("ok"):
+            box["error"] = result.get("error", "")
+    return result
+
+
+async def _check_hr_once(force: bool = False) -> dict:
     """Fetch myhr.php, push LINE+Telegram when files are close to a H&R violation.
 
     De-duped on the actionable set (hr.digest) so the same at-risk files don't
@@ -336,10 +398,16 @@ def _scrape_job():
 
 
 def _cleanup_job():
-    settings = db.get_settings()
-    days = int(settings.get("retention_days", 7))
-    deleted = db.cleanup_old_records(days=days)
-    print(f"[scheduler] weekly cleanup — deleted {deleted} old records (>{days} days)")
+    with _record("cleanup") as box:
+        settings = db.get_settings()
+        days = int(settings.get("retention_days", 7))
+        deleted = db.cleanup_old_records(days=days)
+        # The run log rides the same retention knob — no second cron for one DELETE.
+        runs_deleted = db.cleanup_old_runs(days=max(days, 14))
+        box.update(days=days, deleted=deleted, runs_deleted=runs_deleted)
+        print(
+            f"[scheduler] weekly cleanup — deleted {deleted} old records (>{days} days)",
+        )
 
 
 def _minute_pattern(interval: int) -> str:
@@ -389,18 +457,21 @@ def reload_scrape_job():
 
 
 def _backup_job():
-    backup_dir = "/data/backups"
-    retention = 30
-    path = backup_db(
-        config.DB_PATH,
-        backup_dir,
-        prefix="torrent",
-        retention_days=retention,
-    )
-    if path:
-        print(f"[scheduler] backup: {path}")
-    else:
-        print("[scheduler] backup: failed or nothing to backup")
+    with _record("backup") as box:
+        backup_dir = "/data/backups"
+        retention = 30
+        path = backup_db(
+            config.DB_PATH,
+            backup_dir,
+            prefix="torrent",
+            retention_days=retention,
+        )
+        if path:
+            box.update(file=Path(path).name, retention_days=retention)
+            print(f"[scheduler] backup: {path}")
+        else:
+            box["error"] = "backup failed or nothing to backup"
+            print("[scheduler] backup: failed or nothing to backup")
 
 
 def start():
@@ -473,4 +544,4 @@ def status() -> dict:
 
 async def trigger_now():
     """Manual scrape trigger from API."""
-    await _do_scrape()
+    await _do_scrape("manual")

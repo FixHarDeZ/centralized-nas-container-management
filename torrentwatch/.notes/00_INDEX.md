@@ -60,7 +60,7 @@ torrentwatch/
 ├── docker-compose.yml
 ├── requirements.txt
 └── static/
-    ├── index.html   — SPA shell (tabs: วันนี้, ประวัติ, Keyword, ตั้งค่า)
+    ├── index.html   — SPA shell (tabs: วันนี้, ประวัติ, รอบทำงาน, Keyword, สถิติ, ตั้งค่า)
     ├── app.js       — all frontend logic (fetch, render, state)
     └── style.css    — dark theme CSS variables
 ```
@@ -135,7 +135,13 @@ Default settings:
 - `hr_last_digest` — sha1 (16 ตัว) ของ set ที่ actionable (risky+hit) รอบล่าสุด — เท่ากันแปลว่าไม่มีอะไรเปลี่ยน ข้าม push. เคลียร์เป็น "" เมื่อไม่มีรายการเสี่ยงเลย
 - `free_all_notified_date` — วันที่ push "ทุก torrent ฟรี 100%" ไปแล้ว (กัน notify ซ้ำต่อวัน). Sitewide-free notify ทำงานเสมอ (ไม่มี toggle): scheduler นับ pre-filter `today_total`/`today_free` ต่อรอบ scrape → ยิงเมื่อ `today_free == today_total > 0`
 
-Index: `idx_torrents_source_date ON torrents(source_id, date_posted)`
+### `runs`
+```sql
+id (PK), job, started_at, duration_s, ok, summary (JSON), error
+```
+หนึ่งแถวต่อการรันหนึ่งรอบของ job (`scrape` / `hr` / `cleanup` / `backup`). เขียนผ่าน `scheduler._record(job, trigger)` ซึ่งเป็น contextmanager: **กลืน exception** แล้วบันทึกเป็น `ok=0` + `error` เสมอ (รอบที่ล้มแล้วไม่เหลือแถวคือรอบที่อยากดูที่สุด) และรับ "soft error" ผ่าน `box["error"]` สำหรับกรณีที่ job return เฉยๆ เช่น relogin fail. `summary` เก็บ JSON ต่อ job — scrape: `sources/found/new/source_errors/rows_today/free_today`, hr: `total/risky/hits/seeding/sent`, cleanup: `days/deleted/runs_deleted`, backup: `file/retention_days`; ทุกอันมี `trigger` = `auto|manual`. **`check_hr` ที่ปิด toggle ไว้ return ก่อนเข้า `_record`** ไม่งั้นวันละ 2 แถว fail ปลอมกลบของจริง. เหตุผลที่ต้องลงตาราง: `_last_scrape`/`_scrape_status` เป็น module global ที่ deploy ทีเดียวหายหมด. Retention ใช้ `retention_days` (ขั้นต่ำ 14 วัน) ตัดใน `_cleanup_job` 03:00 เดิม ไม่เพิ่ม cron ใหม่
+
+Index: `idx_torrents_source_date ON torrents(source_id, date_posted)`, `idx_runs_started ON runs(started_at DESC)`
 
 ---
 
@@ -237,6 +243,7 @@ Bug fix 2026-05-20: viewno18sbx.php ใช้ text "Auto Sticky:" แทน imag
 | `/api/keywords` | GET/POST/DELETE | Per-source keyword CRUD |
 | `/api/settings` | GET/PUT | Global settings (PUT triggers scheduler reload) |
 | `/api/scrape` | POST | Manual scrape trigger |
+| `/api/runs` | GET | ประวัติ run (`limit`, `job`) + counters 7 วัน + `hr_fix_recent(20)` + `status()` — ห้ามใส่ `_AUTH_BYPASS_PATHS` เพราะโชว์ internal ของ scrape |
 | `/api/stats` | GET | Aggregate stats (optional source_id filter) |
 | `/api/torrents/{id}/status` | POST | Set watched_status: 0=none, 1=watched, 2=skip |
 | `/api/cover/{id}` | GET | Proxy cover image through authenticated session |

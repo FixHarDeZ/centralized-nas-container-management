@@ -1,3 +1,4 @@
+import json
 import re
 import sqlite3
 from contextlib import contextmanager
@@ -107,8 +108,22 @@ def init_db():
                 note         TEXT NOT NULL DEFAULT ''
             );
 
+            -- One row per job execution. The scheduler's last_scrape/status live in
+            -- module globals that every deploy wipes, so run history needs a table.
+            CREATE TABLE IF NOT EXISTS runs (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                job        TEXT NOT NULL,       -- scrape|hr|cleanup|backup
+                started_at TEXT NOT NULL,
+                duration_s REAL NOT NULL DEFAULT 0,
+                ok         INTEGER NOT NULL DEFAULT 1,
+                summary    TEXT NOT NULL DEFAULT '{}',
+                error      TEXT NOT NULL DEFAULT ''
+            );
+
             CREATE INDEX IF NOT EXISTS idx_torrents_source_date
                 ON torrents(source_id, date_posted);
+
+            CREATE INDEX IF NOT EXISTS idx_runs_started ON runs(started_at DESC);
         """)
 
         # Seed default settings (INSERT new keys only)
@@ -698,3 +713,81 @@ def cleanup_old_records(days: int = 7) -> int:
     with _conn() as c:
         result = c.execute("DELETE FROM torrents WHERE date_posted < ?", (cutoff,))
         return result.rowcount
+
+
+# ─── Run log ──────────────────────────────────────────────────────────────────
+
+
+def add_run(
+    job: str,
+    started_at: str,
+    duration_s: float,
+    ok: bool,
+    summary: dict | None = None,
+    error: str = "",
+):
+    with _conn() as c:
+        c.execute(
+            "INSERT INTO runs (job, started_at, duration_s, ok, summary, error) "
+            "VALUES (?,?,?,?,?,?)",
+            (
+                job,
+                started_at,
+                round(duration_s, 1),
+                int(ok),
+                json.dumps(summary or {}, ensure_ascii=False),
+                error[:300],
+            ),
+        )
+
+
+def get_runs(limit: int = 40, job: str = "") -> list[dict]:
+    sql = "SELECT * FROM runs"
+    args: list = []
+    if job:
+        sql += " WHERE job=?"
+        args.append(job)
+    sql += " ORDER BY id DESC LIMIT ?"
+    args.append(limit)
+    with _conn() as c:
+        rows = [dict(r) for r in c.execute(sql, args).fetchall()]
+    for r in rows:
+        try:
+            r["summary"] = json.loads(r["summary"])
+        except ValueError:
+            r["summary"] = {}
+    return rows
+
+
+def run_counters(days: int = 7) -> dict:
+    """Totals for the run-panel header cards."""
+    cutoff = (datetime.now(_TZ) - timedelta(days=days)).strftime("%Y-%m-%d")
+    with _conn() as c:
+        row = c.execute(
+            "SELECT COUNT(*) n, SUM(ok=0) failed, AVG(duration_s) avg_s "
+            "FROM runs WHERE started_at >= ?",
+            (cutoff,),
+        ).fetchone()
+    return {
+        "runs": row["n"] or 0,
+        "failed": row["failed"] or 0,
+        "avg_s": round(row["avg_s"] or 0, 1),
+        "days": days,
+    }
+
+
+def cleanup_old_runs(days: int = 7) -> int:
+    cutoff = (datetime.now(_TZ) - timedelta(days=days)).strftime("%Y-%m-%d")
+    with _conn() as c:
+        return c.execute("DELETE FROM runs WHERE started_at < ?", (cutoff,)).rowcount
+
+
+def hr_fix_recent(limit: int = 20) -> list[dict]:
+    """Latest H&R actions, newest first — the dashboard view of the Telegram flow."""
+    with _conn() as c:
+        rows = c.execute(
+            "SELECT site_id, title, status, requested_at, decided_at, note FROM hr_fixes "
+            "ORDER BY COALESCE(decided_at, requested_at) DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]

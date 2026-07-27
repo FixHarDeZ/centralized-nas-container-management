@@ -80,6 +80,7 @@ function onTabActivate(tab) {
   if (tab === "keywords") loadKeywords();
   if (tab === "settings") loadSettings();
   if (tab === "stats") loadStats();
+  if (tab === "runs") loadRuns();
 }
 
 // ─── Sources ──────────────────────────────────────────────────────────────────
@@ -1075,6 +1076,106 @@ function _statsBar(label, count, max) {
     <span class="tw-stats-bar-count">${count}</span>
   </div>`;
 }
+
+// ─── Runs ─────────────────────────────────────────────────────────────────────
+const JOB_META = {
+  scrape:  { icon: "bi-cloud-download", label: "Scrape",  color: "var(--accent)" },
+  hr:      { icon: "bi-shield-exclamation", label: "H&R", color: "var(--leech)" },
+  cleanup: { icon: "bi-trash3", label: "Cleanup", color: "var(--dl-local)" },
+  backup:  { icon: "bi-database-check", label: "Backup", color: "var(--seed)" },
+};
+
+// Statuses still owed a button press in Telegram — the reason to open this tab.
+const HRFIX_WAITING = ["pending", "del_asked", "del_confirm"];
+const HRFIX_LABEL = {
+  pending:     "รอกด fix",
+  fixed:       "ส่งเข้า watch folder",
+  cleared:     "พ้น H&R",
+  stalled:     "DS ไม่รับงาน",
+  skipped:     "ข้าม",
+  expired:     "หมดอายุ",
+  failed:      "fix ไม่สำเร็จ",
+  del_asked:   "รอกดดูก่อนลบ",
+  del_confirm: "รอยืนยันลบ",
+  deleted:     "ลบแล้ว",
+  del_skipped: "เก็บไว้",
+  del_failed:  "ลบไม่สำเร็จ",
+};
+
+async function loadRuns() {
+  const el = document.getElementById("runs-content");
+  const data = await api("GET", "/runs").catch(() => null);
+  if (!data) {
+    el.innerHTML = `<div class="tw-empty"><i class="bi bi-exclamation-circle"></i>โหลดข้อมูลไม่สำเร็จ</div>`;
+    return;
+  }
+  const c = data.counters;
+  const waiting = data.hr_fixes.filter(f => HRFIX_WAITING.includes(f.status));
+
+  el.innerHTML = `
+    <div class="tw-stats-grid">
+      ${_statsCard("bi-activity",       c.runs,   `รอบ / ${c.days} วัน`, "var(--accent)")}
+      ${_statsCard("bi-exclamation-octagon", c.failed, "ล้มเหลว", c.failed ? "var(--leech)" : "var(--seed)")}
+      ${_statsCard("bi-stopwatch",      c.avg_s + "s", "เฉลี่ย", "var(--dl-nas)")}
+      ${_statsCard("bi-alarm",          data.status.next_scrape ? data.status.next_scrape.slice(-5) : "—", "รอบถัดไป", "var(--seed)")}
+    </div>
+
+    ${waiting.length ? `
+    <div class="tw-stats-section tw-run-waiting">
+      <div class="tw-stats-header"><i class="bi bi-telegram"></i> รอพี่กดใน Telegram (${waiting.length})</div>
+      ${waiting.map(_hrFixRow).join("")}
+    </div>` : ""}
+
+    <div class="tw-stats-section">
+      <div class="tw-stats-header"><i class="bi bi-list-task"></i> รอบล่าสุด</div>
+      ${data.runs.length ? data.runs.map(_runRow).join("") : '<div class="tw-stats-empty">ยังไม่มีรอบที่บันทึกไว้</div>'}
+    </div>
+
+    ${data.hr_fixes.length ? `
+    <div class="tw-stats-section" style="margin-bottom:14px">
+      <div class="tw-stats-header"><i class="bi bi-shield-check"></i> H&R actions ล่าสุด</div>
+      ${data.hr_fixes.map(_hrFixRow).join("")}
+    </div>` : ""}`;
+}
+
+function _runRow(r) {
+  const meta = JOB_META[r.job] || { icon: "bi-gear", label: r.job, color: "var(--text-dim)" };
+  const s = r.summary || {};
+  const chips = Object.entries(s)
+    .filter(([k, v]) => k !== "trigger" && v !== 0 && v !== "" && v !== false)
+    .map(([k, v]) => `<span class="tw-run-chip">${escHtml(k)} <b>${escHtml(String(v))}</b></span>`)
+    .join("");
+  return `<div class="tw-run-row${r.ok ? "" : " failed"}">
+    <i class="bi ${meta.icon} tw-run-icon" style="color:${r.ok ? meta.color : "var(--leech)"}"></i>
+    <div class="tw-run-body">
+      <div class="tw-run-head">
+        <span class="tw-run-job">${escHtml(meta.label)}</span>
+        ${s.trigger === "manual" ? '<span class="tw-run-manual">manual</span>' : ""}
+        <span class="tw-run-time">${escHtml(r.started_at.slice(5, 16))}</span>
+        <span class="tw-run-dur">${r.duration_s}s</span>
+      </div>
+      ${chips ? `<div class="tw-run-chips">${chips}</div>` : ""}
+      ${r.error ? `<div class="tw-run-err"><i class="bi bi-exclamation-triangle"></i> ${escHtml(r.error)}</div>` : ""}
+    </div>
+  </div>`;
+}
+
+function _hrFixRow(f) {
+  const waiting = HRFIX_WAITING.includes(f.status);
+  const when = (f.decided_at || f.requested_at || "").slice(5, 16);
+  return `<div class="tw-run-row${waiting ? " waiting" : ""}">
+    <i class="bi ${waiting ? "bi-hourglass-split" : "bi-dot"} tw-run-icon"></i>
+    <div class="tw-run-body">
+      <div class="tw-run-head">
+        <span class="tw-run-job">${escHtml(HRFIX_LABEL[f.status] || f.status)}</span>
+        <span class="tw-run-time">${escHtml(when)}</span>
+      </div>
+      <div class="tw-run-title" title="${escHtml(f.title)}">${escHtml(f.title)}</div>
+    </div>
+  </div>`;
+}
+
+document.getElementById("btn-runs-refresh").addEventListener("click", loadRuns);
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 (async function init() {

@@ -23,6 +23,7 @@ A daily torrent monitor that scrapes [bearbit.org](https://bearbit.org) on a sch
   - **Browser** — proxies the `.torrent` to your browser (preserves Thai filename via RFC 5987)
   - **NAS** — saves directly to `/downloads` (Synology watch folder mount)
 - **History tab** — browse any past date (read-only, frozen data)
+- **Run Detail tab** — every scrape / H&R check / cleanup / backup run persisted to SQLite with duration, counts and error, plus the H&R actions still waiting on a Telegram button press
 - **Fixed auto-scrape schedule** (Asia/Bangkok): 19:00–01:00 every 30 min · 01:00–06:00 paused · 06:00–19:00 every 60 min
 - **Live progress** — header badge shows source/page/count in real-time during scrape; auto-refreshes the list when done
 - **LINE notification** — push to LINE when new keyword-matched torrents are found (configure via Settings UI)
@@ -153,6 +154,7 @@ Router must forward external port `15059 → NAS`.
 | `GET /api/keywords?source_id=…` · `POST` · `DELETE` | Per-source keyword CRUD |
 | `GET /api/settings` · `PUT` | Read/update settings (rebuilds scrape job on interval/time change) |
 | `POST /api/scrape` | Manual scrape trigger |
+| `GET /api/runs?limit=&job=` | Job run history + counters + recent H&R actions (Run Detail tab) |
 | `GET /api/status` | Scraper + scheduler state, including live `scrape_progress` |
 | `POST /api/line/test` | Send a test LINE message to verify configuration |
 | `POST /api/telegram/test` | Send a test Telegram message to verify configuration |
@@ -264,6 +266,32 @@ never retried in a loop, because repeated DSM login failures get the container I
 auto-blocked. Every httpx failure inside `dsm.py` is re-raised as `DsmError`, so a
 timeout mid-delete surfaces as `del_failed` instead of being swallowed by the
 callback poller.
+
+## Run Detail tab
+
+Every job execution writes one row to the `runs` table: job, start time, duration,
+ok/failed, a JSON summary and the error if it failed. The scheduler's own
+`last_scrape` / `scrape_status` are module globals that a redeploy wipes, which is
+exactly why this lives in SQLite instead.
+
+What each job records:
+
+| Job | Summary fields |
+|---|---|
+| `scrape` | `sources`, `found`, `new`, `source_errors`, `rows_today`, `free_today`, `trigger` |
+| `hr` | `total`, `risky`, `hits`, `seeding`, `sent`, `trigger` |
+| `cleanup` | `days`, `deleted`, `runs_deleted` |
+| `backup` | `file`, `retention_days` |
+
+An H&R check is only logged when it actually runs — with `hr_notify_enabled` off the
+cron returns early and writes nothing, so the disabled state doesn't bury real runs.
+
+The tab also lists recent `hr_fixes` rows, with the ones still owed a Telegram button
+press (`pending`, `del_asked`, `del_confirm`) pulled into their own block at the top.
+That is the only place outside Telegram scrollback where a forgotten prompt is visible.
+
+Retention rides the existing `retention_days` setting (floor of 14 days), trimmed by
+the same 03:00 cleanup job — no second cron for one `DELETE`.
 
 ## Scraper Selectors
 
