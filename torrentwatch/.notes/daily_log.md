@@ -786,3 +786,9 @@ Verify บน NAS: `_record` ทดสอบทั้งเส้นสำเร
 - bump `app.js?v=20260727b`
 - ตรวจ `--accent-dim` / `--leech-soft` มี override ใน `[data-theme="dark"]` แล้ว (style.css:83,90) แถว failed/waiting ไม่ขาวในโหมดมืด
 - ยังไม่เคยเปิดดูแท็บนี้ในเบราว์เซอร์จริง — รอพี่เปิดดูทั้งโหมดสว่าง/มืด
+
+### 2026-07-27 (รอบ 7) — เวลาในแท็บ Run Detail บังคับ Asia/Bangkok
+- ตรวจข้อมูลจริง: `hr_fixes.decided_at` เก็บ `2026-07-27T00:48:53+07:00` (Bangkok ถูกแล้ว), `runs.started_at` เก็บ `2026-07-27 08:31:56` (naive Bangkok)
+- ปัญหาอยู่ที่ฝั่งแสดงผล: `slice(5,16)` ตัดสตริงดิบ ได้ `07-27T00:48` — ติด `T` อ่านเหมือน ISO UTC และไม่บังคับ timezone เลย
+- เพิ่ม `_fmtWhen()` ใน `app.js`: parse ทั้งสองรูปแบบ (ไม่มี offset = เติม `+07:00`) แล้ว `toLocaleString("en-GB", {timeZone:"Asia/Bangkok"})` ได้ `27/07 00:48` — ตรึงเป็น GMT+7 ไม่ว่าเบราว์เซอร์อยู่โซนไหน หรือ DB จะเก็บ offset อะไรมา
+- ใช้ทั้ง `_runRow` และ `_hrFixRow`, bump `app.js?v=20260727c`

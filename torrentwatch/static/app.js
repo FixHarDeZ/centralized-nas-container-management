@@ -1139,6 +1139,19 @@ async function loadRuns() {
     </div>` : ""}`;
 }
 
+// Two shapes reach here: hr_fixes store ISO with a +07:00 offset, runs store a
+// naive Bangkok string. Render both in Bangkok so neither the offset nor the
+// viewer's own timezone can shift what the row says.
+function _fmtWhen(ts) {
+  if (!ts) return "";
+  const d = new Date(ts.includes("T") ? ts : ts.replace(" ", "T") + "+07:00");
+  if (isNaN(d)) return ts.slice(5, 16);
+  return d.toLocaleString("en-GB", {
+    timeZone: "Asia/Bangkok",
+    day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false,
+  }).replace(",", "");
+}
+
 function _runRow(r) {
   const meta = JOB_META[r.job] || { icon: "bi-gear", label: r.job, color: "var(--text-dim)" };
   const s = r.summary || {};
@@ -1152,7 +1165,7 @@ function _runRow(r) {
       <div class="tw-run-head">
         <span class="tw-run-job">${escHtml(meta.label)}</span>
         ${s.trigger === "manual" ? '<span class="tw-run-manual">manual</span>' : ""}
-        <span class="tw-run-time">${escHtml(r.started_at.slice(5, 16))}</span>
+        <span class="tw-run-time">${escHtml(_fmtWhen(r.started_at))}</span>
         <span class="tw-run-dur">${r.duration_s}s</span>
       </div>
       ${chips ? `<div class="tw-run-chips">${chips}</div>` : ""}
@@ -1163,7 +1176,7 @@ function _runRow(r) {
 
 function _hrFixRow(f) {
   const waiting = HRFIX_WAITING.includes(f.status);
-  const when = (f.decided_at || f.requested_at || "").slice(5, 16);
+  const when = _fmtWhen(f.decided_at || f.requested_at);
   return `<div class="tw-run-row${waiting ? " waiting" : ""}">
     <i class="bi ${waiting ? "bi-hourglass-split" : "bi-dot"} tw-run-icon"></i>
     <div class="tw-run-body">
