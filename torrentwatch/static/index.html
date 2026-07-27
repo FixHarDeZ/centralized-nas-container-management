@@ -276,6 +276,14 @@
             </div>
             <p class="tw-hint">ถ้าเจอไฟล์สถานะ "เตือน" ที่ระบบไม่เห็นเกิน N ชม. (งานใน Download Station หายไป) บอทจะถามใน Telegram ก่อน กดยืนยันแล้วถึงโหลด .torrent ใส่ watch folder ให้ DS seed ต่อ — และแจ้ง LINE + Telegram อีกครั้งเมื่อ seed ครบพ้น H&amp;R</p>
 
+            <div class="tw-field-row" style="margin-top:14px">
+              <label for="cfg-hr-delete">🧹 ถามลบไฟล์หลังพ้น H&amp;R</label>
+              <label class="tw-toggle-row">
+                <input type="checkbox" class="tw-toggle" id="cfg-hr-delete">
+              </label>
+            </div>
+            <p class="tw-hint">เมื่อ seed ครบพ้น H&amp;R บอทจะถามใน Telegram ว่าจะลบทิ้งไหม กดครั้งแรกแค่ไปดึง task ใน Download Station + path ไฟล์จริงมาโชว์ ต้องกดยืนยันครั้งที่สองถึงจะลบ — <b>ลบถาวร ไม่เข้าถังขยะ</b></p>
+
             <p class="tw-hint">เช็ค myhr.php วันละ 2 รอบ (09:10 / 21:10) แจ้ง LINE + Telegram เมื่อมีไฟล์เสี่ยงโดน Hit &amp; Run — "เหลือ" = เวลาที่ยังพอ seed ให้ครบ 48 ชม. ก่อนหมด 168 ชม.</p>
             <button class="tw-btn-secondary" id="btn-hr-test" style="width:100%;margin-top:8px">
               <i class="bi bi-send"></i> ส่งสรุป H&amp;R เดี๋ยวนี้

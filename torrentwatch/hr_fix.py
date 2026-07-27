@@ -16,6 +16,7 @@ from pathlib import Path
 import config
 import db
 import hr
+import hr_delete
 import line_notify
 import scraper
 import telegram_notify
@@ -110,7 +111,7 @@ async def apply_fix(site_id: str) -> tuple[bool, str]:
     return True, f"{dest.name} ({len(data):,} bytes)"
 
 
-async def check_cleared(rows: list[dict]) -> int:
+async def check_cleared(rows: list[dict], settings: dict | None = None) -> int:
     """Notify LINE+Telegram for fixed files that have now seeded their full 48h.
 
     Only rows still present on the page count — parse_hr returns [] when the table
@@ -141,6 +142,8 @@ async def check_cleared(rows: list[dict]) -> int:
         if config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID:
             await telegram_notify.notify_hr(body)
         db.hr_fix_set_status(fix["site_id"], "cleared")
+        if hr_delete.enabled(settings or {}):
+            await hr_delete.prompt_delete(fix["site_id"], fix["title"])
         done += 1
     if done:
         print(f"[hr_fix] {done} file(s) cleared H&R")
@@ -158,6 +161,10 @@ async def _handle_callback(cb: dict):
     if chat_id != str(config.TELEGRAM_CHAT_ID):
         await telegram_notify.answer_callback(cb_id, "ไม่ได้รับอนุญาต")
         print(f"[hr_fix] callback from unexpected chat {chat_id} ignored")
+        return
+    if data.startswith("hrdel:"):
+        _, action, site_id = data.split(":", 2)
+        await hr_delete.handle_callback(action, site_id, cb_id, message_id)
         return
     if not data.startswith("hrfix:"):
         await telegram_notify.answer_callback(cb_id)

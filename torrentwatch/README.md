@@ -129,6 +129,7 @@ Router must forward external port `15059 → NAS`.
 | H&R เตือนเมื่อเหลือ | `24` h | Alert a file once its remaining leeway (slack) drops below this |
 | H&R Auto-fix | off | Ask on Telegram before re-adding a stale H&R file to the watch folder |
 | ถือว่าหลุดเมื่อไม่เห็นเกิน | `24` h | Tracker hasn't seen our client for this long = the DS task is gone |
+| ถามลบไฟล์หลังพ้น H&R | off | Offer to delete a cleared torrent from Download Station + disk (double confirm) |
 
 **Auto-scrape schedule** is fixed (not configurable):
 
@@ -234,6 +235,27 @@ callbacks from any chat other than `TORRENTWATCH_TELEGRAM_CHAT_ID` are rejected.
 ⚠️ The scan and the cleared-check run **before** the `hr_last_digest` early-return in
 `check_hr()`: the at-risk set is unchanged for days at a time, so anything behind the
 dedup would never run in production.
+
+### Post-H&R cleanup (two confirmations)
+
+With `hr_delete_enabled` on, a torrent that just cleared H&R gets one more Telegram
+question: delete it? Removal is permanent — `SYNO.FileStation.Delete` does **not** route
+through `#recycle` — so the flow is two hops:
+
+    cleared → del_asked → del_confirm → deleted
+
+The first button deletes nothing. It logs in to DSM, finds the Download Station task
+(matching `uri` against the filename auto-fix wrote, falling back to the torrent title),
+resolves the payload with `SYNO.FileStation.List getinfo`, and shows the **real path**
+and size back. Only the second button deletes, task first and then the files.
+
+If the path does not resolve, the request is abandoned (`del_failed`) — a multi-file
+torrent with no wrapper folder writes straight into `destination`, and deleting
+`destination` would take unrelated files with it. The path is never guessed.
+
+DSM credentials come from `TORRENTWATCH_DSM_*`; login happens per operation and is
+never retried in a loop, because repeated DSM login failures get the container IP
+auto-blocked.
 
 ## Scraper Selectors
 

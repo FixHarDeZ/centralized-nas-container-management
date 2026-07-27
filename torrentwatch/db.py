@@ -25,6 +25,7 @@ _DEFAULT_SETTINGS = {
     "hr_slack_hours": "24",  # alert when a file has < N hours of leeway left
     "hr_autofix_enabled": "0",  # "1" = ask on Telegram before re-adding stale H&R files
     "hr_fix_stale_hours": "24",  # tracker hasn't seen us for N hours = DS task is gone
+    "hr_delete_enabled": "0",  # "1" = offer to delete a cleared torrent from DSM
 }
 
 

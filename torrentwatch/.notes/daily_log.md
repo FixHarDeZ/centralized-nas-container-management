@@ -714,3 +714,34 @@ Fix (`scheduler.py`):
 
 **หมายเหตุ deploy**: `deploy.sh` ที่รันแบบ background ผ่าน `&`/`nohup` ตายกลางคัน (log ค้างที่ "Uploading project files") — ต้องรัน foreground พร้อม timeout ยาว
 
+
+### 2026-07-27 (รอบ 3) — Feature C: ถามลบ torrent หลังพ้น H&R (double confirm)
+
+**สิ่งที่ทำ**
+- `dsm.py` ใหม่ — DSM WebAPI client ขั้นต่ำ: login/logout ต่อ operation, `SYNO.DownloadStation.Task list/delete` (v1 **ผ่าน HTTP** ไม่ใช่ CLI), `SYNO.FileStation.List getinfo` + `SYNO.FileStation.Delete`
+- `hr_delete.py` ใหม่ — state machine 2 จังหวะ `cleared → del_asked → del_confirm → deleted`
+- ต่อเข้า `hr_fix.check_cleared()` (รับ `settings` เพิ่ม) + router `hrdel:` ใน `_handle_callback`
+- setting `hr_delete_enabled` (default `"0"`) + toggle ในแดชบอร์ด
+- vault keys `stacks.torrentwatch.dsm.{url,username,password}` + manifest → `TORRENTWATCH_DSM_*`
+
+**การค้นพบสำคัญ (แก้ dead end ของรอบก่อน)**
+- `synowebapi` CLI เสิร์ฟเฉพาะ core API — `SYNO.DownloadStation.Task` v1 เลย 102 ตลอด และ `DownloadStation2.Task` v2 ไม่คืน `destination`
+- **HTTP WebAPI v1 คืน `additional.detail.destination` + `uri`** ครบ → เป็น join key ที่ต้องการ
+- `/usr/syno/etc/packages/DownloadStation/download/` ไม่มี task DB (มีแต่ 3 ไฟล์ config) — ทางตัน
+- **ไม่ต้อง mount media path เพิ่ม** เพราะ FileStation ลบให้ฝั่ง DSM (ตอนแรกคิดว่าต้อง mount rw + copy pattern ของ dupe-sweeper)
+- `SYNO.FileStation.Delete` **ลบถาวร ไม่เข้า #recycle** — ข้อความยืนยันเขียนตามนี้
+
+**กับดักที่เจอ**
+- `Dsm._call(self, path, **params)` ชนกับ FileStation param ชื่อ `path` → `TypeError: got multiple values for argument 'path'` แก้เป็น `endpoint`
+- python บน workstation เป็น 3.9 รัน self-check ที่ใช้ `dict | None` ไม่ได้ — ต้องรันใน container (3.12)
+- `scp` เข้า NAS ตาย (`subsystem request failed`) — ใช้ `tar | ssh` เหมือนเดิม
+
+**ที่ verify แล้ว (read-only ไม่ได้ลบอะไรจริง)**
+- `python dsm.py` self-check ผ่านใน container
+- login DSM สำเร็จ, list 6 tasks, **ทั้ง 6 ตัว** `task_payload_path()` resolve เป็น real_path ได้จริง (รวมชื่อไทย/CJK/`[ ]`/หลายชั้นโฟลเดอร์)
+- dry-run callback ด้วย row ปลอม: `ask` → `del_confirm` (ข้อความโชว์ real path จริง), กดซ้ำ = `ปุ่มนี้ใช้ไปแล้ว (del_confirm)`, `no` → `del_skipped`, `go` หลังยกเลิก = ปฏิเสธ. ลบ row ปลอมทิ้งแล้ว
+
+**ค้างไว้**
+- `hr_delete_enabled` ยัง off — เปิดเองในแดชบอร์ดเมื่อพร้อม
+- path ลบจริงยังไม่เคยรัน (ตั้งใจ) — จะรันจริงครั้งแรกตอนผู้ใช้กดยืนยันรอบสอง
+- DSM account ที่ใช้ = ตัวเดียวกับ homepage widget ตอนนี้มีสิทธิ์ลบไฟล์ผ่าน torrentwatch ด้วย

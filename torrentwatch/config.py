@@ -26,3 +26,8 @@ LINE_USER_ID = os.environ.get("TORRENTWATCH_LINE_USER_ID", "")
 # Telegram Bot API — push notifications for keyword matches
 TELEGRAM_BOT_TOKEN = os.environ.get("TORRENTWATCH_TELEGRAM_BOT_TOKEN", "")
 TELEGRAM_CHAT_ID = os.environ.get("TORRENTWATCH_TELEGRAM_CHAT_ID", "")
+
+# Synology DSM WebAPI — post-H&R cleanup (delete a finished torrent + its files)
+DSM_URL = os.environ.get("TORRENTWATCH_DSM_URL", "")
+DSM_USERNAME = os.environ.get("TORRENTWATCH_DSM_USERNAME", "")
+DSM_PASSWORD = os.environ.get("TORRENTWATCH_DSM_PASSWORD", "")
