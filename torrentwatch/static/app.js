@@ -1111,6 +1111,7 @@ async function loadRuns() {
   }
   const c = data.counters;
   const waiting = data.hr_fixes.filter(f => HRFIX_WAITING.includes(f.status));
+  const settled = data.hr_fixes.filter(f => !HRFIX_WAITING.includes(f.status));
 
   el.innerHTML = `
     <div class="tw-stats-grid">
@@ -1131,10 +1132,10 @@ async function loadRuns() {
       ${data.runs.length ? data.runs.map(_runRow).join("") : '<div class="tw-stats-empty">ยังไม่มีรอบที่บันทึกไว้</div>'}
     </div>
 
-    ${data.hr_fixes.length ? `
+    ${settled.length ? `
     <div class="tw-stats-section" style="margin-bottom:14px">
       <div class="tw-stats-header"><i class="bi bi-shield-check"></i> H&R actions ล่าสุด</div>
-      ${data.hr_fixes.map(_hrFixRow).join("")}
+      ${settled.map(_hrFixRow).join("")}
     </div>` : ""}`;
 }
 

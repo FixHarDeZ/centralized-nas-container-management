@@ -780,3 +780,9 @@ Verify (ไม่ลบอะไรจริง):
 Verify บน NAS: `_record` ทดสอบทั้งเส้นสำเร็จและเส้น raise → ได้ `ok=1 {'trigger':'auto','found':3}` กับ `ok=0 error='RuntimeError: boom'` exception ไม่หลุด (ลบแถว selftest ทิ้งแล้ว); `GET /api/runs` คืน 4 key ครบ; ยิง `POST /api/scrape` จริง ได้แถว `scrape … {'trigger':'manual','sources':2,'found':27,'new':2,'source_errors':0,'rows_today':105,'free_today':1}` 4.8s
 
 ยังไม่ได้เปิดดูหน้าเว็บจริงด้วยตา — โครง HTML/JS ล้อแท็บ "สถิติ" ตัวเดิม
+
+### 2026-07-27 (รอบ 6) — fix แถว H&R ซ้ำใน Run Detail
+- `loadRuns()` เดิมโชว์ `hr_fixes` ทั้งชุดในบล็อกล่าง ทำให้รายการที่ยัง `pending`/`del_asked`/`del_confirm` โผล่ทั้งในบล็อก "รอพี่กดใน Telegram" และ "H&R actions ล่าสุด" — แยก `settled` (ตัด `HRFIX_WAITING` ออก) ให้บล็อกล่างใช้
+- bump `app.js?v=20260727b`
+- ตรวจ `--accent-dim` / `--leech-soft` มี override ใน `[data-theme="dark"]` แล้ว (style.css:83,90) แถว failed/waiting ไม่ขาวในโหมดมืด
+- ยังไม่เคยเปิดดูแท็บนี้ในเบราว์เซอร์จริง — รอพี่เปิดดูทั้งโหมดสว่าง/มืด
