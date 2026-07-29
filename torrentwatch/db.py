@@ -291,13 +291,15 @@ def sync_stickies(source_id: int, seen_site_ids: set[str], today: str):
     with _conn() as c:
         # Promote: entries that bearbit now shows as pinned but DB still has is_sticky=0
         placeholders = ",".join("?" * len(seen_site_ids))
-        c.execute(
+        # rowcount lives on the Cursor, not the Connection — reading it off `c`
+        # raised AttributeError and aborted the whole sync every scrape.
+        cur = c.execute(
             f"UPDATE torrents SET is_sticky=1, date_posted=? "
             f"WHERE source_id=? AND is_sticky=0 AND site_id IN ({placeholders})",
             (today, source_id, *seen_site_ids),
         )
-        if c.rowcount > 0:
-            print(f"[db] sync_stickies: PROMOTED {c.rowcount} entries to sticky")
+        if cur.rowcount > 0:
+            print(f"[db] sync_stickies: PROMOTED {cur.rowcount} entries to sticky")
 
         # Refresh still-pinned / demote un-pinned
         rows = c.execute(
@@ -442,6 +444,46 @@ def get_torrent(torrent_id: int) -> dict | None:
     with _conn() as c:
         row = c.execute("SELECT * FROM torrents WHERE id = ?", (torrent_id,)).fetchone()
         return dict(row) if row else None
+
+
+def badges_by_site_ids(site_ids) -> dict[str, dict]:
+    """free_leech / multiplier / uploader keyed by site_id.
+
+    myhr.php carries none of them, so H&R rows borrow them from the listing scrape.
+    """
+    ids = list(site_ids)
+    if not ids:
+        return {}
+    placeholders = ",".join("?" * len(ids))
+    with _conn() as c:
+        rows = c.execute(
+            f"SELECT site_id, free_leech, multiplier, uploader FROM torrents "
+            f"WHERE site_id IN ({placeholders})",
+            tuple(ids),
+        ).fetchall()
+        return {r["site_id"]: dict(r) for r in rows}
+
+
+def attach_badges(rows: list[dict]) -> list[dict]:
+    """Copy free_leech/multiplier/uploader onto myhr.php rows, in place."""
+    found = badges_by_site_ids(r["site_id"] for r in rows)
+    for r in rows:
+        r.update(found.get(r["site_id"]) or {})
+        r["badges"] = badge_text(r)
+    return rows
+
+
+def badge_text(t: dict) -> str:
+    """`ผู้ปล่อย · ฟรี · คูณ` suffix for push messages. Empty when nothing is known."""
+    parts = []
+    if t.get("uploader"):
+        parts.append(f"👤 {t['uploader']}")
+    if t.get("free_leech"):
+        parts.append(f"🆓 FREE {t['free_leech']}")
+    if t.get("multiplier"):
+        # DB stores the column verbatim ("x6"); the site itself prints "UPLOAD 6X".
+        parts.append(f"⚡ UPLOAD {t['multiplier'].lstrip('xX')}X")
+    return "  ·  ".join(parts)
 
 
 def get_unnotified_stickies(source_id: int) -> list[dict]:
@@ -809,4 +851,8 @@ if __name__ == "__main__":
     assert _name.endswith(".torrent")
     assert torrent_filename(" a/b ") == "a_b.torrent"
     assert torrent_filename("") == "torrent.torrent"
+    assert badge_text({"uploader": "u", "free_leech": "100%", "multiplier": "x6"}) == (
+        "👤 u  ·  🆓 FREE 100%  ·  ⚡ UPLOAD 6X"
+    )
+    assert badge_text({"uploader": "", "free_leech": "", "multiplier": ""}) == ""
     print("db self-check OK")

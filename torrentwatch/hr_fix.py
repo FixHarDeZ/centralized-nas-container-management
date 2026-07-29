@@ -60,9 +60,11 @@ async def scan_and_prompt(rows: list[dict], settings: dict) -> int:
         # seen by the tracker, skipped = user said no. None of those re-ask.
         if prev and prev["status"] in ("pending", "fixed", "skipped"):
             continue
+        badge_line = f"{row['badges']}\n" if row.get("badges") else ""
         text = (
             f"🛠 H&R auto-fix?\n\n"
             f"🎬 {row['title'][:80]}\n"
+            f"{badge_line}"
             f"⏳ seed {_fmt(row['seeded_h'])}/{_fmt(row['target_h'])} ชม."
             f" · ขาดอีก {_fmt(row['remaining_h'])} ชม.\n"
             f"📡 ระบบเห็นล่าสุด {_fmt(row['last_seen_h'])} ชม. ที่แล้ว (งานใน DS น่าจะหายไปแล้ว)\n"

@@ -60,7 +60,7 @@ torrentwatch/
 ├── docker-compose.yml
 ├── requirements.txt
 └── static/
-    ├── index.html   — SPA shell (tabs: วันนี้, ประวัติ, รอบทำงาน, Keyword, สถิติ, ตั้งค่า)
+    ├── index.html   — SPA shell (tabs: วันนี้, ประวัติ, รอบทำงาน, Keyword, สถิติ, ตั้งค่า, H&R)
     ├── app.js       — all frontend logic (fetch, render, state)
     └── style.css    — dark theme CSS variables
 ```
@@ -217,6 +217,8 @@ Bug fix 2026-05-20: viewno18sbx.php ใช้ text "Auto Sticky:" แทน imag
 | `cleanup` | ทุกวัน 03:00 + ตอน startup | ลบ records > `retention_days` วัน (default 7) |
 | `hr_check` | ทุกวัน 09:10 + 21:10 | อ่าน myhr.php → เช็คไฟล์ที่พ้น H&R + ถาม auto-fix → push LINE+Telegram ไฟล์เสี่ยง (dedup ด้วย `hr_last_digest`) |
 
+**Badge ผู้ปล่อยไฟล์/free/คูณ** — `myhr.php` ไม่มีคอลัมน์พวกนี้ `db.attach_badges(rows)` จึง join กลับตาราง `torrents` ด้วย `site_id` แล้วยัด `free_leech`/`multiplier`/`uploader` + สตริงสำเร็จรูป `badges` (จาก `db.badge_text()`) ลงทุกแถว. เรียกจุดเดียวก่อน `hr.summarize()` ทั้งใน `scheduler._check_hr_once` และ `main.api_hr` เพื่อให้ digest / ปุ่ม auto-fix / แท็บ H&R ใช้ข้อมูลชุดเดียวกัน — `hr.py` ไม่ import db (คง self-check ให้รันเดี่ยวได้) แค่พิมพ์ `r["badges"]` เมื่อมี. ฝั่ง listing `db.badge_text()` ถูกใช้ผ่าน `_item()` ใน `line_notify.py`/`telegram_notify.py` (keyword + sticky noti). DB เก็บคอลัมน์คูณดิบเป็น `x6` ส่วน UI แปลงเป็น `UPLOAD 6X` ด้วย `multLabel()` ให้ตรงกับที่เว็บพิมพ์
+
 **⚠️ auto-fix/cleared ต้องอยู่เหนือ dedup:** `check_hr()` มี early-return เมื่อ `hr_last_digest` ไม่เปลี่ยน — set เสี่ยงนิ่งเป็นวันๆ ดังนั้นอะไรที่วางใต้บรรทัดนั้นจะไม่รันเลยใน production (force=True ตอนเทสต์จะผ่าน หลอกได้). `hr_fix.check_cleared()` + `hr_fix.scan_and_prompt()` เลยเรียกทันทีหลัง `summarize()`
 
 **ตาราง `hr_fixes`** — สถานะ auto-fix ต่อ site_id: `pending` (ถาม Telegram แล้วรอกด) → `fixed` (โหลด .torrent ลง watch folder แล้ว) → `cleared` (seed ครบ แจ้งแล้ว) · `stalled` (กด fix แล้วแต่ 24 ชม. ผ่านไป DS ยังไม่รับงาน → รอบถัดไปถามใหม่) · `skipped` (กดข้าม) · `expired` (ไม่กดเกิน 12 ชม.) · `failed`. **ลบหลังพ้น H&R** (`hr_delete_enabled`, default off) ต่อท้าย: `cleared` → `del_asked` (ถามครั้งแรก) → `del_confirm` (ดึง DS task + real path มาโชว์ ยังไม่ลบ) → `deleted` · `del_skipped` · `del_failed` — ปุ่มแรกไม่ลบอะไรเลย ปุ่มที่สองถึงลบ (task ก่อน แล้วค่อยไฟล์) และถ้า `FileStation.List getinfo` หา real path ไม่เจอ = ยกเลิก ห้ามเดา path (torrent หลายไฟล์ไม่มีโฟลเดอร์ครอบจะลงตรง `destination` ลบไปโดนของอื่น). `SYNO.FileStation.Delete` **ลบถาวร ไม่เข้า #recycle**. ปุ่มใช้ได้ครั้งเดียว (เช็ค `status == pending`) และรับเฉพาะ callback ที่ `chat_id` ตรง `TORRENTWATCH_TELEGRAM_CHAT_ID` ปุ่มยืนยันครั้งที่สอง re-stat path ก่อนลบ ถ้า real_path/size ไม่ตรงกับตอนโชว์ = ไม่ลบ (`del_confirm` ไม่มีวันหมดอายุ ปุ่มค้างใน Telegram เป็นสัปดาห์ได้), FileStation code 408 (ไม่มีไฟล์แล้ว) นับเป็นสำเร็จ เพราะ DS อาจลบ payload ไปพร้อม task, และ `dsm.py` ห่อ httpx error ทุกตัวเป็น `DsmError` ไม่งั้น timeout กลางทางจะโดน poller กลืนแล้วสถานะค้าง.
@@ -265,7 +267,7 @@ Bug fix 2026-05-20: viewno18sbx.php ใช้ text "Auto Sticky:" แทน imag
 
 ```js
 state = {
-  tab: "today" | "history" | "keywords" | "stats" | "settings",
+  tab: "today" | "history" | "runs" | "keywords" | "stats" | "settings" | "hr",
   sources: [],
   activeSource: { today, history, keywords },  // source_id per tab
   sort: { today, history },                    // "seeds" | "leeches" | "completed" | "date"

@@ -308,13 +308,18 @@ function renderTorrentList(listId, torrents, readOnly) {
   if (!readOnly) attachCardActions(list);
 }
 
+// bearbit stores the column as "x6" but prints "UPLOAD 6X" on the listing page.
+function multLabel(m) {
+  return `UPLOAD ${String(m).replace(/^x/i, "")}X`;
+}
+
 function cardHTML(t, readOnly) {
   const fmt = n => { const v = +n; return (isNaN(v) || v < 0) ? "0" : v >= 1000 ? (v / 1000).toFixed(1).replace(/\.0$/, "") + "k" : String(v); };
 
   const kwStar    = t.keyword_match ? `<span class="tw-kw-star">★ kw</span>` : "";
   const catBadge  = t.category ? `<span class="tw-badge-cat">${escHtml(catLabel(t.category))}</span>` : "";
   const freeBadge = t.free_leech ? `<span class="tw-badge tw-badge-free">FREE ${escHtml(t.free_leech)}</span>` : "";
-  const multBadge = t.multiplier ? `<span class="tw-badge tw-badge-mult">${escHtml(t.multiplier)}</span>` : "";
+  const multBadge = t.multiplier ? `<span class="tw-badge tw-badge-mult">${escHtml(multLabel(t.multiplier))}</span>` : "";
   const stickyBadge = t.is_sticky ? `<span class="tw-badge tw-badge-sticky"><i class="bi bi-pin-fill"></i> Sticky</span>` : "";
 
   const thumbInner = t.cover_url
@@ -1241,9 +1246,17 @@ function _hrRow(r, isRisky) {
   const seen = r.seeding_now
     ? '<span class="tw-hr-live">กำลังนับอยู่</span>'
     : `เห็นล่าสุด ${_hrHours(r.last_seen_h)} ชม. ที่แล้ว`;
+  // myhr.php has no uploader/free/multiplier columns — the API borrows them from
+  // the listing scrape, so they are missing for anything never scraped.
+  const badges = [
+    r.uploader ? `<span class="tw-badge tw-badge-uploader"><i class="bi bi-person"></i> ${escHtml(r.uploader)}</span>` : "",
+    r.free_leech ? `<span class="tw-badge tw-badge-free">FREE ${escHtml(r.free_leech)}</span>` : "",
+    r.multiplier ? `<span class="tw-badge tw-badge-mult">${escHtml(multLabel(r.multiplier))}</span>` : "",
+  ].join("");
   return `<div class="tw-run-row${isRisky ? " waiting" : ""}">
     <div class="tw-run-body">
       <div class="tw-run-title" title="${escHtml(r.title)}">${escHtml(r.title)}</div>
+      ${badges ? `<div class="tw-hr-badges">${badges}</div>` : ""}
       <div class="tw-hr-bar"><span style="width:${pct.toFixed(1)}%;background:${HR_STATE_COLOR[r.state] || "var(--accent)"}"></span></div>
       <div class="tw-run-chips">
         <span class="tw-run-chip">seed <b>${_hrHours(r.seeded_h)}/${_hrHours(r.target_h)} ชม.</b></span>

@@ -1658,3 +1658,6 @@ html, body {
   .tw-nav-item { padding: 8px 9px; }
   .tw-bottom-nav { gap: 0; }
 }
+
+.tw-badge-uploader { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }
+.tw-hr-badges { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }

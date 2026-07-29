@@ -3,6 +3,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 import config
+import db
 import httpx
 from notify import LineCreds, Notifier
 
@@ -30,6 +31,12 @@ async def _push(text: str):
     await asyncio.to_thread(_N.send, text)
 
 
+def _item(t: dict) -> str:
+    line = f"🎬 {t['title']}\n   🌱{t['seeds']}  📥{t['leeches']}"
+    badges = db.badge_text(t)
+    return f"{line}\n   {badges}" if badges else line
+
+
 async def notify_keyword_matches(source_url: str, matches: list[dict]):
     """Push when new keyword-matched torrents are found."""
     if not matches:
@@ -40,7 +47,7 @@ async def notify_keyword_matches(source_url: str, matches: list[dict]):
 
     lines = [f"🎯 keyword match ใหม่! — {label}\n"]
     for t in matches[:10]:
-        lines.append(f"🎬 {t['title']}\n   🌱{t['seeds']}  📥{t['leeches']}")
+        lines.append(_item(t))
     if len(matches) > 10:
         lines.append(f"...และอีก {len(matches) - 10} รายการ")
     lines.append(f"\n🕒 {_now()}")
@@ -57,7 +64,7 @@ async def notify_sticky_new(source_url: str, entries: list[dict]):
 
     lines = [f"📌 Sticky ใหม่! — {label}\n"]
     for t in entries[:10]:
-        lines.append(f"🎬 {t['title']}\n   🌱{t['seeds']}  📥{t['leeches']}")
+        lines.append(_item(t))
     if len(entries) > 10:
         lines.append(f"...และอีก {len(entries) - 10} รายการ")
     lines.append(f"\n🕒 {_now()}")

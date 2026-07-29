@@ -16,6 +16,7 @@ A daily torrent monitor that scrapes [bearbit.org](https://bearbit.org) on a sch
 - **Seed/leech threshold** with **AND/OR** mode toggle (configurable; seed ≠ 0 always enforced)
 - **Per-source keywords** — keyword-matched torrents bypass the threshold
 - **Cover image, file size, file count, upload time** displayed per card; sticky entries show a 📌 badge
+- **FREE / UPLOAD multiplier / uploader** — the listing's ฟรี, คูณ and ผู้ปล่อยไฟล์ columns are stored per torrent; cards show `FREE 100%` and `UPLOAD 6X` badges matching the site's own wording
 - **Sort by** seed count, leech count, or upload time
 - **Filter buttons with live counts** — ทั้งหมด / Keyword / Sticky with per-bucket counts
 - **Clickable title** — opens the bearbit detail page through a backend proxy that bypasses bearbit's anti-hotlink Referer check
@@ -23,6 +24,7 @@ A daily torrent monitor that scrapes [bearbit.org](https://bearbit.org) on a sch
   - **Browser** — proxies the `.torrent` to your browser (preserves Thai filename via RFC 5987)
   - **NAS** — saves directly to `/downloads` (Synology watch folder mount)
 - **History tab** — browse any past date (read-only, frozen data)
+- **H&R tab** — per-file seed status pulled live from `myhr.php` (โหลดจบเมื่อ / ความคืบหน้า seed / เหลืออีก / ระบบเห็นล่าสุด / สถานะ), with uploader + FREE + multiplier badges borrowed from the listing scrape
 - **Run Detail tab** — every scrape / H&R check / cleanup / backup run persisted to SQLite with duration, counts and error, plus the H&R actions still waiting on a Telegram button press
 - **Fixed auto-scrape schedule** (Asia/Bangkok): 19:00–01:00 every 30 min · 01:00–06:00 paused · 06:00–19:00 every 60 min
 - **Live progress** — header badge shows source/page/count in real-time during scrape; auto-refreshes the list when done
@@ -197,6 +199,11 @@ noise. Repeat pushes are suppressed by hashing the actionable set into
 
 The message includes `ระบบเห็นล่าสุด` (last announce) per file — the direct read on
 whether the BitTorrent client is announcing at all.
+
+`myhr.php` carries no uploader/free/multiplier columns, so `db.attach_badges()`
+joins each row to the listing scrape on `site_id` and appends a
+`👤 uploader · 🆓 FREE 100% · ⚡ UPLOAD 6X` line to the digest, the auto-fix prompt
+and the H&R tab. Files never seen by a scrape simply have no badge line.
 
 > ⚠️ `myhr.php` is served as **windows-874** while httpx reports `encoding=utf-8`,
 > so `resp.text` is mojibake. `scraper.fetch_hr_html()` decodes `resp.content` with

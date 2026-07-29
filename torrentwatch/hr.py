@@ -146,8 +146,12 @@ def format_message(summary: dict) -> str:
         f" (ผิดแล้ว {summary['hit_count']}/{summary['cap']}, กำลัง seed {summary['seeding_count']})\n",
     ]
     for r in risky[:10]:
+        # badges is filled by db.attach_badges — absent when the file predates the
+        # listing scrape, so the line is dropped rather than left blank.
+        badge_line = f"   {r['badges']}\n" if r.get("badges") else ""
         lines.append(
             f"🎬 {r['title'][:70]}\n"
+            f"{badge_line}"
             f"   ⏳ seed {_fmt_h(r['seeded_h'])}/{_fmt_h(r['target_h'])} ชม."
             f" · ขาดอีก {_fmt_h(r['remaining_h'])} ชม.\n"
             f"   ⌛ เหลือเวลา {_fmt_h(r['slack_h'])} ชม. (ครบกำหนด {r['deadline']})\n"

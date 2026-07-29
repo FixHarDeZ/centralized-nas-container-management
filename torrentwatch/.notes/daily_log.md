@@ -802,3 +802,12 @@ Verify บน NAS: `_record` ทดสอบทั้งเส้นสำเร
 - CSS ใหม่แค่ `.tw-hr-bar/.tw-hr-live/.tw-hr-foot` + media query ย่อ padding nav ที่ <=430px (7 ปุ่มไม่พอดีจอ 375px ที่ padding เดิม) bump `?v=20260729a` ทั้ง css/js
 - Verify: `node --check static/app.js` ผ่าน, deploy 11s, ในคอนเทนเนอร์เจอ `loadHr` 3 ครั้ง / `tw-hr-bar` 2 ครั้ง / `app.js?v=20260729a`; `/api/hr` ยิงจริงในคอนเทนเนอร์คืน 5 key ครบ
 - ยังไม่ได้เปิดดูด้วยตาในเบราว์เซอร์ (เหมือนแท็บ "รอบทำงาน")
+
+### 2026-07-29 (รอบ 9) — badge คูณ upload/ผู้ปล่อยไฟล์ + ใส่ใน noti
+
+- **`db.sync_stickies` พังเงียบมาตลอด**: `c.rowcount` อ่านจาก Connection (มีแต่ Cursor) → `AttributeError` โยนก่อนถึงลูป refresh/demote และ `scheduler.py:197` กลืนเป็น print. แก้เป็น `cur = c.execute(...)` แล้วอ่าน `cur.rowcount` — sticky ถึงจะ promote/demote จริง
+- **คูณ upload มีอยู่แล้ว ไม่ได้พัง**: เช็คหน้าเว็บสด `viewno18sbx.php` คอลัมน์ที่ 4 (`COL_MULTIPLIER`) คืน `x6` ตรงกับที่ DB เก็บ (แถว The First Jasmine site_id 2378834 = `x6`) — badge เดิมโชว์ `x6` แต่หน้าเว็บพิมพ์ `UPLOAD 6X` เลยเพิ่ม `multLabel()` ใน app.js แปลง `x6` → `UPLOAD 6X` ให้ตรงต้นฉบับ. มีแค่ 4 แถวทั้งหน้าที่มีคูณ (ที่เหลือคอลัมน์เป็น `No`) เลยดูเหมือนหาย
+- **noti เพิ่ม ผู้ปล่อยไฟล์ + free + คูณ**: `db.badge_text()` ทำสตริงเดียว `👤 u · 🆓 FREE 100% · ⚡ UPLOAD 6X` ใช้ร่วมทุกช่องทาง — `_item()` ใน `line_notify.py`/`telegram_notify.py` (keyword + sticky), `hr.format_message()` (H&R digest), `hr_fix.scan_and_prompt()` (ปุ่ม auto-fix). ว่างทั้งสามค่า = ตัดบรรทัดทิ้ง ไม่ปล่อยบรรทัดเปล่า
+- **myhr.php ไม่มีคอลัมน์พวกนี้เลย** — `db.attach_badges(rows)` join กลับตาราง `torrents` ด้วย `site_id` เรียกที่ `scheduler._check_hr_once` + `main.api_hr` จุดเดียวก่อน `summarize` เพื่อให้ทั้ง digest/prompt/แท็บ H&R ได้ข้อมูลชุดเดียวกัน. `hr.py` ยังบริสุทธิ์ (ไม่ import db) แค่พิมพ์ `r["badges"]` ถ้ามี
+- ไฟล์ที่ไม่เคยถูก scrape เก็บไว้ = ไม่มี badge (ของจริงตอนนี้ 14/18 แถวมี uploader, free/คูณ ว่างเพราะเป็นแถวเก่า)
+- Verify: `python3 db.py` + `python3 hr.py` self-check ผ่านในคอนเทนเนอร์, `attach_badges` บน myhr.php จริงคืน 14/18, `/api/hr` คืน `uploader/free_leech/multiplier` ครบ. bump `?v=20260729b`

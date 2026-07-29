@@ -332,7 +332,7 @@ async def _check_hr_once(force: bool = False) -> dict:
     if not html:
         return {"ok": False, "error": "fetch myhr.php failed"}
 
-    rows = hr.parse_hr(html)
+    rows = db.attach_badges(hr.parse_hr(html))
     summary = hr.summarize(rows, float(settings.get("hr_slack_hours") or 24))
     # Both phases run before the dedup early-return below: the at-risk set stays
     # identical for days, so anything behind the digest check would never fire.

@@ -396,7 +396,7 @@ async def api_hr():
         raise HTTPException(502, "Failed to fetch myhr.php — check login credentials")
     settings = db.get_settings()
     summary = hr.summarize(
-        hr.parse_hr(html),
+        db.attach_badges(hr.parse_hr(html)),
         float(settings.get("hr_slack_hours") or 24),
     )
     return {
