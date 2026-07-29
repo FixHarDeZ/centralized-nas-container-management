@@ -811,3 +811,9 @@ Verify บน NAS: `_record` ทดสอบทั้งเส้นสำเร
 - **myhr.php ไม่มีคอลัมน์พวกนี้เลย** — `db.attach_badges(rows)` join กลับตาราง `torrents` ด้วย `site_id` เรียกที่ `scheduler._check_hr_once` + `main.api_hr` จุดเดียวก่อน `summarize` เพื่อให้ทั้ง digest/prompt/แท็บ H&R ได้ข้อมูลชุดเดียวกัน. `hr.py` ยังบริสุทธิ์ (ไม่ import db) แค่พิมพ์ `r["badges"]` ถ้ามี
 - ไฟล์ที่ไม่เคยถูก scrape เก็บไว้ = ไม่มี badge (ของจริงตอนนี้ 14/18 แถวมี uploader, free/คูณ ว่างเพราะเป็นแถวเก่า)
 - Verify: `python3 db.py` + `python3 hr.py` self-check ผ่านในคอนเทนเนอร์, `attach_badges` บน myhr.php จริงคืน 14/18, `/api/hr` คืน `uploader/free_leech/multiplier` ครบ. bump `?v=20260729b`
+
+### 2026-07-29 (รอบ 9b) — ปิดช่องโหว่ badge lookup + คลุม self-check
+- **`badges_by_site_ids` ไม่ deterministic**: `torrents` เป็น `UNIQUE(source_id, site_id)` ไม่ใช่ `UNIQUE(site_id)` — สอง source แชร์ `site_id` เดียวกันได้ แล้ว dict build เก็บแถวที่ planner คืนมาทีหลัง = มีโอกาสแจ้งชื่อผู้ปล่อยไฟล์ผิดใน Telegram. myhr.php ไม่มี `source_id` ให้ filter เลยใส่ `ORDER BY id` ให้แถวใหม่สุดชนะแบบคาดเดาได้
+- **`hr.format_message()` บรรทัด badge ไม่เคยรันจริง**: หน้าจริงตอนนั้น risky 0 รายการ เลย branch `badge_line` ไม่โดนแตะ. เพิ่ม assert ใน `hr.py` self-check ยัด `badges` เข้าแถว risky แล้วเช็คว่าบรรทัดโผล่ในตำแหน่งถูก (indent 3 ช่องระหว่างชื่อเรื่องกับบรรทัด seed)
+- `hr_fix.apply_fix()` re-parse myhr.php เองโดย**ไม่**เรียก `attach_badges` — ตอนนี้ไม่มีปัญหาเพราะ path นั้นไม่พิมพ์ badge แต่ถ้าจะเพิ่มทีหลังต้อง enrich ก่อน
+- Verify: deploy แล้วรัน `python hr.py` + `python db.py` ในคอนเทนเนอร์ ผ่านทั้งคู่
