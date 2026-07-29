@@ -456,9 +456,11 @@ def badges_by_site_ids(site_ids) -> dict[str, dict]:
         return {}
     placeholders = ",".join("?" * len(ids))
     with _conn() as c:
+        # site_id is unique per source, not globally — ORDER BY id keeps the newest
+        # row winning the dict build instead of whichever the planner emitted last.
         rows = c.execute(
             f"SELECT site_id, free_leech, multiplier, uploader FROM torrents "
-            f"WHERE site_id IN ({placeholders})",
+            f"WHERE site_id IN ({placeholders}) ORDER BY id",
             tuple(ids),
         ).fetchall()
         return {r["site_id"]: dict(r) for r in rows}

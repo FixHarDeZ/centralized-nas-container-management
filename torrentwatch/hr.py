@@ -274,4 +274,8 @@ if __name__ == "__main__":
     assert is_cleared(_parsed[6]) and not is_cleared(_parsed[1])
     assert digest(_s) == digest(summarize(parse_hr(_html)))
     assert "H&R" in format_message(_s)
+    # badges are injected by db.attach_badges; the risky lines must carry them
+    # through without disturbing the rest of the block
+    _s["risky"][0]["badges"] = "👤 u  ·  🆓 FREE 100%"
+    assert "\n   👤 u  ·  🆓 FREE 100%\n" in format_message(_s), format_message(_s)
     print("hr self-check OK:", {k: _s[k] for k in ("hit_count", "seeding_count")})
