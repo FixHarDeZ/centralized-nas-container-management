@@ -107,7 +107,12 @@ async def apply_fix(site_id: str) -> tuple[bool, str]:
         return False, "โหลดไฟล์ .torrent ไม่สำเร็จ"
 
     dest = Path(config.NAS_DOWNLOADS_DIR) / db.torrent_filename(row["title"])
-    dest.write_bytes(data)
+    try:
+        dest.write_bytes(data)
+    except OSError as e:
+        # An escaping OSError left the row 'pending', so the poller re-asked and
+        # re-failed every cycle with nothing said in Telegram. Report it instead.
+        return False, f"เขียนไฟล์ลง watch folder ไม่สำเร็จ: {e}"
     return True, f"{dest.name} ({len(data):,} bytes)"
 
 

@@ -86,6 +86,18 @@ notification can't send basic auth. It is guarded by a shared secret instead:
 Keep this key non-empty. With it unset, `_verify_secret()` allows every caller,
 and the open path lets anyone forge incidents (SSH diagnostics + LLM spend).
 
+nginx exempts that path with an **exact match** (`location = /webhook/uptime-kuma`).
+The query string is not part of location matching, so `?secret=...` is fine — but a
+URL with a trailing slash falls through to `location /` and 401s silently. Relax to
+a prefix match if Kuma's stored URL ever gains one.
+
+**Rotating the secret:** Uptime Kuma has no API for notification config — the URL
+lives only inside a JSON blob in `kuma.db`. Stop the container, back the DB up, then
+`UPDATE notification SET config = replace(config, 'secret=<old>', 'secret=<new>')
+WHERE name='ops-bot';`, restart, and update the vault key in the same pass. The secret
+travels in a query param, so it also lands in DSM's reverse-proxy access log in
+cleartext — treat it as rotatable, not permanent.
+
 ### 6. Deploy
 
 ```bash

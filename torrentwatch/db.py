@@ -684,9 +684,16 @@ def hr_fix_expire_pending(max_age_h: float = 12.0) -> list[str]:
 
 
 def torrent_filename(title: str) -> str:
-    """Filesystem-safe UTF-8 filename for a torrent (keeps Thai/Unicode, strips path chars)."""
-    safe = re.sub(r'[\\/:*?"<>|]', "_", title.strip())[:120]
-    return (safe or "torrent") + ".torrent"
+    """Filesystem-safe UTF-8 filename for a torrent (keeps Thai/Unicode, strips path chars).
+
+    ext4/btrfs cap a name at 255 *bytes* and a Thai character costs 3 of them, so
+    the old 120-character cut could still hand the kernel a 360-byte name — the
+    watch-folder write then died with ENAMETOOLONG and the H&R fix silently retried
+    forever. Cut on bytes; decode(errors="ignore") drops the half character at the seam.
+    """
+    safe = re.sub(r'[\\/:*?"<>|]', "_", title.strip())
+    stem = safe.encode()[: 255 - len(".torrent")].decode(errors="ignore").rstrip()
+    return (stem or "torrent") + ".torrent"
 
 
 # ─── Debug / Admin ────────────────────────────────────────────────────────────
@@ -791,3 +798,15 @@ def hr_fix_recent(limit: int = 20) -> list[dict]:
             (limit,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+if __name__ == "__main__":
+    # A Thai title is 3 bytes per character; the name must still fit the 255-byte
+    # filesystem limit that ENAMETOOLONG enforces.
+    _long = "ซับไทยลบเซ็นเซอร์" * 30
+    _name = torrent_filename(_long)
+    assert len(_name.encode()) <= 255, len(_name.encode())
+    assert _name.endswith(".torrent")
+    assert torrent_filename(" a/b ") == "a_b.torrent"
+    assert torrent_filename("") == "torrent.torrent"
+    print("db self-check OK")
