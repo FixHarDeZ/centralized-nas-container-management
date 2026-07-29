@@ -792,3 +792,13 @@ Verify บน NAS: `_record` ทดสอบทั้งเส้นสำเร
 - ปัญหาอยู่ที่ฝั่งแสดงผล: `slice(5,16)` ตัดสตริงดิบ ได้ `07-27T00:48` — ติด `T` อ่านเหมือน ISO UTC และไม่บังคับ timezone เลย
 - เพิ่ม `_fmtWhen()` ใน `app.js`: parse ทั้งสองรูปแบบ (ไม่มี offset = เติม `+07:00`) แล้ว `toLocaleString("en-GB", {timeZone:"Asia/Bangkok"})` ได้ `27/07 00:48` — ตรึงเป็น GMT+7 ไม่ว่าเบราว์เซอร์อยู่โซนไหน หรือ DB จะเก็บ offset อะไรมา
 - ใช้ทั้ง `_runRow` และ `_hrFixRow`, bump `app.js?v=20260727c`
+
+### 2026-07-29 (รอบ 8) — แท็บ Hit & Run แสดงสถานะรายไฟล์
+- ของที่ขอ (ไฟล์ / โหลดจบเมื่อ / ความคืบหน้า seed / เหลืออีก / ระบบเห็นล่าสุด / สถานะ) มีครบใน `hr.parse_hr()` อยู่แล้ว และ `GET /api/hr` (main.py:391) คืน `rows/risky_ids/hit_count/seeding_count/cap` — งานนี้เลย**ไม่แตะ backend เลย** frontend อย่างเดียว
+- panel `#panel-hr` + nav item ที่ 7 (`data-tab="hr"`) + `loadHr()`/`_hrRow()` ใน `app.js` + `if (tab === "hr") loadHr()` ใน `onTabActivate`
+- `/api/hr` **scrape myhr.php สด**ทุกครั้งที่เรียก โหลดตอนกดเข้าแท็บกับปุ่ม refresh เท่านั้น ห้ามใส่ `setInterval` (จะยิง bearbit รัวด้วย session ที่ล็อกอินอยู่)
+- เรียงตาม `slack_h` น้อยไปมาก (`?? Infinity` ให้แถวที่คำนวณ deadline ไม่ได้ตกไปท้าย) แถวที่อยู่ใน `risky_ids` ใช้คลาส `.waiting` เดิมไฮไลต์ — ค่านี้หน้าต้นฉบับไม่มี เป็นของที่เราคำนวณเอง
+- "ระบบเห็นล่าสุด" กับ "สถานะ" ดูซ้ำแต่ไม่ซ้ำ: `seeding_now` = tracker เห็น client ตอนนี้ (โชว์ "กำลังนับอยู่"), `state_label` = 48 ชม. ไปถึงไหน. ของจริง `seeding_now=true` มักมาคู่กับ `last_seen_h=null` เลยต้องเช็ค `seeding_now` ก่อน ไม่งั้นได้ "เห็นล่าสุด ? ชม."
+- CSS ใหม่แค่ `.tw-hr-bar/.tw-hr-live/.tw-hr-foot` + media query ย่อ padding nav ที่ <=430px (7 ปุ่มไม่พอดีจอ 375px ที่ padding เดิม) bump `?v=20260729a` ทั้ง css/js
+- Verify: `node --check static/app.js` ผ่าน, deploy 11s, ในคอนเทนเนอร์เจอ `loadHr` 3 ครั้ง / `tw-hr-bar` 2 ครั้ง / `app.js?v=20260729a`; `/api/hr` ยิงจริงในคอนเทนเนอร์คืน 5 key ครบ
+- ยังไม่ได้เปิดดูด้วยตาในเบราว์เซอร์ (เหมือนแท็บ "รอบทำงาน")

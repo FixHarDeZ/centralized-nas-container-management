@@ -23,7 +23,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@500;600;700&family=IBM+Plex+Sans+Thai+Looped:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-  <link rel="stylesheet" href="/static/style.css?v=20260727a">
+  <link rel="stylesheet" href="/static/style.css?v=20260729a">
 </head>
 <body>
   <div id="app">
@@ -135,6 +135,23 @@
         <div class="tw-pagetitle-sub">scrape · H&amp;R · cleanup · backup — ย้อนหลังตาม retention</div>
       </div>
       <div class="tw-stats-scroll" id="runs-content">
+        <div class="tw-empty"><i class="bi bi-hourglass-split"></i>กำลังโหลด...</div>
+      </div>
+    </section>
+
+    <!-- ── Hit & Run ── -->
+    <section class="tw-panel" id="panel-hr">
+      <div class="tw-pagetitle">
+        <div class="tw-pagetitle-eyebrow">Hit &amp; Run</div>
+        <div class="tw-pagetitle-row">
+          <h1>สถานะ seed</h1>
+          <button class="tw-btn-secondary tw-run-refresh" id="btn-hr-refresh" title="โหลดใหม่">
+            <i class="bi bi-arrow-clockwise"></i>
+          </button>
+        </div>
+        <div class="tw-pagetitle-sub">ดึงสดจาก myhr.php — เรียงตามเวลาที่เหลือน้อยสุด</div>
+      </div>
+      <div class="tw-stats-scroll" id="hr-content">
         <div class="tw-empty"><i class="bi bi-hourglass-split"></i>กำลังโหลด...</div>
       </div>
     </section>
@@ -385,6 +402,11 @@
         <i class="bi bi-activity tw-nav-icon"></i>
         <span class="tw-nav-label">รอบทำงาน</span>
       </button>
+      <button class="tw-nav-item" data-tab="hr">
+        <div class="tw-nav-indicator"></div>
+        <i class="bi bi-shield-exclamation tw-nav-icon"></i>
+        <span class="tw-nav-label">H&amp;R</span>
+      </button>
       <button class="tw-nav-item" data-tab="stats">
         <div class="tw-nav-indicator"></div>
         <i class="bi bi-bar-chart-line-fill tw-nav-icon"></i>
@@ -448,6 +470,6 @@
     })();
   </script>
 
-  <script src="/static/app.js?v=20260727c"></script>
+  <script src="/static/app.js?v=20260729a"></script>
 </body>
 </html>

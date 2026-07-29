@@ -81,6 +81,7 @@ function onTabActivate(tab) {
   if (tab === "settings") loadSettings();
   if (tab === "stats") loadStats();
   if (tab === "runs") loadRuns();
+  if (tab === "hr") loadHr();
 }
 
 // ─── Sources ──────────────────────────────────────────────────────────────────
@@ -1190,6 +1191,75 @@ function _hrFixRow(f) {
 }
 
 document.getElementById("btn-runs-refresh").addEventListener("click", loadRuns);
+
+// ─── Hit & Run ────────────────────────────────────────────────────────────────
+// /api/hr scrapes myhr.php live on every call, so this loads on tab activation
+// and on the refresh button only — never on a timer.
+const HR_STATE_COLOR = {
+  ok:    "var(--seed)",
+  warn:  "var(--dl-nas)",
+  pause: "var(--dl-nas)",
+  hit:   "var(--leech)",
+};
+
+function _hrHours(v) {
+  return v === null || v === undefined ? "?" : v.toFixed(1);
+}
+
+async function loadHr() {
+  const el = document.getElementById("hr-content");
+  el.innerHTML = `<div class="tw-empty"><i class="bi bi-hourglass-split"></i>กำลังดึงจาก myhr.php...</div>`;
+  const data = await api("GET", "/hr").catch(() => null);
+  if (!data) {
+    el.innerHTML = `<div class="tw-empty"><i class="bi bi-exclamation-circle"></i>ดึง myhr.php ไม่สำเร็จ — เช็ค login</div>`;
+    return;
+  }
+  const risky = new Set(data.risky_ids || []);
+  // Least slack first; rows with no computable deadline sink to the bottom.
+  const rows = [...data.rows].sort(
+    (a, b) => (a.slack_h ?? Infinity) - (b.slack_h ?? Infinity)
+  );
+
+  el.innerHTML = `
+    <div class="tw-stats-grid">
+      ${_statsCard("bi-collection", rows.length, "ไฟล์ทั้งหมด", "var(--accent)")}
+      ${_statsCard("bi-upload", data.seeding_count, "กำลัง seed", "var(--seed)")}
+      ${_statsCard("bi-exclamation-triangle", risky.size, "ใกล้ครบกำหนด", risky.size ? "var(--dl-nas)" : "var(--seed)")}
+      ${_statsCard("bi-x-octagon", data.hit_count, `โดน hit (cap ${data.cap})`, data.hit_count ? "var(--leech)" : "var(--seed)")}
+    </div>
+
+    <div class="tw-stats-section" style="margin-bottom:14px">
+      <div class="tw-stats-header"><i class="bi bi-shield-exclamation"></i> รายไฟล์</div>
+      ${rows.length ? rows.map(r => _hrRow(r, risky.has(r.site_id))).join("") : '<div class="tw-stats-empty">ไม่มีไฟล์ค้าง H&R</div>'}
+    </div>`;
+}
+
+function _hrRow(r, isRisky) {
+  const pct = r.target_h ? Math.min(100, ((r.seeded_h || 0) / r.target_h) * 100) : 0;
+  // "กำลังนับอยู่" and the state label look redundant but are not: the first says
+  // the tracker sees our client right now, the second says where the 48h stands.
+  const seen = r.seeding_now
+    ? '<span class="tw-hr-live">กำลังนับอยู่</span>'
+    : `เห็นล่าสุด ${_hrHours(r.last_seen_h)} ชม. ที่แล้ว`;
+  return `<div class="tw-run-row${isRisky ? " waiting" : ""}">
+    <div class="tw-run-body">
+      <div class="tw-run-title" title="${escHtml(r.title)}">${escHtml(r.title)}</div>
+      <div class="tw-hr-bar"><span style="width:${pct.toFixed(1)}%;background:${HR_STATE_COLOR[r.state] || "var(--accent)"}"></span></div>
+      <div class="tw-run-chips">
+        <span class="tw-run-chip">seed <b>${_hrHours(r.seeded_h)}/${_hrHours(r.target_h)} ชม.</b></span>
+        <span class="tw-run-chip">เหลืออีก <b>${_hrHours(r.remaining_h)} ชม.</b></span>
+        <span class="tw-run-chip">${seen}</span>
+        <span class="tw-run-chip" style="color:${HR_STATE_COLOR[r.state] || "var(--text)"}"><b>${escHtml(r.state_label)}</b></span>
+      </div>
+      <div class="tw-hr-foot">
+        <span>โหลดจบ ${escHtml(r.finished_at || "—")}</span>
+        ${r.deadline ? `<span>ครบกำหนด ${escHtml(r.deadline)}${r.slack_h !== null ? ` (เหลือเวลา ${_hrHours(r.slack_h)} ชม.)` : ""}</span>` : ""}
+      </div>
+    </div>
+  </div>`;
+}
+
+document.getElementById("btn-hr-refresh").addEventListener("click", loadHr);
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 (async function init() {

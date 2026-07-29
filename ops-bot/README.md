@@ -126,7 +126,11 @@ Control Panel → Login Portal → Advanced → Reverse Proxy:
 | Destination | HTTP · `localhost` · port `5070` |
 
 Then bind a certificate covering `<NAS_DOMAIN>` in Security → Certificate →
-Configure, and forward TCP `15070` on the router. Verify from the NAS shell —
+Configure. Reuse the existing wildcard/host cert that friendly-reminder already
+uses for the same hostname — do **not** let DSM auto-issue a new one per RP entry
+(a stray `ReverseProxy_<hash>` cert issued against a misspelled hostname is dead
+weight and will never validate). Forward TCP `15070` on the router. Verify from
+the NAS shell —
 `https://localhost:15070` always 404s because DSM's generated block starts with
 `if ($host !~ "^<NAS_DOMAIN>$") { return 404; }`, so pass the real hostname:
 
@@ -135,6 +139,12 @@ curl -s --resolve <NAS_DOMAIN>:15070:127.0.0.1 \
   -u '<user>:<pass>' -o /dev/null -w '%{http_code}\n' \
   https://<NAS_DOMAIN>:15070/dashboard
 ```
+
+### 7c. Homepage Tile
+
+The tile lives under "📥 Downloads & Monitoring" in `homepage/config/services.yaml`
+with a plain `href` and no `ping`/`siteMonitor` widget: every path is behind basic
+auth, so any probe gets a 401 and the tile renders permanently red.
 
 ### 8. Service-Container Mapping
 
@@ -196,5 +206,7 @@ Add these via `make edit-vault`, then `make secrets && ./scripts/deploy.sh -s op
   (`nginx/.htpasswd`); the app itself is never published on the host
 - `/webhook/uptime-kuma` is exempt from basic auth and guarded by
   `KUMA_WEBHOOK_SECRET` (constant-time compare) — required before exposing 5070
-- Watchtower label disables self-update
+- The `ops-bot` app container carries the watchtower-disable label; the nginx
+  sidecar deliberately does **not** — it runs `nginx:alpine` and should keep
+  receiving security patches
 - Fix-as-PR uses GitHub fine-grained PAT with minimal scopes (this repo only)

@@ -1633,3 +1633,28 @@ html, body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* ─── Hit & Run ─────────────────────────────────────────────────────────── */
+.tw-hr-bar {
+  height: 4px;
+  border-radius: 100px;
+  background: var(--surface-2, rgba(128,128,128,0.2));
+  margin: 6px 0;
+  overflow: hidden;
+}
+.tw-hr-bar span { display: block; height: 100%; border-radius: 100px; }
+.tw-hr-live { color: var(--seed); font-weight: 700; }
+.tw-hr-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* 7 nav items no longer fit a 375px phone at the original padding. */
+@media (max-width: 430px) {
+  .tw-nav-item { padding: 8px 9px; }
+  .tw-bottom-nav { gap: 0; }
+}
