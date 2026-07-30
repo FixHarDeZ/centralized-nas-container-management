@@ -1644,6 +1644,8 @@ html, body {
 }
 .tw-hr-bar span { display: block; height: 100%; border-radius: 100px; }
 .tw-hr-live { color: var(--seed); font-weight: 700; }
+/* The header is a nowrap flex row; the stamp is ~28 chars and squeezes "รายไฟล์" on a 375px phone. */
+.tw-stats-header:has(.tw-hr-fetched) { flex-wrap: wrap; row-gap: 2px; }
 .tw-hr-fetched {
   margin-left: auto;
   font-size: 11px;
