@@ -817,3 +817,12 @@ Verify บน NAS: `_record` ทดสอบทั้งเส้นสำเร
 - **`hr.format_message()` บรรทัด badge ไม่เคยรันจริง**: หน้าจริงตอนนั้น risky 0 รายการ เลย branch `badge_line` ไม่โดนแตะ. เพิ่ม assert ใน `hr.py` self-check ยัด `badges` เข้าแถว risky แล้วเช็คว่าบรรทัดโผล่ในตำแหน่งถูก (indent 3 ช่องระหว่างชื่อเรื่องกับบรรทัด seed)
 - `hr_fix.apply_fix()` re-parse myhr.php เองโดย**ไม่**เรียก `attach_badges` — ตอนนี้ไม่มีปัญหาเพราะ path นั้นไม่พิมพ์ badge แต่ถ้าจะเพิ่มทีหลังต้อง enrich ก่อน
 - Verify: deploy แล้วรัน `python hr.py` + `python db.py` ในคอนเทนเนอร์ ผ่านทั้งคู่
+
+### 2026-07-30 (รอบ 10) — แท็บ H&R โชว์เวลาที่ดึงข้อมูล
+- **โจทย์**: สถานะ seed ในแท็บ H&R ไม่บอกว่าข้อมูลเป็นของรอบไหน — `/api/hr` scrape `myhr.php` สดทุกครั้ง แต่ UI ไม่ได้โชว์เวลา
+- `main.api_hr` เพิ่ม `fetched_at = datetime.now(_TZ).strftime("%Y-%m-%d %H:%M:%S")` (`_TZ` = Asia/Bangkok มีอยู่แล้วที่ `main.py:139`) — **ห้าม `datetime.now()` เปล่า** ไม่งั้นเป็น UTC แล้วเพี้ยนจาก `อัปเดตล่าสุด` ที่หัว dashboard (ซึ่งมาจาก `scheduler._last_scrape` = `datetime.now(_TZ)`) 7 ชม.
+- เก็บวินาทีด้วย ต่างจาก `_last_scrape` ที่ใช้ `%H:%M` — อันนี้อยู่หลังปุ่ม refresh มือ กด 2 ครั้งในนาทีเดียวถ้าเลขไม่ขยับจะอ่านเหมือนปุ่มพัง
+- `loadHr()` เรนเดอร์ใน header ของบล็อก "รายไฟล์" (`.tw-hr-fetched` `margin-left:auto` + tabular-nums) ไม่แตะ `index.html` — error path ที่เขียนทับ `hr-content` ทั้งก้อนจึงไม่ค้าง timestamp เก่าเอง. ตั้งใจไม่โชว์ต่อแถว (ค่าเดียวกันทุกแถว) และไม่โชว์เวลารอบ cron 09:10/21:10 (แท็บไม่ได้ใช้ข้อมูลรอบนั้น)
+- ตั้งใจใช้คำ "ดึงข้อมูลเมื่อ" เลี่ยงชนกับ "เห็นล่าสุด" ในแถว (ตัวหลังเป็นเวลาที่ tracker เห็น client)
+- bump asset `?v=20260730a` (ทั้ง app.js + style.css) ไม่งั้น browser cache JS เดิม
+- Verify: deploy `-s torrentwatch` แล้ว curl บน NAS `http://127.0.0.1:5059/api/hr` (basic auth) คืน `"fetched_at":"2026-07-30 12:45:58"` ตรงเวลาไทย

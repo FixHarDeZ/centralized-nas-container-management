@@ -161,7 +161,7 @@ Router must forward external port `15059 → NAS`.
 | `POST /api/line/test` | Send a test LINE message to verify configuration |
 | `POST /api/telegram/test` | Send a test Telegram message to verify configuration |
 | `GET /api/telegram/get-chat-id` | Call `getUpdates` to discover your Telegram chat ID |
-| `GET /api/hr` | Live `myhr.php` snapshot — parsed rows + at-risk split |
+| `GET /api/hr` | Live `myhr.php` snapshot — parsed rows + at-risk split + `fetched_at` (scrape time, Bangkok) |
 | `POST /api/hr/notify` | Force-send the H&R digest now (ignores enable flag + dedup) |
 | `GET /api/debug/html?source_id=…` | Raw scraped HTML — for selector tuning |
 | `GET /api/debug/login-page` | Raw bearbit login page |

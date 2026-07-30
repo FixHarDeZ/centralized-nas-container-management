@@ -400,6 +400,8 @@ async def api_hr():
         float(settings.get("hr_slack_hours") or 24),
     )
     return {
+        # This endpoint scrapes live, so the fetch time *is* the data's age.
+        "fetched_at": datetime.now(_TZ).strftime("%Y-%m-%d %H:%M:%S"),
         "rows": summary["rows"],
         "risky_ids": [r["site_id"] for r in summary["risky"]],
         "hit_count": summary["hit_count"],

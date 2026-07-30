@@ -217,6 +217,8 @@ Bug fix 2026-05-20: viewno18sbx.php ใช้ text "Auto Sticky:" แทน imag
 | `cleanup` | ทุกวัน 03:00 + ตอน startup | ลบ records > `retention_days` วัน (default 7) |
 | `hr_check` | ทุกวัน 09:10 + 21:10 | อ่าน myhr.php → เช็คไฟล์ที่พ้น H&R + ถาม auto-fix → push LINE+Telegram ไฟล์เสี่ยง (dedup ด้วย `hr_last_digest`) |
 
+**เวลาที่ดึงข้อมูล** — `/api/hr` scrape สดทุกครั้งที่เรียก จึงส่ง `fetched_at` = `datetime.now(_TZ)` (`_TZ` = Asia/Bangkok ที่ `main.py:139`) format `%Y-%m-%d %H:%M:%S` — ต่างจาก `_last_scrape` ของ scheduler ที่ตัดวินาที เพราะอันนี้อยู่หลังปุ่ม refresh มือ กด 2 ครั้งในนาทีเดียวต้องเห็นเลขขยับ. `loadHr()` เรนเดอร์ใน header ของบล็อก "รายไฟล์" (`.tw-hr-fetched`, `margin-left:auto`) ไม่แตะ `index.html` — path error จึงไม่ค้าง timestamp เก่า. ห้ามใช้ `datetime.now()` เปล่า จะเป็น UTC เพี้ยนจาก "อัปเดตล่าสุด" ที่หัว dashboard 7 ชม.
+
 **Badge ผู้ปล่อยไฟล์/free/คูณ** — `myhr.php` ไม่มีคอลัมน์พวกนี้ `db.attach_badges(rows)` จึง join กลับตาราง `torrents` ด้วย `site_id` แล้วยัด `free_leech`/`multiplier`/`uploader` + สตริงสำเร็จรูป `badges` (จาก `db.badge_text()`) ลงทุกแถว. เรียกจุดเดียวก่อน `hr.summarize()` ทั้งใน `scheduler._check_hr_once` และ `main.api_hr` เพื่อให้ digest / ปุ่ม auto-fix / แท็บ H&R ใช้ข้อมูลชุดเดียวกัน — `hr.py` ไม่ import db (คง self-check ให้รันเดี่ยวได้) แค่พิมพ์ `r["badges"]` เมื่อมี. ฝั่ง listing `db.badge_text()` ถูกใช้ผ่าน `_item()` ใน `line_notify.py`/`telegram_notify.py` (keyword + sticky noti). DB เก็บคอลัมน์คูณดิบเป็น `x6` ส่วน UI แปลงเป็น `UPLOAD 6X` ด้วย `multLabel()` ให้ตรงกับที่เว็บพิมพ์. ⚠️ `torrents` เป็น `UNIQUE(source_id, site_id)` ไม่ใช่ unique ที่ `site_id` เดี่ยวๆ แต่แถวจาก `myhr.php` ไม่มี `source_id` ให้ filter — `badges_by_site_ids` เลยใส่ `ORDER BY id` ให้แถวใหม่สุดชนะแบบคาดเดาได้ ไม่ปล่อยให้ planner เลือกเอง (ไม่งั้นแจ้งชื่อผู้ปล่อยไฟล์ผิดได้). `hr_fix.apply_fix()` re-parse myhr.php เองโดยไม่เรียก `attach_badges` — ตอนนี้ไม่พิมพ์ badge เลยไม่มีปัญหา ถ้าจะเพิ่มต้อง enrich ก่อน
 
 **⚠️ auto-fix/cleared ต้องอยู่เหนือ dedup:** `check_hr()` มี early-return เมื่อ `hr_last_digest` ไม่เปลี่ยน — set เสี่ยงนิ่งเป็นวันๆ ดังนั้นอะไรที่วางใต้บรรทัดนั้นจะไม่รันเลยใน production (force=True ตอนเทสต์จะผ่าน หลอกได้). `hr_fix.check_cleared()` + `hr_fix.scan_and_prompt()` เลยเรียกทันทีหลัง `summarize()`
@@ -252,7 +254,7 @@ Bug fix 2026-05-20: viewno18sbx.php ใช้ text "Auto Sticky:" แทน imag
 | `/api/download/local/{id}` | GET | Proxy .torrent to browser (RFC 5987 Thai filename) |
 | `/api/download/nas/{id}` | POST | Save .torrent to `/downloads` |
 | `/api/detail/{id}` | GET | Proxy bearbit detail page (bypass anti-hotlink) |
-| `/api/hr` | GET | myhr.php snapshot สด (rows + risky_ids + hit_count/cap) |
+| `/api/hr` | GET | myhr.php snapshot สด (rows + risky_ids + hit_count/cap + `fetched_at`) |
 | `/api/hr/notify` | POST | บังคับส่ง H&R digest เดี๋ยวนี้ (ข้าม toggle + dedup) + รัน auto-fix scan |
 | `/api/debug/html` | GET | Raw scraped HTML |
 | `/api/debug/login-page` | GET | Raw bearbit login page |

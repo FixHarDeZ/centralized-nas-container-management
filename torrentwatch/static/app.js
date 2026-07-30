@@ -1234,7 +1234,10 @@ async function loadHr() {
     </div>
 
     <div class="tw-stats-section" style="margin-bottom:14px">
-      <div class="tw-stats-header"><i class="bi bi-shield-exclamation"></i> รายไฟล์</div>
+      <div class="tw-stats-header">
+        <i class="bi bi-shield-exclamation"></i> รายไฟล์
+        ${data.fetched_at ? `<span class="tw-hr-fetched">ดึงข้อมูลเมื่อ ${escHtml(data.fetched_at)}</span>` : ""}
+      </div>
       ${rows.length ? rows.map(r => _hrRow(r, risky.has(r.site_id))).join("") : '<div class="tw-stats-empty">ไม่มีไฟล์ค้าง H&R</div>'}
     </div>`;
 }
