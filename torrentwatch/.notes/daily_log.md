@@ -826,3 +826,10 @@ Verify บน NAS: `_record` ทดสอบทั้งเส้นสำเร
 - ตั้งใจใช้คำ "ดึงข้อมูลเมื่อ" เลี่ยงชนกับ "เห็นล่าสุด" ในแถว (ตัวหลังเป็นเวลาที่ tracker เห็น client)
 - bump asset `?v=20260730a` (ทั้ง app.js + style.css) ไม่งั้น browser cache JS เดิม
 - Verify: deploy `-s torrentwatch` แล้ว curl บน NAS `http://127.0.0.1:5059/api/hr` (basic auth) คืน `"fetched_at":"2026-07-30 12:45:58"` ตรงเวลาไทย
+
+### 2026-07-30 (รอบ 10b) — แท็บ H&R เลือกการเรียงได้
+- เดิม `loadHr()` hardcode เรียง `slack_h` น้อยไปมาก. เพิ่ม toolbar `#hr-sort` 4 ปุ่ม (reuse `.tw-sort-group`/`.tw-sort-btn` ของแท็บวันนี้ ไม่ต้องเขียน CSS ใหม่): `slack` (default = ใกล้ครบกำหนดขึ้นก่อน), `remaining` (ขาด seed อีกน้อยสุด), `seen` (ไม่เห็น client นานสุดขึ้นก่อน = `last_seen_h` desc), `finished` (โหลดจบใหม่สุด)
+- **สำคัญ: แยก fetch ออกจาก render** — `loadHr()` เก็บผลไว้ที่ `_hrData` แล้วเรียก `_renderHr()`; ปุ่ม sort เรียกแค่ `_renderHr()`. ถ้าให้ปุ่ม sort เรียก `loadHr()` จะ scrape `myhr.php` สดทุกครั้งที่กด (endpoint นี้ไม่แคช) = ยิง tracker รัวๆ ฟรีๆ
+- comparator ทุกตัวดัน null ลงล่าง (`?? Infinity` สำหรับ asc, `?? -Infinity` สำหรับ desc) — แถวที่ไม่มี deadline/`last_seen_h` ไม่ควรลอยขึ้นบนสุดแทนแถวที่เสี่ยงจริง. `finished` เทียบ string ตรงๆ ได้เพราะ `finished_at` เป็น `%Y-%m-%d %H:%M`
+- `state.sort` เพิ่มคีย์ `hr` (เดิมมี `today`/`history`) — sort ไม่ persist ข้าม reload ตั้งใจ ให้ default กลับเป็นอันที่เสี่ยงสุดเสมอ
+- Verify: `node --check static/app.js` ผ่าน, deploy แล้ว curl บน NAS เจอ `HR_SORTS` ใน app.js ที่เสิร์ฟ + `hr-sort` ใน index.html, bump `?v=20260730c`

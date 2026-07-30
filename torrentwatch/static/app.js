@@ -5,7 +5,7 @@ const state = {
   tab: "today",
   sources: [],
   activeSource: { today: null, history: null, keywords: null },
-  sort: { today: "seeds", history: "seeds" },
+  sort: { today: "seeds", history: "seeds", hr: "slack" },
   filter: "all",
   showSticky: true,
   historyDate: "",
@@ -1211,19 +1211,33 @@ function _hrHours(v) {
   return v === null || v === undefined ? "?" : v.toFixed(1);
 }
 
+// Rows with no computable value sink to the bottom in every mode.
+const HR_SORTS = {
+  slack:     (a, b) => (a.slack_h ?? Infinity) - (b.slack_h ?? Infinity),
+  remaining: (a, b) => (a.remaining_h ?? Infinity) - (b.remaining_h ?? Infinity),
+  seen:      (a, b) => (b.last_seen_h ?? -Infinity) - (a.last_seen_h ?? -Infinity),
+  finished:  (a, b) => (b.finished_at || "").localeCompare(a.finished_at || ""),
+};
+
+// Cached so switching sort re-renders instead of re-scraping myhr.php.
+let _hrData = null;
+
 async function loadHr() {
   const el = document.getElementById("hr-content");
   el.innerHTML = `<div class="tw-empty"><i class="bi bi-hourglass-split"></i>กำลังดึงจาก myhr.php...</div>`;
-  const data = await api("GET", "/hr").catch(() => null);
+  _hrData = await api("GET", "/hr").catch(() => null);
+  _renderHr();
+}
+
+function _renderHr() {
+  const el = document.getElementById("hr-content");
+  const data = _hrData;
   if (!data) {
     el.innerHTML = `<div class="tw-empty"><i class="bi bi-exclamation-circle"></i>ดึง myhr.php ไม่สำเร็จ — เช็ค login</div>`;
     return;
   }
   const risky = new Set(data.risky_ids || []);
-  // Least slack first; rows with no computable deadline sink to the bottom.
-  const rows = [...data.rows].sort(
-    (a, b) => (a.slack_h ?? Infinity) - (b.slack_h ?? Infinity)
-  );
+  const rows = [...data.rows].sort(HR_SORTS[state.sort.hr] || HR_SORTS.slack);
 
   el.innerHTML = `
     <div class="tw-stats-grid">
@@ -1276,6 +1290,15 @@ function _hrRow(r, isRisky) {
 }
 
 document.getElementById("btn-hr-refresh").addEventListener("click", loadHr);
+
+document.querySelectorAll("#hr-sort .tw-sort-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#hr-sort .tw-sort-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    state.sort.hr = btn.dataset.sort;
+    _renderHr();
+  });
+});
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 (async function init() {

@@ -24,7 +24,7 @@ A daily torrent monitor that scrapes [bearbit.org](https://bearbit.org) on a sch
   - **Browser** — proxies the `.torrent` to your browser (preserves Thai filename via RFC 5987)
   - **NAS** — saves directly to `/downloads` (Synology watch folder mount)
 - **History tab** — browse any past date (read-only, frozen data)
-- **H&R tab** — per-file seed status pulled live from `myhr.php` (โหลดจบเมื่อ / ความคืบหน้า seed / เหลืออีก / ระบบเห็นล่าสุด / สถานะ), with uploader + FREE + multiplier badges borrowed from the listing scrape
+- **H&R tab** — per-file seed status pulled live from `myhr.php` (โหลดจบเมื่อ / ความคืบหน้า seed / เหลืออีก / ระบบเห็นล่าสุด / สถานะ), with uploader + FREE + multiplier badges borrowed from the listing scrape, a `ดึงข้อมูลเมื่อ` stamp, and four sort modes (deadline slack / remaining seed / last announce / download-done)
 - **Run Detail tab** — every scrape / H&R check / cleanup / backup run persisted to SQLite with duration, counts and error, plus the H&R actions still waiting on a Telegram button press
 - **Fixed auto-scrape schedule** (Asia/Bangkok): 19:00–01:00 every 30 min · 01:00–06:00 paused · 06:00–19:00 every 60 min
 - **Live progress** — header badge shows source/page/count in real-time during scrape; auto-refreshes the list when done
