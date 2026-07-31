@@ -209,7 +209,8 @@ async def check_vanished(rows: list[dict], settings: dict | None = None) -> int:
             db.hr_seen_forget(site_id)
             continue
         title = snap["title"] or (fix["title"] if fix else site_id)
-        if fix and fix["status"] in ("fixed", "stalled"):
+        told_cleared = bool(fix and fix["status"] in ("fixed", "stalled"))
+        if told_cleared:
             # The user pressed a button for this one, so close the loop on it.
             body = (
                 f"✅ พ้น Hit & Run แล้ว\n\n"
@@ -246,9 +247,11 @@ async def check_vanished(rows: list[dict], settings: dict | None = None) -> int:
                 # its auto-fix trigger.
                 db.hr_fix_set_status(site_id, "cleared", "ไม่มี task ใน Download Station — แจ้งให้ลบที่ client อื่น")
                 if config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID:
+                    # An auto-fixed row was already told it cleared a few lines up; only
+                    # the "not ours to delete" half is news to it.
+                    head = "" if told_cleared else f"✅ seed ครบ พ้น Hit & Run แล้ว\n\n🎬 {title[:80]}\n"
                     await telegram_notify.notify_hr(
-                        f"✅ seed ครบ พ้น Hit & Run แล้ว\n\n"
-                        f"🎬 {title[:80]}\n"
+                        f"{head}"
                         f"📱 ไม่มี task ใน Download Station — โหลดจาก client อื่น (เช่นมือถือ)\n"
                         f"ลบจาก client นั้นได้เลย"
                     )
@@ -444,6 +447,15 @@ if __name__ == "__main__":
         _ds = [{"id": "9", "title": "x", "additional": {"detail": {"uri": "หนัง 8.torrent"}}}]
         assert await check_vanished([_row("3", 0.0)], {}) == 1
         assert db.hr_fix_get("8")["status"] == "del_asked"
+
+        # auto-fixed + no DS task: one "cleared" push, then only the missing half
+        db.hr_fix_add_pending("11", "หนัง 11", 5)
+        db.hr_fix_set_status("11", "fixed", "x.torrent")
+        db.hr_seen_snapshot([_row("11", 0.0)])
+        _before_n = len(_notices)
+        assert await check_vanished([_row("3", 0.0)], {}) == 1
+        assert len(_notices) == _before_n + 2
+        assert "seed ครบ" not in _notices[-1] and "client อื่น" in _notices[-1]
 
         # no title to match on: a DS miss proves nothing, so keep the snapshot
         _blank = _row("10", 0.0) | {"title": ""}
