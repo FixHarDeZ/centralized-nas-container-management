@@ -235,6 +235,11 @@ async def check_vanished(rows: list[dict], settings: dict | None = None) -> int:
                 print(f"[hr_fix] {site_id} ถาม Download Station ไม่ได้ — เก็บ snapshot ไว้รอบหน้า")
                 continue
             if dsm.find_task(tasks, title, db.torrent_filename(title)) is None:
+                if title == site_id:
+                    # No real title to match on, so a miss proves nothing. Writing the
+                    # file off here would lose it exactly the way check_cleared did.
+                    print(f"[hr_fix] {site_id} ไม่มีชื่อเรื่องให้เทียบกับ DS — เก็บ snapshot ไว้รอบหน้า")
+                    continue
                 # Downloaded outside this NAS (phone, another client), so there is no
                 # task and no payload of ours to remove. Delete-only: hr.fix_candidates
                 # reads the same "no client" signal as its auto-fix trigger.
@@ -429,6 +434,12 @@ if __name__ == "__main__":
         _ds = [{"id": "9", "title": "x", "additional": {"detail": {"uri": "หนัง 8.torrent"}}}]
         assert await check_vanished([_row("3", 0.0)], {}) == 1
         assert db.hr_fix_get("8")["status"] == "del_asked"
+
+        # no title to match on: a DS miss proves nothing, so keep the snapshot
+        _blank = _row("10", 0.0) | {"title": ""}
+        db.hr_seen_snapshot([_blank])
+        assert await check_vanished([_row("3", 0.0)], {}) == 0
+        assert [s["site_id"] for s in db.hr_seen_vanished({"3"})] == ["10"]
 
         print(f"hr_fix self-check OK: {len(_prompts)} prompt(s), {len(_notices)} notice(s)")
 

@@ -265,6 +265,9 @@ of ours to remove. Three outcomes, and only the first is a prompt:
 | task absent | `cleared` + note, no prompt, snapshot forgotten |
 | unreachable | nothing decided, snapshot kept, retried next round |
 
+A snapshot with no title is treated like the unreachable case: with nothing to match on,
+a miss proves nothing, so the row is kept rather than written off.
+
 The unreachable case must not fall through to a prompt: it would resolve to
 `del_failed`, which is terminal, and a file that really is in DS would never be offered
 again. Note this guard is **delete-only** — `hr.fix_candidates()` treats the same
