@@ -108,6 +108,20 @@ def init_db():
                 note         TEXT NOT NULL DEFAULT ''
             );
 
+            -- Last sighting of every myhr.php row. bearbit drops a row from the page
+            -- once its obligation is met, and we only read the page twice a day, so
+            -- "48/48 while still listed" is usually never sampled. The snapshot is
+            -- what tells a cleared disappearance apart from an abandoned one.
+            CREATE TABLE IF NOT EXISTS hr_seen (
+                site_id     TEXT PRIMARY KEY,
+                title       TEXT NOT NULL DEFAULT '',
+                seeded_h    REAL,
+                target_h    REAL,
+                remaining_h REAL,
+                state       TEXT NOT NULL DEFAULT '',
+                seen_at     TEXT NOT NULL
+            );
+
             -- One row per job execution. The scheduler's last_scrape/status live in
             -- module globals that every deploy wipes, so run history needs a table.
             CREATE TABLE IF NOT EXISTS runs (
@@ -706,6 +720,58 @@ def hr_fix_set_status(site_id: str, status: str, note: str = ""):
             "UPDATE hr_fixes SET status=?, decided_at=?, note=? WHERE site_id=?",
             (status, datetime.now(_TZ).isoformat(timespec="seconds"), note, site_id),
         )
+
+
+def hr_fix_add_cleared(site_id: str, title: str):
+    """Record a file that finished its H&R on its own, never having been auto-fixed.
+
+    The delete flow keys everything off hr_fixes, so a normally-seeded file needs a
+    row here before it can be offered for deletion.
+    """
+    now = datetime.now(_TZ).isoformat(timespec="seconds")
+    with _conn() as c:
+        c.execute(
+            """INSERT OR REPLACE INTO hr_fixes
+               (site_id, title, status, requested_at, decided_at, message_id, note)
+               VALUES (?, ?, 'cleared', ?, ?, NULL, 'seed ครบเอง ไม่ผ่าน auto-fix')""",
+            (site_id, title, now, now),
+        )
+
+
+def hr_seen_snapshot(rows: list[dict]):
+    """Remember where every listed row stood, so a later disappearance can be judged."""
+    now = datetime.now(_TZ).isoformat(timespec="seconds")
+    with _conn() as c:
+        c.executemany(
+            """INSERT OR REPLACE INTO hr_seen
+               (site_id, title, seeded_h, target_h, remaining_h, state, seen_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            [
+                (
+                    r["site_id"],
+                    r.get("title") or "",
+                    r.get("seeded_h"),
+                    r.get("target_h"),
+                    r.get("remaining_h"),
+                    r.get("state") or "",
+                    now,
+                )
+                for r in rows
+                if r.get("site_id")
+            ],
+        )
+
+
+def hr_seen_vanished(present_ids: set[str]) -> list[dict]:
+    """Snapshots whose site_id is no longer on the page."""
+    with _conn() as c:
+        rows = c.execute("SELECT * FROM hr_seen ORDER BY seen_at").fetchall()
+    return [dict(r) for r in rows if r["site_id"] not in present_ids]
+
+
+def hr_seen_forget(site_id: str):
+    with _conn() as c:
+        c.execute("DELETE FROM hr_seen WHERE site_id=?", (site_id,))
 
 
 def hr_fix_expire_pending(max_age_h: float = 12.0) -> list[str]:

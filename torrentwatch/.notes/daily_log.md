@@ -1,4 +1,34 @@
+### 2026-07-31 (เพิ่มเติม) — ตรวจ match task ใน DS + กัน prompt หลุด
+
+- **ตรวจว่า flow ลบใช้ได้จริงกับไฟล์ที่ไม่เคยผ่าน auto-fix หรือเปล่า** (`_resolve` match ด้วย `dsm.find_task(tasks, title, db.torrent_filename(title))` ซึ่งเดิมออกแบบมาสำหรับไฟล์ที่ `apply_fix` เขียน .torrent เอง). ผลบน NAS: `hr_seen.title` **ตรงเป๊ะ** กับ `torrents.title` และ scraper เขียนไฟล์ลง `/downloads` ด้วย `db.torrent_filename(t["title"])` เดียวกัน → DS echo กลับมาเป็น `uri` ตัวเดียวกัน ⇒ key ที่มีอยู่ใช้ได้ ไม่ต้องเพิ่ม match key ใหม่
+- แต่ 6 แถวที่ snapshot ไว้ตอนนี้ **MISS ทั้งหมด** เพราะ DS ไม่มี task พวกนี้แล้วจริงๆ (`SYNO.DownloadStation.Task list` คืน `total=20` ทั้ง default และ `limit=-1` — ไม่ใช่ pagination). เคสนั้นจบที่ `del_failed` ตามตั้งใจ ไม่เดา path
+- **แก้ bug ที่จะทำให้ไฟล์หลุดถาวร**: เดิม `check_vanished` เรียก `hr_seen_forget()` ก่อนตัดสิน ถ้า `prompt_delete` ส่ง Telegram ไม่ผ่าน (คืน `False`) snapshot หายไปแล้ว status ค้างที่ `cleared` และไม่มี path ไหนวนกลับมาอีก = bug เดิมกลับมาเงียบๆ. ย้าย `hr_seen_forget()` ไปอยู่เฉพาะ branch ที่จบงานจริง (ไม่เข้าเกณฑ์ / ผ่านด่านไปแล้ว / prompt สำเร็จ) และเปิดให้ status `cleared` retry ได้ (`_PRE_CLEAR + ("cleared",)`) โดยไม่ส่ง notice ซ้ำ
+- self-check เพิ่มเคส Telegram ล่ม → ยังไม่ลืม snapshot, รอบถัดไปถามซ้ำสำเร็จ, รอบที่สามเงียบ. รันบน image จริงบน NAS: `check_vanished self-check OK: 3 prompt(s), 1 notice(s)`, `hr self-check OK`. deploy แล้ว
+
 # TorrentWatch — Daily Log
+
+## 2026-07-31 — Fix: ไม่มีคำถามลบไฟล์หลัง seed ครบ (แถวหายจาก myhr.php ก่อนถูก sample)
+
+**อาการ (user):** ระบบไม่เคยถามลบไฟล์เลย ทั้งที่ `hr_delete_enabled=1`
+
+**Root cause (verify บน NAS):**
+- `hr_fixes` มี 9 แถว ค้างที่ `fixed` ทั้งหมด ไม่มีแถวไหนถึง `cleared`; ไม่มี site_id ไหนเหลืออยู่บน myhr.php แล้ว
+- runs job `hr`: total 20 → 20 → 16 → 13 → 10 → 6 โดย `risky=0, hits=0` = แถวทยอยหายเพราะ seed ครบ (bearbit ลบแถวทันทีที่ครบภาระ)
+- `check_cleared()` เจอ `row is None` แล้ว `continue` (ตั้งใจไว้ว่า "แถวหาย ≠ พิสูจน์ว่าสำเร็จ") → ค้าง `fixed` ตลอดกาล ไม่เข้า `stalled` ด้วย เพราะ `continue` ยิงก่อน
+- ชั้นที่สอง: `prompt_delete` ถูกเรียกจาก `check_cleared` ที่วน `hr_fix_by_status("fixed")` เท่านั้น → ไฟล์ที่ seed ครบเองไม่เคยเข้าตาราง `hr_fixes` เลย ไม่มีวันได้คำถามลบ
+- อ่านหน้า myhr วันละ 2 รอบ ส่วนสถานะ 48/48 โผล่แค่ช่วงสั้นๆ ก่อนแถวหลุด = sample ไม่ทันแทบทุกครั้ง
+
+**Implementation:**
+- `db.py`: ตาราง `hr_seen` (site_id PK, title, seeded_h, target_h, remaining_h, state, seen_at) + `hr_seen_snapshot/hr_seen_vanished/hr_seen_forget` + `hr_fix_add_cleared()` (แถว `cleared` สำหรับไฟล์ที่ไม่เคยผ่าน auto-fix)
+- `hr.py`: `was_cleared(snap, tolerance_h=2.0)` — ครั้งสุดท้ายที่เห็นขาด ≤2 ชม. (หรือครบแล้ว) และ state ไม่ใช่ `hit` = ถือว่าพ้น H&R; tolerance ชดเชย sampling gap 12 ชม.
+- `hr_fix.py`: `check_vanished(rows, settings)` — เทียบ snapshot กับหน้าปัจจุบัน, แถวที่หายและผ่านเกณฑ์ → set/insert `cleared` แล้วยิง `prompt_delete`; แถวที่หายทั้งที่ยังขาดเยอะ → log ทิ้ง; จบด้วย `hr_seen_snapshot(rows)`. `rows == []` (fetch fail — `parse_hr` คืน `[]` เหมือนกัน) return 0 ทันที กันอ่านเป็น "ครบทั้งหน้า"
+- แจ้ง LINE/Telegram "พ้น Hit & Run" เฉพาะไฟล์ที่ผ่าน auto-fix (`fixed`/`stalled`) เท่านั้น ไฟล์ที่ seed ครบเองไปที่คำถามลบตรงๆ ไม่งั้นวันละสิบ push
+- `scheduler.py`: เรียก `check_vanished` ต่อจาก `check_cleared` (อยู่เหนือ dedup `hr_last_digest` เหมือนเดิม)
+
+**Verify:** `python hr.py` self-check ผ่าน + throwaway container test (`docker run --rm -v /tmp/twtest/torrentwatch:/app`) ครอบ 5 เคส: หน้าว่างไม่ถือว่าครบ, ขาด 20 ชม. ไม่ถาม, `hit` ไม่ถาม, ไฟล์ auto-fix ได้ทั้ง notice+prompt, สถานะ `deleted` ไม่ถูกถามซ้ำ
+
+**ค้างไว้:** 9 แถว `fixed` เดิมยังค้างอยู่ (ไม่มี snapshot ย้อนหลัง) — ไฟล์พวกนี้ต้องลบเองใน DS ถ้าอยากลบ
+
 
 ## 2026-07-06 — Feature: แสดงผู้ปล่อยไฟล์ (uploader) บน card
 

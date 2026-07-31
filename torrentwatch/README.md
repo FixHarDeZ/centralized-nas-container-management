@@ -229,8 +229,36 @@ Rows showing `กำลังนับอยู่` are announcing right now and
 (`seeding_now`, parsed as its own field so it can't be confused with an unparseable cell).
 
 Once a fixed file reaches `seeded_h >= target_h`, the next round pushes a
-**พ้น Hit & Run** notice to LINE **and** Telegram. A row merely disappearing from the
-page does not count as cleared.
+**พ้น Hit & Run** notice to LINE **and** Telegram.
+
+### Rows that vanish from myhr.php
+
+bearbit drops a row from the page as soon as its 48h is served, and the page is only
+read twice a day — so the `48.0/48.0` sighting that `check_cleared()` waits for is
+almost never sampled. Every round therefore snapshots each listed row into `hr_seen`
+(seeded/target/remaining/state), and `check_vanished()` judges disappearances against
+the last snapshot:
+
+* last sighting owed **≤ 2h** (or nothing) and was not `hit` → treated as cleared
+* anything further behind → logged and dropped, never treated as cleared
+
+The 2h tolerance covers the 12h sampling gap. An empty `rows` list (failed fetch —
+`parse_hr` returns `[]` for both) is ignored, so a broken login can never read as
+"every file cleared at once".
+
+This path covers **all** listed files, not just auto-fixed ones: a file that seeds to
+completion on its own gets a `cleared` row in `hr_fixes` (`hr_fix_add_cleared`) so it
+can reach the delete prompt below. The LINE/Telegram **พ้น Hit & Run** notice is only
+sent for files the user actually auto-fixed — the rest would be a dozen pushes a day.
+
+The snapshot is only forgotten once the file has been dealt with. If Telegram refuses
+the delete prompt the row stays in `hr_seen` at status `cleared`, which the next round
+retries — dropping it there would silently recreate the bug this whole path fixes.
+
+> A cleared file whose Download Station task is already gone resolves to
+> `del_failed` ("ไม่เจอ task นี้ใน Download Station แล้ว"). That is the honest answer:
+> the delete flow only ever removes a DS task plus the real path DS reports, and
+> guessing a path for a permanent delete is not on the table.
 
 A `fixed` row that Download Station never picked up (still not seeding 24h after the
 confirm) flips to `stalled`, so the next round asks again instead of letting the file

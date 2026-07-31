@@ -337,6 +337,7 @@ async def _check_hr_once(force: bool = False) -> dict:
     # Both phases run before the dedup early-return below: the at-risk set stays
     # identical for days, so anything behind the digest check would never fire.
     await hr_fix.check_cleared(rows, settings)
+    await hr_fix.check_vanished(rows, settings)
     await hr_fix.scan_and_prompt(rows, settings)
 
     fingerprint = hr.digest(summary)

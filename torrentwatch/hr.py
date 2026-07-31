@@ -199,6 +199,23 @@ def is_cleared(row: dict) -> bool:
     )
 
 
+def was_cleared(snap: dict, tolerance_h: float = 2.0) -> bool:
+    """True when a row that dropped off myhr.php had finished its obligation.
+
+    bearbit removes a row once the 48h is served, but the page is read twice a day,
+    so the final "48.0/48.0" sighting is usually missed — a row can be a couple of
+    hours short at its last sighting and still be legitimately done when it vanishes.
+    `tolerance_h` covers that gap; anything further behind is an abandoned row, not a
+    cleared one, and must never reach the (permanent) delete prompt. A `hit` row has
+    already violated, so its disappearance means something else entirely.
+    """
+    if snap.get("state") == "hit":
+        return False
+    if is_cleared(snap):
+        return True
+    return snap.get("remaining_h") is not None and snap["remaining_h"] <= tolerance_h
+
+
 def digest(summary: dict) -> str:
     """Stable fingerprint of the actionable set — used to skip identical daily pushes."""
     key = "|".join(
@@ -272,6 +289,13 @@ if __name__ == "__main__":
     assert _parsed[5]["seeding_now"] is True and _parsed[5]["last_seen_h"] is None
     assert _parsed[4]["seeding_now"] is False
     assert is_cleared(_parsed[6]) and not is_cleared(_parsed[1])
+    # vanishing: fully seeded and "2h short at last sighting" both count as done,
+    # a warn row still owing 24.5h does not, and a hit row never does
+    assert was_cleared(_parsed[6])
+    assert was_cleared({"state": "ok", "seeded_h": 46.0, "target_h": 48.0, "remaining_h": 2.0})
+    assert not was_cleared(_parsed[1])
+    assert not was_cleared({**_parsed[6], "state": "hit"})
+    assert not was_cleared({"state": "ok", "seeded_h": 40.0, "target_h": 48.0, "remaining_h": None})
     assert digest(_s) == digest(summarize(parse_hr(_html)))
     assert "H&R" in format_message(_s)
     # badges are injected by db.attach_badges; the risky lines must carry them

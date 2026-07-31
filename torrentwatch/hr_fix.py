@@ -157,6 +157,73 @@ async def check_cleared(rows: list[dict], settings: dict | None = None) -> int:
     return done
 
 
+_CLEAR_TOLERANCE_H = 2.0  # how far short a last sighting may be and still count as done
+
+# Statuses that have not yet passed the "cleared" gate. Anything else (cleared,
+# del_*, deleted) has already been offered for deletion and must not be re-asked.
+_PRE_CLEAR = ("pending", "fixed", "stalled", "failed", "skipped", "expired")
+
+
+async def check_vanished(rows: list[dict], settings: dict | None = None) -> int:
+    """Handle rows that dropped off myhr.php, then re-snapshot the page.
+
+    check_cleared only ever sees a file that is still listed at 48/48, which the
+    twice-a-day read almost never catches — bearbit removes the row as soon as the
+    obligation is met. This closes that gap for every listed file, not just the
+    auto-fixed ones, using the last sighting as proof (hr.was_cleared).
+    """
+    if not rows:
+        # parse_hr returns [] for a failed fetch too — that is not 20 files clearing.
+        return 0
+    settings = settings or {}
+    present = {r["site_id"] for r in rows if r["site_id"]}
+    done = 0
+    for snap in db.hr_seen_vanished(present):
+        site_id = snap["site_id"]
+        if not hr.was_cleared(snap, _CLEAR_TOLERANCE_H):
+            db.hr_seen_forget(site_id)
+            print(
+                f"[hr_fix] {site_id} หายจากหน้า myhr แต่ครั้งสุดท้ายยังขาด "
+                f"{_fmt(snap['remaining_h'])} ชม. ({snap['state']}) — ไม่ถือว่าครบ"
+            )
+            continue
+
+        fix = db.hr_fix_get(site_id)
+        # "cleared" stays retriable: the row only survives in hr_seen when a previous
+        # round marked it cleared but could not send the prompt.
+        if fix and fix["status"] not in _PRE_CLEAR + ("cleared",):
+            db.hr_seen_forget(site_id)
+            continue
+        title = snap["title"] or (fix["title"] if fix else site_id)
+        if fix and fix["status"] in ("fixed", "stalled"):
+            # The user pressed a button for this one, so close the loop on it.
+            body = (
+                f"✅ พ้น Hit & Run แล้ว\n\n"
+                f"🎬 {title[:80]}\n"
+                f"⏳ seed {_fmt(snap['seeded_h'])}/{_fmt(snap['target_h'])} ชม."
+                f" แล้วหลุดจากหน้า myhr"
+            )
+            if config.LINE_ACCESS_TOKEN and config.LINE_USER_ID:
+                await line_notify.notify_hr(body)
+            if config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID:
+                await telegram_notify.notify_hr(body)
+        if fix:
+            db.hr_fix_set_status(site_id, "cleared")
+        else:
+            db.hr_fix_add_cleared(site_id, title)
+        if hr_delete.enabled(settings) and not await hr_delete.prompt_delete(site_id, title):
+            # Telegram refused the send. Keep the snapshot so the next round asks
+            # again — dropping it here would lose the file the way check_cleared did.
+            print(f"[hr_fix] {site_id} ส่งคำถามลบไม่สำเร็จ — เก็บ snapshot ไว้ลองใหม่รอบหน้า")
+            continue
+        db.hr_seen_forget(site_id)
+        done += 1
+    db.hr_seen_snapshot(rows)
+    if done:
+        print(f"[hr_fix] {done} file(s) cleared H&R by dropping off the page")
+    return done
+
+
 async def _handle_callback(cb: dict):
     data = cb.get("data") or ""
     cb_id = cb.get("id") or ""
@@ -225,3 +292,85 @@ async def poll_loop():
         except Exception as e:
             print(f"[hr_fix] poll error: {e}")
             await asyncio.sleep(15)
+
+
+if __name__ == "__main__":
+    # check_vanished against a temp DB, with Telegram/LINE stubbed out. Covers the
+    # branching that has no other coverage: the empty-page guard, the ≤2h tolerance,
+    # the hit exclusion, and the retry a failed Telegram send has to leave behind.
+    import tempfile
+
+    # config is already imported by the time this runs, so DATA_DIR is settled —
+    # point the connection helper at a throwaway file instead.
+    config.DB_PATH = tempfile.mkdtemp() + "/selfcheck.db"
+    db.init_db()
+
+    _prompts: list[str] = []
+    _notices: list[str] = []
+
+    async def _fake_buttons(text, kb):
+        _prompts.append(text)
+        return 1
+
+    async def _fake_notify(body):
+        _notices.append(body)
+
+    async def _dead_buttons(text, kb):
+        return None
+
+    telegram_notify.send_buttons = _fake_buttons
+    telegram_notify.notify_hr = _fake_notify
+    line_notify.notify_hr = _fake_notify
+    hr_delete.enabled = lambda s: True
+    config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID = "t", "c"
+    config.LINE_ACCESS_TOKEN, config.LINE_USER_ID = "", ""
+
+    def _row(site_id, remaining, state="ok"):
+        return {
+            "site_id": site_id,
+            "title": f"หนัง {site_id}",
+            "seeded_h": 48.0 - remaining,
+            "target_h": 48.0,
+            "remaining_h": remaining,
+            "state": state,
+        }
+
+    async def _selfcheck():
+        page = [_row("1", 1.5), _row("2", 20.0), _row("3", 0.0), _row("4", 5.0, "hit")]
+        assert await check_vanished(page, {}) == 0  # first pass only snapshots
+        assert _prompts == []
+        assert await check_vanished([], {}) == 0  # failed fetch is not "all cleared"
+        assert _prompts == []
+
+        assert await check_vanished([_row("3", 0.0)], {}) == 1
+        assert len(_prompts) == 1 and "หนัง 1" in _prompts[0]
+        assert db.hr_fix_get("1")["status"] == "del_asked"
+        assert db.hr_fix_get("2") is None and db.hr_fix_get("4") is None
+        assert _notices == []  # no "cleared" push for a file that skipped auto-fix
+
+        db.hr_fix_add_pending("9", "หนัง 9", 5)
+        db.hr_fix_set_status("9", "fixed", "x.torrent")
+        await check_vanished([_row("9", 0.5), _row("3", 0.0)], {})
+        assert await check_vanished([_row("3", 0.0)], {}) == 1
+        assert db.hr_fix_get("9")["status"] == "del_asked"
+        assert len(_notices) == 1 and "พ้น Hit & Run" in _notices[0]
+
+        db.hr_seen_snapshot([_row("7", 0.0)])
+        db.hr_fix_add_cleared("7", "หนัง 7")
+        db.hr_fix_set_status("7", "deleted", "ok")
+        _before = len(_prompts)
+        assert await check_vanished([_row("3", 0.0)], {}) == 0
+        assert len(_prompts) == _before
+
+        telegram_notify.send_buttons = _dead_buttons
+        db.hr_seen_snapshot([_row("5", 0.0)])
+        assert await check_vanished([_row("3", 0.0)], {}) == 0
+        assert db.hr_fix_get("5")["status"] == "cleared"  # snapshot kept for a retry
+        telegram_notify.send_buttons = _fake_buttons
+        assert await check_vanished([_row("3", 0.0)], {}) == 1
+        assert db.hr_fix_get("5")["status"] == "del_asked"
+        assert await check_vanished([_row("3", 0.0)], {}) == 0  # snapshot dropped now
+
+        print(f"hr_fix self-check OK: {len(_prompts)} prompt(s), {len(_notices)} notice(s)")
+
+    asyncio.run(_selfcheck())
