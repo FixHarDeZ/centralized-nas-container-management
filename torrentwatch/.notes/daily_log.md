@@ -1,3 +1,18 @@
+### 2026-07-31 (เพิ่มเติม 5) — verify path ใหม่บน production
+
+- trigger รอบอ่าน myhr เองไม่รอ 21:10 → `2378096` seed ครบหลุดจากหน้า, ไม่มี task ใน DS, ส่ง Telegram แจ้งให้ลบที่ client อื่น, ไม่มีคำถามลบ. DB: status `cleared` note `"ไม่มี task ใน Download Station — แจ้งให้ลบที่ client อื่น"`
+- **วิธี trigger เอง**: endpoint `POST /api/hr/notify` ติด basic auth (`BASIC_AUTH_USER/PASS`) เรียกจากใน container ก็โดน 401 → รัน scheduler ตรงแทน แต่ต้อง `await scraper.init()` ก่อน ไม่งั้น global `_client` เป็น None แล้ว login พังด้วย `'NoneType' object has no attribute 'get'`:
+
+```
+docker exec torrentwatch python -c "
+import asyncio,scraper,scheduler
+async def m():
+    await scraper.init(); print(await scheduler.check_hr(force=True)); await scraper.close()
+asyncio.run(m())"
+```
+
+- ยังไม่เคยรันจริง: path ลบจริง (เจอ task ใน DS → ปุ่มยืนยัน 2 จังหวะ → `FileStation.Delete` ลบถาวร)
+
 ### 2026-07-31 (เพิ่มเติม 4) — เคส "ไม่มี task ใน DS" เปลี่ยนจากเงียบเป็นแจ้ง Telegram
 
 - เดิม: ไม่เจอ task = set `cleared` แล้วเงียบ ผู้ใช้ไม่รู้ว่าต้องไปลบเองที่ client อื่น
