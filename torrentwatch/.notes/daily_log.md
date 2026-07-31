@@ -1,3 +1,10 @@
+### 2026-07-31 (เพิ่มเติม 3) — กันเคส snapshot ไม่มีชื่อเรื่อง
+
+- `check_vanished` ใช้ `title = snap["title"] or (fix["title"] if fix else site_id)` ถ้า snapshot ไม่มี title และไม่มีแถวใน `hr_fixes` จะได้ `title == site_id` ซึ่ง `dsm.find_task` ไม่มีทาง match → ไฟล์ถูกตัดทิ้งเป็น "ไม่ได้อยู่ใน DS" แล้วลืม snapshot = หายเงียบแบบเดียวกับบั๊กที่ path นี้เกิดมาเพื่อแก้
+- แก้: ถ้า `title == site_id` ให้ทำเหมือนเคส DS ติดต่อไม่ได้ — ไม่ตัดสิน เก็บ snapshot ไว้รอบหน้า (ไม่มีชื่อให้เทียบ = miss ไม่ได้พิสูจน์อะไร)
+- self-check เพิ่มเคส title ว่าง: รอบนั้น return 0 และแถวยังอยู่ใน `hr_seen` (`hr_fix self-check OK: 4 prompt(s), 1 notice(s)` EXIT=0 บน image จริง)
+- deploy แล้ว container ขึ้นปกติ (`import dsm` ไม่พัง), `hr_seen` ยัง 6 แถว, `hr_fixes` ยัง 9 แถว `fixed` ค้างเดิม
+
 ### 2026-07-31 (เพิ่มเติม 2) — ไม่ถามลบไฟล์ที่ไม่ได้โหลดผ่าน Download Station
 
 - โจทย์จากผู้ใช้: บาง torrent โหลดจากมือถือ ไม่ได้ผ่าน DS ของ NAS พอ seed ครบไม่ควรถามลบ (เราไม่มี task และไม่มีไฟล์ให้ลบ)
