@@ -241,11 +241,20 @@ async def check_vanished(rows: list[dict], settings: dict | None = None) -> int:
                     print(f"[hr_fix] {site_id} ไม่มีชื่อเรื่องให้เทียบกับ DS — เก็บ snapshot ไว้รอบหน้า")
                     continue
                 # Downloaded outside this NAS (phone, another client), so there is no
-                # task and no payload of ours to remove. Delete-only: hr.fix_candidates
-                # reads the same "no client" signal as its auto-fix trigger.
-                db.hr_fix_set_status(site_id, "cleared", "ไม่มี task ใน Download Station — ไม่ถามลบ")
+                # task and no payload of ours to remove — tell the user to do it there.
+                # Delete-only: hr.fix_candidates reads the same "no client" signal as
+                # its auto-fix trigger.
+                db.hr_fix_set_status(site_id, "cleared", "ไม่มี task ใน Download Station — แจ้งให้ลบที่ client อื่น")
+                if config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID:
+                    await telegram_notify.notify_hr(
+                        f"✅ seed ครบ พ้น Hit & Run แล้ว\n\n"
+                        f"🎬 {title[:80]}\n"
+                        f"📱 ไม่มี task ใน Download Station — โหลดจาก client อื่น (เช่นมือถือ)\n"
+                        f"ลบจาก client นั้นได้เลย"
+                    )
                 db.hr_seen_forget(site_id)
-                print(f"[hr_fix] {site_id} ไม่มี task ใน DS (โหลดจากที่อื่น) — ข้ามคำถามลบ")
+                print(f"[hr_fix] {site_id} ไม่มี task ใน DS (โหลดจากที่อื่น) — แจ้งให้ลบเอง")
+                done += 1
                 continue
             if not await hr_delete.prompt_delete(site_id, title):
                 # Telegram refused the send. Keep the snapshot so the next round asks
@@ -418,12 +427,13 @@ if __name__ == "__main__":
         assert db.hr_fix_get("5")["status"] == "del_asked"
         assert await check_vanished([_row("3", 0.0)], {}) == 0  # snapshot dropped now
 
-        # downloaded elsewhere (phone): no DS task, so nothing of ours to delete
+        # downloaded elsewhere (phone): no DS task, so say so instead of offering a delete
         db.hr_seen_snapshot([_row("6", 0.0)])
-        _before = len(_prompts)
-        assert await check_vanished([_row("3", 0.0)], {}) == 0
+        _before, _before_n = len(_prompts), len(_notices)
+        assert await check_vanished([_row("3", 0.0)], {}) == 1
         assert db.hr_fix_get("6")["status"] == "cleared"
         assert len(_prompts) == _before
+        assert len(_notices) == _before_n + 1 and "client อื่น" in _notices[-1]
         assert await check_vanished([_row("3", 0.0)], {}) == 0  # forgotten, not re-checked
 
         # DS unreachable: decide nothing, keep the snapshot for the next round

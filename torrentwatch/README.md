@@ -262,7 +262,7 @@ of ours to remove. Three outcomes, and only the first is a prompt:
 | Download Station | Result |
 | --- | --- |
 | task found | delete prompt as usual |
-| task absent | `cleared` + note, no prompt, snapshot forgotten |
+| task absent | `cleared` + a Telegram notice "delete it on that client", no prompt |
 | unreachable | nothing decided, snapshot kept, retried next round |
 
 A snapshot with no title is treated like the unreachable case: with nothing to match on,

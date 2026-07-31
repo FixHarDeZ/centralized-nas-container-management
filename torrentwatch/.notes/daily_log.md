@@ -1,3 +1,11 @@
+### 2026-07-31 (เพิ่มเติม 4) — เคส "ไม่มี task ใน DS" เปลี่ยนจากเงียบเป็นแจ้ง Telegram
+
+- เดิม: ไม่เจอ task = set `cleared` แล้วเงียบ ผู้ใช้ไม่รู้ว่าต้องไปลบเองที่ client อื่น
+- ใหม่: ส่ง Telegram แบบไม่มีปุ่ม (`telegram_notify.notify_hr`) ว่า seed ครบพ้น H&R แล้ว ไม่มี task ใน Download Station โหลดจาก client อื่น (เช่นมือถือ) ให้ลบที่ client นั้น
+- note ใน `hr_fixes` เปลี่ยนเป็น `"ไม่มี task ใน Download Station — แจ้งให้ลบที่ client อื่น"` และนับรวมใน `done` เพราะไฟล์ถือว่าจบรอบแล้วจริง
+- ส่ง Telegram อย่างเดียว ไม่ส่ง LINE (ตามที่ผู้ใช้ขอ) และไม่เช็คผลส่ง — ไม่มี action ค้างให้ retry snapshot ถูกลืมทันที ต่างจากเคส `prompt_delete` ที่ต้องเก็บไว้ retry
+- self-check: `hr_fix self-check OK: 4 prompt(s), 2 notice(s)` EXIT=0 บน image จริง, deploy แล้ว
+
 ### 2026-07-31 (เพิ่มเติม 3) — กันเคส snapshot ไม่มีชื่อเรื่อง
 
 - `check_vanished` ใช้ `title = snap["title"] or (fix["title"] if fix else site_id)` ถ้า snapshot ไม่มี title และไม่มีแถวใน `hr_fixes` จะได้ `title == site_id` ซึ่ง `dsm.find_task` ไม่มีทาง match → ไฟล์ถูกตัดทิ้งเป็น "ไม่ได้อยู่ใน DS" แล้วลืม snapshot = หายเงียบแบบเดียวกับบั๊กที่ path นี้เกิดมาเพื่อแก้
