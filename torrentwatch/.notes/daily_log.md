@@ -1,3 +1,13 @@
+### 2026-07-31 (เพิ่มเติม 2) — ไม่ถามลบไฟล์ที่ไม่ได้โหลดผ่าน Download Station
+
+- โจทย์จากผู้ใช้: บาง torrent โหลดจากมือถือ ไม่ได้ผ่าน DS ของ NAS พอ seed ครบไม่ควรถามลบ (เราไม่มี task และไม่มีไฟล์ให้ลบ)
+- `check_vanished` เช็ค DS **ก่อนถาม** ด้วย `dsm.find_task()` ตัวเดียวกับที่ `_resolve` ใช้ (ต้องตรงกัน ไม่งั้น skip ผิดตัว) ดึง task list ครั้งเดียวต่อรอบ ผ่าน `hr_fix.ds_tasks()` และเฉพาะตอนมีแถวที่ครบจริง
+- 3 ทาง ไม่ใช่ 2: **เจอ task** = ถามตามเดิม / **ไม่มี task** = set `cleared` + note "ไม่มี task ใน Download Station — ไม่ถามลบ" ไม่ถาม ลืม snapshot / **DS ต่อไม่ได้ (`DsmError`)** = ไม่ตัดสินอะไร คา snapshot ไว้รอบหน้า (fail-open ไม่ได้ เพราะ prompt จะไปจบที่ `del_failed` ซึ่ง terminal อยู่นอก retry set = ไฟล์ที่อยู่ใน DS จริงจะไม่ถูกถามอีกเลย)
+- **ไม่ยัด logic นี้เข้า `prompt_delete`** เพราะ `check_vanished` อ่านค่า `False` ว่า "คา snapshot ไว้ retry" ไฟล์จากมือถือจะค้างวนตลอดกาล
+- guard นี้ **ใช้เฉพาะ flow ลบ**: `hr.fix_candidates()` ใช้สัญญาณ "tracker ไม่เห็น client" เดียวกันเป็น trigger auto-fix ห้ามให้ guard ไปโดน
+- self-check ใน `hr_fix.py` เพิ่ม 3 เคส (ไม่มี task / DS ล่ม / มี task) stub `ds_tasks` แบบเดียวกับ `telegram_notify.send_buttons`. รันบน image จริง: `hr_fix self-check OK: 4 prompt(s), 1 notice(s)`
+- ข้อมูลจริงตอนนี้: 6 แถวใน `hr_seen` ไม่มี task ใน DS สักอัน และ 3 แถวค้างที่ ~38.4 ชม. เท่ากัน = ตรงกับที่ผู้ใช้บอก (โหลดจากมือถือ หยุด seed) ไม่ใช่ความผิดปกติที่ต้องตาม
+
 ### 2026-07-31 (เพิ่มเติม) — ตรวจ match task ใน DS + กัน prompt หลุด
 
 - **ตรวจว่า flow ลบใช้ได้จริงกับไฟล์ที่ไม่เคยผ่าน auto-fix หรือเปล่า** (`_resolve` match ด้วย `dsm.find_task(tasks, title, db.torrent_filename(title))` ซึ่งเดิมออกแบบมาสำหรับไฟล์ที่ `apply_fix` เขียน .torrent เอง). ผลบน NAS: `hr_seen.title` **ตรงเป๊ะ** กับ `torrents.title` และ scraper เขียนไฟล์ลง `/downloads` ด้วย `db.torrent_filename(t["title"])` เดียวกัน → DS echo กลับมาเป็น `uri` ตัวเดียวกัน ⇒ key ที่มีอยู่ใช้ได้ ไม่ต้องเพิ่ม match key ใหม่

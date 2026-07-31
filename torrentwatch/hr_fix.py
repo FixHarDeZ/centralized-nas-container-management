@@ -15,6 +15,7 @@ from pathlib import Path
 
 import config
 import db
+import dsm
 import hr
 import hr_delete
 import line_notify
@@ -163,6 +164,18 @@ _CLEAR_TOLERANCE_H = 2.0  # how far short a last sighting may be and still count
 # del_*, deleted) has already been offered for deletion and must not be re-asked.
 _PRE_CLEAR = ("pending", "fixed", "stalled", "failed", "skipped", "expired")
 
+_UNASKED = object()  # "have not called DS yet", which None (= DS unreachable) cannot say
+
+
+async def ds_tasks() -> list[dict] | None:
+    """Every Download Station task, or None when DS could not be reached."""
+    try:
+        async with dsm.Dsm() as d:
+            return await d.list_tasks()
+    except dsm.DsmError as e:
+        print(f"[hr_fix] ถาม Download Station ไม่สำเร็จ: {e}")
+        return None
+
 
 async def check_vanished(rows: list[dict], settings: dict | None = None) -> int:
     """Handle rows that dropped off myhr.php, then re-snapshot the page.
@@ -177,6 +190,7 @@ async def check_vanished(rows: list[dict], settings: dict | None = None) -> int:
         return 0
     settings = settings or {}
     present = {r["site_id"] for r in rows if r["site_id"]}
+    tasks = _UNASKED  # fetched once, and only if something actually clears
     done = 0
     for snap in db.hr_seen_vanished(present):
         site_id = snap["site_id"]
@@ -211,11 +225,28 @@ async def check_vanished(rows: list[dict], settings: dict | None = None) -> int:
             db.hr_fix_set_status(site_id, "cleared")
         else:
             db.hr_fix_add_cleared(site_id, title)
-        if hr_delete.enabled(settings) and not await hr_delete.prompt_delete(site_id, title):
-            # Telegram refused the send. Keep the snapshot so the next round asks
-            # again — dropping it here would lose the file the way check_cleared did.
-            print(f"[hr_fix] {site_id} ส่งคำถามลบไม่สำเร็จ — เก็บ snapshot ไว้ลองใหม่รอบหน้า")
-            continue
+        if hr_delete.enabled(settings):
+            if tasks is _UNASKED:
+                tasks = await ds_tasks()
+            if tasks is None:
+                # DS could not be asked. Deciding now would either send a prompt that
+                # dead-ends at del_failed (terminal — the file is then lost for good)
+                # or write off a file that is really there. Keep the snapshot instead.
+                print(f"[hr_fix] {site_id} ถาม Download Station ไม่ได้ — เก็บ snapshot ไว้รอบหน้า")
+                continue
+            if dsm.find_task(tasks, title, db.torrent_filename(title)) is None:
+                # Downloaded outside this NAS (phone, another client), so there is no
+                # task and no payload of ours to remove. Delete-only: hr.fix_candidates
+                # reads the same "no client" signal as its auto-fix trigger.
+                db.hr_fix_set_status(site_id, "cleared", "ไม่มี task ใน Download Station — ไม่ถามลบ")
+                db.hr_seen_forget(site_id)
+                print(f"[hr_fix] {site_id} ไม่มี task ใน DS (โหลดจากที่อื่น) — ข้ามคำถามลบ")
+                continue
+            if not await hr_delete.prompt_delete(site_id, title):
+                # Telegram refused the send. Keep the snapshot so the next round asks
+                # again — dropping it here would lose the file the way check_cleared did.
+                print(f"[hr_fix] {site_id} ส่งคำถามลบไม่สำเร็จ — เก็บ snapshot ไว้ลองใหม่รอบหน้า")
+                continue
         db.hr_seen_forget(site_id)
         done += 1
     db.hr_seen_snapshot(rows)
@@ -318,10 +349,20 @@ if __name__ == "__main__":
     async def _dead_buttons(text, kb):
         return None
 
+    _ds: list[dict] | None = [
+        {"id": "1", "title": "x", "additional": {"detail": {"uri": "หนัง 1.torrent"}}},
+        {"id": "2", "title": "x", "additional": {"detail": {"uri": "หนัง 9.torrent"}}},
+        {"id": "3", "title": "x", "additional": {"detail": {"uri": "หนัง 5.torrent"}}},
+    ]
+
+    async def _fake_tasks():
+        return _ds
+
     telegram_notify.send_buttons = _fake_buttons
     telegram_notify.notify_hr = _fake_notify
     line_notify.notify_hr = _fake_notify
     hr_delete.enabled = lambda s: True
+    ds_tasks = _fake_tasks
     config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID = "t", "c"
     config.LINE_ACCESS_TOKEN, config.LINE_USER_ID = "", ""
 
@@ -336,6 +377,7 @@ if __name__ == "__main__":
         }
 
     async def _selfcheck():
+        global _ds
         page = [_row("1", 1.5), _row("2", 20.0), _row("3", 0.0), _row("4", 5.0, "hit")]
         assert await check_vanished(page, {}) == 0  # first pass only snapshots
         assert _prompts == []
@@ -370,6 +412,23 @@ if __name__ == "__main__":
         assert await check_vanished([_row("3", 0.0)], {}) == 1
         assert db.hr_fix_get("5")["status"] == "del_asked"
         assert await check_vanished([_row("3", 0.0)], {}) == 0  # snapshot dropped now
+
+        # downloaded elsewhere (phone): no DS task, so nothing of ours to delete
+        db.hr_seen_snapshot([_row("6", 0.0)])
+        _before = len(_prompts)
+        assert await check_vanished([_row("3", 0.0)], {}) == 0
+        assert db.hr_fix_get("6")["status"] == "cleared"
+        assert len(_prompts) == _before
+        assert await check_vanished([_row("3", 0.0)], {}) == 0  # forgotten, not re-checked
+
+        # DS unreachable: decide nothing, keep the snapshot for the next round
+        _ds = None
+        db.hr_seen_snapshot([_row("8", 0.0)])
+        assert await check_vanished([_row("3", 0.0)], {}) == 0
+        assert db.hr_fix_get("8")["status"] == "cleared"  # cleared is true; delete is not decided
+        _ds = [{"id": "9", "title": "x", "additional": {"detail": {"uri": "หนัง 8.torrent"}}}]
+        assert await check_vanished([_row("3", 0.0)], {}) == 1
+        assert db.hr_fix_get("8")["status"] == "del_asked"
 
         print(f"hr_fix self-check OK: {len(_prompts)} prompt(s), {len(_notices)} notice(s)")
 

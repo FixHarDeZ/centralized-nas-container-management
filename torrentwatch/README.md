@@ -255,10 +255,20 @@ The snapshot is only forgotten once the file has been dealt with. If Telegram re
 the delete prompt the row stays in `hr_seen` at status `cleared`, which the next round
 retries — dropping it there would silently recreate the bug this whole path fixes.
 
-> A cleared file whose Download Station task is already gone resolves to
-> `del_failed` ("ไม่เจอ task นี้ใน Download Station แล้ว"). That is the honest answer:
-> the delete flow only ever removes a DS task plus the real path DS reports, and
-> guessing a path for a permanent delete is not on the table.
+Before asking, the round checks Download Station for the file — torrents grabbed on a
+phone or another client are seeded outside this NAS, so there is no task and no payload
+of ours to remove. Three outcomes, and only the first is a prompt:
+
+| Download Station | Result |
+| --- | --- |
+| task found | delete prompt as usual |
+| task absent | `cleared` + note, no prompt, snapshot forgotten |
+| unreachable | nothing decided, snapshot kept, retried next round |
+
+The unreachable case must not fall through to a prompt: it would resolve to
+`del_failed`, which is terminal, and a file that really is in DS would never be offered
+again. Note this guard is **delete-only** — `hr.fix_candidates()` treats the same
+"no client seen" signal as its auto-fix trigger, and must keep doing so.
 
 A `fixed` row that Download Station never picked up (still not seeding 24h after the
 confirm) flips to `stalled`, so the next round asks again instead of letting the file
