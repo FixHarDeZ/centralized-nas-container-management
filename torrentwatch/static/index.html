@@ -152,6 +152,12 @@
         <div class="tw-pagetitle-sub">ดึงสดจาก myhr.php — เลือกการเรียงได้</div>
       </div>
       <div class="tw-toolbar">
+        <div class="tw-sort-group" id="hr-view">
+          <button class="tw-sort-btn active" data-view="live" title="ไฟล์ที่ยังค้าง H&R อยู่ตอนนี้"><i class="bi bi-broadcast"></i> กำลัง seed</button>
+          <button class="tw-sort-btn" data-view="history" title="ไฟล์ที่ seed ครบแล้ว และบอทแจ้งอะไรไปบ้าง"><i class="bi bi-clock-history"></i> ประวัติ</button>
+        </div>
+      </div>
+      <div class="tw-toolbar" id="hr-sort-bar">
         <div class="tw-sort-group" id="hr-sort">
           <button class="tw-sort-btn active" data-sort="slack" title="เวลาที่เหลือก่อนครบกำหนด 168 ชม. น้อยสุดขึ้นก่อน"><i class="bi bi-hourglass-bottom"></i> ครบกำหนด</button>
           <button class="tw-sort-btn" data-sort="remaining" title="ขาด seed อีกน้อยสุดขึ้นก่อน"><i class="bi bi-upload"></i> เหลือ seed</button>

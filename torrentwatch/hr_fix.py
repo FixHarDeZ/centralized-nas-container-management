@@ -149,7 +149,7 @@ async def check_cleared(rows: list[dict], settings: dict | None = None) -> int:
             await line_notify.notify_hr(body)
         if config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID:
             await telegram_notify.notify_hr(body)
-        db.hr_fix_set_status(fix["site_id"], "cleared")
+        db.hr_fix_set_status(fix["site_id"], "cleared", "seed ครบ 48 ชม. ตามกำหนด")
         if hr_delete.enabled(settings or {}):
             await hr_delete.prompt_delete(fix["site_id"], fix["title"])
         done += 1
@@ -223,7 +223,9 @@ async def check_vanished(rows: list[dict], settings: dict | None = None) -> int:
             if config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID:
                 await telegram_notify.notify_hr(body)
         if fix:
-            db.hr_fix_set_status(site_id, "cleared")
+            # Always write a note: the default blank wipes the old one, and the history
+            # page then shows a row with no reason at all.
+            db.hr_fix_set_status(site_id, "cleared", "seed ครบ หลุดจากหน้า myhr แล้ว")
         else:
             db.hr_fix_add_cleared(site_id, title)
         if hr_delete.enabled(settings):
@@ -233,12 +235,14 @@ async def check_vanished(rows: list[dict], settings: dict | None = None) -> int:
                 # DS could not be asked. Deciding now would either send a prompt that
                 # dead-ends at del_failed (terminal — the file is then lost for good)
                 # or write off a file that is really there. Keep the snapshot instead.
+                db.hr_fix_set_status(site_id, "cleared", "ถาม Download Station ไม่ได้ — รอรอบหน้า")
                 print(f"[hr_fix] {site_id} ถาม Download Station ไม่ได้ — เก็บ snapshot ไว้รอบหน้า")
                 continue
             if dsm.find_task(tasks, title, db.torrent_filename(title)) is None:
                 if title == site_id:
                     # No real title to match on, so a miss proves nothing. Writing the
                     # file off here would lose it exactly the way check_cleared did.
+                    db.hr_fix_set_status(site_id, "cleared", "ไม่มีชื่อเรื่องให้เทียบกับ DS — รอรอบหน้า")
                     print(f"[hr_fix] {site_id} ไม่มีชื่อเรื่องให้เทียบกับ DS — เก็บ snapshot ไว้รอบหน้า")
                     continue
                 # Downloaded outside this NAS (phone, another client), so there is no

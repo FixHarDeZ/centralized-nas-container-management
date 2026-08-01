@@ -121,8 +121,10 @@ async def _scrape_once(box: dict):
     try:
         # Re-login each cycle to recover from stale connections after long idle periods
         if not await scraper.relogin():
-            print("[scheduler] relogin failed — scrape aborted")
-            box["error"] = "relogin failed — scrape aborted"
+            # Carry the reason: "relogin failed" alone sent us to docker logs every time.
+            why = scraper.last_login_error() or "unknown"
+            print(f"[scheduler] relogin failed — scrape aborted ({why})")
+            box["error"] = f"relogin failed — scrape aborted ({why})"
             return
 
         for i, source in enumerate(sources):

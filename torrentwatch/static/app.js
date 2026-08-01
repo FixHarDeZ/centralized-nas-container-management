@@ -1191,6 +1191,7 @@ function _hrFixRow(f) {
         <span class="tw-run-time">${escHtml(when)}</span>
       </div>
       <div class="tw-run-title" title="${escHtml(f.title)}">${escHtml(f.title)}</div>
+      ${f.note ? `<div class="tw-run-chips"><span class="tw-run-chip">${escHtml(f.note)}</span></div>` : ""}
     </div>
   </div>`;
 }
@@ -1221,12 +1222,48 @@ const HR_SORTS = {
 
 // Cached so switching sort re-renders instead of re-scraping myhr.php.
 let _hrData = null;
+let _hrView = "live";
 
 async function loadHr() {
   const el = document.getElementById("hr-content");
+  document.getElementById("hr-sort-bar").style.display = _hrView === "live" ? "" : "none";
+  if (_hrView === "history") return loadHrHistory();
   el.innerHTML = `<div class="tw-empty"><i class="bi bi-hourglass-split"></i>กำลังดึงจาก myhr.php...</div>`;
   _hrData = await api("GET", "/hr").catch(() => null);
   _renderHr();
+}
+
+// History reads hr_fixes, which the 7-day cleanup does not touch — so this is the
+// whole record of what the bot said about every file that finished seeding.
+async function loadHrHistory() {
+  const el = document.getElementById("hr-content");
+  el.innerHTML = `<div class="tw-empty"><i class="bi bi-hourglass-split"></i>กำลังโหลด...</div>`;
+  const data = await api("GET", "/hr/history").catch(() => null);
+  if (!data) {
+    el.innerHTML = `<div class="tw-empty"><i class="bi bi-exclamation-circle"></i>โหลดประวัติไม่สำเร็จ</div>`;
+    return;
+  }
+  const fixes = data.fixes || [];
+  const waiting = fixes.filter(f => HRFIX_WAITING.includes(f.status));
+  const settled = fixes.filter(f => !HRFIX_WAITING.includes(f.status));
+  const deleted = fixes.filter(f => f.status === "deleted").length;
+  el.innerHTML = `
+    <div class="tw-stats-grid">
+      ${_statsCard("bi-collection", fixes.length, "ทั้งหมด", "var(--accent)")}
+      ${_statsCard("bi-telegram", waiting.length, "รอกดใน Telegram", waiting.length ? "var(--dl-nas)" : "var(--seed)")}
+      ${_statsCard("bi-trash3", deleted, "ลบแล้ว", "var(--dl-local)")}
+    </div>
+
+    ${waiting.length ? `
+    <div class="tw-stats-section tw-run-waiting">
+      <div class="tw-stats-header"><i class="bi bi-telegram"></i> รอพี่กดใน Telegram (${waiting.length})</div>
+      ${waiting.map(_hrFixRow).join("")}
+    </div>` : ""}
+
+    <div class="tw-stats-section" style="margin-bottom:14px">
+      <div class="tw-stats-header"><i class="bi bi-shield-check"></i> จบแล้ว (${settled.length})</div>
+      ${settled.length ? settled.map(_hrFixRow).join("") : '<div class="tw-stats-empty">ยังไม่มีไฟล์ที่ seed ครบ</div>'}
+    </div>`;
 }
 
 function _renderHr() {
@@ -1290,6 +1327,15 @@ function _hrRow(r, isRisky) {
 }
 
 document.getElementById("btn-hr-refresh").addEventListener("click", loadHr);
+
+document.querySelectorAll("#hr-view .tw-sort-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#hr-view .tw-sort-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    _hrView = btn.dataset.view;
+    loadHr();
+  });
+});
 
 document.querySelectorAll("#hr-sort .tw-sort-btn").forEach(btn => {
   btn.addEventListener("click", () => {

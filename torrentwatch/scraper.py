@@ -131,15 +131,23 @@ LOGIN_URL_MARKERS = ["login.php", "/login", "signin", "register.php"]
 
 _client: httpx.AsyncClient | None = None
 _login_ok: bool = False
+_last_login_error: str = ""
+
+
+def _new_client() -> httpx.AsyncClient:
+    return httpx.AsyncClient(
+        follow_redirects=True,
+        timeout=30,
+        headers={"User-Agent": "Mozilla/5.0 (compatible; TorrentWatch/1.0)"},
+        # Drop idle connections well before the site does — a pooled socket the server
+        # already closed is what surfaces as "TCPTransport closed; the handler is closed".
+        limits=httpx.Limits(keepalive_expiry=30),
+    )
 
 
 async def init():
     global _client, _login_ok
-    _client = httpx.AsyncClient(
-        follow_redirects=True,
-        timeout=30,
-        headers={"User-Agent": "Mozilla/5.0 (compatible; TorrentWatch/1.0)"},
-    )
+    _client = _new_client()
     _login_ok = await _login()
     print(f"[scraper] init — login {'OK' if _login_ok else 'FAILED'}")
 
@@ -152,6 +160,7 @@ async def close():
 
 
 async def _login() -> bool:
+    global _last_login_error
     if not config.SITE_USERNAME or not config.SITE_PASSWORD:
         print("[scraper] WARNING: credentials not set — skipping login")
         return False
@@ -178,11 +187,14 @@ async def _login() -> bool:
         resp = await _client.post(action, data=payload)
         print(f"[scraper] login response → {resp.url} (status {resp.status_code})")
         if _is_login_page(resp.text, str(resp.url)):
+            _last_login_error = "still on login page after POST"
             print("[scraper] login failed — still on login page after POST")
             return False
         print("[scraper] login OK")
+        _last_login_error = ""
         return True
     except Exception as e:
+        _last_login_error = f"{type(e).__name__}: {e}"
         print(f"[scraper] login error: {e}")
         return False
 
@@ -228,10 +240,27 @@ async def _fetch(url: str) -> str | None:
 async def relogin() -> bool:
     """Re-establish login session. Call at the start of each scrape cycle to prevent
     stale connections after long idle periods (e.g. overnight pause).
+
+    A first failure is usually a dead pooled socket, and retrying on the same client can
+    hand back the same corpse — so throw the client away and try once on a fresh one.
     """
-    global _login_ok
+    global _client, _login_ok
+    if _client is None:
+        _client = _new_client()
     _login_ok = await _login()
+    if not _login_ok:
+        print(f"[scraper] relogin failed ({_last_login_error}) — rebuilding client and retrying")
+        try:
+            await _client.aclose()
+        except Exception as e:
+            print(f"[scraper] closing dead client: {e}")
+        _client = _new_client()
+        _login_ok = await _login()
     return _login_ok
+
+
+def last_login_error() -> str:
+    return _last_login_error
 
 
 async def fetch_raw_html(url: str) -> str | None:
@@ -835,3 +864,47 @@ def _matches_keywords(title: str, keywords: list[str]) -> bool:
 
 def is_ready() -> bool:
     return _client is not None and _login_ok
+
+
+if __name__ == "__main__":
+    # Self-check: relogin must survive one dead-transport failure by rebuilding the client.
+    import asyncio as _asyncio
+
+    async def _selfcheck():
+        calls = {"n": 0}
+        original = globals()["_login"]
+
+        async def fake_login():
+            global _last_login_error
+            calls["n"] += 1
+            if calls["n"] == 1:
+                _last_login_error = "RuntimeError: the handler is closed"
+                return False
+            _last_login_error = ""
+            return True
+
+        globals()["_login"] = fake_login
+        try:
+            first = _new_client()
+            globals()["_client"] = first
+            assert await relogin() is True
+            assert calls["n"] == 2, calls
+            assert globals()["_client"] is not first, "dead client was not replaced"
+            assert last_login_error() == ""
+
+            # Both attempts fail → report False and keep the reason for the dashboard.
+            async def always_fail():
+                global _last_login_error
+                calls["n"] += 1
+                _last_login_error = "RuntimeError: the handler is closed"
+                return False
+
+            globals()["_login"] = always_fail
+            assert await relogin() is False
+            assert "handler is closed" in last_login_error()
+        finally:
+            globals()["_login"] = original
+            await close()
+        print("scraper self-check OK")
+
+    _asyncio.run(_selfcheck())

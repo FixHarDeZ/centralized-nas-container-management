@@ -410,6 +410,12 @@ async def api_hr():
     }
 
 
+@app.get("/api/hr/history")
+async def api_hr_history(limit: int = 200):
+    """Every H&R file that finished seeding, with what the bot did about it."""
+    return {"fixes": db.hr_fix_recent(min(max(limit, 1), 500))}
+
+
 @app.post("/api/hr/notify")
 async def api_hr_notify():
     """Force-send the H&R digest now (ignores the enable flag and dedup)."""

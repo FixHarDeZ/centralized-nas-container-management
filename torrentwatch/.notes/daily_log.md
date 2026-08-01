@@ -1,3 +1,19 @@
+### 2026-08-02 — ประวัติ H&R + แก้ relogin fail บางรอบ
+
+**relogin fail (สาเหตุจริง)**: APScheduler รัน job คนละ event loop กับ app connection ใน pool ของ `httpx.AsyncClient` ตัวเดิมจึงตายในลูปนั้น (`RuntimeError: unable to perform operation on <TCPTransport closed=True ...>`) เดิม `relogin()` ลองครั้งเดียวแล้วคืน False ทำให้ scheduler ยกเลิกทั้งรอบ (0s, 0 entries)
+- ใหม่: ล้ม 1 ครั้ง = ทิ้ง client เก่า (`aclose()`) สร้างใหม่ด้วย `_new_client()` แล้วลองอีกรอบ
+- `_new_client()` ตั้ง `keepalive_expiry=30` ทิ้ง socket ที่ idle ก่อนฝั่งเว็บจะปิดให้
+- เก็บเหตุผลไว้ที่ `scraper.last_login_error()` แล้วใส่ลง `box["error"]` หน้า "รอบทำงาน" จะขึ้น `relogin failed — scrape aborted (RuntimeError: ...)` ไม่ต้องไปเปิด docker logs
+- self-check ใหม่ใน `scraper.py` (`__main__`): stub `_login` ให้ล้มครั้งแรก ต้องได้ True และ client ต้องถูกเปลี่ยนตัว
+
+**ประวัติ H&R**: แท็บ H&R เพิ่มปุ่มสลับ 2 มุมมอง (`#hr-view`) — "กำลัง seed" (ของเดิม, ดึงสด) กับ "ประวัติ" อ่าน `GET /api/hr/history?limit=` (= `db.hr_fix_recent`, cap 500)
+- แบ่งเป็น "รอพี่กดใน Telegram" (`pending`/`del_asked`/`del_confirm`) กับ "จบแล้ว"
+- `_hrFixRow` แสดง `note` แล้ว (มีใน DB มานานแต่ UI ไม่เคยโชว์) — `note` นี่แหละที่แยก "รอยืนยันลบ" ออกจาก "แจ้งเฉยๆ เพราะโหลดจากมือถือ"
+- แก้ที่มาของ note ว่าง: `hr_fix_set_status()` ถ้าไม่ส่ง note จะ **ล้างของเดิม** ตอนนี้ทุก branch ใน `check_vanished`/`check_cleared` เขียน note เสมอ รวมถึง 2 branch ที่ยังไม่ตัดสิน (`ถาม Download Station ไม่ได้ — รอรอบหน้า`, `ไม่มีชื่อเรื่องให้เทียบกับ DS — รอรอบหน้า`)
+- `hr_fixes` ไม่โดน cleanup 7 วัน (`cleanup_old_records` ลบแค่ `torrents`, `cleanup_old_runs` ลบ `runs`) ประวัติจึงอยู่ยาว
+
+verify: self-check `scraper.py` และ `hr_fix.py` ผ่านบน image จริง, deploy แล้ว, `/api/hr/history` คืนข้อมูลจริงพร้อม note
+
 ### 2026-07-31 (เพิ่มเติม 5) — verify path ใหม่บน production
 
 - trigger รอบอ่าน myhr เองไม่รอ 21:10 → `2378096` seed ครบหลุดจากหน้า, ไม่มี task ใน DS, ส่ง Telegram แจ้งให้ลบที่ client อื่น, ไม่มีคำถามลบ. DB: status `cleared` note `"ไม่มี task ใน Download Station — แจ้งให้ลบที่ client อื่น"`

@@ -24,7 +24,7 @@ A daily torrent monitor that scrapes [bearbit.org](https://bearbit.org) on a sch
   - **Browser** — proxies the `.torrent` to your browser (preserves Thai filename via RFC 5987)
   - **NAS** — saves directly to `/downloads` (Synology watch folder mount)
 - **History tab** — browse any past date (read-only, frozen data)
-- **H&R tab** — per-file seed status pulled live from `myhr.php` (โหลดจบเมื่อ / ความคืบหน้า seed / เหลืออีก / ระบบเห็นล่าสุด / สถานะ), with uploader + FREE + multiplier badges borrowed from the listing scrape, a `ดึงข้อมูลเมื่อ` stamp, and four sort modes (deadline slack / remaining seed / last announce / download-done)
+- **H&R tab** — two views: **กำลัง seed** (live) and **ประวัติ**. Live shows per-file seed status pulled from `myhr.php` (โหลดจบเมื่อ / ความคืบหน้า seed / เหลืออีก / ระบบเห็นล่าสุด / สถานะ), with uploader + FREE + multiplier badges borrowed from the listing scrape, a `ดึงข้อมูลเมื่อ` stamp, and four sort modes (deadline slack / remaining seed / last announce / download-done)
 - **Run Detail tab** — every scrape / H&R check / cleanup / backup run persisted to SQLite with duration, counts and error, plus the H&R actions still waiting on a Telegram button press
 - **Fixed auto-scrape schedule** (Asia/Bangkok): 19:00–01:00 every 30 min · 01:00–06:00 paused · 06:00–19:00 every 60 min
 - **Live progress** — header badge shows source/page/count in real-time during scrape; auto-refreshes the list when done
@@ -162,6 +162,7 @@ Router must forward external port `15059 → NAS`.
 | `POST /api/telegram/test` | Send a test Telegram message to verify configuration |
 | `GET /api/telegram/get-chat-id` | Call `getUpdates` to discover your Telegram chat ID |
 | `GET /api/hr` | Live `myhr.php` snapshot — parsed rows + at-risk split + `fetched_at` (scrape time, Bangkok) |
+| `GET /api/hr/history?limit=` | Every `hr_fixes` row newest first — what the bot decided per file and why (`note`) |
 | `POST /api/hr/notify` | Force-send the H&R digest now (ignores enable flag + dedup) |
 | `GET /api/debug/html?source_id=…` | Raw scraped HTML — for selector tuning |
 | `GET /api/debug/login-page` | Raw bearbit login page |
@@ -265,6 +266,17 @@ of ours to remove. Three outcomes, and only the first is a prompt:
 | task absent | `cleared` + a Telegram notice "delete it on that client", no prompt |
 | unreachable | nothing decided, snapshot kept, retried next round |
 
+Every branch writes a `note`, including the two that decide nothing — the history view
+below reads it, and `hr_fix_set_status()` blanks the previous note when not given one.
+
+### History view (ประวัติ tab)
+
+`GET /api/hr/history` returns `hr_fixes` newest first, split in the UI into **รอพี่กดใน
+Telegram** (`pending`, `del_asked`, `del_confirm`) and **จบแล้ว**. Each row shows the
+status label plus its note, which is what separates "waiting for a delete confirm" from
+"informational only — the file lives on a phone". The 7-day cleanup only touches
+`torrents` and `runs`, so this history is not pruned.
+
 A snapshot with no title is treated like the unreachable case: with nothing to match on,
 a miss proves nothing, so the row is kept rather than written off.
 
@@ -340,6 +352,20 @@ That is the only place outside Telegram scrollback where a forgotten prompt is v
 
 Retention rides the existing `retention_days` setting (floor of 14 days), trimmed by
 the same 03:00 cleanup job — no second cron for one `DELETE`.
+
+## Session handling
+
+Each scrape cycle starts with `scraper.relogin()`. APScheduler runs its jobs in a
+separate event loop from the app, so the pooled connections of the long-lived
+`httpx.AsyncClient` are dead there — the failure surfaces as
+`RuntimeError: unable to perform operation on <TCPTransport closed=True ...>` and used
+to abort the whole round (`relogin failed — scrape aborted`, 0s, nothing scraped).
+
+`relogin()` now throws the client away on a first failure, builds a fresh one and tries
+once more, and the client is created with `keepalive_expiry=30` so an idle socket is
+dropped before the site closes it. The reason for a failure is kept in
+`scraper.last_login_error()` and printed into the run row, so the Run Detail tab says
+*why* instead of only *that* it failed.
 
 ## Scraper Selectors
 
