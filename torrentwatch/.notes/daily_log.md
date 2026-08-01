@@ -10,6 +10,7 @@
 - แบ่งเป็น "รอพี่กดใน Telegram" (`pending`/`del_asked`/`del_confirm`) กับ "จบแล้ว"
 - `_hrFixRow` แสดง `note` แล้ว (มีใน DB มานานแต่ UI ไม่เคยโชว์) — `note` นี่แหละที่แยก "รอยืนยันลบ" ออกจาก "แจ้งเฉยๆ เพราะโหลดจากมือถือ"
 - แก้ที่มาของ note ว่าง: `hr_fix_set_status()` ถ้าไม่ส่ง note จะ **ล้างของเดิม** ตอนนี้ทุก branch ใน `check_vanished`/`check_cleared` เขียน note เสมอ รวมถึง 2 branch ที่ยังไม่ตัดสิน (`ถาม Download Station ไม่ได้ — รอรอบหน้า`, `ไม่มีชื่อเรื่องให้เทียบกับ DS — รอรอบหน้า`)
+- chip `note` ตัดที่ 60 ตัวอักษร (ข้อความเต็มอยู่ใน tooltip) — `_hrFixRow` ใช้ร่วมกับแท็บรอบทำงาน ชื่อไฟล์ .torrent ยาวๆ จะกลืนทั้งแถวบนมือถือ
 - `hr_fixes` ไม่โดน cleanup 7 วัน (`cleanup_old_records` ลบแค่ `torrents`, `cleanup_old_runs` ลบ `runs`) ประวัติจึงอยู่ยาว
 
 verify: self-check `scraper.py` และ `hr_fix.py` ผ่านบน image จริง, deploy แล้ว, `/api/hr/history` คืนข้อมูลจริงพร้อม note
