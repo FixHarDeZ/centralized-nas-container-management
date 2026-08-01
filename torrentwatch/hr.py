@@ -199,21 +199,38 @@ def is_cleared(row: dict) -> bool:
     )
 
 
-def was_cleared(snap: dict, tolerance_h: float = 2.0) -> bool:
+def was_cleared(snap: dict, tolerance_h: float = 2.0, now: datetime | None = None) -> bool:
     """True when a row that dropped off myhr.php had finished its obligation.
 
     bearbit removes a row once the 48h is served, but the page is read twice a day,
-    so the final "48.0/48.0" sighting is usually missed — a row can be a couple of
-    hours short at its last sighting and still be legitimately done when it vanishes.
-    `tolerance_h` covers that gap; anything further behind is an abandoned row, not a
-    cleared one, and must never reach the (permanent) delete prompt. A `hit` row has
-    already violated, so its disappearance means something else entirely.
+    so the final "48.0/48.0" sighting is usually missed. The file keeps seeding after
+    that sighting, so the hours elapsed since count against what it still owed — a
+    flat tolerance cannot, and silently wrote off everything between 2 and 12 hours
+    short. `tolerance_h` remains on top of that for parse skew. A `hit` row has
+    already violated, so its disappearance means something else entirely, and a row
+    that is still behind after the credit is abandoned, not cleared — it must never
+    reach the (permanent) delete prompt.
     """
     if snap.get("state") == "hit":
         return False
     if is_cleared(snap):
         return True
-    return snap.get("remaining_h") is not None and snap["remaining_h"] <= tolerance_h
+    if snap.get("remaining_h") is None:
+        return False
+    return snap["remaining_h"] - _hours_since(snap.get("seen_at"), now) <= tolerance_h
+
+
+def _hours_since(ts: str | None, now: datetime | None = None) -> float:
+    """Hours between an ISO timestamp and now — 0 when it is missing or unreadable."""
+    if not ts:
+        return 0.0
+    try:
+        seen = datetime.fromisoformat(ts)
+    except ValueError:
+        return 0.0
+    if seen.tzinfo is None:
+        seen = seen.replace(tzinfo=_TZ)
+    return max(0.0, ((now or datetime.now(_TZ)) - seen).total_seconds() / 3600)
 
 
 def digest(summary: dict) -> str:
@@ -296,6 +313,22 @@ if __name__ == "__main__":
     assert not was_cleared(_parsed[1])
     assert not was_cleared({**_parsed[6], "state": "hit"})
     assert not was_cleared({"state": "ok", "seeded_h": 40.0, "target_h": 48.0, "remaining_h": None})
+    # elapsed time since the last sighting pays down what was still owed: rounds are
+    # 12h apart, so 5h short half a day ago is done — 20h short is not
+    _now = datetime.now(_TZ)
+    _seen = (_now - timedelta(hours=12)).isoformat(timespec="seconds")
+    assert was_cleared(
+        {"state": "warn", "seeded_h": 43.0, "target_h": 48.0, "remaining_h": 5.0, "seen_at": _seen},
+        now=_now,
+    )
+    assert not was_cleared(
+        {"state": "warn", "seeded_h": 28.0, "target_h": 48.0, "remaining_h": 20.0, "seen_at": _seen},
+        now=_now,
+    )
+    # a missing/unreadable seen_at falls back to the old flat-tolerance behaviour
+    assert not was_cleared(
+        {"state": "ok", "seeded_h": 43.0, "target_h": 48.0, "remaining_h": 5.0, "seen_at": "junk"}
+    )
     assert digest(_s) == digest(summarize(parse_hr(_html)))
     assert "H&R" in format_message(_s)
     # badges are injected by db.attach_badges; the risky lines must carry them

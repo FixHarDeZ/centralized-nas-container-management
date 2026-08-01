@@ -240,10 +240,14 @@ almost never sampled. Every round therefore snapshots each listed row into `hr_s
 (seeded/target/remaining/state), and `check_vanished()` judges disappearances against
 the last snapshot:
 
-* last sighting owed **≤ 2h** (or nothing) and was not `hit` → treated as cleared
+* still owed, minus the hours elapsed since that sighting, **≤ 2h** and not `hit` → treated as cleared
 * anything further behind → logged and dropped, never treated as cleared
 
-The 2h tolerance covers the 12h sampling gap. An empty `rows` list (failed fetch —
+The file keeps seeding after the last sighting, so `was_cleared()` credits the elapsed
+time against what it still owed — a flat tolerance cannot, and silently wrote off
+everything between 2h and a full 12h round short. The 2h that remains is parse skew.
+A missing or unreadable `seen_at` credits nothing and falls back to that flat 2h.
+An empty `rows` list (failed fetch —
 `parse_hr` returns `[]` for both) is ignored, so a broken login can never read as
 "every file cleared at once".
 

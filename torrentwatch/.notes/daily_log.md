@@ -1,3 +1,12 @@
+### 2026-08-02 (เพิ่มเติม) — ปิดรูโหว่ was_cleared ขาด 2–12 ชม.
+
+`hr.was_cleared()` เดิมนับว่าครบเฉพาะ snapshot สุดท้ายขาด ≤ 2 ชม. แต่รอบอ่าน myhr ห่างกัน 12 ชม. → ไฟล์ที่เห็นครั้งสุดท้ายตอนขาด 5 ชม. แล้วหายรอบถัดไป = seed ครบจริงแต่โดนทิ้งเงียบ (log อย่างเดียว ไม่มี noti ไม่มีแถวประวัติ)
+- ใหม่: หักเวลาที่ผ่านไปตั้งแต่ `hr_seen.seen_at` ออกจาก `remaining_h` ก่อนเทียบ tolerance (ไฟล์ยัง seed ต่ออยู่) — `_hours_since()` คืน 0 ถ้า `seen_at` หาย/พังจึงตกกลับไปพฤติกรรมเดิม ไม่ใช่ปล่อยผ่าน
+- `state == "hit"` ยังคืน False เหมือนเดิม (ละเมิดไปแล้ว หายด้วยเหตุอื่น)
+- self-check ใน `hr.py`: ขาด 5 ชม. เมื่อ 12 ชม.ก่อน = ครบ, ขาด 20 ชม. = ไม่ครบ, `seen_at` เป็นขยะ = ไม่ครบ
+
+verify: `python hr.py` และ `python hr_fix.py` ผ่านใน container จริง (EXIT=0)
+
 ### 2026-08-02 — ประวัติ H&R + แก้ relogin fail บางรอบ
 
 **relogin fail (สาเหตุจริง)**: APScheduler รัน job คนละ event loop กับ app connection ใน pool ของ `httpx.AsyncClient` ตัวเดิมจึงตายในลูปนั้น (`RuntimeError: unable to perform operation on <TCPTransport closed=True ...>`) เดิม `relogin()` ลองครั้งเดียวแล้วคืน False ทำให้ scheduler ยกเลิกทั้งรอบ (0s, 0 entries)
