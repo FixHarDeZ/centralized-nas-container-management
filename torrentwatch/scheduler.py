@@ -9,6 +9,7 @@ Daily cleanup runs 03:00 (and once at startup to enforce retention after restart
 """
 
 import asyncio
+import threading
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -372,9 +373,18 @@ async def _check_hr_once(force: bool = False) -> dict:
     return result
 
 
+# Both H&R jobs relogin(), which swaps the module-global scraper client. APScheduler
+# runs them in a thread pool, so a report scheduled at 09:00 and the 09:10 check can
+# overlap and aclose() the client the other is mid-request on. Held only around the
+# sync job wrappers (each owns its own event loop) — never inside the coroutine, where
+# a manual force call would block the app's loop.
+_hr_lock = threading.Lock()
+
+
 def _hr_job():
     try:
-        _run_async(check_hr())
+        with _hr_lock:
+            _run_async(check_hr())
     except Exception as e:
         print(f"[scheduler] H&R check error: {e}")
 
@@ -413,7 +423,8 @@ async def send_hr_report(force: bool = False) -> dict:
 
 def _hr_report_job():
     try:
-        _run_async(send_hr_report())
+        with _hr_lock:
+            _run_async(send_hr_report())
     except Exception as e:
         print(f"[scheduler] H&R report error: {e}")
 
