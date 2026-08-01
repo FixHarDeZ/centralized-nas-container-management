@@ -246,7 +246,11 @@ the last snapshot:
 The file keeps seeding after the last sighting, so `was_cleared()` credits the elapsed
 time against what it still owed — a flat tolerance cannot, and silently wrote off
 everything between 2h and a full 12h round short. The 2h that remains is parse skew.
-A missing or unreadable `seen_at` credits nothing and falls back to that flat 2h.
+A missing or unreadable `seen_at` credits nothing and falls back to that flat 2h, and
+the credit is capped at one round (13h): a failed fetch returns before the re-snapshot,
+so an older `seen_at` means the reader was broken, not that the file kept seeding —
+uncapped it would clear every vanished row, `state` included, since a row that went
+`hit` during the outage still reads `warn` in the stale snapshot.
 An empty `rows` list (failed fetch —
 `parse_hr` returns `[]` for both) is ignored, so a broken login can never read as
 "every file cleared at once".

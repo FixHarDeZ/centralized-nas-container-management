@@ -217,7 +217,15 @@ def was_cleared(snap: dict, tolerance_h: float = 2.0, now: datetime | None = Non
         return True
     if snap.get("remaining_h") is None:
         return False
-    return snap["remaining_h"] - _hours_since(snap.get("seen_at"), now) <= tolerance_h
+    credit = min(_hours_since(snap.get("seen_at"), now), _MAX_CREDIT_H)
+    return snap["remaining_h"] - credit <= tolerance_h
+
+
+# One 12h round plus jitter. A snapshot older than that means the reader was broken
+# (failed fetch skips the re-snapshot entirely), not that the file kept seeding — and
+# an uncapped credit would clear every vanished row, `state` included: a row that went
+# `hit` during the outage still reads `warn` in the stale snapshot.
+_MAX_CREDIT_H = 13.0
 
 
 def _hours_since(ts: str | None, now: datetime | None = None) -> float:
@@ -328,6 +336,18 @@ if __name__ == "__main__":
     # a missing/unreadable seen_at falls back to the old flat-tolerance behaviour
     assert not was_cleared(
         {"state": "ok", "seeded_h": 43.0, "target_h": 48.0, "remaining_h": 5.0, "seen_at": "junk"}
+    )
+    # credit is capped at one round: a stale snapshot from a broken reader must not
+    # clear a row that owed 20h, however old it is
+    assert not was_cleared(
+        {
+            "state": "warn",
+            "seeded_h": 28.0,
+            "target_h": 48.0,
+            "remaining_h": 20.0,
+            "seen_at": (_now - timedelta(hours=60)).isoformat(timespec="seconds"),
+        },
+        now=_now,
     )
     assert digest(_s) == digest(summarize(parse_hr(_html)))
     assert "H&R" in format_message(_s)
