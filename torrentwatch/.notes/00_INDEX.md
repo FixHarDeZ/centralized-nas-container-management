@@ -129,6 +129,8 @@ Default settings:
 - `hr_slack_hours = "24"` — เตือนเมื่อ slack (เวลาเหลือหลังหัก seed ที่ยังขาด) ต่ำกว่านี้
 - `hr_autofix_enabled = "0"` — ถาม Telegram ก่อน re-add ไฟล์ H&R ที่ task ใน DS หายไป (บน NAS เปิด "1" ไว้แล้วตั้งแต่ 2026-07-27)
 - `hr_fix_stale_hours = "24"` — tracker ไม่เห็น client เกินนี้ = ถือว่า task ใน Download Station หายแล้ว
+- `hr_report_enabled = "0"` — รายงานสถานะ H&R ทุกไฟล์เข้า Telegram วันละครั้ง (บน NAS เปิด "1" ไว้แล้วตั้งแต่ 2026-08-02)
+- `hr_report_time = "09:00"` — เวลาส่งรายงานรายวัน (`HH:MM`) — ค่าพังตกไปที่ 09:00 ไม่ raise เพราะ parse เกิดใน PUT /api/settings ถ้า raise จะไม่เหลือ job เลย
 
 **Internal meta keys** (settings table, ไม่ผ่าน UI, อ่าน/เขียนด้วย `get_meta`/`set_meta`):
 - `tg_last_update_id` — offset ล่าสุดของ getUpdates long-poll (hr_fix.poll_loop)

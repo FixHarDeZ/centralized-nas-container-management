@@ -356,6 +356,7 @@ def api_get_settings():
 def api_update_settings(body: dict):
     db.update_settings(body)
     scheduler.reload_scrape_job()
+    scheduler.reload_hr_report_job()
 
 
 # ─── Scrape / Status ─────────────────────────────────────────────────────────

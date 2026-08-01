@@ -27,6 +27,8 @@ _DEFAULT_SETTINGS = {
     "hr_autofix_enabled": "0",  # "1" = ask on Telegram before re-adding stale H&R files
     "hr_fix_stale_hours": "24",  # tracker hasn't seen us for N hours = DS task is gone
     "hr_delete_enabled": "0",  # "1" = offer to delete a cleared torrent from DSM
+    "hr_report_enabled": "0",  # "1" = daily full H&R status report (Telegram only)
+    "hr_report_time": "09:00",  # HH:MM (local) for that report
 }
 
 
@@ -126,7 +128,7 @@ def init_db():
             -- module globals that every deploy wipes, so run history needs a table.
             CREATE TABLE IF NOT EXISTS runs (
                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                job        TEXT NOT NULL,       -- scrape|hr|cleanup|backup
+                job        TEXT NOT NULL,       -- scrape|hr|hr_report|cleanup|backup
                 started_at TEXT NOT NULL,
                 duration_s REAL NOT NULL DEFAULT 0,
                 ok         INTEGER NOT NULL DEFAULT 1,

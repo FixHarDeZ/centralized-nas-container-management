@@ -626,6 +626,8 @@ async function loadSettings() {
   document.getElementById("cfg-hr-autofix").checked = settings.hr_autofix_enabled === "1";
   document.getElementById("cfg-hr-stale").value = settings.hr_fix_stale_hours || 24;
   document.getElementById("cfg-hr-delete").checked = settings.hr_delete_enabled === "1";
+  document.getElementById("cfg-hr-report").checked = settings.hr_report_enabled === "1";
+  document.getElementById("cfg-hr-report-time").value = settings.hr_report_time || "09:00";
 
   const hint = document.getElementById("line-status-hint");
   if (hint) {
@@ -801,6 +803,8 @@ document.getElementById("btn-save-settings").addEventListener("click", async () 
     hr_autofix_enabled:              document.getElementById("cfg-hr-autofix").checked ? "1" : "0",
     hr_fix_stale_hours:              document.getElementById("cfg-hr-stale").value,
     hr_delete_enabled:               document.getElementById("cfg-hr-delete").checked ? "1" : "0",
+    hr_report_enabled:               document.getElementById("cfg-hr-report").checked ? "1" : "0",
+    hr_report_time:                  document.getElementById("cfg-hr-report-time").value || "09:00",
     retention_days:              document.getElementById("cfg-retention").value,
     scrape_interval_night:       document.getElementById("cfg-interval-night").value,
     scrape_interval_day:         document.getElementById("cfg-interval-day").value,
@@ -1087,6 +1091,7 @@ function _statsBar(label, count, max) {
 const JOB_META = {
   scrape:  { icon: "bi-cloud-download", label: "Scrape",  color: "var(--accent)" },
   hr:      { icon: "bi-shield-exclamation", label: "H&R", color: "var(--leech)" },
+  hr_report: { icon: "bi-clipboard-data", label: "H&R Report", color: "var(--leech)" },
   cleanup: { icon: "bi-trash3", label: "Cleanup", color: "var(--dl-local)" },
   backup:  { icon: "bi-database-check", label: "Backup", color: "var(--seed)" },
 };

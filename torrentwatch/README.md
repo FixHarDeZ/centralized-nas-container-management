@@ -214,6 +214,26 @@ Self-check: `python hr.py` parses a synthetic cp874 page covering all four badge
 states and asserts the risk split.
 
 
+### Daily report (Telegram)
+
+`hr_report_enabled` + `hr_report_time` (`HH:MM`, settings UI) push a **full status
+report** of every myhr.php row to Telegram once a day — worst state first, 25 rows max
+(Telegram caps a message at 4096 chars). It is the inverse of the risk digest above:
+that one stays silent when nothing is wrong, this one always says something, so a day
+with no message reads as a broken reader rather than as good news.
+
+The report job is **read-only** — no `check_cleared` / `check_vanished` /
+`scan_and_prompt`. Those fire permanent-delete prompts and re-snapshot `hr_seen`, and
+the user picks this hour expecting a report, not a delete question; `hr_check`
+(09:10 / 21:10) stays the only H&R job with side effects. It is also independent of
+`hr_notify_enabled` — that flag gates the risk alert only, so turning the report on
+alone is enough.
+
+`reload_hr_report_job()` runs from `PUT /api/settings` (next to `reload_scrape_job()`)
+and from `start()`; toggling off removes the job outright. A malformed time falls back
+to 09:00 rather than raising — a `CronTrigger` blowing up inside the settings PUT
+would 500 the save and leave no job at all.
+
 ### Auto-fix (Telegram confirm)
 
 When `hr_autofix_enabled` is on, every H&R round looks for **stale warned files**:

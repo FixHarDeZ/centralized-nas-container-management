@@ -166,6 +166,38 @@ def format_message(summary: dict) -> str:
     return "\n".join(lines)
 
 
+def format_report(summary: dict) -> str:
+    """Daily status report — every file on myhr.php, not only the at-risk ones.
+
+    format_message() is the alert: risky rows only, de-duped, silent when nothing is
+    wrong. This one is the opposite — it always says something, so "no message today"
+    reads as a broken reader rather than as good news. Capped at 25 rows to stay under
+    Telegram's 4096-char limit.
+    """
+    rows = sorted(
+        summary["rows"],
+        # worst first: hits, then the least slack. None slack sorts last, not first.
+        key=lambda r: (r["state"] != "hit", r["slack_h"] if r["slack_h"] is not None else 1e9),
+    )
+    lines = [
+        f"📋 รายงาน H&R ประจำวัน — {len(rows)} รายการ"
+        f" (เสี่ยง {len(summary['risky'])}, ผิดแล้ว {summary['hit_count']}/{summary['cap']},"
+        f" seed ครบ {summary['seeding_count']})\n",
+    ]
+    for r in rows[:25]:
+        lines.append(
+            f"[{r['state_label']}] {r['title'][:60]}\n"
+            f"   seed {_fmt_h(r['seeded_h'])}/{_fmt_h(r['target_h'])} ชม."
+            f" · ขาดอีก {_fmt_h(r['remaining_h'])} ชม."
+            f" · เหลือเวลา {_fmt_h(r['slack_h'])} ชม.",
+        )
+    if len(rows) > 25:
+        lines.append(f"...และอีก {len(rows) - 25} รายการ")
+    if not rows:
+        lines.append("ไม่มีไฟล์ที่ติด H&R — ว่างทั้งหมด")
+    return "\n".join(lines)
+
+
 def fix_candidates(rows: list[dict], stale_h: float = 24.0, limit: int = 5) -> list[dict]:
     """Rows worth re-adding to Download Station: warned, still savable, and the
     tracker has not seen our client for `stale_h` hours (= the DS task is gone).
@@ -355,4 +387,14 @@ if __name__ == "__main__":
     # through without disturbing the rest of the block
     _s["risky"][0]["badges"] = "👤 u  ·  🆓 FREE 100%"
     assert "\n   👤 u  ·  🆓 FREE 100%\n" in format_message(_s), format_message(_s)
+    # the daily report lists every row, worst first — not only the risky subset
+    _rep = format_report(_s)
+    assert f"{len(_s['rows'])} รายการ" in _rep, _rep
+    for _r in _s["rows"]:
+        assert _r["title"][:60] in _rep, (_r["title"], _rep)
+    if _s["hits"]:
+        _first = _rep.split("\n")[2]  # header + blank line, then the first row
+        assert _s["hits"][0]["title"][:60] in _first, _rep
+    assert "รายการ" in format_report({**_s, "rows": [], "risky": [], "hits": []})
+
     print("hr self-check OK:", {k: _s[k] for k in ("hit_count", "seeding_count")})

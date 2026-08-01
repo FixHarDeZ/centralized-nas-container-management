@@ -379,6 +379,76 @@ def _hr_job():
         print(f"[scheduler] H&R check error: {e}")
 
 
+async def send_hr_report(force: bool = False) -> dict:
+    """Push the daily full-status H&R report to Telegram.
+
+    Read-only on purpose: no check_cleared/check_vanished/scan_and_prompt here. Those
+    fire permanent-delete prompts and re-snapshot hr_seen, and the user picks this hour
+    expecting a report, not a delete question. hr_check (09:10/21:10) stays the only
+    job with side effects. Independent of hr_notify_enabled — that flag gates the risk
+    alert, and someone who wants only the daily report would otherwise get nothing.
+    """
+    if not force and db.get_settings().get("hr_report_enabled", "0") != "1":
+        return {"ok": False, "error": "hr_report_enabled=0"}
+    result = {"ok": False, "error": "unknown"}
+    with _record("hr_report", "manual" if force else "auto") as box:
+        await scraper.relogin()  # cron job runs in its own loop — see _check_hr_once
+        html = await scraper.fetch_hr_html()
+        if not html:
+            box["error"] = "fetch myhr.php failed"
+            return {"ok": False, "error": box["error"]}
+        settings = db.get_settings()
+        rows = db.attach_badges(hr.parse_hr(html))
+        summary = hr.summarize(rows, float(settings.get("hr_slack_hours") or 24))
+        await telegram_notify.notify_hr(hr.format_report(summary))
+        result = {
+            "ok": True,
+            "total": len(rows),
+            "risky": len(summary["risky"]),
+            "hits": summary["hit_count"],
+        }
+        box.update({k: v for k, v in result.items() if k != "ok"})
+    return result
+
+
+def _hr_report_job():
+    try:
+        _run_async(send_hr_report())
+    except Exception as e:
+        print(f"[scheduler] H&R report error: {e}")
+
+
+def _parse_hhmm(value: str) -> tuple[int, int]:
+    """"HH:MM" -> (hour, minute). Junk falls back to 09:00 instead of raising —
+    this runs inside the settings PUT, where a crash would leave no job at all."""
+    try:
+        hh, mm = value.split(":")
+        hour, minute = int(hh), int(mm)
+        if 0 <= hour <= 23 and 0 <= minute <= 59:
+            return hour, minute
+    except (ValueError, AttributeError):
+        pass
+    return 9, 0
+
+
+def reload_hr_report_job():
+    """(Re)schedule the daily H&R report from DB settings — off = no job at all."""
+    settings = db.get_settings()
+    if settings.get("hr_report_enabled", "0") != "1":
+        if _scheduler.get_job("hr_report"):
+            _scheduler.remove_job("hr_report")
+        print("[scheduler] H&R daily report off")
+        return
+    hour, minute = _parse_hhmm(settings.get("hr_report_time", "09:00"))
+    _scheduler.add_job(
+        _hr_report_job,
+        CronTrigger(hour=hour, minute=minute, timezone=config.TZ),
+        id="hr_report",
+        replace_existing=True,
+    )
+    print(f"[scheduler] H&R daily report set — {hour:02d}:{minute:02d}")
+
+
 def _update_progress(
     source_label: str,
     source_idx: int,
@@ -499,6 +569,7 @@ def start():
         id="hr_check",
         replace_existing=True,
     )
+    reload_hr_report_job()
     _scheduler.start()
     _update_next()
     # Enforce retention immediately on startup — restarts can otherwise skip the daily 03:00 slot.

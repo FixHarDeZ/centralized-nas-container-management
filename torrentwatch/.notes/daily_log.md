@@ -1,3 +1,13 @@
+### 2026-08-02 (เพิ่มเติม 2) — รายงาน H&R รายวันเข้า Telegram (เปิด/ปิด + ตั้งเวลาได้)
+
+- setting ใหม่ `hr_report_enabled` (default "0") + `hr_report_time` (default "09:00") — ต้องใส่ใน `db._DEFAULT_SETTINGS` ไม่งั้น `update_settings()` ทิ้งเงียบแล้ว UI จะ save ผ่าน 204 แต่ไม่มีอะไรเปลี่ยน
+- `hr.format_report()` = สถานะทุกแถวบน myhr.php เรียงแย่สุดก่อน ตัดที่ 25 แถว (Telegram จำกัด 4096 ตัวอักษร) ตรงข้ามกับ `format_message()` ที่เงียบเมื่อไม่มีอะไรเสี่ยง — รายงานนี้ส่งทุกวัน "วันไหนไม่มีข้อความ" จึงแปลว่าตัวอ่านพัง ไม่ใช่ข่าวดี
+- `scheduler.send_hr_report()` **read-only** ตั้งใจ: ไม่เรียก `check_cleared`/`check_vanished`/`scan_and_prompt` เพราะพวกนั้นยิงคำถามลบถาวร + snapshot `hr_seen` ใหม่ ผู้ใช้ตั้งเวลานี้ไว้เพื่ออ่านรายงาน ไม่ใช่ให้ถามลบ — `hr_check` (09:10/21:10) ยังเป็น job เดียวที่มี side effect
+- ไม่ผูกกับ `hr_notify_enabled` (นั่นคุมเฉพาะ alert เสี่ยง) เปิดรายงานอย่างเดียวก็ได้
+- `reload_hr_report_job()` เรียกจาก `PUT /api/settings` (ข้างๆ `reload_scrape_job()`) และจาก `start()` — ปิด toggle = `remove_job` ทิ้งเลย. `_parse_hhmm()` ค่าพังตกไป 09:00 ไม่ raise เพราะ parse เกิดใน PUT ถ้า CronTrigger ระเบิดจะ 500 แล้วไม่เหลือ job
+- `runs.job` เพิ่ม `hr_report` + `JOB_META` ใน `app.js` (ไม่งั้นแท็บรอบทำงานขึ้นชื่อ job ดิบ)
+- verify บน NAS: `python hr.py` ผ่าน, `send_hr_report(force=True)` = `{'ok': True, 'total': 7, 'risky': 0, 'hits': 0}` ส่ง Telegram จริง, PUT ผ่าน API จริง (basic auth จาก `config.BASIC_AUTH_*`) แล้ว log ขึ้น `[scheduler] H&R daily report set — 09:00` = reschedule ติดใน process ของ app จริง ไม่ต้อง restart, ปิด toggle แล้ว `get_job("hr_report")` เป็น None
+
 ### 2026-08-02 (เพิ่มเติม) — ปิดรูโหว่ was_cleared ขาด 2–12 ชม.
 
 `hr.was_cleared()` เดิมนับว่าครบเฉพาะ snapshot สุดท้ายขาด ≤ 2 ชม. แต่รอบอ่าน myhr ห่างกัน 12 ชม. → ไฟล์ที่เห็นครั้งสุดท้ายตอนขาด 5 ชม. แล้วหายรอบถัดไป = seed ครบจริงแต่โดนทิ้งเงียบ (log อย่างเดียว ไม่มี noti ไม่มีแถวประวัติ)
