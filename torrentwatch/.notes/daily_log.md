@@ -2,7 +2,7 @@
 
 **relogin fail (สาเหตุจริง)**: APScheduler รัน job คนละ event loop กับ app connection ใน pool ของ `httpx.AsyncClient` ตัวเดิมจึงตายในลูปนั้น (`RuntimeError: unable to perform operation on <TCPTransport closed=True ...>`) เดิม `relogin()` ลองครั้งเดียวแล้วคืน False ทำให้ scheduler ยกเลิกทั้งรอบ (0s, 0 entries)
 - ใหม่: ล้ม 1 ครั้ง = ทิ้ง client เก่า (`aclose()`) สร้างใหม่ด้วย `_new_client()` แล้วลองอีกรอบ
-- `_new_client()` ตั้ง `keepalive_expiry=30` ทิ้ง socket ที่ idle ก่อนฝั่งเว็บจะปิดให้
+- ที่ล้มเป็นบางรอบ (ไม่ใช่ทุกรอบ) เพราะขึ้นกับว่ายังมี keepalive connection จาก loop ของ app ค้างใน pool ตอน job เริ่มหรือเปล่า — ไม่แตะ `keepalive_expiry` (default 5s สั้นกว่าที่จะไปตั้งเอง)
 - เก็บเหตุผลไว้ที่ `scraper.last_login_error()` แล้วใส่ลง `box["error"]` หน้า "รอบทำงาน" จะขึ้น `relogin failed — scrape aborted (RuntimeError: ...)` ไม่ต้องไปเปิด docker logs
 - self-check ใหม่ใน `scraper.py` (`__main__`): stub `_login` ให้ล้มครั้งแรก ต้องได้ True และ client ต้องถูกเปลี่ยนตัว
 

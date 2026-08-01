@@ -362,8 +362,9 @@ separate event loop from the app, so the pooled connections of the long-lived
 to abort the whole round (`relogin failed — scrape aborted`, 0s, nothing scraped).
 
 `relogin()` now throws the client away on a first failure, builds a fresh one and tries
-once more, and the client is created with `keepalive_expiry=30` so an idle socket is
-dropped before the site closes it. The reason for a failure is kept in
+once more — whether the first attempt hits a corpse depends on whether a keepalive
+connection from the app loop is still pooled when the job starts, which is why the
+failures were intermittent. The reason for a failure is kept in
 `scraper.last_login_error()` and printed into the run row, so the Run Detail tab says
 *why* instead of only *that* it failed.
 

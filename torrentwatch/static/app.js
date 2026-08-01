@@ -1191,7 +1191,7 @@ function _hrFixRow(f) {
         <span class="tw-run-time">${escHtml(when)}</span>
       </div>
       <div class="tw-run-title" title="${escHtml(f.title)}">${escHtml(f.title)}</div>
-      ${f.note ? `<div class="tw-run-chips"><span class="tw-run-chip">${escHtml(f.note)}</span></div>` : ""}
+      ${f.note ? `<div class="tw-run-chips"><span class="tw-run-chip" title="${escHtml(f.note)}">${escHtml(f.note.length > 60 ? f.note.slice(0, 60) + "…" : f.note)}</span></div>` : ""}
     </div>
   </div>`;
 }

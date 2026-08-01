@@ -139,9 +139,6 @@ def _new_client() -> httpx.AsyncClient:
         follow_redirects=True,
         timeout=30,
         headers={"User-Agent": "Mozilla/5.0 (compatible; TorrentWatch/1.0)"},
-        # Drop idle connections well before the site does — a pooled socket the server
-        # already closed is what surfaces as "TCPTransport closed; the handler is closed".
-        limits=httpx.Limits(keepalive_expiry=30),
     )
 
 
