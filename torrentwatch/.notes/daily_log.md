@@ -6,6 +6,7 @@
 - ไม่ผูกกับ `hr_notify_enabled` (นั่นคุมเฉพาะ alert เสี่ยง) เปิดรายงานอย่างเดียวก็ได้
 - `reload_hr_report_job()` เรียกจาก `PUT /api/settings` (ข้างๆ `reload_scrape_job()`) และจาก `start()` — ปิด toggle = `remove_job` ทิ้งเลย. `_parse_hhmm()` ค่าพังตกไป 09:00 ไม่ raise เพราะ parse เกิดใน PUT ถ้า CronTrigger ระเบิดจะ 500 แล้วไม่เหลือ job
 - `runs.job` เพิ่ม `hr_report` + `JOB_META` ใน `app.js` (ไม่งั้นแท็บรอบทำงานขึ้นชื่อ job ดิบ)
+- `_hr_lock` (threading.Lock) ครอบ `_hr_job`/`_hr_report_job`: APScheduler รัน job ใน thread pool ถ้าตั้งรายงาน 09:00 มันจะทับรอบเช็ค 09:10 ได้ ทั้งคู่ `relogin()` = สลับ `scraper._client` global ตัวเดียวกัน อีกตัวจะโดน `aclose()` กลางคัน (บั๊กเดิมที่เพิ่งแก้ไปรอบนี้). ล็อกเฉพาะ wrapper ที่เป็น sync (แต่ละตัวมี event loop ของตัวเอง) ไม่เอาไปไว้ในตัว coroutine เพราะ force จาก API จะบล็อก loop ของ app
 - verify บน NAS: `python hr.py` ผ่าน, `send_hr_report(force=True)` = `{'ok': True, 'total': 7, 'risky': 0, 'hits': 0}` ส่ง Telegram จริง, PUT ผ่าน API จริง (basic auth จาก `config.BASIC_AUTH_*`) แล้ว log ขึ้น `[scheduler] H&R daily report set — 09:00` = reschedule ติดใน process ของ app จริง ไม่ต้อง restart, ปิด toggle แล้ว `get_job("hr_report")` เป็น None
 
 ### 2026-08-02 (เพิ่มเติม) — ปิดรูโหว่ was_cleared ขาด 2–12 ชม.
