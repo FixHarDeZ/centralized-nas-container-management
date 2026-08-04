@@ -572,11 +572,13 @@ def start():
         id="backup",
         replace_existing=True,
     )
-    # H&R check twice a day — the digest dedup keeps repeats silent, so the second
-    # run only costs a push when the at-risk set actually changed since morning.
+    # H&R check every 6h (03:10/09:10/15:10/21:10). Twice a day left a file that went
+    # stale right after a round waiting up to 12h for its auto-fix prompt, and only 3
+    # prompts go out per round. The digest dedup keeps the extra rounds silent unless
+    # the at-risk set actually changed.
     _scheduler.add_job(
         _hr_job,
-        CronTrigger(hour="9,21", minute=10, timezone=config.TZ),
+        CronTrigger(hour="3,9,15,21", minute=10, timezone=config.TZ),
         id="hr_check",
         replace_existing=True,
     )

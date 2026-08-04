@@ -31,7 +31,7 @@ A daily torrent monitor that scrapes [bearbit.org](https://bearbit.org) on a sch
 - **LINE notification** — push to LINE when new keyword-matched torrents are found (configure via Settings UI)
 - **Telegram notification** — push to Telegram Bot when new keyword-matched torrents are found; built-in Chat ID discovery helper in Settings UI
 - **Sticky notification** — push to LINE + Telegram when a new sticky/pinned torrent is first discovered; toggle in Settings UI
-- **Hit & Run monitor** — reads bearbit `myhr.php` twice a day (09:10 / 21:10) and pushes LINE + Telegram when a downloaded file is about to miss its 48h seed requirement; see [Hit & Run monitor](#hit--run-monitor)
+- **Hit & Run monitor** — reads bearbit `myhr.php` every 6h (03:10 / 09:10 / 15:10 / 21:10) and pushes LINE + Telegram when a downloaded file is about to miss its 48h seed requirement; see [Hit & Run monitor](#hit--run-monitor)
 - **HTTP Basic Auth** — web UI protected via `NGINX_BASIC_AUTH_USER` / `NGINX_BASIC_AUTH_PASS`
 - **Weekly cleanup** — deletes records older than 7 days every Sunday at 03:00
 
@@ -128,7 +128,7 @@ Router must forward external port `15059 → NAS`.
 | เก็บประวัติ | `7` days | Retention period; older records deleted on Sunday 03:00 |
 | LINE notification | off | Push to LINE when new keyword-matched torrents are found |
 | Telegram notification | off | Push to Telegram Bot when new keyword-matched torrents are found |
-| H&R Notify | off | Push the Hit & Run risk digest to LINE + Telegram (09:10 / 21:10) |
+| H&R Notify | off | Push the Hit & Run risk digest to LINE + Telegram (every 6h, HH:10) |
 | H&R เตือนเมื่อเหลือ | `24` h | Alert a file once its remaining leeway (slack) drops below this |
 | H&R Auto-fix | off | Ask on Telegram before re-adding a stale H&R file to the watch folder |
 | ถือว่าหลุดเมื่อไม่เห็นเกิน | `24` h | Tracker hasn't seen our client for this long = the DS task is gone |
@@ -225,7 +225,7 @@ with no message reads as a broken reader rather than as good news.
 The report job is **read-only** — no `check_cleared` / `check_vanished` /
 `scan_and_prompt`. Those fire permanent-delete prompts and re-snapshot `hr_seen`, and
 the user picks this hour expecting a report, not a delete question; `hr_check`
-(09:10 / 21:10) stays the only H&R job with side effects. It is also independent of
+(every 6h at HH:10) stays the only H&R job with side effects. It is also independent of
 `hr_notify_enabled` — that flag gates the risk alert only, so turning the report on
 alone is enough.
 

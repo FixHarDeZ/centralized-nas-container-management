@@ -217,7 +217,7 @@ Bug fix 2026-05-20: viewno18sbx.php ใช้ text "Auto Sticky:" แทน imag
 | `scrape_night` | 19:00–01:00 ทุก 30 นาที | scrape รอบกลางคืน (เวลา active) |
 | `scrape_day` | 06:00–19:00 ทุก 60 นาที | scrape รอบกลางวัน |
 | `cleanup` | ทุกวัน 03:00 + ตอน startup | ลบ records > `retention_days` วัน (default 7) |
-| `hr_check` | ทุกวัน 09:10 + 21:10 | อ่าน myhr.php → เช็คไฟล์ที่พ้น H&R + ถาม auto-fix → push LINE+Telegram ไฟล์เสี่ยง (dedup ด้วย `hr_last_digest`) |
+| `hr_check` | ทุก 6 ชม. (03:10/09:10/15:10/21:10) | อ่าน myhr.php → เช็คไฟล์ที่พ้น H&R + ถาม auto-fix → push LINE+Telegram ไฟล์เสี่ยง (dedup ด้วย `hr_last_digest`) |
 
 **การเรียงในแท็บ H&R** — ปุ่ม `.tw-sort-btn` ใน `#hr-sort` (reuse ชุดเดียวกับแท็บวันนี้/ประวัติ) → `state.sort.hr` → map `HR_SORTS` ใน `app.js`: `slack` (default, ใกล้ครบกำหนดขึ้นก่อน), `remaining` (ขาด seed อีกน้อยสุด), `seen` (`last_seen_h` มาก→น้อย = ไม่เห็น client นานสุดขึ้นก่อน), `finished` (`finished_at` string compare desc — format `%Y-%m-%d %H:%M` เรียงเป็น lexicographic ได้เลย). ค่า null จมล่างสุดทุกโหมด (`?? Infinity` / `?? -Infinity` ตามทิศ). **`loadHr()` ถูกผ่าเป็น fetch + `_renderHr()` แล้วแคชไว้ที่ `_hrData`** — เปลี่ยน sort ต้องไม่ยิง `/api/hr` ใหม่ เพราะ endpoint นั้น scrape myhr.php สดทุกครั้ง (กด sort รัวๆ = ยิง tracker รัวๆ). error path ก็ย้ายมาอยู่ใน `_renderHr()` (`_hrData` เป็น null)
 

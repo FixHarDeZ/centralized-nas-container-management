@@ -1,3 +1,9 @@
+### 2026-08-04 (เพิ่มเติม) — hr_check ทุก 6 ชม.
+
+- `hr_check` เปลี่ยนจาก `hour="9,21"` เป็น `hour="3,9,15,21"` minute=10 — ลดดีเลย์ auto-fix prompt จากสูงสุด ~12 ชม. เหลือ ~6 ชม. (คงเวลาเดิม 09:10/21:10 ไว้ แค่แทรก 03:10/15:10) และเพดาน 3 prompt/รอบ ระบายได้เร็วขึ้นเท่าตัว
+- ไม่กระทบ noise: risk digest ยัง dedup ด้วย `hr_last_digest` รอบที่ set ไม่เปลี่ยนจะเงียบ
+- verify: container ใหม่มี `hour="3,9,15,21"` จริง, `CronTrigger.get_next_fire_time` ที่ 09:43 = 15:10 วันเดียวกัน
+
 ### 2026-08-04 — ยืนยันเงื่อนไข auto-fix (ไม่ต้องแก้โค้ด)
 
 คำถาม: auto-fix ต้องรอ torrent ติด H&R (`hit`) ก่อนไหม — **ไม่ใช่** `hr.fix_candidates()` เลือก `state == "warn"` + `last_seen_h > hr_fix_stale_hours` (24) + ยัง save ได้ (`remaining_h > 0`) + ไม่ `seeding_now` อยู่แล้ว ตรงกับที่อยากได้เป๊ะ
