@@ -359,7 +359,11 @@ failure, or a delete that DSM rejected.
 DS reports a failed task delete *inside* `data` (`[{"error": 544, "id": ...}]`) with
 `success: true` at the top level, so `delete_task` reads the per-id rows itself.
 Without that, task-only removal would report "ลบ task แล้ว" and write a terminal
-`del_task_only` for a task still sitting in Download Station.
+`del_task_only` for a task still sitting in Download Station. A missing id is what
+produces 544 in practice, and by then the task being gone is what both callers wanted
+anyway — but 544 also reads as a generic removal failure, so `delete_task` re-lists and
+only raises if the id is still there. That keeps the full delete reaching `delete_path`
+when the task was removed from the DS UI while the confirm button sat unread.
 
 Every terminal press rewrites the message it came from (which also drops its buttons)
 **and** pushes a fresh message. `editMessageText` makes no sound on a phone, so an edit

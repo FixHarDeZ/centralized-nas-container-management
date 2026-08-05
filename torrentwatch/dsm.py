@@ -111,9 +111,14 @@ class Dsm:
             id=task_id,
             force_complete="false",
         )
-        for row in data if isinstance(data, list) else []:
-            if row.get("error"):
-                raise DsmError(f"SYNO.DownloadStation.Task.delete: {row['error']} ({row.get('id')})")
+        err = next((r.get("error") for r in (data if isinstance(data, list) else []) if r.get("error")), None)
+        if err is None:
+            return
+        # A missing id answers 544 here, and "the task is already gone" is the
+        # outcome both callers wanted — but 544 reads as a generic removal
+        # failure, so ask the task list instead of trusting the code.
+        if any(t.get("id") == task_id for t in await self.list_tasks()):
+            raise DsmError(f"SYNO.DownloadStation.Task.delete: {err} ({task_id})")
 
     async def stat(self, share_path: str) -> dict | None:
         """Resolve a share-relative path to its real path + size, or None if gone."""
@@ -220,17 +225,19 @@ if __name__ == "__main__":
         pass
 
     class _FakeData(Dsm):
-        def __init__(self, data):
-            self._data = data
+        def __init__(self, data, left=()):
+            self._data, self._left = data, left
 
         async def _call(self, endpoint, timeout=None, **params):
-            return self._data
+            return {"tasks": list(self._left)} if params["method"] == "list" else self._data
 
-    # a per-id failure hides behind success=true, so delete_task has to read it
+    # a per-id failure hides behind success=true, so delete_task has to read it —
+    # but only a task still in the list is a real failure
     asyncio.run(_FakeData([{"id": "dbid_1"}]).delete_task("dbid_1"))
+    asyncio.run(_FakeData([{"error": 544, "id": "dbid_1"}]).delete_task("dbid_1"))
     try:
-        asyncio.run(_FakeData([{"error": 544, "id": "dbid_1"}]).delete_task("dbid_1"))
-        raise AssertionError("per-id delete error must propagate")
+        asyncio.run(_FakeData([{"error": 544, "id": "dbid_1"}], [{"id": "dbid_1"}]).delete_task("dbid_1"))
+        raise AssertionError("delete error on a task that is still there must propagate")
     except DsmError:
         pass
     print("dsm self-check OK")
