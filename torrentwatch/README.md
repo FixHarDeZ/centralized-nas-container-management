@@ -317,7 +317,8 @@ A `fixed` row that Download Station never picked up (still not seeding 24h after
 confirm) flips to `stalled`, so the next round asks again instead of letting the file
 drift silently into a violation.
 
-State lives in the `hr_fixes` table (`pending|fixed|stalled|skipped|expired|cleared|failed`);
+State lives in the `hr_fixes` table
+(`pending|fixed|stalled|skipped|expired|cleared|failed|del_asked|del_confirm|deleted|del_task_only|del_skipped|del_failed`);
 unanswered prompts expire after 12h so a stale button can never trigger a download.
 Button presses arrive over a `getUpdates` long-poll started in the app lifespan —
 callbacks from any chat other than `TORRENTWATCH_TELEGRAM_CHAT_ID` are rejected.
@@ -333,15 +334,28 @@ question: delete it? Removal is permanent — `SYNO.FileStation.Delete` does **n
 through `#recycle` — so the flow is two hops:
 
     cleared → del_asked → del_confirm → deleted
+                                      ↘ del_task_only  (task gone, file kept)
 
 The first button deletes nothing. It logs in to DSM, finds the Download Station task
 (matching `uri` against the filename auto-fix wrote, falling back to the torrent title),
 resolves the payload with `SYNO.FileStation.List getinfo`, and shows the **real path**
 and size back. Only the second button deletes, task first and then the files.
 
-If the path does not resolve, the request is abandoned (`del_failed`) — a multi-file
-torrent with no wrapper folder writes straight into `destination`, and deleting
-`destination` would take unrelated files with it. The path is never guessed.
+The second step offers **ลบเฉพาะ task (เก็บไฟล์)** next to the full delete. DS `delete`
+runs with `force_complete=false` and never touches the payload, so dropping the task
+alone stops the seeding and leaves the file where it is — the answer for a file worth
+keeping locally.
+
+If the path does not resolve, the file half is abandoned but the task half is not: the
+confirm still goes out, with task-only as the **only** button. A multi-file torrent with
+no wrapper folder writes straight into `destination`, and deleting `destination` would
+take unrelated files with it, so the path is never guessed — but the leftover task is
+still safe to remove. `del_failed` is now only for a task that is gone or a DSM error.
+
+Every terminal press rewrites the message it came from (which also drops its buttons)
+**and** pushes a fresh message. `editMessageText` makes no sound on a phone, so an edit
+alone read as "nothing happened"; and leaving stage 1 unedited left a live
+"ขอดูก่อนลบ" prompt sitting above an already-deleted file.
 
 The second button re-stats the path before touching anything and refuses if the real
 path or size moved since the confirmation was shown — a button can sit unread in

@@ -953,3 +953,15 @@ Verify บน NAS: `_record` ทดสอบทั้งเส้นสำเร
 - comparator ทุกตัวดัน null ลงล่าง (`?? Infinity` สำหรับ asc, `?? -Infinity` สำหรับ desc) — แถวที่ไม่มี deadline/`last_seen_h` ไม่ควรลอยขึ้นบนสุดแทนแถวที่เสี่ยงจริง. `finished` เทียบ string ตรงๆ ได้เพราะ `finished_at` เป็น `%Y-%m-%d %H:%M`
 - `state.sort` เพิ่มคีย์ `hr` (เดิมมี `today`/`history`) — sort ไม่ persist ข้าม reload ตั้งใจ ให้ default กลับเป็นอันที่เสี่ยงสุดเสมอ
 - Verify: `node --check static/app.js` ผ่าน, deploy แล้ว curl บน NAS เจอ `HR_SORTS` ใน app.js ที่เสิร์ฟ + `hr-sort` ใน index.html, bump `?v=20260730c`
+
+### 2026-08-05 — ปุ่มลบ H&R: ปุ่มค้าง, ไม่มี noti, และตัวเลือก "ลบเฉพาะ task"
+- **อาการที่เจอจริง**: กดลบจนไฟล์หายไปแล้ว แต่ในแชทยังเห็นข้อความ stage 1 พร้อมปุ่ม "ขอดูก่อนลบ" อยู่ + ไม่มีแจ้งเตือนคำว่าลบแล้วเด้งเข้ามือถือ
+- เช็ค `hr_fixes` ใน DB ก่อน: 4 แถวเป็น `deleted` พร้อม real path ครบ = **ลบสำเร็จจริง ปัญหาอยู่ที่ชั้นแสดงผลล้วนๆ** ไม่ต้องไปไล่ DSM
+- เหตุ 1: branch `ask` ส่งข้อความ stage 2 ใหม่แต่ไม่เคย edit ข้อความ stage 1 ปุ่มเดิมจึงค้างอยู่ตลอดกาล → เพิ่ม `edit_message` ทันทีหลังตั้ง `del_confirm`
+- เหตุ 2: `editMessageText` **ไม่ทำให้ Telegram เด้ง noti** ตอนจบจึงเงียบสนิท → ทำ `_finish()` ตัวเดียวคุมทุกทางออก: `hr_fix_set_status` + edit ข้อความที่กดมา (ปุ่มหายไปด้วย) + `notify_hr()` ยิงข้อความใหม่
+- ไล่เก็บทางออกที่ลืม edit ด้วย (กติกาใหม่ของไฟล์นี้: ทุก transition ที่จบเกมต้อง edit ข้อความที่พาปุ่มมา) — เคส `ข้อมูลเป้าหมายหาย` เดิมตอบแค่ callback ปุ่ม "ยืนยันลบ" ค้างเหมือนกัน
+- **ของใหม่: ลบเฉพาะ task เก็บไฟล์ไว้** (`hrdel:task:` → status `del_task_only`) อยู่บนคีย์บอร์ด stage 2 คู่กับลบเต็ม. ปลอดภัยเพราะ `dsm.delete_task` ยิง `force_complete=false` = DS ไม่แตะ payload (นี่คือเหตุผลที่ `_do_delete` ต้องเรียก `delete_path` แยกอยู่แล้ว) ตรวจพารามิเตอร์จริงใน `dsm.py` ก่อนต่อปุ่ม ไม่เดา
+- **`_resolve` ไม่ dead-end แล้ว**: หา task เจอแต่ stat real path ไม่ได้ → คืน target ที่ `real_path=None` แล้วส่งยืนยันรอบสองแบบ**เหลือปุ่มลบเฉพาะ task อย่างเดียว** (เคสนี้แหละที่ต้องการฟีเจอร์นี้ที่สุด — ลบไฟล์ไม่ได้เพราะเดา path ไม่ได้ แต่ task ค้างต้องเก็บกวาด). `del_failed` เหลือไว้ให้เคสหา task ไม่เจอ/DSM error
+- กัน replay: branch `go` ปฏิเสธ target ที่ไม่มี `real_path` (ปุ่มเก่าใน Telegram ยิงมาก็ไม่ผ่าน)
+- `app.js`: เพิ่ม label `del_task_only` + นับรวมในการ์ด "ลบแล้ว" (การ์ดหมายถึงจัดการจบแล้ว ไม่ใช่ตัวนับไฟล์)
+- Verify: `python hr_delete.py` self-check ใน container ผ่าน (4 เคส: ปุ่มครบ/ปุ่มเหลืออันเดียว/`go` ปฏิเสธ target ไร้ path/`task` ลบแล้วยิง push), deploy `-s torrentwatch` ขึ้น NAS แล้ว

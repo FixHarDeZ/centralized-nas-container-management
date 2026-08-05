@@ -1109,6 +1109,7 @@ const HRFIX_LABEL = {
   del_asked:   "รอกดดูก่อนลบ",
   del_confirm: "รอยืนยันลบ",
   deleted:     "ลบแล้ว",
+  del_task_only: "ลบ task เก็บไฟล์",
   del_skipped: "เก็บไว้",
   del_failed:  "ลบไม่สำเร็จ",
 };
@@ -1251,7 +1252,8 @@ async function loadHrHistory() {
   const fixes = data.fixes || [];
   const waiting = fixes.filter(f => HRFIX_WAITING.includes(f.status));
   const settled = fixes.filter(f => !HRFIX_WAITING.includes(f.status));
-  const deleted = fixes.filter(f => f.status === "deleted").length;
+  // task-only counts here too: both are "จัดการเรียบร้อยแล้ว", the card is not a file counter
+  const deleted = fixes.filter(f => f.status === "deleted" || f.status === "del_task_only").length;
   el.innerHTML = `
     <div class="tw-stats-grid">
       ${_statsCard("bi-collection", fixes.length, "ทั้งหมด", "var(--accent)")}
