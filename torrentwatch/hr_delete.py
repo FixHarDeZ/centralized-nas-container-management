@@ -69,13 +69,20 @@ async def _resolve(site_id: str, title: str) -> tuple[dict | None, str]:
     task-only removal. target is None just when there is nothing to act on.
     """
     torrent_name = db.torrent_filename(title)
+    stat_err = ""
     try:
         async with dsm.Dsm() as d:
             task = dsm.find_task(await d.list_tasks(), title, torrent_name)
             if task is None:
                 return None, "ไม่เจอ task นี้ใน Download Station แล้ว (อาจถูกลบไปก่อนหน้า)"
             path = dsm.task_payload_path(task)
-            info = await d.stat(path)
+            try:
+                info = await d.stat(path)
+            except dsm.DsmError as e:
+                # A stat that blows up leaves us exactly where a stat that returns
+                # nothing does: task in hand, file half unknown. Dead-ending at
+                # del_failed here would bury the row for good over one DSM blip.
+                info, stat_err = None, f" (stat ล้มเหลว: {e})"
     except dsm.DsmError as e:
         return None, f"DSM error: {e}"
     target = {
@@ -89,7 +96,7 @@ async def _resolve(site_id: str, title: str) -> tuple[dict | None, str]:
     if not target["real_path"]:
         # Never guess: a multi-file torrent with no wrapper folder puts its files
         # straight into destination, and deleting destination would take the lot.
-        return target, f"⚠️ หา path ไฟล์จริงไม่เจอ ({path}) — ลบไฟล์ไม่ได้ ลบได้แค่ task"
+        return target, f"⚠️ หา path ไฟล์จริงไม่เจอ ({path}){stat_err} — ลบไฟล์ไม่ได้ ลบได้แค่ task"
     return target, ""
 
 
@@ -264,6 +271,20 @@ if __name__ == "__main__":
 
     def _codes(kb):
         return [b["callback_data"].split(":")[1] for row in kb for b in row]
+
+    # a stat that raises must still hand back the task half, not dead-end the row
+    class _StatBoom:
+        async def __aenter__(self): return self
+        async def __aexit__(self, *a): return False
+        async def list_tasks(self): return [{"id": "dbid_9"}]
+        async def stat(self, path): raise dsm.DsmError("boom")
+    dsm.Dsm = _StatBoom
+    dsm.find_task = lambda tasks, title, name: tasks[0]
+    dsm.task_payload_path = lambda task: "/dl/T.mkv"
+    db.torrent_filename = lambda title: "T.torrent"
+    _t, _w = asyncio.run(_resolve("1", "T"))
+    assert _t and _t["task_id"] == "dbid_9" and _t["real_path"] is None, (_t, _w)
+    assert "stat" in _w, _w
 
     # resolved path → both delete options, and stage 1 loses its buttons
     async def _ok_resolve(site_id, title):

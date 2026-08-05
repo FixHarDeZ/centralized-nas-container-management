@@ -350,7 +350,16 @@ If the path does not resolve, the file half is abandoned but the task half is no
 confirm still goes out, with task-only as the **only** button. A multi-file torrent with
 no wrapper folder writes straight into `destination`, and deleting `destination` would
 take unrelated files with it, so the path is never guessed — but the leftover task is
-still safe to remove. `del_failed` is now only for a task that is gone or a DSM error.
+still safe to remove. That covers a `getinfo` that *raises* too, not only one that comes
+back empty — a DSM timeout mid-resolve is the same "task in hand, file unknown" state,
+and dead-ending it at `del_failed` would bury the row for good, since every later pass
+treats that status as handled. `del_failed` is only for a task that is gone, a login
+failure, or a delete that DSM rejected.
+
+DS reports a failed task delete *inside* `data` (`[{"error": 544, "id": ...}]`) with
+`success: true` at the top level, so `delete_task` reads the per-id rows itself.
+Without that, task-only removal would report "ลบ task แล้ว" and write a terminal
+`del_task_only` for a task still sitting in Download Station.
 
 Every terminal press rewrites the message it came from (which also drops its buttons)
 **and** pushes a fresh message. `editMessageText` makes no sound on a phone, so an edit

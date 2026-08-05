@@ -965,3 +965,8 @@ Verify บน NAS: `_record` ทดสอบทั้งเส้นสำเร
 - กัน replay: branch `go` ปฏิเสธ target ที่ไม่มี `real_path` (ปุ่มเก่าใน Telegram ยิงมาก็ไม่ผ่าน)
 - `app.js`: เพิ่ม label `del_task_only` + นับรวมในการ์ด "ลบแล้ว" (การ์ดหมายถึงจัดการจบแล้ว ไม่ใช่ตัวนับไฟล์)
 - Verify: `python hr_delete.py` self-check ใน container ผ่าน (4 เคส: ปุ่มครบ/ปุ่มเหลืออันเดียว/`go` ปฏิเสธ target ไร้ path/`task` ลบแล้วยิง push), deploy `-s torrentwatch` ขึ้น NAS แล้ว
+
+### 2026-08-05 (เพิ่มเติม) — ปิดสองรูใน flow ลบ (review หลังส่ง)
+- **`_resolve` dead-end**: `stat()` ที่ **โยน `DsmError`** (timeout/DSM สะดุด) เดิมทำให้ return `None` → `del_failed` ซึ่งเป็น terminal → รอบต่อไปมองว่าจัดการแล้ว = แถวนั้นตายถาวร ทั้งที่หา task เจอ. แยก try ให้ stat fail ตกไปทาง `real_path=None` เหมือนกรณี getinfo คืนค่าว่าง (เหลือปุ่ม "ลบเฉพาะ task") พร้อมต่อท้ายข้อความว่า stat ล้มเหลวเพราะอะไร.
+- **`delete_task` รายงานสำเร็จทั้งที่ไม่ได้ลบ**: ยิง delete ด้วย id มั่ว (`dbid_nope`) บน NAS ได้ `[{"error": 544, "id": "dbid_nope"}]` โดย top-level `success: true` → `_call` ผ่านฉลุย. เดิม `_do_delete` ยังมี `delete_path` ตามหลังช่วยจับ แต่ `_delete_task_only` ไม่มีอะไรตามหลังเลย = เขียน `del_task_only` ให้ task ที่ยังอยู่. เพิ่มอ่าน per-id error แล้ว raise.
+- self-check: `dsm.py` เพิ่มเคส per-id error (fake `_call` คืน list), `hr_delete.py` เพิ่มเคสเรียก `_resolve` ตัวจริงกับ Dsm ปลอมที่ stat โยน error. รันในคอนเทนเนอร์: `dsm self-check OK` + `hr_delete self-check OK`. deploy แล้ว.

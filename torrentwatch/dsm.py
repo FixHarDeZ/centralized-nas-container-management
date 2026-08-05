@@ -101,7 +101,9 @@ class Dsm:
         return data.get("tasks") or []
 
     async def delete_task(self, task_id: str):
-        await self._call(
+        # DS reports per-id failures inside data with success=true at the top level
+        # ([{"error": 544, "id": "..."}]), so _call alone would call a no-op a win.
+        data = await self._call(
             "DownloadStation/task.cgi",
             api="SYNO.DownloadStation.Task",
             version="1",
@@ -109,6 +111,9 @@ class Dsm:
             id=task_id,
             force_complete="false",
         )
+        for row in data if isinstance(data, list) else []:
+            if row.get("error"):
+                raise DsmError(f"SYNO.DownloadStation.Task.delete: {row['error']} ({row.get('id')})")
 
     async def stat(self, share_path: str) -> dict | None:
         """Resolve a share-relative path to its real path + size, or None if gone."""
@@ -211,6 +216,21 @@ if __name__ == "__main__":
     try:
         asyncio.run(_Fake("SYNO.FileStation.Delete: {'code': 407}").delete_path("/x"))
         raise AssertionError("non-408 delete error must propagate")
+    except DsmError:
+        pass
+
+    class _FakeData(Dsm):
+        def __init__(self, data):
+            self._data = data
+
+        async def _call(self, endpoint, timeout=None, **params):
+            return self._data
+
+    # a per-id failure hides behind success=true, so delete_task has to read it
+    asyncio.run(_FakeData([{"id": "dbid_1"}]).delete_task("dbid_1"))
+    try:
+        asyncio.run(_FakeData([{"error": 544, "id": "dbid_1"}]).delete_task("dbid_1"))
+        raise AssertionError("per-id delete error must propagate")
     except DsmError:
         pass
     print("dsm self-check OK")
