@@ -67,7 +67,7 @@ const TRANSLATIONS = {
     fieldPaymentMethod: "วิธีการจ่ายเงิน",
     paymentMethodCash: "เงินสด",
     paymentMethodTransfer: "เงินโอน",
-    fieldBankName: "ธนาคาร", fieldBankAccount: "เลขบัญชี",
+    fieldBankName: "ธนาคาร", fieldBankAccount: "เลขบัญชี", fieldBankAccountName: "ชื่อบัญชี",
     bankInfoLabel: "บัญชีรับโอน",
     fieldPaymentSchedule: "รอบจ่ายเงินเดือน",
     scheduleBiweekly: "2 รอบ (วันที่ 15 + สิ้นเดือน)",
@@ -274,7 +274,7 @@ const TRANSLATIONS = {
     fieldPaymentMethod: "Payment method",
     paymentMethodCash: "Cash",
     paymentMethodTransfer: "Transfer",
-    fieldBankName: "Bank", fieldBankAccount: "Account no.",
+    fieldBankName: "Bank", fieldBankAccount: "Account no.", fieldBankAccountName: "Account name",
     bankInfoLabel: "Transfer to",
     fieldPaymentSchedule: "Payroll schedule",
     scheduleBiweekly: "2 rounds (15th + end)",
@@ -727,13 +727,17 @@ async function viewEmployeeForm(id) {
             <!-- Bank details — only meaningful when paid by transfer -->
             <div class="col-12 ${emp?.payment_method === "transfer" ? "" : "d-none"}" id="bank-fields">
               <div class="row g-3">
-                <div class="col-6">
+                <div class="col-4">
                   <label class="form-label fw-semibold">${t("fieldBankName")}</label>
                   <input type="text" class="form-control" name="bank_name" value="${escHtml(emp?.bank_name || "")}" placeholder="กสิกรไทย" />
                 </div>
-                <div class="col-6">
+                <div class="col-4">
                   <label class="form-label fw-semibold">${t("fieldBankAccount")}</label>
                   <input type="text" class="form-control" name="bank_account" value="${escHtml(emp?.bank_account || "")}" placeholder="123-4-56789-0" inputmode="numeric" />
+                </div>
+                <div class="col-4">
+                  <label class="form-label fw-semibold">${t("fieldBankAccountName")}</label>
+                  <input type="text" class="form-control" name="bank_account_name" value="${escHtml(emp?.bank_account_name || "")}" placeholder="ชื่อเจ้าของบัญชี" />
                 </div>
               </div>
             </div>
@@ -927,6 +931,7 @@ async function viewEmployeeForm(id) {
       payment_method:     fd.get("payment_method") || "cash",
       bank_name:          fd.get("bank_name") || null,
       bank_account:       fd.get("bank_account") || null,
+      bank_account_name:  fd.get("bank_account_name") || null,
       payment_schedule:   fd.get("payment_schedule") || "biweekly",
       notify_language:    fd.get("notify_language") || "th",
       probation_daily_rate: fd.get("probation_daily_rate") !== "" && fd.get("probation_daily_rate") != null
@@ -2138,10 +2143,11 @@ async function viewPayments(id) {
       </div>
     </div>
 
-    ${isTransfer && (emp.bank_name || emp.bank_account) ? `
+    ${isTransfer && (emp.bank_name || emp.bank_account || emp.bank_account_name) ? `
       <div class="alert alert-info d-flex align-items-center gap-2 mb-3">
         <i class="bi bi-bank fs-5"></i>
-        <span>${t("bankInfoLabel")}: <strong>${escHtml(emp.bank_name || "")}</strong> ${escHtml(emp.bank_account || "")}</span>
+        <span>${t("bankInfoLabel")}: <strong>${escHtml(emp.bank_name || "")}</strong> ${escHtml(emp.bank_account || "")}
+          ${emp.bank_account_name ? `<span class="text-muted">(${escHtml(emp.bank_account_name)})</span>` : ""}</span>
       </div>` : ""}
 
     ${dailySection}
