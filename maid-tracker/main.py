@@ -20,6 +20,7 @@ import reminder_i18n
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from calc import (
+    anchor_of as _anchor_of,
     compute_leave_deduction,
     compute_monthly_leave_balance,
     compute_probation_resign,
@@ -269,11 +270,6 @@ def _fetch_emp(conn, emp_id: int) -> dict:
         conn.close()
         raise HTTPException(404, "Employee not found")
     return dict(row)
-
-
-def _anchor_of(emp: dict) -> date:
-    """Monthly calc anchor: monthly_start_date (set on pass-probation) or start_date."""
-    return date.fromisoformat(emp.get("monthly_start_date") or emp["start_date"])
 
 
 def init_db():

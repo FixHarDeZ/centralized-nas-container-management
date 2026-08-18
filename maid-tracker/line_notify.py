@@ -21,7 +21,7 @@ from zoneinfo import ZoneInfo
 import httpx
 import i18n
 from calc import (
-    compute_overall_balance,
+    balance_snapshot,
     compute_probation_resign,
     compute_probation_tally,
     compute_probation_unpaid,
@@ -91,7 +91,24 @@ def _fmt_days(days: float) -> str:
 
 
 def _balance_block(b: dict) -> str:
-    """Format the balance summary block for LINE messages."""
+    """Format the balance summary block for LINE messages.
+
+    Empty string during probation — there is no leave accounting yet.
+    Monthly mode shows the leave quota; no baht, since over-quota leave is
+    already deducted from the salary at payment time.
+    """
+    if b["mode"] == "probation":
+        return ""
+
+    if b["mode"] == "monthly":
+        bal = b["balance"]
+        sign = "+" if bal >= 0 else "-"
+        return (
+            f"📊 วันลาสะสม:\n"
+            f"  ได้รับ: {_fmt_days(b['total_accrued'])} วัน  |  ใช้ไป: {_fmt_days(b['total_used'])} วัน\n"
+            f"  ⚖️  คงเหลือ: {sign}{_fmt_days(abs(bal))} วัน"
+        )
+
     bal = b["balance"]
     bal_amt = b["balance_amount"]
     sign = "+" if bal >= 0 else ""
@@ -110,6 +127,12 @@ def _balance_block(b: dict) -> str:
     )
 
 
+def _balance_lines(b: dict) -> str:
+    """Balance block plus its trailing blank line, or nothing when there is no block."""
+    blk = _balance_block(b)
+    return f"{blk}\n\n" if blk else ""
+
+
 # ─── Translation append (non-Thai maids) ─────────────────────────────────────
 
 _TR_SEP = "\n\n─────────\n"
@@ -117,8 +140,20 @@ _TR_SEP = "\n\n─────────\n"
 
 def _balance_params(b: dict) -> dict:
     """Pre-formatted balance fields for i18n.translate_block."""
+    if b["mode"] == "probation":
+        return {"mode": "probation"}
+
     bal = b["balance"]
+    if b["mode"] == "monthly":
+        return {
+            "mode": "monthly",
+            "accrued": _fmt_days(b["total_accrued"]),
+            "used": _fmt_days(b["total_used"]),
+            "bal_days": f"{'+' if bal >= 0 else '-'}{_fmt_days(abs(bal))}",
+        }
+
     return {
+        "mode": "sunday",
         "comp": _fmt_days(b["total_comp"]) if b["total_comp"] else "0",
         "leave": f"-{_fmt_days(b['total_leave'])}" if b["total_leave"] else "0",
         "kind_pos": bal >= 0,
@@ -183,13 +218,12 @@ def notify_attendance(
     status_label = STATUS_LABEL.get(status, status) + half_label
 
     try:
-        b = compute_overall_balance(emp_id, start_date, monthly_salary)
+        b = balance_snapshot(emp_id)
         msg = (
             f"📋 บันทึกการทำงาน — {emp_name}\n"
             f"📅 {work_date}:  {status_label}\n"
             f"\n"
-            f"{_balance_block(b)}\n"
-            f"\n"
+            f"{_balance_lines(b)}"
             f"🕒 {_now_str()}"
         )
         msg = _append_tr(
@@ -243,7 +277,7 @@ def notify_payment(
     )
 
     try:
-        b = compute_overall_balance(emp_id, start_date, monthly_salary)
+        b = balance_snapshot(emp_id)
         msg = (
             f"💰 จ่ายเงินเดือนแล้ว — {emp_name}\n"
             f"📅 {month_name} {year}  {period_label}\n"
@@ -251,8 +285,7 @@ def notify_payment(
             f"💵 ฿{_fmt(amount)}\n"
             f"{payer_line}"
             f"\n"
-            f"{_balance_block(b)}\n"
-            f"\n"
+            f"{_balance_lines(b)}"
             f"🕒 {paid_at}"
         )
         msg = _append_tr(
@@ -456,13 +489,12 @@ def notify_cancel_attendance(
     status_label = STATUS_LABEL.get(prev_status, prev_status) + half_label
 
     try:
-        b = compute_overall_balance(emp_id, start_date, monthly_salary)
+        b = balance_snapshot(emp_id)
         msg = (
             f"↩️ ยกเลิกการบันทึก — {emp_name}\n"
             f"📅 {work_date}:  ยกเลิก{status_label}\n"
             f"\n"
-            f"{_balance_block(b)}\n"
-            f"\n"
+            f"{_balance_lines(b)}"
             f"🕒 {_now_str()}"
         )
         msg = _append_tr(
@@ -615,17 +647,10 @@ def notify_balance_query(
                 amount=_fmt(accumulated), daily_rate=_fmt(probation_daily_rate),
             )
         else:
-            b = compute_overall_balance(emp_id, start_date, monthly_salary)
-            msg = f"📊 ยอดสะสม — {emp_name}\n\n{_balance_block(b)}\n\n🕒 {_now_str()}"
+            b = balance_snapshot(emp_id)
+            msg = f"📊 ยอดสะสม — {emp_name}\n\n{_balance_lines(b)}🕒 {_now_str()}"
             msg = _append_tr(
-                msg, "balance", language,
-                name=emp_name,
-                comp=f"+{_fmt_days(b['total_comp'])}" if b["total_comp"] else "0",
-                leave=f"-{_fmt_days(b['total_leave'])}" if b["total_leave"] else "0",
-                kind_pos=b["balance"] >= 0,
-                bal_days=_fmt_days(abs(b["balance"])),
-                bal_amt=_fmt(abs(b["balance_amount"])),
-                daily_rate=_fmt(b["daily_rate"]),
+                msg, "balance", language, name=emp_name, **_balance_params(b)
             )
         send_line(msg)
     except Exception as e:
@@ -636,8 +661,8 @@ def _monthly_entry(emp: dict) -> str:
     """Per-employee block for the monthly report (Thai + maid-language translation).
 
     Probation: leave does not exist — show only whether there is an outstanding
-    daily-pay balance, matching the dashboard ค้างจ่าย. Active: cumulative
-    comp/leave balance as before.
+    daily-pay balance, matching the dashboard ค้างจ่าย. Active: leave quota in
+    monthly mode, cumulative comp/leave balance in sunday mode.
     """
     name = emp["name"]
     lang = emp.get("notify_language") or "th"
@@ -656,28 +681,24 @@ def _monthly_entry(emp: dict) -> str:
             block = i18n.translate_block("monthly_probation_clear", lang, name=name)
         return thai + (_TR_SEP + block if block else "")
 
-    # Active: anchor leave accrual at pass-probation date when present.
-    anchor = (
-        date.fromisoformat(emp["monthly_start_date"])
-        if emp.get("monthly_start_date")
-        else start
-    )
-    b = compute_overall_balance(emp["id"], anchor, emp["monthly_salary"])
+    b = balance_snapshot(emp["id"])
     bal = b["balance"]
-    sign = "+" if bal >= 0 else ""
-    kind = "เครดิต" if bal >= 0 else "ค้างลา"
-    thai = (
-        f"👤 {name}\n"
-        f"  ชดเชย +{_fmt_days(b['total_comp'])} วัน  |  ลา -{_fmt_days(b['total_leave'])} วัน\n"
-        f"  ⚖️ {kind}: {sign}{_fmt_days(abs(bal))} วัน  ≈ {sign}฿{_fmt(abs(b['balance_amount']))}"
-    )
-    block = i18n.translate_block(
-        "monthly", lang, name=name,
-        comp=f"+{_fmt_days(b['total_comp'])}" if b["total_comp"] else "0",
-        leave=f"-{_fmt_days(b['total_leave'])}" if b["total_leave"] else "0",
-        kind_pos=bal >= 0, bal_days=_fmt_days(abs(bal)),
-        bal_amt=_fmt(abs(b["balance_amount"])),
-    )
+    sign = "+" if bal >= 0 else "-"
+    if b["mode"] == "monthly":
+        thai = (
+            f"👤 {name}\n"
+            f"  วันลา: ได้รับ {_fmt_days(b['total_accrued'])} วัน  |  ใช้ไป {_fmt_days(b['total_used'])} วัน\n"
+            f"  ⚖️ คงเหลือ: {sign}{_fmt_days(abs(bal))} วัน"
+        )
+    else:
+        kind = "เครดิต" if bal >= 0 else "ค้างลา"
+        sign = "+" if bal >= 0 else ""
+        thai = (
+            f"👤 {name}\n"
+            f"  ชดเชย +{_fmt_days(b['total_comp'])} วัน  |  ลา -{_fmt_days(b['total_leave'])} วัน\n"
+            f"  ⚖️ {kind}: {sign}{_fmt_days(abs(bal))} วัน  ≈ {sign}฿{_fmt(abs(b['balance_amount']))}"
+        )
+    block = i18n.translate_block("monthly", lang, name=name, **_balance_params(b))
     return thai + (_TR_SEP + block if block else "")
 
 

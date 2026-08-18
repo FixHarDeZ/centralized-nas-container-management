@@ -130,6 +130,15 @@ Sends a LINE message via LINE Messaging API on the following events:
 | Resignation recorded | Staff name · resign date · reason (if any) · resignation summary (last-month pay ± balance settlement = final amount) |
 | Resignation cancelled | Staff name · cancellation confirmation |
 
+**Balance block per employee mode** (`calc.balance_snapshot`, shared by every notification and the dashboard banner):
+
+| `employment_status` / `holiday_mode` | Balance block |
+| :--- | :--- |
+| `probation` | none — leave is not tracked yet, pay is daily |
+| `monthly` | leave quota: accrued / used / remaining days, **no ฿ figure** (over-quota leave is already deducted at payment time via `deduction_days`) |
+| `sunday` | cumulative compensatory − leave, in days + ฿, settled on resignation |
+
+
 Notifications are **opt-in** — if `MAID_LINE_CHANNEL_ACCESS_TOKEN` or `MAID_LINE_GROUP_ID` are not set in the environment, all notifications are silently skipped and the app functions normally. Messages are pushed to a LINE **group** so every member sees them with a single API call. See [LINE Group Setup](#line-group-setup) below.
 
 ### 📲 LINE Webhook — Auto Attendance & Salary Payment from Chat

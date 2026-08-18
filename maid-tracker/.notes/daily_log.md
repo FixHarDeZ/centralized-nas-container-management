@@ -587,3 +587,23 @@ var theme = saved || "light";
 **ไฟล์ใหม่:** `i18n.py`, `reminder_translate.py`, `http_client.py` (vendored จาก `shared/`, เพิ่มใน Makefile `HTTP_COPIES` + guard test).
 **Test:** 33 pass (i18n key-coverage, notify append, daily override, reminder translate stubs, reminder body filtering).
 **ค้าง:** native review my/lo/km; ทดสอบ MiMo จริงบน NAS (workstation sandbox อาจ block).
+
+---
+
+## 2026-08-18 — LINE แจ้งยอดวันลาผิด (monthly mode)
+
+**อาการ:** นันลา 1 วัน (16 ส.ค.) แต่ LINE แจ้ง "ลา -1.5 วัน / ยอดค้าง 1.5 วัน ≈ ฿581" ขณะที่ dashboard แสดง "คงเหลือ +1"
+
+**สาเหตุ 2 ชั้น:**
+1. `line_notify` เรียก `compute_overall_balance` (โมเดล sunday: ชดเชย − ลา) กับพนักงาน `holiday_mode='monthly'` — โควตาวันลาที่สะสมได้ไม่เคยเข้าสมการ วันลาที่ยังไม่เกินโควตาเลยกลายเป็น "หนี้"
+2. `main.py` ส่ง `start_date` (2026-07-05) ให้ notify ขณะที่ dashboard ใช้ `_anchor_of(emp)` (2026-08-01) — วันลาครึ่งวันสมัยทดลองงาน (5 ก.ค.) จึงถูกนับเพิ่ม = 1.5
+
+**แก้:**
+- `calc.balance_snapshot(emp_id)` ตัวใหม่ อ่าน employee row เอง แล้วเลือกโมเดลให้ถูก: `probation` = ไม่มี block เลย, `monthly` = โควตาวันลา (accrued/used/remaining, ไม่มีตัวเงิน — วันลาเกินโควตาถูกหักตอนจ่ายเงินเดือนอยู่แล้วผ่าน `deduction_days`), `sunday` = ชดเชย − ลา ตามเดิม (anchor ที่ `anchor_of` เสมอ)
+- ย้าย `_anchor_of` → `calc.anchor_of` (main.py import กลับ) กันเขียนซ้ำแล้วเพี้ยนอีก
+- `line_notify`: `_balance_block` แตกตาม mode, `_balance_lines` คืน "" ตอน probation (ไม่เหลือบรรทัดว่าง), ทุก call site เปลี่ยนเป็น `balance_snapshot(emp_id)`, `_monthly_entry` ด้วย
+- `i18n`: เพิ่ม `balance_monthly` + `monthly_leave` ทั้ง en/my/lo/km — ถ้าไม่เพิ่ม ไทยถูกแต่พม่ายังโชว์ ฿581
+
+**ผลลัพธ์:** ข้อความ LINE = "วันลาสะสม: ได้รับ 2 วัน | ใช้ไป 1 วัน ⚖️ คงเหลือ: +1 วัน" ตรงกับ dashboard
+
+**Test:** `tests/test_monthly_leave_notify.py` (row จริงของนัน + ส้ม probation) — 56 passed

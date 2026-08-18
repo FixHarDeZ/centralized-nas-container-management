@@ -37,6 +37,8 @@ _MSG = {
         "daily_payment": "💵 Daily pay — {name}\n📅 {date}: ฿{amount}\n{payer}",
         "resign": "🚪 Resignation — {name}\n📅 Last day: {end_date}\n💵 Total payout: ฿{final}",
         "balance": "📊 Balance: comp {comp} / leave {leave} days\n⚖️ {kind}: {bal_days} days ≈ ฿{bal_amt} (฿{daily_rate}/day)",
+        "balance_monthly": "📊 Leave: accrued {accrued} / used {used} days\n⚖️ remaining: {bal_days} days",
+        "monthly_leave": "📊 {name}: leave accrued {accrued} / used {used} days\n  ⚖️ remaining {bal_days} days",
         "balance_query": "📊 Accumulated — {name}\n\n📅 Days worked: {days} days\n💵 Total paid: ฿{amount}\n(฿{daily_rate}/day)",
         "monthly": "📊 {name}: comp {comp} / leave {leave} days\n  ⚖️ {kind} {bal_days} days ≈ ฿{bal_amt}",
         "monthly_probation_owed": "📊 {name}: 💵 outstanding ฿{amount}",
@@ -54,6 +56,8 @@ _MSG = {
         "daily_payment": "💵 နေ့စဉ်လုပ်ခ — {name}\n📅 {date}: ฿{amount}\n{payer}",
         "resign": "🚪 အလုပ်ထွက် — {name}\n📅 နောက်ဆုံးနေ့: {end_date}\n💵 စုစုပေါင်းပေးချေငွေ: ฿{final}",
         "balance": "📊 လက်ကျန်: အပို {comp} / ခွင့် {leave} ရက်\n⚖️ {kind}: {bal_days} ရက် ≈ ฿{bal_amt} (฿{daily_rate}/ရက်)",
+        "balance_monthly": "📊 ခွင့်: ရရှိ {accrued} / သုံးပြီး {used} ရက်\n⚖️ ကျန်: {bal_days} ရက်",
+        "monthly_leave": "📊 {name}: ခွင့် ရရှိ {accrued} / သုံးပြီး {used} ရက်\n  ⚖️ ကျန် {bal_days} ရက်",
         "balance_query": "📊 စုပေါင်း — {name}\n\n📅 အလုပ်လုပ်သည့်ရက်: {days} ရက်\n💵 ပေးပြီးငွေ: ฿{amount}\n(฿{daily_rate}/ရက်)",
         "monthly": "📊 {name}: အပို {comp} / ခွင့် {leave} ရက်\n  ⚖️ {kind} {bal_days} ရက် ≈ ฿{bal_amt}",
         "monthly_probation_owed": "📊 {name}: 💵 ပေးရန်ကျန် ฿{amount}",
@@ -71,6 +75,8 @@ _MSG = {
         "daily_payment": "💵 ຄ່າຈ້າງລາຍວັນ — {name}\n📅 {date}: ฿{amount}\n{payer}",
         "resign": "🚪 ລາອອກ — {name}\n📅 ມື້ສຸດທ້າຍ: {end_date}\n💵 ຍອດຈ່າຍລວມ: ฿{final}",
         "balance": "📊 ຍອດ: ຊົດເຊີຍ {comp} / ລາ {leave} ມື້\n⚖️ {kind}: {bal_days} ມື້ ≈ ฿{bal_amt} (฿{daily_rate}/ມື້)",
+        "balance_monthly": "📊 ລາພັກ: ໄດ້ຮັບ {accrued} / ໃຊ້ໄປ {used} ມື້\n⚖️ ຍັງເຫຼືອ: {bal_days} ມື້",
+        "monthly_leave": "📊 {name}: ລາພັກ ໄດ້ຮັບ {accrued} / ໃຊ້ໄປ {used} ມື້\n  ⚖️ ຍັງເຫຼືອ {bal_days} ມື້",
         "balance_query": "📊 ລວມ — {name}\n\n📅 ມື້ເຮັດວຽກ: {days} ມື້\n💵 ຈ່າຍແລ້ວ: ฿{amount}\n(฿{daily_rate}/ມື້)",
         "monthly": "📊 {name}: ຊົດເຊີຍ {comp} / ລາ {leave} ມື້\n  ⚖️ {kind} {bal_days} ມື້ ≈ ฿{bal_amt}",
         "monthly_probation_owed": "📊 {name}: 💵 ຄ້າງຈ່າຍ ฿{amount}",
@@ -88,6 +94,8 @@ _MSG = {
         "daily_payment": "💵 ប្រាក់ឈ្នួលប្រចាំថ្ងៃ — {name}\n📅 {date}: ฿{amount}\n{payer}",
         "resign": "🚪 លាឈប់ — {name}\n📅 ថ្ងៃចុងក្រោយ: {end_date}\n💵 ប្រាក់សរុបត្រូវបង់: ฿{final}",
         "balance": "📊 សមតុល្យ: សង {comp} / ឈប់ {leave} ថ្ងៃ\n⚖️ {kind}: {bal_days} ថ្ងៃ ≈ ฿{bal_amt} (฿{daily_rate}/ថ្ងៃ)",
+        "balance_monthly": "📊 ការឈប់សម្រាក: បានទទួល {accrued} / បានប្រើ {used} ថ្ងៃ\n⚖️ នៅសល់: {bal_days} ថ្ងៃ",
+        "monthly_leave": "📊 {name}: ការឈប់សម្រាក បានទទួល {accrued} / បានប្រើ {used} ថ្ងៃ\n  ⚖️ នៅសល់ {bal_days} ថ្ងៃ",
         "balance_query": "📊 សរុប — {name}\n\n📅 ថ្ងៃធ្វើការ: {days} ថ្ងៃ\n💵 បានបង់: ฿{amount}\n(฿{daily_rate}/ថ្ងៃ)",
         "monthly": "📊 {name}: សង {comp} / ឈប់ {leave} ថ្ងៃ\n  ⚖️ {kind} {bal_days} ថ្ងៃ ≈ ฿{bal_amt}",
         "monthly_probation_owed": "📊 {name}: 💵 នៅជំពាក់ ฿{amount}",
@@ -222,8 +230,16 @@ def translate_block(msg_type, lang, **p):
         else ""
     )
     kind = (m["kind_pos"] if p["kind_pos"] else m["kind_neg"]) if "kind_pos" in p else ""
+    mode = p.get("mode")
     balance = ""
-    if "daily_rate" in p and "bal_days" in p:
+    if mode == "monthly":
+        # Monthly mode: leave quota only — money is settled at payment time.
+        balance = m["balance_monthly"].format(
+            accrued=p["accrued"], used=p["used"], bal_days=p["bal_days"],
+        )
+        if msg_type == "monthly":
+            msg_type = "monthly_leave"
+    elif "daily_rate" in p and "bal_days" in p:
         balance = _balance_block_tr(
             lang, comp=p["comp"], leave=p["leave"], kind_pos=p["kind_pos"],
             bal_days=p["bal_days"], bal_amt=p["bal_amt"], daily_rate=p["daily_rate"],
@@ -237,4 +253,5 @@ def translate_block(msg_type, lang, **p):
         days=p.get("days", ""), daily_rate=p.get("daily_rate", ""),
         comp=p.get("comp", ""), leave=p.get("leave", ""), kind=kind,
         bal_days=p.get("bal_days", ""), bal_amt=p.get("bal_amt", ""),
-    )
+        accrued=p.get("accrued", ""), used=p.get("used", ""),
+    ).rstrip()

@@ -239,6 +239,52 @@ def compute_monthly_leave_balance(
     }
 
 
+def anchor_of(emp: dict) -> date:
+    """Monthly calc anchor: monthly_start_date (set on pass-probation) or start_date."""
+    return date.fromisoformat(emp.get("monthly_start_date") or emp["start_date"])
+
+
+def balance_snapshot(emp_id: int, up_to: date | None = None) -> dict:
+    """Current leave/comp standing of an employee, for notifications and the dashboard.
+
+    Dispatches on the employee's own settings so every caller sees the same number:
+        probation → no leave accounting at all (pay is daily)
+        monthly   → accrued leave quota vs leave used; no baht figure, because
+                    over-quota leave is already deducted at payment time
+        sunday    → cumulative compensatory minus leave, settled on resignation
+
+    Always returns a "mode" key naming which of the three applies.
+    """
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    row = conn.execute("SELECT * FROM employees WHERE id=?", (emp_id,)).fetchone()
+    conn.close()
+    if row is None:
+        return {"mode": "probation"}
+    emp = dict(row)
+
+    if emp.get("employment_status") == "probation":
+        return {"mode": "probation"}
+
+    anchor = anchor_of(emp)
+    if (emp.get("holiday_mode") or "sunday") == "monthly":
+        lb = compute_monthly_leave_balance(
+            emp_id,
+            anchor,
+            emp.get("monthly_leave_days") or 0.0,
+            emp.get("max_leave_carry"),
+            up_to=up_to,
+            monthly_start_date=anchor,
+            first_month_leave_days=emp.get("first_month_leave_days") or 0.0,
+        )
+        return {"mode": "monthly", **lb}
+
+    b = compute_overall_balance(
+        emp_id, anchor, emp["monthly_salary"], up_to=up_to, holiday_mode="sunday"
+    )
+    return {"mode": "sunday", **b}
+
+
 # ── Sunday-mode helpers ───────────────────────────────────────
 
 
