@@ -617,3 +617,11 @@ var theme = saved || "light";
 **เพิ่ม:** คอลัมน์ `bank_name` / `bank_account` / `bank_account_name` (ชื่อบัญชี) (migration ALTER TABLE ตาม pattern เดิม), field ใน `EmployeeCreate` + insert/update, ฟอร์มแม่บ้านมี 3 ช่องโผล่เมื่อเลือก "เงินโอน" (toggle `d-none` ด้วย `onchange` inline ไม่ต้องมี state), หน้าจ่ายเงินเดือนโชว์ alert "บัญชีรับโอน: <ธนาคาร> <เลขบัญชี> (<ชื่อบัญชี>)" เมื่อเป็น transfer และกรอกไว้
 
 **Test:** `tests/test_bank_details.py` (create/read/update + cash ปล่อยว่างได้) — 58 passed
+
+## 2026-08-18 — reminder Bigcleaning ห้องนอน (แปล 4 ภาษา)
+
+reminder id 3 สร้างจาก dashboard เป็นข้อความล้วน ไม่มี emoji `message_i18n` เลย null (`reminder_i18n.lookup()` match แบบ exact string)
+
+**ทำ:** เพิ่ม key `🧹 วันนี้ดูดฝุ่น ถูพื้น เช็ดฝุ่นทั้งห้องนอนคุณฟิก และคุณปุ๊กด้วยนะคะ` ใน `REMINDERS` (my/en/lo/km, machine-generated ตาม caveat เดิมของไฟล์ — ชื่อคนใช้ Latin ใน my/km กันทับศัพท์เพี้ยน) แล้ว PUT `/api/reminders/3` ด้วยข้อความที่มี 🧹 นำหน้า + แก้สะกด "เช็คฝุ่น" → "เช็ดฝุ่น" เพื่อให้ key ตรงกับ DB → `message_i18n` เติมทันที (ยืนยันบน NAS แล้ว)
+
+**เตือน:** ถ้าแก้ข้อความ reminder ใน dashboard ต้องแก้ key ใน `reminder_i18n.py` ให้ตรงกันเป๊ะ ไม่งั้นแม่บ้านได้แต่ภาษาไทย
