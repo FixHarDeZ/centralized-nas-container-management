@@ -607,3 +607,11 @@ var theme = saved || "light";
 **ผลลัพธ์:** ข้อความ LINE = "วันลาสะสม: ได้รับ 2 วัน | ใช้ไป 1 วัน ⚖️ คงเหลือ: +1 วัน" ตรงกับ dashboard
 
 **Test:** `tests/test_monthly_leave_notify.py` (row จริงของนัน + ส้ม probation) — 56 passed
+
+## 2026-08-18 — ช่องบัญชีธนาคารสำหรับแม่บ้านที่รับเงินโอน
+
+`payment_method='transfer'` เดิมมีแค่ปุ่มแนบสลิป — ไม่มีที่เก็บเลขบัญชี ต้องไปเปิดหาที่อื่นทุกครั้งที่โอน
+
+**เพิ่ม:** คอลัมน์ `bank_name` / `bank_account` (migration ALTER TABLE ตาม pattern เดิม), field ใน `EmployeeCreate` + insert/update, ฟอร์มแม่บ้านมี 2 ช่องโผล่เมื่อเลือก "เงินโอน" (toggle `d-none` ด้วย `onchange` inline ไม่ต้องมี state), หน้าจ่ายเงินเดือนโชว์ alert "บัญชีรับโอน: <ธนาคาร> <เลขบัญชี>" เมื่อเป็น transfer และกรอกไว้
+
+**Test:** `tests/test_bank_details.py` (create/read/update + cash ปล่อยว่างได้) — 58 passed

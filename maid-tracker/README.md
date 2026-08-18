@@ -76,6 +76,7 @@ TLS is terminated by Synology Reverse Proxy — the nginx sidecar handles Authel
 ### 💳 Payment Method, Slips & Payer
 - Each employee has a **payment method**: `cash` or `transfer`
 - For `transfer`, an **attach-slip** button appears on every payment (daily probation days + monthly periods) — uploads an image/PDF stored under `/data/slips`
+- For `transfer`, the employee form also takes **bank name + account number** (`bank_name`, `bank_account`; hidden while the method is `cash`) and the payment page shows them so whoever transfers can read the account off the screen
 - Slips are served behind the stack's basic auth
 - **Payer dropdown:** when marking a period/day as paid, pick who paid it (ฟิก / ปุ๊ก / ฟิก + ปุ๊ก for jointly-paid). The choice (`paid_by`) is stored and shown as a *"Paid by X"* badge; unmarking clears it. Payer list is the `PAYERS` const in `static/app.js`
 

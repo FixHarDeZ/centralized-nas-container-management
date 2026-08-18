@@ -360,6 +360,8 @@ def init_db():
         ("payment_method", "TEXT DEFAULT 'cash'"),
         ("notify_language", "TEXT DEFAULT 'th'"),
         ("payment_schedule", "TEXT DEFAULT 'biweekly'"),
+        ("bank_name", "TEXT"),
+        ("bank_account", "TEXT"),
     ]:
         try:
             c.execute(f"ALTER TABLE employees ADD COLUMN {col} {definition}")
@@ -589,6 +591,8 @@ class EmployeeCreate(BaseModel):
     employment_status: str = "active"  # 'probation' | 'active'
     probation_daily_rate: float | None = None
     payment_method: str = "cash"  # 'cash' | 'transfer'
+    bank_name: str | None = None  # transfer only
+    bank_account: str | None = None  # transfer only
     notify_language: str = "th"  # 'th'|'my'|'en'|'lo'|'km' — appended translation
     payment_schedule: str = "biweekly"  # 'biweekly' (15th+end) | 'monthly' (single lump at end)
 
@@ -641,8 +645,8 @@ def create_employee(emp: EmployeeCreate):
     c = conn.cursor()
     c.execute(
         "INSERT INTO employees (name,age,birth_date,nationality,phone,line_id,facebook,start_date,monthly_salary,"
-        "max_leave_carry,holiday_mode,monthly_leave_days,employment_status,probation_daily_rate,payment_method,notify_language,payment_schedule) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "max_leave_carry,holiday_mode,monthly_leave_days,employment_status,probation_daily_rate,payment_method,bank_name,bank_account,notify_language,payment_schedule) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         (
             emp.name,
             emp.age,
@@ -659,6 +663,8 @@ def create_employee(emp: EmployeeCreate):
             emp.employment_status,
             emp.probation_daily_rate,
             emp.payment_method,
+            emp.bank_name,
+            emp.bank_account,
             emp.notify_language,
             emp.payment_schedule,
         ),
@@ -692,7 +698,7 @@ def update_employee(emp_id: int, emp: EmployeeCreate):
     c = conn.cursor()
     c.execute(
         "UPDATE employees SET name=?,age=?,birth_date=?,nationality=?,phone=?,line_id=?,facebook=?,start_date=?,monthly_salary=?,"
-        "max_leave_carry=?,holiday_mode=?,monthly_leave_days=?,probation_daily_rate=?,payment_method=?,notify_language=?,payment_schedule=? WHERE id=?",
+        "max_leave_carry=?,holiday_mode=?,monthly_leave_days=?,probation_daily_rate=?,payment_method=?,bank_name=?,bank_account=?,notify_language=?,payment_schedule=? WHERE id=?",
         (
             emp.name,
             emp.age,
@@ -708,6 +714,8 @@ def update_employee(emp_id: int, emp: EmployeeCreate):
             emp.monthly_leave_days,
             emp.probation_daily_rate,
             emp.payment_method,
+            emp.bank_name,
+            emp.bank_account,
             emp.notify_language,
             emp.payment_schedule,
             emp_id,
