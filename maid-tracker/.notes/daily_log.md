@@ -608,6 +608,8 @@ var theme = saved || "light";
 
 **Test:** `tests/test_monthly_leave_notify.py` (row จริงของนัน + ส้ม probation) — 56 passed
 
+**เปลี่ยนพฤติกรรมเงียบๆ ที่ตั้งใจ:** สาย `sunday` ก็ anchor ที่ `anchor_of(emp)` แล้ว (เดิม line_notify ส่ง `start_date`) — ตอนนี้ไม่มีแม่บ้าน sunday mode สักคน เลยไม่มีตัวเลขไหนขยับจริง แต่ถ้าวันหน้ามี จะนับจากวันผ่านโปรเหมือน dashboard
+
 ## 2026-08-18 — ช่องบัญชีธนาคารสำหรับแม่บ้านที่รับเงินโอน
 
 `payment_method='transfer'` เดิมมีแค่ปุ่มแนบสลิป — ไม่มีที่เก็บเลขบัญชี ต้องไปเปิดหาที่อื่นทุกครั้งที่โอน

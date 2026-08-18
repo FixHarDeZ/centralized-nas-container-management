@@ -131,7 +131,7 @@ working_days_in_month = จำนวนวัน "ทั้งเดือน" (
 - **`'biweekly'`** (default): 2 รอบต่อเดือนตามปกติด้านบน (period 1 วันที่ 15 + period 2 สิ้นเดือน)
 - **`'monthly'`**: **1 รอบ** สิ้นเดือน = เต็มเงินเดือน (`base_salary`, ไม่หาร 2) — `get_payments` ข้าม period 1 ไปเลย ไม่สร้าง entry. ตั้งค่าได้ตอนสร้าง/แก้ไขข้อมูลแม่บ้าน (dropdown ในฟอร์ม)
 - ไม่กระทบ leave/holiday/probation/pass-probation logic — ใช้แค่คำนวณจำนวนรอบ+จำนวนเงิน
-- **(2026-07-13 refactor)** จำนวนเงินต่อ period มี single source = `_compute_period_amount()` (schedule-aware แล้ว) ใช้ร่วมทั้ง `get_payments` / toggle / LINE webhook — แก้ bug เดิมที่ toggle/webhook แจ้งยอด `monthly` schedule เป็นครึ่งเดียว. Helper กลาง: `_fetch_emp(conn, id)` (fetch-or-404) + `_anchor_of(emp)` (`monthly_start_date or start_date`) แทน pattern ซ้ำ ~14/7 จุดใน main.py
+- **(2026-07-13 refactor)** จำนวนเงินต่อ period มี single source = `_compute_period_amount()` (schedule-aware แล้ว) ใช้ร่วมทั้ง `get_payments` / toggle / LINE webhook — แก้ bug เดิมที่ toggle/webhook แจ้งยอด `monthly` schedule เป็นครึ่งเดียว. Helper กลาง: `_fetch_emp(conn, id)` (fetch-or-404) + `_anchor_of(emp)` (2026-08-18: นิยามย้ายไป `calc.anchor_of`, main.py import กลับมาใช้ชื่อเดิม) (`monthly_start_date or start_date`) แทน pattern ซ้ำ ~14/7 จุดใน main.py
 
 ### Probation mode (จ่ายรายวัน — axis `employment_status`)
 - **`employment_status='probation'`**: จ่ายรายวัน, **ลา/ชดเชย/holiday ปิด** (attendance default = `unmarked`, POST + LINE webhook reject leave). `get_payments` คืน `[]` (ไม่มีงวดเดือน).
