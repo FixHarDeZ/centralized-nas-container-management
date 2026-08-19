@@ -87,7 +87,7 @@ Set `COHERE_API_KEY` in `query/.env` to enable Cohere reranking (`rerank-multili
 |---|---|---|
 | `POST` | `/query` | RAG query. Body: `{"question": str, "top_k_retrieve": int=20, "top_k_final": int=6}` |
 | `GET` | `/health` | Liveness + Qdrant collection stats |
-| `POST` | `/ingest-trigger` | Trigger incremental ingest as subprocess inside query container |
+| `POST` | `/ingest-trigger` | Run incremental ingest inside the query process, reusing its resident BGE-M3. Query params: `full=true`, `page_id=<id>` |
 | `GET` | `/nous/auth` | Start Nous OAuth Device Code flow |
 | `GET` | `/nous/auth/status` | Check Nous auth status |
 
@@ -102,6 +102,12 @@ docker compose run --rm secretary-ingest python ingest.py --dry-run
 
 State DB for standalone ingest: `ingest_state` volume (`/volume2/docker/secretary/ingest_state`).  
 State DB for `/ingest-trigger`: `query-data` volume (`/volume2/docker/secretary/query-data`).
+
+`/ingest-trigger` imports `ingest.py` into the query process and injects the encoder that is
+already resident there, so a sync run holds one BGE-M3 in RAM instead of two. It used to spawn
+`ingest.py` as a subprocess, which loaded its own copy on top and exhausted the 12 GB NAS with a
+host-level OOM on 2026-08-19. Every encode path (`/query`, keep-warm, ingest) shares one lock so
+only one batch of activations is resident at a time; the container is capped at 4 GB.
 
 ## Embedding Model
 

@@ -7,7 +7,6 @@ import time
 import uuid
 
 import tiktoken
-from FlagEmbedding import BGEM3FlagModel
 from notion_client import Client as NotionClient
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
@@ -36,7 +35,20 @@ _UUID_NS = uuid.UUID("b3d1c2a0-4f5e-6789-abcd-ef0123456789")
 
 TOKENIZER = tiktoken.get_encoding("cl100k_base")
 
-embed_model = BGEM3FlagModel("BAAI/bge-m3")
+# Loaded lazily so that secretary-query can inject its already-resident encoder
+# instead of a second BGE-M3 (~2 GB) being loaded on top of it. A CLI run
+# (`docker compose run --rm secretary-ingest`) still loads its own on first use.
+embed_model = None
+
+
+def get_embed_model():
+    global embed_model
+    if embed_model is None:
+        from FlagEmbedding import BGEM3FlagModel
+
+        embed_model = BGEM3FlagModel("BAAI/bge-m3")
+    return embed_model
+
 
 notion = NotionClient(auth=NOTION_TOKEN)
 qdrant = QdrantClient(url=QDRANT_URL)
@@ -622,7 +634,7 @@ def chunk_document(title: str, markdown: str) -> list[dict]:
 
 
 def embed_texts(texts: list[str]) -> list[dict]:
-    result = embed_model.encode(texts, return_dense=True, return_sparse=True)
+    result = get_embed_model().encode(texts, return_dense=True, return_sparse=True)
     dense_vecs = result["dense_vecs"]
     sparse_dicts = result["lexical_weights"]
 
@@ -759,7 +771,7 @@ def remove_deleted_pages(live_ids: set, conn: sqlite3.Connection, dry_run: bool)
 # ---------------------------------------------------------------------------
 
 
-def main():
+def main(argv=None):
     parser = argparse.ArgumentParser(description="Notion → Qdrant ingestion")
     parser.add_argument("--full", action="store_true", help="Re-ingest all pages")
     parser.add_argument(
@@ -772,7 +784,7 @@ def main():
         action="store_true",
         help="Show changes without writing",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     ensure_collection()
     conn = open_state_db()
@@ -825,6 +837,7 @@ def main():
     )
 
     conn.close()
+    return stats
 
 
 if __name__ == "__main__":

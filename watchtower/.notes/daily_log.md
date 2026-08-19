@@ -2,6 +2,22 @@
 
 ---
 
+## 2026-08-19 — Telegram flood: notifier replay log เก่าทั้งก้อนหลัง dockerd restart
+
+**อาการ:** 13:12:28–13:13:29 บอทยิงข้อความ "Container อัปเดตแล้ว" รัวเป็นสิบข้อความ (secretary-n8n
+ไล่ image id ec2ff02→3352c47→…→cb10f16, uptime-kuma, portainer, homepage) ทั้งที่ watchtower ไม่ได้
+อัปเดตอะไรจริงในนาทีนั้น.
+
+**สาเหตุ:** ตอน 13:11:38 เกิด host OOM (ดูรายละเอียดที่ `secretary/.notes/daily_log.md`) dockerd ตายและ
+ขึ้นใหม่ 13:12:08 → `watchtower-notifier` (`restart: always`) start ใหม่แล้วเปิด stream log ของ watchtower
+ใหม่. `stream_logs()` ขอ `tail=0` แต่ **docker engine บน DSM ตัวนี้ตีความ `tail=0` เป็น "ทั้งหมด"** —
+พิสูจน์ตรง ๆ ด้วย `docker logs --tail 0 --follow watchtower` ซึ่งพ่น log ตั้งแต่ 2026-07-24 ออกมา.
+notifier เลย parse log ประวัติทั้งเดือนแล้วยิงแจ้งเตือนย้อนหลังรวดเดียว. watchtower เองไม่ได้ restart
+(`RestartCount=0`, Up ต่อเนื่อง) และไม่ได้เป็นต้นเหตุ container ดับ.
+
+**Fix (ทำแล้ว 2026-08-19):** เปลี่ยน `notifier/notifier.py` เป็น `tail=1` แล้ว deploy — verify หลัง
+restart เห็นเฉพาะบรรทัดปัจจุบัน ไม่มี replay ประวัติ. worst case คือข้อความซ้ำ 1 บรรทัดต่อการ reconnect.
+
 ## 2026-07-24 — major-version watch + uptime-kuma pin fix
 
 **ปัญหา:** watchtower ไม่เคยอัปเดต uptime-kuma เลยทั้งที่มี release ใหม่. สาเหตุ = tag `:latest`

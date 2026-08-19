@@ -117,3 +117,24 @@ targeted re-ingest (`--page <id>`); incremental sync skips unchanged pages.
 ## Gaps / TODOs
 - **Architectural improvement (optional):** `/ingest-trigger` currently loads BGE-M3 in a subprocess inside `secretary-query` (which already has BGE-M3 resident). This works at 6 GB but is structurally OOM-prone. Proper fix: refactor `/ingest-trigger` to launch a one-shot `secretary-ingest` container via Docker socket so the ingest workload runs in its own 6 GB cgroup. Requires mounting docker.sock into secretary-query — security trade-off worth weighing.
 - **Schedule frequency:** n8n "Secretary Auto Sync" runs hourly. Most ticks update 0-2 pages. Consider dropping to every 4-6 h to amortise the BGE-M3 cold-load + Notion-poll cost. One-line workflow JSON change.
+
+## Ingest Path — in-process ตั้งแต่ 2026-08-19
+`POST /ingest-trigger` **ไม่ spawn subprocess แล้ว** — import `ingest` เข้ามาในโปรเซสของ query แล้วยัด
+`SharedEncoder(app.state.model)` ใส่ `ingest.embed_model` ทำให้ BGE-M3 มีชุดเดียวใน RAM.
+`ingest.main(argv)` รับ argv เป็น list เสมอเมื่อเรียกจากเซิร์ฟเวอร์ (ห้ามเรียก `main()` เปล่า —
+argparse จะไปอ่าน argv ของ uvicorn). `full=true` → `argv=["--full"]` ห้ามใช้ env `FULL_INGEST`
+เพราะ mutate env ในโปรเซสยาว = ทุกรอบถัดไปกลายเป็น full ingest.
+ทุก encode ผ่าน `encode_lock` (threading.Lock) ทั้ง `/query`, keep-warm และ ingest — คุม memory spike.
+
+## Memory Ceiling — secretary-query (updated 2026-08-19)
+`limits.memory: 6G` บนเครื่องที่มี RAM 12 GB = ครึ่งเครื่อง. 2026-08-19 container วิ่งชนเพดานจริง
+(python ingest subprocess 3.49 GB + uvicorn parent 2.51 GB) แล้วทำให้ **host** OOM ก่อนที่ cgroup limit
+จะทำงาน (`constraint=CONSTRAINT_NONE ... global_oom`) — dockerd ตายตาม container ทั้ง NAS ดับ.
+ปัจจุบันตั้งเป็น **4G ใน compose** (ถาวร) หลังแก้ ingest ให้ใช้โมเดลร่วม — วัดจริง steady ~0.95 GB,
+peak ระหว่าง ingest 3.70 GB. ถ้าจะกดต่ำกว่านี้ต้องลด batch size ของ `upsert_chunks` ก่อน.
+
+## ONNX Backend ไม่ได้ทำงานจริง (พบ 2026-08-19)
+ตั้ง `EMBEDDING_BACKEND=onnx` ไว้ แต่ตอน start log ขึ้น
+`ONNX encoder unavailable (NO_SUCHFILE: /models/bge-m3-int8.onnx); falling back to torch`
+เพราะ `RUN python export_onnx.py || echo "WARN..."` ใน `query/Dockerfile` fail แบบเงียบตอน build.
+ผลคือ runtime ใช้ torch/FlagEmbedding ซึ่งกิน RAM มากกว่า ONNX int8 — เป็นตัวเร่งของ OOM ข้างบน.

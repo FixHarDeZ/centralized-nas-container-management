@@ -80,16 +80,15 @@ services:
     deploy:
       resources:
         limits:
-          # 6 GB: /ingest-trigger spawns ingest.py as a subprocess in this
-          # container (bind mount above), and that subprocess loads its OWN
-          # BGE-M3 (~2 GB) on top of the parent's already-resident BGE-M3.
-          # At 4 GB the cgroup OOM-killed the subprocess every n8n auto-sync
-          # tick (anon-rss ~3.1 GB just for the subprocess, parent ~1-2 GB
-          # on top — confirmed via dmesg 2026-06-02 20:01/21:01/22:01/23:02).
-          # CPU is controlled at app level via OMP_NUM_THREADS=2 above;
-          # Synology DSM kernel lacks CFS scheduler so docker cpus: limits
-          # can't be applied.
-          memory: 6G
+          # 4 GB, not 6: the NAS has 12 GB total, so a 6 GB ceiling let this one
+          # container exhaust the *host* before its own cgroup limit ever tripped
+          # — global OOM on 2026-08-19 killed dockerd and every stack with it.
+          # /ingest-trigger no longer spawns a subprocess with its own BGE-M3
+          # (it reuses the resident encoder), so steady state is ~0.9 GB and the
+          # per-batch encode spike has to fit in the rest.
+          # CPU is controlled at app level via OMP_NUM_THREADS above; Synology
+          # DSM kernel lacks CFS scheduler so docker cpus: limits can't be applied.
+          memory: 4G
         reservations:
           memory: 1G
     logging:

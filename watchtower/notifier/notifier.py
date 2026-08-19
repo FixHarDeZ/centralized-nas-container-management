@@ -138,7 +138,11 @@ class DockerSocketSession:
     def stream_logs(self, container_id: str):
         sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         sock.connect(self.socket_path)
-        path = f"/containers/{container_id}/logs?follow=1&stdout=1&stderr=1&tail=0"
+        # tail=1, not 0: the docker engine on DSM treats tail=0 as "everything",
+        # so reconnecting after a daemon restart replayed weeks of watchtower log
+        # and flooded Telegram with historical "container updated" messages
+        # (2026-08-19). Worst case now is one duplicate line per reconnect.
+        path = f"/containers/{container_id}/logs?follow=1&stdout=1&stderr=1&tail=1"
         sock.sendall(f"GET {path} HTTP/1.0\r\nHost: localhost\r\n\r\n".encode())
 
         buf = b""

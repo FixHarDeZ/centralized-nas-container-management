@@ -1,5 +1,58 @@
 # Secretary Stack — Daily Log
 
+## 2026-08-19 (รอบสอง) — แก้ถาวร: /ingest-trigger ใช้ encoder ตัวเดียวกับ query + เพดาน 4 GB
+
+1. **`ingest/ingest.py`:** ย้าย `BGEM3FlagModel("BAAI/bge-m3")` จาก module level ไปเป็น lazy
+   `get_embed_model()` และเปลี่ยน `embed_model` เป็น `None` เพื่อให้ inject จากภายนอกได้.
+   `main()` รับ `argv` แล้ว (`main(argv=None)` + `parser.parse_args(argv)`) และ **return stats**.
+   CLI (`docker compose run --rm secretary-ingest`) ยังโหลดโมเดลเองเหมือนเดิม.
+2. **`query/main.py`:** `/ingest-trigger` เลิก `create_subprocess_exec` แล้ว import `ingest` ในโปรเซสเดียวกัน
+   (`sys.path` + `INGEST_PATH`, default `/ingest`) แล้ว inject `SharedEncoder(app.state.model)` เข้าไป →
+   BGE-M3 มีชุดเดียวใน RAM ตลอด. `full=true` ส่งเป็น `argv=["--full"]` ไม่ใช่ `os.environ["FULL_INGEST"]`
+   (ถ้า mutate env ในโปรเซสยาว ๆ ทุก tick ถัดไปจะกลายเป็น full ingest ถาวร).
+   `summary` ยังเป็น string รูปเดิม (`pages: N | updated: N | ...`) เพื่อไม่ให้ n8n node พัง.
+3. **Lock:** `encode_lock` (`threading.Lock`) ครอบทุกทางที่เรียก encode — `/query`, keep-warm, และ ingest —
+   เหตุผลคือ **memory ไม่ใช่ thread-safety**: encode พร้อมกันสองที่ = activations สองชุด ซึ่งเป็น spike
+   ที่เพดาน cgroup ต้องรับ. ล็อกต่อ batch ไม่ใช่ต่อ run (ไม่งั้น query จะรอทั้งรอบ sync เป็นนาที).
+   `ingest_lock` (asyncio) กัน ingest ซ้อนกันเอง.
+4. **`docker-compose.yml`:** `secretary-query` limit 6G → **4G** (เครื่องมี 12 GB — 6G คือครึ่งเครื่อง
+   จึงทำให้ host OOM ก่อน cgroup limit ทำงาน). ไม่ได้ลดเป็น 2G เพราะวัดจริงแล้ว peak ระหว่าง ingest
+   ~3.7 GB.
+5. **วัดผลจริงหลัง deploy:** `grep -c "Loading BGE-M3"` = **1** ตลอด ingest run (เดิมจะเป็น 2),
+   `docker top` เห็นแค่ uvicorn ตัวเดียวไม่มี subprocess, steady state ~0.95 GB, peak ระหว่าง ingest
+   3.70 GB / 4 GB, host ไม่ OOM, `RestartCount` ไม่ขยับ.
+6. **ยังไม่ได้ทำ:** ลดความถี่ n8n auto sync (ไม่จำเป็นแล้วหลังแก้ข้อ 1 และต้องแก้ผ่าน n8n API/UI),
+   และซ่อม ONNX export (ยัง fallback torch อยู่ — ดู 00_INDEX.md).
+
+## 2026-08-19 — Global (host) OOM ล้ม dockerd ทั้งเครื่อง — ต้นเหตุ secretary-query ~6 GB
+
+1. **อาการ:** 13:11:38 (+07) container เกือบทุกตัวบน NAS ดับพร้อมกัน (exit 137/143/0) เหลือแค่ตัวที่ตั้ง
+   `restart: always` (homepage, uptime-kuma, jellyfin, watchtower, notifier) ที่กลับมาเอง ส่วนทุกตัวที่เป็น
+   `restart: unless-stopped` ค้างดับยาว 2 ชม.
+2. **Root cause:** kernel OOM แบบทั้งเครื่อง ไม่ใช่ cgroup —
+   `oom-kill:constraint=CONSTRAINT_NONE ... global_oom, task_memcg=/docker/5eb32457c853...` ซึ่ง container id
+   นั้นคือ `secretary-query` ตรง ๆ. ตอนถูกฆ่า process ในนั้นกิน `python` (ingest subprocess) 3.49 GB +
+   `uvicorn` (parent) 2.51 GB ≈ 6 GB = เพดาน `deploy.resources.limits.memory: 6G` ที่ตั้งไว้พอดี. เครื่องมี RAM
+   12 GB ทั้งเครื่อง เพดาน 6 G จึงกินครึ่งเครื่อง — host หมด RAM ก่อนที่ cgroup limit จะทำงาน. ก่อนหน้านั้นมี
+   OOM รอบแรก 12:12:58 ฆ่า uvicorn 1.9 GB (secretary-query restart 1 ครั้ง) และย้อนไปเคยเกิดรัวรายชั่วโมง
+   2026-07-23 04:01–08:01 ด้วย.
+3. **ทำไมถึงโต 6 GB:** `POST /ingest-trigger` spawn `ingest.py` เป็น subprocess ใน container เดียวกับ query
+   server → BGE-M3 โหลดซ้อนสองชุด. n8n "Secretary Auto Sync" ยิง `/ingest-trigger` ทุกชั่วโมงตรง (ยืนยันจาก log
+   `192.168.192.2 - "POST /ingest-trigger" 200 OK` ที่ HH:01:4x ทุกชั่วโมง).
+4. **ตัวเร่งที่เพิ่งเจอ:** parent ใหญ่กว่าที่ comment ใน compose ประเมินไว้ (1–2 GB) เพราะ ONNX backend
+   ใช้ไม่ได้จริง — `/models/bge-m3-int8.onnx` ไม่มีในอิมเมจ (`export_onnx.py` ตอน build fail แบบ soft-fail
+   `|| echo WARN`) จึง fallback ไป torch/FlagEmbedding ที่กิน RAM มากกว่า ทั้งที่ตั้ง `EMBEDDING_BACKEND=onnx`.
+5. **ผลลูกโซ่:** dockerd (pid 22418) ตายตามไปด้วย แล้วขึ้นใหม่เป็น pid 23414 ตอน 13:12:08. ไม่มี log ว่า
+   Container Manager package restart (ContainerManager.log ล่าสุดคือ 2026-07-24) — คือ daemon ตายเอง ไม่ใช่แพ็กเกจถูกสั่งหยุด.
+6. **กู้คืน (ทำแล้ว):** `docker start` ทุก container ที่ดับ + `docker update --memory 3g --memory-swap 4g
+   secretary-query` เพื่อจำกัดรัศมีความเสียหายให้ OOM เกิดใน cgroup แทนที่จะลาก host ลงทั้งเครื่อง.
+   **หมายเหตุ: `docker update` มีผลเฉพาะ runtime — หายทันทีที่ `compose up` รอบหน้า** และเพดาน 3 G แปลว่า
+   ingest subprocess รายชั่วโมงจะโดน cgroup OOM kill แทน (ตาม comment ใน compose ที่ระบุว่า 4 G ก็ยังโดน)
+   คือยอมให้ ingest พังแทนที่จะให้ NAS ล่ม.
+7. **Fix ที่ยังค้าง:** ตามที่ 00_INDEX.md จดไว้อยู่แล้ว — แยก `/ingest-trigger` ไปรันเป็น one-shot container
+   `secretary-ingest` ของตัวเอง (คนละ cgroup) แทน subprocess, และ/หรือ ลดความถี่ auto sync จากรายชั่วโมงเป็นทุก 4–6 ชม.,
+   และซ่อม ONNX export ให้ได้จริงเพื่อลด RSS ของ parent.
+
 ## 2026-07-10 — Fix secretary-n8n crash loop (JavaScript heap OOM)
 1. **Root cause**: n8n container had 1G memory limit but V8 heap was hitting its default ~256 MB limit, causing `Ineffective mark-compacts near heap limit Allocation failed - JavaScript heap out of memory` crash loop. RestartCount reached 330.
 2. **Fix**: Increased n8n memory limit from 1G → 1536M (1.5G) and added `NODE_OPTIONS=--max-old-space-size=1024` to let V8 use more of the container's memory.

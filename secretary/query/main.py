@@ -2,6 +2,7 @@ import asyncio
 import logging
 import os
 import re
+import threading
 import time
 from contextlib import asynccontextmanager
 
@@ -29,6 +30,32 @@ COHERE_API_KEY = os.getenv("COHERE_API_KEY", "")
 COHERE_RERANK_MODEL = os.getenv("COHERE_RERANK_MODEL", "rerank-multilingual-v3.0")
 
 qdrant: AsyncQdrantClient | None = None
+
+# One BGE-M3 lives in this process and every encode path shares it: /query,
+# keep-warm and the in-process ingest run. The lock is about memory, not
+# thread-safety — two concurrent encodes mean two sets of activations, and that
+# transient spike is what the container memory limit has to absorb. It is held
+# per batch, not per ingest run, so a query during a sync waits for one batch.
+encode_lock = threading.Lock()
+ingest_lock = asyncio.Lock()
+
+INGEST_PATH = os.getenv("INGEST_PATH", "/ingest")
+
+
+def encode(texts: list[str]) -> dict:
+    with encode_lock:
+        return app.state.model.encode(texts, return_dense=True, return_sparse=True)
+
+
+class SharedEncoder:
+    """Hands ingest.py the resident encoder behind the same lock as /query."""
+
+    def __init__(self, model):
+        self._model = model
+
+    def encode(self, texts: list[str], **kw) -> dict:
+        with encode_lock:
+            return self._model.encode(texts, **kw)
 
 SYSTEM_PROMPT = """You are a personal secretary assistant for the user.
 Answer based ONLY on the numbered context blocks provided.
@@ -62,12 +89,7 @@ async def lifespan(app: FastAPI):
             await asyncio.sleep(warm_interval)
             try:
                 t = time.monotonic()
-                await asyncio.to_thread(
-                    app.state.model.encode,
-                    ["ping"],
-                    return_dense=True,
-                    return_sparse=True,
-                )
+                await asyncio.to_thread(encode, ["ping"])
                 log.debug("keep-warm encode: %.0f ms", (time.monotonic() - t) * 1000)
             except Exception as exc:
                 log.warning("keep-warm failed: %s", exc)
@@ -106,15 +128,8 @@ class QueryRequest(BaseModel):
 async def query(req: QueryRequest):
     t0 = time.monotonic()
 
-    model = app.state.model
-
     # Encode runs on CPU — run in thread to avoid blocking the event loop
-    out = await asyncio.to_thread(
-        model.encode,
-        [req.question],
-        return_dense=True,
-        return_sparse=True,
-    )
+    out = await asyncio.to_thread(encode, [req.question])
 
     t_embed = time.monotonic()
     log.info("stage=embed ms=%d", int((t_embed - t0) * 1000))
@@ -226,30 +241,40 @@ async def health():
         }
 
 
+def _run_ingest(argv: list[str]) -> dict:
+    """Run ingest.py in this process against the encoder already resident here.
+
+    It used to be spawned as a subprocess, which loaded a second BGE-M3 (~3.5 GB)
+    on top of this one and took the whole 12 GB NAS down with a host-level OOM on
+    2026-08-19. Injecting the loaded model keeps a sync run to one model in RAM.
+    """
+    import sys
+
+    if INGEST_PATH not in sys.path:
+        sys.path.insert(0, INGEST_PATH)
+    import ingest
+
+    ingest.embed_model = SharedEncoder(app.state.model)
+    return ingest.main(argv)
+
+
 @app.post("/ingest-trigger")
 async def ingest_trigger(full: bool = False, page_id: str = ""):
+    argv: list[str] = []
+    if full:
+        argv.append("--full")
+    if page_id:
+        argv.extend(["--page", page_id])
     try:
-        env = os.environ.copy()
-        if full:
-            env["FULL_INGEST"] = "1"
-        cmd = ["python", "/ingest/ingest.py"]
-        if page_id:
-            cmd.extend(["--page", page_id])
-        proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            env=env,
-        )
-        stdout, stderr = await proc.communicate()
-        combined = (stdout + stderr).decode(errors="replace")
-        if proc.returncode == 0:
-            return {"status": "done", "summary": combined}
-        return JSONResponse(
-            status_code=500,
-            content={"status": "error", "summary": combined},
-        )
+        async with ingest_lock:
+            stats = await asyncio.to_thread(_run_ingest, argv)
+        summary = (
+            "pages: {processed} | updated: {updated} | skipped: {skipped} | "
+            "chunks: {chunks} | deleted: {deleted} | errors: {errors}"
+        ).format(**stats)
+        return {"status": "done", "summary": summary}
     except Exception as exc:
+        log.exception("ingest run failed")
         return JSONResponse(
             status_code=500,
             content={"status": "error", "summary": str(exc)},
