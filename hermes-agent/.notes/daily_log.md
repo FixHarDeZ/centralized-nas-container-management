@@ -195,3 +195,34 @@ When upgrading to a newer tag in the future, check if they've completed the s6-o
 - อัปเดต `hermes-agent/.env` ด้วย token ใหม่
 - Deploy stack บน NAS
 - Bot รับ message ได้ + model เชื่อมต่อ OpenRouter ด้วย qwen/qwen3.6-plus
+
+## 2026-08-19 — v2026.8.18 crash loop (exit 126) fixed
+
+**Symptom:** After bumping `HERMES_REF` to `v2026.8.18`, both `hermes-gateway` and
+`hermes-dashboard` sat in `Restarting (126)`, RestartCount 16 — Telegram went silent.
+
+**Root cause:** v2026.8.18 requires Python 3.11, but the Debian 13 base ships 3.13.
+`uv sync` therefore downloaded its own CPython into uv's default install dir,
+`/root/.local/share/uv/python/cpython-3.11.15-linux-x86_64-gnu/`, and pointed
+`.venv/bin/python` at it. `/root` is mode 0700, so the non-root `hermes` user
+(uid 10000) could not traverse it:
+
+```
+s6-applyuidgid: fatal: unable to exec /opt/hermes/.venv/bin/python: Permission denied
+/opt/hermes/bin/hermes: 55: exec: /opt/hermes/.venv/bin/hermes: Permission denied
+```
+
+The `chmod -R a+rX /opt/hermes` in the Dockerfile could not help — the interpreter
+lives outside `/opt/hermes`.
+
+**Fix (Dockerfile):**
+- `ENV UV_PYTHON_INSTALL_DIR=/opt/uv-python` so uv-managed interpreters land outside `/root`
+- `chmod -R a+rX /opt/hermes /opt/uv-python`
+
+**Verified:** rebuilt on NAS, both containers `Up`, RestartCount 0, gateway reaches
+the Telegram connect stage.
+
+**Gotcha:** `scripts/deploy.sh` prompts `Upload now? [y/N]` — run non-interactively it
+reads nothing and silently skips the upload while still exiting 0. The first rebuild
+was a no-op against the stale remote Dockerfile (identical image sha, all layers CACHED).
+Use `./scripts/deploy.sh -y`.

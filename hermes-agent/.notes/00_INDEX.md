@@ -2,7 +2,7 @@
 
 **สร้าง:** 2026-05-24  
 **Port:** 5063 (external Nginx basic auth) → 9119 (dashboard internal)  
-**Status:** Updated ✅ (2026-07-02)
+**Status:** Updated ✅ (2026-08-19) — running `HERMES_REF=v2026.8.18`
 
 ---
 
@@ -108,6 +108,8 @@ Tracker: `docs/superpowers/specs/2026-06-02-hermes-token-tuning-verification.md`
 - **Telegram logs success at INFO level** — only failures appear as WARNING/ERROR in docker logs; silence = success
 - **Discord error is expected** — `ERROR: No bot token configured` is normal if Discord not used
 - **`.htpasswd` permissions matter** — keep `nginx/.htpasswd` readable by nginx worker (`644`); deploy script already normalizes this on NAS
+- **uv-managed Python must live outside `/root`** — v2026.8.18 needs Python 3.11 while the Debian 13 base ships 3.13, so `uv sync` downloads its own interpreter. uv's default install dir is under `/root` (mode 0700), which the non-root `hermes` user can't traverse → `exec .venv/bin/python: Permission denied`, exit 126 crash loop on both containers. Fixed with `ENV UV_PYTHON_INSTALL_DIR=/opt/uv-python` + `chmod -R a+rX /opt/uv-python`
+- **`deploy.sh` needs `-y` when non-interactive** — its `Upload now? [y/N]` prompt reads nothing, skips the upload, and still exits 0; the next `--build` then rebuilds the stale remote Dockerfile entirely from cache (same image sha) and looks like the fix didn't work
 - **v2026.7.1+ requires auth providers** for non-loopback dashboard binds — `--insecure` no longer bypasses. Fixed via `inject-dashboard-auth.sh` wrapper + vault-seeded env vars
 - **Old sessions store model per-session** — sessions created before config fix have empty model; new sessions use config
 
@@ -117,6 +119,7 @@ Tracker: `docs/superpowers/specs/2026-06-02-hermes-token-tuning-verification.md`
 
 | วันที่ | เรื่อง |
 |--------|--------|
+| 2026-08-19 | Bump to `v2026.8.18`; fix exit-126 crash loop by moving the uv-managed CPython 3.11 out of `/root` via `UV_PYTHON_INSTALL_DIR=/opt/uv-python` |
 | 2026-07-02 | Fix dashboard crash loop on v2026.7.1: added `scripts/inject-dashboard-auth.sh` + `DASHBOARD_PASSWORD_HASH` env var via vault. Credentials in vault only. |
 | 2026-06-02 | Approach A token tune: session_reset.idle_minutes 1440→15, agent.max_turns →20, agent.api_max_retries →1, image_input_mode →text, memory disabled (1-week trial), compression.threshold →0.80. Spec: `docs/superpowers/specs/2026-06-02-hermes-token-tuning-design.md`. Schema: `hermes-v2026.5.16-schema.md`. |
 | 2026-05-30 | Pinned `HERMES_REF=v2026.5.16` to dodge s6-overlay migration that broke entrypoint after that tag |

@@ -10,7 +10,8 @@ ENV PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \
     PLAYWRIGHT_BROWSERS_PATH=/opt/hermes/.playwright \
     HERMES_WEB_DIST=/opt/hermes/hermes_cli/web_dist \
-    npm_config_install_links=false
+    npm_config_install_links=false \
+    UV_PYTHON_INSTALL_DIR=/opt/uv-python
 
 # System packages — no tini/gosu; s6-overlay takes over as PID 1
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -109,7 +110,9 @@ RUN mkdir -p /opt/hermes/bin && \
     chmod +x /opt/hermes/bin/hermes
 
 # Permissions: world-readable tree; hermes owns write-critical subdirs
-RUN chmod -R a+rX /opt/hermes && \
+# uv downloads its own CPython when requires-python doesn't match the system one;
+# keep it out of /root (mode 0700) so the non-root hermes user can exec it.
+RUN chmod -R a+rX /opt/hermes /opt/uv-python && \
     chown -R hermes:hermes /opt/hermes/.venv /opt/hermes/ui-tui /opt/hermes/node_modules
 
 RUN mkdir -p /opt/data
