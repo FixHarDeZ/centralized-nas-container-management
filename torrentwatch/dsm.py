@@ -11,6 +11,7 @@ Login is per-operation and never retried in a loop: repeated DSM login failures
 get the container IP auto-blocked (see CLAUDE.md).
 """
 
+import asyncio
 import json
 
 import config
@@ -99,6 +100,31 @@ class Dsm:
             additional="detail",
         )
         return data.get("tasks") or []
+
+    async def nudge_task(self, task_id: str):
+        """Pause then resume a task so DS hash-checks it.
+
+        DS's live progress counter can die (it did here after the 2026-08-19 OOM
+        outage): bytes keep landing on disk while `size_downloaded` stays frozen
+        and a task that is really complete never flips to seeding. The counter is
+        only recomputed on a hash check, and pause/resume is what triggers one —
+        verified on a 2.1GB task that jumped from "4 MB downloading" to "seeding".
+        """
+        await self._call(
+            "DownloadStation/task.cgi",
+            api="SYNO.DownloadStation.Task",
+            version="1",
+            method="pause",
+            id=task_id,
+        )
+        await asyncio.sleep(5)
+        await self._call(
+            "DownloadStation/task.cgi",
+            api="SYNO.DownloadStation.Task",
+            version="1",
+            method="resume",
+            id=task_id,
+        )
 
     async def delete_task(self, task_id: str):
         # DS reports per-id failures inside data with success=true at the top level

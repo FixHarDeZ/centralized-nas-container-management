@@ -26,6 +26,10 @@ _PROMPT_TTL_H = 12.0  # a button older than this is stale — state has moved on
 _MAX_PROMPTS_PER_ROUND = 3
 _TZ = ZoneInfo(config.TZ)
 _FIX_GRACE_H = 24.0  # DS should have picked the .torrent up long before this
+# A DS task that exists but is still not seeding this long after the fix is wedged
+# on the DS side (hash_checking that never ends, progress that never counts).
+# Re-adding the .torrent cannot help while the task is there, so say so once instead.
+_FIX_WEDGED_H = 120.0
 
 
 def _fmt(v) -> str:
@@ -59,7 +63,7 @@ async def scan_and_prompt(rows: list[dict], settings: dict) -> int:
         prev = db.hr_fix_get(row["site_id"])
         # pending = still waiting on an answer, fixed = already re-added and not yet
         # seen by the tracker, skipped = user said no. None of those re-ask.
-        if prev and prev["status"] in ("pending", "fixed", "skipped"):
+        if prev and prev["status"] in ("pending", "fixed", "skipped", "wedged"):
             continue
         badge_line = f"{row['badges']}\n" if row.get("badges") else ""
         text = (
@@ -70,7 +74,8 @@ async def scan_and_prompt(rows: list[dict], settings: dict) -> int:
             f" · ขาดอีก {_fmt(row['remaining_h'])} ชม.\n"
             f"📡 ระบบเห็นล่าสุด {_fmt(row['last_seen_h'])} ชม. ที่แล้ว (งานใน DS น่าจะหายไปแล้ว)\n"
             f"⌛ เหลือเวลา {_fmt(row['slack_h'])} ชม. (ครบกำหนด {row['deadline']})\n\n"
-            f"โหลด .torrent ใส่ watch folder ให้ Download Station seed ต่อไหม?"
+            f"โหลด .torrent ใส่ watch folder ให้ Download Station seed ต่อไหม?\n"
+            f"⚠️ ถ้าไฟล์เดิมถูกลบไปแล้ว DS จะโหลดใหม่ทั้งไฟล์ก่อนถึงจะเริ่ม seed"
         )
         message_id = await telegram_notify.send_buttons(
             text,
@@ -128,6 +133,7 @@ async def check_cleared(rows: list[dict], settings: dict | None = None) -> int:
     if not rows:
         return 0
     by_id = {r["site_id"]: r for r in rows}
+    tasks = _UNASKED  # fetched once, and only when something looks stalled
     done = 0
     for fix in db.hr_fix_by_status("fixed"):
         row = by_id.get(fix["site_id"])
@@ -136,9 +142,48 @@ async def check_cleared(rows: list[dict], settings: dict | None = None) -> int:
         if not hr.is_cleared(row):
             # DS never picked it up (watch folder off, task errored). Left as
             # "fixed" the row would never be re-prompted and would drift to hit.
-            if not row.get("seeding_now") and _older_than(fix["decided_at"], _FIX_GRACE_H):
-                db.hr_fix_set_status(fix["site_id"], "stalled", "DS ไม่รับงานภายใน 24 ชม.")
+            if not row.get("seeding_now"):
+                if tasks is _UNASKED:
+                    tasks = await ds_tasks()
+                if tasks is None:
+                    continue  # cannot tell — ask again next round
+                task = dsm.find_task(tasks, fix["title"], db.torrent_filename(fix["title"]))
+                if task:
+                    # The task is there, just not seeding yet: the payload was gone,
+                    # so DS is re-downloading it first. Re-prompting would drop the
+                    # same .torrent in again and start a second copy of that download.
+                    if not _older_than(fix["decided_at"], _FIX_WEDGED_H):
+                        # DS may already be sitting on a finished payload without
+                        # knowing it (dead progress counter — see dsm.nudge_task), and
+                        # then it never seeds and the H&R clock runs out in silence.
+                        # Not gated on the grace window: a hash check is cheap, and the
+                        # reason grace exists (do not call it stalled too early) has
+                        # nothing to do with asking DS to look at the file again.
+                        await nudge_task(task["id"])
+                        continue
+                    # Days on and still not seeding: DS itself is stuck. Left as
+                    # "fixed" this row would never clear, never re-prompt and never
+                    # say anything — only a human can unstick Download Station.
+                    db.hr_fix_set_status(fix["site_id"], "wedged", "task ค้างใน Download Station ไม่ขยับ")
+                    print(f"[hr_fix] {fix['site_id']} wedged in Download Station")
+                    if config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID:
+                        await telegram_notify.notify_hr(
+                            f"⚠️ task ค้างใน Download Station\n\n"
+                            f"🎬 {fix['title'][:80]}\n"
+                            f"หย่อน .torrent ไปแล้ว {_FIX_WEDGED_H:.0f} ชม. แต่ยังไม่เริ่ม seed —"
+                            f" ต้องเข้าไปดู/ลบ task ใน Download Station เอง"
+                        )
+                    continue
+                if not _older_than(fix["decided_at"], _FIX_GRACE_H):
+                    continue  # DS may not have swept the watch folder yet
+                db.hr_fix_set_status(fix["site_id"], "stalled", "ไม่มี task ใน Download Station หลัง fix 24 ชม.")
                 print(f"[hr_fix] {fix['site_id']} stalled — will re-prompt")
+                if config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID:
+                    await telegram_notify.notify_hr(
+                        f"⚠️ fix ไม่ติด — Download Station ไม่มี task นี้หลังผ่านไป 24 ชม.\n\n"
+                        f"🎬 {fix['title'][:80]}\n"
+                        f"จะถามใหม่ในรอบถัดไป"
+                    )
             continue
         body = (
             f"✅ พ้น Hit & Run แล้ว\n\n"
@@ -162,9 +207,21 @@ _CLEAR_TOLERANCE_H = 2.0  # how far short a last sighting may be and still count
 
 # Statuses that have not yet passed the "cleared" gate. Anything else (cleared,
 # del_*, deleted) has already been offered for deletion and must not be re-asked.
-_PRE_CLEAR = ("pending", "fixed", "stalled", "failed", "skipped", "expired")
+_PRE_CLEAR = ("pending", "fixed", "stalled", "wedged", "failed", "skipped", "expired")
 
 _UNASKED = object()  # "have not called DS yet", which None (= DS unreachable) cannot say
+
+
+async def nudge_task(task_id: str) -> bool:
+    """Pause+resume one task so DS re-checks it. False when DS could not be asked."""
+    try:
+        async with dsm.Dsm() as d:
+            await d.nudge_task(task_id)
+        print(f"[hr_fix] nudged Download Station task {task_id}")
+        return True
+    except dsm.DsmError as e:
+        print(f"[hr_fix] nudge {task_id} ไม่สำเร็จ: {e}")
+        return False
 
 
 async def ds_tasks() -> list[dict] | None:
@@ -384,6 +441,14 @@ if __name__ == "__main__":
     line_notify.notify_hr = _fake_notify
     hr_delete.enabled = lambda s: True
     ds_tasks = _fake_tasks
+
+    _nudged: list[str] = []
+
+    async def _fake_nudge(task_id):
+        _nudged.append(task_id)
+        return True
+
+    nudge_task = _fake_nudge
     config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID = "t", "c"
     config.LINE_ACCESS_TOKEN, config.LINE_USER_ID = "", ""
 
@@ -466,6 +531,33 @@ if __name__ == "__main__":
         db.hr_seen_snapshot([_blank])
         assert await check_vanished([_row("3", 0.0)], {}) == 0
         assert [s["site_id"] for s in db.hr_seen_vanished({"3"})] == ["10"]
+
+        # a fixed row is only "stalled" when DS has no task for it — a task that is
+        # still re-downloading the deleted payload must never be re-prompted
+        _ds = [{"id": "d", "title": "x", "additional": {"detail": {"uri": "หนัง 20.torrent"}}}]
+        for sid in ("20", "21"):
+            db.hr_fix_add_pending(sid, f"หนัง {sid}", int(sid))
+            db.hr_fix_set_status(sid, "fixed", "x.torrent")
+        globals()["_older_than"] = lambda ts, h: False  # still inside the grace window
+        await check_cleared([_row("20", 10.0), _row("21", 10.0)], {})
+        assert db.hr_fix_get("20")["status"] == "fixed"
+        assert db.hr_fix_get("21")["status"] == "fixed"  # too early to call it stalled
+        # ...but a DS task never waits on the grace window for its hash check
+        assert _nudged == ["d"]
+
+        globals()["_older_than"] = lambda ts, h: h < _FIX_WEDGED_H  # past grace, not wedged yet
+        await check_cleared([_row("20", 10.0), _row("21", 10.0)], {})
+        assert db.hr_fix_get("20")["status"] == "fixed"
+        assert db.hr_fix_get("21")["status"] == "stalled"
+        assert _nudged == ["d", "d"]  # the one DS still has gets a hash check, not a re-prompt
+
+        # ...but a task that is still not seeding days later is wedged in DS, and
+        # only a human can clear that — say it once instead of staying silent forever
+        globals()["_older_than"] = lambda ts, h: True
+        _before_n = len(_notices)
+        await check_cleared([_row("20", 10.0)], {})
+        assert db.hr_fix_get("20")["status"] == "wedged"
+        assert len(_notices) == _before_n + 1 and "ค้างใน Download Station" in _notices[-1]
 
         print(f"hr_fix self-check OK: {len(_prompts)} prompt(s), {len(_notices)} notice(s)")
 

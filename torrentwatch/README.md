@@ -313,12 +313,30 @@ The unreachable case must not fall through to a prompt: it would resolve to
 again. Note this guard is **delete-only** — `hr.fix_candidates()` treats the same
 "no client seen" signal as its auto-fix trigger, and must keep doing so.
 
-A `fixed` row that Download Station never picked up (still not seeding 24h after the
-confirm) flips to `stalled`, so the next round asks again instead of letting the file
-drift silently into a violation.
+A `fixed` row that Download Station never picked up (no DS task 24h after the confirm)
+flips to `stalled`, so the next round asks again instead of letting the file drift
+silently into a violation. "No DS task" is checked against `list_tasks()`, never against
+the clock alone: a payload that was deleted has to be re-downloaded in full before it can
+seed, which easily outlasts 24h, and re-prompting would drop the same `.torrent` in again.
+
+When the DS task *is* there but still not seeding, every round nudges it instead —
+`dsm.nudge_task()` pauses and resumes the task, which forces a hash check. Download
+Station's live progress counter can die (it did NAS-wide after the 2026-08-19 OOM
+outage): bytes keep landing on disk while `size_downloaded` stays frozen at 0 and a task
+that is really complete never flips to seeding. The counter is only recomputed on a hash
+check, so the nudge is the only thing that unsticks it — a 2.1GB task went from
+"4 MB, downloading" to "seeding" in one pause/resume. The nudge is deliberately *not*
+gated on the 24h grace window: a hash check is cheap next to missing an H&R deadline.
+
+Some tasks cannot be unstuck: a torrent whose *internal* folder or file name exceeds 255
+bytes (Thai costs 3 bytes per character) can never be written on ext4/btrfs —
+`/volume1/@download/transmissiond.log` shows `ERR open-files.cc:183 Couldn't open ...`
+and the task sits in `hash_checking` forever with no payload directory. After
+`_FIX_WEDGED_H` (120h) of a task that exists but never seeds, the row flips to `wedged`
+and Telegram says so once; only a human can delete that task.
 
 State lives in the `hr_fixes` table
-(`pending|fixed|stalled|skipped|expired|cleared|failed|del_asked|del_confirm|deleted|del_task_only|del_skipped|del_failed`);
+(`pending|fixed|stalled|wedged|skipped|expired|cleared|failed|del_asked|del_confirm|deleted|del_task_only|del_skipped|del_failed`);
 unanswered prompts expire after 12h so a stale button can never trigger a download.
 Button presses arrive over a `getUpdates` long-poll started in the app lifespan —
 callbacks from any chat other than `TORRENTWATCH_TELEGRAM_CHAT_ID` are rejected.
