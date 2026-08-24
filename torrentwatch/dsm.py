@@ -194,19 +194,30 @@ def task_payload_path(task: dict) -> str:
     return "/" + "/".join(p for p in (dest.strip("/"), task.get("title") or "") if p)
 
 
-def find_task(tasks: list[dict], title: str, torrent_name: str) -> dict | None:
+def find_task(
+    tasks: list[dict],
+    title: str | list[str],
+    torrent_name: str | list[str],
+) -> dict | None:
     """Match a bearbit row to its DS task.
 
     `title` is the torrent's own name, which DS reports verbatim. `torrent_name`
     is the filename apply_fix dropped into the watch folder, which DS echoes back
     as `uri` — the stronger key, so it wins.
+
+    Both accept a list, because a torrent can be known by more than one name: an
+    uploader renaming the row on myhr.php leaves DS holding the name we first saw,
+    and matching on the newest name alone reads as "there is no task" for a task
+    that is right there (see db.hr_title_variants).
     """
+    titles = [title] if isinstance(title, str) else list(title)
+    names = [n for n in ([torrent_name] if isinstance(torrent_name, str) else torrent_name) if n]
     for t in tasks:
         uri = ((t.get("additional") or {}).get("detail") or {}).get("uri") or ""
-        if torrent_name and uri == torrent_name:
+        if uri and uri in names:
             return t
     for t in tasks:
-        if (t.get("title") or "") == title:
+        if (t.get("title") or "") in titles:
             return t
     return None
 
@@ -228,6 +239,22 @@ if __name__ == "__main__":
     assert find_task(_tasks, "Troy - Director's Cut (2004).mkv", "")["id"] == "dbid_2"
     # a wrong filename must not silently fall through to a title that also mismatches
     assert find_task(_tasks, "nope", "nope.torrent") is None
+    # myhr.php can rename a row after we saved it (an uploader added a Thai blurb in
+    # front), and then neither key matches — every name the torrent is known by has
+    # to be tried, or a task that is right there reads as "downloaded elsewhere"
+    _renamed = [{
+        "id": "dbid_215",
+        "title": "Anna Ralphs [Pornhub]",
+        "additional": {"detail": {"destination": "home/Torrents_Download",
+                                  "uri": "Anna Ralphs [PornHub].torrent"}},
+    }]
+    _new_title = "สมควรเก็บเป็นอย่างยิ่ง Anna Ralphs [PornHub]"
+    assert find_task(_renamed, _new_title, _new_title + ".torrent") is None
+    assert find_task(
+        _renamed,
+        [_new_title, "Anna Ralphs [PornHub]"],
+        [_new_title + ".torrent", "Anna Ralphs [PornHub].torrent"],
+    )["id"] == "dbid_215"
     assert task_payload_path(_tasks[0]) == "/home/Torrents_Download/MIAA-362 Eimi Fukada [ Destroyed ]"
     assert task_payload_path(_tasks[1]) == "/Movies/Western/Troy - Director's Cut (2004).mkv"
     # a task with no destination must not produce a path that deletes a share root

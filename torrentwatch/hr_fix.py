@@ -147,7 +147,8 @@ async def check_cleared(rows: list[dict], settings: dict | None = None) -> int:
                     tasks = await ds_tasks()
                 if tasks is None:
                     continue  # cannot tell — ask again next round
-                task = dsm.find_task(tasks, fix["title"], db.torrent_filename(fix["title"]))
+                names = db.hr_title_variants(fix["site_id"], fix["title"], row["title"])
+                task = dsm.find_task(tasks, names, [db.torrent_filename(n) for n in names])
                 if task:
                     # The task is there, just not seeding yet: the payload was gone,
                     # so DS is re-downloading it first. Re-prompting would drop the
@@ -266,6 +267,9 @@ async def check_vanished(rows: list[dict], settings: dict | None = None) -> int:
             db.hr_seen_forget(site_id)
             continue
         title = snap["title"] or (fix["title"] if fix else site_id)
+        # myhr.php shows the current name; DS holds the one from download time, and an
+        # uploader can rename a row in between. Match on every name we know.
+        names = db.hr_title_variants(site_id, snap["title"], fix["title"] if fix else "")
         told_cleared = bool(fix and fix["status"] in ("fixed", "stalled"))
         if told_cleared:
             # The user pressed a button for this one, so close the loop on it.
@@ -295,8 +299,8 @@ async def check_vanished(rows: list[dict], settings: dict | None = None) -> int:
                 db.hr_fix_set_status(site_id, "cleared", "ถาม Download Station ไม่ได้ — รอรอบหน้า")
                 print(f"[hr_fix] {site_id} ถาม Download Station ไม่ได้ — เก็บ snapshot ไว้รอบหน้า")
                 continue
-            if dsm.find_task(tasks, title, db.torrent_filename(title)) is None:
-                if title == site_id:
+            if dsm.find_task(tasks, names, [db.torrent_filename(n) for n in names]) is None:
+                if not names:
                     # No real title to match on, so a miss proves nothing. Writing the
                     # file off here would lose it exactly the way check_cleared did.
                     db.hr_fix_set_status(site_id, "cleared", "ไม่มีชื่อเรื่องให้เทียบกับ DS — รอรอบหน้า")

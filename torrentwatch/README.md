@@ -308,6 +308,16 @@ status label plus its note, which is what separates "waiting for a delete confir
 A snapshot with no title is treated like the unreachable case: with nothing to match on,
 a miss proves nothing, so the row is kept rather than written off.
 
+Matching a row to its DS task always goes through every name the torrent is known by —
+`db.hr_title_variants()` (the caller's titles plus the newest `torrents` row for that
+`site_id`), fed as a list to `dsm.find_task()`. myhr.php shows whatever the uploader
+currently calls the row and they do rename them, while Download Station still holds the
+name from download time in both the task title and the `uri` we wrote. Matching on the
+current name alone reported "no task in Download Station — downloaded on another client"
+for a task that was seeding right there. `check_vanished`, `check_cleared` and
+`hr_delete._resolve` must all use the same list: a row that matches in one but not the
+other dead-ends at `del_failed`, which is terminal.
+
 The unreachable case must not fall through to a prompt: it would resolve to
 `del_failed`, which is terminal, and a file that really is in DS would never be offered
 again. Note this guard is **delete-only** — `hr.fix_candidates()` treats the same

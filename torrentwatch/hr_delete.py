@@ -68,11 +68,15 @@ async def _resolve(site_id: str, title: str) -> tuple[dict | None, str]:
     the task is there, only the file half is unknown — so the caller can offer
     task-only removal. target is None just when there is nothing to act on.
     """
-    torrent_name = db.torrent_filename(title)
+    # Same reason check_vanished matches on a list: the title stored on the row is
+    # whatever myhr.php called it last, which is not always what DS was told.
+    names = db.hr_title_variants(site_id, title)
     stat_err = ""
     try:
         async with dsm.Dsm() as d:
-            task = dsm.find_task(await d.list_tasks(), title, torrent_name)
+            task = dsm.find_task(
+                await d.list_tasks(), names, [db.torrent_filename(n) for n in names]
+            )
             if task is None:
                 return None, "ไม่เจอ task นี้ใน Download Station แล้ว (อาจถูกลบไปก่อนหน้า)"
             path = dsm.task_payload_path(task)
@@ -279,7 +283,12 @@ if __name__ == "__main__":
         async def list_tasks(self): return [{"id": "dbid_9"}]
         async def stat(self, path): raise dsm.DsmError("boom")
     dsm.Dsm = _StatBoom
-    dsm.find_task = lambda tasks, title, name: tasks[0]
+    def _fake_find(tasks, title, name):
+        # _resolve must hand find_task every known name, not one string
+        assert isinstance(title, list) and isinstance(name, list), (title, name)
+        return tasks[0]
+
+    dsm.find_task = _fake_find
     dsm.task_payload_path = lambda task: "/dl/T.mkv"
     db.torrent_filename = lambda title: "T.torrent"
     _t, _w = asyncio.run(_resolve("1", "T"))

@@ -740,6 +740,31 @@ def hr_fix_add_cleared(site_id: str, title: str):
         )
 
 
+def hr_title_variants(site_id: str, *titles: str) -> list[str]:
+    """Every name this torrent is known by, newest caller-supplied name first.
+
+    myhr.php shows whatever the uploader currently calls the row, and they do rename
+    them (a Thai blurb glued in front, months after we downloaded it). Download Station
+    still holds the name we saw at download time — both the task title and the `uri` we
+    wrote — so matching on one name alone reports "no task in Download Station" for a
+    task that is sitting right there, and the file gets written off as somebody else's.
+    """
+    out: list[str] = []
+    for t in titles:
+        if t and t not in out:
+            out.append(t)
+    with _conn() as c:
+        row = c.execute(
+            # UNIQUE is (source_id, site_id), so the same id can carry several rows —
+            # newest wins, same rule as badges_by_site_ids.
+            "SELECT title FROM torrents WHERE site_id=? ORDER BY id DESC LIMIT 1",
+            (site_id,),
+        ).fetchone()
+    if row and row["title"] and row["title"] not in out:
+        out.append(row["title"])
+    return out
+
+
 def hr_seen_snapshot(rows: list[dict]):
     """Remember where every listed row stood, so a later disappearance can be judged."""
     now = datetime.now(_TZ).isoformat(timespec="seconds")
