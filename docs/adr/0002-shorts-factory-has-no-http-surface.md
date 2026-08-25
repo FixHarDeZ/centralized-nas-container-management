@@ -1,0 +1,14 @@
+# shorts-factory is Telegram-only: no HTTP server, no nginx, no published port
+
+Every other stack in this repo publishes a port behind an nginx sidecar with
+basic auth from the vault. shorts-factory deliberately does not: its whole
+interaction loop (send a topic, read the generated script, press a button,
+receive the clip) fits in a Telegram chat, and it has no scheduler and no
+inbound webhook, so nothing needs to listen. The container runs a single
+`getUpdates` long-poll loop with no FastAPI, no uvicorn, and no
+`ports:` mapping. That deletes an nginx sidecar, an `.htpasswd`, a vault entry,
+and a LAN-reachable attack surface. The remaining trust boundary is the bot
+itself: inbound updates are accepted only from the configured chat_id and
+anything else is dropped, the same guard torrentwatch applies to its callbacks.
+Without it, any stranger who finds the bot can spend LLM credit and start
+renders on the NAS. A future dashboard would have to add the nginx layer back.

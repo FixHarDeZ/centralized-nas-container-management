@@ -1,0 +1,21 @@
+services:
+  shorts-factory:
+    build: .
+    container_name: shorts-factory
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - TZ=Asia/Bangkok
+    # No ports and no nginx sidecar: the whole interface is a Telegram
+    # long-poll loop. See docs/adr/0002.
+    volumes:
+      - shorts_factory_data:/data
+      - /volume1/shorts:/output
+    # ffmpeg + Pillow are the memory spike here, and this host has already had a
+    # whole-box OOM (2026-08-19), so cap memory. No `cpus:` — DSM's kernel has no
+    # CFS bandwidth control and the daemon refuses to create the container:
+    # "NanoCPUs can not be set, as your kernel does not support CPU CFS scheduler".
+    mem_limit: 2g
+
+volumes:
+  shorts_factory_data:

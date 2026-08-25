@@ -1,0 +1,8 @@
+httpx==0.28.1
+openai==1.93.0
+pillow==12.3.0
+# 7.0.2 gets a 403 from the synthesis endpoint: the Sec-MS-GEC token scheme
+# moves server-side, so an old pin stops working. Bump, do not downgrade.
+edge-tts==7.2.8
+
+pytest==8.4.1

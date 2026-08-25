@@ -37,3 +37,31 @@ A concrete transport satisfying one channel behind the [[Notifier]]: the **LINE
 adapter** (`/v2/bot/message/push`) and the **Telegram adapter**
 (`/bot<token>/sendMessage`). Two adapters justify the seam. Message *formatting*
 is not part of an adapter — it stays local to each stack (good locality).
+
+## Shorts vocabulary
+
+Terms owned by the `shorts-factory` stack.
+
+**Topic**:
+A one-line subject the human sends to the bot, and the only input the pipeline
+takes.
+_Avoid_: idea, prompt, request
+
+**Script**:
+The structured plan for one clip that the LLM returns from a Topic: a hook, an
+ordered list of Cards, and the publishing metadata (title, description,
+hashtags). Reviewed by the human before anything is rendered.
+_Avoid_: outline, storyboard, plan
+
+**Card**:
+One unit of a Script: a single line of narration paired with the text (and
+optional code block) shown on screen while it is spoken.
+_Avoid_: slide, scene, frame, segment
+
+**Hook**:
+The first Card, whose job is to stop the scroll in the opening seconds. Named
+separately because it is written to a different brief than the rest.
+
+**Clip**:
+The finished vertical mp4 assembled from every Card of one Script.
+_Avoid_: video, short
