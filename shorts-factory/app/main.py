@@ -202,6 +202,19 @@ async def do_render(client: httpx.AsyncClient, state: dict) -> None:
         save_state(state)
 
 
+async def retire_buttons(client: httpx.AsyncClient, message_id: int | None) -> None:
+    """Drop a message's keyboard.
+
+    `editMessageText` cannot touch a video message — that carries a caption,
+    not text — so removing the markup is the one edit that works on both.
+    """
+    if message_id:
+        await api(
+            client, "editMessageReplyMarkup",
+            chat_id=CHAT_ID, message_id=message_id, reply_markup={"inline_keyboard": []},
+        )
+
+
 async def do_upload(client: httpx.AsyncClient, state: dict) -> None:
     clip = Path(state.get("last_clip") or "")
     script = state.get("last_script")
@@ -209,9 +222,10 @@ async def do_upload(client: httpx.AsyncClient, state: dict) -> None:
         await say(client, "ไม่เจอคลิปที่จะอัปแล้ว (บอทน่าจะรีสตาร์ทไป) ลอง render ใหม่")
         return
 
-    await close_prompt(client, state.get("upload_message_id"), "⬆️ กำลังอัปโหลด...")
+    await retire_buttons(client, state.get("upload_message_id"))
     state["upload_message_id"] = None
     save_state(state)
+    await say(client, "⬆️ กำลังอัปโหลด...")
 
     try:
         video_id, privacy = await youtube.upload(clip, script)

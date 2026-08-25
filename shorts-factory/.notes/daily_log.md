@@ -308,3 +308,27 @@ data is legitimately out of scope.
 Still unproven: whether an upload actually lands, and what `privacyStatus`
 YouTube applies to it. That needs a real upload, which stays a human button
 press by design.
+
+### Same day — the music mix was quietly attenuating the narration
+
+Review caught what the earlier ducking measurement could not distinguish:
+`amix` defaults to `normalize=1`, scaling every input by 1/n, so the presence of
+*any* music dropped the voice by roughly 6dB. Comparing total RMS at the same
+timestamps cannot tell "music ducked away" apart from "voice turned down and
+music filling the hole" — both look like a small delta.
+
+The test that separates them is a **silent** music track: any level change can
+then only come from the filter chain. It measured -2.8dB and -5.5dB on the
+narration. With `normalize=0`, whole-file RMS is -21.204dB without music against
+-21.206dB with a silent track, and the peaks match too — the music path is now
+an identity when there is nothing to mix.
+
+Also turned off `alimiter`'s auto-level (`level=false`), which would otherwise
+have made a clip with music louder than one without; peak protection was the
+only thing wanted from it.
+
+Two smaller fixes alongside: ADR 0003 still told readers to install
+`fonts-noto-core` after the switch to Waree, which would have reintroduced the
+tofu-box bug; and retiring the upload button used `editMessageText`, which
+cannot touch a video message — that carries a caption, not text — so it now
+uses `editMessageReplyMarkup`, which works on both.

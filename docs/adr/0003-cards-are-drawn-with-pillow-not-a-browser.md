@@ -15,8 +15,7 @@ manylinux wheel does **not** bundle Raqm — `features.check("raqm")` is `False`
 and `ImageFont.Layout.RAQM` silently falls back to basic layout with only a
 `UserWarning`. Pillow dlopens the system library at runtime, so
 `apt-get install libraqm0` flips it to `True` (Raqm 0.10.5) with no rebuild.
-The image therefore needs two apt packages, `libraqm0` and `fonts-noto-core`
-(which supplies `NotoSansThai-{Regular,Bold}.ttf`). Rendered proof: with basic
+The image therefore needs `libraqm0` from apt. Rendered proof: with basic
 layout the mai-ek over sara-ii in "ที่" is dropped; with Raqm it is placed
 correctly.
 

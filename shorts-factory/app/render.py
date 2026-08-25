@@ -309,8 +309,13 @@ def mux(video: Path, audio: Path, out: Path, music: Path | None = None) -> Path:
                 "[1:a]asplit=2[voice][key];"
                 "[music][key]sidechaincompress="
                 "threshold=0.03:ratio=12:attack=5:release=400[ducked];"
-                "[voice][ducked]amix=inputs=2:duration=first:dropout_transition=0,"
-                "alimiter=limit=0.95[mix]"
+                # normalize=0 is essential: amix defaults to scaling every input
+                # by 1/n, which quietly drops the narration ~6dB the moment any
+                # music is present — measured, not assumed.
+                "[voice][ducked]amix=inputs=2:duration=first:dropout_transition=0:normalize=0,"
+                # level=false: alimiter auto-levels by default, which would make a clip
+                # with music louder than one without. Peak protection only.
+                "alimiter=limit=0.95:level=false[mix]"
             ),
             "-map", "0:v", "-map", "[mix]",
         ]
