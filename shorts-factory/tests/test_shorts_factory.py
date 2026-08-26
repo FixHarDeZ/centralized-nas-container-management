@@ -17,7 +17,7 @@ os.environ.setdefault("TELEGRAM_CHAT_ID", "42")
 os.environ.setdefault("MIMO_API_KEY", "test-key")
 os.environ.setdefault("MIMO_BASE_URL", "https://example.invalid/v1")
 
-from app import main, render, script as script_gen, youtube  # noqa: E402
+from app import analytics, history, main, render, script as script_gen, youtube  # noqa: E402
 
 
 def a_card(text: str = "ทดสอบการ์ด", code: str | None = None) -> dict:
@@ -244,6 +244,75 @@ def test_music_is_picked_from_the_folder(monkeypatch, tmp_path):
 
 
 # --- youtube -----------------------------------------------------------------
+
+# --- captions ----------------------------------------------------------------
+
+def test_srt_uses_raw_narration_not_the_spoken_form(tmp_path):
+    """Transliteration belongs to the voice; the screen wants real English."""
+    cards = [
+        {"narration": "ปัญหาคือ Docker ไม่ได้จำกัดขนาด log"},
+        {"narration": "สรุปคือ ตั้งค่าไว้เสมอ"},
+    ]
+    srt = render.write_srt(cards, [0.0, 5.0], 9.5, tmp_path / "c.srt")
+    body = srt.read_text(encoding="utf-8")
+
+    assert "Docker" in body and "ด็อกเกอร์" not in body
+    assert "00:00:00,000 --> 00:00:05,000" in body
+    # the last cue ends at the audio length, not at some reported duration
+    assert "00:00:05,000 --> 00:00:09,500" in body
+
+
+def test_srt_timestamps_cross_the_minute_boundary(tmp_path):
+    srt = render.write_srt([{"narration": "ท้ายคลิป"}], [65.25], 71.5, tmp_path / "c.srt")
+    assert "00:01:05,250 --> 00:01:11,500" in srt.read_text(encoding="utf-8")
+
+
+# --- history -----------------------------------------------------------------
+
+def test_history_records_and_reads_back(tmp_path, monkeypatch):
+    monkeypatch.setattr(history, "PATH", tmp_path / "history.json")
+    assert history.recent_titles() == []
+
+    history.record("abc123", {"title": "เรื่องแรก"}, "หัวข้อแรก")
+    history.record("def456", {"title": "เรื่องสอง"}, "หัวข้อสอง")
+
+    assert history.recent_titles() == ["เรื่องแรก", "เรื่องสอง"]
+    assert history.video_ids() == ["abc123", "def456"]
+    assert history.title_of("def456") == "เรื่องสอง"
+    assert history.title_of("nope") == "nope"
+
+
+def test_history_survives_a_corrupt_file(tmp_path, monkeypatch):
+    path = tmp_path / "history.json"
+    path.write_text("{not json", encoding="utf-8")
+    monkeypatch.setattr(history, "PATH", path)
+    assert history.load() == []
+
+
+# --- prompt priming ----------------------------------------------------------
+
+def test_past_titles_and_winners_reach_the_prompt():
+    note = script_gen._context_note(["เรื่องเก่า"], ["เรื่องที่ปัง"])
+    assert "เรื่องเก่า" in note and "ห้ามเขียนซ้ำ" in note
+    assert "เรื่องที่ปัง" in note
+
+
+def test_no_history_means_no_extra_prompt():
+    assert script_gen._context_note([], []) == ""
+
+
+def test_empty_history_reports_plainly():
+    assert "ยังไม่มีสถิติ" in analytics.format_report([])
+
+
+def test_report_sorts_by_retention():
+    rows = [
+        {"video_id": "a", "title": "A", "views": 10, "seconds": 20, "percent": 80},
+        {"video_id": "b", "title": "B", "views": 99, "seconds": 5, "percent": 20},
+    ]
+    text = analytics.format_report(rows)
+    assert text.index("A") < text.index("B")
+
 
 def test_first_frame_is_a_thumbnail_sized_jpeg(tmp_path):
     """The cover is the opening frame, and small enough for YouTube's 2MB cap."""

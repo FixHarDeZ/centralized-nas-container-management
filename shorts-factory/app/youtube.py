@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 UPLOAD_URL = "https://www.googleapis.com/upload/youtube/v3/videos"
 THUMBNAIL_URL = "https://www.googleapis.com/upload/youtube/v3/thumbnails/set"
+CAPTIONS_URL = "https://www.googleapis.com/upload/youtube/v3/captions"
 SCOPE = "https://www.googleapis.com/auth/youtube.upload"
 
 MAX_TITLE = 100
@@ -73,6 +74,37 @@ async def set_thumbnail(video_id: str, image: Path) -> None:
             raise UploadError("ช่องยังไม่ได้ยืนยันเบอร์โทร เลยตั้งปกเองไม่ได้")
         raise UploadError(f"ตั้งปกไม่สำเร็จ ({reply.status_code}): {detail}")
     logger.info("ตั้งปกให้ %s แล้ว", video_id)
+
+
+async def add_captions(video_id: str, srt: Path, language: str = "th") -> None:
+    """Attach a subtitle track.
+
+    Unlike the video upload this is a single multipart request, not the
+    resumable flow: one JSON part for the snippet and one part for the SRT.
+    Needs the `youtube.force-ssl` scope.
+    """
+    snippet = {
+        "snippet": {
+            "videoId": video_id,
+            "language": language,
+            "name": "ไทย",
+            "isDraft": False,
+        }
+    }
+    async with httpx.AsyncClient(timeout=120) as client:
+        token = await _access_token(client)
+        reply = await client.post(
+            CAPTIONS_URL,
+            params={"part": "snippet", "uploadType": "multipart"},
+            headers={"Authorization": f"Bearer {token}"},
+            files={
+                "metadata": (None, json.dumps(snippet), "application/json; charset=UTF-8"),
+                "file": ("captions.srt", srt.read_bytes(), "application/octet-stream"),
+            },
+        )
+    if reply.status_code not in (200, 201):
+        raise UploadError(f"ใส่ซับไม่สำเร็จ ({reply.status_code}): {reply.text[:300]}")
+    logger.info("ใส่ซับให้ %s แล้ว", video_id)
 
 
 def metadata(script: dict) -> dict:

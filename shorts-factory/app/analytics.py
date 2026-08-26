@@ -1,0 +1,91 @@
+"""How the published clips actually performed.
+
+Read-only, and only ever asked about videos this bot uploaded — the channel is
+never enumerated. Needs the `yt-analytics.readonly` scope.
+"""
+from __future__ import annotations
+
+import logging
+from datetime import date, timedelta
+
+import httpx
+
+from app import history, youtube
+
+logger = logging.getLogger(__name__)
+
+REPORTS_URL = "https://youtubeanalytics.googleapis.com/v2/reports"
+LOOKBACK_DAYS = 90
+MAX_VIDEOS = 50   # the filter is a comma-joined list; keep the URL sane
+
+
+class AnalyticsError(RuntimeError):
+    """Stats could not be fetched. Never fatal — nothing else depends on them."""
+
+
+async def performance() -> list[dict]:
+    """Views and retention per uploaded video, best retention first.
+
+    Sorted by how much of the clip people actually watched rather than by
+    views: for a Shorts channel that is the number that says whether the
+    writing worked.
+    """
+    ids = history.video_ids()[-MAX_VIDEOS:]
+    if not ids:
+        return []
+
+    async with httpx.AsyncClient(timeout=60) as client:
+        token = await youtube._access_token(client)
+        reply = await client.get(
+            REPORTS_URL,
+            headers={"Authorization": f"Bearer {token}"},
+            params={
+                "ids": "channel==MINE",
+                "startDate": (date.today() - timedelta(days=LOOKBACK_DAYS)).isoformat(),
+                "endDate": date.today().isoformat(),
+                "metrics": "views,averageViewDuration,averageViewPercentage",
+                "dimensions": "video",
+                "filters": "video==" + ",".join(ids),
+            },
+        )
+    if reply.status_code != 200:
+        raise AnalyticsError(f"ดึงสถิติไม่ได้ ({reply.status_code}): {reply.text[:300]}")
+
+    rows = reply.json().get("rows", [])
+    result = [
+        {
+            "video_id": row[0],
+            "title": history.title_of(row[0]),
+            "views": row[1],
+            "seconds": row[2],
+            "percent": row[3],
+        }
+        for row in rows
+    ]
+    result.sort(key=lambda r: (r["percent"], r["views"]), reverse=True)
+    return result
+
+
+def format_report(rows: list[dict]) -> str:
+    if not rows:
+        return (
+            "ยังไม่มีสถิติ — นับเฉพาะคลิปที่อัปผ่านบอทตัวนี้ "
+            "และ YouTube ใช้เวลาสักพักกว่าข้อมูลจะขึ้น"
+        )
+    lines = [f"📊 {len(rows)} คลิปล่าสุด (เรียงตาม % ที่คนดูจนจบ)", ""]
+    for row in rows:
+        lines.append(
+            f"{row['percent']:.0f}% · {row['views']} views · {row['seconds']:.0f}s\n"
+            f"   {row['title']}"
+        )
+    return "\n".join(lines)
+
+
+async def winning_examples(limit: int = 3) -> list[str]:
+    """Titles worth writing more like. Empty on any failure, by design."""
+    try:
+        rows = await performance()
+    except Exception:
+        logger.exception("ดึงสถิติเพื่อป้อน prompt ไม่สำเร็จ")
+        return []
+    return [r["title"] for r in rows[:limit] if r["views"] > 0]

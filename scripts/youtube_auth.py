@@ -32,7 +32,13 @@ import webbrowser
 
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
-SCOPE = "https://www.googleapis.com/auth/youtube.upload"
+# upload: publish the clip. force-ssl: attach a caption track.
+# yt-analytics.readonly: read how past clips performed.
+SCOPE = " ".join([
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube.force-ssl",
+    "https://www.googleapis.com/auth/yt-analytics.readonly",
+])
 PORT = 8765
 REDIRECT = f"http://localhost:{PORT}/"
 

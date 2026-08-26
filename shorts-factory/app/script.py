@@ -104,12 +104,35 @@ def _parse(raw: str) -> dict:
         raise ScriptError(f"JSON พัง: {exc}") from exc
 
 
-async def generate(topic: str, previous: dict | None = None, feedback: str = "") -> dict:
+def _context_note(avoid: list[str], winners: list[str]) -> str:
+    """Tell the model what has been made already and what worked."""
+    parts = []
+    if avoid:
+        parts.append(
+            "เคยทำคลิปเรื่องพวกนี้ไปแล้ว ห้ามเขียนซ้ำมุมเดิม ถ้าหัวข้อใกล้เคียงให้หามุมใหม่:\n"
+            + "\n".join(f"- {title}" for title in avoid)
+        )
+    if winners:
+        parts.append(
+            "คลิปที่คนดูจนจบมากที่สุดคือเรื่องพวกนี้ เขียนให้ใกล้เคียงแนวนี้:\n"
+            + "\n".join(f"- {title}" for title in winners)
+        )
+    return "\n\n".join(parts)
+
+
+async def generate(
+    topic: str,
+    previous: dict | None = None,
+    feedback: str = "",
+    avoid: list[str] | None = None,
+    winners: list[str] | None = None,
+) -> dict:
     """Write a Script for `topic`, optionally revising `previous` per `feedback`."""
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": f"หัวข้อ: {topic}"},
-    ]
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    note = _context_note(avoid or [], winners or [])
+    if note:
+        messages.append({"role": "system", "content": note})
+    messages.append({"role": "user", "content": f"หัวข้อ: {topic}"})
     if previous is not None:
         messages.append({"role": "assistant", "content": json.dumps(previous, ensure_ascii=False)})
         messages.append({"role": "user", "content": f"แก้ตามนี้: {feedback}"})

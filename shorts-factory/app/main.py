@@ -15,7 +15,7 @@ from pathlib import Path
 
 import httpx
 
-from app import render, script as script_gen, youtube
+from app import analytics, history, render, script as script_gen, youtube
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("shorts-factory")
@@ -135,6 +135,11 @@ async def deliver(client: httpx.AsyncClient, state: dict, script: dict, clip: Pa
     shutil.copy2(clip, final)
     (OUTPUT_DIR / f"{stem}.txt").write_text(metadata_text(script), encoding="utf-8")
 
+    srt = clip.parent / "captions.srt"
+    final_srt = OUTPUT_DIR / f"{stem}.srt"
+    if srt.exists():
+        shutil.copy2(srt, final_srt)
+
     # Publishing is outward-facing and cannot be undone quietly, so it stays
     # behind a button even though everything up to here is automatic.
     offer_upload = youtube.configured()
@@ -145,6 +150,7 @@ async def deliver(client: httpx.AsyncClient, state: dict, script: dict, clip: Pa
     await say(client, f"✅ เสร็จแล้ว เก็บไว้ที่ {final}")
     state.update(
         last_clip=str(final),
+        last_srt=str(final_srt) if srt.exists() else None,
         last_script=script,
         upload_message_id=(sent or {}).get("message_id") if offer_upload else None,
     )
@@ -161,7 +167,13 @@ async def make_script(client: httpx.AsyncClient, state: dict, topic: str, feedba
 
     await say(client, "🤔 กำลังเขียนสคริปต์...")
     try:
-        script = await script_gen.generate(topic, previous=previous, feedback=feedback)
+        script = await script_gen.generate(
+            topic,
+            previous=previous,
+            feedback=feedback,
+            avoid=history.recent_titles(),
+            winners=await analytics.winning_examples(),
+        )
     except Exception as exc:
         logger.exception("generate failed")
         if previous is not None:
@@ -244,10 +256,22 @@ async def do_upload(client: httpx.AsyncClient, state: dict) -> None:
         logger.exception("thumbnail failed")
         thumbnail_note = f"\n⚠️ ตั้งปกไม่ได้: {exc} (คลิปขึ้นแล้ว ตั้งเองใน Studio ได้)"
 
+    captions_note = ""
+    srt = Path(state.get("last_srt") or "")
+    if srt.is_file():
+        try:
+            await youtube.add_captions(video_id, srt)
+            captions_note = "\nซับ: ใส่แล้ว"
+        except Exception as exc:
+            logger.exception("captions failed")
+            captions_note = f"\n⚠️ ใส่ซับไม่ได้: {exc}"
+
+    history.record(video_id, script, state.get("topic") or "")
+
     url = f"https://youtu.be/{video_id}"
     note = (
         f"⬆️ ขึ้นช่องแล้ว: {url}\n"
-        f"สถานะ: {privacy}{thumbnail_note}\n\n"
+        f"สถานะ: {privacy}{thumbnail_note}{captions_note}\n\n"
         # The Shorts feed ignores custom thumbnails and picks its own frame, and
         # there is no API for that cover — only the mobile app can set it, where
         # the first option is the opening frame.
@@ -257,13 +281,26 @@ async def do_upload(client: httpx.AsyncClient, state: dict) -> None:
         # Google forces uploads from an unaudited project to private.
         note += "\n⚠️ YouTube เปลี่ยนสถานะเอง — โปรเจกต์ยังไม่ผ่าน API audit"
     await say(client, note)
-    state.update(last_clip=None, last_script=None)
+    state.update(last_clip=None, last_srt=None, last_script=None)
     save_state(state)
 
 
 # --- dispatch ----------------------------------------------------------------
 
+async def on_stats(client: httpx.AsyncClient) -> None:
+    await say(client, "📊 กำลังดึงสถิติ...")
+    try:
+        await say(client, analytics.format_report(await analytics.performance()))
+    except Exception as exc:
+        logger.exception("stats failed")
+        await say(client, f"ดึงสถิติไม่ได้: {exc}")
+
+
 async def on_text(client: httpx.AsyncClient, state: dict, text: str) -> None:
+    if text.startswith("/stats"):
+        await on_stats(client)
+        return
+
     mode = state.get("mode", "idle")
     if mode == "rendering":
         await say(client, "⏳ กำลัง render อยู่ รอให้เสร็จก่อนนะ")

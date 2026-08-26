@@ -326,6 +326,32 @@ def mux(video: Path, audio: Path, out: Path, music: Path | None = None) -> Path:
     return out
 
 
+def _timestamp(seconds: float) -> str:
+    whole = int(seconds)
+    ms = round((seconds - whole) * 1000)
+    return f"{whole // 3600:02d}:{whole % 3600 // 60:02d}:{whole % 60:02d},{ms:03d}"
+
+
+def write_srt(cards: list[dict], starts: list[float], end: float, dest: Path) -> Path:
+    """Subtitles from the Card boundaries we already know.
+
+    Uses each Card's **raw** narration, not the `_speakable()` form: the
+    transliteration ("ด็อกเกอร์") is right for the voice and wrong on screen,
+    where the English words should be spelled as English.
+    """
+    lines = []
+    for i, card in enumerate(cards):
+        stop = starts[i + 1] if i + 1 < len(starts) else end
+        lines += [
+            str(i + 1),
+            f"{_timestamp(starts[i])} --> {_timestamp(stop)}",
+            card["narration"].strip(),
+            "",
+        ]
+    dest.write_text("\n".join(lines), encoding="utf-8")
+    return dest
+
+
 def first_frame(clip: Path, dest: Path) -> Path:
     """The very first frame of the Clip, as a JPEG fit for a thumbnail.
 
@@ -395,6 +421,8 @@ async def build(script: dict, workdir: Path) -> Path:
             # Alternate push and pull so a run of gradient cards does not feel
             # like one long drift.
             segments.append(_segment(png, seconds, out, zoom_in=(i % 2 == 0)))
+
+    write_srt(cards, starts, total, workdir / "captions.srt")
 
     silent = concat(segments, workdir / "silent.mp4")
     music = pick_music()
