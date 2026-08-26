@@ -326,6 +326,20 @@ def mux(video: Path, audio: Path, out: Path, music: Path | None = None) -> Path:
     return out
 
 
+def first_frame(clip: Path, dest: Path) -> Path:
+    """The very first frame of the Clip, as a JPEG fit for a thumbnail.
+
+    That frame is the hook card, which is the one screen written to make
+    someone stop scrolling — so it is already the right picture.
+    """
+    _run([
+        "ffmpeg", "-y", "-i", str(clip), "-frames:v", "1",
+        # -q:v 2 keeps it well under YouTube's 2MB thumbnail limit
+        "-q:v", "2", str(dest),
+    ])
+    return dest
+
+
 async def _narration_track(cards: list[dict], workdir: Path) -> tuple[Path, list[float]]:
     """One audio track for the whole Script, plus the start time of each Card.
 

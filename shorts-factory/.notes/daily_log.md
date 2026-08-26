@@ -332,3 +332,19 @@ Two smaller fixes alongside: ADR 0003 still told readers to install
 tofu-box bug; and retiring the upload button used `editMessageText`, which
 cannot touch a video message — that carries a caption, not text — so it now
 uses `editMessageReplyMarkup`, which works on both.
+
+## 2026-08-26 — thumbnail from the opening frame
+
+After a successful upload the bot now grabs frame one of the clip and sets it
+as the video's thumbnail. That frame is the hook card, which is the one screen
+written specifically to stop a scroll, so it is already the right picture —
+checked against a real clip rather than assumed: the opening frame shows the
+hook text legible over its footage, not a black or mid-fade frame.
+
+`thumbnails.set` accepts the `youtube.upload` scope already granted, so no
+re-consent. Custom thumbnails do need a **phone-verified channel**; without one
+YouTube answers 403. The video is already published by that point, so a
+thumbnail failure is reported as a nuisance ("ตั้งเองใน Studio ได้") and never
+as a failed upload.
+
+Unrun, like the upload itself — it needs a real video id.

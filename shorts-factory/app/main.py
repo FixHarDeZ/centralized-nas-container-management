@@ -234,8 +234,18 @@ async def do_upload(client: httpx.AsyncClient, state: dict) -> None:
         await say(client, f"อัปโหลดไม่สำเร็จ: {exc}")
         return
 
+    # The video is already up; a thumbnail problem must not read as a failure.
+    thumbnail_note = ""
+    try:
+        cover = render.first_frame(clip, clip.with_suffix(".jpg"))
+        await youtube.set_thumbnail(video_id, cover)
+        thumbnail_note = "\nปก: เฟรมแรกของคลิป"
+    except Exception as exc:
+        logger.exception("thumbnail failed")
+        thumbnail_note = f"\n⚠️ ตั้งปกไม่ได้: {exc} (คลิปขึ้นแล้ว ตั้งเองใน Studio ได้)"
+
     url = f"https://youtu.be/{video_id}"
-    note = f"⬆️ ขึ้นช่องแล้ว: {url}\nสถานะ: {privacy}"
+    note = f"⬆️ ขึ้นช่องแล้ว: {url}\nสถานะ: {privacy}{thumbnail_note}"
     if privacy != os.environ.get("YOUTUBE_PRIVACY", "public"):
         # Google forces uploads from an unaudited project to private.
         note += "\n⚠️ YouTube เปลี่ยนสถานะเอง — โปรเจกต์ยังไม่ผ่าน API audit"

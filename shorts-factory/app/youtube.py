@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 UPLOAD_URL = "https://www.googleapis.com/upload/youtube/v3/videos"
+THUMBNAIL_URL = "https://www.googleapis.com/upload/youtube/v3/thumbnails/set"
 SCOPE = "https://www.googleapis.com/auth/youtube.upload"
 
 MAX_TITLE = 100
@@ -48,6 +49,30 @@ async def _access_token(client: httpx.AsyncClient) -> str:
         # in Testing, where refresh tokens expire after 7 days.
         raise UploadError(f"ขอ access token ไม่ผ่าน ({reply.status_code}): {reply.text[:300]}")
     return reply.json()["access_token"]
+
+
+async def set_thumbnail(video_id: str, image: Path) -> None:
+    """Use `image` as the video's thumbnail.
+
+    Custom thumbnails need a phone-verified channel; without that YouTube
+    answers 403 and the video simply keeps its auto-generated thumbnail. That
+    is a nuisance, not a failed upload, so this raises and the caller reports
+    it without treating the clip as lost.
+    """
+    async with httpx.AsyncClient(timeout=120) as client:
+        token = await _access_token(client)
+        reply = await client.post(
+            THUMBNAIL_URL,
+            params={"videoId": video_id},
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "image/jpeg"},
+            content=image.read_bytes(),
+        )
+    if reply.status_code not in (200, 201):
+        detail = reply.text[:300]
+        if reply.status_code == 403:
+            raise UploadError("ช่องยังไม่ได้ยืนยันเบอร์โทร เลยตั้งปกเองไม่ได้")
+        raise UploadError(f"ตั้งปกไม่สำเร็จ ({reply.status_code}): {detail}")
+    logger.info("ตั้งปกให้ %s แล้ว", video_id)
 
 
 def metadata(script: dict) -> dict:

@@ -245,6 +245,20 @@ def test_music_is_picked_from_the_folder(monkeypatch, tmp_path):
 
 # --- youtube -----------------------------------------------------------------
 
+def test_first_frame_is_a_thumbnail_sized_jpeg(tmp_path):
+    """The cover is the opening frame, and small enough for YouTube's 2MB cap."""
+    from PIL import Image
+
+    png = render.draw_card(a_card("ปกคลิป"), tmp_path / "c.png")
+    clip = render._segment(png, 1.0, tmp_path / "s.mp4")
+    cover = render.first_frame(clip, tmp_path / "cover.jpg")
+
+    with Image.open(cover) as img:
+        assert img.format == "JPEG"
+        assert img.size == (render.W, render.H)
+    assert 0 < cover.stat().st_size < 2 * 1024 * 1024
+
+
 def test_upload_needs_all_three_credentials(monkeypatch):
     for name in ("YOUTUBE_CLIENT_ID", "YOUTUBE_CLIENT_SECRET", "YOUTUBE_REFRESH_TOKEN"):
         monkeypatch.setenv(name, "x")

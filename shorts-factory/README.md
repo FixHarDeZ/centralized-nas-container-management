@@ -43,6 +43,11 @@ Set it up once with `python3 scripts/youtube_auth.py <client_id> <client_secret>
 must be set to **In production**; left in "Testing", refresh tokens expire after
 7 days and uploads start failing with `invalid_grant`.
 
+The clip's first frame — the hook card — is set as the thumbnail straight
+after upload. That needs a phone-verified channel; without one YouTube refuses
+with a 403 and the video keeps its auto-generated thumbnail, which is reported
+but does not count as a failed upload.
+
 With no credentials in the vault, the button simply never appears.
 
 ## Background music
