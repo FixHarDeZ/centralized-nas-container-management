@@ -246,15 +246,18 @@ async def do_upload(client: httpx.AsyncClient, state: dict) -> None:
         await say(client, f"อัปโหลดไม่สำเร็จ: {exc}")
         return
 
-    # The video is already up; a thumbnail problem must not read as a failure.
+    # Off by default: the Shorts feed and the channel grid ignore custom
+    # thumbnails and show a frame YouTube picks itself, so setting one only
+    # reaches search and suggestions. Kept behind a flag rather than deleted.
     thumbnail_note = ""
-    try:
-        cover = render.first_frame(clip, clip.with_suffix(".jpg"))
-        await youtube.set_thumbnail(video_id, cover)
-        thumbnail_note = "\nปก: เฟรมแรกของคลิป"
-    except Exception as exc:
-        logger.exception("thumbnail failed")
-        thumbnail_note = f"\n⚠️ ตั้งปกไม่ได้: {exc} (คลิปขึ้นแล้ว ตั้งเองใน Studio ได้)"
+    if os.environ.get("YOUTUBE_SET_THUMBNAIL", "").lower() in ("1", "true", "yes"):
+        try:
+            cover = render.first_frame(clip, clip.with_suffix(".jpg"))
+            await youtube.set_thumbnail(video_id, cover)
+            thumbnail_note = "\nปก: เฟรมแรกของคลิป"
+        except Exception as exc:
+            logger.exception("thumbnail failed")
+            thumbnail_note = f"\n⚠️ ตั้งปกไม่ได้: {exc} (คลิปขึ้นแล้ว ตั้งเองใน Studio ได้)"
 
     captions_note = ""
     srt = Path(state.get("last_srt") or "")

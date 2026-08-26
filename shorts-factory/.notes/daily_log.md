@@ -425,3 +425,38 @@ polling would be the larger fix if it ever matters.
 Verified afterwards against the topic that hung: a script came back in 73s with
 six valid cards. Non-tech topics are handled fine by the prompt, so the freezes
 were a mimo-side stall and nothing to do with the subject matter.
+
+### 2026-08-26 (later) — why scripts kept failing, measured
+
+Reports of frequent "เขียนสคริปต์ไม่สำเร็จ" and blank-looking covers. Both were
+investigated rather than guessed at, and the script failures turned out to be
+three separate causes stacked.
+
+**The covers were never broken.** All six uploads have thumbnails served by
+YouTube (60-115KB each), and downloading the newest one shows our own frame 0.
+The grey tiles were the app's grid not having loaded. What *is* true is that the
+Shorts feed and channel grid ignore custom thumbnails entirely, so setting one
+only reaches search and suggestions. Per the request, `YOUTUBE_SET_THUMBNAIL`
+now defaults to `false` — the code stays, the behaviour is opt-in.
+
+**mimo is not down.** Benchmarked from the container: a trivial prompt answers
+in 3-10s. The real prompt took 48-86s, and one run took 161s while burning
+**10,457 completion tokens for 2,400 characters of output** — mimo-v2.5-pro is a
+reasoning model and most of that is thinking. Latency therefore swings with how
+long it chooses to think, and the tail was crossing the 180s deadline.
+
+Three fixes, each measured:
+
+1. `reasoning_effort="low"` — 79s / 3,796 tokens against 161s / 10,457 at the
+   default, and the shorter run produced a *valid* script where the long one did
+   not. `"minimal"` is rejected with a 400.
+2. **A timeout now retries instead of failing.** The previous fix raised
+   immediately on the deadline, so a single slow response lost the whole script
+   even though the next attempt usually succeeds.
+3. `HARD_MAX_CHARS_PER_LINE` 30 → 34, with the font floor 44px → 40px to match
+   (34 wide Thai consonants measure 976px against 994px of usable width). The
+   161s run failed validation on a 33-character line, and of three verification
+   runs two produced longest lines of 30 and 31 — the old limit would have
+   thrown away a third of otherwise good scripts.
+
+Verified after: three real topics, 3/3 valid, 48-124s.

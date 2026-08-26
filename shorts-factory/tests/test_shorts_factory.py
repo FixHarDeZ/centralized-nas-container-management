@@ -71,6 +71,36 @@ def test_slightly_over_target_line_is_accepted():
     assert script_gen.validate(script)
 
 
+def test_a_timeout_is_retried_before_giving_up(monkeypatch):
+    """Latency swings with how long the model thinks, so one slow call is
+    worth retrying rather than losing the whole script."""
+    monkeypatch.setenv("MIMO_TIMEOUT_SECONDS", "0.1")
+    calls = []
+
+    good = {
+        "title": "t", "description": "d", "hashtags": ["#x"],
+        "cards": [a_card() for _ in range(5)],
+    }
+
+    class Flaky:
+        class chat:
+            class completions:
+                @staticmethod
+                async def create(**_):
+                    calls.append(1)
+                    if len(calls) == 1:
+                        await asyncio.sleep(30)
+                    import json as _json
+                    import types
+                    msg = types.SimpleNamespace(content=_json.dumps(good))
+                    return types.SimpleNamespace(choices=[types.SimpleNamespace(message=msg)])
+
+    monkeypatch.setattr(script_gen, "_client", lambda: Flaky)
+    result = asyncio.run(script_gen.generate("หัวข้อ"))
+    assert len(calls) == 2
+    assert result["title"] == "t"
+
+
 def test_hard_max_line_still_fits_the_card():
     longest = "ก" * script_gen.HARD_MAX_CHARS_PER_LINE
     usable = render.CW - render.MARGIN * 2

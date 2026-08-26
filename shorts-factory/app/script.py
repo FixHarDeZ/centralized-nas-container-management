@@ -14,11 +14,12 @@ MAX_LINES_PER_CARD = 4
 # anyway — Thai glyphs are narrower than Latin ones.
 TARGET_CHARS_PER_LINE = 22
 # Enforced, and measured rather than guessed: at the renderer's smallest font
-# (44px Waree) 30 full-width Thai consonants come to 947px against 994px of
-# usable card width, and 32 overflow. Real Thai runs far narrower — a natural
-# 34-character line measures ~788px — because vowels and tone marks carry no
-# advance. So 30 is the worst case that is still guaranteed to fit.
-HARD_MAX_CHARS_PER_LINE = 30
+# (40px Waree) 34 full-width Thai consonants come to 976px against 994px of
+# usable card width, and 36 overflow. Real Thai runs far narrower because vowels
+# and tone marks carry no advance. 34 is the worst case that still fits — raised
+# from 30 after the model kept producing 31-33 character lines and losing whole
+# scripts to the retry.
+HARD_MAX_CHARS_PER_LINE = 34
 
 SYSTEM_PROMPT = f"""คุณเป็นคนเขียนสคริปต์ YouTube Shorts ภาษาไทย สายเทค (DevOps / AI / โครงสร้างพื้นฐาน)
 
@@ -157,12 +158,19 @@ async def generate(
                     model=os.environ.get("MIMO_MODEL", "mimo-v2.5-pro"),
                     messages=messages,
                     temperature=0.8,
+                    # This is a reasoning model and its thinking budget drives
+                    # the latency: measured 161s / 10457 tokens at the default
+                    # against 79s / 3796 at "low", for a better script. "minimal"
+                    # is rejected with a 400.
+                    reasoning_effort=os.environ.get("MIMO_REASONING_EFFORT", "low"),
                 ),
                 timeout=budget,
             )
-        except asyncio.TimeoutError as exc:
+        except asyncio.TimeoutError:
+            # Latency varies with how long the model chooses to think, so one
+            # slow response is worth retrying rather than giving up on.
             last_error = ScriptError(f"mimo ไม่ตอบภายใน {budget:.0f} วินาที")
-            raise last_error from exc
+            continue
         raw = reply.choices[0].message.content or ""
         try:
             return validate(_parse(raw))

@@ -35,8 +35,9 @@ SCRIM = "black@0.5"  # holds the footage back far enough for text to read
 THAI_BOLD = "/usr/share/fonts/truetype/tlwg/Waree-Bold.ttf"
 MONO = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
 
-# The floor is what a hard-max-length line ends up at; still readable on a phone.
-TEXT_SIZE, MIN_TEXT_SIZE, CODE_SIZE = 92, 44, 38
+# The floor is what a HARD_MAX_CHARS_PER_LINE line ends up at: 34 wide Thai
+# consonants measure 976px at 40px against 994px of usable width.
+TEXT_SIZE, MIN_TEXT_SIZE, CODE_SIZE = 92, 40, 38
 LINE_SPACING = 1.35
 
 

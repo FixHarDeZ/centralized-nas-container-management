@@ -35,7 +35,9 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
 | `TTS_VOICE` | literal | `th-TH-NiwatNeural` |
 | `PEXELS_API_KEY` | `stacks.shorts_factory.pexels_api_key` | free key; absent = every card falls back to the gradient |
 | `BGM_DIR` | literal `/output/bgm` | drop CC0 tracks in; empty or missing = no music |
-| `MIMO_TIMEOUT_SECONDS` | literal `180` | wall-clock deadline per model call — httpx's own timeout is per read and will not fire on a trickling server |
+| `MIMO_REASONING_EFFORT` | literal `low` | mimo-v2.5-pro is a reasoning model; the default budget doubles latency for no better script |
+| `YOUTUBE_SET_THUMBNAIL` | literal `false` | the Shorts feed ignores custom thumbnails, so it is opt-in |
+| `MIMO_TIMEOUT_SECONDS` | literal `240` | wall-clock deadline per model call — httpx's own timeout is per read and will not fire on a trickling server |
 | `YOUTUBE_*` | `stacks.shorts_factory.youtube.*` | empty until `scripts/youtube_auth.py` is run; no credentials = no upload button |
 
 ## Gotchas
