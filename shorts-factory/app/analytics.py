@@ -66,11 +66,40 @@ async def performance() -> list[dict]:
     return result
 
 
-def format_report(rows: list[dict]) -> str:
+async def latest_data_date() -> str | None:
+    """The most recent day YouTube has processed.
+
+    Analytics runs a few days behind, so a clip uploaded today has no rows yet.
+    Reporting the cut-off turns an empty result into something explainable
+    instead of something that looks broken.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            token = await youtube._access_token(client)
+            reply = await client.get(
+                REPORTS_URL,
+                headers={"Authorization": f"Bearer {token}"},
+                params={
+                    "ids": "channel==MINE",
+                    "startDate": (date.today() - timedelta(days=LOOKBACK_DAYS)).isoformat(),
+                    "endDate": date.today().isoformat(),
+                    "metrics": "views",
+                    "dimensions": "day",
+                },
+            )
+        rows = reply.json().get("rows", []) if reply.status_code == 200 else []
+        return rows[-1][0] if rows else None
+    except Exception:
+        logger.exception("หาวันล่าสุดของข้อมูลไม่ได้")
+        return None
+
+
+def format_report(rows: list[dict], as_of: str | None = None) -> str:
     if not rows:
+        lag = f" ข้อมูลล่าสุดที่ YouTube ประมวลผลคือ {as_of}" if as_of else ""
         return (
             "ยังไม่มีสถิติ — นับเฉพาะคลิปที่อัปผ่านบอทตัวนี้ "
-            "และ YouTube ใช้เวลาสักพักกว่าข้อมูลจะขึ้น"
+            f"และ YouTube ประมวลผลช้ากว่าปัจจุบันหลายวัน{lag}"
         )
     lines = [f"📊 {len(rows)} คลิปล่าสุด (เรียงตาม % ที่คนดูจนจบ)", ""]
     for row in rows:

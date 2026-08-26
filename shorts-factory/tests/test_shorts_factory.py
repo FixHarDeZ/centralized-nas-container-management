@@ -360,6 +360,12 @@ def test_empty_history_reports_plainly():
     assert "ยังไม่มีสถิติ" in analytics.format_report([])
 
 
+def test_empty_report_explains_the_lag_when_known():
+    """An empty result should read as 'not yet', not as 'broken'."""
+    text = analytics.format_report([], as_of="2026-08-22")
+    assert "2026-08-22" in text
+
+
 def test_report_sorts_by_retention():
     rows = [
         {"video_id": "a", "title": "A", "views": 10, "seconds": 20, "percent": 80},

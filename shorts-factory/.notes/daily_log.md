@@ -460,3 +460,17 @@ Three fixes, each measured:
    thrown away a third of otherwise good scripts.
 
 Verified after: three real topics, 3/3 valid, 48-124s.
+
+### 2026-08-26 (later) — Analytics API enabled; `/stats` is correct but early
+
+With the API enabled the query works: channel totals return 75 views over 90
+days and a per-video breakdown comes back fine. Filtering to the eight clips
+this bot uploaded returns nothing, and the reason is visible in the day
+dimension — **the most recent processed day is 2026-08-22 while today is the
+26th.** YouTube Analytics runs a few days behind, and every clip in the history
+was uploaded today, so there is genuinely nothing to report yet.
+
+Since an empty result and a broken one look identical from Telegram, the empty
+report now names the cut-off date ("ข้อมูลล่าสุด ... 2026-08-22"), fetched only
+when there are no rows. Numbers should start appearing in a couple of days on
+their own.

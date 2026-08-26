@@ -293,7 +293,9 @@ async def do_upload(client: httpx.AsyncClient, state: dict) -> None:
 async def on_stats(client: httpx.AsyncClient) -> None:
     await say(client, "📊 กำลังดึงสถิติ...")
     try:
-        await say(client, analytics.format_report(await analytics.performance()))
+        rows = await analytics.performance()
+        as_of = await analytics.latest_data_date() if not rows else None
+        await say(client, analytics.format_report(rows, as_of))
     except Exception as exc:
         logger.exception("stats failed")
         await say(client, f"ดึงสถิติไม่ได้: {exc}")
