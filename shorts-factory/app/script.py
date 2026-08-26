@@ -55,9 +55,16 @@ class ScriptError(ValueError):
 
 
 def _client() -> AsyncOpenAI:
+    # An explicit timeout matters more here than it looks: httpx logs "200 OK"
+    # when the headers arrive, so a response that stalls mid-body reads as a
+    # success in the log while the call hangs. The library default is 600s with
+    # retries — and because the Telegram poll loop runs inline, that freezes the
+    # whole bot, not just this request.
     return AsyncOpenAI(
         api_key=os.environ["MIMO_API_KEY"],
         base_url=os.environ["MIMO_BASE_URL"],
+        timeout=float(os.environ.get("MIMO_TIMEOUT_SECONDS", "180")),
+        max_retries=1,
     )
 
 

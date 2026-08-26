@@ -98,6 +98,14 @@ def test_prosody_settings_reach_edge_tts(monkeypatch, tmp_path):
     assert seen["pitch"] == "-20Hz"
 
 
+def test_llm_client_has_a_bounded_timeout(monkeypatch):
+    """A stalled response must not freeze the bot's only loop."""
+    monkeypatch.setenv("MIMO_TIMEOUT_SECONDS", "42")
+    client = script_gen._client()
+    assert client.timeout == 42
+    assert client.max_retries == 1
+
+
 def test_parse_unwraps_fenced_json():
     assert script_gen._parse('```json\n{"a": 1}\n```') == {"a": 1}
 
