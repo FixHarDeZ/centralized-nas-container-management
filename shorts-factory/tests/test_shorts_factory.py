@@ -98,6 +98,23 @@ def test_prosody_settings_reach_edge_tts(monkeypatch, tmp_path):
     assert seen["pitch"] == "-20Hz"
 
 
+def test_a_stalled_model_gives_up_on_the_clock(monkeypatch):
+    """httpx's timeout is per read, so a trickling server never trips it.
+    Only a wall-clock deadline gets the bot back."""
+    monkeypatch.setenv("MIMO_TIMEOUT_SECONDS", "0.2")
+
+    class Hanging:
+        class chat:
+            class completions:
+                @staticmethod
+                async def create(**_):
+                    await asyncio.sleep(30)
+
+    monkeypatch.setattr(script_gen, "_client", lambda: Hanging)
+    with pytest.raises(script_gen.ScriptError, match="ไม่ตอบภายใน"):
+        asyncio.run(script_gen.generate("หัวข้อ"))
+
+
 def test_llm_client_has_a_bounded_timeout(monkeypatch):
     """A stalled response must not freeze the bot's only loop."""
     monkeypatch.setenv("MIMO_TIMEOUT_SECONDS", "42")

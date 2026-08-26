@@ -54,6 +54,17 @@ but does not count as a failed upload.
 
 With no credentials in the vault, the button simply never appears.
 
+## Subtitles, history and `/stats`
+
+Each upload gets a Thai caption track built from the same sentence boundaries
+the video is cut on, and the `.srt` is kept beside the mp4.
+
+Uploads are recorded in `/data/history.json`. Recent titles go into the prompt
+so the bot stops repeating itself, and `/stats` reports views and retention per
+clip — sorted by how much of each clip was actually watched, which is the number
+that matters for Shorts. The top performers are fed back in as examples. Both
+only see clips uploaded through the bot.
+
 ## Background music
 
 Put royalty-free tracks in `/volume1/shorts/bgm/` and one is picked at random

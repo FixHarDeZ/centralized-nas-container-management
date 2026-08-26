@@ -35,9 +35,18 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
 | `TTS_VOICE` | literal | `th-TH-NiwatNeural` |
 | `PEXELS_API_KEY` | `stacks.shorts_factory.pexels_api_key` | free key; absent = every card falls back to the gradient |
 | `BGM_DIR` | literal `/output/bgm` | drop CC0 tracks in; empty or missing = no music |
+| `MIMO_TIMEOUT_SECONDS` | literal `180` | wall-clock deadline per model call — httpx's own timeout is per read and will not fire on a trickling server |
 | `YOUTUBE_*` | `stacks.shorts_factory.youtube.*` | empty until `scripts/youtube_auth.py` is run; no credentials = no upload button |
 
 ## Gotchas
+
+- **A model call must have `asyncio.wait_for` around it.** httpx logs
+  `200 OK` on headers, so a stalled body looks like success in the log, and its
+  `timeout` is per read, not a total budget. The poll loop is inline, so a hung
+  call freezes the entire bot.
+- **`/stats` and prompt priming only know about clips uploaded through the
+  bot** (`/data/history.json`). Anything published by hand is invisible to
+  them.
 
 - **Pillow needs `libraqm0` from apt.** The wheel does not bundle Raqm, and
   `ImageFont.Layout.RAQM` fails *silently* without it — Thai tone marks vanish

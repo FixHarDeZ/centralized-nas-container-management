@@ -373,3 +373,55 @@ So `thumbnails.set` still earns its place (search, channel page, suggestions),
 but the Shorts cover cannot be automated. The upload message now says so and
 tells the human the three taps, rather than leaving them to conclude the feature
 is broken.
+
+### 2026-08-26 — captions, upload history, performance feedback
+
+Three additions, all free, all on demand — **no scheduler was added**, because
+ADR 0002's "nothing needs to listen" is load-bearing for the whole shape. A
+weekly digest would have broken it; `/stats` plus priming the prompt at
+generation time gets the same value.
+
+- **Captions.** `write_srt()` builds a subtitle track from the Card boundaries
+  already computed for the video, so the timings cost nothing extra. It uses
+  each Card's **raw** narration, not the `_speakable()` form: transliteration is
+  right for the voice and wrong on screen, where "Docker" should read as
+  "Docker". Attached after upload via `captions.insert`, which is a single
+  multipart request rather than the resumable flow used for the video. The
+  `.srt` is also kept beside the mp4 in `/volume1/shorts`.
+- **History.** Every successful upload appends to `/data/history.json`. It is
+  the only record of which videos are ours — YouTube is never enumerated — and
+  it feeds the last 30 titles into the prompt as "already covered, do not repeat
+  the same angle".
+- **Performance.** `/stats` reports views and retention per uploaded clip,
+  sorted by **percentage watched rather than views**, which for Shorts is the
+  number that says whether the writing worked. The top three titles are fed
+  into every subsequent generation as examples to write more like. Failure to
+  fetch stats returns an empty list and never blocks writing a script.
+
+Scopes were widened in one consent round (`youtube.force-ssl`,
+`yt-analytics.readonly`). The old refresh token was kept until the new one was
+proven — verified via `tokeninfo` that all three scopes were granted before
+overwriting the vault. The YouTube Analytics API still needs enabling in the
+Cloud project; it is separate from YouTube Data API v3 and currently answers
+403.
+
+### Same day — the bot froze twice, and the first fix was wrong
+
+Two topics hung at "กำลังเขียนสคริปต์" with no error. The logs looked healthy —
+`POST .../chat/completions "HTTP/1.1 200 OK"` — which is the trap: **httpx logs
+that line when the headers arrive, not when the body finishes.** The connection
+to mimo was still open 14 minutes later.
+
+First fix set `timeout=180` on `AsyncOpenAI`, and it did not work. That value is
+httpx's **per-read** timeout: a server trickling bytes resets the clock forever,
+so it never fires. What was needed is a wall-clock deadline, so the call is now
+wrapped in `asyncio.wait_for`.
+
+Worth stating why this froze *everything* rather than one request: the Telegram
+poll loop runs inline on the same task, so a hung model call takes the whole bot
+down with it. The deadline bounds that; making generation concurrent with
+polling would be the larger fix if it ever matters.
+
+Verified afterwards against the topic that hung: a script came back in 73s with
+six valid cards. Non-tech topics are handled fine by the prompt, so the freezes
+were a mimo-side stall and nothing to do with the subject matter.

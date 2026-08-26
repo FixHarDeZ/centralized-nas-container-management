@@ -1,6 +1,7 @@
 """Turns a Topic into a Script by asking mimo."""
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 
@@ -55,11 +56,8 @@ class ScriptError(ValueError):
 
 
 def _client() -> AsyncOpenAI:
-    # An explicit timeout matters more here than it looks: httpx logs "200 OK"
-    # when the headers arrive, so a response that stalls mid-body reads as a
-    # success in the log while the call hangs. The library default is 600s with
-    # retries — and because the Telegram poll loop runs inline, that freezes the
-    # whole bot, not just this request.
+    # httpx logs "200 OK" when the headers arrive, so a response that stalls
+    # mid-body reads as a success in the log while the call hangs.
     return AsyncOpenAI(
         api_key=os.environ["MIMO_API_KEY"],
         base_url=os.environ["MIMO_BASE_URL"],
@@ -145,14 +143,26 @@ async def generate(
         messages.append({"role": "user", "content": f"แก้ตามนี้: {feedback}"})
 
     client = _client()
+    budget = float(os.environ.get("MIMO_TIMEOUT_SECONDS", "180"))
     last_error: Exception | None = None
     # One retry: a schema slip is usually fixed by telling the model what broke.
     for _ in range(2):
-        reply = await client.chat.completions.create(
-            model=os.environ.get("MIMO_MODEL", "mimo-v2.5-pro"),
-            messages=messages,
-            temperature=0.8,
-        )
+        try:
+            # A wall-clock deadline, because httpx's timeout is per read: a
+            # server that trickles bytes resets that clock forever and the call
+            # never returns. This bot polls Telegram on the same task, so a hung
+            # request freezes everything, not just this one.
+            reply = await asyncio.wait_for(
+                client.chat.completions.create(
+                    model=os.environ.get("MIMO_MODEL", "mimo-v2.5-pro"),
+                    messages=messages,
+                    temperature=0.8,
+                ),
+                timeout=budget,
+            )
+        except asyncio.TimeoutError as exc:
+            last_error = ScriptError(f"mimo ไม่ตอบภายใน {budget:.0f} วินาที")
+            raise last_error from exc
         raw = reply.choices[0].message.content or ""
         try:
             return validate(_parse(raw))
