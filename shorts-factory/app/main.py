@@ -245,7 +245,14 @@ async def do_upload(client: httpx.AsyncClient, state: dict) -> None:
         thumbnail_note = f"\n⚠️ ตั้งปกไม่ได้: {exc} (คลิปขึ้นแล้ว ตั้งเองใน Studio ได้)"
 
     url = f"https://youtu.be/{video_id}"
-    note = f"⬆️ ขึ้นช่องแล้ว: {url}\nสถานะ: {privacy}{thumbnail_note}"
+    note = (
+        f"⬆️ ขึ้นช่องแล้ว: {url}\n"
+        f"สถานะ: {privacy}{thumbnail_note}\n\n"
+        # The Shorts feed ignores custom thumbnails and picks its own frame, and
+        # there is no API for that cover — only the mobile app can set it, where
+        # the first option is the opening frame.
+        "ปกในฟีด Shorts ตั้งผ่าน API ไม่ได้ — เปิดในแอป YouTube → Edit → Cover → เลือกอันแรก"
+    )
     if privacy != os.environ.get("YOUTUBE_PRIVACY", "public"):
         # Google forces uploads from an unaudited project to private.
         note += "\n⚠️ YouTube เปลี่ยนสถานะเอง — โปรเจกต์ยังไม่ผ่าน API audit"

@@ -348,3 +348,28 @@ thumbnail failure is reported as a nuisance ("ตั้งเองใน Studio
 as a failed upload.
 
 Unrun, like the upload itself — it needs a real video id.
+
+### 2026-08-26 — first upload, and what the thumbnail actually controls
+
+First real upload: video `mOyx9mDhly8`, and it came back **`public`**. That
+settles the open question behind ADR 0001 — an unaudited project did *not* have
+its upload forced to private, at least for this account. `thumbnails.set`
+returned success on the same run.
+
+Then the cover looked wrong, and the investigation is worth keeping because the
+code turned out to be correct:
+
+- The JPEG sent is frame 0 exactly — re-extracting it from the finished clip and
+  differencing gives a mean absolute difference of 0.00.
+- The thumbnail YouTube actually serves
+  (`i.ytimg.com/vi/<id>/maxresdefault.jpg`) **is** that image: the hook card over
+  its footage, fitted into a 16:9 canvas with the sides filled by a zoomed,
+  darkened copy. That letterboxing is why it reads as a different picture.
+- **The Shorts feed ignores custom thumbnails entirely.** It picks its own frame,
+  and there is no API for that cover — only the YouTube mobile app can set it,
+  where the first option in the picker happens to be the opening frame.
+
+So `thumbnails.set` still earns its place (search, channel page, suggestions),
+but the Shorts cover cannot be automated. The upload message now says so and
+tells the human the three taps, rather than leaving them to conclude the feature
+is broken.

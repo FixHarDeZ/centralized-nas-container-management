@@ -60,9 +60,9 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
   created as a shared folder in DSM first, and the human must press Start on
   `@JaFixShortsBot` (a bot cannot open a chat; `sendMessage` returns "chat not
   found" until then).
-- The YouTube upload path has never run: the credentials are empty pending the
-  Google Cloud setup. Whether an unaudited project really forces uploads to
-  `private` (ADR 0001) will be answered by the first upload, which reports the
-  status YouTube actually applied.
+- **Answered 2026-08-26:** the first upload came back `public`, so an unaudited
+  project did not force it to private — the caution in ADR 0001 did not bite.
+- The Shorts feed cover cannot be set through the API; `thumbnails.set` only
+  affects search, the channel page and suggestions.
 - The Google API-audit and OAuth-refresh-token claims behind ADR 0001 were
   never checked against Google's own docs. Confirm before building any upload.
