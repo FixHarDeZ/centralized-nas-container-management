@@ -146,12 +146,21 @@ async def generate(
     feedback: str = "",
     avoid: list[str] | None = None,
     winners: list[str] | None = None,
+    style: str = "",
 ) -> dict:
-    """Write a Script for `topic`, optionally revising `previous` per `feedback`."""
+    """Write a Script for `topic`, optionally revising `previous` per `feedback`.
+
+    `style` is the clause the running Experiment assigned to this Clip. It is
+    appended rather than folded into SYSTEM_PROMPT so the Manifest can record
+    the exact words that produced this Script — the base prompt will drift, and
+    a Variant name alone would not say what it meant at the time.
+    """
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
     note = _context_note(avoid or [], winners or [])
     if note:
         messages.append({"role": "system", "content": note})
+    if style:
+        messages.append({"role": "system", "content": style})
     messages.append({"role": "user", "content": f"หัวข้อ: {topic}"})
     if previous is not None:
         messages.append({"role": "assistant", "content": json.dumps(previous, ensure_ascii=False)})

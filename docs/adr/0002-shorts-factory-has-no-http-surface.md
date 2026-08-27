@@ -3,8 +3,10 @@
 Every other stack in this repo publishes a port behind an nginx sidecar with
 basic auth from the vault. shorts-factory deliberately does not: its whole
 interaction loop (send a topic, read the generated script, press a button,
-receive the clip) fits in a Telegram chat, and it has no scheduler and no
-inbound webhook, so nothing needs to listen. The container runs a single
+receive the clip) fits in a Telegram chat, and it has no inbound webhook, so
+nothing needs to listen. (It had no scheduler either when this was written;
+ADR 0004 added a daily job that pulls performance snapshots. That job makes
+outbound calls only and does not change this decision.) The container runs a single
 `getUpdates` long-poll loop with no FastAPI, no uvicorn, and no
 `ports:` mapping. That deletes an nginx sidecar, an `.htpasswd`, a vault entry,
 and a LAN-reachable attack surface. The remaining trust boundary is the bot

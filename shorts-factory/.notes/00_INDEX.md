@@ -29,6 +29,20 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
 - Two card looks: over footage (transparent card + scrim, footage supplies the
   motion) or, when no footage came back, the gradient card with a Ken Burns
   move. The fallback is silent by design.
+- **Learning loop (ขั้น 1-2 ลงแล้ว 27/08).** แผน 6 ขั้นที่
+  `.notes/plan-learning-loop.md`, เหตุผลที่ `docs/adr/0004`, ศัพท์ที่ root
+  `CONTEXT.md`. หัวใจ: บันทึกทุกอย่างลง Manifest ต่อคลิป (รวม Script ที่ไม่ได้อัป)
+  แต่**ห้ามสรุปหรือปรับพรอมป์เอง**จนกว่าจะผ่าน Gate. `winning_examples()` ต้องปิด
+  ก่อนถึง Gate. **ลงแล้ว**: `app/manifest.py` (1 ไฟล์ต่อ Topic ที่ `/data/clips`,
+  เก็บ draft ทุกรอบรวมที่กดทิ้ง + `render` details ที่ `build()` คืนกลับมา) และ
+  `analytics.gate_note()` ที่ปิด `winning_examples()` จนกว่าจะครบ 30 คลิป.
+  `app/snapshots.py` (job รายวันขี่ poll loop ไม่ใช้ scheduler thread, `/snapshot`
+  สั่งมือได้, day-7 = ตัวเลขทางการ) และ `app/backfill.py` (กู้ manifest 9 คลิปเก่าจาก
+  `.txt`/`.srt` ใน `/output` ตอน startup, idempotent, ติดธง `reconstructed`).
+  `app/experiment.py` (factor `hook` 2 variant สุ่มต่อคลิปตอนเปิด Topic ไม่ re-roll,
+  explore 1 ใน 3 ไม่นับผล, `/experiment` รายงาน + ปฏิเสธที่จะฟันธงก่อนถึงเกณฑ์).
+  `app/retention.py` (เส้น retention + หา cliff + map กลับเป็น card + วาด PNG ด้วย Pillow,
+  `/retention`). **ยังไม่ลง**: recommender (ขั้น 6 รอ Gate)
 - State: `/data/state.json`. Working files under `/data`, wiped after each
   render. Finished clips and their metadata `.txt` land in `/output`
   (`/volume1/shorts` on the NAS, reachable over SMB).

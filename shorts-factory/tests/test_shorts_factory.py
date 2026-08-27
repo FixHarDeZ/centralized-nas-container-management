@@ -6,6 +6,7 @@ Run inside the image, where Raqm and the Thai fonts exist:
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import pathlib
 import subprocess
@@ -17,7 +18,12 @@ os.environ.setdefault("TELEGRAM_CHAT_ID", "42")
 os.environ.setdefault("MIMO_API_KEY", "test-key")
 os.environ.setdefault("MIMO_BASE_URL", "https://example.invalid/v1")
 
-from app import analytics, history, main, render, script as script_gen, youtube  # noqa: E402
+from app import (analytics, backfill, experiment, history, main, manifest,  # noqa: E402
+                 render, retention, script as script_gen, snapshots, youtube)
+
+
+async def _nothing(*args, **kwargs):
+    return {"message_id": 7}
 
 
 def a_card(text: str = "ทดสอบการ์ด", code: str | None = None) -> dict:
@@ -179,6 +185,32 @@ def test_slugify_never_returns_empty():
 
 
 # --- trust boundary ----------------------------------------------------------
+
+def test_commands_work_while_a_script_is_waiting_for_review(monkeypatch):
+    """Plain text revises the pending Script — a command must not become feedback."""
+    called = []
+
+    async def boom(*args, **kwargs):
+        called.append("make_script")
+
+    monkeypatch.setattr(main, "make_script", boom)
+    monkeypatch.setattr(main, "say", _nothing)
+    seen = []
+
+    async def fake_retention(client, video_id=""):
+        seen.append(video_id)
+
+    monkeypatch.setattr(main, "on_retention", fake_retention)
+    monkeypatch.setattr(main, "on_stats", lambda client: _nothing())
+
+    state = {"mode": "review", "topic": "หัวข้อเดิม", "script": {}}
+    asyncio.run(main.on_text(None, state, "/retention abc123"))
+    assert seen == ["abc123"] and not called
+
+    # ...and plain text in the same state still revises, as before
+    asyncio.run(main.on_text(None, state, "แก้ hook หน่อย"))
+    assert called == ["make_script"]
+
 
 def test_updates_from_other_chats_are_dropped():
     # Read the id off the module: this suite also runs against the real .env.
@@ -372,6 +404,459 @@ def test_srt_uses_raw_narration_not_the_spoken_form(tmp_path):
 def test_srt_timestamps_cross_the_minute_boundary(tmp_path):
     srt = render.write_srt([{"narration": "ท้ายคลิป"}], [65.25], 71.5, tmp_path / "c.srt")
     assert "00:01:05,250 --> 00:01:11,500" in srt.read_text(encoding="utf-8")
+
+
+# --- manifest ----------------------------------------------------------------
+
+def test_every_draft_is_kept_including_the_discarded_ones(tmp_path, monkeypatch):
+    """A Variant that writes badly must not be flattered by the human's taste."""
+    monkeypatch.setattr(manifest, "DIR", tmp_path / "clips")
+
+    kept = manifest.start("ทำไม log บวม")
+    manifest.add_script(kept, a_script())
+    manifest.add_script(kept, a_script())          # a revision
+    manifest.update(kept, outcome="rendered", render={"seconds": 41.2})
+    manifest.update(kept, published=True, video_id="abc123")
+
+    thrown = manifest.start("หัวข้อที่ไม่ชอบ")
+    manifest.add_script(thrown, a_script())
+    manifest.update(thrown, outcome="discarded")
+
+    records = {r["id"]: r for r in manifest.load_all()}
+    assert len(records) == 2, "the discarded draft must survive too"
+    assert len(records[kept]["scripts"]) == 2, "revisions are kept, not overwritten"
+    assert records[kept]["published"] is True and records[kept]["video_id"] == "abc123"
+    assert records[thrown]["published"] is False
+    assert records[thrown]["outcome"] == "discarded"
+
+
+def test_manifests_opened_in_the_same_millisecond_do_not_overwrite(tmp_path, monkeypatch):
+    """The backfill opens them in a tight loop; a shared id would erase data."""
+    monkeypatch.setattr(manifest, "DIR", tmp_path / "clips")
+    ids = [manifest.start(f"หัวข้อ {i}") for i in range(20)]
+    assert len(set(ids)) == 20
+    assert len(manifest.load_all()) == 20
+
+
+def test_a_broken_manifest_never_breaks_the_caller(tmp_path, monkeypatch):
+    """Recording is not allowed to take a render down with it."""
+    monkeypatch.setattr(manifest, "DIR", tmp_path / "clips")
+    manifest.update(None, outcome="rendered")           # no id yet
+    manifest.add_script("does-not-exist", a_script())   # id that was never opened
+    assert manifest.load("does-not-exist") is None
+    assert manifest.load_all() == []
+
+
+def test_upload_credits_the_clip_it_was_offered_for(tmp_path, monkeypatch):
+    """The upload button outlives the Topic that produced the clip.
+
+    Render A, send a new Topic B, then press upload on A's message: the video
+    id must land on A's Manifest, not on whichever Topic happens to be open.
+    """
+    monkeypatch.setattr(main, "OUTPUT_DIR", tmp_path / "out")
+    monkeypatch.setattr(manifest, "DIR", tmp_path / "clips")
+    monkeypatch.setattr(history, "PATH", tmp_path / "history.json")
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+    monkeypatch.setattr(youtube, "configured", lambda: True)
+
+    monkeypatch.setattr(main, "say", _nothing)
+    monkeypatch.setattr(main, "send_video", _nothing)
+    monkeypatch.setattr(main, "api", _nothing)
+
+    async def fake_upload(clip, script):
+        return "vidA", "public"
+
+    monkeypatch.setattr(youtube, "upload", fake_upload)
+
+    clip = tmp_path / "clip.mp4"
+    clip.write_bytes(b"not really an mp4")
+    script = a_script()
+
+    first = manifest.start("หัวข้อ A")
+    state = {"clip_id": first, "topic": "หัวข้อ A"}
+    asyncio.run(main.deliver(None, state, script, clip))
+
+    # the human sends a new Topic before pressing upload on the old clip
+    second = manifest.start("หัวข้อ B")
+    state.update(clip_id=second, topic="หัวข้อ B")
+
+    asyncio.run(main.do_upload(None, state))
+
+    records = {r["id"]: r for r in manifest.load_all()}
+    assert records[first]["published"] is True
+    assert records[first]["video_id"] == "vidA"
+    assert records[second]["published"] is False, "the open Topic must not be credited"
+    assert history.load()[0]["topic"] == "หัวข้อ A"
+
+
+# --- retention ---------------------------------------------------------------
+
+CARDS = [
+    {"start": 0.0, "seconds": 4.0, "narration": "hook"},
+    {"start": 4.0, "seconds": 6.0, "narration": "กลางเรื่อง"},
+    {"start": 10.0, "seconds": 5.0, "narration": "สรุป"},
+]
+
+
+def test_a_drop_is_reported_as_a_card_not_a_fraction():
+    """`elapsedVideoTimeRatio` is a fraction of the clip; the script is not."""
+    rows = [[round(0.05 * i, 2), 1.0] for i in range(1, 21)]
+    rows[9][1] = 0.2          # a cliff at 50% of a 15s clip = 7.5s = card 2
+    curve = [[r[0], r[1], 1.0] for r in rows]
+
+    found = retention.drops(curve, duration=15.0, cards=CARDS)
+    assert [d["card"] for d in found] == [1]
+    assert found[0]["at"] == pytest.approx(7.5, abs=0.1)
+    assert "card 2" in retention.summary(curve, 15.0, CARDS)
+    assert "กลางเรื่อง" in retention.summary(curve, 15.0, CARDS)
+
+
+def test_one_cliff_spread_over_two_buckets_is_one_drop():
+    """Otherwise the same moment is named three times and the labels collide."""
+    curve = [[round(0.01 * i, 2), 1.0, 1.0] for i in range(1, 101)]
+    for i in range(40, 100):
+        curve[i][1] = 0.3          # the fall happens across buckets 0.40-0.42
+    curve[40][1], curve[41][1] = 0.7, 0.5
+
+    found = retention.drops(curve, duration=15.0, cards=CARDS)
+    assert len(found) == 1
+    assert found[0]["at"] == pytest.approx(0.41 * 15.0, abs=0.2), "dated from where it began"
+    assert found[0]["size"] == pytest.approx(0.7, abs=0.01), "the whole fall, not one bucket"
+
+
+def test_a_curve_that_only_slopes_has_no_cliffs():
+    """Every clip loses viewers everywhere; only the cliffs are worth naming."""
+    curve = [[round(0.05 * i, 2), 1.0 - 0.02 * i, 1.0] for i in range(1, 21)]
+    assert retention.drops(curve, 15.0, CARDS) == []
+    assert "ชันผิดปกติ" in retention.summary(curve, 15.0, CARDS)
+
+
+def test_card_lookup_covers_the_whole_clip():
+    assert retention.card_at(CARDS, 0.0) == 0
+    assert retention.card_at(CARDS, 4.0) == 1
+    assert retention.card_at(CARDS, 14.9) == 2
+    # past the last boundary (rounding, or a tail the srt did not cover)
+    assert retention.card_at(CARDS, 99.0) == 2
+    assert retention.card_at([], 1.0) is None
+
+
+def test_the_chart_is_drawn_with_the_card_boundaries(tmp_path):
+    curve = [[round(0.01 * i, 2), max(1.0 - 0.01 * i, 0.1), 1.0] for i in range(1, 101)]
+    dest = retention.chart(curve, 15.0, CARDS, tmp_path / "curve.png", "ชื่อคลิป")
+    from PIL import Image
+
+    with Image.open(dest) as img:
+        assert img.size == (retention.W, retention.H)
+        colours = {colour for _, colour in img.getcolors(maxcolors=1 << 20)}
+    assert retention.LINE in colours, "the curve itself must be drawn"
+
+
+# --- experiment --------------------------------------------------------------
+
+def test_one_clip_in_three_breaks_the_pattern():
+    """Learning only from its own past is how a channel stops improving."""
+    explore = experiment.assign(roll=0.0)
+    assert explore["explore"] is True and explore["variant"] is None
+    assert explore["style"] == experiment.EXPLORE_CLAUSE
+
+    assigned = experiment.assign(roll=0.99, pick="question")
+    assert assigned["explore"] is False and assigned["variant"] == "question"
+    # the clause is stored verbatim: the base prompt drifts, the record must not
+    assert assigned["style"] == experiment.VARIANTS["question"]
+
+
+def test_explore_clips_never_enter_the_arithmetic():
+    records = [
+        {"variant": "question", "outcome": "rendered",
+         "snapshots": [{"date": "d", "age_days": 7, "views": 10, "percent": 50.0}]},
+        {"explore": True, "variant": None, "outcome": "rendered",
+         "snapshots": [{"date": "d", "age_days": 7, "views": 900, "percent": 99.0}]},
+        {"variant": "question", "outcome": "discarded", "snapshots": []},
+        {"outcome": "rendered", "snapshots": []},   # predates the experiment
+    ]
+    counts = experiment.tally(records)
+    assert counts["question"] == {"clips": 2, "discarded": 1, "failed": 0,
+                                  "views": 10, "percents": [50.0]}
+    assert counts["explore"]["views"] == 900
+    assert counts["shock_number"]["clips"] == 0
+
+
+def test_a_topic_that_never_produced_a_script_is_not_a_clip():
+    """Otherwise an arm reaches the Gate on records that made nothing."""
+    records = [
+        {"variant": "question", "outcome": "drafting", "snapshots": []},
+        {"variant": "question", "outcome": "generate_failed", "snapshots": []},
+        {"variant": "question", "outcome": "rendered", "snapshots": []},
+    ]
+    counts = experiment.tally(records)
+    assert counts["question"]["clips"] == 1
+    assert counts["question"]["failed"] == 2
+    # and the discard rate is not diluted by failures
+    assert counts["question"]["discarded"] == 0
+
+
+def test_a_revision_keeps_the_variant_it_was_born_with(tmp_path, monkeypatch):
+    """Rewriting a script you dislike must not quietly pick the winner."""
+    monkeypatch.setattr(manifest, "DIR", tmp_path / "clips")
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+    monkeypatch.setattr(history, "recent_titles", lambda: [])
+    monkeypatch.setattr(main, "close_prompt", _nothing)
+    monkeypatch.setattr(main, "say", _nothing)
+
+    async def no_winners():
+        return []
+
+    monkeypatch.setattr(analytics, "winning_examples", no_winners)
+    monkeypatch.setattr(experiment, "assign",
+                        lambda: {"variant": "question", "explore": False,
+                                 "style": experiment.VARIANTS["question"]})
+
+    styles = []
+
+    async def fake_generate(topic, previous=None, feedback="", avoid=None,
+                            winners=None, style=""):
+        styles.append(style)
+        return a_script()
+
+    monkeypatch.setattr(script_gen, "generate", fake_generate)
+
+    state = {}
+    asyncio.run(main.make_script(None, state, "หัวข้อ"))
+    first = state["clip_id"]
+    asyncio.run(main.make_script(None, state, "หัวข้อ", feedback="แก้ hook ให้แรงกว่านี้"))
+
+    records = manifest.load_all()
+    assert len(records) == 1, "a revision must not open a second Manifest"
+    assert records[0]["id"] == first and records[0]["variant"] == "question"
+    assert len(records[0]["scripts"]) == 2, "both drafts are kept"
+    assert styles == [experiment.VARIANTS["question"]] * 2, "the clause must not be re-rolled"
+
+
+def _arm(percents, views, variant):
+    return [
+        {"variant": variant, "outcome": "rendered",
+         "snapshots": [{"date": str(i), "age_days": 7, "views": views // len(percents),
+                        "percent": p}]}
+        for i, p in enumerate(percents)
+    ]
+
+
+def test_no_winner_is_named_before_the_gate():
+    records = _arm([80.0], 5, "question") + _arm([40.0], 5, "shock_number")
+    assert "ยังสรุปไม่ได้" in experiment.verdict(experiment.tally(records))
+
+
+def test_a_small_gap_past_the_gate_is_a_draw_not_a_winner():
+    percents = [50.0] * experiment.MIN_CLIPS
+    records = (_arm(percents, experiment.MIN_VIEWS, "question")
+               + _arm([53.0] * experiment.MIN_CLIPS, experiment.MIN_VIEWS, "shock_number"))
+    verdict = experiment.verdict(experiment.tally(records))
+    assert "เสมอ" in verdict and "🏆" not in verdict
+
+
+def test_a_real_gap_past_the_gate_names_the_winner():
+    records = (_arm([50.0] * experiment.MIN_CLIPS, experiment.MIN_VIEWS, "question")
+               + _arm([70.0] * experiment.MIN_CLIPS, experiment.MIN_VIEWS, "shock_number"))
+    verdict = experiment.verdict(experiment.tally(records))
+    assert verdict.startswith("🏆 shock_number")
+
+
+def test_day7_is_what_counts_not_the_latest_reading():
+    """A clip measured yesterday must not be compared with one measured today."""
+    record = {"variant": "question", "outcome": "rendered", "snapshots": [
+        {"date": "2026-09-01", "age_days": 3, "views": 5, "percent": 90.0},
+        {"date": "2026-09-05", "age_days": 7, "views": 40, "percent": 55.0},
+        {"date": "2026-09-20", "age_days": 22, "views": 60, "percent": 51.0},
+    ]}
+    counts = experiment.tally([record])
+    assert counts["question"]["percents"] == [55.0]
+    assert counts["question"]["views"] == 40
+
+
+def test_the_variant_clause_reaches_the_model(monkeypatch):
+    seen = {}
+
+    class Spy:
+        class chat:
+            class completions:
+                @staticmethod
+                async def create(**kwargs):
+                    import json as _json
+                    import types
+                    seen["messages"] = kwargs["messages"]
+                    body = {"title": "t", "description": "d", "hashtags": ["#x"],
+                            "cards": [a_card() for _ in range(5)]}
+                    msg = types.SimpleNamespace(content=_json.dumps(body))
+                    return types.SimpleNamespace(choices=[types.SimpleNamespace(message=msg)])
+
+    monkeypatch.setattr(script_gen, "_client", lambda: Spy)
+    asyncio.run(script_gen.generate("หัวข้อ", style=experiment.VARIANTS["shock_number"]))
+    assert any(experiment.VARIANTS["shock_number"] in m["content"] for m in seen["messages"])
+
+
+# --- snapshots ---------------------------------------------------------------
+
+def test_snapshots_run_once_a_day_after_the_hour():
+    import datetime as dt
+
+    state = {}
+    assert not snapshots.due(state, dt.datetime(2026, 8, 27, snapshots.HOUR - 1, 59))
+    assert snapshots.due(state, dt.datetime(2026, 8, 27, snapshots.HOUR, 0))
+
+    state["last_snapshot"] = "2026-08-27"
+    assert not snapshots.due(state, dt.datetime(2026, 8, 27, 23, 59)), "twice in one day"
+    # a day skipped (bot down) is picked up at the next tick, not lost
+    assert snapshots.due(state, dt.datetime(2026, 8, 29, snapshots.HOUR, 5))
+
+
+def test_only_young_published_clips_are_measured():
+    import datetime as dt
+
+    today = dt.date(2026, 8, 27)
+    records = [
+        {"id": "young", "video_id": "a", "published_at": "2026-08-26T10:00:00"},
+        {"id": "old", "video_id": "b", "published_at": "2026-06-01T10:00:00"},
+        {"id": "never-published", "created_at": "2026-08-26T10:00:00"},
+    ]
+    assert set(snapshots._wanted(records, today)) == {"a"}
+
+
+def test_a_snapshot_taken_twice_in_a_day_does_not_double_up(tmp_path, monkeypatch):
+    monkeypatch.setattr(manifest, "DIR", tmp_path / "clips")
+    clip_id = manifest.start("หัวข้อ")
+    manifest.add_snapshot(clip_id, {"date": "2026-08-28", "age_days": 1, "views": 3})
+    manifest.add_snapshot(clip_id, {"date": "2026-08-28", "age_days": 1, "views": 9})
+    manifest.add_snapshot(clip_id, {"date": "2026-09-03", "age_days": 7, "percent": 61.0})
+
+    record = manifest.load(clip_id)
+    assert [s["date"] for s in record["snapshots"]] == ["2026-08-28", "2026-09-03"]
+    assert record["snapshots"][0]["views"] == 9, "the later reading wins"
+    # experiments compare every clip at the same age, never at "latest"
+    assert manifest.day7(record)["percent"] == 61.0
+
+
+def test_day7_is_none_until_the_clip_is_old_enough(tmp_path, monkeypatch):
+    monkeypatch.setattr(manifest, "DIR", tmp_path / "clips")
+    clip_id = manifest.start("หัวข้อ")
+    manifest.add_snapshot(clip_id, {"date": "2026-08-28", "age_days": 2, "percent": 90.0})
+    assert manifest.day7(manifest.load(clip_id)) is None
+
+
+def test_the_newest_clips_are_the_ones_that_get_measured(tmp_path, monkeypatch):
+    """The id filter has a cap; at 3 clips a day the window outgrows it."""
+    monkeypatch.setattr(manifest, "DIR", tmp_path / "clips")
+    monkeypatch.setattr(analytics, "MAX_VIDEOS", 2)
+    for day, video_id in enumerate(["old", "middle", "newest"], start=1):
+        clip_id = manifest.start("หัวข้อ")
+        manifest.update(clip_id, video_id=video_id, published=True,
+                        published_at=f"2026-08-0{day}T10:00:00")
+
+    asked = []
+
+    async def fake_rows(client, ids):
+        asked.extend(ids)
+        return []
+
+    monkeypatch.setattr(snapshots, "_rows", fake_rows)
+    import datetime as dt
+    monkeypatch.setattr(snapshots, "MAX_AGE_DAYS", 3650)
+    asyncio.run(snapshots.run())
+    assert asked == ["newest", "middle"], "the oldest clip is the one to drop"
+
+
+def test_a_failed_snapshot_does_not_retry_every_tick(monkeypatch):
+    """`due()` runs on every poll tick; a dead credential must not be hammered."""
+    async def explode():
+        raise RuntimeError("invalid_grant")
+
+    monkeypatch.setattr(snapshots, "run", explode)
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+
+    state = {}
+    asyncio.run(main.take_snapshots(None, state))
+    assert state["last_snapshot"], "the day is stamped even when the pull failed"
+    assert not snapshots.due(state)
+
+
+# --- backfill ----------------------------------------------------------------
+
+SRT_SAMPLE = """1
+00:00:00,000 --> 00:00:04,807
+เคยมั้ย เปิดดูซีรีย์จีนแนวตั้งแค่ตอนเดียว
+
+2
+00:00:04,807 --> 00:01:05,250
+ซีรีย์จีนแนวตั้ง หรือ Short Vertical Drama
+"""
+
+
+def test_cards_are_read_back_out_of_the_subtitles():
+    cards = backfill.cards_from_srt(SRT_SAMPLE)
+    assert [c["start"] for c in cards] == [0.0, 4.807]
+    assert cards[1]["seconds"] == pytest.approx(60.443, abs=0.001)
+    assert cards[0]["narration"].startswith("เคยมั้ย")
+
+
+def test_old_clips_get_a_manifest_marked_reconstructed(tmp_path, monkeypatch):
+    """Their scripts died with the workdir; the boundaries survive in /output."""
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / "clip.txt").write_text("ทำไมซีรีย์จีนแนวตั้ง\n\nคำอธิบาย\n", encoding="utf-8")
+    (out / "clip.srt").write_text(SRT_SAMPLE, encoding="utf-8")
+
+    monkeypatch.setattr(backfill, "OUTPUT_DIR", out)
+    monkeypatch.setattr(manifest, "DIR", tmp_path / "clips")
+    monkeypatch.setattr(history, "PATH", tmp_path / "history.json")
+    history.PATH.write_text(json.dumps([
+        {"video_id": "vid1", "title": "ทำไมซีรีย์จีนแนวตั้ง", "topic": "",
+         "uploaded_at": "2026-08-26T20:29:14"},
+        {"video_id": "vid2", "title": "คลิปที่ไฟล์หายไปแล้ว", "topic": "",
+         "uploaded_at": "2026-08-26T21:39:09"},
+    ], ensure_ascii=False), encoding="utf-8")
+
+    assert backfill.run() == 2
+    assert backfill.run() == 0, "backfill must be idempotent"
+
+    with_srt = manifest.by_video("vid1")
+    assert with_srt["reconstructed"] is True and with_srt["published"] is True
+    assert len(with_srt["render"]["cards"]) == 2
+    assert with_srt["published_at"] == "2026-08-26T20:29:14"
+    # a clip whose files are gone still gets a record, just an emptier one
+    assert manifest.by_video("vid2")["render"]["cards"] == []
+
+
+# --- the gate ----------------------------------------------------------------
+
+def test_nothing_is_fed_back_into_the_prompt_before_the_gate(monkeypatch):
+    """One clip holds 88% of this channel's views — see docs/adr/0004."""
+    monkeypatch.setattr(history, "video_ids", lambda: ["a"] * 9)
+
+    def explode():
+        raise AssertionError("performance() must not even be called before the gate")
+
+    monkeypatch.setattr(analytics, "performance", explode)
+    assert asyncio.run(analytics.winning_examples()) == []
+    assert "9/30" in analytics.gate_note()
+
+
+def test_past_the_gate_the_winners_come_back(monkeypatch):
+    monkeypatch.setattr(history, "video_ids", lambda: ["a"] * 30)
+    monkeypatch.setattr(history, "title_of", lambda v: "ชนะ")
+
+    async def rows():
+        return [{"title": "ชนะ", "views": 12}, {"title": "แพ้", "views": 0}]
+
+    monkeypatch.setattr(analytics, "performance", rows)
+    assert analytics.gate_note() is None
+    assert asyncio.run(analytics.winning_examples()) == ["ชนะ"]
+
+
+def test_the_report_says_when_it_cannot_be_trusted(monkeypatch):
+    monkeypatch.setattr(history, "video_ids", lambda: ["a"] * 9)
+    body = analytics.format_report([{"video_id": "a", "title": "t", "views": 3,
+                                     "seconds": 20, "percent": 55}])
+    assert "ยังไม่พอสรุป" in body
+    assert "55%" in body
 
 
 # --- history -----------------------------------------------------------------

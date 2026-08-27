@@ -15,7 +15,8 @@ from pathlib import Path
 
 import httpx
 
-from app import analytics, history, render, script as script_gen, youtube
+from app import (analytics, backfill, experiment, history, manifest, render,
+                 retention, script as script_gen, snapshots, youtube)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("shorts-factory")
@@ -30,6 +31,10 @@ CHAT_ID = int(os.environ["TELEGRAM_CHAT_ID"])
 API = f"https://api.telegram.org/bot{TOKEN}"
 
 RENDER_CB, DISCARD_CB, UPLOAD_CB = "render", "discard", "upload"
+# How far back /retention walks looking for a Clip YouTube has a curve for.
+# ponytail: one Reports call per Clip tried. Skip Clips whose snapshots show
+# too few views to have a curve (observed: 361 yes, 27 no) if this gets slow.
+RETENTION_TRIES = 10
 UPLOAD_KEYBOARD = {
     "inline_keyboard": [[{"text": "⬆️ อัปโหลดขึ้น YouTube", "callback_data": UPLOAD_CB}]]
 }
@@ -148,10 +153,16 @@ async def deliver(client: httpx.AsyncClient, state: dict, script: dict, clip: Pa
         **({"reply_markup": UPLOAD_KEYBOARD} if offer_upload else {}),
     )
     await say(client, f"✅ เสร็จแล้ว เก็บไว้ที่ {final}")
+    # The upload button outlives this Topic — the human can send a new one and
+    # press upload on an older clip afterwards. Everything the upload needs is
+    # snapshotted here for that reason; reading the live `clip_id`/`topic`
+    # would stamp the new Topic's Manifest with the old clip's video id.
     state.update(
         last_clip=str(final),
         last_srt=str(final_srt) if srt.exists() else None,
         last_script=script,
+        last_clip_id=state.get("clip_id"),
+        last_topic=state.get("topic"),
         upload_message_id=(sent or {}).get("message_id") if offer_upload else None,
     )
     save_state(state)
@@ -159,6 +170,16 @@ async def deliver(client: httpx.AsyncClient, state: dict, script: dict, clip: Pa
 
 async def make_script(client: httpx.AsyncClient, state: dict, topic: str, feedback: str = "") -> None:
     previous = state.get("script") if feedback else None
+    # A revision belongs to the Manifest already open for this Topic; only a
+    # fresh Topic starts a new one.
+    if previous is None:
+        state["clip_id"] = manifest.start(topic)
+        # Assigned before the Script exists and never re-rolled: a Script
+        # rewritten on feedback keeps the Variant it was born with, or the
+        # human's taste would quietly pick the winner (docs/adr/0004).
+        assignment = experiment.assign()
+        manifest.update(state["clip_id"], **assignment)
+        state["style"] = assignment["style"]
     # Retire the buttons on the script being replaced. Two live keyboards would
     # let the human approve the message they are looking at and get a different
     # script rendered, since state.message_id only tracks the newest one.
@@ -173,6 +194,7 @@ async def make_script(client: httpx.AsyncClient, state: dict, topic: str, feedba
             feedback=feedback,
             avoid=history.recent_titles(),
             winners=await analytics.winning_examples(),
+            style=state.get("style", ""),
         )
     except Exception as exc:
         logger.exception("generate failed")
@@ -182,11 +204,17 @@ async def make_script(client: httpx.AsyncClient, state: dict, topic: str, feedba
             sent = await say(client, format_script(previous), reply_markup=REVIEW_KEYBOARD)
             state["message_id"] = (sent or {}).get("message_id")
         else:
-            state.update(mode="idle", script=None)
+            # A Topic that never produced a Script is not a Clip. Recorded so
+            # the Gate cannot be reached on failures, and so a clause that
+            # makes the model return junk shows up as its own number.
+            manifest.update(state.get("clip_id"), outcome="generate_failed",
+                            error=str(exc)[:500])
+            state.update(mode="idle", script=None, clip_id=None, style="")
         save_state(state)
         await say(client, f"เขียนสคริปต์ไม่สำเร็จ: {exc}")
         return
 
+    manifest.add_script(state.get("clip_id"), script)
     sent = await say(client, format_script(script), reply_markup=REVIEW_KEYBOARD)
     state.update(
         mode="review", topic=topic, script=script, message_id=(sent or {}).get("message_id")
@@ -202,15 +230,17 @@ async def do_render(client: httpx.AsyncClient, state: dict) -> None:
 
     workdir = WORK_DIR / datetime.now().strftime("%Y%m%d-%H%M%S")
     try:
-        clip = await render.build(script, workdir)
+        clip, details = await render.build(script, workdir)
+        manifest.update(state.get("clip_id"), outcome="rendered", render=details)
         await deliver(client, state, script, clip)
     except Exception as exc:
         logger.exception("render failed")
+        manifest.update(state.get("clip_id"), outcome="render_failed", error=str(exc)[:500])
         await say(client, f"render ล้มเหลว: {exc}")
     finally:
         # Intermediate PNG/audio dwarf the mp4; never leave them behind.
         shutil.rmtree(workdir, ignore_errors=True)
-        state.update(mode="idle", script=None, topic=None)
+        state.update(mode="idle", script=None, topic=None, clip_id=None, style="")
         save_state(state)
 
 
@@ -269,7 +299,14 @@ async def do_upload(client: httpx.AsyncClient, state: dict) -> None:
             logger.exception("captions failed")
             captions_note = f"\n⚠️ ใส่ซับไม่ได้: {exc}"
 
-    history.record(video_id, script, state.get("topic") or "")
+    history.record(video_id, script, state.get("last_topic") or "")
+    manifest.update(
+        state.get("last_clip_id"),
+        published=True,
+        video_id=video_id,
+        privacy=privacy,
+        published_at=datetime.now().isoformat(timespec="seconds"),
+    )
 
     url = f"https://youtu.be/{video_id}"
     note = (
@@ -284,8 +321,24 @@ async def do_upload(client: httpx.AsyncClient, state: dict) -> None:
         # Google forces uploads from an unaudited project to private.
         note += "\n⚠️ YouTube เปลี่ยนสถานะเอง — โปรเจกต์ยังไม่ผ่าน API audit"
     await say(client, note)
-    state.update(last_clip=None, last_srt=None, last_script=None)
+    state.update(
+        last_clip=None, last_srt=None, last_script=None,
+        last_clip_id=None, last_topic=None,
+    )
     save_state(state)
+
+
+async def send_photo(client: httpx.AsyncClient, path: Path, caption: str) -> None:
+    with path.open("rb") as handle:
+        reply = await client.post(
+            f"{API}/sendPhoto",
+            data={"chat_id": CHAT_ID, "caption": caption[:1024]},
+            files={"photo": (path.name, handle, "image/png")},
+            timeout=120,
+        )
+    if not reply.json().get("ok"):
+        logger.error("sendPhoto: %s", reply.text[:400])
+        await say(client, caption)
 
 
 # --- dispatch ----------------------------------------------------------------
@@ -301,9 +354,88 @@ async def on_stats(client: httpx.AsyncClient) -> None:
         await say(client, f"ดึงสถิติไม่ได้: {exc}")
 
 
+async def take_snapshots(client: httpx.AsyncClient, state: dict, announce: bool = False) -> None:
+    """Record today's numbers. Never fatal — the bot's job is making clips."""
+    try:
+        written = await snapshots.run()
+        logger.info("snapshot %d คลิป", written)
+        if announce:
+            await say(client, f"📸 บันทึกตัวเลขของ {written} คลิปแล้ว")
+    except Exception as exc:
+        logger.exception("snapshot failed")
+        if announce:
+            await say(client, f"เก็บ snapshot ไม่ได้: {exc}")
+    finally:
+        # Stamped even on failure. `due()` is checked on every poll tick, so a
+        # dead refresh token (ADR 0001) would otherwise mean a token request
+        # every 30 seconds until someone noticed. Losing a day costs nothing:
+        # day7() takes the first reading at age 7 or later.
+        state["last_snapshot"] = datetime.now().date().isoformat()
+        save_state(state)
+
+
+async def on_retention(client: httpx.AsyncClient, video_id: str = "") -> None:
+    """The retention curve of one Clip, read against its own Cards.
+
+    Without an id it walks back from the newest published Clip until one has a
+    curve: YouTube only builds them once a Clip has been watched enough, so the
+    newest is usually not the one with data.
+    """
+    published = [r for r in manifest.load_all() if r.get("video_id")]
+    published.sort(key=lambda r: r.get("published_at") or "", reverse=True)
+    if video_id:
+        published = [r for r in published if r["video_id"] == video_id]
+    if not published:
+        await say(client, "ไม่เจอคลิปที่อัปแล้วในบันทึก")
+        return
+
+    await say(client, "📉 กำลังดึงเส้น retention...")
+    last_error = "ยังไม่มีคลิปไหนมีเส้น retention"
+    # One session for the whole walk: refreshing the access token once per
+    # Clip is three requests where one will do.
+    async with httpx.AsyncClient(timeout=60) as session:
+        for record in published[:RETENTION_TRIES]:
+            details = record.get("render") or {}
+            cards = details.get("cards") or []
+            duration = details.get("seconds") or 0
+            if not duration:
+                continue
+            try:
+                rows = await retention.fetch(record["video_id"], session)
+            except retention.NoCurve as exc:
+                last_error = str(exc)
+                continue
+            except Exception as exc:
+                logger.exception("retention failed")
+                await say(client, f"ดึงเส้น retention ไม่ได้: {exc}")
+                return
+
+            title = record.get("title") or (record.get("scripts") or [{}])[-1].get(
+                "script", {}
+            ).get("title", record["video_id"])
+            png = DATA_DIR / f"retention-{record['video_id']}.png"
+            retention.chart(rows, duration, cards, png, title)
+            await send_photo(
+                client, png,
+                f"📉 {title}\n{retention.summary(rows, duration, cards)}",
+            )
+            return
+
+    await say(client, last_error)
+
+
 async def on_text(client: httpx.AsyncClient, state: dict, text: str) -> None:
     if text.startswith("/stats"):
         await on_stats(client)
+        return
+    if text.startswith("/snapshot"):
+        await take_snapshots(client, state, announce=True)
+        return
+    if text.startswith("/experiment"):
+        await say(client, experiment.report(manifest.load_all()))
+        return
+    if text.startswith("/retention"):
+        await on_retention(client, text.split(maxsplit=1)[1].strip() if " " in text else "")
         return
 
     mode = state.get("mode", "idle")
@@ -328,7 +460,8 @@ async def on_callback(client: httpx.AsyncClient, state: dict, query: dict) -> No
         await do_render(client, state)
     elif query.get("data") == DISCARD_CB:
         await close_prompt(client, state.get("message_id"), "🗑 ทิ้งสคริปต์แล้ว")
-        state.update(mode="idle", script=None, topic=None, message_id=None)
+        manifest.update(state.get("clip_id"), outcome="discarded")
+        state.update(mode="idle", script=None, topic=None, message_id=None, clip_id=None, style="")
         save_state(state)
         await say(client, "ทิ้งแล้ว ส่งหัวข้อใหม่มาได้เลย")
 
@@ -358,9 +491,17 @@ async def main() -> None:
         state.update(mode="idle", script=None, topic=None)
         save_state(state)
 
+    restored = backfill.run()
+    if restored:
+        logger.info("สร้าง manifest ย้อนหลัง %d คลิป", restored)
+
     async with httpx.AsyncClient() as client:
         await say(client, "🎬 shorts-factory พร้อมแล้ว ส่งหัวข้อมาได้เลย")
         while True:
+            # The daily pull rides the poll loop rather than a scheduler
+            # thread: getUpdates already wakes every 30s. See app/snapshots.py.
+            if snapshots.due(state):
+                await take_snapshots(client, state)
             try:
                 updates = await api(
                     client, "getUpdates", offset=state.get("offset", 0), timeout=30

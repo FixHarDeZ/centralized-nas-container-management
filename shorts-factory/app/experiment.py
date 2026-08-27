@@ -1,0 +1,150 @@
+"""The running Experiment: what is being varied, and what the numbers say.
+
+One factor at a time, two levels, assigned per Clip at random and recorded in
+the Manifest before the Script is written. YouTube offers no within-clip A/B
+for Shorts, so a Variant belongs to a whole Clip and is compared against other
+Clips (docs/adr/0004).
+
+Nothing here decides anything before the Gate. `report()` is happy to say that
+it does not know, which is the honest answer for a channel with 9 clips and 206
+views.
+"""
+from __future__ import annotations
+
+import random
+from statistics import median
+
+from app import analytics, manifest
+
+FACTOR = "hook"
+
+# The clause appended to the prompt, stored verbatim in every Manifest: the
+# prompt will drift, and a Variant name alone would not say what it meant on
+# the day the Clip was written.
+VARIANTS = {
+    "shock_number": (
+        "รอบนี้ card แรกต้องเปิดด้วย**ตัวเลขที่ทำให้คนอึ้ง** (เช่น เวลาที่เสียไป "
+        "ขนาดที่โตขึ้น เงินที่หายไป) ห้ามเปิดด้วยคำถาม"
+    ),
+    "question": (
+        "รอบนี้ card แรกต้องเปิดด้วย**คำถามตรงๆ ที่คนทำงานสายนี้ถามตัวเองอยู่แล้ว** "
+        "ห้ามเปิดด้วยตัวเลขสถิติ"
+    ),
+}
+
+EXPLORE_RATE = 1 / 3
+EXPLORE_CLAUSE = (
+    "รอบนี้เป็นคลิปทดลอง: เขียนออกนอกแพตเทิร์นเดิมได้เต็มที่ "
+    "(โครงสร้างแปลกไป มุมที่ยังไม่เคยเล่า จังหวะที่ไม่เหมือนคลิปก่อนๆ) "
+    "ขอแค่ยังอยู่ในหัวข้อสาย DevOps/AI"
+)
+
+# The Gate, per Variant (docs/adr/0004). The channel-wide half lives in
+# `analytics.gate_note()`.
+MIN_CLIPS = 10
+MIN_VIEWS = analytics.GATE_VIEWS_PER_VARIANT
+MIN_GAP = 5.0   # percentage points of averageViewPercentage
+
+
+def assign(roll: float | None = None, pick: str | None = None) -> dict:
+    """Choose what this Clip is: an Explore clip, or one Variant of the factor.
+
+    Returned as the fields a Manifest carries, so the caller writes them
+    straight in and never has to know the shape.
+    """
+    roll = random.random() if roll is None else roll
+    if roll < EXPLORE_RATE:
+        return {"variant": None, "explore": True, "style": EXPLORE_CLAUSE}
+    name = pick or random.choice(sorted(VARIANTS))
+    return {"variant": name, "explore": False, "style": VARIANTS[name]}
+
+
+def _percent(record: dict) -> float | None:
+    """The day-7 reading, or nothing. Never the latest one — see ADR 0004."""
+    snapshot = manifest.day7(record)
+    return snapshot.get("percent") if snapshot else None
+
+
+def tally(records: list[dict]) -> dict[str, dict]:
+    """Per Variant: how many Clips, how they did, and how many were thrown out.
+
+    Explore clips are counted separately and never mixed in: they exist to
+    break the pattern, so including them would measure the pattern breaking.
+    """
+    def empty() -> dict:
+        return {"clips": 0, "discarded": 0, "failed": 0, "views": 0, "percents": []}
+
+    out = {name: empty() for name in sorted(VARIANTS)}
+    out["explore"] = empty()
+
+    # A Manifest only becomes a Clip once a Script was actually written and
+    # judged. `drafting` (the model never answered) and `render_failed` are
+    # technical noise: counting them would let an arm pass the Gate on records
+    # that produced nothing, and would flatter the discard rate of whichever
+    # Variant fails most often, since the failures inflate its denominator.
+    REAL = {"rendered", "discarded"}
+
+    for record in records:
+        key = "explore" if record.get("explore") else record.get("variant")
+        if key not in out:
+            continue   # written before the Experiment started
+        bucket = out[key]
+        outcome = record.get("outcome")
+        if outcome not in REAL:
+            bucket["failed"] += 1
+            continue
+        bucket["clips"] += 1
+        if outcome == "discarded":
+            bucket["discarded"] += 1
+        snapshot = manifest.day7(record)
+        if snapshot:
+            bucket["views"] += snapshot.get("views", 0)
+        percent = _percent(record)
+        if percent is not None:
+            bucket["percents"].append(percent)
+    return out
+
+
+def verdict(counts: dict[str, dict]) -> str:
+    """Who won, or — far more likely for now — that nobody can tell yet."""
+    arms = {name: counts[name] for name in VARIANTS}
+    short = [
+        f"{name} ({data['clips']}/{MIN_CLIPS} คลิป, {data['views']}/{MIN_VIEWS} views)"
+        for name, data in arms.items()
+        if data["clips"] < MIN_CLIPS or data["views"] < MIN_VIEWS
+    ]
+    if short:
+        return "⚠️ ยังสรุปไม่ได้ — ยังไม่ถึงเกณฑ์: " + ", ".join(short)
+
+    medians = {name: median(data["percents"]) for name, data in arms.items() if data["percents"]}
+    if len(medians) < len(arms):
+        return "⚠️ ยังสรุปไม่ได้ — บาง variant ยังไม่มีตัวเลข day-7"
+
+    best, worst = max(medians, key=medians.get), min(medians, key=medians.get)
+    gap = medians[best] - medians[worst]
+    if gap < MIN_GAP:
+        return (
+            f"= เสมอ — ต่างกัน {gap:.1f} จุด ยังไม่ถึง {MIN_GAP:.0f} จุดที่ตั้งไว้ "
+            "ถือว่าสรุปไม่ได้ ใช้ค่าเดิมต่อ"
+        )
+    return f"🏆 {best} ชนะ — median {medians[best]:.1f}% เทียบ {medians[worst]:.1f}% (ต่าง {gap:.1f} จุด)"
+
+
+def report(records: list[dict]) -> str:
+    counts = tally(records)
+    # The channel-wide warning goes first: it says the figures below cannot be
+    # used to decide anything, which is no use underneath them.
+    gate = analytics.gate_note()
+    lines = ([gate, ""] if gate else []) + [f"🧪 การทดลอง: {FACTOR}", ""]
+    for name, data in counts.items():
+        label = "explore (ไม่นับผล)" if name == "explore" else name
+        percents = data["percents"]
+        shown = f"{median(percents):.1f}%" if percents else "—"
+        rate = f"{data['discarded']}/{data['clips']}" if data["clips"] else "0/0"
+        failed = f" · พัง {data['failed']}" if data["failed"] else ""
+        lines.append(
+            f"• {label}: {data['clips']} คลิป · ทิ้ง {rate}{failed} · "
+            f"{data['views']} views (day-7) · median day-7 {shown}"
+        )
+    lines += ["", verdict(counts)]
+    return "\n".join(lines)

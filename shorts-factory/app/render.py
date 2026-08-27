@@ -456,8 +456,12 @@ async def _narration_track(cards: list[dict], workdir: Path) -> tuple[Path, list
     return concat(parts, workdir / "narration.mp3"), starts
 
 
-async def build(script: dict, workdir: Path) -> Path:
-    """Script → mp4. Narration is spoken once; the images are cut to it."""
+async def build(script: dict, workdir: Path) -> tuple[Path, dict]:
+    """Script → mp4, plus the parameters it was actually built with.
+
+    The second return value is what the Manifest records: the workdir is wiped
+    after every render, so anything not handed back here is gone for good.
+    """
     workdir.mkdir(parents=True, exist_ok=True)
     cards = script["cards"]
 
@@ -496,4 +500,22 @@ async def build(script: dict, workdir: Path) -> Path:
     music = pick_music()
     if music:
         logger.info("ใส่เพลงประกอบ: %s", music.name)
-    return mux(silent, audio, workdir / "clip.mp4", music)
+    clip = mux(silent, audio, workdir / "clip.mp4", music)
+
+    details = {
+        "seconds": round(audio_seconds(clip), 3),
+        "frame": [W, H],
+        "voice": os.environ.get("TTS_VOICE", "th-TH-NiwatNeural"),
+        "rate": os.environ.get("TTS_RATE", "+0%"),
+        "pitch": os.environ.get("TTS_PITCH", "+0Hz"),
+        "join_silence": JOIN_SILENCE,
+        "bgm": music.name if music else None,
+        # The narration rides along: `/retention` names the Card a drop-off
+        # landed on, and a Card with only timings to show would name it blank.
+        "cards": [
+            {"start": round(start, 3), "seconds": round(span, 3),
+             "footage": bool(clip_path), "narration": card["narration"]}
+            for card, start, span, clip_path in zip(cards, starts, spans, clips)
+        ],
+    }
+    return clip, details

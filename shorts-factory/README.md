@@ -47,6 +47,80 @@ spans exactly its narration, alternating direction card to card, so the clip
 does not read as a slideshow. Cards are drawn 12% larger than the frame and the
 zoom crops into that margin, which keeps the text at native resolution.
 
+## What it records
+
+Every Script the bot writes gets a Manifest under `/data/clips/<id>.json` —
+the drafts in order (a revision is appended, never overwritten), the render
+parameters, the Card start times, and later the publication and its numbers.
+It is written whether or not the clip is ever uploaded: keeping only the
+scripts that survived review would flatter whichever way of writing produces
+the ones you happen to throw away (`docs/adr/0004`).
+
+The workdir is deleted after every render, so anything not captured there is
+gone for good.
+
+Once a day, after `SNAPSHOT_HOUR` (default 10:00), the bot pulls views, likes,
+shares, comments, subscribers gained and retention for the youngest published
+clips inside a 30-day window — the id filter is a URL and only 50 fit, so the
+newest are kept and the oldest dropped — and appends a dated snapshot to each
+Manifest. A failed pull still marks the day rather than retrying on every poll
+tick; a missed day costs nothing, since the day-7 reading is the first one
+taken at age seven or later. It rides the
+Telegram poll loop rather than a scheduler thread — `getUpdates` already wakes
+every 30 seconds — so the stack still has no port and no listener. `/snapshot`
+runs it on demand. The **day-7** snapshot is the official figure: retention
+keeps moving as views accrue, and comparing "latest" numbers compares old clips
+to new ones instead of one way of writing to another.
+
+The nine clips published before Manifests existed are reconstructed at startup
+from the `.txt` and `.srt` left in `/output` — title and card boundaries
+survive there, nothing else does — and flagged `reconstructed`.
+
+Reading the numbers back is deliberately gated. Until the channel has 30 clips
+(and, once experiments start, 300 views per variant), `winning_examples()`
+returns nothing and `/stats` says in words that the figures cannot be used to
+decide anything. Measured on 2026-08-27: 9 clips, 206 views, 182 of them on a
+single clip — feeding that back into the prompt is learning from one sample.
+The "do not repeat these titles" list keeps working; deduplication is not
+inference.
+
+## Where viewers leave
+
+`/retention` draws one clip's retention curve with its card boundaries on it,
+marks the cliffs, and names the card that was on screen at each one. It is the
+reason the Manifest records card start times: `elapsedVideoTimeRatio` is a
+fraction of the clip, and turning that back into a card needs the clip's own
+duration and boundaries.
+
+A cliff is a fall at least twice the clip's typical step and at least 5% of the
+curve's height; neighbouring buckets are merged, since one cliff usually spans
+two or three. Everything below that is the ordinary slope every clip has.
+
+YouTube builds these curves only once a clip has been watched enough —
+measured on this channel: 361 views yes, 27 views no — so `/retention` walks
+back from the newest published clip until it finds one with data.
+
+## The experiment
+
+One factor is varied at a time, currently the hook: a Clip opens either with a
+shock number or with a question. The Variant is drawn at random when a Topic
+arrives — before the Script exists — and never re-rolled, so rewriting a script
+you dislike cannot quietly pick the winner. One Clip in three is an **Explore
+clip** instead: written deliberately outside the pattern, flagged, and left out
+of every calculation. A loop that only ever learns from its own past stops
+improving.
+
+The clause that defines a Variant is stored verbatim in the Manifest, because
+the base prompt drifts and a Variant name alone would not say what it meant on
+the day.
+
+`/experiment` reports clips, discard rate, views and median day-7 retention per
+Variant. It names a winner only when both arms have 10 clips and 300 views and
+their medians differ by at least 5 percentage points; below that it says
+*inconclusive*, which is a result and not a failure. The discard rate is a
+signal in its own right — a Variant whose scripts you keep throwing away is
+losing, whatever its retention says.
+
 ## Uploading to YouTube
 
 Once configured, the bot puts an "อัปโหลดขึ้น YouTube" button under each

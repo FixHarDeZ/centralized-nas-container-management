@@ -65,3 +65,44 @@ separately because it is written to a different brief than the rest.
 **Clip**:
 The finished vertical mp4 assembled from every Card of one Script.
 _Avoid_: video, short
+
+## Learning vocabulary
+
+Terms for the feedback loop that reads how published Clips performed. See
+`docs/adr/0004` for why the loop is gated.
+
+**Manifest**:
+The permanent record of one Clip: the Script it was built from, the Card start
+times, every rendering parameter, the Variant it was assigned, whether the
+human published it, and the performance snapshots pulled later. Written for
+every Script the bot generates, published or not.
+_Avoid_: record, log, metadata
+
+**Variant**:
+One value of the factor an Experiment is testing — `hook=shock_number` against
+`hook=question`. Assigned before the Script is written and never re-rolled.
+_Avoid_: arm, group, bucket, treatment
+
+**Experiment**:
+A set of Clips testing the same factor under a decision rule fixed in advance.
+Ends in a winner or in *inconclusive*, which is a legitimate outcome.
+
+**Explore clip**:
+A Clip deliberately written outside the current pattern, to stop the loop
+learning only from its own past. Flagged in the [[Manifest]] and excluded from
+every Experiment's arithmetic.
+
+**Gate**:
+The minimum evidence before the system may state a conclusion or feed its own
+results back into the prompt: 10 Clips and 300 views per [[Variant]], and 30
+Clips on the channel. Below the Gate, recommendations are labelled as guesses.
+
+**Retention curve**:
+`audienceWatchRatio` over `elapsedVideoTimeRatio` for one Clip — the shape of
+how far viewers got. Whether YouTube serves it for Shorts is unverified.
+
+**Drop-off**:
+A point on a [[Retention curve]] where the fall is sharper than the clip's own
+baseline, mapped back to the [[Card]] that was on screen at that moment via the
+Card start times in the [[Manifest]].
+_Avoid_: churn, exit, bounce

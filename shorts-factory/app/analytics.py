@@ -18,6 +18,13 @@ REPORTS_URL = "https://youtubeanalytics.googleapis.com/v2/reports"
 LOOKBACK_DAYS = 90
 MAX_VIDEOS = 50   # the filter is a comma-joined list; keep the URL sane
 
+# The Gate (docs/adr/0004): below it the numbers are noise and the system is
+# forbidden to feed its own results back into the prompt. Measured 2026-08-27
+# with 9 clips: 206 views total, 182 of them on one clip, median 3. Learning
+# from that is fitting a single data point.
+GATE_CLIPS = 30
+GATE_VIEWS_PER_VARIANT = 300   # enforced once experiments assign Variants
+
 
 class AnalyticsError(RuntimeError):
     """Stats could not be fetched. Never fatal — nothing else depends on them."""
@@ -94,14 +101,31 @@ async def latest_data_date() -> str | None:
         return None
 
 
+def gate_note() -> str | None:
+    """What is still missing before conclusions are allowed, or None if past it."""
+    published = len(history.video_ids())
+    if published >= GATE_CLIPS:
+        return None
+    return (
+        f"⚠️ ข้อมูลยังไม่พอสรุปอะไร — มี {published}/{GATE_CLIPS} คลิป "
+        f"(ต้องมี {GATE_VIEWS_PER_VARIANT} views ต่อ variant ด้วยตอนเริ่มทดลอง). "
+        "ตัวเลขข้างล่างดูได้ แต่ยังห้ามใช้ตัดสินใจ และบอทยังไม่ป้อนกลับเข้า prompt"
+    )
+
+
 def format_report(rows: list[dict], as_of: str | None = None) -> str:
     if not rows:
         lag = f" ข้อมูลล่าสุดที่ YouTube ประมวลผลคือ {as_of}" if as_of else ""
+        gate = gate_note()
+        head = f"{gate}\n\n" if gate else ""
         return (
-            "ยังไม่มีสถิติ — นับเฉพาะคลิปที่อัปผ่านบอทตัวนี้ "
+            f"{head}ยังไม่มีสถิติ — นับเฉพาะคลิปที่อัปผ่านบอทตัวนี้ "
             f"และ YouTube ประมวลผลช้ากว่าปัจจุบันหลายวัน{lag}"
         )
+    gate = gate_note()
     lines = [f"📊 {len(rows)} คลิปล่าสุด (เรียงตาม % ที่คนดูจนจบ)", ""]
+    if gate:
+        lines = [gate, ""] + lines
     for row in rows:
         lines.append(
             f"{row['percent']:.0f}% · {row['views']} views · {row['seconds']:.0f}s\n"
@@ -111,7 +135,15 @@ def format_report(rows: list[dict], as_of: str | None = None) -> str:
 
 
 async def winning_examples(limit: int = 3) -> list[str]:
-    """Titles worth writing more like. Empty on any failure, by design."""
+    """Titles worth writing more like — nothing at all before the Gate.
+
+    Feeding the top performers back into the prompt is the whole point of the
+    loop, and it is exactly what must not happen while one clip holds 88% of
+    the channel's views: the model would learn from a single sample and drift
+    off the locked niche. See docs/adr/0004.
+    """
+    if gate_note() is not None:
+        return []
     try:
         rows = await performance()
     except Exception:
