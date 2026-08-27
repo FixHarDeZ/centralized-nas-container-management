@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 
 from openai import AsyncOpenAI
 
@@ -21,6 +22,8 @@ TARGET_CHARS_PER_LINE = 22
 # scripts to the retry.
 HARD_MAX_CHARS_PER_LINE = 34
 
+LATIN = re.compile(r"[A-Za-z]+")
+
 SYSTEM_PROMPT = f"""คุณเป็นคนเขียนสคริปต์ YouTube Shorts ภาษาไทย สายเทค (DevOps / AI / โครงสร้างพื้นฐาน)
 
 เขียนสคริปต์คลิปแนวตั้ง ยาว 40-50 วินาที แบ่งเป็น card ละ 6-9 วินาที
@@ -31,15 +34,14 @@ SYSTEM_PROMPT = f"""คุณเป็นคนเขียนสคริปต
 - card สุดท้ายสรุปสั้นๆ ให้คนดูเอาไปใช้ต่อได้
 - แต่ละ card มี lines = ข้อความบนจอ 1-{MAX_LINES_PER_CARD} บรรทัด บรรทัดละราวๆ {TARGET_CHARS_PER_LINE} ตัวอักษร (ห้ามเกิน {HARD_MAX_CHARS_PER_LINE})
   **สำคัญ: ต้องตัดบรรทัดตรงรอยต่อคำภาษาไทยเอง** เพราะโปรแกรมวาดตัวอักษรตามที่ให้มาเป๊ะๆ ตัดผิดที่แล้วคำจะขาดกลางคำ
-- narration = ประโยคที่จะอ่านออกเสียงของ card นั้น เขียนแบบพูด ไม่ใช่แบบเขียน ยาวพอให้อ่าน 6-9 วินาที
-  ห้ามใส่ emoji หรือสัญลักษณ์ที่อ่านออกเสียงไม่ได้ลงใน narration
-  **narration ต้องเขียนให้เครื่องอ่านออกเสียงเพราะๆ ตามกฎ 2 ข้อนี้:**
-  1. **ทับศัพท์คำอังกฤษเป็นอักษรไทยทั้งหมด** เช่น Docker → ด็อกเกอร์, log → ล็อก,
-     container → คอนเทนเนอร์, AI → เอไอ, CPU → ซีพียู
-     เพราะเครื่องอ่านจะสลับสำเนียงไทย-อังกฤษกลางประโยคแล้วฟังสะดุด
-     (**เฉพาะใน narration เท่านั้น — ใน lines ให้คงคำอังกฤษไว้ตามเดิม** เพราะบนจอต้องอ่านง่าย)
-  2. **ใส่จุลภาคคั่นตรงจุดที่คนพูดจะหยุดหายใจ** ประมาณทุก 10-15 คำ
-     เช่น "ปัญหาคือ ด็อกเกอร์ ไม่ได้จำกัดขนาด ล็อก ให้เราตั้งแต่แรก, มันจะเขียนไปเรื่อยๆ, จนกว่าดิสก์จะเต็ม"
+- narration = ประโยคของ card นั้น เขียนแบบพูด ไม่ใช่แบบเขียน ยาวพอให้อ่าน 6-9 วินาที
+  คำอังกฤษเขียนเป็นอังกฤษตามปกติ (ใช้ขึ้นซับบนจอ) ห้ามใส่ emoji หรือสัญลักษณ์ที่อ่านออกเสียงไม่ได้
+  **ใส่จุลภาคคั่นตรงจุดที่คนพูดจะหยุดหายใจ** ประมาณทุก 10-15 คำ
+- spoken = narration ประโยคเดียวกันเป๊ะ แต่**เขียนด้วยอักษรไทยล้วน ห้ามมีตัวอักษรละติน (a-z, A-Z) แม้แต่ตัวเดียว**
+  ทับศัพท์คำอังกฤษทุกคำ เช่น Docker → ด็อกเกอร์, log → ล็อก, container → คอนเทนเนอร์,
+  AI → เอไอ, CPU → ซีพียู, Netflix → เน็ตฟลิกซ์, cliffhanger → คลิฟแฮงเกอร์
+  เพราะเครื่องอ่านจะสลับไปสำเนียงอังกฤษกลางประโยค พูดรัวจนฟังไม่ทันและไม่ชัด
+  ตัวเลขให้เขียนเป็นคำอ่านไทย เช่น 2024 → สองพันยี่สิบสี่, 1-2 นาที → หนึ่งถึงสองนาที
   คำสั่ง/แฟลกที่ทับศัพท์แล้วงง (เช่น --log-opt) ให้เลี่ยงไปพูดเป็นคำอธิบายแทน
 - code = บล็อกโค้ด/คำสั่งสั้นๆ ไม่เกิน 4 บรรทัด ใส่เฉพาะ card ที่มีคำสั่งจริงให้ดู ถ้าไม่มีให้เป็น null
 - query = **คำค้นภาษาอังกฤษ 2-4 คำ** สำหรับหาคลิป stock footage มาเป็นพื้นหลังของ card นั้น
@@ -49,7 +51,8 @@ SYSTEM_PROMPT = f"""คุณเป็นคนเขียนสคริปต
 
 ตอบเป็น JSON อย่างเดียว ห้ามมีข้อความอื่นนอก JSON:
 {{"title": "...", "description": "...", "hashtags": ["#..."],
-  "cards": [{{"lines": ["..."], "code": null, "query": "...", "narration": "..."}}]}}"""
+  "cards": [{{"lines": ["..."], "code": null, "query": "...",
+             "narration": "...", "spoken": "..."}}]}}"""
 
 
 class ScriptError(ValueError):
@@ -90,6 +93,17 @@ def validate(script: dict) -> dict:
                 )
         if not str(card.get("narration", "")).strip():
             raise ScriptError(f"card {i}: ไม่มี narration")
+        spoken = str(card.get("spoken", "")).strip()
+        if not spoken:
+            raise ScriptError(f"card {i}: ไม่มี spoken (narration ฉบับทับศัพท์ไทยล้วน)")
+        # A Latin word makes the voice switch accent mid-sentence: it reads the
+        # English at English pace, which lands as a rushed, unclear burst inside
+        # Thai speech. The screen keeps the real spelling; only the voice gets
+        # the transliteration.
+        if LATIN.search(spoken):
+            raise ScriptError(
+                f"card {i}: spoken มีตัวอักษรละติน ({LATIN.findall(spoken)[:3]}) ต้องทับศัพท์เป็นไทยทั้งหมด"
+            )
         if not str(card.get("query", "")).strip():
             raise ScriptError(f"card {i}: ไม่มี query สำหรับหา footage")
     return script

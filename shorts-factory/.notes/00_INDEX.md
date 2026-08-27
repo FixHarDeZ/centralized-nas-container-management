@@ -14,6 +14,14 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
   fetched per Card, cards are drawn with Pillow → silent video segments cut to
   the sentence boundaries, concatenated, then the narration muxed over the
   whole thing → mp4 delivered to Telegram and to `/output`.
+- **Every Card has two narrations.** `narration` = screen/subtitle form
+  (English stays English), `spoken` = Thai-script transliteration, the only one
+  edge-tts reads. `validate()` rejects any Latin character in `spoken`.
+- **Card joins are trimmed.** The paragraph break that produces the boundary
+  events also produces ~1.0s of dead air per join (measured; clause breaks are
+  0.12-0.53s). `render.tighten()` slices at the boundaries, trims each slice's
+  tail back to `JOIN_SILENCE` (0.30s) and re-joins, recomputing the starts by
+  measuring the trimmed slices — the endpoint's offsets overshoot the file.
 - **Card timing comes from `SentenceBoundary` events.** Thai emits no
   `WordBoundary` (no spaces), so per-word timing does not exist. If the
   boundaries do not line up with the Cards, it falls back to speaking each Card

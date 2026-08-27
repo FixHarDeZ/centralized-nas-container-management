@@ -26,6 +26,7 @@ def a_card(text: str = "ทดสอบการ์ด", code: str | None = None
         "code": code,
         "query": "server room racks",
         "narration": "อ่านออกเสียงประโยคนี้",
+        "spoken": "อ่านออกเสียงประโยคนี้",
     }
 
 
@@ -54,6 +55,11 @@ def test_valid_script_passes():
         pytest.param(lambda s: s["cards"][0].update(lines=[]), id="no-lines"),
         pytest.param(lambda s: s["cards"][0].update(narration="  "), id="empty-narration"),
         pytest.param(lambda s: s["cards"][0].update(query=""), id="empty-footage-query"),
+        pytest.param(lambda s: s["cards"][0].pop("spoken"), id="missing-spoken"),
+        pytest.param(
+            lambda s: s["cards"][0].update(spoken="ปัญหาคือ Docker เขียน log ไม่หยุด"),
+            id="latin-in-spoken",
+        ),
     ],
 )
 def test_bad_script_is_rejected(mutate):
@@ -278,6 +284,52 @@ def test_narration_is_one_take_with_a_start_per_card():
         assert starts == sorted(starts), "card starts must run forward"
         # every cut lands inside the file
         assert starts[-1] < render.audio_seconds(audio)
+
+
+def test_the_voice_reads_the_transliteration_and_the_screen_keeps_the_english():
+    card = {"narration": "ปัญหาคือ Docker เขียน log ไม่หยุด",
+            "spoken": "ปัญหาคือ ด็อกเกอร์ เขียน ล็อก ไม่หยุด"}
+    assert render._tts_text(card) == "ปัญหาคือ ด็อกเกอร์ เขียน ล็อก ไม่หยุด"
+    # a Script written before `spoken` existed still renders
+    assert render._tts_text({"narration": "มีแต่ narration"}) == "มีแต่ narration"
+
+
+def _speech_runs(path: pathlib.Path) -> list[tuple[float, float]]:
+    """(end, duration) of every silence longer than a clause break."""
+    done = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-i", str(path),
+         "-af", f"silencedetect=noise={render.SILENCE_FLOOR}:d=0.2", "-f", "null", "-"],
+        capture_output=True, text=True,
+    )
+    return [line for line in done.stderr.splitlines() if "silence_duration" in line]
+
+
+def test_card_joins_lose_their_dead_air(tmp_path):
+    """A paragraph break leaves ~1s of silence at every Card join; trim it.
+
+    Stands in for narration with tone bursts: two seconds of speech, a second
+    of nothing, two more seconds.
+    """
+    source = tmp_path / "src.wav"
+    subprocess.run(
+        ["ffmpeg", "-y", "-hide_banner",
+         "-f", "lavfi", "-i", "sine=frequency=300:duration=2",
+         "-f", "lavfi", "-i", "anullsrc=r=44100:cl=mono:d=1",
+         "-f", "lavfi", "-i", "sine=frequency=300:duration=2",
+         "-filter_complex", "[0:a][1:a][2:a]concat=n=3:v=0:a=1[a]",
+         "-map", "[a]", str(source)],
+        capture_output=True, check=True,
+    )
+    assert len(_speech_runs(source)) == 1, "the fixture should have one long gap"
+
+    tight, starts = render.tighten(source, [0.0, 3.0], tmp_path)
+
+    assert len(starts) == 2 and starts[0] == 0.0
+    # the gap is cut back to a clause-length pause, not removed outright
+    assert starts[1] == pytest.approx(2.0 + render.JOIN_SILENCE, abs=0.1)
+    assert render.audio_seconds(tight) == pytest.approx(4.0 + render.JOIN_SILENCE, abs=0.15)
+    # both Cards are still there: one gap between them, none inside them
+    assert len(_speech_runs(tight)) == 1
 
 
 def test_no_music_folder_means_no_music(monkeypatch, tmp_path):

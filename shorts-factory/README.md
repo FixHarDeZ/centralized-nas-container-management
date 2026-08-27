@@ -26,6 +26,21 @@ Cards sit on real footage, dimmed by a scrim so the text reads. When Pexels has
 nothing for a card — or the key is missing entirely — that card falls back to a
 gradient background with a slow Ken Burns move, and the render carries on.
 
+The whole script is spoken in one edge-tts call, which is what keeps the
+delivery continuous — but the paragraph break that makes the endpoint report
+one sentence boundary per card also buys a paragraph-length pause: measured
+~1.0s at every card join against 0.12-0.53s at the voice's own clause breaks.
+The render cuts each card out at those boundaries, trims its trailing silence
+back to 0.30s and joins the pieces again, so the joins sit inside the voice's
+natural rhythm instead of reading as a series of announcements.
+
+Every card carries its narration twice: `narration` keeps English spelled as
+English and goes to the subtitles, `spoken` is the same sentence transliterated
+into Thai script and is the only one the voice ever reads. A Latin word left in
+`spoken` makes the voice switch to English mid-sentence, where it reads at
+English pace — a rushed, unclear burst inside Thai speech — so the validator
+rejects it.
+
 Card timing follows the length of each card's audio, so the clip runs as long
 as the narration takes. Each card also drifts — a slow zoom in or out that
 spans exactly its narration, alternating direction card to card, so the clip

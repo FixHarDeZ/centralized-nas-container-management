@@ -129,11 +129,24 @@ BGM_FADE = 2.0      # seconds of fade-out at the end
 
 CARD_SEPARATOR = ".\n\n"   # what makes the endpoint treat each Card as one sentence
 TAIL_PAD = 0.2               # video runs slightly past the audio; -shortest trims it
+# The newline in CARD_SEPARATOR is a paragraph break: it is what makes the
+# endpoint emit one SentenceBoundary per Card, and it also buys a paragraph
+# sized pause. Measured on th-TH-NiwatNeural: 0.96-1.01s at every Card join
+# against 0.12-0.53s at the voice's own clause breaks. Cutting the joins back
+# to a value inside that range is what stops the delivery sounding like a
+# series of announcements.
+JOIN_SILENCE = 0.30
+SILENCE_FLOOR = "-32dB"
 
 
 def _speakable(narration: str) -> str:
     """A full stop inside a Card would split it into two sentences."""
     return narration.replace(".", ",").strip()
+
+
+def _tts_text(card: dict) -> str:
+    """What the voice reads: the transliterated form, never the screen form."""
+    return _speakable(card.get("spoken") or card["narration"])
 
 
 async def narrate(cards: list[dict], path: Path) -> tuple[Path, list[float]] | None:
@@ -147,7 +160,7 @@ async def narrate(cards: list[dict], path: Path) -> tuple[Path, list[float]] | N
     Returns None when the boundaries cannot be trusted; the caller then falls
     back to speaking each Card separately.
     """
-    narrations = [_speakable(c["narration"]) for c in cards]
+    narrations = [_tts_text(c) for c in cards]
     communicate = edge_tts.Communicate(
         CARD_SEPARATOR.join(narrations),
         os.environ.get("TTS_VOICE", "th-TH-NiwatNeural"),
@@ -336,9 +349,9 @@ def _timestamp(seconds: float) -> str:
 def write_srt(cards: list[dict], starts: list[float], end: float, dest: Path) -> Path:
     """Subtitles from the Card boundaries we already know.
 
-    Uses each Card's **raw** narration, not the `_speakable()` form: the
-    transliteration ("ด็อกเกอร์") is right for the voice and wrong on screen,
-    where the English words should be spelled as English.
+    Uses each Card's `narration`, never its `spoken` twin: the transliteration
+    ("ด็อกเกอร์") is right for the voice and wrong on screen, where the English
+    words should be spelled as English.
     """
     lines = []
     for i, card in enumerate(cards):
@@ -367,6 +380,60 @@ def first_frame(clip: Path, dest: Path) -> Path:
     return dest
 
 
+def concat_audio(parts: list[Path], out: Path) -> Path:
+    """Join audio slices losslessly.
+
+    Re-encoded to PCM rather than stream-copied: copying mp3 frames carries
+    each part's encoder padding into the join, which is exactly the silence
+    this path exists to remove.
+    """
+    listing = out.parent / f"{out.stem}-parts.txt"
+    listing.write_text("".join(f"file '{p.name}'\n" for p in parts), encoding="utf-8")
+    _run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(listing),
+          "-c:a", "pcm_s16le", str(out)])
+    return out
+
+
+def tighten(audio: Path, starts: list[float], workdir: Path) -> tuple[Path, list[float]]:
+    """Cut the paragraph-length dead air out of every Card join.
+
+    Each Card is cut out at the boundaries we already have and its trailing
+    silence trimmed back to JOIN_SILENCE, then the pieces are joined again. The
+    prosody is untouched — this is still one synthesis, only shorter — and the
+    new start times are measured off the trimmed pieces rather than derived
+    from the endpoint's offsets, which overshoot the real file.
+    """
+    slices = []
+    for i, start in enumerate(starts):
+        out = workdir / f"tight{i:02d}.wav"
+        # Seeking on the input, not the output: output-side -ss/-to are applied
+        # after the filter chain, where `areverse` has already reordered the
+        # timestamps, and the trim silently does nothing.
+        args = ["ffmpeg", "-y", "-ss", f"{start:.3f}"]
+        if i + 1 < len(starts):
+            args += ["-to", f"{starts[i + 1]:.3f}"]
+        args += ["-i", str(audio)]
+        args += [
+            "-af",
+            # Trimming the tail means reversing, trimming the head, reversing
+            # back: silenceremove only ever works on the front of a stream.
+            "areverse,"
+            "silenceremove=start_periods=1:start_duration=0"
+            f":start_threshold={SILENCE_FLOOR}:start_silence={JOIN_SILENCE},"
+            "areverse",
+            str(out),
+        ]
+        _run(args)
+        slices.append(out)
+
+    joined = concat_audio(slices, workdir / "narration-tight.wav")
+    starts, clock = [], 0.0
+    for part in slices:
+        starts.append(clock)
+        clock += audio_seconds(part)
+    return joined, starts
+
+
 async def _narration_track(cards: list[dict], workdir: Path) -> tuple[Path, list[float]]:
     """One audio track for the whole Script, plus the start time of each Card.
 
@@ -376,11 +443,11 @@ async def _narration_track(cards: list[dict], workdir: Path) -> tuple[Path, list
     """
     single = await narrate(cards, workdir / "narration.mp3")
     if single:
-        return single
+        return tighten(*single, workdir)
 
     logger.info("ใช้วิธีพูดทีละ card แทน (ขอบเขตประโยคไม่น่าเชื่อถือ)")
     parts = await asyncio.gather(
-        *(speak(c["narration"], workdir / f"card{i:02d}.mp3") for i, c in enumerate(cards))
+        *(speak(_tts_text(c), workdir / f"card{i:02d}.mp3") for i, c in enumerate(cards))
     )
     starts, clock = [], 0.0
     for part in parts:
