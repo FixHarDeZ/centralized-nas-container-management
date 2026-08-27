@@ -5,6 +5,7 @@ import asyncio
 import json
 import os
 import re
+import time
 
 from openai import AsyncOpenAI
 
@@ -94,6 +95,21 @@ class ScriptError(ValueError):
     """The model returned something we cannot render."""
 
 
+# Latency here tracks how much the model decides to think, not the network.
+# Measured on the NAS, same prompt: 93s/3,092 completion tokens, 112s/4,016,
+# 197s/7,010, 207s/5,415, 347s/10,585 — about 30 tokens a second, every time.
+# It does not stall at random; it thinks for longer. So a wall-clock cap is the
+# right shape after all, it was simply set at 240s where a long think needs
+# ~350s, and the retry doubled the wait on top.
+#
+# Streaming was tried and abandoned: reading the same answer as a stream took
+# 400s against 137s unstreamed, so the idle-detection it buys costs three times
+# the wall clock it was meant to save.
+BUDGET_SECONDS = float(os.environ.get("MIMO_TIMEOUT_SECONDS", "600"))
+# Below this there is no point starting another attempt.
+MIN_ATTEMPT = 90.0
+
+
 def _client() -> AsyncOpenAI:
     # httpx logs "200 OK" when the headers arrive, so a response that stalls
     # mid-body reads as a success in the log while the call hangs.
@@ -103,6 +119,30 @@ def _client() -> AsyncOpenAI:
         timeout=float(os.environ.get("MIMO_TIMEOUT_SECONDS", "180")),
         max_retries=1,
     )
+
+
+async def _say(client: AsyncOpenAI, messages: list[dict], temperature: float,
+               budget: float) -> str:
+    """One completion, under a wall-clock deadline.
+
+    The deadline is enforced here rather than left to httpx, whose timeout is
+    per read: a server that trickles bytes resets that clock forever and the
+    call never returns.
+    """
+    reply = await asyncio.wait_for(
+        client.chat.completions.create(
+            model=os.environ.get("MIMO_MODEL", "mimo-v2.5-pro"),
+            messages=messages,
+            temperature=temperature,
+            # This is a reasoning model and its thinking budget drives the
+            # latency: measured 161s / 10457 tokens at the default against
+            # 79s / 3796 at "low", for a better script. "minimal" is rejected
+            # with a 400.
+            reasoning_effort=os.environ.get("MIMO_REASONING_EFFORT", "low"),
+        ),
+        timeout=budget,
+    )
+    return reply.choices[0].message.content or ""
 
 
 def validate(script: dict) -> dict:
@@ -187,21 +227,14 @@ async def suggest_topics(rows: list[dict]) -> list[dict]:
         + (f" — ข่าว: {row['headline']}" if row.get("headline") else "")
         for row in rows
     )
-    client = _client()
-    budget = float(os.environ.get("MIMO_TIMEOUT_SECONDS", "180"))
-    reply = await asyncio.wait_for(
-        client.chat.completions.create(
-            model=os.environ.get("MIMO_MODEL", "mimo-v2.5-pro"),
-            messages=[
-                {"role": "system", "content": TRENDS_PROMPT},
-                {"role": "user", "content": listing},
-            ],
-            temperature=0.7,
-            reasoning_effort=os.environ.get("MIMO_REASONING_EFFORT", "low"),
-        ),
-        timeout=budget,
+    raw = await _say(
+        _client(),
+        [{"role": "system", "content": TRENDS_PROMPT},
+         {"role": "user", "content": listing}],
+        temperature=0.7,
+        budget=BUDGET_SECONDS,
     )
-    parsed = _parse(reply.choices[0].message.content or "")
+    parsed = _parse(raw)
     topics = parsed.get("topics")
     if not isinstance(topics, list) or not topics:
         raise ScriptError("โมเดลไม่ได้เสนอหัวข้อมาเลย")
@@ -235,34 +268,24 @@ async def generate(
         messages.append({"role": "user", "content": f"แก้ตามนี้: {feedback}"})
 
     client = _client()
-    budget = float(os.environ.get("MIMO_TIMEOUT_SECONDS", "180"))
     last_error: Exception | None = None
+    # The budget is shared across attempts, not granted afresh to each one:
+    # two full-length attempts is twenty minutes of a human staring at
+    # "กำลังเขียนสคริปต์...".
+    deadline = time.monotonic() + BUDGET_SECONDS
     # One retry: a schema slip is usually fixed by telling the model what broke.
     for _ in range(2):
+        left = deadline - time.monotonic()
+        if left < MIN_ATTEMPT:
+            break
         try:
-            # A wall-clock deadline, because httpx's timeout is per read: a
-            # server that trickles bytes resets that clock forever and the call
-            # never returns. This bot polls Telegram on the same task, so a hung
-            # request freezes everything, not just this one.
-            reply = await asyncio.wait_for(
-                client.chat.completions.create(
-                    model=os.environ.get("MIMO_MODEL", "mimo-v2.5-pro"),
-                    messages=messages,
-                    temperature=0.8,
-                    # This is a reasoning model and its thinking budget drives
-                    # the latency: measured 161s / 10457 tokens at the default
-                    # against 79s / 3796 at "low", for a better script. "minimal"
-                    # is rejected with a 400.
-                    reasoning_effort=os.environ.get("MIMO_REASONING_EFFORT", "low"),
-                ),
-                timeout=budget,
-            )
+            raw = await _say(client, messages, temperature=0.8, budget=left)
         except asyncio.TimeoutError:
-            # Latency varies with how long the model chooses to think, so one
-            # slow response is worth retrying rather than giving up on.
-            last_error = ScriptError(f"mimo ไม่ตอบภายใน {budget:.0f} วินาที")
+            last_error = ScriptError(
+                f"mimo ไม่ตอบภายใน {BUDGET_SECONDS:.0f} วินาที "
+                "(ปกติใช้ 90-350 วินาทีตามความยาวที่โมเดลคิด)"
+            )
             continue
-        raw = reply.choices[0].message.content or ""
         try:
             return validate(_parse(raw))
         except ScriptError as exc:

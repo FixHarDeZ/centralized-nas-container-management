@@ -10,6 +10,7 @@ import json
 import os
 import pathlib
 import subprocess
+import time
 
 import pytest
 
@@ -85,33 +86,41 @@ def test_slightly_over_target_line_is_accepted():
     assert script_gen.validate(script)
 
 
-def test_a_timeout_is_retried_before_giving_up(monkeypatch):
-    """Latency swings with how long the model thinks, so one slow call is
-    worth retrying rather than losing the whole script."""
-    monkeypatch.setenv("MIMO_TIMEOUT_SECONDS", "0.1")
-    calls = []
+def fake_client(replies):
+    """A client that hands out the prepared answers in order.
 
-    good = {
-        "title": "t", "description": "d", "hashtags": ["#x"], "category": "เทค",
-        "cards": [a_card() for _ in range(5)],
-    }
+    A string is an answer; a number is "hang for this many seconds".
+    """
+    queue = list(replies)
 
-    class Flaky:
+    class Fake:
         class chat:
             class completions:
                 @staticmethod
                 async def create(**_):
-                    calls.append(1)
-                    if len(calls) == 1:
-                        await asyncio.sleep(30)
-                    import json as _json
                     import types
-                    msg = types.SimpleNamespace(content=_json.dumps(good))
+                    nxt = queue.pop(0)
+                    if not isinstance(nxt, str):
+                        await asyncio.sleep(nxt)
+                    msg = types.SimpleNamespace(content=nxt)
                     return types.SimpleNamespace(choices=[types.SimpleNamespace(message=msg)])
 
-    monkeypatch.setattr(script_gen, "_client", lambda: Flaky)
+    return Fake
+
+
+def test_a_broken_script_is_retried_before_giving_up(monkeypatch):
+    """Telling the model what it got wrong usually fixes it in one go.
+
+    A *timeout* is not retried, and cannot be: the deadline is shared, so an
+    attempt that runs out of time has spent the whole budget by definition.
+    Only a schema slip leaves time on the clock."""
+    good = json.dumps({
+        "title": "t", "description": "d", "hashtags": ["#x"], "category": "เทค",
+        "cards": [a_card() for _ in range(5)],
+    })
+    monkeypatch.setattr(script_gen, "_client", lambda: fake_client(["ไม่ใช่ JSON", good]))
+
     result = asyncio.run(script_gen.generate("หัวข้อ"))
-    assert len(calls) == 2
     assert result["title"] == "t"
 
 
@@ -142,10 +151,13 @@ def test_prosody_settings_reach_edge_tts(monkeypatch, tmp_path):
     assert seen["pitch"] == "-20Hz"
 
 
-def test_a_stalled_model_gives_up_on_the_clock(monkeypatch):
-    """httpx's timeout is per read, so a trickling server never trips it.
-    Only a wall-clock deadline gets the bot back."""
-    monkeypatch.setenv("MIMO_TIMEOUT_SECONDS", "0.2")
+def test_the_budget_is_shared_across_attempts(monkeypatch):
+    """Two full-length attempts is twenty minutes of a human staring at
+    'กำลังเขียนสคริปต์...'. httpx cannot enforce this: its timeout is per read,
+    so a server that trickles bytes resets that clock forever."""
+    monkeypatch.setattr(script_gen, "BUDGET_SECONDS", 0.3)
+    monkeypatch.setattr(script_gen, "MIN_ATTEMPT", 0.2)
+    started = time.monotonic()
 
     class Hanging:
         class chat:
@@ -157,6 +169,8 @@ def test_a_stalled_model_gives_up_on_the_clock(monkeypatch):
     monkeypatch.setattr(script_gen, "_client", lambda: Hanging)
     with pytest.raises(script_gen.ScriptError, match="ไม่ตอบภายใน"):
         asyncio.run(script_gen.generate("หัวข้อ"))
+    # one attempt burned the budget; the second is never started
+    assert time.monotonic() - started < 1.0
 
 
 def test_llm_client_has_a_bounded_timeout(monkeypatch):
@@ -770,18 +784,18 @@ def test_day7_is_what_counts_not_the_latest_reading():
 def test_the_variant_clause_reaches_the_model(monkeypatch):
     seen = {}
 
+    body = json.dumps({"title": "t", "description": "d", "hashtags": ["#x"],
+                       "category": "เทค",
+                       "cards": [a_card() for _ in range(5)]})
+
     class Spy:
         class chat:
             class completions:
                 @staticmethod
                 async def create(**kwargs):
-                    import json as _json
                     import types
                     seen["messages"] = kwargs["messages"]
-                    body = {"title": "t", "description": "d", "hashtags": ["#x"],
-                            "category": "เทค",
-                            "cards": [a_card() for _ in range(5)]}
-                    msg = types.SimpleNamespace(content=_json.dumps(body))
+                    msg = types.SimpleNamespace(content=body)
                     return types.SimpleNamespace(choices=[types.SimpleNamespace(message=msg)])
 
     monkeypatch.setattr(script_gen, "_client", lambda: Spy)

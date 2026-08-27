@@ -13,6 +13,28 @@ It does not upload to YouTube, and it has no web interface — no port, no
 nginx, no dashboard. See `docs/adr/0001` and `docs/adr/0002` at the repo root
 for why.
 
+## Waiting for the model
+
+Writing a script takes minutes, and how many depends on how long the model
+decides to think rather than on the network. Measured on the NAS, same prompt:
+93s for 3,092 completion tokens, 112s/4,016, 197s/7,010, 207s/5,415 and
+347s/10,585 — roughly 30 tokens a second every time. The old 240s cap cut off
+the long thinks and then retried, so a topic that needed 283s produced eight
+minutes of silence and an error; the budget is now 600s and it is **shared
+across both attempts**, because two full-length tries is twenty minutes of
+someone staring at "กำลังเขียนสคริปต์...". A timeout is therefore never
+retried — it has spent the whole budget by definition — while a script that
+comes back malformed is, since that leaves time on the clock.
+
+Streaming was tried and abandoned: reading the same answer as a stream took
+400s against 137s unstreamed. It would have let silence be told from slowness,
+but this endpoint does not go silent — it thinks — so the trade bought nothing
+and cost three times the wall clock.
+
+Long jobs run off the Telegram poll loop, so `/help`, `/stats` and the rest
+still answer while a script is being written or a clip rendered. The bot takes
+one job at a time: a second topic during either is refused rather than queued.
+
 ## Commands
 
 `/help` prints the lot in Thai, inside the chat, which is where anyone would

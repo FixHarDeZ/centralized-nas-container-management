@@ -82,6 +82,27 @@ HELP = """🎬 shorts-factory
 /help — หน้านี้"""
 
 
+# Work that outlives one poll tick. Writing a Script takes 1-7 minutes and
+# rendering takes longer; awaiting either inline froze the whole bot, so
+# `/stats` or even `/help` would sit unanswered until it finished.
+BUSY_MODES = {"writing", "rendering"}
+_running: set[asyncio.Task] = set()
+
+
+def spawn(coro, label: str) -> asyncio.Task:
+    """Run something long off the poll loop, and never lose its exception."""
+    task = asyncio.create_task(coro, name=label)
+    _running.add(task)
+
+    def done(finished: asyncio.Task) -> None:
+        _running.discard(finished)
+        if not finished.cancelled() and finished.exception():
+            logger.error("%s ล้ม", label, exc_info=finished.exception())
+
+    task.add_done_callback(done)
+    return task
+
+
 # --- state -------------------------------------------------------------------
 
 def load_state() -> dict:
@@ -253,7 +274,12 @@ async def make_script(client: httpx.AsyncClient, state: dict, topic: str, feedba
     await close_prompt(client, state.get("message_id"), f"📝 {previous['title']} — กำลังแก้ตามที่บอก" if previous else "")
     state["message_id"] = None
 
-    await say(client, "🤔 กำลังเขียนสคริปต์...")
+    # Claimed before the first await: the poll loop keeps running now, so a
+    # second Topic could otherwise arrive mid-generation and overwrite this
+    # one's clip_id and Variant.
+    state["mode"] = "writing"
+    save_state(state)
+    await say(client, "🤔 กำลังเขียนสคริปต์... (ระหว่างนี้ใช้คำสั่งอื่นได้)")
     try:
         script = await script_gen.generate(
             topic,
@@ -269,7 +295,8 @@ async def make_script(client: httpx.AsyncClient, state: dict, topic: str, feedba
             # A blip during a revision must not throw away the script being
             # worked on; re-post it so its buttons come back.
             sent = await say(client, format_script(previous), reply_markup=REVIEW_KEYBOARD)
-            state["message_id"] = (sent or {}).get("message_id")
+            state.update(mode="review", script=previous,
+                         message_id=(sent or {}).get("message_id"))
         else:
             # A Topic that never produced a Script is not a Clip. Recorded so
             # the Gate cannot be reached on failures, and so a clause that
@@ -543,7 +570,7 @@ async def on_text(client: httpx.AsyncClient, state: dict, text: str) -> None:
         await take_snapshots(client, state, announce=True)
         return
     if text.startswith("/trends"):
-        await on_trends(client, state)
+        spawn(on_trends(client, state), "on_trends")
         return
     if text.startswith("/experiment"):
         await say(client, experiment.report(manifest.load_all()))
@@ -553,14 +580,15 @@ async def on_text(client: httpx.AsyncClient, state: dict, text: str) -> None:
         return
 
     mode = state.get("mode", "idle")
-    if mode == "rendering":
-        await say(client, "⏳ กำลัง render อยู่ รอให้เสร็จก่อนนะ")
+    if mode in BUSY_MODES:
+        job = "เขียนสคริปต์" if mode == "writing" else "render"
+        await say(client, f"⏳ กำลัง{job}อยู่ รอให้เสร็จก่อนนะ")
     elif mode == "review":
         # A pending Script is work in progress: plain text revises it rather
         # than silently discarding it. Starting over is the 🗑 button.
-        await make_script(client, state, state["topic"], feedback=text)
+        spawn(make_script(client, state, state["topic"], feedback=text), "make_script")
     else:
-        await make_script(client, state, text)
+        spawn(make_script(client, state, text), "make_script")
 
 
 async def on_callback(client: httpx.AsyncClient, state: dict, query: dict) -> None:
@@ -568,10 +596,10 @@ async def on_callback(client: httpx.AsyncClient, state: dict, query: dict) -> No
     if query.get("data") != UPLOAD_CB and state.get("mode") != "review":
         return
     if query.get("data") == UPLOAD_CB:
-        await do_upload(client, state)
+        spawn(do_upload(client, state), "do_upload")
         return
     if query.get("data") == RENDER_CB:
-        await do_render(client, state)
+        spawn(do_render(client, state), "do_render")
     elif query.get("data") == DISCARD_CB:
         await close_prompt(client, state.get("message_id"), "🗑 ทิ้งสคริปต์แล้ว")
         manifest.update(state.get("clip_id"), outcome="discarded")
@@ -600,8 +628,8 @@ async def handle(client: httpx.AsyncClient, state: dict, update: dict) -> None:
 
 async def main() -> None:
     state = load_state()
-    if state.get("mode") == "rendering":
-        # Crashed or restarted mid-render; the workdir is gone either way.
+    if state.get("mode") in BUSY_MODES:
+        # Crashed or restarted mid-job; the workdir is gone either way.
         state.update(mode="idle", script=None, topic=None)
         save_state(state)
 
