@@ -86,6 +86,60 @@ def test_slightly_over_target_line_is_accepted():
     assert script_gen.validate(script)
 
 
+def hanging_client(delays):
+    """Each call sleeps for the next delay, then answers with its index."""
+    calls = []
+
+    class Fake:
+        class chat:
+            class completions:
+                @staticmethod
+                async def create(**kwargs):
+                    import types
+                    mine = len(calls)
+                    calls.append(kwargs.get("model"))
+                    await asyncio.sleep(delays[mine])
+                    msg = types.SimpleNamespace(content=f"answer-{mine}")
+                    return types.SimpleNamespace(choices=[types.SimpleNamespace(message=msg)])
+
+    return Fake, calls
+
+
+def test_a_hung_request_is_overtaken_by_its_twin(monkeypatch):
+    """Observed 2026-08-27: headers at 19:25:45, no body for ten minutes.
+
+    Waiting it out costs the human ten minutes; cutting every slow call off
+    costs the long thinks that do finish (measured up to 347s). So a second
+    request goes out alongside the first and the winner is whoever answers.
+    """
+    monkeypatch.setattr(script_gen, "HEDGE_AFTER", 0.05)
+    client, calls = hanging_client([30, 0.05])   # first hangs, twin answers
+
+    text = asyncio.run(script_gen._say(client, [], 0.8, budget=5))
+    assert text == "answer-1", "the twin's answer is the one used"
+    # the twin goes to the other model: both requests stuck in one episode is
+    # exactly the failure that was observed
+    assert calls[1] == script_gen.FALLBACK_MODEL != calls[0]
+
+
+def test_a_slow_but_healthy_answer_is_never_thrown_away(monkeypatch):
+    """A 347s think has to land — that is the failure that started all this."""
+    monkeypatch.setattr(script_gen, "HEDGE_AFTER", 0.05)
+    client, calls = hanging_client([0.2, 30])    # first is slow but arrives
+
+    text = asyncio.run(script_gen._say(client, [], 0.8, budget=5))
+    assert text == "answer-0"
+    assert len(calls) == 2, "the hedge goes out, and is simply not needed"
+
+
+def test_both_requests_hanging_still_gives_up_on_the_budget(monkeypatch):
+    monkeypatch.setattr(script_gen, "HEDGE_AFTER", 0.05)
+    client, _ = hanging_client([30, 30])
+
+    with pytest.raises(asyncio.TimeoutError):
+        asyncio.run(script_gen._say(client, [], 0.8, budget=0.3))
+
+
 def fake_client(replies):
     """A client that hands out the prepared answers in order.
 

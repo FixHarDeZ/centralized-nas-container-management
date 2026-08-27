@@ -3,11 +3,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import re
 import time
 
 from openai import AsyncOpenAI
+
+logger = logging.getLogger(__name__)
 
 MIN_CARDS, MAX_CARDS = 5, 7
 MAX_LINES_PER_CARD = 4
@@ -108,6 +111,23 @@ class ScriptError(ValueError):
 BUDGET_SECONDS = float(os.environ.get("MIMO_TIMEOUT_SECONDS", "600"))
 # Below this there is no point starting another attempt.
 MIN_ATTEMPT = 90.0
+# There are two failure shapes, and they need different answers. Most slow runs
+# are the model thinking: 93s/3,092 completion tokens, 112s/4,016, 197s/7,010,
+# 207s/5,415, 347s/10,585 — those finish, and cutting them off is what broke
+# the bot at 240s. But a request can also take the headers and never deliver a
+# body at all: observed 2026-08-27 19:25:45, "200 OK" logged instantly, silence
+# until the 600s deadline. Waiting out a hang costs ten minutes; killing a long
+# think costs the clip. So neither: after HEDGE_AFTER a second identical
+# request goes out alongside the first and whichever answers first wins. A
+# healthy long think (347s) still lands; a hung one is overtaken by its twin.
+HEDGE_AFTER = 240.0
+# The twin goes to the *other* model on purpose. Proven the same evening: the
+# same topic hung twice past 600s — including once with an identical hedge
+# alongside it, so both requests were stuck in the same episode — and then
+# answered in 137s an hour later. A hedge that shares the sick pool is no
+# hedge; mimo-v2.5 wrote the same script in 149s while the pro model was
+# healthy, so it is a real fallback and not a downgrade to nothing.
+FALLBACK_MODEL = os.environ.get("MIMO_FALLBACK_MODEL", "mimo-v2.5")
 
 
 def _client() -> AsyncOpenAI:
@@ -123,15 +143,16 @@ def _client() -> AsyncOpenAI:
 
 async def _say(client: AsyncOpenAI, messages: list[dict], temperature: float,
                budget: float) -> str:
-    """One completion, under a wall-clock deadline.
+    """One completion, hedged against a request that hangs.
 
     The deadline is enforced here rather than left to httpx, whose timeout is
     per read: a server that trickles bytes resets that clock forever and the
     call never returns.
     """
-    reply = await asyncio.wait_for(
-        client.chat.completions.create(
-            model=os.environ.get("MIMO_MODEL", "mimo-v2.5-pro"),
+
+    async def once(model: str) -> str:
+        reply = await client.chat.completions.create(
+            model=model,
             messages=messages,
             temperature=temperature,
             # This is a reasoning model and its thinking budget drives the
@@ -139,10 +160,43 @@ async def _say(client: AsyncOpenAI, messages: list[dict], temperature: float,
             # 79s / 3796 at "low", for a better script. "minimal" is rejected
             # with a 400.
             reasoning_effort=os.environ.get("MIMO_REASONING_EFFORT", "low"),
-        ),
-        timeout=budget,
-    )
-    return reply.choices[0].message.content or ""
+        )
+        return reply.choices[0].message.content or ""
+
+    primary = os.environ.get("MIMO_MODEL", "mimo-v2.5-pro")
+    running = {asyncio.create_task(once(primary))}
+    waited = 0.0
+    hedged = False
+    try:
+        while True:
+            slice_for = min(HEDGE_AFTER, budget) - waited if not hedged else budget - waited
+            if slice_for <= 0:
+                raise asyncio.TimeoutError
+            started = time.monotonic()
+            done, running = await asyncio.wait(
+                running, timeout=slice_for, return_when=asyncio.FIRST_COMPLETED
+            )
+            waited += time.monotonic() - started
+            if done:
+                # Any answer will do; a failed twin is not worth reporting when
+                # the other one is still running.
+                for task in done:
+                    if not task.exception():
+                        return task.result()
+                if not running:
+                    raise next(iter(done)).exception()
+                continue
+            if hedged or waited >= budget:
+                raise asyncio.TimeoutError
+            logger.warning(
+                "%s ยังไม่ตอบใน %.0f วินาที ยิงคำขอสำรองไปที่ %s คู่ไปด้วย",
+                primary, waited, FALLBACK_MODEL,
+            )
+            running.add(asyncio.create_task(once(FALLBACK_MODEL)))
+            hedged = True
+    finally:
+        for task in running:
+            task.cancel()
 
 
 def validate(script: dict) -> dict:

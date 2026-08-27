@@ -26,6 +26,16 @@ someone staring at "กำลังเขียนสคริปต์...". A t
 retried — it has spent the whole budget by definition — while a script that
 comes back malformed is, since that leaves time on the clock.
 
+There is a second failure shape underneath that one. A request can take the
+headers and never deliver a body: observed 2026-08-27 at 19:25:45, "200 OK"
+logged instantly, silence until the deadline — and the same topic answered in
+137s two hours later. Waiting a hang out costs ten minutes; cutting every slow
+call off costs the long thinks that do finish. So after 240s a second request
+goes out alongside the first and whichever answers first wins. It goes to
+`mimo-v2.5` rather than to `mimo-v2.5-pro` again: an identical twin was tried
+and both requests hung together in the same episode, while the smaller model
+wrote the same script in 149s.
+
 Streaming was tried and abandoned: reading the same answer as a stream took
 400s against 137s unstreamed. It would have let silence be told from slowness,
 but this endpoint does not go silent — it thinks — so the trade bought nothing
