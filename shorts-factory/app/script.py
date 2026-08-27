@@ -24,13 +24,19 @@ HARD_MAX_CHARS_PER_LINE = 34
 
 LATIN = re.compile(r"[A-Za-z]+")
 
-SYSTEM_PROMPT = f"""คุณเป็นคนเขียนสคริปต์ YouTube Shorts ภาษาไทย สายเทค (DevOps / AI / โครงสร้างพื้นฐาน)
+SYSTEM_PROMPT = f"""คุณเป็นคนเขียนสคริปต์ YouTube Shorts ภาษาไทย
+
+หัวข้ออะไรก็ได้ตามที่สั่ง (เทค การเงิน สุขภาพ ไลฟ์สไตล์ ความรู้รอบตัว ฯลฯ)
+เขียนแบบคนที่รู้เรื่องนั้นจริงและเล่าให้เพื่อนฟัง ไม่ใช่ท่องสารานุกรม
+
+**ห้ามกล่าวอ้างเรื่องบุคคลจริง (ดารา นักการเมือง นักกีฬา) ข่าวสด คดีความ หรือผลการแข่งขัน**
+ถ้าหัวข้อพาไปทางนั้น ให้เล่าเฉพาะแง่มุมที่เป็นความรู้ทั่วไปซึ่งตรวจสอบได้
 
 เขียนสคริปต์คลิปแนวตั้ง ยาว 40-50 วินาที แบ่งเป็น card ละ 6-9 วินาที
 
 กฎ:
 - มี {MIN_CARDS}-{MAX_CARDS} card
-- card แรกคือ hook ต้องหยุดนิ้วคนดูใน 3 วินาที ตั้งคำถามหรือชี้ความเจ็บปวดที่คนทำงานสายนี้เจอจริง ห้ามเกริ่นแบบ "วันนี้เราจะมาพูดถึง"
+- card แรกคือ hook ต้องหยุดนิ้วคนดูใน 3 วินาที ตั้งคำถามหรือชี้ความเจ็บปวดที่คนดูเจอจริง ห้ามเกริ่นแบบ "วันนี้เราจะมาพูดถึง"
 - card สุดท้ายสรุปสั้นๆ ให้คนดูเอาไปใช้ต่อได้
 - แต่ละ card มี lines = ข้อความบนจอ 1-{MAX_LINES_PER_CARD} บรรทัด บรรทัดละราวๆ {TARGET_CHARS_PER_LINE} ตัวอักษร (ห้ามเกิน {HARD_MAX_CHARS_PER_LINE})
   **สำคัญ: ต้องตัดบรรทัดตรงรอยต่อคำภาษาไทยเอง** เพราะโปรแกรมวาดตัวอักษรตามที่ให้มาเป๊ะๆ ตัดผิดที่แล้วคำจะขาดกลางคำ
@@ -48,11 +54,40 @@ SYSTEM_PROMPT = f"""คุณเป็นคนเขียนสคริปต
   ต้องเป็นสิ่งที่**ถ่ายเป็นวิดีโอได้จริง** เช่น "server room racks", "developer typing keyboard",
   "data center lights" ห้ามใช้คำนามธรรมที่ถ่ายไม่ได้ เช่น "docker configuration", "log rotation"
 - title/description/hashtags = สำหรับอัปขึ้น YouTube, hashtags 3-5 ตัว ขึ้นต้นด้วย #
+- category = หมวดของคลิปนี้ คำสั้นๆ ภาษาไทย เช่น เทค, การเงิน, สุขภาพ, ไลฟ์สไตล์, เกม,
+  ความรู้รอบตัว — ใช้บันทึกว่าหมวดไหนคนดูเยอะ ไม่ได้โชว์ในคลิป
 
 ตอบเป็น JSON อย่างเดียว ห้ามมีข้อความอื่นนอก JSON:
-{{"title": "...", "description": "...", "hashtags": ["#..."],
+{{"title": "...", "description": "...", "hashtags": ["#..."], "category": "...",
   "cards": [{{"lines": ["..."], "code": null, "query": "...",
              "narration": "...", "spoken": "..."}}]}}"""
+
+
+TRENDS_PROMPT = """คุณเป็นคนเลือกหัวข้อคลิป YouTube Shorts ภาษาไทย
+
+จะได้รับรายการ "สิ่งที่คนไทยกำลังค้นหา/กำลังดู" ตอนนี้ หน้าที่คุณคือแปลงเป็น
+**หัวข้อคลิปที่ทำได้จริง 5 หัวข้อ**
+
+กฎเหล็ก:
+- **ห้ามเสนอหัวข้อที่เป็นข่าวสด การเมือง คดีความ ผลการแข่งขัน หรือเรื่องของบุคคลจริง**
+  (ดารา นักการเมือง นักกีฬา) เพราะคลิปจะกลายเป็นการกล่าวอ้างเรื่องคนจริงโดยไม่มีหลักฐาน
+  ถ้ากระแสนั้นเป็นข่าวคน ให้**ข้ามไปเลย** หรือดึงเฉพาะแง่มุมที่อธิบายได้แบบไม่พาดพิงใคร
+  เช่น กระแส "ชิป M6" → "ชิป M6 ต่างจาก M4 ยังไง" (โอเค),
+  กระแส "นายก..." → ข้าม
+- **ห้ามตั้งหัวข้อที่เป็นการคาดเดา/ยืนยันเรื่องของคนจริงเด็ดขาด** เช่น
+  "ดาราคนนั้นจะกลับมาเล่นจริงไหม", "นักร้องคนนี้เลิกกับใคร", "ผู้บริหารคนนั้นจะลาออกไหม"
+  — พวกนี้คือข่าวลือ บอทไม่มีทางรู้ แล้วจะเดาใส่ปากคนจริง
+  ถ้ากระแสมาจากหนัง/ซีรีส์/เกม ให้เล่า**ตัวงาน**แทน เช่น "จักรวาลนี้เล่าเรื่องอะไรมาบ้าง"
+  ไม่ใช่ "ใครจะกลับมาแสดง"
+- เอาหัวข้อที่**อธิบายได้ด้วยข้อเท็จจริงที่อยู่ตัวแล้ว** ไม่ใช่เรื่องที่ต้องรู้ข่าวล่าสุดถึงจะพูดถูก
+- หัวข้อละ 1 บรรทัด เขียนแบบที่พิมพ์ส่งให้บอทเขียนสคริปต์ได้ทันที
+- kind = "evergreen" ถ้าเรื่องนี้ยังน่าดูอีก 6 เดือน, "spike" ถ้าตายพร้อมกระแส
+- category = หมวดสั้นๆ ภาษาไทย เช่น เทค, การเงิน, สุขภาพ, ไลฟ์สไตล์, เกม, ความรู้รอบตัว
+- from = คำ/ชื่อคลิปต้นทางที่จุดประกายหัวข้อนี้ (ก๊อปมาจากรายการที่ให้)
+- why = เหตุผลสั้นๆ ว่าทำไมคนน่าจะดู
+
+ตอบเป็น JSON อย่างเดียว:
+{"topics": [{"topic": "...", "kind": "evergreen", "category": "...", "from": "...", "why": "..."}]}"""
 
 
 class ScriptError(ValueError):
@@ -72,7 +107,7 @@ def _client() -> AsyncOpenAI:
 
 def validate(script: dict) -> dict:
     """Reject a Script the renderer would mangle. Raises ScriptError."""
-    for key in ("title", "description", "hashtags", "cards"):
+    for key in ("title", "description", "hashtags", "cards", "category"):
         if key not in script:
             raise ScriptError(f"ไม่มีฟิลด์ {key}")
 
@@ -138,6 +173,39 @@ def _context_note(avoid: list[str], winners: list[str]) -> str:
             + "\n".join(f"- {title}" for title in winners)
         )
     return "\n\n".join(parts)
+
+
+async def suggest_topics(rows: list[dict]) -> list[dict]:
+    """Turn raw trend rows into Topics the bot could actually be given.
+
+    Kept separate from `generate()`: this decides *what* to make, which is the
+    human's call, so its output is a list to choose from and never an input to
+    a Script (docs/adr/0004).
+    """
+    listing = "\n".join(
+        f"- [{row['source']}] {row['term']} ({row['traffic']:,})"
+        + (f" — ข่าว: {row['headline']}" if row.get("headline") else "")
+        for row in rows
+    )
+    client = _client()
+    budget = float(os.environ.get("MIMO_TIMEOUT_SECONDS", "180"))
+    reply = await asyncio.wait_for(
+        client.chat.completions.create(
+            model=os.environ.get("MIMO_MODEL", "mimo-v2.5-pro"),
+            messages=[
+                {"role": "system", "content": TRENDS_PROMPT},
+                {"role": "user", "content": listing},
+            ],
+            temperature=0.7,
+            reasoning_effort=os.environ.get("MIMO_REASONING_EFFORT", "low"),
+        ),
+        timeout=budget,
+    )
+    parsed = _parse(reply.choices[0].message.content or "")
+    topics = parsed.get("topics")
+    if not isinstance(topics, list) or not topics:
+        raise ScriptError("โมเดลไม่ได้เสนอหัวข้อมาเลย")
+    return [t for t in topics if str(t.get("topic", "")).strip()][:5]
 
 
 async def generate(

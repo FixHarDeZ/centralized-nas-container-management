@@ -64,3 +64,46 @@ That is why the earlier probe on a bot Clip was inconclusive, and why
 `/retention` walks back through published Clips instead of assuming the newest
 has data. Individual videos also answer 500 from time to time; a sick video is
 skipped rather than allowed to abort the walk.
+
+
+## Amended 2026-08-27: the niche lock is gone, and category is an observation
+
+The lock to DevOps/AI was chosen so that the subject could not swamp every
+other variable. Evidence collected the same day killed the premise: a YouTube
+search for `devops ไทย` over 30 days of Thai short-form returns **zero**
+results, `kubernetes สอน` returns one clip with 123 views, and the channel's
+own median is 3 views a clip against a personal-finance outlier at 182. A lock
+that keeps the experiment clean but guarantees no audience produces a Gate that
+can never be reached — cleanliness bought with the entire point of the
+exercise. Topics are now free.
+
+`/trends` supplies the outside signal the loop was missing: Google Trends'
+RSS feed for TH (the `dailytrends` JSON endpoint is retired — it answers 404;
+`/trending/rss?geo=TH` is what replaced it) and YouTube's own `mostPopular`
+chart for TH. Both measure demand, and both are outside data, so the Gate does
+not apply: that gate stops the bot learning from its own thin numbers, not from
+the world. Suggestions are shown alongside the raw rows they came from and are
+never fed into a Script automatically — the human still picks.
+
+News, politics, sport results and anything about a real person are kept out —
+but by different means on each path, and one of them is weaker than the other.
+YouTube rows carry a category, so 25 (News & Politics) and 17 (Sports) are
+dropped outright. Google Trends rows carry no category at all, so on that path
+the prompt and the human's choice are the only filter: `นายกเฮง` and a live
+volleyball match both reached the model, which declined them. That is one layer
+where the other has two, which is why the raw rows are always printed alongside
+the suggestions — a bad suggestion has to be visible against the thing it came
+from. This is not taste, it is the
+one place where an LLM writing confidently about a live story publishes an
+invented claim about a named human being under this channel's name. Observed
+before the rule was tightened: the model proposed *"is Tobey Maguire really
+coming back?"* — exactly the shape to refuse.
+
+Making **category** the randomised factor was considered and rejected on
+implementation: the human chooses the Topic, so a category drawn at random
+would simply be overruled, and randomisation is the only thing that separates
+an experiment from a story. Category is therefore recorded on every Script and
+reported as an **observation**, labelled as such in `/experiment` — with topics
+free to roam it is the biggest thing moving the numbers, and refusing to look
+at it would be worse than looking at it with the caveat attached. The
+randomised factor stays `hook`.

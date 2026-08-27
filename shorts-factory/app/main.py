@@ -10,13 +10,13 @@ import logging
 import os
 import re
 import shutil
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import httpx
 
 from app import (analytics, backfill, experiment, history, manifest, render,
-                 retention, script as script_gen, snapshots, youtube)
+                 retention, script as script_gen, snapshots, trends, youtube)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("shorts-factory")
@@ -35,6 +35,8 @@ RENDER_CB, DISCARD_CB, UPLOAD_CB = "render", "discard", "upload"
 # ponytail: one Reports call per Clip tried. Skip Clips whose snapshots show
 # too few views to have a curve (observed: 361 yes, 27 no) if this gets slow.
 RETENTION_TRIES = 10
+# How long a /trends list stays creditable for a Topic typed back.
+SUGGESTION_LIFETIME = timedelta(days=2)
 UPLOAD_KEYBOARD = {
     "inline_keyboard": [[{"text": "⬆️ อัปโหลดขึ้น YouTube", "callback_data": UPLOAD_CB}]]
 }
@@ -44,6 +46,40 @@ REVIEW_KEYBOARD = {
         {"text": "🗑 ทิ้ง", "callback_data": DISCARD_CB},
     ]]
 }
+
+
+HELP = """🎬 shorts-factory
+
+ส่งหัวข้อมาเฉยๆ = เริ่มทำคลิปใหม่
+ระหว่างรอรีวิวสคริปต์ พิมพ์บอกได้ว่าอยากแก้ตรงไหน (บอทเขียนใหม่ให้)
+🎬 render = ลงมือทำคลิป · 🗑 ทิ้ง = เริ่มใหม่ · ⬆️ = อัปขึ้น YouTube (ต้องกดเอง)
+
+/stats — คลิปที่อัปแล้วทำได้แค่ไหน
+   เรียงตาม % ที่คนดูจนจบ (ไม่ใช่ยอดวิว) เพราะมันคือตัวที่บอกว่า "เขียนดีขึ้นไหม"
+   YouTube ประมวลผลช้ากว่าปัจจุบันหลายวัน คลิปที่เพิ่งอัปจะยังไม่มีตัวเลข
+
+/snapshot — เก็บตัวเลขของวันนี้เดี๋ยวนี้เลย
+   ปกติบอทเก็บเองวันละครั้งตอน 10 โมง ไม่ต้องสั่ง — คำสั่งนี้ไว้ใช้ตอนอยากได้เดี๋ยวนั้น
+   ตัวเลข ณ วันที่ 7 หลังอัปคือตัวที่ใช้ตัดสินผลทดลอง (เก็บทุกวันแต่ใช้วันที่ 7)
+
+/experiment — ผลการทดลองตอนนี้
+   ทุกคลิปถูกสุ่มแบบเปิดเรื่อง: เปิดด้วยตัวเลขช็อก หรือเปิดด้วยคำถาม
+   1 ใน 3 คลิปเป็นคลิป "ลองของใหม่" ไม่นับเข้าผลทดลอง (กันไม่ให้ระบบวนอยู่กับของเดิม)
+   บอทจะยังไม่ฟันธงว่าฝั่งไหนชนะ จนกว่าจะครบ 10 คลิป + 300 views ทั้งสองฝั่ง
+   และต่างกันเกิน 5 จุด — ไม่งั้นตอบ "สรุปไม่ได้" ซึ่งเป็นคำตอบที่ถูกต้อง ไม่ใช่ความล้มเหลว
+
+/retention — คนดูหนีตอนไหน
+   ส่งกราฟมาให้ พร้อมบอกว่าวินาทีที่คนหนีเยอะสุดคือ card ไหน พูดอะไรอยู่
+   ใส่ id ต่อท้ายได้ เช่น /retention abc123 — ไม่ใส่ = ไล่หาคลิปล่าสุดที่มีข้อมูล
+   YouTube ทำกราฟนี้ให้เฉพาะคลิปที่มีคนดูมากพอ (วัดแล้ว: 361 views มี, 27 views ไม่มี)
+
+/trends — ตอนนี้คนไทยค้นอะไร ดูอะไรกันอยู่
+   ดึงจาก Google Trends (ประเทศไทย) + ชาร์ตคลิปฮิตของ YouTube ไทย
+   ส่งของดิบมาให้ดูด้วย แล้วค่อยเสนอหัวข้อที่ทำได้จริง 5 อัน — ชอบอันไหนพิมพ์กลับมา
+   ข่าวสด การเมือง คดี ผลแข่ง และเรื่องของคนจริง ถูกกรองทิ้ง (บอทจะแต่งข้อมูลมั่ว)
+   🌱 evergreen = ดูได้อีกนาน · ⚡️ spike = ตายพร้อมกระแส
+
+/help — หน้านี้"""
 
 
 # --- state -------------------------------------------------------------------
@@ -168,6 +204,34 @@ async def deliver(client: httpx.AsyncClient, state: dict, script: dict, clip: Pa
     save_state(state)
 
 
+def trend_origin(state: dict, topic: str) -> dict | None:
+    """Whether this Topic came off the last /trends list, and from where.
+
+    Matched loosely on purpose: the human retypes or trims a suggestion rather
+    than copying it byte for byte.
+    """
+    # state.json outlives restarts, so an ancient list would credit a Topic to
+    # a trend it has nothing to do with — corrupting the one field that exists
+    # to answer whether trend topics did better.
+    try:
+        age = datetime.now() - datetime.fromisoformat(state.get("suggested_at", ""))
+    except (TypeError, ValueError):
+        return None
+    if age > SUGGESTION_LIFETIME:
+        return None
+
+    head = topic.strip()[:16]
+    for suggestion in state.get("suggested") or []:
+        text = str(suggestion.get("topic", ""))
+        if head and (head in text or text[:16] in topic):
+            return {
+                "from": suggestion.get("from", ""),
+                "kind": suggestion.get("kind", ""),
+                "category": suggestion.get("category", ""),
+            }
+    return None
+
+
 async def make_script(client: httpx.AsyncClient, state: dict, topic: str, feedback: str = "") -> None:
     previous = state.get("script") if feedback else None
     # A revision belongs to the Manifest already open for this Topic; only a
@@ -180,6 +244,9 @@ async def make_script(client: httpx.AsyncClient, state: dict, topic: str, feedba
         assignment = experiment.assign()
         manifest.update(state["clip_id"], **assignment)
         state["style"] = assignment["style"]
+        origin = trend_origin(state, topic)
+        if origin:
+            manifest.update(state["clip_id"], trend=origin)
     # Retire the buttons on the script being replaced. Two live keyboards would
     # let the human approve the message they are looking at and get a different
     # script rendered, since state.message_id only tracks the newest one.
@@ -374,6 +441,45 @@ async def take_snapshots(client: httpx.AsyncClient, state: dict, announce: bool 
         save_state(state)
 
 
+def format_topics(topics: list[dict]) -> str:
+    lines = ["💡 หัวข้อที่น่าทำ (พิมพ์หัวข้อที่ชอบกลับมาได้เลย)", ""]
+    for i, topic in enumerate(topics, 1):
+        tag = "🌱 evergreen" if topic.get("kind") == "evergreen" else "⚡️ spike"
+        lines.append(f"{i}. {topic['topic']}")
+        lines.append(
+            f"    {tag} · {topic.get('category', '?')} · มาจาก: {topic.get('from', '?')[:40]}"
+        )
+        if topic.get("why"):
+            lines.append(f"    {topic['why'][:90]}")
+    return "\n".join(lines)
+
+
+async def on_trends(client: httpx.AsyncClient, state: dict) -> None:
+    """What Thailand is searching for and watching, turned into Topics.
+
+    The raw list is sent too: a suggestion that drifted from its source is only
+    catchable against the thing it came from.
+    """
+    await say(client, "📈 กำลังดู trend...")
+    rows = await trends.collect()
+    await say(client, trends.format_raw(rows))
+    if not rows:
+        return
+    try:
+        topics = await script_gen.suggest_topics(rows)
+    except Exception as exc:
+        logger.exception("suggest_topics failed")
+        await say(client, f"แปลง trend เป็นหัวข้อไม่สำเร็จ: {exc}")
+        return
+
+    # Remembered so a Topic typed back gets its origin recorded — the point of
+    # the whole exercise is answering "did trend topics do better?" later.
+    state["suggested"] = topics
+    state["suggested_at"] = datetime.now().isoformat(timespec="seconds")
+    save_state(state)
+    await say(client, format_topics(topics))
+
+
 async def on_retention(client: httpx.AsyncClient, video_id: str = "") -> None:
     """The retention curve of one Clip, read against its own Cards.
 
@@ -425,11 +531,19 @@ async def on_retention(client: httpx.AsyncClient, video_id: str = "") -> None:
 
 
 async def on_text(client: httpx.AsyncClient, state: dict, text: str) -> None:
+    if text.startswith("/help") or text.startswith("/start"):
+        # No parse_mode: Telegram's Markdown rejects unbalanced markers and
+        # answers 400, which would leave the help unreachable.
+        await say(client, HELP)
+        return
     if text.startswith("/stats"):
         await on_stats(client)
         return
     if text.startswith("/snapshot"):
         await take_snapshots(client, state, announce=True)
+        return
+    if text.startswith("/trends"):
+        await on_trends(client, state)
         return
     if text.startswith("/experiment"):
         await say(client, experiment.report(manifest.load_all()))

@@ -106,3 +106,16 @@ A point on a [[Retention curve]] where the fall is sharper than the clip's own
 baseline, mapped back to the [[Card]] that was on screen at that moment via the
 Card start times in the [[Manifest]].
 _Avoid_: churn, exit, bounce
+
+**Trend**:
+An outside signal of what Thailand is searching for (Google Trends RSS) or
+watching (YouTube's TH chart) right now. Turned into candidate Topics for the
+human to choose from, never fed into a Script by itself. Unlike performance
+data it is not held back by the [[Gate]]: the Gate stops the loop learning from
+its own thin numbers, not from the world.
+
+**Category**:
+The subject area of a Clip — เทค, การเงิน, สุขภาพ and so on — written by the
+model into every Script. A recorded dimension, **not** a [[Variant]]: the human
+chooses the Topic, so categories are never randomised and comparing them is an
+observation, not an experiment.

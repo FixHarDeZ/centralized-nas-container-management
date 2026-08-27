@@ -42,7 +42,10 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
   `app/experiment.py` (factor `hook` 2 variant สุ่มต่อคลิปตอนเปิด Topic ไม่ re-roll,
   explore 1 ใน 3 ไม่นับผล, `/experiment` รายงาน + ปฏิเสธที่จะฟันธงก่อนถึงเกณฑ์).
   `app/retention.py` (เส้น retention + หา cliff + map กลับเป็น card + วาด PNG ด้วย Pillow,
-  `/retention`). **ยังไม่ลง**: recommender (ขั้น 6 รอ Gate)
+  `/retention`) และ `app/trends.py` (Google Trends RSS ไทย + YouTube chart ไทย → mimo
+  แปลงเป็นหัวข้อ, `/trends`). **หัวข้อไม่ล็อก DevOps/AI แล้ว** (ADR 0004 ท้ายไฟล์) —
+  `category` เป็นมิติที่บันทึกไว้อ่านแบบสังเกตการณ์ ไม่ใช่ variant ที่สุ่ม.
+  **ยังไม่ลง**: recommender (ขั้น 6 รอ Gate)
 - State: `/data/state.json`. Working files under `/data`, wiped after each
   render. Finished clips and their metadata `.txt` land in `/output`
   (`/volume1/shorts` on the NAS, reachable over SMB).

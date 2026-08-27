@@ -19,7 +19,8 @@ os.environ.setdefault("MIMO_API_KEY", "test-key")
 os.environ.setdefault("MIMO_BASE_URL", "https://example.invalid/v1")
 
 from app import (analytics, backfill, experiment, history, main, manifest,  # noqa: E402
-                 render, retention, script as script_gen, snapshots, youtube)
+                 render, retention, script as script_gen, snapshots, trends,  # noqa: E402
+                 youtube)
 
 
 async def _nothing(*args, **kwargs):
@@ -41,6 +42,7 @@ def a_script(cards: int = 5) -> dict:
         "title": "ทดสอบ",
         "description": "คำอธิบาย",
         "hashtags": ["#devops"],
+        "category": "เทค",
         "cards": [a_card() for _ in range(cards)],
     }
 
@@ -90,7 +92,7 @@ def test_a_timeout_is_retried_before_giving_up(monkeypatch):
     calls = []
 
     good = {
-        "title": "t", "description": "d", "hashtags": ["#x"],
+        "title": "t", "description": "d", "hashtags": ["#x"], "category": "เทค",
         "cards": [a_card() for _ in range(5)],
     }
 
@@ -185,6 +187,17 @@ def test_slugify_never_returns_empty():
 
 
 # --- trust boundary ----------------------------------------------------------
+
+def test_help_lists_every_command_the_bot_answers(monkeypatch):
+    """A command the help forgets is a command nobody remembers using."""
+    import re
+
+    answered = set(re.findall(r'text\.startswith\("(/\w+)"\)', pathlib.Path(
+        main.__file__).read_text(encoding="utf-8")))
+    answered -= {"/start"}   # an alias for /help, not worth a line of its own
+    missing = [command for command in answered if command not in main.HELP]
+    assert not missing, f"ไม่ได้อธิบายไว้ใน /help: {missing}"
+
 
 def test_commands_work_while_a_script_is_waiting_for_review(monkeypatch):
     """Plain text revises the pending Script — a command must not become feedback."""
@@ -489,6 +502,87 @@ def test_upload_credits_the_clip_it_was_offered_for(tmp_path, monkeypatch):
     assert history.load()[0]["topic"] == "หัวข้อ A"
 
 
+# --- trends ------------------------------------------------------------------
+
+TRENDS_RSS = """<?xml version="1.0" encoding="UTF-8"?>
+<rss xmlns:ht="https://trends.google.com/trending/rss" version="2.0"><channel>
+<item><title>ช่อง29</title><ht:approx_traffic>20000+</ht:approx_traffic>
+  <ht:news_item><ht:news_item_title>ถ่ายทอดสด ไทย VS เกาหลีใต้</ht:news_item_title></ht:news_item>
+</item>
+<item><title>mac mini ชิป m6</title><ht:approx_traffic>200+</ht:approx_traffic>
+  <ht:news_item><ht:news_item_title>Apple ลุ้น iPhone 18 จอพับ</ht:news_item_title></ht:news_item>
+</item>
+<item><title>ไม่มีตัวเลข</title></item>
+</channel></rss>"""
+
+
+def test_search_spikes_are_read_biggest_first():
+    rows = trends.parse_rss(TRENDS_RSS)
+    assert [r["term"] for r in rows] == ["ช่อง29", "mac mini ชิป m6", "ไม่มีตัวเลข"]
+    assert rows[0]["traffic"] == 20000
+    assert rows[0]["headline"].startswith("ถ่ายทอดสด")
+    assert rows[2]["traffic"] == 0, "a spike with no volume still counts, just last"
+
+
+def test_news_and_sport_never_become_topics():
+    """The rule the ADR calls risk, not taste — a regression here is silent."""
+    assert trends.keep("28") and trends.keep(None)
+    assert not trends.keep("25"), "News & Politics"
+    assert not trends.keep("17"), "Sports — live results, and they age in hours"
+
+
+def test_an_old_suggestion_list_stops_crediting_topics():
+    """state.json outlives restarts; a stale list would invent a trend origin."""
+    import datetime as dt
+
+    suggestion = {"topic": "ชิป M6 ต่างจาก M4 ยังไง", "from": "mac mini ชิป m6",
+                  "kind": "evergreen", "category": "เทค"}
+    fresh = {"suggested": [suggestion],
+             "suggested_at": dt.datetime.now().isoformat(timespec="seconds")}
+    stale = {"suggested": [suggestion],
+             "suggested_at": (dt.datetime.now() - dt.timedelta(days=30)).isoformat()}
+
+    assert main.trend_origin(fresh, "ชิป M6 ต่างจาก M4 ยังไง")
+    assert main.trend_origin(stale, "ชิป M6 ต่างจาก M4 ยังไง") is None
+    assert main.trend_origin({"suggested": [suggestion]}, "ชิป M6 ต่างจาก M4 ยังไง") is None
+
+
+def test_a_topic_typed_back_from_the_suggestions_is_credited():
+    """The whole point is answering 'did trend topics do better?' later."""
+    import datetime as dt
+
+    state = {"suggested": [
+        {"topic": "ชิป M6 ต่างจาก M4 ยังไง", "from": "mac mini ชิป m6",
+         "kind": "evergreen", "category": "เทค"},
+    ], "suggested_at": dt.datetime.now().isoformat(timespec="seconds")}
+    # retyped, not copied byte for byte
+    origin = main.trend_origin(state, "ชิป M6 ต่างจาก M4 ยังไง แบบเข้าใจง่าย")
+    assert origin["from"] == "mac mini ชิป m6" and origin["kind"] == "evergreen"
+    assert main.trend_origin(state, "ทำไมแมวชอบนอนกลางวัน") is None
+    assert main.trend_origin({}, "อะไรก็ได้") is None
+
+
+def test_categories_are_reported_as_observation_not_experiment():
+    """Topics are chosen by the human, so this can never be a randomised arm."""
+    records = [
+        {"outcome": "rendered", "variant": "question",
+         "scripts": [{"script": {"category": "การเงิน"}}],
+         "snapshots": [{"date": "d", "age_days": 7, "views": 180, "percent": 70.0}]},
+        {"outcome": "rendered", "variant": "question",
+         "scripts": [{"script": {"category": "เทค"}}], "trend": {"category": "เทค"},
+         "snapshots": [{"date": "d", "age_days": 7, "views": 3, "percent": 40.0}]},
+        {"outcome": "drafting", "scripts": [{"script": {"category": "เทค"}}], "snapshots": []},
+    ]
+    counts = experiment.by_category(records)
+    assert counts["การเงิน"]["clips"] == 1 and counts["การเงิน"]["views"] == 180
+    assert counts["เทค"]["clips"] == 1, "a topic that never became a clip is not one"
+    assert counts["เทค"]["trend"] == 1
+
+    body = experiment.report(records)
+    assert "สังเกตการณ์ ไม่ใช่การทดลอง" in body
+    assert body.index("การเงิน") < body.index("• เทค"), "best median first"
+
+
 # --- retention ---------------------------------------------------------------
 
 CARDS = [
@@ -685,6 +779,7 @@ def test_the_variant_clause_reaches_the_model(monkeypatch):
                     import types
                     seen["messages"] = kwargs["messages"]
                     body = {"title": "t", "description": "d", "hashtags": ["#x"],
+                            "category": "เทค",
                             "cards": [a_card() for _ in range(5)]}
                     msg = types.SimpleNamespace(content=_json.dumps(body))
                     return types.SimpleNamespace(choices=[types.SimpleNamespace(message=msg)])

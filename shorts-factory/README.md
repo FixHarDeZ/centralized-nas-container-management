@@ -13,6 +13,14 @@ It does not upload to YouTube, and it has no web interface — no port, no
 nginx, no dashboard. See `docs/adr/0001` and `docs/adr/0002` at the repo root
 for why.
 
+## Commands
+
+`/help` prints the lot in Thai, inside the chat, which is where anyone would
+look for it. The others: `/stats` (how published clips did), `/snapshot` (pull
+today's numbers now rather than waiting for the daily run), `/experiment` (the
+running A/B and whether it can be called yet), `/retention` (one clip's curve,
+with the drop-offs named by card). Anything that is not a command is a Topic.
+
 ## Pipeline
 
 ```
@@ -99,6 +107,33 @@ two or three. Everything below that is the ordinary slope every clip has.
 YouTube builds these curves only once a clip has been watched enough —
 measured on this channel: 361 views yes, 27 views no — so `/retention` walks
 back from the newest published clip until it finds one with data.
+
+## Finding something to make
+
+`/trends` reads two outside signals — Google Trends' RSS feed for Thailand
+(what people search for, with volumes and the headline behind each spike) and
+YouTube's own `mostPopular` chart for TH (what they watch) — and asks the model
+to turn them into five topics you could actually be given. The raw rows are
+sent too, so a suggestion that drifted from its source can be caught against
+it. Nothing is fed into a script automatically: a topic you did not choose
+becomes a clip you do not want to upload.
+
+News, politics, sport results and anything about a real person are kept out.
+YouTube rows carry a category, so 25 (News & Politics) and 17 (Sports) are
+dropped before the model sees them; Google Trends rows carry no category, so
+there the prompt and your own choice are the only filter — a politician and a
+live match both reached the model in testing, and it declined them. That is why
+the raw rows are always printed: on that path a bad suggestion is only
+catchable against its source. This is not squeamishness — it is the one place
+where a model writing confidently about a live story publishes an invented
+claim about a named person under your channel's name.
+
+Topics are no longer locked to DevOps/AI. A search of Thai short-form for
+`devops ไทย` over 30 days returns nothing at all, so the lock was buying clean
+experiments on an audience that does not exist. Each script now names its own
+category, and `/experiment` reports how the categories did — labelled as an
+observation, because you choose the topics and nothing about that is
+randomised.
 
 ## The experiment
 

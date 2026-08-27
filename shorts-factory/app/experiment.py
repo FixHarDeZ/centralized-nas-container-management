@@ -130,6 +130,43 @@ def verdict(counts: dict[str, dict]) -> str:
     return f"🏆 {best} ชนะ — median {medians[best]:.1f}% เทียบ {medians[worst]:.1f}% (ต่าง {gap:.1f} จุด)"
 
 
+def _category_of(record: dict) -> str:
+    """The Clip's own category: what the Script said, or what /trends tagged."""
+    scripts = record.get("scripts") or []
+    if scripts:
+        category = str(scripts[-1].get("script", {}).get("category", "")).strip()
+        if category:
+            return category
+    return str((record.get("trend") or {}).get("category", "")).strip() or "ไม่ระบุ"
+
+
+def by_category(records: list[dict]) -> dict[str, dict]:
+    """How each subject area did.
+
+    **Not an experiment.** The human picks the Topic, so categories are not
+    randomised and anything read here is a correlation with whatever made that
+    Topic get chosen. Kept because with topics free to roam, the subject is the
+    biggest thing moving the numbers and refusing to look at it would be worse
+    than looking at it with the label attached.
+    """
+    out: dict[str, dict] = {}
+    for record in records:
+        if record.get("outcome") not in {"rendered", "discarded"}:
+            continue
+        bucket = out.setdefault(
+            _category_of(record), {"clips": 0, "views": 0, "percents": [], "trend": 0}
+        )
+        bucket["clips"] += 1
+        if record.get("trend"):
+            bucket["trend"] += 1
+        snapshot = manifest.day7(record)
+        if snapshot:
+            bucket["views"] += snapshot.get("views", 0)
+            if snapshot.get("percent") is not None:
+                bucket["percents"].append(snapshot["percent"])
+    return out
+
+
 def report(records: list[dict]) -> str:
     counts = tally(records)
     # The channel-wide warning goes first: it says the figures below cannot be
@@ -147,4 +184,21 @@ def report(records: list[dict]) -> str:
             f"{data['views']} views (day-7) · median day-7 {shown}"
         )
     lines += ["", verdict(counts)]
+
+    categories = by_category(records)
+    if categories:
+        lines += ["", "📂 แยกตามหมวด — **สังเกตการณ์ ไม่ใช่การทดลอง**",
+                  "   (คนเลือกหัวข้อเอง ไม่ได้สุ่ม อ่านเป็นความสัมพันธ์ ไม่ใช่สาเหตุ)", ""]
+        ranked = sorted(
+            categories.items(),
+            key=lambda kv: (median(kv[1]["percents"]) if kv[1]["percents"] else -1),
+            reverse=True,
+        )
+        for name, data in ranked:
+            shown = f"{median(data['percents']):.1f}%" if data["percents"] else "—"
+            trend = f" · จาก trend {data['trend']}" if data["trend"] else ""
+            lines.append(
+                f"• {name}: {data['clips']} คลิป · {data['views']} views (day-7) · "
+                f"median {shown}{trend}"
+            )
     return "\n".join(lines)
