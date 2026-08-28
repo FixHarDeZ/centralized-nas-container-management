@@ -150,6 +150,16 @@ sent too, so a suggestion that drifted from its source can be caught against
 it. Nothing is fed into a script automatically: a topic you did not choose
 becomes a clip you do not want to upload.
 
+The suggestions carry a numbered button each, so picking one is a tap rather
+than retyping a Thai sentence; typing a topic still works and is still the only
+way to send one the model did not suggest. The button carries the list's
+timestamp as well as the index, because the index alone means nothing: run
+`/trends` twice and button 3 on the older message points into the newer list,
+which would start writing a topic nobody chose. A tap on a superseded list is
+refused. A tap while a script is waiting for review is refused too — starting a
+new topic there would abandon the pending one without marking it discarded,
+which is what 🗑 is for.
+
 News, politics, sport results and anything about a real person are kept out.
 YouTube rows carry a category, so 25 (News & Politics) and 17 (Sports) are
 dropped before the model sees them; Google Trends rows carry no category, so

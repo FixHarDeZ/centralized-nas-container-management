@@ -16,7 +16,9 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
   whole thing → mp4 delivered to Telegram and to `/output`.
 - **Every Card has two narrations.** `narration` = screen/subtitle form
   (English stays English), `spoken` = Thai-script transliteration, the only one
-  edge-tts reads. `validate()` rejects any Latin character in `spoken`.
+  edge-tts reads. `validate()` rejects any Latin character in `spoken`, and
+  `render._speakable()` strips hyphens/dashes before synthesis — the voice reads
+  one as a ~1s pause ("เอฟ-35" became "เอฟ" … "35"), so model names are said whole.
 - **Card joins are trimmed.** The paragraph break that produces the boundary
   events also produces ~1.0s of dead air per join (measured; clause breaks are
   0.12-0.53s). `render.tighten()` slices at the boundaries, trims each slice's
@@ -43,7 +45,8 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
   explore 1 ใน 3 ไม่นับผล, `/experiment` รายงาน + ปฏิเสธที่จะฟันธงก่อนถึงเกณฑ์).
   `app/retention.py` (เส้น retention + หา cliff + map กลับเป็น card + วาด PNG ด้วย Pillow,
   `/retention`) และ `app/trends.py` (Google Trends RSS ไทย + YouTube chart ไทย → mimo
-  แปลงเป็นหัวข้อ, `/trends`). **หัวข้อไม่ล็อก DevOps/AI แล้ว** (ADR 0004 ท้ายไฟล์) —
+  แปลงเป็นหัวข้อ, `/trends` — ลิสต์หัวข้อแนบปุ่มเลข กดแทนพิมพ์ได้ `callback_data`
+  = `pick:<suggested_at>:<index>` เทียบ timestamp กันกดปุ่มของลิสต์เก่า). **หัวข้อไม่ล็อก DevOps/AI แล้ว** (ADR 0004 ท้ายไฟล์) —
   `category` เป็นมิติที่บันทึกไว้อ่านแบบสังเกตการณ์ ไม่ใช่ variant ที่สุ่ม.
   **ยังไม่ลง**: recommender (ขั้น 6 รอ Gate)
 - State: `/data/state.json`. Working files under `/data`, wiped after each

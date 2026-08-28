@@ -31,6 +31,8 @@ CHAT_ID = int(os.environ["TELEGRAM_CHAT_ID"])
 API = f"https://api.telegram.org/bot{TOKEN}"
 
 RENDER_CB, DISCARD_CB, UPLOAD_CB = "render", "discard", "upload"
+# Prefix of the 💡 buttons under a /trends list: `pick:<suggested_at>:<index>`.
+PICK_CB = "pick"
 # How far back /retention walks looking for a Clip YouTube has a curve for.
 # ponytail: one Reports call per Clip tried. Skip Clips whose snapshots show
 # too few views to have a curve (observed: 361 yes, 27 no) if this gets slow.
@@ -75,7 +77,8 @@ HELP = """🎬 shorts-factory
 
 /trends — ตอนนี้คนไทยค้นอะไร ดูอะไรกันอยู่
    ดึงจาก Google Trends (ประเทศไทย) + ชาร์ตคลิปฮิตของ YouTube ไทย
-   ส่งของดิบมาให้ดูด้วย แล้วค่อยเสนอหัวข้อที่ทำได้จริง 5 อัน — ชอบอันไหนพิมพ์กลับมา
+   ส่งของดิบมาให้ดูด้วย แล้วค่อยเสนอหัวข้อที่ทำได้จริง 5 อัน — ชอบอันไหนกดปุ่มเลขได้เลย
+   (พิมพ์หัวข้อเองก็ยังได้เหมือนเดิม ปุ่มเป็นแค่ทางลัด)
    ข่าวสด การเมือง คดี ผลแข่ง และเรื่องของคนจริง ถูกกรองทิ้ง (บอทจะแต่งข้อมูลมั่ว)
    🌱 evergreen = ดูได้อีกนาน · ⚡️ spike = ตายพร้อมกระแส
 
@@ -469,7 +472,7 @@ async def take_snapshots(client: httpx.AsyncClient, state: dict, announce: bool 
 
 
 def format_topics(topics: list[dict]) -> str:
-    lines = ["💡 หัวข้อที่น่าทำ (พิมพ์หัวข้อที่ชอบกลับมาได้เลย)", ""]
+    lines = ["💡 หัวข้อที่น่าทำ (กดเลขข้างล่าง หรือพิมพ์หัวข้อเองก็ได้)", ""]
     for i, topic in enumerate(topics, 1):
         tag = "🌱 evergreen" if topic.get("kind") == "evergreen" else "⚡️ spike"
         lines.append(f"{i}. {topic['topic']}")
@@ -504,7 +507,38 @@ async def on_trends(client: httpx.AsyncClient, state: dict) -> None:
     state["suggested"] = topics
     state["suggested_at"] = datetime.now().isoformat(timespec="seconds")
     save_state(state)
-    await say(client, format_topics(topics))
+    await say(client, format_topics(topics),
+              reply_markup=topics_keyboard(topics, state["suggested_at"]))
+
+
+def topics_keyboard(topics: list[dict], stamp: str) -> dict:
+    """One button per suggestion, each carrying the list it belongs to."""
+    return {"inline_keyboard": [[
+        {"text": str(i), "callback_data": f"{PICK_CB}:{stamp}:{i - 1}"}
+        for i in range(1, len(topics) + 1)
+    ]]}
+
+
+def picked(state: dict, data: str) -> str | None:
+    """The Topic behind a 💡 button, or None if its list is no longer the live one.
+
+    The index alone means nothing: run /trends twice and button 3 on the older
+    message points into the newer list, so the bot would start writing a Topic
+    nobody chose. The list's timestamp travels in the callback data and a tap
+    on a superseded message is refused instead.
+    """
+    stamp, _, index = data[len(PICK_CB) + 1:].rpartition(":")
+    if not stamp or stamp != state.get("suggested_at"):
+        return None
+    # Same expiry the recorder uses: past it, trend_origin() refuses to credit
+    # the Topic, so accepting the tap would write a Clip with no trend field —
+    # losing the one number /trends exists to produce.
+    if datetime.now() - datetime.fromisoformat(stamp) > SUGGESTION_LIFETIME:
+        return None
+    try:
+        return str((state.get("suggested") or [])[int(index)]["topic"])
+    except (ValueError, IndexError, KeyError, TypeError):
+        return None
 
 
 async def on_retention(client: httpx.AsyncClient, video_id: str = "") -> None:
@@ -593,6 +627,10 @@ async def on_text(client: httpx.AsyncClient, state: dict, text: str) -> None:
 
 async def on_callback(client: httpx.AsyncClient, state: dict, query: dict) -> None:
     await api(client, "answerCallbackQuery", callback_query_id=query["id"])
+    data = query.get("data") or ""
+    if data.startswith(f"{PICK_CB}:"):
+        await on_pick(client, state, data)
+        return
     if query.get("data") != UPLOAD_CB and state.get("mode") != "review":
         return
     if query.get("data") == UPLOAD_CB:
@@ -606,6 +644,27 @@ async def on_callback(client: httpx.AsyncClient, state: dict, query: dict) -> No
         state.update(mode="idle", script=None, topic=None, message_id=None, clip_id=None, style="")
         save_state(state)
         await say(client, "ทิ้งแล้ว ส่งหัวข้อใหม่มาได้เลย")
+
+
+async def on_pick(client: httpx.AsyncClient, state: dict, data: str) -> None:
+    """A suggestion tapped instead of retyped. Same path as a Topic sent by hand."""
+    topic = picked(state, data)
+    if topic is None:
+        await say(client, "ลิสต์นี้เก่าแล้ว สั่ง /trends ใหม่ก่อนนะ")
+        return
+    mode = state.get("mode", "idle")
+    if mode in BUSY_MODES:
+        job = "เขียนสคริปต์" if mode == "writing" else "render"
+        await say(client, f"⏳ กำลัง{job}อยู่ รอให้เสร็จก่อนนะ")
+        return
+    if mode == "review":
+        # Starting a new Topic here would abandon the pending Script without
+        # marking it discarded, leaving an outcome-less record in the Manifest.
+        await say(client, "ยังมีสคริปต์ค้างอยู่ กด 🗑 ทิ้งก่อนแล้วค่อยเลือกหัวข้อใหม่")
+        return
+    # Verbatim, so trend_origin matches it and the origin gets recorded.
+    await say(client, f"👍 {topic}")
+    spawn(make_script(client, state, topic), "make_script")
 
 
 def is_ours(update: dict) -> bool:

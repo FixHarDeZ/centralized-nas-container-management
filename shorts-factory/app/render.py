@@ -5,6 +5,7 @@ import asyncio
 import logging
 import os
 import random
+import re
 import subprocess
 from pathlib import Path
 
@@ -139,9 +140,20 @@ JOIN_SILENCE = 0.30
 SILENCE_FLOOR = "-32dB"
 
 
+CLAUSE_DASH = re.compile(r"\s+[-‐-―]\s+")
+WORD_DASH = re.compile(r"[-‐-―]")
+
+
 def _speakable(narration: str) -> str:
-    """A full stop inside a Card would split it into two sentences."""
-    return narration.replace(".", ",").strip()
+    """A full stop inside a Card would split it into two sentences.
+
+    A hyphen is read as a break, not as part of the word: "เอฟ-สามสิบห้า" comes
+    out as "เอฟ", a second of silence, then "สามสิบห้า". A dash with spaces
+    around it stands between clauses, so it becomes the comma the voice pauses
+    on for 0.12-0.53s; one inside a word is dropped so the name is said whole.
+    """
+    text = narration.replace(".", ",")
+    return WORD_DASH.sub("", CLAUSE_DASH.sub(", ", text)).strip()
 
 
 def _tts_text(card: dict) -> str:

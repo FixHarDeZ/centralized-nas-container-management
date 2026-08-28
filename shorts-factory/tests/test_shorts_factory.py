@@ -1127,3 +1127,47 @@ def test_metadata_respects_youtube_limits():
 
 def test_internal_full_stop_would_split_a_card():
     assert render._speakable("แบบนี้. แล้วก็แบบนั้น") == "แบบนี้, แล้วก็แบบนั้น"
+
+
+def test_a_hyphen_is_read_as_a_pause_so_it_is_dropped():
+    # "เอฟ-สามสิบห้า" came out as "เอฟ", a second of silence, then "สามสิบห้า".
+    assert render._speakable("เอฟ-สามสิบห้า บินเร็ว") == "เอฟสามสิบห้า บินเร็ว"
+    # A spaced dash separates clauses; it keeps a breath, as a comma.
+    assert render._speakable("อันนี้ — สำคัญมาก") == "อันนี้, สำคัญมาก"
+
+
+def test_a_tapped_suggestion_only_counts_for_the_list_it_came_from():
+    """Two /trends runs = two live keyboards; an index alone points anywhere."""
+    import datetime as dt
+
+    topics = [{"topic": "ทองผันผวนเพราะอะไร"}, {"topic": "เกม Roblox ตัวนี้คืออะไร"}]
+    stamp = dt.datetime.now().isoformat(timespec="seconds")
+    state = {"suggested": topics, "suggested_at": stamp}
+    keyboard = main.topics_keyboard(topics, stamp)
+    buttons = keyboard["inline_keyboard"][0]
+
+    assert [b["text"] for b in buttons] == ["1", "2"]
+    assert all(len(b["callback_data"].encode()) <= 64 for b in buttons)
+    assert main.picked(state, buttons[1]["callback_data"]) == "เกม Roblox ตัวนี้คืออะไร"
+    # the same taps against a newer list are refused, not silently re-indexed
+    newer = {"suggested": [{"topic": "อย่างอื่น"}], "suggested_at": "2026-08-28T09:00:00"}
+    assert main.picked(newer, buttons[0]["callback_data"]) is None
+    assert main.picked(state, "pick::0") is None
+    assert main.picked(state, f"pick:{stamp}:9") is None
+    # past SUGGESTION_LIFETIME the origin can no longer be credited, so the tap
+    # must be refused rather than writing a Clip with no trend field
+    old_stamp = (dt.datetime.now() - dt.timedelta(days=3)).isoformat(timespec="seconds")
+    assert main.picked({"suggested": topics, "suggested_at": old_stamp},
+                       f"pick:{old_stamp}:0") is None
+
+
+def test_a_tapped_topic_keeps_its_trend_origin():
+    """The pick shortcut must not lose the attribution /trends exists to collect."""
+    import datetime as dt
+
+    stamp = dt.datetime.now().isoformat(timespec="seconds")
+    state = {"suggested": [{"topic": "ทองผันผวนเพราะอะไร", "from": "ทองเปิดบวก 50 บาท",
+                            "kind": "evergreen", "category": "การเงิน"}],
+             "suggested_at": stamp}
+    topic = main.picked(state, f"pick:{stamp}:0")
+    assert main.trend_origin(state, topic)["from"] == "ทองเปิดบวก 50 บาท"
