@@ -153,6 +153,7 @@ async def _say(client: AsyncOpenAI, messages: list[dict], temperature: float,
     """
 
     async def once(model: str) -> str:
+        started = time.monotonic()
         reply = await client.chat.completions.create(
             model=model,
             messages=messages,
@@ -162,6 +163,17 @@ async def _say(client: AsyncOpenAI, messages: list[dict], temperature: float,
             # 79s / 3796 at "low", for a better script. "minimal" is rejected
             # with a 400.
             reasoning_effort=os.environ.get("MIMO_REASONING_EFFORT", "low"),
+        )
+        # The only way to tell a healthy long think from a sick endpoint after
+        # the fact. Thinking runs at about 30 tokens a second whatever the
+        # length; a stalled request never reaches this line at all while its
+        # hedged twin does.
+        spent = time.monotonic() - started
+        used = getattr(reply, "usage", None)
+        tokens = getattr(used, "completion_tokens", 0) or 0
+        logger.info(
+            "%s ตอบใน %.0f วินาที %d tokens (%.0f tokens/วินาที)",
+            model, spent, tokens, tokens / spent if spent else 0,
         )
         return reply.choices[0].message.content or ""
 
@@ -337,14 +349,23 @@ async def generate(
         try:
             raw = await _say(client, messages, temperature=0.8, budget=left)
         except asyncio.TimeoutError:
-            last_error = ScriptError(
+            # Say what went wrong the *first* time too. A retry inherits
+            # whatever is left of the shared budget, so a first attempt that
+            # answered slowly and then failed validation leaves too little
+            # time for the second — and reporting only the timeout hides the
+            # schema slip that actually started it.
+            timed_out = (
                 f"mimo ไม่ตอบภายใน {BUDGET_SECONDS:.0f} วินาที "
                 "(ปกติใช้ 90-350 วินาทีตามความยาวที่โมเดลคิด)"
             )
+            if last_error is not None:
+                timed_out += f" — รอบก่อนหน้า: {last_error}"
+            last_error = ScriptError(timed_out)
             continue
         try:
             return validate(_parse(raw))
         except ScriptError as exc:
+            logger.warning("สคริปต์ผิดกติกา: %s (raw %d ตัวอักษร)", exc, len(raw))
             last_error = exc
             messages += [
                 {"role": "assistant", "content": raw},

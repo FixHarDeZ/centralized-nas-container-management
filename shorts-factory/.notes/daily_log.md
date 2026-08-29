@@ -1,5 +1,54 @@
 # Daily Log — shorts-factory
 
+## 2026-08-28 — The bot goes looking for work on its own
+
+`/trends` no longer needs a human to ask. Three times a day (`TRENDS_HOURS`,
+default `8,12,17` in the container's Asia/Bangkok clock) the poll loop runs the
+same `on_trends()` path, and the list it posts carries a ✋ button and a
+deadline. Nobody taps a number and nobody taps ✋ within `AUTO_PICK_MINUTES`
+(default 15) → one of the five suggestions is chosen at random, the script is
+written and the clip is rendered unattended. Uploading stays a button under the
+finished clip; ADR 0001 has not moved.
+
+Rides the poll loop the way `snapshots.due()` does — still no scheduler thread,
+still no port, still ADR 0002 shaped. Two pure functions carry the timing so
+they can be tested without a bot: `auto_slot(state, now)` and
+`auto_pick_due(state, now)`.
+
+Things that had to be got right, each of which would have been a real bug:
+
+- **Stamp the slot before spawning, not after.** `suggest_topics()` runs off
+  the loop and can take minutes; an unstamped slot fires again on the next
+  30-second tick and two trends runs race. `take_snapshots()` stamps in a
+  `finally` for the same reason.
+- **Only the newest passed hour is owed.** A restart at 23:00 produces one
+  list (the 17:00 slot, late), not three.
+- **An unattended script gets no keyboard and no `message_id`.**
+  `do_render()` calls `close_prompt()` on the message id it finds and replaces
+  the text wholesale — a tracked review message would have been overwritten
+  with "กำลัง render", erasing the only copy of a script nobody was there to
+  read. `close_prompt()` no-ops on `None`, so leaving it unset is the fix.
+- **Auto-render lives inside `make_script()`, at the end of the success
+  path.** `await make_script(); await do_render()` would raise `KeyError:
+  'script'` on every LLM failure, because the failure handler returns normally
+  with `mode="idle", script=None`.
+- **The ✋ branch sits above the `mode != "review"` early return in
+  `on_callback()`.** The bot is idle while a list is pending, so the guard
+  would have swallowed the tap silently. The button carries `suggested_at` for
+  the same reason `picked()` checks it: a tap on yesterday's list must not call
+  off today's run. Cancelling edits only the reply markup, so the numbered
+  buttons stay pressable.
+- **One clear point for the pending pick:** `state.pop("auto_pick")` at the top
+  of `make_script()`. Every start path routes through it, so no caller has to
+  remember. The deadline fires only while `mode == "idle"`; a human mid-script
+  when it passes drops the pick rather than getting a second clip queued behind
+  their own.
+
+Tests: `test_only_the_newest_passed_slot_is_owed`,
+`test_the_automatic_pick_waits_for_its_deadline`. Full suite: 86 passed, 7
+failed — all seven are the pre-existing Pillow/Raqm failures that cannot pass
+on macOS (`libraqm0` is a Linux apt package; they pass in the container).
+
 ## 2026-08-24 — Design settled, stack scaffolded
 
 Ran a full design interview (`/grill-with-docs`) for a new stack that turns a
@@ -792,3 +841,42 @@ factor ที่สุ่มจริงยังเป็น `hook` เหม�
 `84 passed, 7 failed` บน macOS — 7 เคสที่ fail คือ Raqm ไม่มีในเครื่อง (ADR 0003)
 ไม่เกี่ยวกับงานนี้ ในอิมเมจผ่านหมด. `picked()` ใช้เพดานอายุ `SUGGESTION_LIFETIME`
 ตัวเดียวกับ `trend_origin()` — เกินแล้วปุ่มตีกลับ ไม่ใช่เขียนคลิปที่ไม่มีช่อง trend
+
+## 2026-08-29 — "เขียนสคริปต์ไม่สำเร็จ: mimo ไม่ตอบภายใน 600 วินาที" ที่ mimo ไม่ได้พัง
+
+**อาการ:** 07:45 กดเลือกหัวข้อจากลิสต์ `/trends` → 07:55 บอทตอบ "mimo ไม่ตอบภายใน 600 วินาที"
+
+**ของจริงจาก log (`docker logs shorts-factory | grep -v api.telegram.org`):**
+
+```
+07:49:05 WARNING mimo-v2.5-pro ยังไม่ตอบใน 240 วินาที ยิงคำขอสำรอง...
+07:54:48 WARNING mimo-v2.5-pro ยังไม่ตอบใน 240 วินาที ยิงคำขอสำรอง...
+07:55:05 ERROR   mimo ไม่ตอบภายใน 600 วินาที
+```
+
+hedge warning **สองครั้ง = `_say()` ถูกเรียกสองครั้ง = รอบแรกได้คำตอบกลับมาแล้ว**
+(timeout ไม่มีวัน retry ได้ เพราะ budget แชร์กัน — หมดเวลาแปลว่าใช้ครบ 600 แล้ว
+`left < MIN_ATTEMPT` แล้ว break). ไล่เวลา: รอบแรกยิง 07:45:05 hedge +240 = 07:49:05,
+คำตอบมา 07:50:48 (343 วิ) → `validate()` ตีกลับ → รอบสองเริ่ม 07:50:48 เหลือ 257 วิ
+hedge +240 = 07:54:48 เหลือ slice 17 วิ → หมดเวลา 07:55:05 ตรงเป๊ะทุกจุด
+
+**สาเหตุจริง: สคริปต์รอบแรกผิดกติกา** ไม่ใช่ mimo พัง. ข้อความที่บอทส่งโกหกเพราะ
+`last_error` ถูก timeout เขียนทับ และ branch `except ScriptError` ไม่ log อะไรเลย
+
+**แก้ (`app/script.py`):**
+- `except ScriptError` → `logger.warning` บอกว่า validate ตีกลับด้วยเหตุอะไร + ความยาว raw
+- timeout ไม่ลบ error เดิมทิ้ง ต่อท้าย " — รอบก่อนหน้า: ..." แทน
+- `once()` log **model / วินาที / completion_tokens / tokens ต่อวินาที** ตอนสำเร็จ —
+  นี่คือตัวแยก "คิดนาน" ออกจาก "endpoint พัง": คิดปกติ ~30 tokens/วินาที ไม่ว่ายาวแค่ไหน
+  ส่วนคำขอที่ค้างจะไม่ถึงบรรทัดนี้เลย ขณะที่ตัว hedge ตอบได้
+
+**หมายเหตุ:** บรรทัด `HTTP Request: POST ... 200 OK` ของ mimo ขึ้นหลังยิง ~8 วินาที**ทุกครั้ง**
+(httpx log ตอน header มาถึง) ใช้ตัดสินสุขภาพไม่ได้ ตัวแปรเดียวคือเวลาของ body
+
+**ยังไม่ได้แก้ (ตั้งใจ):** รอบ retry ได้เศษเวลาเสมอ — รอบแรกตอบช้า (343 วิ) แล้วผิดกติกา
+เหลือให้รอบสอง 257 วิ ซึ่งน้อยกว่าเวลาคิดจริงที่วัดได้สูงสุด. budget แชร์เป็นการตัดสินใจ
+ที่จงใจ (`script.py` comment) ทางเลือกถ้าเจอบ่อย: ส่งรอบแก้ schema ไป `mimo-v2.5` ตรงๆ
+(149 วิ พอดีกับเศษเวลา) เพราะแก้ JSON ให้ถูกกติกาไม่ต้องใช้ pro
+
+**ยืนยันของจริงหลัง deploy:** `mimo-v2.5-pro ตอบใน 59 วินาที 4135 tokens (70 tokens/วินาที)`
+— `usage.completion_tokens` มีจริงในคำตอบ non-streaming ของ mimo บรรทัดนี้ใช้ได้ไม่ใช่ 0 เปล่าๆ

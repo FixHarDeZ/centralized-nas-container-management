@@ -1171,3 +1171,47 @@ def test_a_tapped_topic_keeps_its_trend_origin():
              "suggested_at": stamp}
     topic = main.picked(state, f"pick:{stamp}:0")
     assert main.trend_origin(state, topic)["from"] == "ทองเปิดบวก 50 บาท"
+
+
+def test_only_the_newest_passed_slot_is_owed():
+    """A bot that was down all day comes back and runs /trends once, not three times."""
+    import datetime as dt
+
+    hours = main.AUTO_HOURS
+    early = dt.datetime(2026, 8, 28, hours[0] - 1, 0)
+    assert main.auto_slot({}, early) is None
+
+    late = dt.datetime(2026, 8, 28, 23, 0)
+    slot = main.auto_slot({}, late)
+    assert slot == f"2026-08-28T{hours[-1]:02d}"
+    # stamped: the same tick 30 seconds later must not start a second run
+    assert main.auto_slot({"last_auto_trends": slot}, late) is None
+    # yesterday's stamp does not satisfy today's slot
+    assert main.auto_slot({"last_auto_trends": "2026-08-27T17"}, late) == slot
+
+
+def test_the_automatic_pick_waits_for_its_deadline():
+    import datetime as dt
+
+    now = dt.datetime(2026, 8, 28, 8, 10)
+    assert main.auto_pick_due({}, now) is False
+    assert main.auto_pick_due({"auto_pick": {"deadline": "2026-08-28T08:15:00"}}, now) is False
+    assert main.auto_pick_due({"auto_pick": {"deadline": "2026-08-28T08:05:00"}}, now) is True
+    # a state written by an older build, or half-written, is not a deadline
+    assert main.auto_pick_due({"auto_pick": {}}, now) is False
+
+
+def test_a_timeout_does_not_bury_the_first_failure(monkeypatch):
+    """Reported 2026-08-29: 'mimo ไม่ตอบภายใน 600 วินาที' when mimo had in fact
+    answered — the first attempt came back in 343s and failed validation, and
+    the retry inherited too little of the shared budget to finish. Overwriting
+    last_error with the timeout hid the schema slip that started it."""
+    monkeypatch.setattr(script_gen, "BUDGET_SECONDS", 0.4)
+    monkeypatch.setattr(script_gen, "MIN_ATTEMPT", 0.1)
+    monkeypatch.setattr(script_gen, "HEDGE_AFTER", 0.05)
+    monkeypatch.setattr(script_gen, "_client", lambda: fake_client(["ไม่ใช่ JSON", 30, 30]))
+
+    with pytest.raises(script_gen.ScriptError) as caught:
+        asyncio.run(script_gen.generate("หัวข้อ"))
+    assert "ไม่ตอบภายใน" in str(caught.value)
+    assert "รอบก่อนหน้า" in str(caught.value)

@@ -51,7 +51,8 @@ one job at a time: a second topic during either is refused rather than queued.
 look for it. The others: `/stats` (how published clips did), `/snapshot` (pull
 today's numbers now rather than waiting for the daily run), `/experiment` (the
 running A/B and whether it can be called yet), `/retention` (one clip's curve,
-with the drop-offs named by card). Anything that is not a command is a Topic.
+with the drop-offs named by card), `/trends` (what Thailand is searching for
+and watching, turned into topics). Anything that is not a command is a Topic.
 
 ## Pipeline
 
@@ -147,8 +148,7 @@ back from the newest published clip until it finds one with data.
 YouTube's own `mostPopular` chart for TH (what they watch) — and asks the model
 to turn them into five topics you could actually be given. The raw rows are
 sent too, so a suggestion that drifted from its source can be caught against
-it. Nothing is fed into a script automatically: a topic you did not choose
-becomes a clip you do not want to upload.
+it.
 
 The suggestions carry a numbered button each, so picking one is a tap rather
 than retyping a Thai sentence; typing a topic still works and is still the only
@@ -176,6 +176,34 @@ experiments on an audience that does not exist. Each script now names its own
 category, and `/experiment` reports how the categories did — labelled as an
 observation, because you choose the topics and nothing about that is
 randomised.
+
+### Running itself
+
+The bot also calls `/trends` on its own three times a day — `TRENDS_HOURS`,
+default `8,12,17` in the container's Asia/Bangkok time. That list carries one
+extra button, ✋, and a deadline: leave it alone for `AUTO_PICK_MINUTES`
+(default 15) and the bot picks one of the five suggestions at random, writes
+the script and renders the clip unattended. ✋ calls off that round and leaves
+the numbered buttons pressable, in case you change your mind about a topic but
+not about the schedule.
+
+Nothing about this reaches YouTube. Uploading is still a button under the
+finished clip — outward-facing, irreversible, and the one step ADR 0001 keeps
+in a human's hands.
+
+Details that are load-bearing rather than cosmetic:
+
+- Only the newest passed hour is ever owed, and the slot is stamped *before*
+  the run starts. A bot that was down all day comes back and produces one list,
+  not three, and a run that takes minutes is not started again 30 seconds later.
+- An unattended script is posted without the 🎬/🗑 keyboard and its message id
+  is not tracked. `do_render` rewrites the message it tracks, which would erase
+  the only copy of the script nobody was there to read.
+- The deadline fires only while the bot is idle. If you are mid-script when it
+  passes, the pending pick is dropped rather than queued behind your clip.
+- Starting any topic — typed, tapped or automatic — cancels a pending pick.
+- The ✋ button carries the list's timestamp, like the numbered ones: a tap on
+  yesterday's message must not call off today's run.
 
 ## The experiment
 
@@ -249,6 +277,11 @@ it by hand.
 make secrets                    # render .env from vault + manifest
 ./scripts/deploy.sh -s shorts-factory -y
 ```
+
+| Key | Default | What it does |
+| :--- | :--- | :--- |
+| `TRENDS_HOURS` | `8,12,17` | hours the bot runs `/trends` unasked |
+| `AUTO_PICK_MINUTES` | `15` | how long that list waits before picking itself |
 
 The `/volume1/shorts` shared folder must exist on the NAS before first run;
 create it in DSM (Control Panel → Shared Folder), it is not created by the

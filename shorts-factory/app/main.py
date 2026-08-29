@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import os
+import random
 import re
 import shutil
 from datetime import datetime, timedelta
@@ -33,6 +34,14 @@ API = f"https://api.telegram.org/bot{TOKEN}"
 RENDER_CB, DISCARD_CB, UPLOAD_CB = "render", "discard", "upload"
 # Prefix of the 💡 buttons under a /trends list: `pick:<suggested_at>:<index>`.
 PICK_CB = "pick"
+# The ✋ button under an automatic list: `cancel:<suggested_at>`.
+CANCEL_CB = "cancel"
+# Hours the bot goes looking for a Topic on its own, no one having asked.
+AUTO_HOURS = tuple(
+    sorted(int(h) for h in os.environ.get("TRENDS_HOURS", "8,12,17").split(",") if h.strip())
+)
+# How long the human has to pick one, or press ✋, before the bot picks itself.
+AUTO_PICK_MINUTES = int(os.environ.get("AUTO_PICK_MINUTES", "15"))
 # How far back /retention walks looking for a Clip YouTube has a curve for.
 # ponytail: one Reports call per Clip tried. Skip Clips whose snapshots show
 # too few views to have a curve (observed: 361 yes, 27 no) if this gets slow.
@@ -81,6 +90,9 @@ HELP = """🎬 shorts-factory
    (พิมพ์หัวข้อเองก็ยังได้เหมือนเดิม ปุ่มเป็นแค่ทางลัด)
    ข่าวสด การเมือง คดี ผลแข่ง และเรื่องของคนจริง ถูกกรองทิ้ง (บอทจะแต่งข้อมูลมั่ว)
    🌱 evergreen = ดูได้อีกนาน · ⚡️ spike = ตายพร้อมกระแส
+   บอทสั่ง /trends เองวันละ 3 รอบ (ตั้งไว้ที่ TRENDS_HOURS) — รอบอัตโนมัติจะมีปุ่ม ✋
+   ไม่กดอะไรเลยภายใน AUTO_PICK_MINUTES นาที = บอทสุ่มหัวข้อมา 1 อัน เขียนสคริปต์แล้ว
+   render ให้เองเลย (อัปขึ้น YouTube ยังต้องกดปุ่มเองเหมือนเดิม)
 
 /help — หน้านี้"""
 
@@ -120,6 +132,32 @@ def load_state() -> dict:
 def save_state(state: dict) -> None:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     STATE_PATH.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+
+
+# --- the unattended run ------------------------------------------------------
+
+def auto_slot(state: dict, now: datetime | None = None) -> str | None:
+    """The /trends slot that is owed, or None. Same shape as snapshots.due().
+
+    Only the newest passed hour is ever owed: a bot that was down all day comes
+    back and runs once, not three times. A restart late in the evening does run
+    the 17:00 slot late — the list is still worth having.
+    """
+    now = now or datetime.now()
+    passed = [hour for hour in AUTO_HOURS if now.hour >= hour]
+    if not passed:
+        return None
+    slot = f"{now.date().isoformat()}T{max(passed):02d}"
+    return None if state.get("last_auto_trends") == slot else slot
+
+
+def auto_pick_due(state: dict, now: datetime | None = None) -> bool:
+    """Whether the wait for a human choice has run out."""
+    pending = state.get("auto_pick") or {}
+    try:
+        return (now or datetime.now()) >= datetime.fromisoformat(pending["deadline"])
+    except (KeyError, TypeError, ValueError):
+        return False
 
 
 # --- telegram ----------------------------------------------------------------
@@ -256,7 +294,11 @@ def trend_origin(state: dict, topic: str) -> dict | None:
     return None
 
 
-async def make_script(client: httpx.AsyncClient, state: dict, topic: str, feedback: str = "") -> None:
+async def make_script(client: httpx.AsyncClient, state: dict, topic: str,
+                      feedback: str = "", auto: bool = False) -> None:
+    # Every way a Topic can start routes through here, and any of them means a
+    # pending automatic pick is no longer wanted.
+    state.pop("auto_pick", None)
     previous = state.get("script") if feedback else None
     # A revision belongs to the Manifest already open for this Topic; only a
     # fresh Topic starts a new one.
@@ -312,11 +354,20 @@ async def make_script(client: httpx.AsyncClient, state: dict, topic: str, feedba
         return
 
     manifest.add_script(state.get("clip_id"), script)
-    sent = await say(client, format_script(script), reply_markup=REVIEW_KEYBOARD)
+    # An unattended Script gets no review keyboard and no tracked message id:
+    # nobody is going to press anything, and do_render() would overwrite the
+    # message with "กำลัง render", erasing the only copy of what it rendered.
+    sent = await say(client, format_script(script),
+                     **({} if auto else {"reply_markup": REVIEW_KEYBOARD}))
     state.update(
-        mode="review", topic=topic, script=script, message_id=(sent or {}).get("message_id")
+        mode="review", topic=topic, script=script,
+        message_id=None if auto else (sent or {}).get("message_id"),
     )
     save_state(state)
+    if auto:
+        # Inside the success path on purpose: a generate failure returns above
+        # with no Script in state, and rendering that is a KeyError.
+        await do_render(client, state)
 
 
 async def do_render(client: httpx.AsyncClient, state: dict) -> None:
@@ -484,7 +535,7 @@ def format_topics(topics: list[dict]) -> str:
     return "\n".join(lines)
 
 
-async def on_trends(client: httpx.AsyncClient, state: dict) -> None:
+async def on_trends(client: httpx.AsyncClient, state: dict, auto: bool = False) -> None:
     """What Thailand is searching for and watching, turned into Topics.
 
     The raw list is sent too: a suggestion that drifted from its source is only
@@ -506,9 +557,36 @@ async def on_trends(client: httpx.AsyncClient, state: dict) -> None:
     # the whole exercise is answering "did trend topics do better?" later.
     state["suggested"] = topics
     state["suggested_at"] = datetime.now().isoformat(timespec="seconds")
+    keyboard = topics_keyboard(topics, state["suggested_at"])
+    if auto:
+        deadline = datetime.now() + timedelta(minutes=AUTO_PICK_MINUTES)
+        state["auto_pick"] = {"deadline": deadline.isoformat(timespec="seconds")}
+        keyboard["inline_keyboard"].append([{
+            "text": f"✋ ไม่ต้องทำรอบนี้ (ไม่กด = สุ่มทำเองใน {AUTO_PICK_MINUTES} นาที)",
+            "callback_data": f"{CANCEL_CB}:{state['suggested_at']}",
+        }])
     save_state(state)
-    await say(client, format_topics(topics),
-              reply_markup=topics_keyboard(topics, state["suggested_at"]))
+    sent = await say(client, format_topics(topics), reply_markup=keyboard)
+    if auto:
+        state["trends_message_id"] = (sent or {}).get("message_id")
+        save_state(state)
+
+
+async def auto_pick(client: httpx.AsyncClient, state: dict) -> None:
+    """Nobody chose and nobody said no: take one at random and make the clip.
+
+    The Topic goes in verbatim so trend_origin() still credits the list it came
+    from — an unattended clip is the same kind of record as a chosen one.
+    """
+    topics = state.get("suggested") or []
+    if not topics:
+        return
+    topic = str(random.choice(topics).get("topic", "")).strip()
+    if not topic:
+        return
+    await retire_buttons(client, state.pop("trends_message_id", None))
+    await say(client, f"🎲 ไม่มีใครเลือก สุ่มได้: {topic}\nเขียนสคริปต์แล้ว render ให้เลย")
+    await make_script(client, state, topic, auto=True)
 
 
 def topics_keyboard(topics: list[dict], stamp: str) -> dict:
@@ -631,6 +709,11 @@ async def on_callback(client: httpx.AsyncClient, state: dict, query: dict) -> No
     if data.startswith(f"{PICK_CB}:"):
         await on_pick(client, state, data)
         return
+    if data.startswith(f"{CANCEL_CB}:"):
+        # Above the mode guard below: the bot is idle while a list is pending,
+        # so that guard would drop this tap without a word.
+        await on_cancel(client, state, data[len(CANCEL_CB) + 1:])
+        return
     if query.get("data") != UPLOAD_CB and state.get("mode") != "review":
         return
     if query.get("data") == UPLOAD_CB:
@@ -644,6 +727,26 @@ async def on_callback(client: httpx.AsyncClient, state: dict, query: dict) -> No
         state.update(mode="idle", script=None, topic=None, message_id=None, clip_id=None, style="")
         save_state(state)
         await say(client, "ทิ้งแล้ว ส่งหัวข้อใหม่มาได้เลย")
+
+
+async def on_cancel(client: httpx.AsyncClient, state: dict, stamp: str) -> None:
+    """✋ on an automatic list: drop the pending pick, keep the list usable.
+
+    The stamp travels in the callback data for the same reason picked() checks
+    it — a tap on an older message must not call off today's run.
+    """
+    if not stamp or stamp != state.get("suggested_at"):
+        await say(client, "ลิสต์นี้เก่าแล้ว สั่ง /trends ใหม่ก่อนนะ")
+        return
+    cancelled = state.pop("auto_pick", None)
+    message_id = state.pop("trends_message_id", None)
+    save_state(state)
+    # Only the ✋ row goes; the 💡 numbers stay pressable if the human changes
+    # their mind, and editMessageReplyMarkup leaves the list text alone.
+    if message_id:
+        await api(client, "editMessageReplyMarkup", chat_id=CHAT_ID, message_id=message_id,
+                  reply_markup=topics_keyboard(state.get("suggested") or [], stamp))
+    await say(client, "ได้ ไม่ทำรอบนี้" if cancelled else "รอบนี้ยกเลิกไปแล้ว")
 
 
 async def on_pick(client: httpx.AsyncClient, state: dict, data: str) -> None:
@@ -703,6 +806,20 @@ async def main() -> None:
             # thread: getUpdates already wakes every 30s. See app/snapshots.py.
             if snapshots.due(state):
                 await take_snapshots(client, state)
+            slot = auto_slot(state)
+            if slot:
+                # Stamped before the work: suggest_topics() can take minutes and
+                # runs off the loop, so an unstamped slot fires again in 30s.
+                state["last_auto_trends"] = slot
+                save_state(state)
+                spawn(on_trends(client, state, auto=True), "auto_trends")
+            if auto_pick_due(state):
+                pending = state.pop("auto_pick", None)
+                save_state(state)
+                # A human already busy with a Script of their own does not get a
+                # second one queued behind it; the pending pick is simply dropped.
+                if pending and state.get("mode", "idle") == "idle":
+                    spawn(auto_pick(client, state), "auto_pick")
             try:
                 updates = await api(
                     client, "getUpdates", offset=state.get("offset", 0), timeout=30

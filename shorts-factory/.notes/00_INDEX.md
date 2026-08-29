@@ -7,8 +7,9 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
 
 ## Shape
 
-- One container, no ports, no nginx, no scheduler. A single Telegram
-  `getUpdates` long-poll loop is the entire interface.
+- One container, no ports, no nginx, no scheduler thread. A single Telegram
+  `getUpdates` long-poll loop is the entire interface; the two recurring jobs
+  (daily snapshots, `/trends` three times a day) ride that loop.
 - Flow: Topic → mimo returns a Script → human reviews it in Telegram →
   button → the whole narration is spoken in **one** edge-tts call, footage is
   fetched per Card, cards are drawn with Pillow → silent video segments cut to
@@ -49,6 +50,18 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
   = `pick:<suggested_at>:<index>` เทียบ timestamp กันกดปุ่มของลิสต์เก่า). **หัวข้อไม่ล็อก DevOps/AI แล้ว** (ADR 0004 ท้ายไฟล์) —
   `category` เป็นมิติที่บันทึกไว้อ่านแบบสังเกตการณ์ ไม่ใช่ variant ที่สุ่ม.
   **ยังไม่ลง**: recommender (ขั้น 6 รอ Gate)
+- **The bot starts Topics itself (28/08).** `auto_slot()` owes the newest
+  passed hour of `TRENDS_HOURS` (default `8,12,17`, TZ Asia/Bangkok) and the
+  slot is stamped *before* the run spawns — `suggest_topics()` takes minutes and
+  an unstamped slot re-fires on the next 30s tick. The automatic list carries a
+  ✋ button (callback `cancel:<suggested_at>`, stamp-checked like the 💡 ones,
+  and its branch must stay **above** the `mode != "review"` return in
+  `on_callback()` or the tap dies silently). No tap within `AUTO_PICK_MINUTES`
+  (default 15) and while `mode == "idle"` → a random suggestion is written and
+  **rendered unattended**. That Script is posted with no keyboard and no
+  `message_id`: `do_render()` rewrites the message it tracks. Auto-render sits
+  at the end of the success path *inside* `make_script()` — the failure handler
+  returns with `script=None`. Uploading is still a button (ADR 0001).
 - State: `/data/state.json`. Working files under `/data`, wiped after each
   render. Finished clips and their metadata `.txt` land in `/output`
   (`/volume1/shorts` on the NAS, reachable over SMB).
@@ -65,7 +78,7 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
 | `BGM_DIR` | literal `/output/bgm` | drop CC0 tracks in; empty or missing = no music |
 | `MIMO_REASONING_EFFORT` | literal `low` | mimo-v2.5-pro is a reasoning model; the default budget doubles latency for no better script |
 | `YOUTUBE_SET_THUMBNAIL` | literal `false` | the Shorts feed ignores custom thumbnails, so it is opt-in |
-| `MIMO_TIMEOUT_SECONDS` | literal `240` | wall-clock deadline per model call — httpx's own timeout is per read and will not fire on a trickling server |
+| `MIMO_TIMEOUT_SECONDS` | literal `600` | wall-clock deadline per model call — httpx's own timeout is per read and will not fire on a trickling server |
 | `YOUTUBE_*` | `stacks.shorts_factory.youtube.*` | empty until `scripts/youtube_auth.py` is run; no credentials = no upload button |
 
 ## Gotchas
@@ -74,6 +87,15 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
   `200 OK` on headers, so a stalled body looks like success in the log, and its
   `timeout` is per read, not a total budget. The poll loop is inline, so a hung
   call freezes the entire bot.
+- **"mimo ไม่ตอบภายใน 600 วินาที" does not mean mimo was down.** The retry
+  shares one deadline, so an attempt that answers slowly *and* fails
+  `validate()` leaves the second attempt only the remainder. Read the log
+  before blaming the endpoint: two hedge warnings mean the first attempt came
+  back and was rejected. The `%d tokens (%.0f tokens/วินาที)` line from
+  `once()` is the discriminator — a healthy think runs at about 30 tokens a
+  second however long it takes, and a stalled request never logs at all while
+  its hedged twin does. The `HTTP Request: POST ... 200 OK` line lands ~8s
+  after every mimo call (httpx logs on headers) and says nothing about health.
 - **`/stats` and prompt priming only know about clips uploaded through the
   bot** (`/data/history.json`). Anything published by hand is invisible to
   them.
