@@ -130,6 +130,7 @@ HEDGE_AFTER = 240.0
 # hedge; mimo-v2.5 wrote the same script in 149s while the pro model was
 # healthy, so it is a real fallback and not a downgrade to nothing.
 FALLBACK_MODEL = os.environ.get("MIMO_FALLBACK_MODEL", "mimo-v2.5")
+PRIMARY_MODEL = os.environ.get("MIMO_MODEL", "mimo-v2.5-pro")
 
 
 def _client() -> AsyncOpenAI:
@@ -144,12 +145,15 @@ def _client() -> AsyncOpenAI:
 
 
 async def _say(client: AsyncOpenAI, messages: list[dict], temperature: float,
-               budget: float) -> str:
+               budget: float, models: tuple[str, str] | None = None) -> str:
     """One completion, hedged against a request that hangs.
 
     The deadline is enforced here rather than left to httpx, whose timeout is
     per read: a server that trickles bytes resets that clock forever and the
     call never returns.
+
+    `models` is (who answers first, who the hedge goes to); the two must differ
+    or the hedge shares whatever is making the first one sick.
     """
 
     async def once(model: str) -> str:
@@ -177,7 +181,7 @@ async def _say(client: AsyncOpenAI, messages: list[dict], temperature: float,
         )
         return reply.choices[0].message.content or ""
 
-    primary = os.environ.get("MIMO_MODEL", "mimo-v2.5-pro")
+    primary, hedge_to = models or (PRIMARY_MODEL, FALLBACK_MODEL)
     running = {asyncio.create_task(once(primary))}
     waited = 0.0
     hedged = False
@@ -204,9 +208,9 @@ async def _say(client: AsyncOpenAI, messages: list[dict], temperature: float,
                 raise asyncio.TimeoutError
             logger.warning(
                 "%s ยังไม่ตอบใน %.0f วินาที ยิงคำขอสำรองไปที่ %s คู่ไปด้วย",
-                primary, waited, FALLBACK_MODEL,
+                primary, waited, hedge_to,
             )
-            running.add(asyncio.create_task(once(FALLBACK_MODEL)))
+            running.add(asyncio.create_task(once(hedge_to)))
             hedged = True
     finally:
         for task in running:
@@ -342,12 +346,22 @@ async def generate(
     # "กำลังเขียนสคริปต์...".
     deadline = time.monotonic() + BUDGET_SECONDS
     # One retry: a schema slip is usually fixed by telling the model what broke.
-    for _ in range(2):
+    for attempt in range(2):
         left = deadline - time.monotonic()
         if left < MIN_ATTEMPT:
             break
+        # The retry only ever gets the remainder of the shared budget, and the
+        # first attempt can eat almost all of it: measured 2026-08-29, a Script
+        # came back after 343s and failed validate(), leaving 257s against a
+        # worst case think of 347s — a retry that could not finish. So the
+        # second attempt leads with the smaller model (149s measured on the
+        # same prompt) and hedges back to the pro. Fixing JSON to match a
+        # schema it has already been shown is not work that needs the pro
+        # model; finishing inside the leftovers is.
+        models = None if attempt == 0 else (FALLBACK_MODEL, PRIMARY_MODEL)
         try:
-            raw = await _say(client, messages, temperature=0.8, budget=left)
+            raw = await _say(client, messages, temperature=0.8, budget=left,
+                             models=models)
         except asyncio.TimeoutError:
             # Say what went wrong the *first* time too. A retry inherits
             # whatever is left of the shared budget, so a first attempt that

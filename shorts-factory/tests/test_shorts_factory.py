@@ -148,11 +148,14 @@ def fake_client(replies):
     queue = list(replies)
 
     class Fake:
+        asked = []
+
         class chat:
             class completions:
                 @staticmethod
-                async def create(**_):
+                async def create(model=None, **_):
                     import types
+                    Fake.asked.append(model)
                     nxt = queue.pop(0)
                     if not isinstance(nxt, str):
                         await asyncio.sleep(nxt)
@@ -1215,3 +1218,18 @@ def test_a_timeout_does_not_bury_the_first_failure(monkeypatch):
         asyncio.run(script_gen.generate("หัวข้อ"))
     assert "ไม่ตอบภายใน" in str(caught.value)
     assert "รอบก่อนหน้า" in str(caught.value)
+
+
+def test_the_schema_retry_leads_with_the_smaller_model(monkeypatch):
+    """The retry inherits only what the first attempt left of the shared
+    budget, which can be less than a pro-model think takes. Correcting JSON
+    against a schema it has already been shown does not need the pro model."""
+    good = json.dumps({
+        "title": "t", "description": "d", "hashtags": ["#x"], "category": "เทค",
+        "cards": [a_card() for _ in range(5)],
+    })
+    client = fake_client(["ไม่ใช่ JSON", good])
+    monkeypatch.setattr(script_gen, "_client", lambda: client)
+
+    assert asyncio.run(script_gen.generate("หัวข้อ"))["title"] == "t"
+    assert client.asked == [script_gen.PRIMARY_MODEL, script_gen.FALLBACK_MODEL]

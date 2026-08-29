@@ -96,6 +96,10 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
   second however long it takes, and a stalled request never logs at all while
   its hedged twin does. The `HTTP Request: POST ... 200 OK` line lands ~8s
   after every mimo call (httpx logs on headers) and says nothing about health.
+- **The schema retry leads with `mimo-v2.5`, not the pro model.** It inherits
+  only the remainder of the shared deadline, which can be shorter than a pro
+  think (measured: 257s left against a 347s worst case). The hedge still goes
+  to the *other* model either way.
 - **`/stats` and prompt priming only know about clips uploaded through the
   bot** (`/data/history.json`). Anything published by hand is invisible to
   them.
