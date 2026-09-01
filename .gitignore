@@ -16,3 +16,8 @@ __pycache__/
 .roo/
 .ruff_cache/
 .serena/
+
+# headroom wrap runtime state (per-machine PIDs, not shared config)
+.claude/.headroom_wrap_marker.json
+.claude/.headroom_wrap_owners.json
+.claude/.headroom_wrap_settings.lock
