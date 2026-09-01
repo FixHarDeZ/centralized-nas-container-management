@@ -14,7 +14,7 @@ started with a different command (`python -m app.dashboard`), mounting the
 bot's data volume read-only. It imports `app.manifest`, `app.experiment`,
 `app.analytics` and `app.history` directly, so its numbers can
 never disagree with what the bot answers in Telegram. An nginx sidecar publishes
-port 5067 with basic auth; the FastAPI app is `expose:`-only.
+port 5069 with basic auth; the FastAPI app is `expose:`-only.
 
 **Tech Stack:** Python 3.12, FastAPI, uvicorn, Jinja2, nginx:alpine, pytest.
 
@@ -42,7 +42,7 @@ These apply to every task. They are environment facts, not preferences.
   `NanoCPUs can not be set, as your kernel does not support CPU CFS scheduler`.
 - **`mem_limit` is required on every new service.** The host had a whole-box OOM
   on 2026-08-19.
-- **Port 5067.** 5063-5066 and 5068-5070 are taken by other stacks; 5060 and
+- **Port 5069.** 5063-5066 and 5068-5070 are taken by other stacks; 5060 and
   5061 are unusable because browsers block them as SIP ports.
 - **Never commit** `.env`, `.env.deploy`, `nginx/.htpasswd`, or any real
   hostname, IP or password. Use `<NAS_HOST>` / `<NAS_USER>` placeholders in
@@ -942,7 +942,7 @@ git commit -m "feat(shorts-factory): dashboard experiment and live-state pages"
 
 **Interfaces:**
 - Consumes: the app listening on `0.0.0.0:8000` from Task 2.
-- Produces: `http://<NAS_HOST>:5067` behind basic auth.
+- Produces: `http://<NAS_HOST>:5069` behind basic auth.
 
 - [ ] **Step 1: Write the nginx config**
 
@@ -1005,7 +1005,7 @@ top-level `volumes:` key would silently win and drop the first.
     container_name: shorts-factory-nginx
     restart: unless-stopped
     ports:
-      - "5067:80"
+      - "5069:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - ./nginx/.htpasswd:/etc/nginx/.htpasswd:ro
@@ -1019,11 +1019,11 @@ top-level `volumes:` key would silently win and drop the first.
 - [ ] **Step 3: Verify the compose file parses and says what you meant**
 
 ```bash
-cd shorts-factory && docker compose config | grep -E "container_name|:ro|5067|mem_limit|cpus|TELEGRAM|MIMO|YOUTUBE"
+cd shorts-factory && docker compose config | grep -E "container_name|:ro|5069|mem_limit|cpus|TELEGRAM|MIMO|YOUTUBE"
 ```
 
 Expected: three `container_name` lines, `shorts_factory_data:/data:ro` under
-the dashboard only, `5067:80` on nginx, three `mem_limit` values, and **no
+the dashboard only, `5069:80` on nginx, three `mem_limit` values, and **no
 `cpus`** anywhere. No `TELEGRAM_*`/`MIMO_*`/`YOUTUBE_*` may appear under
 `shorts-factory-dashboard` — if they do, `env_file` crept back in. Confirm the
 bot service still has no `ports:`.
@@ -1056,7 +1056,7 @@ back.
 ```bash
 git add shorts-factory/nginx/nginx.conf shorts-factory/docker-compose.yml shorts-factory/secrets.manifest.yaml
 git status --short   # nginx/.htpasswd must NOT appear
-git commit -m "feat(shorts-factory): nginx sidecar and dashboard service on 5067"
+git commit -m "feat(shorts-factory): nginx sidecar and dashboard service on 5069"
 ```
 
 ---
@@ -1100,13 +1100,13 @@ Append one line to `docs/adr/0002-shorts-factory-has-no-http-surface.md`:
 
 **Amended 2026-09-01 by `docs/adr/0007`:** the dashboard was built. The bot
 process is still portless and Telegram-only; the HTTP surface belongs to a
-separate read-only container behind nginx basic auth on 5067.
+separate read-only container behind nginx basic auth on 5069.
 ```
 
 - [ ] **Step 3: Update the stack README**
 
 In `shorts-factory/README.md`, add a Dashboard section covering: the URL shape
-`http://<NAS_HOST>:5067`, basic auth from the vault, the four pages and what
+`http://<NAS_HOST>:5069`, basic auth from the vault, the four pages and what
 each answers, that it is read-only by mount and by route, and the setup command:
 
 ```bash
@@ -1116,9 +1116,9 @@ htpasswd -cB shorts-factory/nginx/.htpasswd <username>   # gitignored; use the v
 - [ ] **Step 4: Update the root docs**
 
 In the root `CLAUDE.md` stacks table, edit the `shorts-factory/` row: change the
-port cell from `— / —` to `5067 (dashboard) / —` and append to the description:
+port cell from `— / —` to `5069 (dashboard) / —` and append to the description:
 
-> **Dashboard read-only ที่ 5067** (`app/dashboard.py` + nginx sidecar, ADR 0007):
+> **Dashboard read-only ที่ 5069** (`app/dashboard.py` + nginx sidecar, ADR 0007):
 > คอนเทนเนอร์แยกจากบอท อิมเมจเดียวกัน `command` ต่างกัน mount `/data:ro` — บอทเองยังไม่มีพอร์ต
 > ตาม ADR 0002. หน้า `/` ลิสต์คลิปทุกอันพร้อมตัวเลข day-7, `/clip/{id}` manifest เต็มรวม draft
 > ที่กดทิ้ง, `/experiment` สอง arm + verdict, `/now` state.json + say.json. **ไม่มี route
@@ -1200,12 +1200,12 @@ ssh -p 2222 <NAS_USER>@<NAS_HOST> "bash -lc 'sudo -n /usr/local/bin/docker ps --
 ```
 
 Expected: `shorts-factory` (no ports), `shorts-factory-dashboard` (no published
-ports), `shorts-factory-nginx` with `0.0.0.0:5067->80/tcp`, all Up.
+ports), `shorts-factory-nginx` with `0.0.0.0:5069->80/tcp`, all Up.
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}\n" http://<NAS_HOST>:5067/            # expect 401
-curl -s -u <user>:<password> http://<NAS_HOST>:5067/healthz                 # expect {"ok":true}
-curl -s -u <user>:<password> http://<NAS_HOST>:5067/ | head -40             # expect the clip table
+curl -s -o /dev/null -w "%{http_code}\n" http://<NAS_HOST>:5069/            # expect 401
+curl -s -u <user>:<password> http://<NAS_HOST>:5069/healthz                 # expect {"ok":true}
+curl -s -u <user>:<password> http://<NAS_HOST>:5069/ | head -40             # expect the clip table
 ```
 
 If `/` returns 401 with correct credentials, the `.htpasswd` permissions are

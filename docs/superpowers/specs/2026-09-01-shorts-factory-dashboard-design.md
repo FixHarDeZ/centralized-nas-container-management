@@ -44,7 +44,7 @@ the **same image** as the bot (`build: .`), started with a different command.
 ```
 shorts-factory        (bot)        no ports          /data rw, /output rw
 shorts-factory-dash   (uvicorn)    expose: 8000      /data ro, no credentials
-shorts-factory-nginx  (nginx)      ports: 5067:80    basic auth, all paths
+shorts-factory-nginx  (nginx)      ports: 5069:80    basic auth, all paths
 ```
 
 Sharing the image is what makes the dashboard import `app.manifest`,
@@ -126,7 +126,7 @@ bot container  ──writes──▶  shorts_factory_data volume  ──reads (r
                             /data/say.json                                │
                             /data/history.json                            │
                                                                           ▼
-                                                      nginx :5067 ──▶ browser (LAN)
+                                                      nginx :5069 ──▶ browser (LAN)
 ```
 
 No shared memory, no IPC, no polling protocol. The dashboard reads the files on
@@ -152,13 +152,13 @@ Modified:
 - `shorts-factory/docker-compose.yml` — two services added
 - `shorts-factory/README.md`, `shorts-factory/.notes/00_INDEX.md`,
   `shorts-factory/.notes/daily_log.md`
-- root `CLAUDE.md` (port table row: `5067`), root `README.md`
+- root `CLAUDE.md` (port table row: `5069`), root `README.md`
 - `docs/adr/0002-...md` — a closing line pointing at 0007
 
 `deploy.sh` needs no change: `shorts-factory` is already in `ALL_STACKS` and the
 new services live in that stack's compose file.
 
-Port 5067 is the free slot: 5063, 5064, 5065, 5066, 5068, 5069 and 5070 are
+Port 5069 is the free slot: 5063, 5064, 5065, 5066, 5068, 5069 and 5070 are
 taken, and 5060/5061 are unusable because browsers block them as SIP.
 
 ## Testing

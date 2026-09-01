@@ -134,3 +134,20 @@
 ไม่ต้องเพิ่ม `HOMEPAGE_VAR_*` ใหม่ — ใช้ `DDNS_BASE_HTTPS` ที่มีอยู่แล้ว
 
 **Deploy:** `scripts/deploy.sh -s homepage -y` — verify ด้วย `docker exec homepage grep -A3 ops-bot /app/config/services.yaml` + เช็ค log ไม่มี error
+
+## 2026-09-01 — เพิ่ม tile shorts-factory
+
+`homepage/config/services.yaml` — เพิ่มรายการใน group `📥 Downloads & Monitoring` (ใต้ ops-bot):
+
+```yaml
+- shorts-factory:
+    icon: mdi-movie-open-outline
+    href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15071"
+    description: YouTube Shorts Dashboard
+```
+
+ไม่ใส่ `ping`/`widget` ด้วยเหตุผลเดียวกับ dupe-sweeper/ops-bot — อยู่หลัง nginx basic auth ทั้งเส้นทาง ping จะได้ 401 แล้วโชว์ down ผิดๆ ไม่ต้องเพิ่ม `HOMEPAGE_VAR_*` ใหม่ ใช้ `DDNS_BASE_HTTPS` เดิม
+
+บริบท: ช่วงเดียวกันแก้ dashboard port ของ shorts-factory เอง `5069 → 5071` (ชนกับ dupe-sweeper) และผู้ใช้แจ้งว่าตั้ง DSM Reverse Proxy `15071 → localhost:5071` แล้ว จึงอัปเดต root `README.md`/`CLAUDE.md` จาก "LAN only" เป็น `https://…:15071` ด้วย — **ยังไม่ verify จริงว่า RP rule มีอยู่จริง** แค่เชื่อคำผู้ใช้ ต้องเช็ค `curl -o /dev/null -w "%{http_code}" https://fixhardez.synology.me:15071` (คาด 401) ตอน deploy รอบหน้า
+
+**Deploy:** `scripts/deploy.sh -s homepage -y` — verify ด้วย `docker exec homepage grep -A3 shorts-factory /app/config/services.yaml`

@@ -19,7 +19,10 @@ Docker stacks for Synology DS925+ NAS, managed via Synology Container Manager.
 | `torrentwatch/` | Daily torrent monitor for bearbit.org — scrapes, filters, LINE alerts | `5059` | `https://…:15059` |
 | `news-feed/` | AI & IT news feed bot — Thai summaries via Claude/DeepSeek, digest to LINE + Telegram, dashboard | `5064` | `https://…:15064` |
 | `ink-reader/` | Doujin library + OPDS catalog for Meebook M8 — scrapes doujin-th.com, converts to CBZ, curation dashboard | `5068` | `https://…:15068` |
-| `shorts-factory/` | Telegram bot that renders Thai YouTube Shorts — read-only dashboard over the clip record | `5067` (Nginx basic-auth dashboard) | — (LAN only) |
+| `dupe-sweeper/` | Duplicate video finder/deleter dashboard by media code | `5069` (Nginx basic-auth dashboard) | — (LAN only) |
+| `friendly-reminder/` | Monthly installment payment tracker — LINE reminders + webhook slip auto-match | `5066` | `https://…:15066` |
+| `ops-bot/` | AI incident-response bot — Uptime Kuma webhook, SSH diagnostics, Telegram fixes, fix-as-PR | `5070` | `https://…:15070` |
+| `shorts-factory/` | Telegram bot that renders Thai YouTube Shorts — read-only dashboard over the clip record | `5071` (Nginx basic-auth dashboard) | `https://…:15071` |
 
 ### Reverse Proxy Summary
 
@@ -38,6 +41,9 @@ All stacks except `watchtower` are exposed externally via **Synology Reverse Pro
 | Hermes | `https://…:15063` | `http://localhost:5063` |
 | news-feed | `https://…:15064` | `http://localhost:5064` |
 | ink-reader | `https://…:15068` | `http://localhost:5068` |
+| friendly-reminder | `https://…:15066` | `http://localhost:5066` |
+| ops-bot | `https://…:15070` | `http://localhost:5070` |
+| shorts-factory | `https://…:15071` | `http://localhost:5071` |
 
 > Your router must forward each **external port → NAS** so traffic reaches Synology Reverse Proxy. Homepage is the only exception — it has its own Nginx inside the container that handles TLS, so Synology RP simply forwards `:443` to port `3000` unencrypted and lets Nginx take over from there.
 

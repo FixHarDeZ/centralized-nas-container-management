@@ -17,4 +17,4 @@ renders on the NAS. A future dashboard would have to add the nginx layer back.
 
 **Amended 2026-09-01 by `docs/adr/0007`:** the dashboard was built. The bot
 process is still portless and Telegram-only; the HTTP surface belongs to a
-separate read-only container behind nginx basic auth on 5067.
+separate read-only container behind nginx basic auth on 5069.

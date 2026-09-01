@@ -65,6 +65,11 @@
         href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15070/dashboard"
         description: AI Incident Response Bot
 
+    - shorts-factory:
+        icon: mdi-movie-open-outline
+        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15071"
+        description: YouTube Shorts Dashboard
+
     - Portainer:
         icon: portainer.png
         href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:19000"

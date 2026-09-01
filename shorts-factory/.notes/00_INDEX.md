@@ -121,13 +121,20 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
   (`/volume1/shorts` on the NAS, reachable over SMB).
 - **Dashboard (2026-09-01).** `app/dashboard.py` runs as a second container
   (`shorts-factory-dashboard`, same image, different `command`) behind an
-  nginx sidecar publishing 5067 with basic auth. Read-only twice over: `/data`
+  nginx sidecar publishing 5071 with basic auth. Read-only twice over: `/data`
   mounted `:ro` and the app declares no non-GET/HEAD route (`test_no_route_can_write`).
   No `env_file` — it holds neither the Telegram bot token nor the YouTube
   refresh token. Four pages: `/` (clip list + day-7 numbers), `/clip/{id}`
   (full manifest incl. discarded drafts), `/experiment` (arms + verdict),
   `/now` (state.json + say.json + recent uploads). Reads `say.json` itself via
   a local `_say()`, does not import `app.render`. See `docs/adr/0007`.
+- **Port 5071, not 5069 (2026-09-01).** The dashboard originally shipped on
+  5069; that collided with `dupe-sweeper` which already owned it. Moved to
+  5071 in `docker-compose.yml` — ADR 0002/0007 and the original design
+  spec/plan still say 5069, they're left alone (decision record, not live
+  config). External access: DSM Reverse Proxy `15071 → localhost:5071` plus a
+  homepage tile (`homepage/config/services.yaml`, no ping/widget — the whole
+  path is behind basic auth so a ping would 401 and show as down).
 
 ## Settings
 

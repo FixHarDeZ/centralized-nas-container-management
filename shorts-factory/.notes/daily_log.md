@@ -1074,11 +1074,11 @@ Topic. `RESULT_TOPIC` จับไม่ได้เพราะ URL ไม่�
 **Regression:** เพิ่มเทสต์ที่ยืนยันว่า URL ล้วนไม่ถึง `script_gen.generate()` และไม่เปลี่ยน
 state/สร้างงานค้าง
 
-## 2026-09-01 (2) — Dashboard read-only ที่ port 5067
+## 2026-09-01 (2) — Dashboard read-only ที่ port 5069
 
 **ที่ทำ:** เพิ่ม `app/dashboard.py` (FastAPI) + `docker-compose.yml` service
 ใหม่ `shorts-factory-dashboard` (image เดียวกับบอท `command` ต่างกัน,
-mount `/data:ro`, ไม่มี `env_file`) + `nginx` sidecar publish `5067:80` basic
+mount `/data:ro`, ไม่มี `env_file`) + `nginx` sidecar publish `5069:80` basic
 auth จาก `.htpasswd`. สี่หน้า: `/` (ลิสต์คลิปทุกอันพร้อมตัวเลข day-7),
 `/clip/{id}` (manifest เต็มรวม draft ที่กดทิ้ง), `/experiment` (สอง arm +
 verdict), `/now` (state.json + say.json + upload ล่าสุด)
@@ -1095,15 +1095,15 @@ verdict), `/now` (state.json + say.json + upload ล่าสุด)
 ### 2026-09-01 — dashboard deploy verified on the NAS
 
 `./scripts/deploy.sh -s shorts-factory -y`, then, checked from the NAS itself
-(port 5067 is LAN-only — it is not forwarded, so a workstation on another
+(port 5069 is LAN-only — it is not forwarded, so a workstation on another
 network gets no connection at all, which is the intended shape):
 
 - `shorts-factory` Up with no published ports, `shorts-factory-dashboard` Up on
-  `8000/tcp` unpublished, `shorts-factory-nginx` Up on `0.0.0.0:5067->80/tcp`
+  `8000/tcp` unpublished, `shorts-factory-nginx` Up on `0.0.0.0:5069->80/tcp`
 - `docker exec shorts-factory-dashboard touch /data/nope` →
   `touch: cannot touch '/data/nope': Read-only file system`
 - `printenv | grep -c 'TELEGRAM\|YOUTUBE\|MIMO\|PEXELS'` inside the dashboard → `0`
-- `curl http://localhost:5067/` without credentials → `401`; with them, `/`,
+- `curl http://localhost:5069/` without credentials → `401`; with them, `/`,
   `/experiment`, `/now` and `/healthz` all `200`, and `/` listed the real clips
 - `/clip/<real id>` → 200, `/clip/nope` → 404 (logged `อ่าน manifest nope ไม่ได้`,
   no traceback), `/clip/..%2f..%2fetc%2fpasswd` → 400
@@ -1112,3 +1112,14 @@ network gets no connection at all, which is the intended shape):
 
 Observation, pre-existing and unrelated to this change: httpx logs the full
 Telegram API URL, so the bot token appears in `docker logs shorts-factory`.
+
+## 2026-09-01 (3) — Dashboard port moved 5069 → 5071
+
+Port 5069 collided with `dupe-sweeper` (which already owns it). Moved the
+`shorts-factory-nginx` sidecar publish to `5071:80` in `docker-compose.yml`
+and updated every "current state" reference (`README.md`, `.notes/00_INDEX.md`,
+root `CLAUDE.md`, root `README.md`). Historical docs (ADR 0002/0007, the
+2026-09-01 dashboard spec/plan, earlier daily-log entries) were left as-is —
+they record the decision as made at the time, not the live port number.
+Next deploy: re-run `make secrets` if the vault manifest references the port,
+then `docker compose up -d` to recreate `shorts-factory-nginx` on the new port.

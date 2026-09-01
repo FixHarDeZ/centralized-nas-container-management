@@ -386,7 +386,7 @@ stack.
 ## Dashboard
 
 A read-only view of everything the bot has already written down, served at
-`http://<NAS_HOST>:5067` behind nginx basic auth (credentials from the vault,
+`http://<NAS_HOST>:5071` behind nginx basic auth (credentials from the vault,
 see below). It runs as its own container from the same image as the bot with
 `/data` mounted `:ro`, and the app itself declares no route other than GET/HEAD
 — read-only twice over, by mount and by code (`docs/adr/0007`). It carries no

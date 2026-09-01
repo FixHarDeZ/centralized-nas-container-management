@@ -5,7 +5,7 @@ it is still a single Telegram `getUpdates` long-poll loop, it still publishes
 no `ports:`, and nothing about how it decides what to render changed. What
 gained an HTTP surface is a different container — `shorts-factory-dashboard`,
 built from the same image with a different `command`, sitting behind an nginx
-sidecar with basic auth on 5067. ADR 0002 is amended by this decision, not
+sidecar with basic auth on 5069. ADR 0002 is amended by this decision, not
 withdrawn: the reasoning that kept an inbound webhook off the bot itself is
 untouched, and this ADR only explains the thing that sits beside it.
 
