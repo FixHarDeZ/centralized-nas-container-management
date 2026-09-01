@@ -52,15 +52,30 @@ look for it. The others: `/stats` (how published clips did), `/snapshot` (pull
 today's numbers now rather than waiting for the daily run), `/experiment` (the
 running A/B and whether it can be called yet), `/retention` (one clip's curve,
 with the drop-offs named by card), `/trends` (what Thailand is searching for
-and watching, turned into topics). Anything that is not a command is a Topic.
+and watching, turned into topics), `/storyboard` (a long-form storyboard from a
+one-line brief), `/say` (fix how a word is pronounced), `/redo` (render the
+last script again, unchanged). Anything that is not a command is a Topic —
+except text starting with `/`, which is answered as an unknown command rather
+than written about, because a typo used to cost minutes of model time and left
+a manifest named after it.
+
+A Topic that hinges on a result — who won, a score, what was announced — is
+turned away with an explanation rather than written. The model has no source
+for any of it: no web access, and the prompt sends it to general knowledge
+instead. Six volleyball topics between 2026-08-29 and 08-31 came back with one
+essay (small team, fast sets, tight defence, heart) and two reached YouTube
+carrying invented figures — "Thai sets are 0.3s faster", "China average 186cm
+against Thailand's 175". `/trends` has always dropped news and sport before
+suggesting anything; this is the same rule applied to what the human types.
+`!` in front of the topic overrides it, for when the human knows better.
 
 ## Pipeline
 
 ```
 topic → mimo → script (hook + cards + metadata) → your review
-      → Pexels (one stock clip per card)  ┐
-      → Pillow (one card image per card)  ├→ ffmpeg composite + concat → mp4
-      → edge-tts (one audio per card)     ┘
+      → Pexels, or footage you made in Flow  ┐
+      → Pillow (one card image per card)     ├→ ffmpeg composite + concat → mp4
+      → edge-tts (one audio per card)        ┘
 ```
 
 Cards sit on real footage, dimmed by a scrim so the text reads. When Pexels has
@@ -82,11 +97,89 @@ into Thai script and is the only one the voice ever reads. A Latin word left in
 English pace — a rushed, unclear burst inside Thai speech — so the validator
 rejects it.
 
+Two pronunciation faults survive that. The model letter-spells a coined word it
+does not read as a pun — "TH-AI Passport" came back as `ทีเอไอพาสปอร์ต`, said
+"tee-ay-eye", where it is meant to be `ไทยพาสปอร์ต` — and the voice reads a
+handful of correctly spelled Thai words wrong on its own. Neither is fixable by
+rewriting the script: a rewrite returns the same spelling and the same audio.
+`/say <wrong> = <right>` writes a substitution to `/data/say.json`, keyed on
+Thai because Latin never reaches the voice, and it applies to every later clip.
+The script shown for review prints a 🗣 line wherever `spoken` differs from
+`narration`, which is the text to copy into the command. An entry only reaches
+a clip that is synthesised after it, so `/redo` re-renders the last script with
+the fix and without a rewrite; a clip already on YouTube is not replaced.
+
+Thai has no final /s/ at all — ส ษ ศ ซ in a coda are all said /t/ — so "พาส"
+is read "พาด" by the rules, not by a fault in the voice, and no correct
+spelling will fix it. The way out is an override that either keeps the English
+word or moves the s into the next syllable (`เอไอพาสะทีเอช`); `/say` values are
+never validated, so a Latin one is allowed there even though `spoken` forbids
+it. Substitution happens
+inside `_tts_text()`, before `narrate()` joins the cards: doing it later would
+leave the boundary check comparing pre-substitution text against what the voice
+reports, failing alignment on every card and dropping the clip to per-card
+speech without saying why.
+
 Card timing follows the length of each card's audio, so the clip runs as long
 as the narration takes. Each card also drifts — a slow zoom in or out that
 spans exactly its narration, alternating direction card to card, so the clip
 does not read as a slideshow. Cards are drawn 12% larger than the frame and the
 zoom crops into that margin, which keeps the text at native resolution.
+
+## Footage you generate yourself
+
+Pexels is instant and generic. When the hook deserves better, press
+**🎨 ทำ footage เอง** on the script instead of 🎬: the bot writes an English
+Flow Prompt for the hook card, sends it in a code block you can copy with one
+tap, and then gets out of the way. You paste it into the Google Flow app
+(9:16), generate, download, and **reply to that same message with the mp4**.
+
+The reply is what makes the matching exact — the message id says which card the
+file belongs to, so nothing is inferred from filenames or the order things
+arrive in. The bot files it under `/volume1/shorts/footage/<clip_id>/c00.mp4`,
+which outlives the workdir, and offers a 🎬 button. Cards without supplied
+footage still go to Pexels as usual.
+
+While a clip is parked the bot is idle: send another topic, run any command.
+What it will not do is park a second clip, or pick a topic on its own — you are
+already busy with this one. A clip nobody sends footage for is written off
+after 24 hours (`FLOW_PARK_HOURS`) and recorded as `abandoned`.
+
+Telegram's Bot API will not serve the bot a file over 20MB, so send the video
+normally and let Telegram compress it rather than sending it as a file.
+
+The bot never calls a video model itself: Flow credits and the Veo API are
+separate systems, and the API costs about $18 per clip at Veo 3.1 Standard
+rates. See `docs/adr/0005`.
+
+## Storyboards
+
+Sometimes the shot list matters more than the stock clip. **📋 prompt ทำ
+storyboard** on a script plans one for it and sends it back one scene at a
+time: Thai above (what happens, what is heard, what the mood is), English
+below in copy blocks — one prompt to make the frame, one to make the video
+from it. The first message is the master character: generate that image in
+Flow before anything else and use it as an ingredient, or the face changes
+scene to scene.
+
+The character lock is enforced, not requested. The storyboard names the
+character once in a `locked_prompt_tag`, and validation rejects any scene whose
+image prompt does not repeat that phrase word for word — along with any prompt
+that is not English, omits the aspect ratio, or drops the `no text, no
+watermark, no UI, no split-screen` tail.
+
+The narration and on-screen lines are copied in from the script after the model
+answers, never taken from its reply: those words are what the renderer will
+speak and draw, and a storyboard that paraphrases them is a set of images for a
+video that does not exist.
+
+`/storyboard <บรีฟ>` does the long-form version: a one-line brief becomes a
+16:9 storyboard (four scenes unless the brief asks for another number). There
+is no script to lock against, so the voiceover is written by the model.
+
+Both stop at prompts — this stack does not assemble long-form video, and
+`docs/adr/0006` says why. Pressing 📋 changes nothing about the clip: the
+script keeps its buttons, and you can press it again.
 
 ## What it records
 
@@ -282,6 +375,9 @@ make secrets                    # render .env from vault + manifest
 | :--- | :--- | :--- |
 | `TRENDS_HOURS` | `8,12,17` | hours the bot runs `/trends` unasked |
 | `AUTO_PICK_MINUTES` | `15` | how long that list waits before picking itself |
+| `FLOW_PARK_HOURS` | `24` | how long a clip waits for footage you generate in Flow |
+| `FLOW_PROMPT_TIMEOUT_SECONDS` | `180` | cap on writing one Flow Prompt |
+| `STORYBOARD_TIMEOUT_SECONDS` | `300` | cap on planning one storyboard |
 
 The `/volume1/shorts` shared folder must exist on the NAS before first run;
 create it in DSM (Control Panel → Shared Folder), it is not created by the

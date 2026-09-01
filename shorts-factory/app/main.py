@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import os
+import html
 import random
 import re
 import shutil
@@ -17,7 +18,8 @@ from pathlib import Path
 import httpx
 
 from app import (analytics, backfill, experiment, history, manifest, render,
-                 retention, script as script_gen, snapshots, trends, youtube)
+                 retention, script as script_gen, snapshots, storyboard, trends,
+                 youtube)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("shorts-factory")
@@ -32,6 +34,11 @@ CHAT_ID = int(os.environ["TELEGRAM_CHAT_ID"])
 API = f"https://api.telegram.org/bot{TOKEN}"
 
 RENDER_CB, DISCARD_CB, UPLOAD_CB = "render", "discard", "upload"
+# 🎨 on a Script: write the Flow Prompt and park the Clip. `parked_render` is
+# the button that comes back once the human has sent the Footage in.
+FLOW_CB, PARK_RENDER_CB = "flow", "parked_render"
+# 📋 on a Script: the Storyboard Prompt for it. Changes nothing about the Clip.
+STORYBOARD_CB = "storyboard"
 # Prefix of the 💡 buttons under a /trends list: `pick:<suggested_at>:<index>`.
 PICK_CB = "pick"
 # The ✋ button under an automatic list: `cancel:<suggested_at>`.
@@ -48,14 +55,36 @@ AUTO_PICK_MINUTES = int(os.environ.get("AUTO_PICK_MINUTES", "15"))
 RETENTION_TRIES = 10
 # How long a /trends list stays creditable for a Topic typed back.
 SUGGESTION_LIFETIME = timedelta(days=2)
+# How long a Parked Clip waits for Footage before it is written off. Generating
+# in Flow takes minutes and the human may be away; a day is generous and still
+# short enough that a forgotten Clip does not block the next one forever.
+PARK_LIFETIME = timedelta(hours=int(os.environ.get("FLOW_PARK_HOURS", "24")))
+# Human-generated Footage lives beside the clips on /volume1/shorts: it cost
+# Flow credits, and the workdir is wiped after every render.
+FOOTAGE_DIR = OUTPUT_DIR / "footage"
+# getFile on the cloud Bot API will not serve anything larger. Telegram's own
+# video compression lands well under it; "send as file" does not.
+TELEGRAM_FILE_LIMIT = 20 * 1024 * 1024
+# sendMessage refuses anything longer; a Storyboard Prompt that overruns is
+# sent as a .txt file rather than chopped into pieces nobody can paste.
+TELEGRAM_TEXT_LIMIT = 4096
 UPLOAD_KEYBOARD = {
     "inline_keyboard": [[{"text": "⬆️ อัปโหลดขึ้น YouTube", "callback_data": UPLOAD_CB}]]
 }
 REVIEW_KEYBOARD = {
-    "inline_keyboard": [[
-        {"text": "🎬 render", "callback_data": RENDER_CB},
-        {"text": "🗑 ทิ้ง", "callback_data": DISCARD_CB},
-    ]]
+    "inline_keyboard": [
+        [
+            {"text": "🎬 render (Pexels)", "callback_data": RENDER_CB},
+            {"text": "🎨 ทำ footage เอง", "callback_data": FLOW_CB},
+        ],
+        [
+            {"text": "📋 prompt ทำ storyboard", "callback_data": STORYBOARD_CB},
+            {"text": "🗑 ทิ้ง", "callback_data": DISCARD_CB},
+        ],
+    ]
+}
+PARK_KEYBOARD = {
+    "inline_keyboard": [[{"text": "🎬 render เลย", "callback_data": PARK_RENDER_CB}]]
 }
 
 
@@ -63,7 +92,27 @@ HELP = """🎬 shorts-factory
 
 ส่งหัวข้อมาเฉยๆ = เริ่มทำคลิปใหม่
 ระหว่างรอรีวิวสคริปต์ พิมพ์บอกได้ว่าอยากแก้ตรงไหน (บอทเขียนใหม่ให้)
-🎬 render = ลงมือทำคลิป · 🗑 ทิ้ง = เริ่มใหม่ · ⬆️ = อัปขึ้น YouTube (ต้องกดเอง)
+🎬 render (Pexels) = ทำคลิปเลย · 🗑 ทิ้ง = เริ่มใหม่ · ⬆️ = อัปขึ้น YouTube (ต้องกดเอง)
+
+🎨 ทำ footage เอง = อยากได้พื้นหลัง hook สวยกว่า stock
+   บอทเขียน prompt ภาษาอังกฤษให้ 1 อัน (แตะที่กล่องโค้ดเพื่อก๊อป)
+   เอาไปวางในแอป Google Flow เลือก 9:16 เจนเสร็จโหลดลงเครื่อง
+   แล้วตอบกลับ (reply) ข้อความ prompt นั้น พร้อมแนบคลิป — บอทถึงจะรู้ว่าเป็นของ card ไหน
+   ระหว่างรอ บอทว่าง สั่งอย่างอื่นได้ตามปกติ (แต่พักได้ทีละ 1 คลิป รอได้ 24 ชม.)
+   ไฟล์ต้องไม่เกิน 20MB — ส่งแบบวิดีโอธรรมดา อย่าส่งเป็นไฟล์
+
+📋 prompt ทำ storyboard = ออกแบบภาพทุกฉากก่อนไปเจนใน Flow
+   บอทวาง storyboard ของสคริปต์ที่รีวิวอยู่ (9:16) แล้วส่งมาทีละฉาก
+   แต่ละฉากมี prompt อังกฤษ 2 กล่อง (แตะก๊อป): กล่องแรกสร้างภาพ กล่องสองสร้างวิดีโอ
+   ฉากแรกสุดคือ prompt สร้าง "ตัวละครหลัก" — เจนภาพนั้นก่อน แล้วใช้เป็น ingredient
+   ของทุกฉากใน Flow ไม่งั้นหน้าตัวละครเปลี่ยนไปทุกฉาก
+   บทพูดกับข้อความบนจอถูกล็อกให้ตรงกับสคริปต์เป๊ะ ไม่ให้โมเดลเขียนใหม่
+   ไม่เปลี่ยนอะไรกับคลิปเลย สคริปต์ยังรีวิวอยู่เหมือนเดิม กดซ้ำได้
+
+/storyboard <บรีฟ> — storyboard ของคลิปยาว (16:9)
+   เช่น /storyboard โฆษณาบ้านเดี่ยว 10 ล้าน 3 ห้องนอน ตัวละครหญิงไทย 25 ปี 6 ฉาก
+   ไม่บอกจำนวนฉาก = 4 ฉาก · บอกในบรีฟได้เลยว่าอยากได้กี่ฉาก
+   บอทออกให้แค่ prompt — คลิปยาวไม่ได้ประกอบให้ (ดู docs/adr/0006)
 
 /stats — คลิปที่อัปแล้วทำได้แค่ไหน
    เรียงตาม % ที่คนดูจนจบ (ไม่ใช่ยอดวิว) เพราะมันคือตัวที่บอกว่า "เขียนดีขึ้นไหม"
@@ -72,6 +121,18 @@ HELP = """🎬 shorts-factory
 /snapshot — เก็บตัวเลขของวันนี้เดี๋ยวนี้เลย
    ปกติบอทเก็บเองวันละครั้งตอน 10 โมง ไม่ต้องสั่ง — คำสั่งนี้ไว้ใช้ตอนอยากได้เดี๋ยวนั้น
    ตัวเลข ณ วันที่ 7 หลังอัปคือตัวที่ใช้ตัดสินผลทดลอง (เก็บทุกวันแต่ใช้วันที่ 7)
+
+หัวข้อที่ต้องรู้ผลแข่ง/ผลประกาศ บอทจะไม่รับ (ไม่ได้ต่อเน็ต เขียนไปก็แต่งตัวเลขเอง)
+   อยากให้ทำจริงๆ ใส่ ! นำหน้าหัวข้อ
+
+/redo — render คลิปล่าสุดซ้ำ ด้วยสคริปต์เดิมเป๊ะ ไม่ต้องรอเขียนใหม่
+   ใช้ตอนแก้เสียงอ่านด้วย /say แล้วอยากได้ไฟล์ใหม่ (เพลงประกอบสุ่มใหม่ด้วย)
+   คลิปที่อัป YouTube ไปแล้วไม่ถูกแทนที่ ต้องอัปใหม่เอง
+
+/say <คำที่อ่านผิด> = <คำที่อยากให้อ่าน> — แก้เสียงอ่านคำนั้นถาวร
+   ดูคำที่บอทจะอ่านได้จากบรรทัด 🗣 ใต้สคริปต์ ก๊อปคำที่ผิดมาวางได้เลย
+   เช่น /say ทีเอไอ = ไทย  ·  ดูรายการทั้งหมด: /say  ·  ลบ: /say ทีเอไอ =
+   ใช้ตอนเสียงอ่านชื่อผิด หรืออ่านคำที่สะกดถูกแล้วแต่ออกเสียงเพี้ยน
 
 /experiment — ผลการทดลองตอนนี้
    ทุกคลิปถูกสุ่มแบบเปิดเรื่อง: เปิดด้วยตัวเลขช็อก หรือเปิดด้วยคำถาม
@@ -160,6 +221,31 @@ def auto_pick_due(state: dict, now: datetime | None = None) -> bool:
         return False
 
 
+def parked_expired(state: dict, now: datetime | None = None) -> bool:
+    """Whether a Parked Clip has waited for its Footage long enough."""
+    parked = state.get("parked") or {}
+    try:
+        born = datetime.fromisoformat(parked["created_at"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    return (now or datetime.now()) - born > PARK_LIFETIME
+
+
+def take_auto_pick(state: dict, now: datetime | None = None) -> bool:
+    """Claim an owed unattended pick, and say whether to act on it.
+
+    The pick is dropped either way. A human already busy with a Script of their
+    own — or off generating Footage for a Parked Clip — does not get a second
+    one queued behind it, and leaving it pending would fire the round later,
+    off a /trends list from hours ago.
+    """
+    if not auto_pick_due(state, now):
+        return False
+    state.pop("auto_pick", None)
+    save_state(state)
+    return state.get("mode", "idle") == "idle" and not state.get("parked")
+
+
 # --- telegram ----------------------------------------------------------------
 
 async def api(client: httpx.AsyncClient, method: str, **payload):
@@ -210,6 +296,10 @@ def format_script(script: dict) -> str:
         label = "hook" if i == 1 else f"card {i}"
         parts.append(f"[{label}] {' / '.join(card['lines'])}")
         parts.append(f"   🔊 {card['narration']}")
+        # The voice reads `spoken`, not `narration`; show it when they differ
+        # so a mispronounced word can be copied straight into /say.
+        if (card.get("spoken") or card["narration"]) != card["narration"]:
+            parts.append(f"   🗣 {card['spoken']}")
         if (card.get("code") or "").strip():
             parts.append(f"   ```{card['code'].strip()}```")
     parts += ["", " ".join(script["hashtags"]), "", "พิมพ์บอกได้เลยว่าอยากแก้ตรงไหน"]
@@ -294,12 +384,53 @@ def trend_origin(state: dict, topic: str) -> dict | None:
     return None
 
 
+# A Topic that hinges on what actually happened: a score, a result, who won.
+# The model has no source for any of it — no web access, and the prompt sends
+# it to "ความรู้ทั่วไปที่ตรวจสอบได้" instead. Measured on six volleyball clips
+# (2026-08-29..31): every one came back with the same skeleton, two of them
+# reached YouTube carrying numbers the model made up. `/trends` already drops
+# news and sport before suggesting anything; this is the same rule for Topics
+# the human types.
+RESULT_TOPIC = re.compile(
+    r"ชนะ|แพ้|ผลการแข่ง|ผลบอล|สกอร์|ตกรอบ|เข้ารอบ|คว้าแชมป์|ได้แชมป์|"
+    r"ประกาศผล|เมื่อคืน|\d\s*[-:]\s*\d"
+)
+BARE_URL = re.compile(r"https?://\S+\Z", re.IGNORECASE)
+FORCE_PREFIX = "!"
+
+
+def result_shaped(topic: str) -> bool:
+    return bool(RESULT_TOPIC.search(topic))
+
+
 async def make_script(client: httpx.AsyncClient, state: dict, topic: str,
                       feedback: str = "", auto: bool = False) -> None:
+    previous = state.get("script") if feedback else None
+    # Checked here rather than in on_text so the trend buttons and the
+    # automatic pick go through the same door, and before anything is claimed:
+    # a Topic that is turned away leaves the state exactly as it was. Only a
+    # fresh Topic is judged — a revision is about a Script that already exists.
+    if previous is None:
+        if BARE_URL.fullmatch(topic.strip()):
+            await say(client, (
+                "บอทเห็นแค่ลิงก์ ไม่เห็นหัวข้อหรือข้อความใน link preview ของ Telegram\n\n"
+                "พิมพ์หัวข้อหรือพาดหัวที่อยากทำเป็นคลิปมาด้วย แล้วค่อยแปะลิงก์อ้างอิงต่อท้ายได้"
+            ))
+            return
+        if topic.startswith(FORCE_PREFIX):
+            topic = topic[len(FORCE_PREFIX):].strip()
+        elif result_shaped(topic):
+            await say(client, (
+                "หัวข้อนี้ต้องรู้ว่าเกิดอะไรขึ้นจริง แต่บอทไม่รู้ผลแข่ง/ผลประกาศ "
+                "(ไม่ได้ต่อเน็ต) เขียนไปก็ได้แต่ความรู้ทั่วไปโครงเดิม แถมมีสิทธิ์แต่งตัวเลขเอง\n\n"
+                "ลองเปลี่ยนเป็นมุมที่อธิบายได้โดยไม่ต้องอ้างผล เช่น "
+                "“วอลเลย์บอลไทยเล่นสไตล์ไหน ต่างจากทีมตัวสูงยังไง”\n"
+                f"ถ้ายืนยันว่าจะทำ ใส่ {FORCE_PREFIX} นำหน้าหัวข้อ"
+            ))
+            return
     # Every way a Topic can start routes through here, and any of them means a
     # pending automatic pick is no longer wanted.
     state.pop("auto_pick", None)
-    previous = state.get("script") if feedback else None
     # A revision belongs to the Manifest already open for this Topic; only a
     # fresh Topic starts a new one.
     if previous is None:
@@ -370,7 +501,8 @@ async def make_script(client: httpx.AsyncClient, state: dict, topic: str,
         await do_render(client, state)
 
 
-async def do_render(client: httpx.AsyncClient, state: dict) -> None:
+async def do_render(client: httpx.AsyncClient, state: dict,
+                    supplied: dict[int, Path] | None = None) -> None:
     script = state["script"]
     await close_prompt(client, state.get("message_id"), f"📝 {script['title']} — กำลัง render")
     state.update(mode="rendering", message_id=None)
@@ -378,7 +510,7 @@ async def do_render(client: httpx.AsyncClient, state: dict) -> None:
 
     workdir = WORK_DIR / datetime.now().strftime("%Y%m%d-%H%M%S")
     try:
-        clip, details = await render.build(script, workdir)
+        clip, details = await render.build(script, workdir, supplied=supplied)
         manifest.update(state.get("clip_id"), outcome="rendered", render=details)
         await deliver(client, state, script, clip)
     except Exception as exc:
@@ -403,6 +535,235 @@ async def retire_buttons(client: httpx.AsyncClient, message_id: int | None) -> N
             client, "editMessageReplyMarkup",
             chat_id=CHAT_ID, message_id=message_id, reply_markup={"inline_keyboard": []},
         )
+
+
+# --- footage the human generates in Google Flow (docs/adr/0005) ---------------
+
+def flow_message(script: dict, prompt: str) -> str:
+    """The one message that carries the Flow Prompt and receives the Footage.
+
+    The prompt sits in a <pre> block so Telegram gives it a copy button — the
+    whole route is meant to be walkable on a phone — and this message's id is
+    what a replied Footage file is matched against.
+    """
+    return (
+        f"🎨 <b>footage สำหรับ hook</b> — {html.escape(script['title'])}\n\n"
+        "1. เปิดแอป Google Flow → New Project → Video → เลือก 9:16\n"
+        "2. แตะก๊อป prompt ข้างล่างแล้ววาง → เจน (Veo 3.1 Lite ก็พอ)\n"
+        "3. โหลดคลิปลงเครื่อง แล้ว <b>ตอบกลับข้อความนี้</b> พร้อมแนบคลิป\n\n"
+        f"<pre>{html.escape(prompt)}</pre>\n"
+        f"รอได้ {PARK_LIFETIME.total_seconds() / 3600:.0f} ชั่วโมง เลยกว่านั้นต้องเริ่มใหม่ "
+        "(ระหว่างนี้สั่งอย่างอื่นได้ แต่จะกด 🎨 ให้คลิปอื่นไม่ได้จนกว่าอันนี้จะจบ)"
+    )
+
+
+async def on_flow(client: httpx.AsyncClient, state: dict) -> None:
+    """🎨 pressed: write the Flow Prompt for the Hook, then park the Clip."""
+    script = state["script"]
+    await close_prompt(client, state.get("message_id"),
+                       f"🎨 {script['title']} — กำลังเขียน prompt ให้ Flow")
+    # Claimed before the first await, same as make_script(): the poll loop
+    # keeps running and a Topic arriving now would overwrite this one.
+    state.update(mode="writing", message_id=None)
+    save_state(state)
+    try:
+        prompt = await script_gen.flow_prompt(state.get("topic", ""), script["cards"][0])
+    except Exception as exc:
+        logger.exception("flow_prompt failed")
+        # The Script is not the casualty of a prompt that would not write:
+        # re-post it so its buttons come back, exactly as a failed revision does.
+        sent = await say(client, format_script(script), reply_markup=REVIEW_KEYBOARD)
+        state.update(mode="review", message_id=(sent or {}).get("message_id"))
+        save_state(state)
+        await say(client, f"เขียน prompt ให้ Flow ไม่สำเร็จ: {exc}")
+        return
+
+    manifest.update(state.get("clip_id"), flow_prompt=prompt)
+    sent = await say(client, flow_message(script, prompt), parse_mode="HTML")
+    # Everything the render needs moves into `parked`, and the live slots are
+    # cleared: the bot is genuinely idle now — a new Topic is welcome and must
+    # not be able to overwrite the Script that is waiting for its Footage.
+    state["parked"] = {
+        "clip_id": state.get("clip_id"),
+        "topic": state.get("topic"),
+        "script": script,
+        "style": state.get("style", ""),
+        "card": 0,
+        "prompt": prompt,
+        "prompt_message_id": (sent or {}).get("message_id"),
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+    }
+    state.update(mode="idle", script=None, topic=None, clip_id=None, style="",
+                 message_id=None)
+    save_state(state)
+
+
+async def download_footage(client: httpx.AsyncClient, file_id: str, dest: Path) -> bool:
+    """Pull a Telegram file onto the NAS. False (with a word said) on failure."""
+    info = await api(client, "getFile", file_id=file_id)
+    path = (info or {}).get("file_path")
+    if not path:
+        await say(client, "โหลดไฟล์จาก Telegram ไม่ได้ ลองส่งใหม่อีกที")
+        return False
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    async with client.stream(
+        "GET", f"https://api.telegram.org/file/bot{TOKEN}/{path}", timeout=300
+    ) as stream:
+        if stream.status_code != 200:
+            await say(client, f"โหลดไฟล์ไม่สำเร็จ (HTTP {stream.status_code}) ลองส่งใหม่")
+            return False
+        with dest.open("wb") as handle:
+            async for chunk in stream.aiter_bytes():
+                handle.write(chunk)
+    return True
+
+
+async def on_footage(client: httpx.AsyncClient, state: dict, message: dict) -> None:
+    """A video sent as a reply to a Flow Prompt: the Footage for that Card."""
+    parked = state.get("parked")
+    if not parked:
+        await say(client, "ตอนนี้ไม่มีคลิปที่รอ footage อยู่ — เริ่มหัวข้อใหม่แล้วกด 🎨 ก่อนนะ")
+        return
+    replied = (message.get("reply_to_message") or {}).get("message_id")
+    if replied != parked.get("prompt_message_id"):
+        # Never guessed: a file that landed on the wrong Card is a clip that
+        # looks fine and is about something else.
+        await say(client, "ส่งคลิปมาแบบตอบกลับ (reply) ข้อความ prompt ด้วยนะ บอทจะได้รู้ว่าเป็นของ card ไหน")
+        return
+
+    media = message.get("video") or message.get("document") or {}
+    if (media.get("file_size") or 0) > TELEGRAM_FILE_LIMIT:
+        await say(client, "ไฟล์ใหญ่เกิน 20MB บอทโหลดไม่ได้ — ส่งใหม่แบบวิดีโอธรรมดา (ไม่ใช่ส่งเป็นไฟล์) Telegram จะบีบให้เอง")
+        return
+    file_id = media.get("file_id")
+    if not file_id:
+        await say(client, "ไม่เจอไฟล์ในข้อความนี้ แนบคลิปมาด้วยนะ")
+        return
+
+    card = int(parked.get("card", 0))
+    dest = FOOTAGE_DIR / str(parked.get("clip_id") or "unknown") / f"c{card:02d}.mp4"
+    await say(client, "⬇️ กำลังรับ footage...")
+    if not await download_footage(client, file_id, dest):
+        return
+    parked.setdefault("footage", {})[str(card)] = str(dest)
+    save_state(state)
+    sent = await say(
+        client,
+        f"✅ ได้ footage แล้ว ({dest.stat().st_size / 1_000_000:.1f}MB)\n"
+        f"📝 {parked['script']['title']}\n"
+        "ส่งไฟล์ใหม่ทับได้เรื่อยๆ จนกว่าจะกด render",
+        reply_markup=PARK_KEYBOARD,
+    )
+    parked["ready_message_id"] = (sent or {}).get("message_id")
+    save_state(state)
+
+
+async def render_parked(client: httpx.AsyncClient, state: dict) -> None:
+    """🎬 on a Parked Clip: put it back in the live slots and render it."""
+    parked = state.get("parked")
+    if not parked:
+        await say(client, "คลิปนี้ไม่อยู่แล้ว (น่าจะหมดอายุไปก่อน) เริ่มหัวข้อใหม่ได้เลย")
+        return
+    mode = state.get("mode", "idle")
+    if mode in BUSY_MODES:
+        job = "เขียนสคริปต์" if mode == "writing" else "render"
+        await say(client, f"⏳ กำลัง{job}อยู่ รอให้เสร็จก่อนนะ")
+        return
+    if mode == "review":
+        # Rendering the parked Script here would overwrite the one on screen
+        # and leave it in the Manifest with no outcome at all.
+        await say(client, "ยังมีสคริปต์ค้างรีวิวอยู่ กด 🎬 หรือ 🗑 ให้อันนั้นก่อน แล้วค่อยกลับมากด render อันนี้")
+        return
+    state.pop("parked", None)
+    supplied = {int(i): Path(path) for i, path in (parked.get("footage") or {}).items()}
+    state.update(
+        script=parked["script"], topic=parked.get("topic"),
+        clip_id=parked.get("clip_id"), style=parked.get("style", ""),
+        message_id=parked.get("ready_message_id"),
+    )
+    save_state(state)
+    await do_render(client, state, supplied=supplied)
+
+
+async def drop_parked(client: httpx.AsyncClient, parked: dict) -> None:
+    """The wait ran out. Written off, not silently forgotten.
+
+    Handed the record rather than the state: the sweep drops it before this
+    runs, or a slow sendMessage lets the next poll tick fire a second one.
+    """
+    manifest.update(parked.get("clip_id"), outcome="abandoned")
+    title = (parked.get("script") or {}).get("title", "")
+    await say(client, f"⌛️ หมดเวลารอ footage แล้ว ทิ้งคลิปนี้ไป: {title}")
+
+
+# --- storyboard prompts (docs/adr/0006) --------------------------------------
+
+async def send_prompt(client: httpx.AsyncClient, heading: str,
+                      blocks: list[tuple[str, str]]) -> None:
+    """One storyboard message: Thai to read, English in <pre> to copy.
+
+    A <pre> block gets Telegram's copy button, which is what makes this usable
+    on a phone — the prompts are pasted into Flow one at a time.
+    """
+    parts = [heading]
+    for label, text in blocks:
+        parts.append(f"<b>{html.escape(label)}</b>\n<pre>{html.escape(text)}</pre>")
+    body = "\n\n".join(parts)
+    if len(body) > TELEGRAM_TEXT_LIMIT:
+        # Never chopped in half: a prompt pasted in two pieces is a prompt that
+        # generated the wrong frame.
+        body = body[:TELEGRAM_TEXT_LIMIT]
+        logger.warning("ข้อความ storyboard ยาวเกิน %d ตัว", TELEGRAM_TEXT_LIMIT)
+    await api(client, "sendMessage", chat_id=CHAT_ID, text=body, parse_mode="HTML")
+
+
+async def send_storyboard(client: httpx.AsyncClient, board: dict) -> None:
+    for message in storyboard.messages(board):
+        await send_prompt(client, message["heading"], message["blocks"])
+    await say(client, "เอา prompt ไปวางใน Google Flow ได้เลย — สร้างภาพตัวละครก่อน "
+                      "แล้วใช้เป็น ingredient ของทุกฉาก")
+
+
+async def on_storyboard(client: httpx.AsyncClient, state: dict) -> None:
+    """📋 on a Script: the 9:16 storyboard for the Cards as written.
+
+    Touches no state: the Script keeps its buttons and its place in the review,
+    because this produces prompts for another tool and nothing else. The
+    narration and on-screen lines are written back in from the Script rather
+    than trusted to the model (`storyboard.lock_to_script`).
+    """
+    script = state["script"]
+    clip_id = state.get("clip_id")
+    await say(client, "📋 กำลังวาง storyboard... (ระหว่างนี้ใช้คำสั่งอื่นได้)")
+    try:
+        board = await storyboard.for_script(script)
+    except Exception as exc:
+        logger.exception("storyboard failed")
+        await say(client, f"วาง storyboard ไม่สำเร็จ: {exc}")
+        return
+    # Against the id read *before* the model call: the human is free to start
+    # another Topic while this runs, and state.clip_id may have moved on.
+    manifest.update(clip_id, storyboard=board)
+    await send_storyboard(client, board)
+
+
+async def on_long_storyboard(client: httpx.AsyncClient, brief: str) -> None:
+    """/storyboard <บรีฟ>: a 16:9 storyboard for a long-form video.
+
+    The bot stops here — it writes the prompts for long-form and does not
+    assemble it (docs/adr/0006).
+    """
+    await say(client, "📋 กำลังวาง storyboard... (ระหว่างนี้ใช้คำสั่งอื่นได้)")
+    try:
+        board = await storyboard.for_brief(brief)
+    except asyncio.TimeoutError:
+        await say(client, f"mimo ไม่ตอบภายใน {storyboard.BUDGET_SECONDS:.0f} วินาที ลองสั่งใหม่อีกที")
+        return
+    except Exception as exc:
+        logger.exception("storyboard failed")
+        await say(client, f"วาง storyboard ไม่สำเร็จ: {exc}")
+        return
+    await send_storyboard(client, board)
 
 
 async def do_upload(client: httpx.AsyncClient, state: dict) -> None:
@@ -669,6 +1030,53 @@ async def on_retention(client: httpx.AsyncClient, video_id: str = "") -> None:
     await say(client, last_error)
 
 
+async def on_say(client: httpx.AsyncClient, arg: str) -> None:
+    """/say <คำที่อ่านผิด> = <คำที่อยากให้อ่าน>: fix a word's pronunciation.
+
+    Keys are Thai because that is what reaches the voice — the Latin spelling
+    on screen never does. An empty right-hand side deletes the entry.
+    """
+    if arg and "=" in arg:
+        wrong, right = (part.strip() for part in arg.split("=", 1))
+        if not wrong:
+            await say(client, "ต้องบอกคำที่อ่านผิดด้วย เช่น /say ทีเอไอ = ไทย")
+            return
+        render.say_set(wrong, right)
+        await say(client, f"โอเค อ่าน “{wrong}” ว่า “{right}”" if right
+                  else f"ลบ “{wrong}” ออกแล้ว")
+        return
+
+    entries = render.say_as()
+    if not entries:
+        await say(client, "ยังไม่มีคำที่ตั้งไว้\nเพิ่มด้วย /say ทีเอไอ = ไทย (ลบ: /say ทีเอไอ =)")
+        return
+    listing = "\n".join(f"• {k} → {v}" for k, v in entries.items())
+    await say(client, f"🗣 คำที่ตั้งให้อ่านแบบนี้:\n{listing}\n\nลบ: /say <คำ> =")
+
+
+async def on_redo(client: httpx.AsyncClient, state: dict) -> None:
+    """/redo: render the last Script again, without going back to the model.
+
+    A pronunciation entry from /say, or a different music track, only changes
+    what synthesis does with words that are already written. Rewriting them
+    costs minutes of model time and comes back a different Script, which is the
+    one thing the human did not ask for.
+    """
+    if state.get("mode", "idle") != "idle":
+        await say(client, "⏳ กำลังทำงานอยู่ รอให้เสร็จก่อนนะ")
+        return
+    script = state.get("last_script")
+    if not script:
+        await say(client, "ยังไม่มีคลิปล่าสุดให้ render ซ้ำ ส่งหัวข้อมาก่อนนะ")
+        return
+    # The Clip is re-opened where it left off, so the re-render lands in the
+    # Manifest it belongs to instead of starting an untitled one.
+    state.update(script=script, topic=state.get("last_topic"),
+                 clip_id=state.get("last_clip_id"), message_id=None)
+    await say(client, f"🔁 render ซ้ำ: {script['title']}")
+    spawn(do_render(client, state), "do_render")
+
+
 async def on_text(client: httpx.AsyncClient, state: dict, text: str) -> None:
     if text.startswith("/help") or text.startswith("/start"):
         # No parse_mode: Telegram's Markdown rejects unbalanced markers and
@@ -684,11 +1092,30 @@ async def on_text(client: httpx.AsyncClient, state: dict, text: str) -> None:
     if text.startswith("/trends"):
         spawn(on_trends(client, state), "on_trends")
         return
+    if text.startswith("/storyboard"):
+        brief = text[len("/storyboard"):].strip()
+        if not brief:
+            await say(client, "พิมพ์บรีฟต่อท้ายด้วยนะ เช่น /storyboard โฆษณาบ้านเดี่ยว 10 ล้าน ตัวละครหญิงไทย 25 ปี 4 ฉาก")
+            return
+        spawn(on_long_storyboard(client, brief), "on_long_storyboard")
+        return
+    if text.startswith("/say"):
+        await on_say(client, text[len("/say"):].strip())
+        return
     if text.startswith("/experiment"):
         await say(client, experiment.report(manifest.load_all()))
         return
     if text.startswith("/retention"):
         await on_retention(client, text.split(maxsplit=1)[1].strip() if " " in text else "")
+        return
+    if text.startswith("/redo"):
+        await on_redo(client, state)
+        return
+    # A mistyped command is not a Topic. Letting it fall through spends minutes
+    # of model time and leaves a Manifest named after the typo — /stat did that
+    # on 2026-08-30, /redo on 2026-08-31.
+    if text.startswith("/"):
+        await say(client, f"ไม่รู้จักคำสั่ง {text.split()[0]} — /help ดูรายการทั้งหมด")
         return
 
     mode = state.get("mode", "idle")
@@ -714,6 +1141,11 @@ async def on_callback(client: httpx.AsyncClient, state: dict, query: dict) -> No
         # so that guard would drop this tap without a word.
         await on_cancel(client, state, data[len(CANCEL_CB) + 1:])
         return
+    if data == PARK_RENDER_CB:
+        # Above the mode guard: a Parked Clip is waited on while the bot is
+        # idle, so that guard would swallow the tap without a word.
+        spawn(render_parked(client, state), "render_parked")
+        return
     if query.get("data") != UPLOAD_CB and state.get("mode") != "review":
         return
     if query.get("data") == UPLOAD_CB:
@@ -721,6 +1153,15 @@ async def on_callback(client: httpx.AsyncClient, state: dict, query: dict) -> No
         return
     if query.get("data") == RENDER_CB:
         spawn(do_render(client, state), "do_render")
+    elif query.get("data") == STORYBOARD_CB:
+        spawn(on_storyboard(client, state), "on_storyboard")
+    elif query.get("data") == FLOW_CB:
+        if state.get("parked"):
+            # One at a time: two Parked Clips would need a queue to pick from,
+            # and the human generating them in Flow is one person doing one.
+            await say(client, "ยังมีคลิปรอ footage อยู่ ส่ง footage ของอันนั้นก่อน (หรือรอให้หมดอายุ)")
+            return
+        spawn(on_flow(client, state), "on_flow")
     elif query.get("data") == DISCARD_CB:
         await close_prompt(client, state.get("message_id"), "🗑 ทิ้งสคริปต์แล้ว")
         manifest.update(state.get("clip_id"), outcome="discarded")
@@ -783,7 +1224,13 @@ async def handle(client: httpx.AsyncClient, state: dict, update: dict) -> None:
     if "callback_query" in update:
         await on_callback(client, state, update["callback_query"])
         return
-    text = (update.get("message") or {}).get("text", "").strip()
+    message = update.get("message") or {}
+    if message.get("video") or message.get("document"):
+        # Off the loop like every other job that touches the network: a 20MB
+        # file over a slow link would otherwise freeze the bot mid-download.
+        spawn(on_footage(client, state, message), "on_footage")
+        return
+    text = message.get("text", "").strip()
     if text:
         await on_text(client, state, text)
 
@@ -813,13 +1260,12 @@ async def main() -> None:
                 state["last_auto_trends"] = slot
                 save_state(state)
                 spawn(on_trends(client, state, auto=True), "auto_trends")
-            if auto_pick_due(state):
-                pending = state.pop("auto_pick", None)
+            if parked_expired(state):
+                expired = state.pop("parked", None)
                 save_state(state)
-                # A human already busy with a Script of their own does not get a
-                # second one queued behind it; the pending pick is simply dropped.
-                if pending and state.get("mode", "idle") == "idle":
-                    spawn(auto_pick(client, state), "auto_pick")
+                spawn(drop_parked(client, expired or {}), "drop_parked")
+            if take_auto_pick(state):
+                spawn(auto_pick(client, state), "auto_pick")
             try:
                 updates = await api(
                     client, "getUpdates", offset=state.get("offset", 0), timeout=30

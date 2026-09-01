@@ -20,6 +20,57 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
   edge-tts reads. `validate()` rejects any Latin character in `spoken`, and
   `render._speakable()` strips hyphens/dashes before synthesis — the voice reads
   one as a ~1s pause ("เอฟ-35" became "เอฟ" … "35"), so model names are said whole.
+- **Pronunciation overrides live in `/data/say.json`.** `validate()` cannot see
+  that a word is said wrong: the model letter-spelled "TH-AI Passport" into
+  `ทีเอไอพาสปอร์ต` (2026-08-31), and edge-tts mangles some correctly spelled
+  Thai on its own. `/say <wrong> = <right>` writes the substitution; it is
+  applied in `render._tts_text()` and **must stay there** — later than that and
+  `narrate()`'s boundary check compares pre- against post-substitution text,
+  fails on every Card, and falls back to per-Card speech silently.
+- **`/redo` re-renders the last Script.** Everything `deliver()` snapshots
+  into `last_*` is put back into `state` and `do_render()` runs again — same
+  words, new synthesis, same Manifest. It exists because a `/say` fix would
+  otherwise cost a full rewrite (minutes of model time, and a different
+  Script). Anything else starting with `/` is answered as an unknown command:
+  a typo used to open a Clip (`/stat` 2026-08-30, `/redo` 2026-08-31).
+- **Result-shaped Topics are refused.** `main.RESULT_TOPIC` matches ชนะ/แพ้/
+  สกอร์/ตกรอบ/a scoreline and turns the Topic away inside `make_script()`,
+  before a Manifest or a Variant is claimed, so every entry point (typed,
+  trend button, automatic pick) goes through one door. The model cannot know a
+  result — it writes the same generic essay and invents figures (six
+  volleyball clips, 2026-08-29..31, two published with made-up numbers).
+  A leading `!` skips the check; revisions are never checked.
+- **A bare URL is not a Topic.** Telegram's rich link preview is not included
+  in `message.text`; the bot receives only the URL, while mimo has no browser
+  and commonly answers prose instead of Script JSON. `make_script()` rejects
+  URL-only input before claiming a Manifest/Variant and asks for a headline or
+  topic. A topic plus an optional reference URL still goes through normally.
+- **Line length is checked in pixels, not characters.** `script._too_wide()`
+  measures the line with Waree at `render.MIN_TEXT_SIZE` against 864px — the
+  1080px frame less margins, which is the narrower of the two draw paths (text
+  over footage; the gradient card is 1210px wide). A character count is a bad
+  proxy for Thai: measured across 209 accepted lines the widest was 719px at 33
+  characters, and a 37-character line lost a whole Script on 2026-08-29.
+  `HARD_MAX_CHARS_PER_LINE = 34` survives only as prompt guidance (the model
+  cannot measure pixels) and as the fallback where the font is unavailable.
+- **Footage can come from the human.** 🎨 on a Script makes the bot write an
+  English Flow Prompt for the Hook card and park the Clip in `state["parked"]`;
+  the human generates it in the Google Flow app and replies to that message
+  with the mp4. The reply's `reply_to_message.message_id` is the only thing
+  that binds a file to a Card — never the filename, never the arrival order.
+  Files land in `/output/footage/<clip_id>/c00.mp4` and reach the renderer as
+  `render.build(..., supplied={0: path})`. One parked Clip at a time, 24h to
+  live, `auto_pick_due()` stands down while one exists. The bot never calls a
+  video model itself: `docs/adr/0005`.
+- **Storyboards are written for Google Flow.** 📋 plans one for the Script
+  under review (9:16, one Scene per Card), `/storyboard <brief>` plans a 16:9
+  one for long-form. Both cost a model call and both stop at prompts — the bot
+  assembles nothing (`docs/adr/0006`). Sent as one message per Scene: Thai to
+  read, English in copy blocks to paste. The master character is locked by a
+  phrase `validate()` requires verbatim in every scene's image prompt; the
+  narration and on-screen lines are written back in from the Script
+  (`lock_to_script`) rather than trusted to the model. 📋 mutates no state, and
+  reads `clip_id` before the model call because the human can move on mid-run.
 - **Card joins are trimmed.** The paragraph break that produces the boundary
   events also produces ~1.0s of dead air per join (measured; clause breaks are
   0.12-0.53s). `render.tighten()` slices at the boundaries, trims each slice's

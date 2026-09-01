@@ -10,6 +10,8 @@ import time
 
 from openai import AsyncOpenAI
 
+from app import render
+
 logger = logging.getLogger(__name__)
 
 MIN_CARDS, MAX_CARDS = 5, 7
@@ -18,12 +20,11 @@ MAX_LINES_PER_CARD = 4
 # pixel width and shrinks the font to fit, and character count is a poor proxy
 # anyway — Thai glyphs are narrower than Latin ones.
 TARGET_CHARS_PER_LINE = 22
-# Enforced, and measured rather than guessed: at the renderer's smallest font
-# (40px Waree) 34 full-width Thai consonants come to 976px against 994px of
-# usable card width, and 36 overflow. Real Thai runs far narrower because vowels
-# and tone marks carry no advance. 34 is the worst case that still fits — raised
-# from 30 after the model kept producing 31-33 character lines and losing whole
-# scripts to the retry.
+# Told to the model, which cannot measure pixels, and used as the fallback rule
+# wherever the font is unavailable. The real gate is _too_wide(): a character
+# count is a poor proxy for Thai, where vowels and tone marks carry no advance
+# width. Measured over every line this bot has written (209 lines, 2026-08-29):
+# the widest came to 719px at 33 characters, well inside the 864px available.
 HARD_MAX_CHARS_PER_LINE = 34
 
 LATIN = re.compile(r"[A-Za-z]+")
@@ -52,6 +53,8 @@ SYSTEM_PROMPT = f"""คุณเป็นคนเขียนสคริปต
   AI → เอไอ, CPU → ซีพียู, Netflix → เน็ตฟลิกซ์, cliffhanger → คลิฟแฮงเกอร์
   เพราะเครื่องอ่านจะสลับไปสำเนียงอังกฤษกลางประโยค พูดรัวจนฟังไม่ทันและไม่ชัด
   ตัวเลขให้เขียนเป็นคำอ่านไทย เช่น 2024 → สองพันยี่สิบสี่, 1-2 นาที → หนึ่งถึงสองนาที
+  ถ้าคำอังกฤษเป็นการเล่นคำที่อ่านเป็นไทยได้ ให้ใช้คำอ่านนั้น ไม่ใช่สะกดทีละตัวอักษร
+  เช่น TH-AI Passport → ไทยพาสปอร์ต (ไม่ใช่ ทีเอไอพาสปอร์ต)
   **ห้ามมีขีดกลาง (-) ใน spoken** เครื่องอ่านจะหยุดเงียบตรงขีด ชื่อรุ่นให้เขียนติดกัน
   เช่น F-35 → เอฟสามสิบห้า, GPT-4 → จีพีทีโฟร์
   คำสั่ง/แฟลกที่ทับศัพท์แล้วงง (เช่น --log-opt) ให้เลี่ยงไปพูดเป็นคำอธิบายแทน
@@ -131,6 +134,25 @@ HEDGE_AFTER = 240.0
 # healthy, so it is a real fallback and not a downgrade to nothing.
 FALLBACK_MODEL = os.environ.get("MIMO_FALLBACK_MODEL", "mimo-v2.5")
 PRIMARY_MODEL = os.environ.get("MIMO_MODEL", "mimo-v2.5-pro")
+
+
+# The prompt a human pastes into Google Flow is short and is written while
+# they wait, so it gets its own, much smaller budget than a Script.
+FLOW_BUDGET_SECONDS = float(os.environ.get("FLOW_PROMPT_TIMEOUT_SECONDS", "180"))
+
+FLOW_SYSTEM_PROMPT = """คุณเขียน prompt ภาษาอังกฤษให้คนเอาไปวางใน Google Flow (โมเดล Veo)
+เพื่อสร้างวิดีโอพื้นหลังแนวตั้ง 8 วินาที สำหรับการ์ดหนึ่งใบของคลิป YouTube Shorts
+
+ตอบกลับมาเป็น prompt เดียว ภาษาอังกฤษ ย่อหน้าเดียว ไม่เกิน 60 คำ
+ห้ามมีหัวข้อ ห้ามมีคำอธิบาย ห้ามมีเครื่องหมายคำพูดครอบ ห้ามใส่หมายเลขข้อ
+
+กติกา:
+- 9:16 vertical. บอกช็อต มุมกล้อง แสง และการเคลื่อนกล้องให้ชัด (slow push in, static wide ฯลฯ)
+- **ห้ามมีตัวหนังสือใดๆ ในภาพ** (no text, no captions, no UI, no logos, no signage)
+  เพราะโปรแกรมจะวาดข้อความไทยทับอีกชั้น ตัวหนังสือซ้อนกันอ่านไม่ออก
+- **ห้ามมีใบหน้าที่ระบุตัวตนได้ และห้ามอ้างอิงบุคคลจริง** — ถ่ายมือ ไหล่ เงา ฉากหลัง หรือระยะไกลแทน
+- กลางจอต้องโล่ง ให้ subject อยู่ริมเฟรมหรือเป็นฉากกว้าง เพราะข้อความจะทับตรงกลาง
+- ห้ามพูดถึงเสียง เพลง หรือคำบรรยาย เสียงทั้งหมดมาจากที่อื่น"""
 
 
 def _client() -> AsyncOpenAI:
@@ -217,6 +239,28 @@ async def _say(client: AsyncOpenAI, messages: list[dict], temperature: float,
             task.cancel()
 
 
+def _too_wide(line: str) -> int:
+    """Characters to cut so the renderer can draw the line, 0 if it already can.
+
+    The renderer shrinks the font until the text fits, so the only line it
+    cannot draw is one still too wide at its smallest size. Measured against
+    the narrower of the two draw paths: text over footage is laid out at the
+    1080px frame, not the oversized 1210px gradient card.
+    """
+    try:
+        font = render._font(render.THAI_BOLD, render.MIN_TEXT_SIZE)
+    except (OSError, RuntimeError):
+        # No Waree, or Pillow without Raqm — off the container. The renderer
+        # refuses to run at all in that state, so fall back to the count
+        # rather than let every line through.
+        return max(0, len(line) - HARD_MAX_CHARS_PER_LINE)
+    usable = render.W - render.MARGIN * 2
+    width = font.getlength(line)
+    if width <= usable:
+        return 0
+    return max(1, round(len(line) * (width - usable) / width))
+
+
 def validate(script: dict) -> dict:
     """Reject a Script the renderer would mangle. Raises ScriptError."""
     for key in ("title", "description", "hashtags", "cards", "category"):
@@ -234,9 +278,17 @@ def validate(script: dict) -> dict:
         for line in lines:
             if not isinstance(line, str) or not line.strip():
                 raise ScriptError(f"card {i}: มีบรรทัดว่าง")
-            if len(line) > HARD_MAX_CHARS_PER_LINE:
+            over = _too_wide(line)
+            if over:
+                # Say how much to cut: this message is fed back to the model on
+                # the retry, and it cannot measure the line itself. Only offer
+                # the extra line where the card has one left to give.
+                room = (
+                    " (ขึ้นบรรทัดใหม่ได้ ไม่ทำให้คลิปยาวขึ้น)"
+                    if len(lines) < MAX_LINES_PER_CARD else ""
+                )
                 raise ScriptError(
-                    f"card {i}: บรรทัดยาว {len(line)} ตัว เกิน {HARD_MAX_CHARS_PER_LINE}"
+                    f"card {i}: บรรทัดกว้างเกินการ์ด ต้องตัดออกอีกราว {over} ตัว{room}: {line}"
                 )
         if not str(card.get("narration", "")).strip():
             raise ScriptError(f"card {i}: ไม่มี narration")
@@ -386,3 +438,33 @@ async def generate(
                 {"role": "user", "content": f"สคริปต์ผิดกติกา: {exc} — ส่ง JSON ใหม่ให้ถูกกติกา"},
             ]
     raise ScriptError(str(last_error))
+
+
+async def flow_prompt(topic: str, card: dict) -> str:
+    """The English Veo prompt a human pastes into Google Flow for one Card.
+
+    Asked for on demand rather than folded into the Script: a Script already
+    takes 90-350s to think, most Clips never go the Flow route, and every extra
+    field on the schema is latency every Clip pays.
+    """
+    user = "\n".join([
+        f"หัวข้อคลิป: {topic}",
+        f"ข้อความบนจอของการ์ดนี้: {' / '.join(card.get('lines') or [])}",
+        f"คำที่จะพูดทับ: {card.get('narration', '')}",
+        f"คำค้น footage ที่เคยคิดไว้: {card.get('query', '')}",
+    ])
+    raw = await _say(
+        _client(),
+        [{"role": "system", "content": FLOW_SYSTEM_PROMPT},
+         {"role": "user", "content": user}],
+        temperature=0.8,
+        budget=FLOW_BUDGET_SECONDS,
+    )
+    text = raw.strip()
+    if text.startswith("```"):
+        text = text.split("```")[1]
+        text = text[4:] if text.startswith("json") else text
+    text = text.strip().strip('"').strip()
+    if not text:
+        raise ScriptError("โมเดลไม่ได้ตอบ prompt กลับมา")
+    return text[:1200]

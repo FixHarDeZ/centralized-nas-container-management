@@ -19,7 +19,7 @@ os.environ.setdefault("TELEGRAM_CHAT_ID", "42")
 os.environ.setdefault("MIMO_API_KEY", "test-key")
 os.environ.setdefault("MIMO_BASE_URL", "https://example.invalid/v1")
 
-from app import (analytics, backfill, experiment, history, main, manifest,  # noqa: E402
+from app import (analytics, backfill, experiment, history, main, manifest, storyboard,  # noqa: E402
                  render, retention, script as script_gen, snapshots, trends,  # noqa: E402
                  youtube)
 
@@ -179,6 +179,25 @@ def test_a_broken_script_is_retried_before_giving_up(monkeypatch):
 
     result = asyncio.run(script_gen.generate("หัวข้อ"))
     assert result["title"] == "t"
+
+
+def test_real_thai_line_over_the_char_count_is_accepted():
+    """Character count is not the rule — pixels are. This 35-character line of
+    ordinary Thai draws at 654px against 864px of usable frame, so losing a
+    whole script to it (as happened 2026-08-29) is a false reject."""
+    line = "น้ำท่วมปีนี้มาเร็วกว่าที่คิดไว้มากๆ"
+    assert len(line) > script_gen.HARD_MAX_CHARS_PER_LINE
+    assert script_gen._too_wide(line) == 0
+    script = a_script()
+    script["cards"][0]["lines"] = [line]
+    assert script_gen.validate(script)
+
+
+def test_line_that_would_overflow_is_rejected():
+    script = a_script()
+    script["cards"][0]["lines"] = ["ก" * 60]
+    with pytest.raises(script_gen.ScriptError, match="กว้างเกินการ์ด"):
+        script_gen.validate(script)
 
 
 def test_hard_max_line_still_fits_the_card():
@@ -408,6 +427,194 @@ def test_the_voice_reads_the_transliteration_and_the_screen_keeps_the_english():
     assert render._tts_text(card) == "ปัญหาคือ ด็อกเกอร์ เขียน ล็อก ไม่หยุด"
     # a Script written before `spoken` existed still renders
     assert render._tts_text({"narration": "มีแต่ narration"}) == "มีแต่ narration"
+
+
+def test_a_pronunciation_override_does_not_break_card_alignment(monkeypatch, tmp_path):
+    """The override must be applied before `narrate()` compares boundaries.
+
+    Substituting anywhere later leaves the check holding the pre-substitution
+    text while the voice reports the post-substitution one: every Card looks
+    misaligned, `narrate()` returns None, and the Clip silently drops to
+    per-Card speech with restarted prosody.
+    """
+    monkeypatch.setattr(render, "SAY_PATH", tmp_path / "say.json")
+    render.say_set("ทีเอไอพาสปอร์ต", "ไทยพาสปอร์ต")
+    assert render.say_as() == {"ทีเอไอพาสปอร์ต": "ไทยพาสปอร์ต"}
+
+    cards = [{"narration": "TH-AI Passport คืออะไร", "spoken": "ทีเอไอพาสปอร์ตคืออะไร"},
+             {"narration": "ต่างจากเล่มเดิมยังไง", "spoken": "ต่างจากเล่มเดิมยังไง"}]
+
+    class FakeCommunicate:
+        def __init__(self, text, voice, rate="+0%", pitch="+0Hz"):
+            self.parts = text.split(render.CARD_SEPARATOR)
+
+        async def stream(self):
+            yield {"type": "audio", "data": b""}
+            for i, part in enumerate(self.parts):
+                # what the voice actually saw, offsets in 100ns ticks
+                yield {"type": "SentenceBoundary",
+                       "offset": (i + 1) * 5 * 10**7, "text": part}
+
+    monkeypatch.setattr(render.edge_tts, "Communicate", FakeCommunicate)
+    result = asyncio.run(render.narrate(cards, tmp_path / "n.mp3"))
+
+    assert result is not None, "override desynced the boundary check"
+    _, starts = result
+    assert starts == [0.0, 10.0]
+
+    render.say_set("ทีเอไอพาสปอร์ต", "")
+    assert render.say_as() == {}
+
+
+def test_say_sets_lists_and_deletes(monkeypatch, tmp_path):
+    """The command the human types, all three branches of it."""
+    monkeypatch.setattr(render, "SAY_PATH", tmp_path / "say.json")
+    sent = []
+
+    async def fake_say(client, text):
+        sent.append(text)
+
+    monkeypatch.setattr(main, "say", fake_say)
+
+    asyncio.run(main.on_say(None, "ทีเอไอ = ไทย"))
+    assert render.say_as() == {"ทีเอไอ": "ไทย"}
+    asyncio.run(main.on_say(None, ""))
+    assert "ทีเอไอ" in sent[-1] and "ไทย" in sent[-1]
+    asyncio.run(main.on_say(None, "ทีเอไอ ="))
+    assert render.say_as() == {}
+    # a missing left-hand side would write an entry that matches everything
+    asyncio.run(main.on_say(None, "= ไทย"))
+    assert render.say_as() == {}
+
+
+@pytest.mark.parametrize("topic", [
+    "วอลเล่หญิงไทยชนะจีนได้ไปโอลิมปิก",
+    "วอลเล่ย์บอลหญิง U19 จีนแพ้ไทยเพราะอะไร",
+    "วิเคราะห์ทีมวอลเลย์บอลไทยกับจีน เจอกันไทยชนะ 3-2",
+])
+def test_a_topic_about_a_result_is_turned_away(monkeypatch, topic):
+    """The model has no source for a score, so it invents one — see the six
+    volleyball clips of 2026-08-29..31, all the same essay."""
+    sent = []
+
+    async def fake_say(client, text, **kw):
+        sent.append(text)
+
+    async def never(*a, **kw):
+        raise AssertionError("a result topic reached the model")
+
+    monkeypatch.setattr(main, "say", fake_say)
+    monkeypatch.setattr(main.script_gen, "generate", never)
+    state = {"mode": "idle", "auto_pick": "แตะไม่ได้"}
+    asyncio.run(main.make_script(None, state, topic))
+
+    assert sent and "ไม่รู้ผลแข่ง" in sent[0]
+    # nothing was claimed: no Manifest, no Variant, and the pending pick lives
+    assert state == {"mode": "idle", "auto_pick": "แตะไม่ได้"}
+
+
+def test_a_bare_url_is_turned_away_before_reaching_the_model(monkeypatch):
+    """Telegram's link preview is not part of message.text, so the model would
+    receive only an opaque URL and answer prose instead of the Script JSON."""
+    sent = []
+
+    async def fake_say(client, text, **kw):
+        sent.append(text)
+
+    async def never(*a, **kw):
+        raise AssertionError("a bare URL reached the model")
+
+    monkeypatch.setattr(main, "say", fake_say)
+    monkeypatch.setattr(main.script_gen, "generate", never)
+    monkeypatch.setattr(main.manifest, "start", lambda topic: "test-id")
+    monkeypatch.setattr(main.manifest, "update", lambda *a, **kw: None)
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+    state = {"mode": "idle", "auto_pick": "แตะไม่ได้"}
+    asyncio.run(main.make_script(
+        None, state, "https://marketeeronline.co/archives/484466",
+    ))
+
+    assert sent and "พิมพ์หัวข้อ" in sent[0] and "ลิงก์" in sent[0]
+    assert state == {"mode": "idle", "auto_pick": "แตะไม่ได้"}
+
+
+@pytest.mark.parametrize("topic", [
+    "TH-AI Passport คืออะไร ต่างจาก Digital ID ยังไง",
+    "วอลเลย์บอลไทยเล่นสไตล์ไหน ต่างจากทีมตัวสูงยังไง",
+    "iPhone 18 Pro Max ราคาคาดการณ์เท่าไหร่",
+])
+def test_ordinary_topics_still_get_through(topic):
+    assert not main.result_shaped(topic)
+
+
+def test_the_force_prefix_gets_past_the_guard_and_is_not_part_of_the_topic(monkeypatch):
+    seen = {}
+
+    async def fake_say(client, text, **kw):
+        return None
+
+    async def fake_generate(topic, **kw):
+        seen["topic"] = topic
+        raise RuntimeError("stop here — the guard is what is under test")
+
+    monkeypatch.setattr(main, "say", fake_say)
+    monkeypatch.setattr(main.script_gen, "generate", fake_generate)
+    monkeypatch.setattr(main.manifest, "start", lambda topic: "test-id")
+    monkeypatch.setattr(main.manifest, "update", lambda *a, **kw: None)
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+    asyncio.run(main.make_script(None, {"mode": "idle"}, "!ไทยชนะจีน 3-2"))
+
+    assert seen["topic"] == "ไทยชนะจีน 3-2"
+
+
+def test_redo_renders_the_last_script_without_asking_the_model(monkeypatch):
+    """/redo exists so a /say fix does not cost a whole rewrite."""
+    rendered = {}
+    sent = []
+
+    async def fake_say(client, text, **kw):
+        sent.append(text)
+
+    async def never(*a, **kw):
+        raise AssertionError("/redo went back to the model")
+
+    monkeypatch.setattr(main, "say", fake_say)
+    monkeypatch.setattr(main.script_gen, "generate", never)
+    monkeypatch.setattr(main, "spawn", lambda coro, name: rendered.update(job=name) or coro.close())
+    state = {"mode": "idle", "last_script": {"title": "เดิม"}, "last_topic": "หัวข้อเดิม",
+             "last_clip_id": "clip-1"}
+    asyncio.run(main.on_redo(None, state))
+
+    assert rendered["job"] == "do_render"
+    # the re-render belongs to the Clip it came from, not a new one
+    assert state["clip_id"] == "clip-1" and state["topic"] == "หัวข้อเดิม"
+    assert state["script"] == {"title": "เดิม"}
+
+
+def test_redo_without_a_previous_clip_says_so(monkeypatch):
+    sent = []
+
+    async def fake_say(client, text, **kw):
+        sent.append(text)
+
+    monkeypatch.setattr(main, "say", fake_say)
+    monkeypatch.setattr(main, "spawn", lambda *a, **kw: pytest.fail("nothing to render"))
+    asyncio.run(main.on_redo(None, {"mode": "idle"}))
+    assert "ยังไม่มีคลิปล่าสุด" in sent[0]
+
+
+def test_a_mistyped_command_is_not_treated_as_a_topic(monkeypatch):
+    """/stat opened a Clip on 2026-08-30 and /redo on 2026-08-31, both spending
+    minutes of model time on a typo."""
+    sent = []
+
+    async def fake_say(client, text, **kw):
+        sent.append(text)
+
+    monkeypatch.setattr(main, "say", fake_say)
+    monkeypatch.setattr(main, "spawn", lambda *a, **kw: pytest.fail("a typo reached the model"))
+    asyncio.run(main.on_text(None, {"mode": "idle"}, "/stat"))
+    assert "ไม่รู้จักคำสั่ง" in sent[0]
 
 
 def _speech_runs(path: pathlib.Path) -> list[tuple[float, float]]:
@@ -1233,3 +1440,356 @@ def test_the_schema_retry_leads_with_the_smaller_model(monkeypatch):
 
     assert asyncio.run(script_gen.generate("หัวข้อ"))["title"] == "t"
     assert client.asked == [script_gen.PRIMARY_MODEL, script_gen.FALLBACK_MODEL]
+
+
+# --- footage the human generates in Flow (docs/adr/0005) ---------------------
+
+def _parked_state(tmp_path, clip_id="clip-1"):
+    return {
+        "mode": "idle",
+        "parked": {
+            "clip_id": clip_id, "topic": "หัวข้อ", "script": a_script(),
+            "style": "", "card": 0, "prompt": "a slow push in on rain",
+            "prompt_message_id": 7,
+            "created_at": __import__("datetime").datetime.now().isoformat(timespec="seconds"),
+        },
+    }
+
+
+def test_flow_parks_the_clip_and_frees_the_bot(monkeypatch, tmp_path):
+    """🎨 hands over a prompt and lets go: the bot must be idle afterwards, or
+    the human cannot use it while they are off generating in Flow."""
+    monkeypatch.setattr(manifest, "DIR", tmp_path / "clips")
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+    monkeypatch.setattr(main, "close_prompt", _nothing)
+    sent = []
+
+    async def fake_say(client, text, **extra):
+        sent.append(text)
+        return {"message_id": 42}
+
+    monkeypatch.setattr(main, "say", fake_say)
+
+    async def fake_prompt(topic, card):
+        return "slow push in on a flooded street at dusk"
+
+    monkeypatch.setattr(script_gen, "flow_prompt", fake_prompt)
+
+    clip_id = manifest.start("หัวข้อ")
+    state = {"mode": "review", "script": a_script(), "topic": "หัวข้อ",
+             "clip_id": clip_id, "message_id": 5}
+    asyncio.run(main.on_flow(None, state))
+
+    assert state["mode"] == "idle" and state["script"] is None
+    parked = state["parked"]
+    assert parked["clip_id"] == clip_id and parked["prompt_message_id"] == 42
+    assert "slow push in" in sent[-1], "the prompt must be in the message it is replied to"
+    assert manifest.load_all()[0]["flow_prompt"].startswith("slow push")
+
+
+def test_a_failed_flow_prompt_keeps_the_script(monkeypatch, tmp_path):
+    monkeypatch.setattr(manifest, "DIR", tmp_path / "clips")
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+    monkeypatch.setattr(main, "close_prompt", _nothing)
+    monkeypatch.setattr(main, "say", _nothing)
+
+    async def boom(topic, card):
+        raise script_gen.ScriptError("mimo ไม่ตอบ")
+
+    monkeypatch.setattr(script_gen, "flow_prompt", boom)
+
+    state = {"mode": "review", "script": a_script(), "topic": "หัวข้อ", "clip_id": None}
+    asyncio.run(main.on_flow(None, state))
+    assert state["mode"] == "review" and state["script"] is not None
+    assert "parked" not in state
+
+
+def test_footage_must_reply_to_the_prompt_message(monkeypatch, tmp_path):
+    """A file matched to the wrong Card renders a clip that is about something
+    else and looks fine, so an unmatched file is refused rather than guessed."""
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+    said = []
+    monkeypatch.setattr(main, "say", lambda client, text, **extra: said.append(text) or _nothing())
+
+    async def never(*args, **kwargs):
+        raise AssertionError("must not download an unmatched file")
+
+    monkeypatch.setattr(main, "download_footage", never)
+
+    state = _parked_state(tmp_path)
+    asyncio.run(main.on_footage(None, state, {"video": {"file_id": "f1"}}))
+    asyncio.run(main.on_footage(
+        None, state,
+        {"video": {"file_id": "f1"}, "reply_to_message": {"message_id": 999}},
+    ))
+    assert len(said) == 2 and "parked" in state and "footage" not in state["parked"]
+
+
+def test_oversize_footage_is_refused_with_a_way_out(monkeypatch, tmp_path):
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+    said = []
+    monkeypatch.setattr(main, "say", lambda client, text, **extra: said.append(text) or _nothing())
+    state = _parked_state(tmp_path)
+    asyncio.run(main.on_footage(None, state, {
+        "document": {"file_id": "f1", "file_size": main.TELEGRAM_FILE_LIMIT + 1},
+        "reply_to_message": {"message_id": 7},
+    }))
+    assert "20MB" in said[0] and "footage" not in state["parked"]
+
+
+def test_replied_footage_is_filed_under_the_clip(monkeypatch, tmp_path):
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+    monkeypatch.setattr(main, "FOOTAGE_DIR", tmp_path / "footage")
+    monkeypatch.setattr(main, "say", _nothing)
+
+    async def fake_download(client, file_id, dest):
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"mp4")
+        return True
+
+    monkeypatch.setattr(main, "download_footage", fake_download)
+
+    state = _parked_state(tmp_path)
+    asyncio.run(main.on_footage(None, state, {
+        "video": {"file_id": "f1", "file_size": 5_000_000},
+        "reply_to_message": {"message_id": 7},
+    }))
+    stored = state["parked"]["footage"]["0"]
+    assert stored.endswith("footage/clip-1/c00.mp4") and pathlib.Path(stored).is_file()
+
+
+def test_render_parked_hands_the_file_to_the_renderer(monkeypatch, tmp_path):
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+    monkeypatch.setattr(main, "say", _nothing)
+    seen = {}
+
+    async def fake_render(client, state, supplied=None):
+        seen["supplied"] = supplied
+        seen["script"] = state["script"]
+
+    monkeypatch.setattr(main, "do_render", fake_render)
+
+    state = _parked_state(tmp_path)
+    state["parked"]["footage"] = {"0": str(tmp_path / "c00.mp4")}
+    asyncio.run(main.render_parked(None, state))
+
+    assert seen["supplied"] == {0: pathlib.Path(tmp_path / "c00.mp4")}
+    assert "parked" not in state and seen["script"] is not None
+
+
+def test_a_script_under_review_is_not_clobbered_by_the_parked_one(monkeypatch, tmp_path):
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+    said = []
+    monkeypatch.setattr(main, "say", lambda client, text, **extra: said.append(text) or _nothing())
+
+    async def never(*args, **kwargs):
+        raise AssertionError("must not render while a Script waits for review")
+
+    monkeypatch.setattr(main, "do_render", never)
+
+    state = _parked_state(tmp_path)
+    state.update(mode="review", script=a_script())
+    asyncio.run(main.render_parked(None, state))
+    assert "parked" in state and said
+
+
+def test_parked_clip_expires_and_is_written_off(monkeypatch, tmp_path):
+    import datetime as dt
+
+    monkeypatch.setattr(manifest, "DIR", tmp_path / "clips")
+    monkeypatch.setattr(main, "say", _nothing)
+
+    clip_id = manifest.start("หัวข้อ")
+    state = _parked_state(tmp_path, clip_id)
+    assert not main.parked_expired(state)
+
+    state["parked"]["created_at"] = (
+        dt.datetime.now() - main.PARK_LIFETIME - dt.timedelta(minutes=1)
+    ).isoformat(timespec="seconds")
+    assert main.parked_expired(state)
+
+    asyncio.run(main.drop_parked(None, state.pop("parked")))
+    assert manifest.load_all()[0]["outcome"] == "abandoned"
+
+
+def test_auto_pick_stands_down_while_a_clip_is_parked(monkeypatch, tmp_path):
+    """The human is busy generating Footage; an unattended clip would land on
+    top of the one they are working on — and the round must be *dropped*, not
+    held until the parked clip clears and fired off a stale /trends list."""
+    import datetime as dt
+
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+    overdue = {"deadline": (dt.datetime.now() - dt.timedelta(minutes=1)).isoformat()}
+
+    free = {"mode": "idle", "auto_pick": dict(overdue)}
+    assert main.take_auto_pick(free) and "auto_pick" not in free
+
+    parked = {**_parked_state(tmp_path), "auto_pick": dict(overdue)}
+    assert not main.take_auto_pick(parked)
+    assert "auto_pick" not in parked, "a skipped round must not fire later"
+
+    busy = {"mode": "rendering", "auto_pick": dict(overdue)}
+    assert not main.take_auto_pick(busy) and "auto_pick" not in busy
+
+
+# --- storyboards for Google Flow (docs/adr/0006) -----------------------------
+
+TAG = "the same 25-year-old Thai woman with long dark hair and a white shirt"
+
+
+def a_board(scenes: int = 5, ratio: str = "9:16", character: bool = True) -> dict:
+    return {
+        "overview": {
+            "title": "บ้านที่ใช่",
+            "mood_tone_progression": "อบอุ่นขึ้นเรื่อยๆ",
+            "target_audience": "คนวัยทำงาน",
+            "master_character": {
+                "name": "มิ้นท์", "age": 25, "ethnicity": "Thai",
+                "appearance": "long dark hair", "outfit": "white shirt",
+                "locked_prompt_tag": TAG,
+            } if character else None,
+        },
+        "scenes": [
+            {"scene_number": i, "camera": "Medium Shot",
+             "scene_description": f"เหตุการณ์ฉาก {i}", "visual_details": "แสงเช้า",
+             "sound_verbatim": "เสียงพากย์", "on_screen_text": "ข้อความ",
+             "scene_mood_note": "อบอุ่น",
+             "image_gen_prompt": (
+                 f"A cinematic {ratio} shot of {TAG}, standing in a garden, "
+                 f"golden hour, clean center composition for text overlay, "
+                 f"photorealistic, {storyboard.NEGATIVES}"
+             ),
+             "motion": "slow push in as she turns to the camera"}
+            for i in range(1, scenes + 1)
+        ],
+    }
+
+
+def test_every_scene_must_repeat_the_locked_character(monkeypatch):
+    """A paraphrased character tag in one scene is a different face in that
+    scene — the whole reason the tag exists."""
+    board = a_board()
+    board["scenes"][2]["image_gen_prompt"] = board["scenes"][2]["image_gen_prompt"].replace(
+        TAG, "a young Thai woman")
+    with pytest.raises(script_gen.ScriptError, match="locked_prompt_tag"):
+        storyboard.validate(board, "9:16")
+
+    # ...and a storyboard with no character at all is fine
+    assert storyboard.validate(a_board(character=False), "9:16")
+
+
+def test_image_prompts_must_be_english_and_carry_the_rules():
+    for mutate, complaint in (
+        (lambda b: b["scenes"][0].update(image_gen_prompt="ภาพผู้หญิงยืนในสวน"), "อังกฤษ"),
+        (lambda b: b["scenes"][0].update(motion="ค่อยๆ ซูมเข้า"), "อังกฤษ"),
+        (lambda b: b["scenes"][0].update(
+            image_gen_prompt=f"A cinematic shot of {TAG}, {storyboard.NEGATIVES}"), "9:16"),
+        (lambda b: b["scenes"][0].update(
+            image_gen_prompt=f"A cinematic 9:16 shot of {TAG}, garden"), "no text"),
+        (lambda b: b["scenes"][0].pop("motion"), "motion"),
+        (lambda b: b["overview"].pop("target_audience"), "target_audience"),
+    ):
+        board = a_board()
+        mutate(board)
+        with pytest.raises(script_gen.ScriptError, match=complaint):
+            storyboard.validate(board, "9:16")
+
+
+def test_scene_count_must_match_the_script():
+    with pytest.raises(script_gen.ScriptError, match="ตรงกับสคริปต์"):
+        storyboard.validate(a_board(scenes=4), "9:16", scenes_wanted=5)
+
+
+def test_the_script_owns_the_words_not_the_model():
+    """What is spoken and what is drawn are already decided; a storyboard that
+    paraphrases them is a set of images for a video that does not exist."""
+    script = a_script(cards=3)
+    script["cards"][1]["narration"] = "ประโยคจริงของการ์ดที่สอง"
+    script["cards"][1]["lines"] = ["บรรทัดจริง"]
+    board = a_board(scenes=3)
+    board["scenes"][1]["sound_verbatim"] = "โมเดลเขียนเองมั่วๆ"
+
+    locked = storyboard.lock_to_script(board, script["cards"])
+    assert locked["scenes"][1]["sound_verbatim"] == "ประโยคจริงของการ์ดที่สอง"
+    assert locked["scenes"][1]["on_screen_text"] == "บรรทัดจริง"
+
+
+def test_messages_lead_with_the_character_then_one_per_scene():
+    board = storyboard.validate(a_board(scenes=4), "9:16")
+    messages = storyboard.messages(board)
+
+    assert len(messages) == 1 + 1 + 4, "overview, character, then a message per scene"
+    assert "ingredient" in messages[1]["heading"]
+    assert TAG in messages[1]["blocks"][0][1]
+    labels = [label for label, _ in messages[2]["blocks"]]
+    assert len(labels) == 2, "one block to make the image, one to make the video"
+    assert messages[2]["blocks"][1][1].endswith("slow push in as she turns to the camera")
+
+    # long-form has neither: no character to lock, and no on-screen text unless
+    # the story calls for one — the message must survive the key being absent
+    long_board = a_board(scenes=4, character=False, ratio="16:9")
+    for scene in long_board["scenes"]:
+        scene.pop("on_screen_text")
+    long_messages = storyboard.messages(storyboard.validate(long_board, "16:9"))
+    assert len(long_messages) == 1 + 4
+    assert "ข้อความบนจอ" not in long_messages[1]["heading"]
+
+
+def test_storyboard_button_leaves_the_script_in_review(monkeypatch, tmp_path):
+    monkeypatch.setattr(manifest, "DIR", tmp_path / "clips")
+    monkeypatch.setattr(main, "say", _nothing)
+    sent = []
+
+    async def fake_send(client, board):
+        sent.append(board)
+
+    monkeypatch.setattr(main, "send_storyboard", fake_send)
+
+    async def fake_for_script(script):
+        return storyboard.validate(a_board(scenes=len(script["cards"])), "9:16")
+
+    monkeypatch.setattr(storyboard, "for_script", fake_for_script)
+
+    clip_id = manifest.start("หัวข้อ")
+    state = {"mode": "review", "script": a_script(), "clip_id": clip_id, "message_id": 5}
+    asyncio.run(main.on_storyboard(None, state))
+
+    assert state["mode"] == "review" and state["message_id"] == 5
+    assert state["script"] is not None, "the button must not consume the Script"
+    assert sent and manifest.load_all()[0]["storyboard"]["overview"]["title"] == "บ้านที่ใช่"
+
+
+def test_a_storyboard_is_credited_to_the_clip_it_was_asked_for(monkeypatch, tmp_path):
+    """The model call takes minutes and the human may start another Topic
+    meanwhile; the storyboard must not land on the new clip's manifest."""
+    monkeypatch.setattr(manifest, "DIR", tmp_path / "clips")
+    monkeypatch.setattr(main, "say", _nothing)
+    monkeypatch.setattr(main, "send_storyboard", _nothing)
+
+    first = manifest.start("หัวข้อ A")
+    second = manifest.start("หัวข้อ B")
+    state = {"mode": "review", "script": a_script(), "clip_id": first}
+
+    async def slow_for_script(script):
+        state["clip_id"] = second      # the human moved on while this ran
+        return storyboard.validate(a_board(scenes=len(script["cards"])), "9:16")
+
+    monkeypatch.setattr(storyboard, "for_script", slow_for_script)
+    asyncio.run(main.on_storyboard(None, state))
+
+    records = {r["id"]: r for r in manifest.load_all()}
+    assert "storyboard" in records[first] and "storyboard" not in records[second]
+
+
+def test_a_scene_message_carries_the_thai_and_the_english(monkeypatch):
+    posted = {}
+
+    async def fake_api(client, method, **payload):
+        posted.update(payload)
+        return {}
+
+    monkeypatch.setattr(main, "api", fake_api)
+    asyncio.run(main.send_prompt(None, "หัวเรื่อง", [("ภาพ", "A cinematic 9:16 shot")]))
+
+    assert posted["parse_mode"] == "HTML"
+    assert "หัวเรื่อง" in posted["text"] and "<pre>A cinematic 9:16 shot</pre>" in posted["text"]

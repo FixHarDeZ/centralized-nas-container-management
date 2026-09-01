@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import random
@@ -36,8 +37,9 @@ SCRIM = "black@0.5"  # holds the footage back far enough for text to read
 THAI_BOLD = "/usr/share/fonts/truetype/tlwg/Waree-Bold.ttf"
 MONO = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
 
-# The floor is what a HARD_MAX_CHARS_PER_LINE line ends up at: 34 wide Thai
-# consonants measure 976px at 40px against 994px of usable width.
+# The floor is the size script._too_wide() validates against: a line that does
+# not fit 864px (the frame width less margins, which is what the footage path
+# draws into) at 40px Waree is rejected before it ever reaches the renderer.
 TEXT_SIZE, MIN_TEXT_SIZE, CODE_SIZE = 92, 40, 38
 LINE_SPACING = 1.35
 
@@ -156,9 +158,48 @@ def _speakable(narration: str) -> str:
     return WORD_DASH.sub("", CLAUSE_DASH.sub(", ", text)).strip()
 
 
+SAY_PATH = Path(os.environ.get("DATA_DIR", "/data")) / "say.json"
+
+
+def say_as() -> dict[str, str]:
+    """Pronunciation overrides, keyed on the Thai the model wrote.
+
+    Two things the Script cannot fix by itself. The voice reads some correct
+    Thai spellings wrong — "พาสปอร์ต" comes out "พาด" — and the model
+    letter-spells a coined word it does not recognise as a pun, writing
+    "TH-AI" as "ทีเอไอ" where it is meant to be read "ไทย". A rewrite produces
+    the same spelling and the same wrong audio, so the human respells the word
+    once here and every later Clip says it right.
+    """
+    try:
+        return json.loads(SAY_PATH.read_text("utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def say_set(wrong: str, right: str) -> None:
+    """Add an override, or drop it when `right` is empty."""
+    entries = say_as()
+    if right:
+        entries[wrong] = right
+    else:
+        entries.pop(wrong, None)
+    SAY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    SAY_PATH.write_text(json.dumps(entries, ensure_ascii=False, indent=2), "utf-8")
+
+
 def _tts_text(card: dict) -> str:
-    """What the voice reads: the transliterated form, never the screen form."""
-    return _speakable(card.get("spoken") or card["narration"])
+    """What the voice reads: the transliterated form, never the screen form.
+
+    Overrides are applied here rather than at the join in `narrate()` so both
+    sides of its boundary check see the same string; substituting later would
+    make every Card look misaligned and drop the Clip to per-Card speech.
+    Longest key first, so an entry cannot be half-eaten by a shorter one.
+    """
+    text = _speakable(card.get("spoken") or card["narration"])
+    for wrong, right in sorted(say_as().items(), key=lambda kv: -len(kv[0])):
+        text = text.replace(wrong, right)
+    return text
 
 
 async def narrate(cards: list[dict], path: Path) -> tuple[Path, list[float]] | None:
@@ -468,19 +509,31 @@ async def _narration_track(cards: list[dict], workdir: Path) -> tuple[Path, list
     return concat(parts, workdir / "narration.mp3"), starts
 
 
-async def build(script: dict, workdir: Path) -> tuple[Path, dict]:
+async def _ready(path: Path) -> Path:
+    """A Footage file that already exists, shaped like footage.fetch()."""
+    return path
+
+
+async def build(script: dict, workdir: Path,
+                supplied: dict[int, Path] | None = None) -> tuple[Path, dict]:
     """Script → mp4, plus the parameters it was actually built with.
 
     The second return value is what the Manifest records: the workdir is wiped
     after every render, so anything not handed back here is gone for good.
+
+    `supplied` maps a Card index to Footage a human generated in Google Flow
+    (docs/adr/0005). Those Cards skip the Pexels search entirely; the rest are
+    unaffected.
     """
     workdir.mkdir(parents=True, exist_ok=True)
     cards = script["cards"]
+    supplied = {i: Path(p) for i, p in (supplied or {}).items() if Path(p).is_file()}
 
     narration, clips = await asyncio.gather(
         _narration_track(cards, workdir),
         asyncio.gather(
-            *(footage.fetch(c.get("query", ""), workdir / f"broll{i:02d}.mp4")
+            *(_ready(supplied[i]) if i in supplied
+              else footage.fetch(c.get("query", ""), workdir / f"broll{i:02d}.mp4")
               for i, c in enumerate(cards))
         ),
     )
@@ -526,8 +579,12 @@ async def build(script: dict, workdir: Path) -> tuple[Path, dict]:
         # landed on, and a Card with only timings to show would name it blank.
         "cards": [
             {"start": round(start, 3), "seconds": round(span, 3),
-             "footage": bool(clip_path), "narration": card["narration"]}
-            for card, start, span, clip_path in zip(cards, starts, spans, clips)
+             "footage": bool(clip_path),
+             # Which Footage a Card got, so "does a Flow hook hold viewers
+             # longer than a stock one" is answerable later without guessing.
+             "footage_source": ("flow" if i in supplied else "pexels") if clip_path else None,
+             "narration": card["narration"]}
+            for i, (card, start, span, clip_path) in enumerate(zip(cards, starts, spans, clips))
         ],
     }
     return clip, details
