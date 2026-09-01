@@ -17,5 +17,44 @@ services:
     # "NanoCPUs can not be set, as your kernel does not support CPU CFS scheduler".
     mem_limit: 2g
 
+  # The dashboard is a second process from the same image, with /data mounted
+  # read-only: it reads the Manifests the bot writes and can never write back.
+  # See docs/adr/0007. The bot above still publishes no port.
+  shorts-factory-dashboard:
+    build: .
+    container_name: shorts-factory-dashboard
+    restart: unless-stopped
+    command: ["python", "-m", "app.dashboard"]
+    # No `env_file: .env` on purpose. This is the only LAN-reachable process in
+    # the stack and it needs no credential: the modules it imports read
+    # DATA_DIR and nothing else, and `youtube.configured()` reads its env at
+    # call time, which never happens here. Without the bot token and the
+    # YouTube refresh token, this container cannot act even if it is reached.
+    environment:
+      - TZ=Asia/Bangkok
+      - DATA_DIR=/data
+    expose:
+      - "8000"
+    volumes:
+      - shorts_factory_data:/data:ro
+    mem_limit: 256m
+    depends_on:
+      - shorts-factory
+
+  nginx:
+    image: nginx:alpine
+    container_name: shorts-factory-nginx
+    restart: unless-stopped
+    ports:
+      - "5067:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/.htpasswd:/etc/nginx/.htpasswd:ro
+    environment:
+      - TZ=Asia/Bangkok
+    mem_limit: 64m
+    depends_on:
+      - shorts-factory-dashboard
+
 volumes:
   shorts_factory_data:

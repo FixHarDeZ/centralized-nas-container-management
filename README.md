@@ -19,6 +19,7 @@ Docker stacks for Synology DS925+ NAS, managed via Synology Container Manager.
 | `torrentwatch/` | Daily torrent monitor for bearbit.org — scrapes, filters, LINE alerts | `5059` | `https://…:15059` |
 | `news-feed/` | AI & IT news feed bot — Thai summaries via Claude/DeepSeek, digest to LINE + Telegram, dashboard | `5064` | `https://…:15064` |
 | `ink-reader/` | Doujin library + OPDS catalog for Meebook M8 — scrapes doujin-th.com, converts to CBZ, curation dashboard | `5068` | `https://…:15068` |
+| `shorts-factory/` | Telegram bot that renders Thai YouTube Shorts — read-only dashboard over the clip record | `5067` (Nginx basic-auth dashboard) | — (LAN only) |
 
 ### Reverse Proxy Summary
 

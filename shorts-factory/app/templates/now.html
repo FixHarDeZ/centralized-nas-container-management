@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>สถานะตอนนี้</h1>
+<table>
+  {% for key, value in summary.items() %}
+  <tr><th>{{ key }}</th><td><pre>{{ value | tojson(indent=1) if value is mapping else value }}</pre></td></tr>
+  {% else %}
+  <tr><td class="muted">ยังไม่มี state.json</td></tr>
+  {% endfor %}
+</table>
+
+<h2>คำอ่านที่ตั้งไว้ ({{ say|length }})</h2>
+<table>
+  <tr><th>ที่โมเดลเขียน</th><th>ที่ให้อ่าน</th></tr>
+  {% for wrong, right in say.items() %}<tr><td>{{ wrong }}</td><td>{{ right }}</td></tr>{% endfor %}
+</table>
+
+<h2>อัปล่าสุด</h2>
+<table>
+  <tr><th>เมื่อ</th><th>ชื่อ</th></tr>
+  {% for entry in uploads %}
+  <tr><td class="muted">{{ entry.uploaded_at[:16].replace("T", " ") }}</td>
+      <td><a href="https://youtu.be/{{ entry.video_id }}">{{ entry.title }}</a></td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

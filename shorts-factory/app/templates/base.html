@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}shorts-factory{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <nav>
+    <a href="/">คลิป</a>
+    <a href="/experiment">การทดลอง</a>
+    <a href="/now">สถานะตอนนี้</a>
+  </nav>
+  {% if gate %}<p class="warn">{{ gate }}</p>{% endif %}
+  <main>{% block content %}{% endblock %}</main>
+</body>
+</html>

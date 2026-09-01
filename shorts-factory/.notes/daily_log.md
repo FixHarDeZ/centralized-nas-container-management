@@ -1073,3 +1073,42 @@ Topic. `RESULT_TOPIC` จับไม่ได้เพราะ URL ไม่�
 
 **Regression:** เพิ่มเทสต์ที่ยืนยันว่า URL ล้วนไม่ถึง `script_gen.generate()` และไม่เปลี่ยน
 state/สร้างงานค้าง
+
+## 2026-09-01 (2) — Dashboard read-only ที่ port 5067
+
+**ที่ทำ:** เพิ่ม `app/dashboard.py` (FastAPI) + `docker-compose.yml` service
+ใหม่ `shorts-factory-dashboard` (image เดียวกับบอท `command` ต่างกัน,
+mount `/data:ro`, ไม่มี `env_file`) + `nginx` sidecar publish `5067:80` basic
+auth จาก `.htpasswd`. สี่หน้า: `/` (ลิสต์คลิปทุกอันพร้อมตัวเลข day-7),
+`/clip/{id}` (manifest เต็มรวม draft ที่กดทิ้ง), `/experiment` (สอง arm +
+verdict), `/now` (state.json + say.json + upload ล่าสุด)
+
+**ทำไม:** อยากดูสถานะคลิป/experiment/state จากเบราว์เซอร์แทนไล่ manifest JSON
+เอง แต่ไม่อยากเพิ่ม credential ให้ process ที่ LAN เข้าถึงได้ — เลยแยกเป็นคอนเทนเนอร์
+คนละตัวจากบอท (import `app.manifest`/`app.experiment`/`app.analytics` ตัวเดียวกับ
+บอทใช้ กันเลขไม่ตรงกัน), การันตี read-only สองชั้น: mount `:ro` + เทสต์
+`test_no_route_can_write` เช็คว่าทุก route เป็น GET/HEAD เท่านั้น. อ่าน `say.json`
+ผ่าน `_say()` เองในไฟล์ ไม่ import `app.render` เพื่อไม่ให้ Pillow/edge-tts ติดเข้ามา
+ใน process ที่เปิดพอร์ต. เอกสารเหตุผลเต็มอยู่ `docs/adr/0007` (แก้ ADR 0002 ที่เคย
+บอกว่า stack ไม่มี HTTP surface — ยังจริงสำหรับตัวบอท แต่ไม่จริงสำหรับทั้ง stack แล้ว)
+
+### 2026-09-01 — dashboard deploy verified on the NAS
+
+`./scripts/deploy.sh -s shorts-factory -y`, then, checked from the NAS itself
+(port 5067 is LAN-only — it is not forwarded, so a workstation on another
+network gets no connection at all, which is the intended shape):
+
+- `shorts-factory` Up with no published ports, `shorts-factory-dashboard` Up on
+  `8000/tcp` unpublished, `shorts-factory-nginx` Up on `0.0.0.0:5067->80/tcp`
+- `docker exec shorts-factory-dashboard touch /data/nope` →
+  `touch: cannot touch '/data/nope': Read-only file system`
+- `printenv | grep -c 'TELEGRAM\|YOUTUBE\|MIMO\|PEXELS'` inside the dashboard → `0`
+- `curl http://localhost:5067/` without credentials → `401`; with them, `/`,
+  `/experiment`, `/now` and `/healthz` all `200`, and `/` listed the real clips
+- `/clip/<real id>` → 200, `/clip/nope` → 404 (logged `อ่าน manifest nope ไม่ได้`,
+  no traceback), `/clip/..%2f..%2fetc%2fpasswd` → 400
+- the bot kept polling `getUpdates` through the restart; host free memory
+  unchanged within noise (4.0 GB available)
+
+Observation, pre-existing and unrelated to this change: httpx logs the full
+Telegram API URL, so the bot token appears in `docker logs shorts-factory`.

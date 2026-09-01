@@ -14,3 +14,7 @@ itself: inbound updates are accepted only from the configured chat_id and
 anything else is dropped, the same guard torrentwatch applies to its callbacks.
 Without it, any stranger who finds the bot can spend LLM credit and start
 renders on the NAS. A future dashboard would have to add the nginx layer back.
+
+**Amended 2026-09-01 by `docs/adr/0007`:** the dashboard was built. The bot
+process is still portless and Telegram-only; the HTTP surface belongs to a
+separate read-only container behind nginx basic auth on 5067.

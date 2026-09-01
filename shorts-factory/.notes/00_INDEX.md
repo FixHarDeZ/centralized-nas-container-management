@@ -7,9 +7,12 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
 
 ## Shape
 
-- One container, no ports, no nginx, no scheduler thread. A single Telegram
-  `getUpdates` long-poll loop is the entire interface; the two recurring jobs
-  (daily snapshots, `/trends` three times a day) ride that loop.
+- One container for the bot itself: no ports, no scheduler thread. A single
+  Telegram `getUpdates` long-poll loop is its entire interface; the two
+  recurring jobs (daily snapshots, `/trends` three times a day) ride that
+  loop. The stack as a whole now has an HTTP surface — see the Dashboard
+  bullet below and `docs/adr/0007` — but the bot process itself is unchanged:
+  still portless, still Telegram-only.
 - Flow: Topic → mimo returns a Script → human reviews it in Telegram →
   button → the whole narration is spoken in **one** edge-tts call, footage is
   fetched per Card, cards are drawn with Pillow → silent video segments cut to
@@ -116,6 +119,15 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
 - State: `/data/state.json`. Working files under `/data`, wiped after each
   render. Finished clips and their metadata `.txt` land in `/output`
   (`/volume1/shorts` on the NAS, reachable over SMB).
+- **Dashboard (2026-09-01).** `app/dashboard.py` runs as a second container
+  (`shorts-factory-dashboard`, same image, different `command`) behind an
+  nginx sidecar publishing 5067 with basic auth. Read-only twice over: `/data`
+  mounted `:ro` and the app declares no non-GET/HEAD route (`test_no_route_can_write`).
+  No `env_file` — it holds neither the Telegram bot token nor the YouTube
+  refresh token. Four pages: `/` (clip list + day-7 numbers), `/clip/{id}`
+  (full manifest incl. discarded drafts), `/experiment` (arms + verdict),
+  `/now` (state.json + say.json + recent uploads). Reads `say.json` itself via
+  a local `_say()`, does not import `app.render`. See `docs/adr/0007`.
 
 ## Settings
 

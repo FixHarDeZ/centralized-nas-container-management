@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>การทดลอง: {{ factor }}</h1>
+<p class="warn">{{ verdict }}</p>
+<table>
+  <tr><th>arm</th><th>คลิป</th><th>ทิ้ง</th><th>ล้มเหลว</th><th>views</th><th>median ดูจนจบ</th></tr>
+  {% for name, data in arms.items() %}
+  <tr><td>{{ name }}</td><td>{{ data.clips }}</td><td>{{ data.discarded }}</td>
+      <td>{{ data.failed }}</td><td>{{ data.views }}</td>
+      <td>{% if data.median is none %}<span class="muted">—</span>{% else %}{{ "%.1f"|format(data.median) }}%{% endif %}</td></tr>
+  {% endfor %}
+</table>
+
+<h2>ประโยคที่ต่อท้าย prompt</h2>
+<div class="grid">
+  {% for name, clause in clauses.items() %}
+  <div class="card"><p><strong>{{ name }}</strong></p><pre>{{ clause }}</pre></div>
+  {% endfor %}
+</div>
+
+<h2>ตามหมวด <span class="muted">(สังเกตการณ์ ไม่ใช่การทดลอง — คนเลือกหัวข้อเอง)</span></h2>
+<table>
+  <tr><th>หมวด</th><th>คลิป</th><th>มาจาก /trends</th><th>views</th></tr>
+  {% for name, data in categories.items() %}
+  <tr><td>{{ name }}</td><td>{{ data.clips }}</td><td>{{ data.trend }}</td><td>{{ data.views }}</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

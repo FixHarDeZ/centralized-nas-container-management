@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="muted">{{ total }} คลิปในบันทึก</p>
+<table>
+  <tr><th>เมื่อ</th><th>หัวข้อ</th><th>variant</th><th>ผล</th><th>views</th><th>ดูจนจบ</th></tr>
+  {% for row in rows %}
+  <tr>
+    <td class="muted">{{ row.created_at[:16].replace("T", " ") }}</td>
+    <td><a href="/clip/{{ row.id }}">{{ row.topic or "(ไม่มีหัวข้อ)" }}</a></td>
+    <td>
+      {% if row.explore %}<span class="pill">explore</span>
+      {% elif row.variant %}<span class="pill">{{ row.variant }}</span>
+      {% else %}<span class="muted">—</span>{% endif %}
+    </td>
+    <td>{{ row.outcome }}{% if row.published %} · อัปแล้ว{% endif %}</td>
+    <td>{% if row.views is none %}<span class="muted">—</span>{% else %}{{ row.views }}{% endif %}</td>
+    <td>{% if row.percent is none %}<span class="muted">—</span>{% else %}{{ "%.1f"|format(row.percent) }}%{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endblock %}

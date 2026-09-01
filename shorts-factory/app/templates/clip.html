@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block content %}
+{% if not record %}
+  <p class="warn">ไม่พบคลิปนี้</p>
+{% else %}
+<h1>{{ record.topic or "(ไม่มีหัวข้อ)" }}</h1>
+<p class="muted">
+  {{ record.id }} · {{ record.created_at }} · {{ record.outcome }}
+  {% if record.variant %} · <span class="pill">{{ record.variant }}</span>{% endif %}
+  {% if record.explore %} · <span class="pill">explore</span>{% endif %}
+  {% if record.video_id %} · <a href="https://youtu.be/{{ record.video_id }}">{{ record.video_id }}</a>{% endif %}
+</p>
+
+{% if snapshots %}
+<h2>ตัวเลขรายวัน</h2>
+<table>
+  <tr><th>วันที่</th><th>อายุ (วัน)</th><th>views</th><th>ดูจนจบ</th></tr>
+  {% for s in snapshots %}
+  <tr><td>{{ s.date }}</td><td>{{ s.age_days }}</td><td>{{ s.views }}</td>
+      <td>{% if s.percent is none %}—{% else %}{{ "%.1f"|format(s.percent) }}%{% endif %}</td></tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+{% if cards %}
+<h2>การ์ดที่เรนเดอร์</h2>
+<table>
+  <tr><th>#</th><th>เริ่มวินาทีที่</th></tr>
+  {% for c in cards %}<tr><td>{{ loop.index0 }}</td><td>{{ "%.2f"|format(c.start or 0) }}</td></tr>{% endfor %}
+</table>
+{% endif %}
+
+<h2>สคริปต์ทุกรอบ ({{ drafts|length }})</h2>
+{% for draft in drafts %}
+<div class="card">
+  <p class="muted">รอบที่ {{ loop.index }} · {{ draft.at }}</p>
+  <p><strong>{{ draft.script.title or "(ไม่มีชื่อ)" }}</strong>
+     {% if draft.script.category %}<span class="pill">{{ draft.script.category }}</span>{% endif %}</p>
+  {% for card in draft.script.cards or [] %}
+    <p>{{ card.narration or "" }}
+       {% if card.spoken and card.spoken != card.narration %}
+         <br><span class="muted">🗣 {{ card.spoken }}</span>{% endif %}</p>
+  {% endfor %}
+</div>
+{% else %}
+<p class="muted">ยังไม่มีสคริปต์ในบันทึกนี้</p>
+{% endfor %}
+
+{% if record.storyboard %}
+<h2>storyboard</h2>
+<div class="card"><pre>{{ record.storyboard | tojson(indent=1) }}</pre></div>
+{% endif %}
+{% endif %}
+{% endblock %}

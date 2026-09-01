@@ -383,6 +383,39 @@ The `/volume1/shorts` shared folder must exist on the NAS before first run;
 create it in DSM (Control Panel → Shared Folder), it is not created by the
 stack.
 
+## Dashboard
+
+A read-only view of everything the bot has already written down, served at
+`http://<NAS_HOST>:5067` behind nginx basic auth (credentials from the vault,
+see below). It runs as its own container from the same image as the bot with
+`/data` mounted `:ro`, and the app itself declares no route other than GET/HEAD
+— read-only twice over, by mount and by code (`docs/adr/0007`). It carries no
+`env_file`, so the Telegram bot token and the YouTube refresh token never
+reach this LAN-facing process.
+
+Four pages:
+
+| Page | Answers |
+| :--- | :--- |
+| `/` | every Clip, newest first, with day-7 views/retention once available |
+| `/clip/{id}` | one Clip's full Manifest — every Script draft (including discarded ones), render detail, snapshots |
+| `/experiment` | the two hook arms, their medians, and the verdict once enough data exists |
+| `/now` | the bot's live `state.json`, its `say.json` overrides, and recent uploads |
+
+Set it up once with:
+
+```bash
+htpasswd -cB shorts-factory/nginx/.htpasswd <username>   # gitignored; use the vault password
+```
+
+Nothing on this surface can start a render, edit a Script, or touch YouTube —
+that all still happens in Telegram, on the phone.
+
+`/healthz` sits behind the same basic auth as every other path on this
+dashboard, so an Uptime Kuma monitor pointed at it must be given the vault
+credentials — unlike ops-bot's `/webhook/uptime-kuma`, there is no
+unauthenticated path here by design.
+
 ## Thai text rendering
 
 Pillow's wheel does not include Raqm. Without the `libraqm0` package,

@@ -5,4 +5,10 @@ pillow==12.3.0
 # moves server-side, so an old pin stops working. Bump, do not downgrade.
 edge-tts==7.2.8
 
+# The dashboard only (app/dashboard.py). app.main never imports these; they are
+# in the shared image because the dashboard runs from it. See docs/adr/0007.
+fastapi==0.115.6
+uvicorn==0.34.0
+jinja2==3.1.5
+
 pytest==8.4.1
