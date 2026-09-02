@@ -1,21 +1,54 @@
 {% extends "base.html" %}
 {% block content %}
-<p class="muted">{{ total }} คลิปในบันทึก</p>
+<div class="kpis">
+  <div class="kpi">
+    <div class="label">อัปแล้ว (Gate {{ summary.gate_clips }})</div>
+    <div class="value">{{ summary.published }}<small> / {{ summary.gate_clips }}</small></div>
+    <div class="meter"><i style="width: {{ [100, summary.published * 100 // summary.gate_clips]|min }}%"></i></div>
+  </div>
+  <div class="kpi">
+    <div class="label">median ดูจนจบ (day 7)</div>
+    <div class="value">{% if summary.median is none %}—{% else %}{{ "%.1f"|format(summary.median) }}<small>%</small>{% endif %}</div>
+  </div>
+  <div class="kpi">
+    <div class="label">views รวม (day 7)</div>
+    <div class="value">{{ summary.views }}</div>
+  </div>
+  <div class="kpi">
+    <div class="label">คลิปในบันทึก</div>
+    <div class="value">{{ summary.total }}</div>
+    <div class="label">ทิ้งไป {{ summary.discarded }}</div>
+  </div>
+</div>
+
+<div class="filters">
+  <button class="pill on" data-outcome="">ทั้งหมด</button>
+  {% for outcome in outcomes %}<button class="pill" data-outcome="{{ outcome }}">{{ outcome }}</button>{% endfor %}
+</div>
+
+<div class="rows">
 <table>
-  <tr><th>เมื่อ</th><th>หัวข้อ</th><th>variant</th><th>ผล</th><th>views</th><th>ดูจนจบ</th></tr>
+  <thead>
+    <tr><th>เมื่อ</th><th>หัวข้อ</th><th>variant</th><th>ผล</th>
+        <th class="num">views</th><th class="num">ดูจนจบ</th></tr>
+  </thead>
+  <tbody>
   {% for row in rows %}
-  <tr>
-    <td class="muted">{{ row.created_at[:16].replace("T", " ") }}</td>
-    <td><a href="/clip/{{ row.id }}">{{ row.topic or "(ไม่มีหัวข้อ)" }}</a></td>
-    <td>
+  <tr data-outcome="{{ row.outcome }}">
+    <td class="muted" data-label="เมื่อ">{{ row.created_at[:16].replace("T", " ") }}</td>
+    <td class="wide" data-label="หัวข้อ"><a href="/clip/{{ row.id }}">{{ row.topic or "(ไม่มีหัวข้อ)" }}</a></td>
+    <td data-label="variant">
       {% if row.explore %}<span class="pill">explore</span>
       {% elif row.variant %}<span class="pill">{{ row.variant }}</span>
       {% else %}<span class="muted">—</span>{% endif %}
     </td>
-    <td>{{ row.outcome }}{% if row.published %} · อัปแล้ว{% endif %}</td>
-    <td>{% if row.views is none %}<span class="muted">—</span>{% else %}{{ row.views }}{% endif %}</td>
-    <td>{% if row.percent is none %}<span class="muted">—</span>{% else %}{{ "%.1f"|format(row.percent) }}%{% endif %}</td>
+    <td data-label="ผล">{{ row.outcome }}{% if row.published %} · อัปแล้ว{% endif %}</td>
+    <td class="num" data-label="views">{% if row.views is none %}<span class="muted">—</span>{% else %}{{ row.views }}{% endif %}</td>
+    <td class="num" data-label="ดูจนจบ">{% if row.percent is none %}<span class="muted">—</span>{% else %}{{ "%.1f"|format(row.percent) }}%{% endif %}</td>
   </tr>
   {% endfor %}
+  </tbody>
 </table>
+</div>
+<p class="muted">{{ total }} คลิปในบันทึก</p>
 {% endblock %}

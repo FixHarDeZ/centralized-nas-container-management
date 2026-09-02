@@ -402,6 +402,15 @@ Four pages:
 | `/experiment` | the two hook arms, their medians, and the verdict once enough data exists |
 | `/now` | the bot's live `state.json`, its `say.json` overrides, and recent uploads |
 
+The pages lead with the day-7 figures — Gate progress, median retention, total
+views — and the clip list filters by outcome in the browser, so no route grew a
+query parameter. `/clip` draws views over age as an **inline SVG built in the
+template**: `app/retention.py` renders its PNGs with Pillow, and keeping Pillow
+out of the LAN-facing process is a property `docs/adr/0007` asserts, guarded by
+`test_no_drawing_library_in_this_process`. Theme follows the system with a
+toggle kept in `localStorage`; the assets ship inside the image (no CDN, no web
+fonts), so a visual change needs a rebuild and deploy, not a file copy.
+
 Set it up once with:
 
 ```bash

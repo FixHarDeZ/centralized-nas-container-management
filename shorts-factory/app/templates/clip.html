@@ -5,29 +5,65 @@
 {% else %}
 <h1>{{ record.topic or "(ไม่มีหัวข้อ)" }}</h1>
 <p class="muted">
-  {{ record.id }} · {{ record.created_at }} · {{ record.outcome }}
-  {% if record.variant %} · <span class="pill">{{ record.variant }}</span>{% endif %}
-  {% if record.explore %} · <span class="pill">explore</span>{% endif %}
+  {{ record.id }} · {{ record.created_at }} · <span class="pill">{{ record.outcome }}</span>
+  {% if record.variant %} <span class="pill">{{ record.variant }}</span>{% endif %}
+  {% if record.explore %} <span class="pill">explore</span>{% endif %}
   {% if record.video_id %} · <a href="https://youtu.be/{{ record.video_id }}">{{ record.video_id }}</a>{% endif %}
 </p>
 
+{% if day7 %}
+<div class="kpis">
+  <div class="kpi"><div class="label">views (day 7)</div><div class="value">{{ day7.views }}</div></div>
+  <div class="kpi"><div class="label">ดูจนจบ (day 7)</div>
+    <div class="value">{% if day7.percent is none %}—{% else %}{{ "%.1f"|format(day7.percent) }}<small>%</small>{% endif %}</div></div>
+  {% if record.render and record.render.duration %}
+  <div class="kpi"><div class="label">ความยาว</div>
+    <div class="value">{{ "%.0f"|format(record.render.duration) }}<small> วิ</small></div></div>
+  {% endif %}
+</div>
+{% endif %}
+
 {% if snapshots %}
 <h2>ตัวเลขรายวัน</h2>
+{% if chart %}
+<div class="card">
+  <svg viewBox="0 0 {{ chart.w }} {{ chart.h }}" width="100%" height="{{ chart.h }}"
+       role="img" aria-label="views ตามอายุคลิป สูงสุด {{ chart.top }}">
+    <polygon class="area" points="{{ chart.area }}"/>
+    <polyline class="line" points="{{ chart.line }}"/>
+    {% for d in chart.dots %}<circle class="dot" cx="{{ d.x }}" cy="{{ d.y }}" r="3"/>{% endfor %}
+  </svg>
+  <p class="muted">views ตามวัน · สูงสุด {{ chart.top }}</p>
+</div>
+{% endif %}
+<div class="rows">
 <table>
-  <tr><th>วันที่</th><th>อายุ (วัน)</th><th>views</th><th>ดูจนจบ</th></tr>
+  <thead><tr><th>วันที่</th><th class="num">อายุ (วัน)</th><th class="num">views</th><th class="num">ดูจนจบ</th></tr></thead>
+  <tbody>
   {% for s in snapshots %}
-  <tr><td>{{ s.date }}</td><td>{{ s.age_days }}</td><td>{{ s.views }}</td>
-      <td>{% if s.percent is none %}—{% else %}{{ "%.1f"|format(s.percent) }}%{% endif %}</td></tr>
+  <tr><td data-label="วันที่">{{ s.date }}</td>
+      <td class="num" data-label="อายุ (วัน)">{{ s.age_days }}</td>
+      <td class="num" data-label="views">{{ s.views }}</td>
+      <td class="num" data-label="ดูจนจบ">{% if s.percent is none %}—{% else %}{{ "%.1f"|format(s.percent) }}%{% endif %}</td></tr>
   {% endfor %}
+  </tbody>
 </table>
+</div>
 {% endif %}
 
 {% if cards %}
 <h2>การ์ดที่เรนเดอร์</h2>
+<div class="rows">
 <table>
-  <tr><th>#</th><th>เริ่มวินาทีที่</th></tr>
-  {% for c in cards %}<tr><td>{{ loop.index0 }}</td><td>{{ "%.2f"|format(c.start or 0) }}</td></tr>{% endfor %}
+  <thead><tr><th>#</th><th class="num">เริ่มวินาทีที่</th></tr></thead>
+  <tbody>
+  {% for c in cards %}
+  <tr><td data-label="#">{{ loop.index0 }}</td>
+      <td class="num" data-label="เริ่มวินาทีที่">{{ "%.2f"|format(c.start or 0) }}</td></tr>
+  {% endfor %}
+  </tbody>
 </table>
+</div>
 {% endif %}
 
 <h2>สคริปต์ทุกรอบ ({{ drafts|length }})</h2>

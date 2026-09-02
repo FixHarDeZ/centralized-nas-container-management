@@ -1,17 +1,141 @@
-:root { color-scheme: dark; --bg:#14161a; --fg:#e8eaee; --muted:#9aa2ad; --line:#272b32; --accent:#ffd24a; }
+/* Token names and the light/dark split follow dupe-sweeper's dashboard so the
+   two look like one system; only the accent differs, which is what tells the
+   browser tabs apart. */
+:root {
+  --bg:        #f5f6f8;
+  --surface:   #ffffff;
+  --surface-2: #f0f1f4;
+  --border:    #e2e4e9;
+  --text:      #1a1c20;
+  --muted:     #6b7280;
+  --accent:    #a06a00;
+  --accent-fg: #ffffff;
+  --warn-bg:   #fff4e0;
+  --warn-fg:   #92500a;
+  --shadow:    0 1px 3px rgba(20,22,30,.08), 0 6px 18px rgba(20,22,30,.06);
+  --radius:    12px;
+  color-scheme: light;
+}
+[data-theme="dark"] {
+  --bg:        #0f1115;
+  --surface:   #181b21;
+  --surface-2: #21252d;
+  --border:    #2a2f38;
+  --text:      #e6e8ec;
+  --muted:     #9099a6;
+  --accent:    #ffd24a;
+  --accent-fg: #14161a;
+  --warn-bg:   #3a2f18;
+  --warn-fg:   #f0b429;
+  --shadow:    0 1px 3px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+  color-scheme: dark;
+}
+
 * { box-sizing: border-box; }
-body { margin:0; padding:1rem; background:var(--bg); color:var(--fg);
-       font:16px/1.5 system-ui, -apple-system, "Noto Sans Thai", sans-serif; }
-nav { display:flex; gap:1rem; padding-bottom:.75rem; border-bottom:1px solid var(--line); margin-bottom:1rem; }
-nav a { color:var(--accent); text-decoration:none; }
-a { color:var(--accent); }
-table { width:100%; border-collapse:collapse; }
-th, td { text-align:left; padding:.5rem .4rem; border-bottom:1px solid var(--line); vertical-align:top; }
-th { color:var(--muted); font-weight:600; font-size:.85rem; }
-.muted { color:var(--muted); }
-.warn { background:#3a2f14; border:1px solid #6b551f; padding:.6rem .8rem; border-radius:6px; }
-.pill { display:inline-block; padding:.05rem .5rem; border:1px solid var(--line); border-radius:999px; font-size:.8rem; }
-.card { border:1px solid var(--line); border-radius:8px; padding:.8rem; margin-bottom:.8rem; }
-.grid { display:grid; gap:.8rem; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); }
-pre { white-space:pre-wrap; word-break:break-word; margin:0; }
-@media (max-width:600px) { body { padding:.6rem; } th, td { padding:.4rem .25rem; font-size:.9rem; } }
+/* An author display rule (.rows tr{display:block} below) overrides the UA
+   [hidden] rule, so filtered-out rows would stay visible on phones. */
+[hidden] { display: none !important; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.6 system-ui, -apple-system, "Noto Sans Thai", sans-serif;
+}
+a { color: var(--accent); }
+h1 { font-size: 1.35rem; margin: 0 0 .25rem; }
+h2 { font-size: 1rem; letter-spacing: .02em; color: var(--muted);
+     text-transform: uppercase; margin: 1.75rem 0 .6rem; }
+.muted { color: var(--muted); }
+
+/* ---- shell ---- */
+header {
+  position: sticky; top: 0; z-index: 5;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid var(--border);
+}
+.bar { display: flex; align-items: center; gap: .35rem;
+       max-width: 1100px; margin: 0 auto; padding: .6rem 1rem; }
+.brand { font-weight: 700; margin-right: .6rem; letter-spacing: -.01em; }
+nav { display: flex; gap: .2rem; flex: 1; overflow-x: auto; }
+nav a {
+  padding: .35rem .7rem; border-radius: 999px;
+  text-decoration: none; color: var(--muted); white-space: nowrap;
+}
+nav a:hover { background: var(--surface-2); color: var(--text); }
+nav a[aria-current="page"] { background: var(--accent); color: var(--accent-fg); font-weight: 600; }
+#theme {
+  border: 1px solid var(--border); background: var(--surface); color: var(--text);
+  border-radius: 999px; width: 2rem; height: 2rem; cursor: pointer; font-size: .9rem;
+}
+main { max-width: 1100px; margin: 0 auto; padding: 1rem 1rem 4rem; }
+
+/* ---- pieces ---- */
+.warn {
+  background: var(--warn-bg); color: var(--warn-fg);
+  border: 1px solid color-mix(in srgb, var(--warn-fg) 35%, transparent);
+  border-radius: var(--radius); padding: .5rem .8rem; margin: 0 0 1rem;
+}
+.warn summary { cursor: pointer; }
+.card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: .9rem 1rem; margin-bottom: .8rem;
+}
+.grid { display: grid; gap: .8rem; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+.pill {
+  display: inline-block; padding: .05rem .55rem; border-radius: 999px;
+  background: var(--surface-2); border: 1px solid var(--border);
+  font-size: .78rem; color: var(--muted); white-space: nowrap;
+}
+.pill.on { background: var(--accent); color: var(--accent-fg); border-color: transparent; }
+pre { white-space: pre-wrap; word-break: break-word; margin: 0;
+      font: .85rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+/* ---- kpi ---- */
+.kpis { display: grid; gap: .7rem; margin-bottom: 1.2rem;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.kpi { background: var(--surface); border: 1px solid var(--border);
+       border-radius: var(--radius); box-shadow: var(--shadow); padding: .7rem .9rem; }
+.kpi .label { color: var(--muted); font-size: .78rem; }
+.kpi .value { font-size: 1.6rem; font-weight: 700; line-height: 1.2;
+              font-variant-numeric: tabular-nums; }
+.kpi .value small { font-size: .9rem; font-weight: 400; color: var(--muted); }
+.meter { height: 5px; border-radius: 999px; background: var(--surface-2); margin-top: .45rem; }
+.meter i { display: block; height: 100%; border-radius: 999px; background: var(--accent); }
+
+/* ---- table ---- */
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: .55rem .5rem; border-bottom: 1px solid var(--border);
+         vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: .78rem; text-transform: uppercase;
+     letter-spacing: .03em; }
+tbody tr:hover { background: var(--surface-2); }
+.num { text-align: right; font-variant-numeric: tabular-nums; }
+.rows { background: var(--surface); border: 1px solid var(--border);
+        border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; }
+.rows table { padding: 0 .4rem; }
+.rows tr:last-child td { border-bottom: 0; }
+.filters { display: flex; gap: .35rem; flex-wrap: wrap; margin-bottom: .8rem; }
+.filters button { font: inherit; font-size: .82rem; cursor: pointer; }
+
+svg .line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
+svg .area { fill: var(--accent); opacity: .12; stroke: none; }
+svg .dot  { fill: var(--accent); }
+
+/* Below 600px a six-column table cannot be read, so each row becomes its own
+   card and every cell carries its own header from data-label. */
+@media (max-width: 600px) {
+  main { padding: .8rem .7rem 3rem; }
+  .rows { background: none; border: 0; box-shadow: none; }
+  .rows thead { display: none; }
+  .rows tr { display: block; background: var(--surface); border: 1px solid var(--border);
+             border-radius: var(--radius); box-shadow: var(--shadow);
+             padding: .6rem .8rem; margin-bottom: .6rem; }
+  .rows td { display: flex; justify-content: space-between; gap: 1rem;
+             border: 0; padding: .15rem 0; }
+  .rows td[data-label]::before { content: attr(data-label); color: var(--muted); font-size: .8rem; }
+  .rows td.wide { display: block; font-weight: 600; padding-bottom: .3rem; }
+  .rows td.wide::before { content: none; }
+  .num { text-align: left; }
+}

@@ -137,3 +137,50 @@ def test_now_page_without_state_file(client, data_dir):
     (data_dir / "state.json").unlink()
     reply = client.get("/now")
     assert reply.status_code == 200
+
+
+def test_no_drawing_library_in_this_process():
+    """docs/adr/0007: Pillow and edge-tts stay out of the LAN-facing process.
+
+    `test_no_route_can_write` only checks HTTP methods, so a chart drawn with
+    app.retention's Pillow code would pass every other test in this file. Run
+    in a subprocess because a full-suite run imports app.render long before
+    this point, which would make an in-process sys.modules check meaningless.
+    """
+    import subprocess
+    import sys
+    subprocess.run(
+        [sys.executable, "-c",
+         "import app.dashboard, sys;"
+         " assert 'PIL' not in sys.modules, 'Pillow reached the dashboard';"
+         " assert 'edge_tts' not in sys.modules, 'edge-tts reached the dashboard'"],
+        check=True,
+    )
+
+
+def test_clips_page_leads_with_the_gate_and_the_day7_figures(client):
+    body = client.get("/").text
+    assert ">1<small> / 30</small>" in body   # one clip in history.json, Gate is 30
+    assert "41.2" in body          # median day-7 retention across the list
+
+
+def test_clips_rows_carry_their_outcome_for_the_filter(client):
+    body = client.get("/").text
+    assert 'data-outcome="rendered"' in body
+    assert 'data-outcome="discarded"' in body
+
+
+def test_clip_chart_needs_two_snapshots(client, data_dir):
+    from app import dashboard
+    assert dashboard._chart([{"age_days": 7, "views": 182}]) is None
+    chart = dashboard._chart([
+        {"age_days": 1, "views": 0}, {"age_days": 7, "views": 182}])
+    assert chart["top"] == 182
+    assert len(chart["line"].split()) == 2
+
+
+def test_now_page_still_shows_a_key_it_does_not_know_about(client, data_dir):
+    """A dashboard that only rendered known keys would hide every new one."""
+    (data_dir / "state.json").write_text(json.dumps(
+        {"mode": "idle", "a_key_invented_tomorrow": "xyzzy"}), encoding="utf-8")
+    assert "xyzzy" in client.get("/now").text

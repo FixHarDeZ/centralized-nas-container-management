@@ -28,7 +28,13 @@ the bot or upload as the channel — there is nothing to extract. The one file
 it reads for its own purposes, `/data/say.json`, is read directly through a
 small local `_say()` helper in `app/dashboard.py`, not through `app.render` —
 that module pulls in Pillow and edge-tts, and keeping both out of the
-LAN-facing process is the point, not an accident of code reuse.
+LAN-facing process is the point, not an accident of code reuse. That property
+now has a test of its own, `test_no_drawing_library_in_this_process`, which
+asserts neither module is in `sys.modules` once the dashboard is imported:
+`test_no_route_can_write` only inspects HTTP methods, so a chart drawn the
+obvious way — by reusing `app.retention`'s Pillow code — would have passed
+every other test in the file. Charts here are inline SVG built in the template
+instead.
 
 The dashboard shares the bot's image on purpose. It imports `app.manifest`,
 `app.experiment`, and `app.analytics` — the same modules the bot itself calls

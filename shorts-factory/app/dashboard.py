@@ -48,13 +48,70 @@ def _row(record: dict) -> dict:
     }
 
 
+def _summary(rows: list[dict]) -> dict:
+    """The four figures the list page leads with.
+
+    All of them come from the day-7 snapshot rather than the latest one, for
+    the reason `manifest.day7` gives: retention keeps moving as views accrue.
+    `state.json` is deliberately not among them — the bot writes it and the
+    dashboard only reads, so a stale `mode` would read as a live one.
+    """
+    percents = [r["percent"] for r in rows if r["percent"] is not None]
+    return {
+        "published": len(history.video_ids()),
+        "gate_clips": analytics.GATE_CLIPS,
+        "median": median(percents) if percents else None,
+        "views": sum(r["views"] or 0 for r in rows),
+        "total": len(rows),
+        "discarded": sum(1 for r in rows if r["outcome"] == "discarded"),
+    }
+
+
 @app.get("/", response_class=HTMLResponse)
 def clips(request: Request):
     records = manifest.load_all()
     rows = [_row(r) for r in reversed(records)]   # load_all is chronological
     return TEMPLATES.TemplateResponse(request, "clips.html", {
-        "rows": rows, "total": len(records), "gate": analytics.gate_note(),
+        "rows": rows,
+        "total": len(records),
+        "summary": _summary(rows),
+        # The filter buttons are built from what is actually on the page, so a
+        # new outcome the bot starts writing appears without a code change.
+        "outcomes": sorted({r["outcome"] for r in rows if r["outcome"]}),
+        "gate": analytics.gate_note(),
     })
+
+
+CHART = {"w": 640, "h": 160, "pad": 8}
+
+
+def _chart(snapshots: list[dict]) -> dict | None:
+    """Views over age, as coordinates for an inline SVG polyline.
+
+    Drawn in the template rather than by `app.retention`: that module renders
+    PNGs with Pillow, and docs/adr/0007 keeps Pillow out of the one process
+    reachable from the LAN. Two points are the minimum that draws a line.
+    """
+    points = [(s.get("age_days") or 0, s.get("views") or 0) for s in snapshots]
+    if len(points) < 2:
+        return None
+    w, h, pad = CHART["w"], CHART["h"], CHART["pad"]
+    span = max(x for x, _ in points) - min(x for x, _ in points) or 1
+    top = max(y for _, y in points) or 1
+    left = min(x for x, _ in points)
+    xy = [
+        (pad + (x - left) / span * (w - 2 * pad), h - pad - y / top * (h - 2 * pad))
+        for x, y in points
+    ]
+    return {
+        "line": " ".join(f"{x:.1f},{y:.1f}" for x, y in xy),
+        "area": f"{xy[0][0]:.1f},{h - pad} " +
+                " ".join(f"{x:.1f},{y:.1f}" for x, y in xy) +
+                f" {xy[-1][0]:.1f},{h - pad}",
+        "dots": [{"x": round(x, 1), "y": round(y, 1)} for x, y in xy],
+        "top": top,
+        **CHART,
+    }
 
 
 @app.get("/clip/{clip_id}", response_class=HTMLResponse)
@@ -66,11 +123,14 @@ def clip(request: Request, clip_id: str):
         return TEMPLATES.TemplateResponse(
             request, "clip.html", {"record": None, "gate": None}, status_code=404
         )
+    snapshots = record.get("snapshots") or []
     return TEMPLATES.TemplateResponse(request, "clip.html", {
         "record": record,
         "drafts": record.get("scripts") or [],
         "cards": (record.get("render") or {}).get("cards") or [],
-        "snapshots": record.get("snapshots") or [],
+        "snapshots": snapshots,
+        "day7": manifest.day7(record),
+        "chart": _chart(snapshots),
         "gate": analytics.gate_note(),
     })
 
@@ -114,14 +174,23 @@ def _state() -> dict:
         return {}
 
 
+# Keys worth a card of their own. The rest still appear below verbatim: the
+# bot grows new keys often (`parked`, `last_auto_trends`), and a dashboard that
+# only rendered the ones named here would hide every one of them.
+HEADLINE = ("mode", "topic", "clip_id", "style", "parked", "auto_pick", "last_snapshot")
+
+
 @app.get("/now", response_class=HTMLResponse)
 def now(request: Request):
     state = _state()
+    summary = {k: v for k, v in state.items() if k not in {"script", "suggested"}}
     return TEMPLATES.TemplateResponse(request, "now.html", {
         "state": state,
         # `script` is the whole Script being reviewed and `suggested` a topic
         # list; both are pages of JSON that belong on /clip, not here.
-        "summary": {k: v for k, v in state.items() if k not in {"script", "suggested"}},
+        "summary": summary,
+        "headline": [(k, summary[k]) for k in HEADLINE if k in summary],
+        "rest": {k: v for k, v in summary.items() if k not in HEADLINE},
         "say": _say(),
         "uploads": list(reversed(history.load()))[:20],
         "gate": analytics.gate_note(),

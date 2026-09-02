@@ -1123,3 +1123,38 @@ root `CLAUDE.md`, root `README.md`). Historical docs (ADR 0002/0007, the
 they record the decision as made at the time, not the live port number.
 Next deploy: re-run `make secrets` if the vault manifest references the port,
 then `docker compose up -d` to recreate `shorts-factory-nginx` on the new port.
+
+## 2026-09-02 — Dashboard redesign (visual, still read-only)
+
+Restyled all four dashboard pages and reorganised what they lead with. No new
+route, no new dependency, no change to what the bot does.
+
+- `app/static/style.css` rewritten around the token set `dupe-sweeper` already
+  uses (surface / surface-2 / border / muted / shadow / radius) so the two
+  dashboards look like one system; the accent stays amber, which is what tells
+  the browser tabs apart. Light/dark via `data-theme` following the system,
+  toggle remembered in `localStorage`, with a three-line inline script in
+  `<head>` — later than that and every navigation flashes the wrong theme.
+- Tables become one card per row below 600px (`data-label` on each cell).
+- `app/static/app.js` (new, ~20 lines, no dependency): theme toggle and the
+  outcome filter. Filtering is client-side on purpose — a server-side filter
+  would mean a query parameter on a route that ADR 0007 keeps to plain GET.
+- `/` leads with four KPIs: published against the Gate of 30 (with a meter),
+  median day-7 retention, total day-7 views, clips on record and how many were
+  discarded. `state.mode` is deliberately *not* a KPI: the dashboard only reads
+  what the bot wrote, and a stale mode would read as a live one.
+- `/clip` draws views over age as inline SVG (`_chart()` returns polyline
+  coordinates; needs two snapshots or it returns None). It is **not** drawn
+  with `app.retention`'s Pillow code — see the test below.
+- `/now` lifts the interesting keys into cards but still prints the whole
+  `state.json` underneath, so keys the bot invents later cannot go unseen.
+- Tests: `test_no_drawing_library_in_this_process` asserts `PIL` and `edge_tts`
+  are absent from `sys.modules` after importing the dashboard. This is the
+  property ADR 0007 actually claims; `test_no_route_can_write` only checks HTTP
+  methods and would not have caught a Pillow-drawn chart. ADR 0007 amended with
+  a paragraph saying so.
+
+Verified locally: `pytest tests/test_dashboard.py` → 16 passed; the app served
+against a sample `/data` returned 200 on `/`, `/clip/{id}`, `/experiment`,
+`/now`. `tests/test_shorts_factory.py` cannot be collected on the workstation
+(`edge_tts` is not installed there) — pre-existing, unrelated.

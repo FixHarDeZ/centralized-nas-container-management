@@ -128,6 +128,17 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
   (full manifest incl. discarded drafts), `/experiment` (arms + verdict),
   `/now` (state.json + say.json + recent uploads). Reads `say.json` itself via
   a local `_say()`, does not import `app.render`. See `docs/adr/0007`.
+- **Dashboard look (2026-09-02).** Token-based CSS shared in spirit with
+  `dupe-sweeper` (amber accent here), light/dark from the system with a
+  `localStorage` toggle and an anti-flash inline script in `<head>`, tables
+  collapsing to one card per row below 600px. `app/static/app.js` (~20 lines,
+  no dependency) does the toggle and a client-side outcome filter — filtering
+  stays in the browser so no route grows a query parameter. `/` leads with four
+  day-7 KPIs; `state.mode` is not one of them (a stale value would read as
+  live). `/clip` charts views over age as **inline SVG** built by
+  `dashboard._chart()`: `app.retention`'s Pillow rendering must never be
+  imported here, and `test_no_drawing_library_in_this_process` asserts `PIL`
+  and `edge_tts` are absent from `sys.modules`.
 - **Port 5071, not 5069 (2026-09-01).** The dashboard originally shipped on
   5069; that collided with `dupe-sweeper` which already owned it. Moved to
   5071 in `docker-compose.yml` — ADR 0002/0007 and the original design

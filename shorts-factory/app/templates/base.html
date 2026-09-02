@@ -1,18 +1,41 @@
 <!doctype html>
-<html lang="th">
+<html lang="th" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}shorts-factory{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css">
+  <!-- Inline and before the stylesheet paints: any later and the page flashes
+       the wrong theme on every navigation. -->
+  <script>
+    document.documentElement.dataset.theme =
+      localStorage.getItem('theme') ||
+      (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+  </script>
 </head>
 <body>
-  <nav>
-    <a href="/">คลิป</a>
-    <a href="/experiment">การทดลอง</a>
-    <a href="/now">สถานะตอนนี้</a>
-  </nav>
-  {% if gate %}<p class="warn">{{ gate }}</p>{% endif %}
-  <main>{% block content %}{% endblock %}</main>
+  <header>
+    <div class="bar">
+      <span class="brand">shorts-factory</span>
+      <nav>
+        <a href="/" {% if request.url.path == "/" %}aria-current="page"{% endif %}>คลิป</a>
+        <a href="/experiment" {% if request.url.path == "/experiment" %}aria-current="page"{% endif %}>การทดลอง</a>
+        <a href="/now" {% if request.url.path == "/now" %}aria-current="page"{% endif %}>สถานะตอนนี้</a>
+      </nav>
+      <button id="theme" type="button" title="สลับธีม" aria-label="สลับธีม">◐</button>
+    </div>
+  </header>
+  <main>
+    {# The Gate warning stays on every page (docs/adr/0004) — folded to one
+       line, never hidden. #}
+    {% if gate %}
+    <details class="warn">
+      <summary>{{ gate.split("—")[0] }}</summary>
+      <p>{{ gate }}</p>
+    </details>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+  <script src="/static/app.js"></script>
 </body>
 </html>
