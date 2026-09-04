@@ -1442,6 +1442,56 @@ def test_the_schema_retry_leads_with_the_smaller_model(monkeypatch):
     assert client.asked == [script_gen.PRIMARY_MODEL, script_gen.FALLBACK_MODEL]
 
 
+def test_an_unparseable_reply_does_not_pollute_the_retry(monkeypatch):
+    """Observed 2026-09-04: attempt 0 (pro model) returned 60 chars of
+    non-JSON after 167s. generate() appended that garbage to `messages` as an
+    assistant turn plus a "ส่ง JSON ใหม่" correction, then sent it to the
+    weaker fallback model, which replied with a 496-char fragment missing
+    `title`. The two-attempt cap then raised ScriptError with ~420s of the
+    600s budget unused — but the same prompt succeeds on a plain retry, so an
+    unparseable reply must be retried with `messages` unchanged instead."""
+    good = json.dumps({
+        "title": "t", "description": "d", "hashtags": ["#x"], "category": "เทค",
+        "cards": [a_card() for _ in range(5)],
+    })
+    replies = iter(["ก" * 60, good])
+    seen_messages = []
+
+    async def fake_say(client, messages, temperature, budget, models=None):
+        seen_messages.append(list(messages))
+        return next(replies)
+
+    monkeypatch.setattr(script_gen, "_say", fake_say)
+
+    result = asyncio.run(script_gen.generate("หัวข้อ"))
+    assert result["title"] == "t"
+    assert seen_messages[1] == seen_messages[0], (
+        "the garbage reply must not be appended before the retry"
+    )
+
+
+def test_attempts_are_bounded_by_the_deadline_not_a_fixed_count(monkeypatch):
+    """Before this fix, `for attempt in range(2):` gave up after exactly two
+    tries even when most of BUDGET_SECONDS was still unspent. Every attempt
+    below returns unparseable garbage, so the only thing that can stop the
+    loop is running out of budget — proving it is deadline-driven rather than
+    capped at two."""
+    monkeypatch.setattr(script_gen, "BUDGET_SECONDS", 0.2)
+    monkeypatch.setattr(script_gen, "MIN_ATTEMPT", 0.05)
+    calls = []
+
+    async def fake_say(client, messages, temperature, budget, models=None):
+        calls.append(models)
+        await asyncio.sleep(0.06)
+        return "ก" * 60  # never parses as JSON
+
+    monkeypatch.setattr(script_gen, "_say", fake_say)
+
+    with pytest.raises(script_gen.ScriptError):
+        asyncio.run(script_gen.generate("หัวข้อ"))
+    assert len(calls) > 2, "budget allowed more than the old hard count of 2"
+
+
 # --- footage the human generates in Flow (docs/adr/0005) ---------------------
 
 def _parked_state(tmp_path, clip_id="clip-1"):

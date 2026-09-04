@@ -21,10 +21,29 @@ decides to think rather than on the network. Measured on the NAS, same prompt:
 347s/10,585 — roughly 30 tokens a second every time. The old 240s cap cut off
 the long thinks and then retried, so a topic that needed 283s produced eight
 minutes of silence and an error; the budget is now 600s and it is **shared
-across both attempts**, because two full-length tries is twenty minutes of
+across every attempt**, because two full-length tries is twenty minutes of
 someone staring at "กำลังเขียนสคริปต์...". A timeout is therefore never
 retried — it has spent the whole budget by definition — while a script that
 comes back malformed is, since that leaves time on the clock.
+
+How many retries that buys is decided by the clock, not by a count. It used to
+be exactly two tries, which confuses "the budget ran out" with "the attempts
+ran out": on 2026-09-04 an unattended round got 60 characters of non-JSON from
+the pro model, spent its one retry on the small model, and gave up 172s in with
+420s unspent — on a topic that answered correctly on a plain retry minutes
+later. The loop now keeps trying while at least `MIN_ATTEMPT` of the budget is
+left, capped at four so an endpoint that fails in milliseconds cannot spin.
+
+Only a reply that parsed as JSON is quoted back to the model. A malformed
+*script* is worth answering with "this is what broke, send it again" — the
+model can see its own JSON and fix the field. A reply that was not JSON at all
+is not: appending it puts garbage in the context the next attempt reads, which
+is how that 2026-09-04 retry produced a 496-character fragment with no `title`.
+Those attempts retry with the conversation untouched. A reply the endpoint cut
+off (`finish_reason == "length"`) or left blank is rejected inside `_say()`
+before it can be parsed at all, and both failure branches log the first 300
+characters of what came back — logging only its length is why nobody could say
+what those 60 characters were.
 
 There is a second failure shape underneath that one. A request can take the
 headers and never deliver a body: observed 2026-08-27 at 19:25:45, "200 OK"

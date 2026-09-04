@@ -177,6 +177,24 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
   second however long it takes, and a stalled request never logs at all while
   its hedged twin does. The `HTTP Request: POST ... 200 OK` line lands ~8s
   after every mimo call (httpx logs on headers) and says nothing about health.
+- **`generate()` retries until the deadline, not twice.** Until 2026-09-04 the
+  loop was `for attempt in range(2)`: an attempt that failed fast burned an
+  attempt rather than time, and the 08:16 auto round gave up after 172s with
+  ~420s of the 600s budget still unspent, on a topic that succeeds on a plain
+  retry. It now loops while `deadline - now >= MIN_ATTEMPT`, capped at 4 so a
+  client that always fails fast cannot spin.
+- **Only a reply that parsed as JSON is fed back to the model.** A reply that
+  did not parse (the 60-character answer that started the above) is retried
+  with `messages` untouched — appending garbage plus a correction turn only
+  poisons the next model's context, and the small model answered that with a
+  fragment missing `title`. A parsed-but-invalid reply still gets the
+  append-and-correct turn, which is what that mechanism was for.
+- **A truncated reply is a failure, not an answer.** `once()` reads
+  `finish_reason` and raises on `"length"` or blank content, so the hedge and
+  retry handle it instead of `_parse()` choking on half a JSON object. The
+  reason is logged on the `ตอบใน ... วินาที` line, and both failure branches
+  log `raw[:300]` — the old warning logged only the length, which is why
+  nobody could say what those 60 characters were.
 - **The schema retry leads with `mimo-v2.5`, not the pro model.** It inherits
   only the remainder of the shared deadline, which can be shorter than a pro
   think (measured: 257s left against a 347s worst case). The hedge still goes

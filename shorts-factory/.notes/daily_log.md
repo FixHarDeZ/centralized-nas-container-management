@@ -1158,3 +1158,44 @@ Verified locally: `pytest tests/test_dashboard.py` → 16 passed; the app served
 against a sample `/data` returned 200 on `/`, `/clip/{id}`, `/experiment`,
 `/now`. `tests/test_shorts_factory.py` cannot be collected on the workstation
 (`edge_tts` is not installed there) — pre-existing, unrelated.
+
+## 2026-09-04 — generate() gave up at a hard-coded 2 attempts, wasting ~420s of budget
+
+Incident: an auto round's `generate()` attempt 0 (pro model) returned 60 chars
+of non-JSON after 167s. The old code appended that garbage to `messages` as
+an assistant turn plus a "ส่ง JSON ใหม่" correction and sent it to the weaker
+fallback model, which replied with a 496-char fragment missing `title`.
+`for attempt in range(2):` then ran out and raised `ScriptError` after only
+~172s of the 600s `BUDGET_SECONDS` — a plain retry of the same prompt
+succeeds, so the budget was there, the attempt count was not.
+
+Fixed in `app/script.py`:
+- `generate()`'s loop is deadline-driven (`while` on `deadline - now >=
+  MIN_ATTEMPT`, hard cap 4 attempts) instead of `for attempt in range(2)`.
+  Model selection unchanged: attempt 0 leads with the pro model, every later
+  attempt leads with the fallback.
+- A reply is now parsed *before* deciding whether to feed it back. Only a
+  reply that parsed as JSON but failed `validate()` gets appended to
+  `messages` with a correction (unchanged from before). A reply that did not
+  parse at all is retried with `messages` untouched — feeding garbage back
+  as an "assistant" turn only poisoned the next model's context.
+- `_say`'s `once()` now reads `finish_reason` (via `getattr`, defensive
+  against the test doubles that omit it) and raises `ScriptError` if it is
+  `"length"` or the content is blank, instead of quietly returning junk.
+  `generate()`'s `_say` call now also catches `ScriptError` (not just
+  `asyncio.TimeoutError`) and retries with `messages` unchanged.
+- The "model didn't return JSON" warning and the `ScriptError` message now
+  carry the first ~300 chars of the raw reply alongside the length, so the
+  next occurrence is diagnosable from the manifest's `error` field alone.
+- The final `ScriptError` now chains every attempt's failure, most-recent-
+  first (same idiom the timeout branch already used), so a fallback model's
+  schema slip no longer hides the pro model's earlier failure behind it —
+  main.py still truncates at 500 chars, so the newest failure is what survives.
+
+Added two tests to `tests/test_shorts_factory.py`: a garbage-then-good reply
+proves `messages` isn't polluted before the retry, and a deadline test proves
+more than 2 attempts happen when the budget allows and that the loop stops on
+the deadline rather than a fixed count.
+
+Verified in the running container (`/tmp/verify` scratch copy, container
+untouched): `pytest tests/test_shorts_factory.py -q` → **129 passed**.

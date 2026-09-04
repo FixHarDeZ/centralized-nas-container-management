@@ -197,11 +197,23 @@ async def _say(client: AsyncOpenAI, messages: list[dict], temperature: float,
         spent = time.monotonic() - started
         used = getattr(reply, "usage", None)
         tokens = getattr(used, "completion_tokens", 0) or 0
+        # Read defensively: the test doubles build a bare SimpleNamespace with
+        # no finish_reason at all, and a real reply that got cut off mid-JSON
+        # by the token cap reports "length" here rather than raising.
+        finish_reason = getattr(reply.choices[0], "finish_reason", None)
         logger.info(
-            "%s ตอบใน %.0f วินาที %d tokens (%.0f tokens/วินาที)",
-            model, spent, tokens, tokens / spent if spent else 0,
+            "%s ตอบใน %.0f วินาที %d tokens (%.0f tokens/วินาที) finish_reason=%s",
+            model, spent, tokens, tokens / spent if spent else 0, finish_reason,
         )
-        return reply.choices[0].message.content or ""
+        content = reply.choices[0].message.content or ""
+        if finish_reason == "length" or not content.strip():
+            # Junk here would otherwise be returned as if it were a real
+            # answer; raising lets the hedge/retry machinery treat it the same
+            # as any other failed attempt instead of feeding it to _parse().
+            raise ScriptError(
+                f"{model} ตอบไม่ครบ (finish_reason={finish_reason}, {len(content)} ตัวอักษร)"
+            )
+        return content
 
     primary, hedge_to = models or (PRIMARY_MODEL, FALLBACK_MODEL)
     running = {asyncio.create_task(once(primary))}
@@ -397,20 +409,26 @@ async def generate(
     # two full-length attempts is twenty minutes of a human staring at
     # "กำลังเขียนสคริปต์...".
     deadline = time.monotonic() + BUDGET_SECONDS
-    # One retry: a schema slip is usually fixed by telling the model what broke.
-    for attempt in range(2):
+    # Deadline-driven, not a fixed attempt count: a garbage 60-char reply can
+    # come back in seconds, and stopping at two tries then leaves most of a
+    # 600s budget unspent while a plain retry would have succeeded (observed
+    # 2026-09-04). Capped at 4 so a client that always fails fast cannot spin
+    # forever inside one budget.
+    attempt = 0
+    while attempt < 4:
         left = deadline - time.monotonic()
         if left < MIN_ATTEMPT:
             break
         # The retry only ever gets the remainder of the shared budget, and the
         # first attempt can eat almost all of it: measured 2026-08-29, a Script
         # came back after 343s and failed validate(), leaving 257s against a
-        # worst case think of 347s — a retry that could not finish. So the
-        # second attempt leads with the smaller model (149s measured on the
-        # same prompt) and hedges back to the pro. Fixing JSON to match a
-        # schema it has already been shown is not work that needs the pro
+        # worst case think of 347s — a retry that could not finish. So every
+        # attempt after the first leads with the smaller model (149s measured
+        # on the same prompt) and hedges back to the pro. Fixing JSON to match
+        # a schema it has already been shown is not work that needs the pro
         # model; finishing inside the leftovers is.
         models = None if attempt == 0 else (FALLBACK_MODEL, PRIMARY_MODEL)
+        attempt += 1
         try:
             raw = await _say(client, messages, temperature=0.8, budget=left,
                              models=models)
@@ -428,11 +446,50 @@ async def generate(
                 timed_out += f" — รอบก่อนหน้า: {last_error}"
             last_error = ScriptError(timed_out)
             continue
-        try:
-            return validate(_parse(raw))
         except ScriptError as exc:
-            logger.warning("สคริปต์ผิดกติกา: %s (raw %d ตัวอักษร)", exc, len(raw))
-            last_error = exc
+            # _say itself rejected the reply (truncated by finish_reason or
+            # empty) before it ever became text to parse. Same shape as an
+            # unparseable reply below: retry with messages untouched, there is
+            # nothing sane to feed back for a reply that was not really an
+            # answer.
+            last_error = ScriptError(
+                f"{exc} — รอบก่อนหน้า: {last_error}" if last_error is not None else str(exc)
+            )
+            continue
+        try:
+            parsed = _parse(raw)
+        except ScriptError as exc:
+            # Parsing failed outright: raw is not JSON at all (the 60-char
+            # garbage reply that started this). Feeding it back as an
+            # "assistant" turn only pollutes the conversation the *next*
+            # model reads, and it is not JSON the model itself agreed to, so
+            # retry with messages unchanged instead of the append-and-correct
+            # below.
+            excerpt = raw[:300]
+            logger.warning(
+                "โมเดลไม่ตอบเป็น JSON: %s (raw %d ตัวอักษร): %r",
+                exc, len(raw), excerpt,
+            )
+            msg = f"{exc} (raw {len(raw)} ตัวอักษร): {excerpt}"
+            last_error = ScriptError(
+                f"{msg} — รอบก่อนหน้า: {last_error}" if last_error is not None else msg
+            )
+            continue
+        try:
+            return validate(parsed)
+        except ScriptError as exc:
+            excerpt = raw[:300]
+            logger.warning(
+                "สคริปต์ผิดกติกา: %s (raw %d ตัวอักษร): %r", exc, len(raw), excerpt,
+            )
+            # Chained the same as the other two failure shapes above: without
+            # this, a fallback model's schema slip overwrites the pro model's
+            # earlier failure and the final message shows only the symptom,
+            # not the cause (observed 2026-09-04).
+            msg = f"{exc} (raw {len(raw)} ตัวอักษร): {excerpt}"
+            last_error = ScriptError(
+                f"{msg} — รอบก่อนหน้า: {last_error}" if last_error is not None else msg
+            )
             messages += [
                 {"role": "assistant", "content": raw},
                 {"role": "user", "content": f"สคริปต์ผิดกติกา: {exc} — ส่ง JSON ใหม่ให้ถูกกติกา"},
