@@ -2015,6 +2015,58 @@ def test_a_latin_line_that_clears_the_pixel_floor_is_still_rejected():
     assert script_gen._too_wide(line, "en") > 0, "the count must not"
 
 
+def test_an_over_long_english_line_is_rewrapped_not_rejected():
+    """The failure that cost four attempts on 2026-09-09: a 26-character line
+    two over the limit, splitting cleanly at a space. Fix it here instead of
+    spending a round trip asking the model to count."""
+    script = an_english_script()
+    script["cards"][1]["lines"] = ["Showa, Heisei, Millennium."]
+    out = script_gen.validate(script, "en")
+    lines = out["cards"][1]["lines"]
+    assert lines == ["Showa, Heisei,", "Millennium."]
+    assert all(script_gen._too_wide(x, "en") == 0 for x in lines)
+
+
+def test_rewrapping_leaves_the_lines_that_already_fit_alone():
+    """The model groups its lines on purpose. Only the offending one moves."""
+    script = an_english_script()
+    script["cards"][0]["lines"] = ["Before:", "and over 30 Godzilla movies.", "After:"]
+    out = script_gen.validate(script, "en")
+    assert out["cards"][0]["lines"] == [
+        "Before:", "and over 30 Godzilla", "movies.", "After:",
+    ]
+
+
+def test_a_card_that_cannot_be_rewrapped_is_told_the_total():
+    """Past 4 lines x 24 characters no per-line delta converges — the whole
+    card has to shrink, so say so once."""
+    script = an_english_script()
+    script["cards"][0]["lines"] = ["word " * 40]
+    with pytest.raises(script_gen.ScriptError, match="ยาวเกินการ์ด"):
+        script_gen.validate(script, "en")
+
+
+def test_thai_lines_are_never_rewrapped():
+    """Thai has no spaces to break on; the prompt makes the model break its
+    own lines for exactly this reason."""
+    script = a_script()
+    line = "ก" * 60
+    script["cards"][0]["lines"] = [line]
+    with pytest.raises(script_gen.ScriptError, match="กว้างเกินการ์ด"):
+        script_gen.validate(script)
+    assert script["cards"][0]["lines"] == [line]
+
+
+def test_every_broken_card_is_reported_at_once():
+    """One round trip per slip is what burnt the 2026-09-09 budget."""
+    script = a_script()
+    script["cards"][0]["query"] = ""
+    script["cards"][2]["narration"] = "  "
+    with pytest.raises(script_gen.ScriptError) as exc:
+        script_gen.validate(script)
+    assert "card 1" in str(exc.value) and "card 3" in str(exc.value)
+
+
 def test_the_english_voice_reads_an_english_clip(monkeypatch, tmp_path):
     seen = {}
 

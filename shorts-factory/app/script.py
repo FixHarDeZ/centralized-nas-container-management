@@ -418,6 +418,36 @@ def _too_wide(line: str, locale: str = locales.DEFAULT) -> int:
     return max(counted, 1, round(len(line) * (width - usable) / width))
 
 
+def _rewrap(lines: list[str], spec: dict) -> list[str]:
+    """Break the over-long lines of one card at word boundaries.
+
+    Only the offending line is touched, and only where the Locale has spaces
+    to break on. The lines that already fit are left exactly as the model sent
+    them: they are usually a deliberate grouping — an enumeration, a
+    before/after — and re-flowing the whole card as one paragraph destroys it.
+
+    A word longer than the limit is left on a line of its own; there is nowhere
+    to break it, and the pixel check downstream still gets to refuse it.
+    """
+    limit = spec["hard_max_chars"]
+    out: list[str] = []
+    for line in lines:
+        if len(line) <= limit:
+            out.append(line)
+            continue
+        current = ""
+        for word in line.split():
+            candidate = f"{current} {word}".strip()
+            if current and len(candidate) > limit:
+                out.append(current)
+                current = word
+            else:
+                current = candidate
+        if current:
+            out.append(current)
+    return out
+
+
 def validate(script: dict, locale: str = locales.DEFAULT) -> dict:
     """Reject a Script the renderer would mangle. Raises ScriptError.
 
@@ -434,30 +464,58 @@ def validate(script: dict, locale: str = locales.DEFAULT) -> dict:
     if not isinstance(cards, list) or not MIN_CARDS <= len(cards) <= MAX_CARDS:
         raise ScriptError(f"ต้องมี {MIN_CARDS}-{MAX_CARDS} card แต่ได้ {len(cards) if isinstance(cards, list) else '?'}")
 
+    # Every card is checked before anything is raised. Reporting only the first
+    # slip costs a full round trip per line: on 2026-09-09 an English Clip burnt
+    # all four attempts that way, each reply fixing the line the message named
+    # and overflowing another. The model can only fix what it is shown.
+    problems: list[str] = []
+
     for i, card in enumerate(cards, 1):
         lines = card.get("lines")
         if not isinstance(lines, list) or not 1 <= len(lines) <= MAX_LINES_PER_CARD:
-            raise ScriptError(f"card {i}: lines ต้องมี 1-{MAX_LINES_PER_CARD} บรรทัด")
+            problems.append(f"card {i}: lines ต้องมี 1-{MAX_LINES_PER_CARD} บรรทัด")
+            lines = []
+        if lines and spec.get("wrap_lines") and all(isinstance(x, str) for x in lines):
+            # Fix the width ourselves where the script has word boundaries to
+            # break on, rather than spending an attempt asking. Only if the
+            # rewrap needs more lines than a card holds is this the model's
+            # problem, and then the total — not any one line — is what has to
+            # come down.
+            wrapped = _rewrap(lines, spec)
+            if len(wrapped) > MAX_LINES_PER_CARD:
+                total = sum(len(x) for x in lines)
+                budget = MAX_LINES_PER_CARD * spec["hard_max_chars"]
+                problems.append(
+                    f"card {i}: ข้อความบนจอยาวเกินการ์ด ({total} ตัวอักษร) "
+                    f"ต้องเหลือไม่เกิน {budget} ตัวอักษรรวมทุกบรรทัด"
+                )
+            else:
+                lines = wrapped
+                card["lines"] = wrapped
         for line in lines:
             if not isinstance(line, str) or not line.strip():
-                raise ScriptError(f"card {i}: มีบรรทัดว่าง")
+                problems.append(f"card {i}: มีบรรทัดว่าง")
+                continue
             over = _too_wide(line, locale)
             if over:
                 # Say how much to cut: this message is fed back to the model on
                 # the retry, and it cannot measure the line itself. Only offer
-                # the extra line where the card has one left to give.
+                # the extra line where the card has one left to give — and never
+                # where we do the wrapping ourselves, since the invitation is
+                # what pushed one reply to five lines on 2026-09-09.
                 room = (
                     " (ขึ้นบรรทัดใหม่ได้ ไม่ทำให้คลิปยาวขึ้น)"
-                    if len(lines) < MAX_LINES_PER_CARD else ""
+                    if len(lines) < MAX_LINES_PER_CARD and not spec.get("wrap_lines")
+                    else ""
                 )
-                raise ScriptError(
+                problems.append(
                     f"card {i}: บรรทัดกว้างเกินการ์ด ต้องตัดออกอีกราว {over} ตัว{room}: {line}"
                 )
         if not str(card.get("narration", "")).strip():
-            raise ScriptError(f"card {i}: ไม่มี narration")
+            problems.append(f"card {i}: ไม่มี narration")
         spoken = str(card.get("spoken", "")).strip()
         if not spoken:
-            raise ScriptError(f"card {i}: ไม่มี spoken (narration ฉบับที่เสียงอ่านได้)")
+            problems.append(f"card {i}: ไม่มี spoken (narration ฉบับที่เสียงอ่านได้)")
         # A Latin word makes the Thai voice switch accent mid-sentence: it reads
         # the English at English pace, which lands as a rushed, unclear burst
         # inside Thai speech. The screen keeps the real spelling; only the voice
@@ -467,12 +525,15 @@ def validate(script: dict, locale: str = locales.DEFAULT) -> dict:
         found = forbidden.findall(spoken)
         if found:
             wrong = "ละติน" if spec["spoken_script"] == "thai" else "ไทย"
-            raise ScriptError(
+            problems.append(
                 f"card {i}: spoken มีตัวอักษร{wrong} ({found[:3]}) ต้องเขียนเป็น"
                 f"{'ไทย' if spec['spoken_script'] == 'thai' else 'อังกฤษ'}ทั้งหมด"
             )
         if not str(card.get("query", "")).strip():
-            raise ScriptError(f"card {i}: ไม่มี query สำหรับหา footage")
+            problems.append(f"card {i}: ไม่มี query สำหรับหา footage")
+
+    if problems:
+        raise ScriptError(" | ".join(problems))
     return script
 
 

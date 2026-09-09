@@ -57,6 +57,13 @@ LOCALES = {
         # floor would pass a 38-character Latin line and then draw it at the
         # 40px minimum. See script._too_wide().
         "enforce_char_count": True,
+        # Latin has spaces, so a line that came back a few characters over can
+        # be re-broken at a word boundary instead of costing a whole round trip
+        # to the model — which is what happened: four attempts in a row, each
+        # fixing the one line the error named and breaking another (2026-09-09).
+        # Thai cannot have this: it does not put spaces between words, which is
+        # the same reason its prompt makes the model break its own lines.
+        "wrap_lines": True,
         "captions": "en",
         "subdir": "en",
         "trends_geo": "US",

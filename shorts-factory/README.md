@@ -166,6 +166,24 @@ the renderer applies whichever cut — pixels or characters — is larger. Thai
 keeps the pixel measurement only; its 34-character guidance to the model has
 never been a hard limit.
 
+An English line that comes back a few characters over is **re-broken here, not
+sent back to the model**: Latin has spaces to break on, so `script._rewrap()`
+splits the offending line at a word boundary and leaves the lines that already
+fit untouched (the model groups them on purpose — an enumeration, a
+before/after — and re-flowing the whole card destroys that). Only when the
+rewrap needs more than 4 lines is it the model's problem, and then the message
+names the card's *total* character budget rather than a per-line delta, because
+no per-line correction converges once the whole card is too long. Thai gets
+none of this: it puts no spaces between words, which is the same reason its
+prompt makes the model break its own lines.
+
+`validate()` also checks **every** card before raising and reports all the
+slips in one message. Reporting only the first cost a full round trip per line:
+on 2026-09-09 an English continuation burnt all four attempts, each reply
+fixing the line the error named and overflowing another, and one of them took
+the "you may add a line" hint to five lines. That hint is now offered only to a
+Locale whose lines we do not wrap ourselves.
+
 The `spoken` field — the transliteration the voice actually reads, separate
 from the `narration` shown as subtitles — mirrors the same rule the other way:
 Thai `spoken` may hold no Latin characters, English `spoken` may hold no Thai

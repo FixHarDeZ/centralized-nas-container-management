@@ -348,3 +348,10 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
   human still uploads it by hand from `/volume1/shorts/en`.
   `storyboard.SHORTS_LAYOUT` also still describes its negative space as being
   "for Thai subtitles" — left alone in this batch.
+- **English line width is self-healing since 2026-09-09.** `validate()`
+  re-breaks an over-long Latin line at a word boundary (`script._rewrap()`,
+  gated on the locale key `wrap_lines`) instead of spending a model round trip
+  on it, and reports every card's slips in one message rather than the first
+  one it finds. Thai is deliberately excluded — no word boundaries. The only
+  thing the model is still asked to fix is a card whose *total* on-screen text
+  exceeds 4 x 24 characters.

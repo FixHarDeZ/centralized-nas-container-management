@@ -1571,3 +1571,37 @@ always made English clips through them — only the pair row was wrong.
 Test: `test_an_english_trends_list_has_no_pair_row`. Suite: 194 passed, 8
 pre-existing font failures on the workstation (no Waree/libraqm; same 8 fail on
 a clean tree).
+
+## 2026-09-09 — the English half of a pair could not get past `validate()`
+
+The Thai clip rendered, `continue_pair()` started the English one, and the
+script never came back: four attempts, four rejections, all of them the same
+class. Read the chain backwards — card 1 too wide by 4, card 2 too wide by 6,
+card 2 **five lines**, card 2 too wide by 2. Whack-a-mole. `validate()` raised
+on the first slip it found, so each reply fixed the line the message named and
+overflowed a different one, and the "ขึ้นบรรทัดใหม่ได้" hint invited the
+five-line reply that failed attempt 3. Every offending line was 26-30
+characters against the English cap of 24, and every one split cleanly at a
+space: `Showa, Heisei,` / `Millennium.`
+
+Two fixes, both in `validate()`:
+
+- **Rewrap instead of asking.** New locale key `wrap_lines`, on `en` only.
+  `_rewrap()` re-breaks an over-long line at a word boundary and leaves the
+  lines that already fit exactly as the model wrote them — they are usually a
+  deliberate grouping, and re-flowing the card as one paragraph destroys it. A
+  word longer than the cap keeps its own line; the pixel check still gets to
+  refuse it. Thai cannot have this and does not get it: no spaces to break on,
+  which is why its prompt makes the model break its own lines.
+  Only if the rewrap needs more than `MAX_LINES_PER_CARD` lines is the model
+  told anything, and then it is the card's *total* budget (4 x 24 = 96
+  characters), not a per-line delta — past that point no per-line correction
+  can converge.
+- **Report every slip at once.** Per-card problems accumulate into a list and
+  raise as one message joined with ` | `. Structural failures (missing field,
+  card count) still raise immediately, since nothing after them is meaningful.
+  The extra-line hint is now offered only where we do not wrap ourselves.
+
+Tests: 5 new (rewrap, lines-that-fit left alone, the total-budget message, Thai
+never rewrapped, all cards reported). Suite 180 passed, the same 8 pre-existing
+font failures as a clean tree (no Waree/libraqm on the workstation).
