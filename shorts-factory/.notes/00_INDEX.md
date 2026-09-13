@@ -143,7 +143,9 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
 - **The synthesis endpoint drops whole calls.** `NoAudioReceived` ("No audio
   was received. Please verify that your parameters are correct.") is raised
   from `stream()` as well as `save()`, reads like a parameter error, and is
-  not — the same text speaks fine seconds later (2026-09-13). `_with_retry()`
+  not: 2026-09-13 an English clip died in `speak()` at 23:23 while another
+  English clip on the same voice rendered at 19:09 that evening (log, not
+  reproduced on demand). `_with_retry()`
   wraps both `narrate()` and `speak()`: `TTS_ATTEMPTS` (3), backoff growing by
   attempt, a fresh `Communicate` and a reopened file each time (`stream()`
   runs once per object; a half-written take must not be prepended). Exhausted
@@ -378,3 +380,7 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
   one it finds. Thai is deliberately excluded — no word boundaries. The only
   thing the model is still asked to fix is a card whose *total* on-screen text
   exceeds 4 x 24 characters.
+- An expired park now says the queued English half goes with it
+  (`drop_parked()`), and `render_parked()` hands `PARK_KEYBOARD` back on every
+  refusal — `on_footage()` decides about the button from a mode read taken
+  before its own sendMessage.

@@ -461,8 +461,8 @@ def test_narration_is_one_take_with_a_start_per_card():
 
 def test_a_synthesis_that_returns_no_audio_is_asked_again(monkeypatch, tmp_path):
     """`NoAudioReceived` reads like a bad request and is not: the endpoint
-    drops whole calls at random and the same text speaks fine seconds later
-    (2026-09-13, an English clip that died mid-render)."""
+    drops single calls at random — 2026-09-13, an English clip died in
+    `speak()` at 23:23 while another rendered on the same voice at 19:09."""
     monkeypatch.setattr(render, "TTS_BACKOFF", 0)
     tries = []
 
@@ -2682,6 +2682,50 @@ def test_a_queued_pair_travels_with_the_parked_clip(monkeypatch, tmp_path):
     state["parked"]["footage"] = {"0": str(tmp_path / "c00.mp4")}
     asyncio.run(main.render_parked(None, state))
     assert state["pair"]["footage"] == {"0": str(tmp_path / "c00.mp4")}
+
+
+def test_an_expired_park_says_the_english_half_goes_too(monkeypatch, tmp_path):
+    """The queued half rides inside the parked record, so expiry kills it —
+    said out loud, the way do_render() says it when a render fails."""
+    monkeypatch.setattr(manifest, "DIR", tmp_path / "clips")
+    said = []
+
+    async def fake_say(client, text, **extra):
+        said.append(text)
+        return {"message_id": 1}
+
+    monkeypatch.setattr(main, "say", fake_say)
+    parked = {"clip_id": manifest.start("หัวข้อ"), "script": a_script(),
+              "pair": {"topic": "หัวข้อ", "pair_id": "clip-th"}}
+    asyncio.run(main.drop_parked(None, parked))
+    assert "ภาษาอังกฤษ" in said[0]
+
+    said.clear()
+    asyncio.run(main.drop_parked(None, {"clip_id": None, "script": a_script()}))
+    assert "ภาษาอังกฤษ" not in said[0]
+
+
+def test_a_busy_bot_hands_the_render_button_back(monkeypatch, tmp_path):
+    """on_footage() reads the mode before its own sendMessage, so a job that
+    starts in between would strand the reply with no button at all."""
+    monkeypatch.setattr(manifest, "DIR", tmp_path / "clips")
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+    markups = []
+
+    async def fake_say(client, text, **extra):
+        markups.append(extra.get("reply_markup"))
+        return {"message_id": 1}
+
+    monkeypatch.setattr(main, "say", fake_say)
+    state = {"mode": "rendering", "parked": {"clip_id": "c1", "script": a_script()}}
+    asyncio.run(main.render_parked(None, state))
+    assert markups[-1] == main.PARK_KEYBOARD
+    assert state["parked"], "the clip stays parked while the bot is busy"
+
+    markups.clear()
+    state["mode"] = "review"
+    asyncio.run(main.render_parked(None, state))
+    assert markups[-1] == main.PARK_KEYBOARD
 
 
 def test_the_sibling_note_asks_for_a_rewrite_not_a_translation():

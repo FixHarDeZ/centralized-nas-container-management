@@ -872,14 +872,19 @@ async def render_parked(client: httpx.AsyncClient, state: dict) -> None:
         await say(client, "คลิปนี้ไม่อยู่แล้ว (น่าจะหมดอายุไปก่อน) เริ่มหัวข้อใหม่ได้เลย")
         return
     mode = state.get("mode", "idle")
+    # Every refusal carries the keyboard back: on_footage() decides whether to
+    # send it from a mode read taken before its own sendMessage, so a job that
+    # starts in between would leave the reply with no button and a message
+    # telling the human to press one.
     if mode in BUSY_MODES:
         job = "เขียนสคริปต์" if mode == "writing" else "render"
-        await say(client, f"⏳ กำลัง{job}อยู่ รอให้เสร็จก่อนนะ")
+        await say(client, f"⏳ กำลัง{job}อยู่ รอให้เสร็จก่อนนะ", reply_markup=PARK_KEYBOARD)
         return
     if mode == "review":
         # Rendering the parked Script here would overwrite the one on screen
         # and leave it in the Manifest with no outcome at all.
-        await say(client, "ยังมีสคริปต์ค้างรีวิวอยู่ กด 🎬 หรือ 🗑 ให้อันนั้นก่อน แล้วค่อยกลับมากด render อันนี้")
+        await say(client, "ยังมีสคริปต์ค้างรีวิวอยู่ กด 🎬 หรือ 🗑 ให้อันนั้นก่อน แล้วค่อยกลับมากด render อันนี้",
+                  reply_markup=PARK_KEYBOARD)
         return
     state.pop("parked", None)
     supplied = {int(i): Path(path) for i, path in (parked.get("footage") or {}).items()}
@@ -909,7 +914,10 @@ async def drop_parked(client: httpx.AsyncClient, parked: dict) -> None:
     """
     manifest.update(parked.get("clip_id"), outcome="abandoned")
     title = (parked.get("script") or {}).get("title", "")
-    await say(client, f"⌛️ หมดเวลารอ footage แล้ว ทิ้งคลิปนี้ไป: {title}")
+    # A queued second language rides inside the Parked record, so it dies here
+    # too — said out loud for the same reason do_render() says it on failure.
+    tail = "\n(ยกเลิกภาษาอังกฤษของหัวข้อนี้ด้วย)" if parked.get("pair") else ""
+    await say(client, f"⌛️ หมดเวลารอ footage แล้ว ทิ้งคลิปนี้ไป: {title}{tail}")
 
 
 # --- storyboard prompts (docs/adr/0006) --------------------------------------

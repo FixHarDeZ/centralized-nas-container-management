@@ -210,9 +210,11 @@ def _tts_text(card: dict, locale: str = locales.DEFAULT) -> str:
 # The synthesis endpoint fails whole calls at random: a socket that closes
 # with nothing on it surfaces as NoAudioReceived ("No audio was received.
 # Please verify that your parameters are correct."), which reads like a bad
-# request and is not — the same Script speaks fine seconds later (seen
-# 2026-09-13, an English Clip that died mid-render). Asking again is the only
-# handling there is.
+# request and is not: the voice and the text were fine — an English Clip died
+# in speak() at 23:23 on 2026-09-13 while another English Clip on the same
+# voice rendered at 19:09 the same evening, so the endpoint is refusing single
+# calls, not the parameters. Not reproduced on demand; asking again is the only
+# handling there is either way.
 TTS_FAILURES = (edge_tts.exceptions.EdgeTTSException, aiohttp.ClientError,
                 asyncio.TimeoutError)
 TTS_ATTEMPTS = int(os.environ.get("TTS_ATTEMPTS", "3"))

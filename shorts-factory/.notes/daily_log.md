@@ -1637,7 +1637,9 @@ still sitting there. `pair` now rides inside `parked` and is restored by
 `render ล้มเหลว: No audio was received. Please verify that your parameters are
 correct.` on an English clip. edge-tts raises it from `stream()` (not only
 `save()`) when the socket closes with no audio on it — the endpoint drops whole
-calls at random and the same script speaks fine seconds later. `_with_retry()`
+calls at random: the clip died at 23:23 while another English clip on the
+same voice rendered at 19:09 the same evening (log evidence; not reproduced on
+demand, so the retry is the handling either way). `_with_retry()`
 asks again `TTS_ATTEMPTS` (3) times with a backoff that grows by attempt, on
 both `narrate()` and `speak()`. A fresh `Communicate` per attempt, because
 `stream()` refuses to run twice on one object, and the file is reopened so a
@@ -1656,3 +1658,21 @@ reviewed, `pair` travels inside `parked`, TTS retried then recovered, a dead
 endpoint falls back to per-card, trends re-asked once and then gives up). Suite
 208 passed, the same 8 pre-existing font failures as a clean tree (no
 Waree/libraqm on the workstation).
+
+**Two holes the same change opened.** `drop_parked()` now says the queued
+English half dies with the expired clip — it rides inside `parked`, so expiry
+was discarding it silently while the render-failure path has always announced
+it. And `render_parked()` sends `PARK_KEYBOARD` on both refusal branches:
+`on_footage()` reads the mode *before* its own sendMessage, so a job starting
+in between left the reply with no button and a message telling the human to
+press one. 210 passed, same 8 font failures.
+
+**What the log actually says about `NoAudioReceived`.** The traceback is in
+`speak()` (line 263), reached after `narrate()` had already fallen back on its
+own — `ได้ขอบเขตประโยค 7 อัน แต่มี 6 card`. So the whole-clip take was not the
+casualty; a per-card call was, and the per-card path is the fallback, which is
+why the clip died outright. The English voice and env are fine
+(`TTS_VOICE_EN=en-US-AndrewNeural`) and `/output/en` has a clip rendered at
+19:09 the same evening, four hours before the 23:23 failure. Endpoint refusing
+single calls, not a parameter fault — but not reproduced on demand, so the
+retry is justified without the claim that it always recovers.
