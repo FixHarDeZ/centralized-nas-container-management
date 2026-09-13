@@ -318,8 +318,21 @@ tap, and then gets out of the way. You paste it into the Google Flow app
 The reply is what makes the matching exact — the message id says which card the
 file belongs to, so nothing is inferred from filenames or the order things
 arrive in. The bot files it under `/volume1/shorts/footage/<clip_id>/c00.mp4`,
-which outlives the workdir, and offers a 🎬 button. Cards without supplied
-footage still go to Pexels as usual.
+which outlives the workdir, and **starts rendering right away** — the script
+was already reviewed before you pressed 🎨, so the file arriving is the
+go-ahead and there is nothing left to tap. Cards without supplied footage still
+go to Pexels as usual.
+
+The 🎬 button only comes back when the bot cannot start: a reply that lands
+while another script is under review, or mid-render, keeps its button and says
+so, because without one that clip would be stranded. Send a new file any time
+before it starts and the newer one wins.
+
+If the clip is half of a 🌏 pair, the English half **reuses the same footage and
+renders itself** — the hook shot is the same in both languages, and you already
+approved the angle in Thai. A pair with no Flow footage keeps its normal review
+step. If the file has gone missing by then, the bot says so and falls back to
+Pexels with the usual review rather than quietly shipping stock footage.
 
 While a clip is parked the bot is idle: send another topic, run any command.
 What it will not do is park a second clip, or pick a topic on its own — you are
@@ -640,6 +653,8 @@ make secrets                    # render .env from vault + manifest
 | `FLOW_PROMPT_TIMEOUT_SECONDS` | `180` | cap on writing one Flow Prompt |
 | `STORYBOARD_TIMEOUT_SECONDS` | `300` | cap on planning one storyboard |
 | `TTS_VOICE_EN` | `en-US-AndrewNeural` | the English Locale's voice, used by `/en` and `/trends en` clips |
+| `TTS_ATTEMPTS` | `3` | tries per synthesis call; the endpoint drops whole calls at random (`No audio was received`) |
+| `TTS_BACKOFF_SECONDS` | `3` | wait before the next try, multiplied by the try number |
 
 The `/volume1/shorts` shared folder must exist on the NAS before first run;
 create it in DSM (Control Panel → Shared Folder), it is not created by the

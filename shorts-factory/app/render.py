@@ -10,6 +10,7 @@ import re
 import subprocess
 from pathlib import Path
 
+import aiohttp
 import edge_tts
 from PIL import Image, ImageDraw, ImageFont, features
 
@@ -206,6 +207,32 @@ def _tts_text(card: dict, locale: str = locales.DEFAULT) -> str:
     return text
 
 
+# The synthesis endpoint fails whole calls at random: a socket that closes
+# with nothing on it surfaces as NoAudioReceived ("No audio was received.
+# Please verify that your parameters are correct."), which reads like a bad
+# request and is not — the same Script speaks fine seconds later (seen
+# 2026-09-13, an English Clip that died mid-render). Asking again is the only
+# handling there is.
+TTS_FAILURES = (edge_tts.exceptions.EdgeTTSException, aiohttp.ClientError,
+                asyncio.TimeoutError)
+TTS_ATTEMPTS = int(os.environ.get("TTS_ATTEMPTS", "3"))
+TTS_BACKOFF = float(os.environ.get("TTS_BACKOFF_SECONDS", "3"))
+
+
+async def _with_retry(attempt, what: str):
+    """Run a synthesis call, asking again on the endpoint's random failures."""
+    for n in range(1, TTS_ATTEMPTS + 1):
+        try:
+            return await attempt()
+        except TTS_FAILURES as exc:
+            if n == TTS_ATTEMPTS:
+                raise
+            logger.warning("%s ล้มเหลวครั้งที่ %d/%d (%s) รออีก %.0fs แล้วลองใหม่",
+                           what, n, TTS_ATTEMPTS, exc, TTS_BACKOFF * n)
+            await asyncio.sleep(TTS_BACKOFF * n)
+    raise AssertionError("unreachable")
+
+
 async def narrate(cards: list[dict], path: Path,
                   locale: str = locales.DEFAULT) -> tuple[Path, list[float]] | None:
     """Speak the whole Script in one breath and report where each Card starts.
@@ -221,19 +248,33 @@ async def narrate(cards: list[dict], path: Path,
     back to speaking each Card separately.
     """
     narrations = [_tts_text(c, locale) for c in cards]
-    communicate = edge_tts.Communicate(
-        CARD_SEPARATOR.join(narrations),
-        locales.voice(locale),
-        rate=os.environ.get("TTS_RATE", "+0%"),
-        pitch=os.environ.get("TTS_PITCH", "+0Hz"),
-    )
-    bounds: list[tuple[float, str]] = []
-    with path.open("wb") as handle:
-        async for chunk in communicate.stream():
-            if chunk["type"] == "audio":
-                handle.write(chunk["data"])
-            elif chunk["type"] == "SentenceBoundary":
-                bounds.append((chunk["offset"] / 1e7, str(chunk.get("text", ""))))
+
+    async def once() -> list[tuple[float, str]]:
+        # A fresh Communicate every attempt: stream() refuses to run twice on
+        # the same object, and the file is reopened so a half-written take
+        # cannot be prepended to the next one.
+        communicate = edge_tts.Communicate(
+            CARD_SEPARATOR.join(narrations),
+            locales.voice(locale),
+            rate=os.environ.get("TTS_RATE", "+0%"),
+            pitch=os.environ.get("TTS_PITCH", "+0Hz"),
+        )
+        heard: list[tuple[float, str]] = []
+        with path.open("wb") as handle:
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    handle.write(chunk["data"])
+                elif chunk["type"] == "SentenceBoundary":
+                    heard.append((chunk["offset"] / 1e7, str(chunk.get("text", ""))))
+        return heard
+
+    try:
+        bounds = await _with_retry(once, "narrate")
+    except TTS_FAILURES as exc:
+        # Not fatal here: the caller still has the per-Card path, which opens
+        # its own connections and has come back from a bad one before.
+        logger.warning("พูดรวดเดียวไม่สำเร็จ (%s) ลองพูดทีละ card แทน", exc)
+        return None
 
     if len(bounds) != len(cards):
         logger.warning("ได้ขอบเขตประโยค %d อัน แต่มี %d card", len(bounds), len(cards))
@@ -260,12 +301,15 @@ async def speak(text: str, path: Path, locale: str = locales.DEFAULT) -> Path:
     Rate and pitch are configurable because edge-tts defaults read slow and
     flat; they are the only prosody knobs the endpoint exposes.
     """
-    await edge_tts.Communicate(
-        text,
-        locales.voice(locale),
-        rate=os.environ.get("TTS_RATE", "+0%"),
-        pitch=os.environ.get("TTS_PITCH", "+0Hz"),
-    ).save(str(path))
+    async def once() -> None:
+        await edge_tts.Communicate(
+            text,
+            locales.voice(locale),
+            rate=os.environ.get("TTS_RATE", "+0%"),
+            pitch=os.environ.get("TTS_PITCH", "+0Hz"),
+        ).save(str(path))
+
+    await _with_retry(once, f"พูด card ({text[:20]})")
     return path
 
 

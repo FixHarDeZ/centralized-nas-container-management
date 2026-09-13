@@ -534,7 +534,8 @@ async def make_script(client: httpx.AsyncClient, state: dict, topic: str,
                       feedback: str = "", auto: bool = False,
                       locale: str | None = None,
                       sibling: dict | None = None,
-                      pair_id: str | None = None) -> None:
+                      pair_id: str | None = None,
+                      supplied: dict[int, Path] | None = None) -> None:
     previous = state.get("script") if feedback else None
     # A revision belongs to the Clip already open, and that Clip's Locale is
     # not up for renegotiation halfway through.
@@ -671,7 +672,7 @@ async def make_script(client: httpx.AsyncClient, state: dict, topic: str,
     if auto:
         # Inside the success path on purpose: a generate failure returns above
         # with no Script in state, and rendering that is a KeyError.
-        await do_render(client, state)
+        await do_render(client, state, supplied=supplied)
 
 
 async def do_render(client: httpx.AsyncClient, state: dict,
@@ -781,6 +782,11 @@ async def on_flow(client: httpx.AsyncClient, state: dict) -> None:
         # otherwise decide this Clip's voice and folder when it finally renders.
         "locale": state.get("locale", locales.DEFAULT),
         "card": 0,
+        # A queued second language belongs to this Clip, not to whatever Topic
+        # the human starts while the Footage is being generated: left in the
+        # live state, the next Clip to render would spawn continue_pair() for
+        # a Topic that is still sitting in `parked`.
+        "pair": state.pop("pair", None),
         "prompt": prompt,
         "prompt_message_id": (sent or {}).get("message_id"),
         "created_at": datetime.now().isoformat(timespec="seconds"),
@@ -839,15 +845,24 @@ async def on_footage(client: httpx.AsyncClient, state: dict, message: dict) -> N
         return
     parked.setdefault("footage", {})[str(card)] = str(dest)
     save_state(state)
+    # The Footage arriving *is* the approval — the Script was already reviewed
+    # before 🎨 was pressed, and a second button adds a round trip on a phone
+    # for nothing. The keyboard is still offered when the bot cannot render
+    # right now, or a reply that lands mid-review would be stranded with no
+    # way left to start it.
+    free = state.get("mode", "idle") == "idle"
     sent = await say(
         client,
         f"✅ ได้ footage แล้ว ({dest.stat().st_size / 1_000_000:.1f}MB)\n"
         f"📝 {parked['script']['title']}\n"
-        "ส่งไฟล์ใหม่ทับได้เรื่อยๆ จนกว่าจะกด render",
-        reply_markup=PARK_KEYBOARD,
+        + ("🎬 เริ่ม render ให้เลย" if free else
+           "ตอนนี้บอทไม่ว่าง — กด render เมื่อพร้อม (ส่งไฟล์ใหม่ทับได้เรื่อยๆ)"),
+        **({} if free else {"reply_markup": PARK_KEYBOARD}),
     )
     parked["ready_message_id"] = (sent or {}).get("message_id")
     save_state(state)
+    if free:
+        await render_parked(client, state)
 
 
 async def render_parked(client: httpx.AsyncClient, state: dict) -> None:
@@ -868,6 +883,14 @@ async def render_parked(client: httpx.AsyncClient, state: dict) -> None:
         return
     state.pop("parked", None)
     supplied = {int(i): Path(path) for i, path in (parked.get("footage") or {}).items()}
+    pair = parked.get("pair")
+    if pair:
+        # Handed over at render time, not at download time: what the second
+        # language reuses is whatever actually went into this Clip, after any
+        # number of overwrites. Only card 0 can be here — 🎨 parks the Hook and
+        # nothing else — so the indices line up across Locales by construction.
+        pair["footage"] = {str(i): str(path) for i, path in supplied.items()}
+        state["pair"] = pair
     state.update(
         script=parked["script"], topic=parked.get("topic"),
         clip_id=parked.get("clip_id"), style=parked.get("style", ""),
@@ -1576,9 +1599,21 @@ async def continue_pair(client: httpx.AsyncClient, state: dict) -> None:
     if not pair:
         return
     sibling = state.get("last_script")
-    await say(client, "🌏 ต่อภาษาอังกฤษของหัวข้อเดิม กำลังเขียนสคริปต์...")
+    # Footage the human generated in Flow is language-neutral — the Hook Card
+    # is the same shot in both — so the second half reuses the file instead of
+    # asking for it again, and renders unattended: there is nothing new to
+    # approve that the Thai half did not already settle.
+    supplied = {int(i): Path(path) for i, path in (pair.get("footage") or {}).items()
+                if Path(path).is_file()}
+    missing = bool(pair.get("footage")) and not supplied
+    if missing:
+        await say(client, "⚠️ หา footage ของคลิปไทยไม่เจอแล้ว อังกฤษจะใช้ stock footage แทน "
+                          "(รีวิวสคริปต์ก่อน แล้วค่อยกด render)")
+    await say(client, "🌏 ต่อภาษาอังกฤษของหัวข้อเดิม กำลังเขียนสคริปต์..."
+                      + (" ได้ footage เดิมแล้ว render ต่อให้เลย" if supplied else ""))
     await make_script(client, state, pair["topic"], locale="en", sibling=sibling,
-                      pair_id=pair.get("pair_id"))
+                      pair_id=pair.get("pair_id"),
+                      auto=bool(supplied), supplied=supplied or None)
 
 
 async def on_pick(client: httpx.AsyncClient, state: dict, data: str,

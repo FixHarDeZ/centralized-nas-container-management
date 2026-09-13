@@ -615,18 +615,33 @@ async def suggest_topics(rows: list[dict], locale: str = locales.DEFAULT) -> lis
         + (f" — ข่าว: {row['headline']}" if row.get("headline") else "")
         for row in rows
     )
-    raw = await _say(
-        _client(),
-        [{"role": "system", "content": trends_prompt(locale)},
-         {"role": "user", "content": listing}],
-        temperature=0.7,
-        budget=BUDGET_SECONDS,
-    )
-    parsed = _parse(raw)
-    topics = parsed.get("topics")
-    if not isinstance(topics, list) or not topics:
-        raise ScriptError("โมเดลไม่ได้เสนอหัวข้อมาเลย")
-    return [t for t in topics if str(t.get("topic", "")).strip()][:5]
+    messages = [{"role": "system", "content": trends_prompt(locale)},
+                {"role": "user", "content": listing}]
+    client = _client()
+    # A reply in prose instead of JSON is a coin flip this model loses now and
+    # then, and the whole round is thrown away over it — the automatic /trends
+    # rounds have nobody watching to ask again. Saying what came back wrong is
+    # what fixes it; the same listing asked twice usually parses the second
+    # time (seen 2026-09-13, an 08:36 automatic round).
+    for attempt in (1, 2):
+        raw = await _say(client, messages, temperature=0.7, budget=BUDGET_SECONDS)
+        try:
+            parsed = _parse(raw)
+            topics = parsed.get("topics")
+            if not isinstance(topics, list) or not topics:
+                raise ScriptError("โมเดลไม่ได้เสนอหัวข้อมาเลย")
+            return [t for t in topics if str(t.get("topic", "")).strip()][:5]
+        except ScriptError as exc:
+            if attempt == 2:
+                raise
+            logger.warning("trends: %s — ขอใหม่อีกครั้ง", exc)
+            messages = messages + [
+                {"role": "assistant", "content": raw[:2000]},
+                {"role": "user", "content":
+                 f"คำตอบก่อนหน้าใช้ไม่ได้ ({exc}) ตอบใหม่เป็น JSON object ล้วนๆ "
+                 'ขึ้นต้นด้วย { และมีคีย์ "topics" เท่านั้น ห้ามมีข้อความอื่นนอก JSON'},
+            ]
+    raise AssertionError("unreachable")
 
 
 async def generate(

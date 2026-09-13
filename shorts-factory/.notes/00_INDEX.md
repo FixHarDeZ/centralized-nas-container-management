@@ -129,6 +129,29 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
   `render.build(..., supplied={0: path})`. One parked Clip at a time, 24h to
   live, `auto_pick_due()` stands down while one exists. The bot never calls a
   video model itself: `docs/adr/0005`.
+- **The footage reply renders itself (2026-09-13).** No 🎬 tap: the Script was
+  reviewed before 🎨 and the file arriving is the approval. `PARK_KEYBOARD` is
+  still sent when the bot is busy or has a Script under review — `render_parked()`
+  refuses in those states and a reply with no button left would be stranded.
+  A queued pair now rides inside `parked` rather than in the live state, or an
+  unrelated Clip rendering while the footage is generated spawns
+  `continue_pair()` for the parked Topic. The English half inherits the same
+  file (`pair["footage"]`, handed over at render time so overwrites count) and
+  goes through `make_script(auto=True, supplied=...)` — unattended, because the
+  angle was approved in Thai and the Hook shot is the same. Missing file: said
+  out loud, falls back to Pexels with a normal review.
+- **The synthesis endpoint drops whole calls.** `NoAudioReceived` ("No audio
+  was received. Please verify that your parameters are correct.") is raised
+  from `stream()` as well as `save()`, reads like a parameter error, and is
+  not — the same text speaks fine seconds later (2026-09-13). `_with_retry()`
+  wraps both `narrate()` and `speak()`: `TTS_ATTEMPTS` (3), backoff growing by
+  attempt, a fresh `Communicate` and a reopened file each time (`stream()`
+  runs once per object; a half-written take must not be prepended). Exhausted
+  in `narrate()` is not fatal — return None and let the per-card path try.
+- **`suggest_topics()` asks twice.** A reply in prose instead of JSON killed an
+  automatic `/trends` round (2026-09-13 08:36), which has nobody to retype it.
+  The bad reply and what was wrong with it go back to the model once; a second
+  failure raises.
 - **Storyboards are written for Google Flow.** 📋 plans one for the Script
   under review (9:16, one Scene per Card), `/storyboard <brief>` plans a 16:9
   one for long-form. Both cost a model call and both stop at prompts — the bot

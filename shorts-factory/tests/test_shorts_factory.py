@@ -459,6 +459,51 @@ def test_narration_is_one_take_with_a_start_per_card():
         assert starts[-1] < render.audio_seconds(audio)
 
 
+def test_a_synthesis_that_returns_no_audio_is_asked_again(monkeypatch, tmp_path):
+    """`NoAudioReceived` reads like a bad request and is not: the endpoint
+    drops whole calls at random and the same text speaks fine seconds later
+    (2026-09-13, an English clip that died mid-render)."""
+    monkeypatch.setattr(render, "TTS_BACKOFF", 0)
+    tries = []
+
+    class FlakyCommunicate:
+        def __init__(self, text, voice, rate="+0%", pitch="+0Hz"):
+            self.parts = text.split(render.CARD_SEPARATOR)
+
+        async def stream(self):
+            tries.append(1)
+            if len(tries) == 1:
+                raise render.edge_tts.exceptions.NoAudioReceived("No audio was received.")
+            yield {"type": "audio", "data": b""}
+            for i, part in enumerate(self.parts):
+                yield {"type": "SentenceBoundary",
+                       "offset": (i + 1) * 5 * 10**7, "text": part}
+
+    monkeypatch.setattr(render.edge_tts, "Communicate", FlakyCommunicate)
+    cards = [{"narration": "หนึ่ง สอง สาม สี่ ห้า หก"},
+             {"narration": "เจ็ด แปด เก้า สิบ สิบเอ็ด"}]
+    result = asyncio.run(render.narrate(cards, tmp_path / "n.mp3"))
+
+    assert len(tries) == 2 and result is not None
+
+
+def test_a_dead_endpoint_falls_back_to_speaking_card_by_card(monkeypatch, tmp_path):
+    """Every attempt failing is still not fatal here — the per-Card path opens
+    its own connections and has come back from a bad one before."""
+    monkeypatch.setattr(render, "TTS_BACKOFF", 0)
+
+    class DeadCommunicate:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        async def stream(self):
+            raise render.edge_tts.exceptions.NoAudioReceived("No audio was received.")
+            yield  # pragma: no cover
+
+    monkeypatch.setattr(render.edge_tts, "Communicate", DeadCommunicate)
+    assert asyncio.run(render.narrate([{"narration": "หนึ่ง"}], tmp_path / "n.mp3")) is None
+
+
 def test_the_voice_reads_the_transliteration_and_the_screen_keeps_the_english():
     card = {"narration": "ปัญหาคือ Docker เขียน log ไม่หยุด",
             "spoken": "ปัญหาคือ ด็อกเกอร์ เขียน ล็อก ไม่หยุด"}
@@ -1721,13 +1766,91 @@ def test_replied_footage_is_filed_under_the_clip(monkeypatch, tmp_path):
 
     monkeypatch.setattr(main, "download_footage", fake_download)
 
+    rendered = {}
+
+    async def fake_render(client, state, supplied=None):
+        rendered["supplied"] = supplied
+
+    monkeypatch.setattr(main, "do_render", fake_render)
+
     state = _parked_state(tmp_path)
     asyncio.run(main.on_footage(None, state, {
         "video": {"file_id": "f1", "file_size": 5_000_000},
         "reply_to_message": {"message_id": 7},
     }))
-    stored = state["parked"]["footage"]["0"]
+    stored = str(rendered["supplied"][0])
     assert stored.endswith("footage/clip-1/c00.mp4") and pathlib.Path(stored).is_file()
+
+
+def test_footage_on_an_idle_bot_renders_without_a_button(monkeypatch, tmp_path):
+    """The Script was approved before 🎨 was pressed; the file arriving is the
+    go-ahead, and a second tap on a phone buys nothing."""
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+    monkeypatch.setattr(main, "FOOTAGE_DIR", tmp_path / "footage")
+    keyboards = []
+
+    async def fake_say(client, text, **extra):
+        keyboards.append(extra.get("reply_markup"))
+        return {"message_id": 99}
+
+    monkeypatch.setattr(main, "say", fake_say)
+
+    async def fake_download(client, file_id, dest):
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"mp4")
+        return True
+
+    monkeypatch.setattr(main, "download_footage", fake_download)
+    rendered = {}
+
+    async def fake_render(client, state, supplied=None):
+        rendered["supplied"] = supplied
+
+    monkeypatch.setattr(main, "do_render", fake_render)
+
+    state = _parked_state(tmp_path)
+    asyncio.run(main.on_footage(None, state, {
+        "video": {"file_id": "f1", "file_size": 5_000_000},
+        "reply_to_message": {"message_id": 7},
+    }))
+    assert rendered["supplied"] == {0: tmp_path / "footage" / "clip-1" / "c00.mp4"}
+    assert not any(keyboards), "no button is offered when the render starts by itself"
+    assert "parked" not in state
+
+
+def test_footage_while_busy_keeps_the_render_button(monkeypatch, tmp_path):
+    """A reply that lands mid-review must not be stranded: render_parked would
+    refuse it, so the keyboard is the only way back."""
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+    monkeypatch.setattr(main, "FOOTAGE_DIR", tmp_path / "footage")
+    keyboards = []
+
+    async def fake_say(client, text, **extra):
+        keyboards.append(extra.get("reply_markup"))
+        return {"message_id": 99}
+
+    monkeypatch.setattr(main, "say", fake_say)
+
+    async def fake_download(client, file_id, dest):
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"mp4")
+        return True
+
+    monkeypatch.setattr(main, "download_footage", fake_download)
+
+    async def never(*args, **kwargs):
+        raise AssertionError("must not render while a Script waits for review")
+
+    monkeypatch.setattr(main, "do_render", never)
+
+    state = _parked_state(tmp_path)
+    state.update(mode="review", script=a_script())
+    asyncio.run(main.on_footage(None, state, {
+        "video": {"file_id": "f1", "file_size": 5_000_000},
+        "reply_to_message": {"message_id": 7},
+    }))
+    assert main.PARK_KEYBOARD in keyboards
+    assert state["parked"]["footage"]["0"].endswith("footage/clip-1/c00.mp4")
 
 
 def test_render_parked_hands_the_file_to_the_renderer(monkeypatch, tmp_path):
@@ -2193,6 +2316,41 @@ def test_an_unknown_locale_falls_back_to_thai():
     assert main.output_dir(None) == main.OUTPUT_DIR
 
 
+def test_a_trends_reply_in_prose_is_asked_again(monkeypatch):
+    """The model answers in prose now and then and the whole round is lost over
+    it — and an automatic round has nobody there to retype /trends."""
+    asked = []
+
+    async def fake_say(client, messages, temperature, budget, models=None):
+        asked.append(messages)
+        if len(asked) == 1:
+            return "นี่คือหัวข้อที่น่าสนใจครับ: 1. โดรน 2. เอไอ"
+        return '{"topics": [{"topic": "โดรนส่งของ", "why": "กระแส"}]}'
+
+    monkeypatch.setattr(script_gen, "_client", lambda: None)
+    monkeypatch.setattr(script_gen, "_say", fake_say)
+    topics = asyncio.run(script_gen.suggest_topics(
+        [{"source": "rss", "term": "โดรน", "traffic": 1000}]))
+
+    assert [t["topic"] for t in topics] == ["โดรนส่งของ"]
+    assert len(asked) == 2, "one bad reply must not cost the round"
+    assert "JSON" in asked[1][-1]["content"], "the retry says what came back wrong"
+
+
+def test_a_trends_reply_that_never_parses_still_gives_up(monkeypatch):
+    calls = []
+
+    async def fake_say(client, messages, temperature, budget, models=None):
+        calls.append(1)
+        return "ยังเป็นข้อความธรรมดาอยู่ดี"
+
+    monkeypatch.setattr(script_gen, "_client", lambda: None)
+    monkeypatch.setattr(script_gen, "_say", fake_say)
+    with pytest.raises(script_gen.ScriptError):
+        asyncio.run(script_gen.suggest_topics([{"source": "rss", "term": "โดรน", "traffic": 1}]))
+    assert len(calls) == 2, "asked twice, not forever"
+
+
 def test_trends_asks_the_right_country(monkeypatch):
     asked = []
 
@@ -2455,6 +2613,75 @@ def test_the_english_half_is_written_from_the_thai_one_not_translated(monkeypatc
     assert seen["sibling"] == approved, "the approved Thai script is context"
     assert seen["pair_id"] == "clip-th"
     assert "pair" not in state, "the queue is consumed, not left to fire twice"
+
+
+def test_the_english_half_reuses_the_flow_footage_and_renders_itself(monkeypatch, tmp_path):
+    """The Hook shot is the same in both languages: asking for it again in
+    Flow, and for a render tap on top, is work the human already did."""
+    seen = {}
+
+    async def fake_make_script(client, state, topic, **kw):
+        seen.update(topic=topic, **kw)
+
+    monkeypatch.setattr(main, "make_script", fake_make_script)
+    monkeypatch.setattr(main, "say", _nothing)
+    clip = tmp_path / "c00.mp4"
+    clip.write_bytes(b"mp4")
+    state = {"pair": {"topic": "หัวข้อ", "pair_id": "clip-th",
+                      "footage": {"0": str(clip)}}}
+    asyncio.run(main.continue_pair(None, state))
+
+    assert seen["supplied"] == {0: clip} and seen["auto"] is True
+
+
+def test_a_pair_without_footage_still_gets_reviewed(monkeypatch):
+    seen = {}
+
+    async def fake_make_script(client, state, topic, **kw):
+        seen.update(kw)
+
+    monkeypatch.setattr(main, "make_script", fake_make_script)
+    monkeypatch.setattr(main, "say", _nothing)
+    asyncio.run(main.continue_pair(None, {"pair": {"topic": "หัวข้อ"}}))
+    assert seen["auto"] is False and seen["supplied"] is None
+
+
+def test_a_queued_pair_travels_with_the_parked_clip(monkeypatch, tmp_path):
+    """🌏 then 🎨: the bot goes idle and the human may start something else.
+    The queued English half belongs to the parked Topic, so an unrelated Clip
+    rendering in the meantime must not fire it."""
+    monkeypatch.setattr(manifest, "DIR", tmp_path / "clips")
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+    monkeypatch.setattr(main, "close_prompt", _nothing)
+
+    async def fake_say(client, text, **extra):
+        return {"message_id": 42}
+
+    monkeypatch.setattr(main, "say", fake_say)
+
+    async def fake_prompt(topic, card):
+        return "slow push in on a flooded street at dusk"
+
+    monkeypatch.setattr(script_gen, "flow_prompt", fake_prompt)
+
+    state = {"mode": "review", "script": a_script(), "topic": "หัวข้อ",
+             "clip_id": manifest.start("หัวข้อ"), "locale": "th",
+             "pair": {"topic": "หัวข้อ", "pair_id": "clip-th"}}
+    asyncio.run(main.on_flow(None, state))
+
+    assert "pair" not in state, "an unrelated render must not queue this half"
+    assert state["parked"]["pair"]["pair_id"] == "clip-th"
+
+    # ...and it comes back when the parked clip is the one being rendered.
+    seen = {}
+
+    async def fake_render(client, state, supplied=None):
+        seen["supplied"] = supplied
+
+    monkeypatch.setattr(main, "do_render", fake_render)
+    state["parked"]["footage"] = {"0": str(tmp_path / "c00.mp4")}
+    asyncio.run(main.render_parked(None, state))
+    assert state["pair"]["footage"] == {"0": str(tmp_path / "c00.mp4")}
 
 
 def test_the_sibling_note_asks_for_a_rewrite_not_a_translation():

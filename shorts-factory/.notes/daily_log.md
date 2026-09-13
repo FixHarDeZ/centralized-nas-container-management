@@ -1605,3 +1605,54 @@ Two fixes, both in `validate()`:
 Tests: 5 new (rewrap, lines-that-fit left alone, the total-budget message, Thai
 never rewrapped, all cards reported). Suite 180 passed, the same 8 pre-existing
 font failures as a clean tree (no Waree/libraqm on the workstation).
+
+## 2026-09-13 — footage renders itself, and two flaky endpoints stop costing rounds
+
+**The footage reply is the approval.** A file replied to a Flow Prompt now
+renders straight away with no keyboard. The tap it replaces bought nothing: the
+script was reviewed before 🎨 was pressed, and the file arriving is the same
+person acting on the same phone. The 🎬 button survives for the one case that
+needs it — `render_parked()` refuses while the bot is busy or has a script under
+review, and without a button that reply would be stranded, so that message keeps
+`PARK_KEYBOARD` and says why.
+
+**The English half of a pair reuses the footage and renders unattended.** Same
+hook shot in both languages, and the angle was approved in Thai. `continue_pair`
+passes `supplied` through to `make_script(auto=True)`, reusing the existing
+unattended path (no review keyboard, no tracked message id) rather than inventing
+a second one. A pair with no Flow footage keeps its normal review. The handover
+happens at render time, not at download time, so what English reuses is whatever
+actually went into the Thai clip after any number of overwrites. A file that has
+gone missing is said out loud and falls back to Pexels with a review, rather
+than quietly shipping stock footage against a promise of reuse.
+
+**Bug found on the way: `pair` did not follow the parked clip.** 🌏 then 🎨 left
+the queued English half in the live state while the bot went idle. Any unrelated
+clip rendered in the meantime hit `do_render`'s tail and spawned `continue_pair`
+for the *parked* topic — English half written for the wrong clip, parked one
+still sitting there. `pair` now rides inside `parked` and is restored by
+`render_parked()`.
+
+**`NoAudioReceived` is not a bad request.** Reported today as
+`render ล้มเหลว: No audio was received. Please verify that your parameters are
+correct.` on an English clip. edge-tts raises it from `stream()` (not only
+`save()`) when the socket closes with no audio on it — the endpoint drops whole
+calls at random and the same script speaks fine seconds later. `_with_retry()`
+asks again `TTS_ATTEMPTS` (3) times with a backoff that grows by attempt, on
+both `narrate()` and `speak()`. A fresh `Communicate` per attempt, because
+`stream()` refuses to run twice on one object, and the file is reopened so a
+half-written take cannot be prepended to the next. Exhausting the attempts in
+`narrate()` is still not fatal: it returns None and the per-card path, which
+opens its own connections, gets its turn.
+
+**A trends reply in prose no longer costs the round.** `แปลง trend เป็นหัวข้อ
+ไม่สำเร็จ: โมเดลไม่ได้ตอบเป็น JSON` at 08:36, on an *automatic* round — nobody
+was there to retype `/trends`. `suggest_topics()` now asks once more, feeding
+back the unusable reply and what was wrong with it. Twice, not forever.
+
+Tests: 8 new (idle footage renders with no keyboard, busy keeps the button, the
+English half inherits `supplied` + `auto`, a pair without footage still gets
+reviewed, `pair` travels inside `parked`, TTS retried then recovered, a dead
+endpoint falls back to per-card, trends re-asked once and then gives up). Suite
+208 passed, the same 8 pre-existing font failures as a clean tree (no
+Waree/libraqm on the workstation).

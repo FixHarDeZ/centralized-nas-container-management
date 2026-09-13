@@ -31,3 +31,25 @@ Reversing this means adding a Veo API client and a key — additive, and worth
 revisiting if Lite pricing drops below what a clip is worth or if a Flow API
 appears. The prices above were read from third-party summaries in August 2026;
 check Google's own pricing page before acting on them.
+
+## Update 2026-09-13: the footage reply is the approval
+
+The human press this ADR protects is the one that spends money and leaves the
+house — generating in Flow, and uploading. Pressing 🎬 afterwards is neither:
+the Script was reviewed before 🎨 was pressed, and the Footage arriving is a
+deliberate act by the same person on the same phone. The extra tap only
+existed because the parked clip had to get back into the live slots somehow.
+
+So a Footage reply on an idle bot renders straight away, with no keyboard. The
+button stays for the case that keeps the clip safe: when the bot is busy or has
+another Script under review, `render_parked()` would refuse, and without a
+button the reply would be stranded — that message keeps `PARK_KEYBOARD` and
+says so.
+
+The same reasoning carries the Footage across a 🌏 pair. The Hook shot is the
+same in both languages, so the English half reuses the file rather than asking
+for another generation, and renders unattended: there is nothing left to
+approve that the Thai half did not settle. A pair with no Flow footage keeps
+its normal review. The queued half now rides inside `parked` rather than in
+the live state — otherwise an unrelated clip rendered while the pair waits for
+footage would spawn the English half for the parked topic.
