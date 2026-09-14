@@ -278,3 +278,5 @@ advisor จับอีก 2 ข้อ ที่เทสต์รอบแร�
   `/cancel` ยกเลิกได้ทั้ง Outline และ Story
 เทสต์ 35 ผ่าน, import ไม่ต้องมี env ผ่าน. ยังไม่ commit — รอ /release พร้อม root docs
 ต่อไป: shared/mimo.py + shared/telegram.py แล้วรื้อ hedge ใน shorts
+
+**2026-09-15** — `shared/telegram.py` mutes `httpx` logger at import: INFO log line carries the bot token in the URL. Inherited via vendored copy.

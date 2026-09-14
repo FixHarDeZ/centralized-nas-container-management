@@ -1701,3 +1701,5 @@ close_prompt` เป็นชื่อบางๆ ทับ `telegram.Bot` — 
 และเทสต์ 8 ข้อรันบนเครื่องนี้ไม่ได้ (Raqm) = ทำเป็น session แยกที่รันเทสต์ครบได้ (ใน container).
 
 187 passed + 8 font/Raqm เดิม (HEAD ก็ 8). ยังไม่ commit — รอ /release พร้อม root docs.
+
+**Token leak in logs (fixed same day).** httpx INFO log printed the full Telegram URL = bot token on every request in `docker logs shorts-factory`. Muted `httpx` logger to WARNING at import in `shared/telegram.py` (covers story-factory too). ops-bot/torrentwatch checked on the NAS: 0 such lines in 48h (they do not set INFO). Redeployed.

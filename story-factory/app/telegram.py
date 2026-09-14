@@ -38,6 +38,13 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
+# httpx logs every request URL at INFO, and a Telegram URL *is* the bot token:
+# `POST https://api.telegram.org/bot<TOKEN>/sendMessage`. A bot that turns on
+# INFO logging (both factories do) would print its own credential into
+# `docker logs` on every message. Seen on the NAS 2026-09-15. Muted here, at
+# import, because every process that imports this module talks to Telegram.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 TEXT_LIMIT = 4096
 CAPTION_LIMIT = 1024
 
