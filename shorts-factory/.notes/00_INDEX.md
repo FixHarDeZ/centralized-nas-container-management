@@ -1,5 +1,11 @@
 # shorts-factory — Index
 
+**2026-09-15:** hedge ใน `script._say` รื้อออกแล้ว (README อธิบาย), `app/mimo.py` +
+`app/telegram.py` เป็นสำเนาจาก `shared/` **ห้ามแก้ตรงๆ** (`make sync-shared`),
+`app/state.py` ถือ `to_idle()/busy_note()/claim_auto_pick()` — เพิ่มทางกลับ idle ที่ไหน
+ให้เรียก `st.to_idle(state)` ไม่เขียน `state.update(mode="idle", ...)` เอง.
+`main.py` ยังใหญ่ (1,634 บรรทัด) — flows/commands split ค้างไว้ ดู daily_log 15/09.
+
 Telegram bot that turns a one-line Topic into a 40-50s vertical Thai
 DevOps/AI clip. Design decisions live in the repo root: `CONTEXT.md`
 (vocabulary) and `docs/adr/0001..0003` (why no YouTube upload, why no HTTP

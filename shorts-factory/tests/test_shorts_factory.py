@@ -106,41 +106,15 @@ def hanging_client(delays):
     return Fake, calls
 
 
-def test_a_hung_request_is_overtaken_by_its_twin(monkeypatch):
-    """Observed 2026-08-27: headers at 19:25:45, no body for ten minutes.
-
-    Waiting it out costs the human ten minutes; cutting every slow call off
-    costs the long thinks that do finish (measured up to 347s). So a second
-    request goes out alongside the first and the winner is whoever answers.
-    """
-    monkeypatch.setattr(script_gen, "HEDGE_AFTER", 0.05)
-    monkeypatch.setattr(script_gen, "HEDGE_MIN_ROOM", 0.01)
-    client, calls = hanging_client([30, 0.05])   # first hangs, twin answers
-
-    text = asyncio.run(script_gen._say(client, [], 0.8, budget=5))
-    assert text == "answer-1", "the twin's answer is the one used"
-    # the twin goes to the other model: both requests stuck in one episode is
-    # exactly the failure that was observed
-    assert calls[1] == script_gen.FALLBACK_MODEL != calls[0]
-
-
-def test_a_slow_but_healthy_answer_is_never_thrown_away(monkeypatch):
-    """A 347s think has to land — that is the failure that started all this."""
-    monkeypatch.setattr(script_gen, "HEDGE_AFTER", 0.05)
-    monkeypatch.setattr(script_gen, "HEDGE_MIN_ROOM", 0.01)
-    client, calls = hanging_client([0.2, 30])    # first is slow but arrives
-
-    text = asyncio.run(script_gen._say(client, [], 0.8, budget=5))
-    assert text == "answer-0"
-    assert len(calls) == 2, "the hedge goes out, and is simply not needed"
-
-
-def test_both_requests_hanging_still_gives_up_on_the_budget(monkeypatch):
-    monkeypatch.setattr(script_gen, "HEDGE_AFTER", 0.05)
-    client, _ = hanging_client([30, 30])
+def test_a_hung_request_gives_up_on_the_budget():
+    """Hedging with twin requests was removed 2026-09-14: across every logged
+    stall the twins hung together (a stall is a window, not a request). One
+    request, one deadline; the cooldown in main.make_script() does the rest."""
+    client, calls = hanging_client([30])
 
     with pytest.raises(asyncio.TimeoutError):
         asyncio.run(script_gen._say(client, [], 0.8, budget=0.3))
+    assert calls == [script_gen.PRIMARY_MODEL], "exactly one request"
 
 
 def fake_client(replies):
@@ -307,16 +281,21 @@ def test_a_message_over_telegrams_limit_is_sent_in_pieces():
 
 
 def test_a_keyboard_rides_the_last_piece_only(monkeypatch):
-    """Buttons under anything but the final piece get text posted below them."""
-    sent = []
+    """Buttons under anything but the final piece get text posted below them.
 
-    async def fake_api(client, method, **payload):
+    The rule lives in app/telegram.py (vendored from shared/) since 2026-09-15;
+    main.say is a name over Bot.say, so the Bot is what gets exercised."""
+    from app import telegram
+    sent = []
+    bot = telegram.Bot(None, "token", 42)
+
+    async def fake_api(method, **payload):
         sent.append(payload)
         return {"message_id": len(sent)}
 
-    monkeypatch.setattr(main, "api", fake_api)
-    result = asyncio.run(main.say(None, main.HELP, parse_mode="HTML",
-                                  reply_markup={"inline_keyboard": []}))
+    monkeypatch.setattr(bot, "api", fake_api)
+    result = asyncio.run(bot.say(main.HELP, parse_mode="HTML",
+                                 reply_markup={"inline_keyboard": []}))
     assert len(sent) > 1
     assert [bool(payload.get("reply_markup")) for payload in sent[:-1]] == [False] * (len(sent) - 1)
     assert sent[-1].get("reply_markup") is not None
@@ -1585,7 +1564,6 @@ def test_a_timeout_does_not_bury_the_first_failure(monkeypatch):
     last_error with the timeout hid the schema slip that started it."""
     monkeypatch.setattr(script_gen, "BUDGET_SECONDS", 0.4)
     monkeypatch.setattr(script_gen, "MIN_ATTEMPT", 0.1)
-    monkeypatch.setattr(script_gen, "HEDGE_AFTER", 0.05)
     monkeypatch.setattr(script_gen, "_client", lambda: fake_client(["ไม่ใช่ JSON", 30, 30]))
 
     with pytest.raises(script_gen.ScriptError) as caught:
@@ -1624,7 +1602,7 @@ def test_an_unparseable_reply_does_not_pollute_the_retry(monkeypatch):
     replies = iter(["ก" * 60, good])
     seen_messages = []
 
-    async def fake_say(client, messages, temperature, budget, models=None):
+    async def fake_say(client, messages, temperature, budget, model=None):
         seen_messages.append(list(messages))
         return next(replies)
 
@@ -1647,8 +1625,8 @@ def test_attempts_are_bounded_by_the_deadline_not_a_fixed_count(monkeypatch):
     monkeypatch.setattr(script_gen, "MIN_ATTEMPT", 0.05)
     calls = []
 
-    async def fake_say(client, messages, temperature, budget, models=None):
-        calls.append(models)
+    async def fake_say(client, messages, temperature, budget, model=None):
+        calls.append(model)
         await asyncio.sleep(0.06)
         return "ก" * 60  # never parses as JSON
 
@@ -2321,7 +2299,7 @@ def test_a_trends_reply_in_prose_is_asked_again(monkeypatch):
     it — and an automatic round has nobody there to retype /trends."""
     asked = []
 
-    async def fake_say(client, messages, temperature, budget, models=None):
+    async def fake_say(client, messages, temperature, budget, model=None):
         asked.append(messages)
         if len(asked) == 1:
             return "นี่คือหัวข้อที่น่าสนใจครับ: 1. โดรน 2. เอไอ"
@@ -2340,7 +2318,7 @@ def test_a_trends_reply_in_prose_is_asked_again(monkeypatch):
 def test_a_trends_reply_that_never_parses_still_gives_up(monkeypatch):
     calls = []
 
-    async def fake_say(client, messages, temperature, budget, models=None):
+    async def fake_say(client, messages, temperature, budget, model=None):
         calls.append(1)
         return "ยังเป็นข้อความธรรมดาอยู่ดี"
 
@@ -2872,35 +2850,6 @@ def test_an_upload_button_without_an_id_still_means_the_last_clip():
              "last_topic": "หัวข้อ", "last_locale": "th", "uploads": {}}
     assert main._to_upload(state, None)["clip"] == "/tmp/a.mp4"
     assert main._to_upload({"uploads": {}}, None) is None
-
-
-def test_two_stuck_requests_get_a_third_rather_than_more_waiting(monkeypatch):
-    """Measured 2026-09-07 17:04: a request hung, its hedge hung too, and both
-    were silent at the 600s deadline — while the same topic answered in 62s
-    when it was simply asked again. One hedge is not enough."""
-    monkeypatch.setattr(script_gen, "HEDGE_AFTER", 0.05)
-    monkeypatch.setattr(script_gen, "HEDGE_AGAIN", 0.05)
-    monkeypatch.setattr(script_gen, "HEDGE_MIN_ROOM", 0.05)
-    client, calls = hanging_client([30, 30, 0.05])   # only the third answers
-
-    text = asyncio.run(script_gen._say(client, [], 0.8, budget=5))
-    assert text == "answer-2"
-    # the first hedge goes to the other model, the second one back to the
-    # better writer
-    assert calls == [script_gen.PRIMARY_MODEL, script_gen.FALLBACK_MODEL,
-                     script_gen.PRIMARY_MODEL]
-
-
-def test_a_hedge_is_not_fired_with_no_time_left_to_answer(monkeypatch):
-    """A request sent into the last seconds of the budget cannot come back;
-    firing it only spends tokens on an answer nobody will read."""
-    monkeypatch.setattr(script_gen, "HEDGE_AFTER", 0.05)
-    monkeypatch.setattr(script_gen, "HEDGE_MIN_ROOM", 30.0)
-    client, calls = hanging_client([30, 30])
-
-    with pytest.raises(asyncio.TimeoutError):
-        asyncio.run(script_gen._say(client, [], 0.8, budget=0.3))
-    assert calls == [script_gen.PRIMARY_MODEL], "no room, so no hedge at all"
 
 
 # --- the trends schedule (docs/adr/0009) -------------------------------------

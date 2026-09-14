@@ -1,0 +1,31 @@
+services:
+  story-factory:
+    build: .
+    container_name: story-factory
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - TZ=Asia/Bangkok
+    # No ports, no dashboard, no nginx sidecar. Every human decision in this
+    # stack happens in Telegram (docs/adr/0010), and there is no manifest,
+    # experiment or retention data for a dashboard to show yet. Ports
+    # 5067/15067 are noted as free in .notes/00_INDEX.md but are NOT claimed.
+    volumes:
+      - story_factory_data:/data
+      # Renders land here. This must be a DSM **shared folder** named `stories`,
+      # created once in Control Panel -> Shared Folder: a Story is ~470 MB and
+      # is fetched from a desk over File Station / SMB, which only see shared
+      # folders. `synoshare --add` refuses on this box (share_is_acl_share.c).
+      - /volume1/stories:/output
+    # A 40-minute render peaks around 400 MB RSS (measured 2026-09-14) and this
+    # host has already had a whole-box OOM (2026-08-19), so cap memory.
+    #
+    # No `cpus:` — DSM's kernel has no CFS bandwidth control and the daemon
+    # refuses outright: "NanoCPUs can not be set, as your kernel does not
+    # support CPU CFS scheduler". Every `cpus:` line already in this repo is a
+    # silent no-op (`docker inspect` reports NanoCpus=0). Parallelism is capped
+    # where it actually takes effect, with `-threads` on the ffmpeg command.
+    mem_limit: 2g
+
+volumes:
+  story_factory_data:

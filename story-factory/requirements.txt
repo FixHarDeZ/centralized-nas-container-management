@@ -1,0 +1,11 @@
+httpx==0.28.1
+# mimo speaks the OpenAI wire format; this is the same client shorts-factory uses.
+openai==1.93.0
+# Draws the still Backdrop stand-in when there is no Flow clip.
+pillow==12.3.0
+
+# Google Cloud Text-to-Speech. Chirp 3: HD voices, `synthesize` only — the
+# long-audio endpoint is rejected in docs/adr/0012, so no google-cloud-storage.
+google-cloud-texttospeech==2.27.0
+
+pytest==8.4.1

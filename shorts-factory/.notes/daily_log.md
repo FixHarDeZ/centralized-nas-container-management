@@ -1676,3 +1676,28 @@ why the clip died outright. The English voice and env are fine
 19:09 the same evening, four hours before the 23:23 failure. Endpoint refusing
 single calls, not a parameter fault — but not reproduced on demand, so the
 retry is justified without the claim that it always recovers.
+
+
+## 2026-09-15 — review ข้าม stack: hedge ออก, shared transport เข้า, state transitions
+
+ผู้ใช้ให้ทำตามลำดับ review (ดู story-factory/.notes/daily_log 2026-09-14 ต่อ 3).
+
+**hedge รื้อ.** `_say()` เหลือ `mimo.complete()` คำขอเดียวใต้ `budget` — เหตุผลอยู่ใน README
+(นับแล้ว 0 rescue จาก 2 เคส, ทุกครั้งที่ยิงคือเผา credit ×3). `FALLBACK_MODEL` ยังใช้ที่เดียว:
+retry หลัง schema slip. เทสต์ hedge 5 ข้อลบ แทนด้วย `test_a_hung_request_gives_up_on_the_budget`.
+
+**`app/mimo.py` + `app/telegram.py` vendored จาก `shared/`** (`make sync-shared`, hash test
+ที่ root `tests/test_shared_sync.py` จะจับเมื่อ commit แล้ว). `main.say/api/chunks/send_video/
+close_prompt` เป็นชื่อบางๆ ทับ `telegram.Bot` — คงเป็น function ระดับโมดูลเพราะเทสต์ patch
+`main.say` 41 จุด. `test_a_keyboard_rides_the_last_piece_only` ย้ายไปทดสอบ `Bot.say` ตรงๆ.
+
+**`app/state.py`.** `to_idle()` แทน `state.update(mode="idle", ...)` 5 จุดที่เคลียร์ field
+ไม่เหมือนกัน (จุด discard ไม่เคลียร์ `locale`, จุด startup เคลียร์แค่ 2 field), `busy_note()`
+แทนข้อความ ⏳ ที่ก๊อป 5 ที่, `claim_auto_pick()` ไม่ save เอง (`main.take_auto_pick` save
+เพราะเทสต์ stub `main.save_state`). `BUSY_MODES/PARK_LIFETIME/auto_*` re-export ผ่าน `main`.
+
+**ที่ยังไม่ทำ (ตั้งใจ):** แยก flows/commands ออกจาก `main.py` (1,634 บรรทัด) — เทสต์ 3,200
+บรรทัด patch ชื่อผ่าน `main` ~130 จุด การย้าย flow ออกต้อง retarget ทั้งหมดในรอบเดียว
+และเทสต์ 8 ข้อรันบนเครื่องนี้ไม่ได้ (Raqm) = ทำเป็น session แยกที่รันเทสต์ครบได้ (ใน container).
+
+187 passed + 8 font/Raqm เดิม (HEAD ก็ 8). ยังไม่ commit — รอ /release พร้อม root docs.

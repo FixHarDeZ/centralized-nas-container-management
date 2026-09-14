@@ -49,35 +49,22 @@ what those 60 characters were.
 There is a second failure shape underneath that one. A request can take the
 headers and never deliver a body: observed 2026-08-27 at 19:25:45, "200 OK"
 logged instantly, silence until the deadline — and the same topic answered in
-137s two hours later. Waiting a hang out costs ten minutes; cutting every slow
-call off costs the long thinks that do finish. So after 240s a second request
-goes out alongside the first and whichever answers first wins. It goes to
-`mimo-v2.5` rather than to `mimo-v2.5-pro` again: an identical twin was tried
-and both requests hung together in the same episode, while the smaller model
-wrote the same script in 149s.
+137s two hours later.
 
-One hedge turned out not to be enough. On 2026-09-07 an English script request
-hung, its 240s hedge hung as well, and both were still silent when the 600s
-budget ran out — 360 seconds spent waiting on two requests that were never
-going to answer. What settles it is what happened around them: an unrelated
-call sent at 17:00 answered in 43s, and the identical topic, asked again three
-minutes after the failure, came back in 62s. The stall is per request, not per
-endpoint, so a third request is worth more than more waiting. A second hedge
-now goes out 120s after the first (`HEDGE_AGAIN`), back to the pro model,
-which is the better writer and by then usually healthy. A hedge is skipped
-when less than `HEDGE_MIN_ROOM` (150s) of the budget remains, since the
-fastest healthy answers measured are 30-70s and one fired into the last
-seconds cannot come back.
-
-Then the hedges were counted, and none of them had ever rescued anything. Two
-episodes exist in the log. On 2026-09-07 19:02 the hedge fired at 240s and then
-the *primary* answered at 268s — a long think that crossed the threshold, not a
-save. On 2026-09-08 08:02 the primary and both hedges were silent together at
-the deadline, and an unrelated request half an hour later answered in 51s. Read
-again with that in hand, the 2026-09-07 counter-example does not say what it
-was taken to say: the 43s call at 17:00 had *finished* before the window
-opened. Both episodes are a correlated sick window of a few minutes, so a
-fourth concurrent request would have died with the other three.
+From 2026-08-27 to 2026-09-14 the answer to that was hedging: a twin request to
+`mimo-v2.5` at 240s, a third back to the pro model at 360s. Then the hedges
+were counted, and none had ever rescued anything. Two episodes exist in the
+log. On 2026-09-07 19:02 the hedge fired at 240s and then the *primary*
+answered at 268s — a long think that crossed the threshold, not a save. On
+2026-09-08 08:02 the primary and both hedges were silent together at the
+deadline, and an unrelated request half an hour later answered in 51s. Both
+episodes are a correlated sick window of a few minutes; a fourth concurrent
+request would have died with the other three, and every hedge tripled the
+token spend for the privilege. The hedge machinery was removed on 2026-09-15.
+`_say()` is now one request under one deadline, built on `app/mimo.py`
+(vendored from `shared/mimo.py`, the same client story-factory uses). The
+smaller model is still used in one place where it earns it: a retry after a
+schema slip, which has only the tail of the shared budget left to finish in.
 
 What worked both times was asking again once the window had passed. `generate()`
 now raises `ScriptStalled` — a `ScriptError` subclass — when the budget expires

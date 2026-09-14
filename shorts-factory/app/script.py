@@ -10,7 +10,7 @@ import time
 
 from openai import AsyncOpenAI
 
-from app import locales, render
+from app import locales, mimo, render
 
 logger = logging.getLogger(__name__)
 
@@ -215,49 +215,21 @@ class ScriptStalled(ScriptError):
     """
 
 
-# Latency here tracks how much the model decides to think, not the network.
-# Measured on the NAS, same prompt: 93s/3,092 completion tokens, 112s/4,016,
-# 197s/7,010, 207s/5,415, 347s/10,585 — about 30 tokens a second, every time.
-# It does not stall at random; it thinks for longer. So a wall-clock cap is the
-# right shape after all, it was simply set at 240s where a long think needs
-# ~350s, and the retry doubled the wait on top.
-#
-# Streaming was tried and abandoned: reading the same answer as a stream took
-# 400s against 137s unstreamed, so the idle-detection it buys costs three times
-# the wall clock it was meant to save.
-BUDGET_SECONDS = float(os.environ.get("MIMO_TIMEOUT_SECONDS", "600"))
+# Latency here tracks how much the model decides to think, not the network:
+# ~30 tokens/s whatever the length (see app/mimo.py). The budget is a wall
+# clock shared across every retry of one Script, not granted afresh per call.
+BUDGET_SECONDS = mimo.budget()
 # Below this there is no point starting another attempt.
 MIN_ATTEMPT = 90.0
-# There are two failure shapes, and they need different answers. Most slow runs
-# are the model thinking: 93s/3,092 completion tokens, 112s/4,016, 197s/7,010,
-# 207s/5,415, 347s/10,585 — those finish, and cutting them off is what broke
-# the bot at 240s. But a request can also take the headers and never deliver a
-# body at all: observed 2026-08-27 19:25:45, "200 OK" logged instantly, silence
-# until the 600s deadline. Waiting out a hang costs ten minutes; killing a long
-# think costs the clip. So neither: after HEDGE_AFTER a second identical
-# request goes out alongside the first and whichever answers first wins. A
-# healthy long think (347s) still lands; a hung one is overtaken by its twin.
-HEDGE_AFTER = 240.0
-# ...and again after that, because one hedge is not enough. Measured
-# 2026-09-07 17:04: an English Script request hung, its 240s hedge to the other
-# model hung too, and both were still silent at the 600s deadline — while an
-# unrelated request sent at 17:00 answered in 43s and the very same topic,
-# re-run three minutes later, came back in 62s. So the stall is per request,
-# not per endpoint, and the answer to two stuck requests is a third one rather
-# than six more minutes of waiting on them.
-HEDGE_AGAIN = 120.0
-# A request fired with less time left than this cannot finish: the fastest
-# healthy answers measured are 30-70s and the budget has to cover reading the
-# body too.
-HEDGE_MIN_ROOM = 150.0
-# The twin goes to the *other* model on purpose. Proven the same evening: the
-# same topic hung twice past 600s — including once with an identical hedge
-# alongside it, so both requests were stuck in the same episode — and then
-# answered in 137s an hour later. A hedge that shares the sick pool is no
-# hedge; mimo-v2.5 wrote the same script in 149s while the pro model was
-# healthy, so it is a real fallback and not a downgrade to nothing.
-FALLBACK_MODEL = os.environ.get("MIMO_FALLBACK_MODEL", "mimo-v2.5")
-PRIMARY_MODEL = os.environ.get("MIMO_MODEL", "mimo-v2.5-pro")
+# Hedging — a twin request fired at 240s, and a third at 360s — was here from
+# 2026-08-27 to 2026-09-14 and, across every case in the logs, never once
+# rescued a call: the twins hung together (07/09 19:02 the primary answered
+# on its own at 268s; 08/09 08:02 primary and hedge were both silent at 600s).
+# A stall is a window, not a request. It is now `ScriptStalled` and a cooldown
+# in main.make_script(), and the smaller model is used only where it earns
+# its place: a retry with just the tail of the budget left.
+FALLBACK_MODEL = mimo.fallback_model()
+PRIMARY_MODEL = mimo.model()
 
 
 # The prompt a human pastes into Google Flow is short and is written while
@@ -280,111 +252,27 @@ FLOW_SYSTEM_PROMPT = """คุณเขียน prompt ภาษาอังก
 
 
 def _client() -> AsyncOpenAI:
-    # httpx logs "200 OK" when the headers arrive, so a response that stalls
-    # mid-body reads as a success in the log while the call hangs.
-    return AsyncOpenAI(
-        api_key=os.environ["MIMO_API_KEY"],
-        base_url=os.environ["MIMO_BASE_URL"],
-        timeout=float(os.environ.get("MIMO_TIMEOUT_SECONDS", "180")),
-        max_retries=1,
-    )
+    return mimo.client()
 
 
 async def _say(client: AsyncOpenAI, messages: list[dict], temperature: float,
-               budget: float, models: tuple[str, str] | None = None) -> str:
-    """One completion, hedged against a request that hangs.
+               budget: float, model: str | None = None) -> str:
+    """One completion inside `budget` seconds, or `asyncio.TimeoutError`.
 
-    The deadline is enforced here rather than left to httpx, whose timeout is
-    per read: a server that trickles bytes resets that clock forever and the
-    call never returns.
-
-    `models` is (who answers first, who the hedge goes to); the two must differ
-    or the hedge shares whatever is making the first one sick.
+    The deadline is enforced by `mimo.complete`, not left to httpx, whose
+    timeout is per read: a server that trickles bytes resets that clock
+    forever and the call never returns.
     """
-
-    async def once(model: str) -> str:
-        started = time.monotonic()
-        reply = await client.chat.completions.create(
-            model=model,
-            messages=messages,
-            temperature=temperature,
-            # This is a reasoning model and its thinking budget drives the
-            # latency: measured 161s / 10457 tokens at the default against
-            # 79s / 3796 at "low", for a better script. "minimal" is rejected
-            # with a 400.
-            reasoning_effort=os.environ.get("MIMO_REASONING_EFFORT", "low"),
-        )
-        # The only way to tell a healthy long think from a sick endpoint after
-        # the fact. Thinking runs at about 30 tokens a second whatever the
-        # length; a stalled request never reaches this line at all while its
-        # hedged twin does.
-        spent = time.monotonic() - started
-        used = getattr(reply, "usage", None)
-        tokens = getattr(used, "completion_tokens", 0) or 0
-        # Read defensively: the test doubles build a bare SimpleNamespace with
-        # no finish_reason at all, and a real reply that got cut off mid-JSON
-        # by the token cap reports "length" here rather than raising.
-        finish_reason = getattr(reply.choices[0], "finish_reason", None)
-        logger.info(
-            "%s ตอบใน %.0f วินาที %d tokens (%.0f tokens/วินาที) finish_reason=%s",
-            model, spent, tokens, tokens / spent if spent else 0, finish_reason,
-        )
-        content = reply.choices[0].message.content or ""
-        if finish_reason == "length" or not content.strip():
-            # Junk here would otherwise be returned as if it were a real
-            # answer; raising lets the hedge/retry machinery treat it the same
-            # as any other failed attempt instead of feeding it to _parse().
-            raise ScriptError(
-                f"{model} ตอบไม่ครบ (finish_reason={finish_reason}, {len(content)} ตัวอักษร)"
-            )
-        return content
-
-    primary, hedge_to = models or (PRIMARY_MODEL, FALLBACK_MODEL)
-    # When to give up waiting and add another request alongside the ones
-    # already in flight, and who to send it to. The first hedge goes to the
-    # other model — a stall that is really the pool being sick would take a
-    # twin with it — and the one after that goes back to the primary, which is
-    # the better writer and, on the evidence, usually healthy by then.
-    plan = [(HEDGE_AFTER, hedge_to), (HEDGE_AFTER + HEDGE_AGAIN, primary)]
-    running = {asyncio.create_task(once(primary))}
-    waited = 0.0
     try:
-        while True:
-            # Wait until the next scheduled hedge, or until the budget runs
-            # out if they have all been fired.
-            horizon = min(plan[0][0], budget) if plan else budget
-            slice_for = horizon - waited
-            if slice_for > 0:
-                started = time.monotonic()
-                done, running = await asyncio.wait(
-                    running, timeout=slice_for, return_when=asyncio.FIRST_COMPLETED
-                )
-                waited += time.monotonic() - started
-                if done:
-                    # Any answer will do; a failed twin is not worth reporting
-                    # when the other one is still running.
-                    for task in done:
-                        if not task.exception():
-                            return task.result()
-                    if not running:
-                        raise next(iter(done)).exception()
-                    continue
-            if not plan or waited >= budget:
-                raise asyncio.TimeoutError
-            _, model = plan.pop(0)
-            if budget - waited < HEDGE_MIN_ROOM:
-                # Not enough left for the new request to come back; waiting out
-                # what is already in flight is the only move left.
-                plan.clear()
-                continue
-            logger.warning(
-                "ยังไม่มีใครตอบใน %.0f วินาที (%d คำขอค้างอยู่) ยิงเพิ่มไปที่ %s",
-                waited, len(running), model,
-            )
-            running.add(asyncio.create_task(once(model)))
-    finally:
-        for task in running:
-            task.cancel()
+        return await mimo.complete(client, messages, within=budget,
+                                   model_name=model or PRIMARY_MODEL,
+                                   temperature=temperature)
+    except mimo.Stalled as stalled:
+        raise asyncio.TimeoutError(str(stalled)) from stalled
+    except mimo.Truncated as truncated:
+        # Junk would otherwise be returned as if it were an answer; the retry
+        # loop treats this like any other failed attempt instead of parsing it.
+        raise ScriptError(str(truncated)) from truncated
 
 
 def _too_wide(line: str, locale: str = locales.DEFAULT) -> int:
@@ -704,11 +592,11 @@ async def generate(
         # on the same prompt) and hedges back to the pro. Fixing JSON to match
         # a schema it has already been shown is not work that needs the pro
         # model; finishing inside the leftovers is.
-        models = None if attempt == 0 else (FALLBACK_MODEL, PRIMARY_MODEL)
+        model = PRIMARY_MODEL if attempt == 0 else FALLBACK_MODEL
         attempt += 1
         try:
             raw = await _say(client, messages, temperature=0.8, budget=left,
-                             models=models)
+                             model=model)
         except asyncio.TimeoutError:
             # Say what went wrong the *first* time too. A retry inherits
             # whatever is left of the shared budget, so a first attempt that

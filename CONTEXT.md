@@ -158,3 +158,64 @@ The subject area of a Clip — เทค, การเงิน, สุขภา
 model into every Script. A recorded dimension, **not** a [[Variant]]: the human
 chooses the Topic, so categories are never randomised and comparing them is an
 observation, not an experiment.
+
+## Long-form vocabulary
+
+Terms owned by the `story-factory` stack. It shares no code path with
+`shorts-factory` and no term below is interchangeable with a Shorts term: a
+[[Chapter]] is not a [[Card]], a [[Story]] is not a [[Clip]].
+
+**Story**:
+The finished long-form video: one narrated piece of 30-40 minutes on a single
+legend, historical episode or unexplained mystery, over one still visual. Sits
+between documentary and sleep listening — the subject matter is documentary,
+the packaging (unbroken ambience, no intro, faded ending) is made for people
+who put it on and stop looking at the screen.
+_Avoid_: episode, clip, video, podcast
+
+**Chapter**:
+One unit of a Story: roughly 700 words of narration, written by its own model
+call carrying the previous chapters forward, and published as one timestamp in
+the description. The unit of a model call and of a timestamp — a Chapter that
+fails is rewritten alone, never the whole Story. It is *not* the unit of a
+speech call: 700 Thai words exceed the 5,000-byte request cap, so a Chapter is
+always voiced by several calls whose boundaries carry no meaning and are never
+shown to anyone.
+_Avoid_: section, part, segment, card
+
+**Outline**:
+The Story's skeleton — its subject and its ordered Chapter titles — and **the
+only thing the human approves**. Approving an Outline authorises everything
+downstream; the full prose is delivered afterwards as a file to read at
+leisure, not as a gate.
+_Avoid_: plan, structure, draft
+
+**Source note**:
+The reference behind a factual claim in a Chapter, found during research.
+Its presence decides how the narration may speak: a claim with a Source note
+can be stated as fact, a claim without one must be voiced as something people
+tell — "เล่ากันว่า". Enforced in code, not asked for in the prompt.
+_Avoid_: citation, reference, fact
+
+**Backdrop**:
+The single visual behind the whole Story. A few seconds of video the human
+generates in Google Flow from a [[Flow Prompt]], played forwards and backwards
+without end so the seam never shows — which is why its motion must be
+reversible (drifting mist, moving water) and never one-way. With no Flow file,
+a slow push on a still image stands in.
+_Avoid_: background, footage, image
+
+**Waveform**:
+The audio-reactive strip drawn over the [[Backdrop]], and the only thing on
+screen that moves in step with the narration. Drawn inside the same render pass
+as the rest of the picture, not composited separately. Because it moves, every
+frame of a Story is a new frame.
+_Avoid_: visualiser, spectrum, bars
+
+**Competitor scan**:
+A reading of what comparable Thai channels published recently and how it
+performed, turned into candidate subjects for the human to choose from. The
+outside signal for this stack — it replaces [[Trend]], which reflects what
+Thailand is searching for today and is the wrong clock for a Story about
+something a thousand years old.
+_Avoid_: trends, research, market data

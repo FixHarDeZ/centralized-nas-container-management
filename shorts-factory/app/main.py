@@ -5,7 +5,6 @@ No HTTP server, no scheduler — see docs/adr/0002.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
 import html
@@ -18,9 +17,12 @@ from pathlib import Path
 import httpx
 
 from app import (analytics, backfill, experiment, history, locales, manifest, render,
-                 schedule,
-                 retention, script as script_gen, snapshots, storyboard, trends,
+                 retention, schedule, script as script_gen, snapshots, storyboard, telegram, trends,
                  youtube)
+from app import state as st
+# Re-exported: the tests and the dashboard reach these through `main`.
+from app.state import (BUSY_MODES, PARK_LIFETIME, auto_pick_due, auto_slots,  # noqa: F401
+                       parked_expired)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("shorts-factory")
@@ -56,10 +58,6 @@ CANCEL_CB = "cancel"
 RETENTION_TRIES = 10
 # How long a /trends list stays creditable for a Topic typed back.
 SUGGESTION_LIFETIME = timedelta(days=2)
-# How long a Parked Clip waits for Footage before it is written off. Generating
-# in Flow takes minutes and the human may be away; a day is generous and still
-# short enough that a forgotten Clip does not block the next one forever.
-PARK_LIFETIME = timedelta(hours=int(os.environ.get("FLOW_PARK_HOURS", "24")))
 # How long to leave mimo alone after every request in flight went silent. Both
 # recorded stalls were over inside four minutes: 62s and 51s answers came back
 # 3 and 20 minutes after the deadline. Seconds, because asyncio.sleep takes
@@ -80,7 +78,7 @@ FOOTAGE_DIR = OUTPUT_DIR / "footage"
 TELEGRAM_FILE_LIMIT = 20 * 1024 * 1024
 # sendMessage refuses anything longer; a Storyboard Prompt that overruns is
 # sent as a .txt file rather than chopped into pieces nobody can paste.
-TELEGRAM_TEXT_LIMIT = 4096
+TELEGRAM_TEXT_LIMIT = telegram.TEXT_LIMIT
 # How many finished Clips keep a live upload button. They are only a path and
 # a Script each, but state.json is rewritten on every tick.
 MAX_PENDING_UPLOADS = 10
@@ -209,7 +207,6 @@ HELP = """🎬 shorts-factory
 # Work that outlives one poll tick. Writing a Script takes 1-7 minutes and
 # rendering takes longer; awaiting either inline froze the whole bot, so
 # `/stats` or even `/help` would sit unanswered until it finished.
-BUSY_MODES = {"writing", "rendering"}
 _running: set[asyncio.Task] = set()
 
 
@@ -230,159 +227,56 @@ def spawn(coro, label: str) -> asyncio.Task:
 # --- state -------------------------------------------------------------------
 
 def load_state() -> dict:
-    if STATE_PATH.exists():
-        try:
-            return json.loads(STATE_PATH.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            logger.warning("state.json อ่านไม่ได้ เริ่มใหม่")
-    return {"mode": "idle", "offset": 0}
+    return st.load()
 
 
 def save_state(state: dict) -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    STATE_PATH.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+    st.save(state)
 
 
 # --- the unattended run ------------------------------------------------------
 
-def auto_slots(state: dict, now: datetime | None = None) -> list[tuple[str, str]]:
-    """The (locale, slot) trends rounds that are owed. Shaped like snapshots.due().
-
-    Only the newest passed hour is ever owed per Locale: a bot that was down
-    all day comes back and runs each channel once, not once per missed hour. A
-    restart late in the evening does run the 17:00 slot late — the list is
-    still worth having.
-
-    The hours themselves live in `/config/schedule.json`, which the dashboard
-    writes (docs/adr/0009), so this reads them fresh every tick rather than
-    holding what the environment said at import.
-    """
-    return schedule.due(state, now or datetime.now())
-
-
-def auto_pick_due(state: dict, now: datetime | None = None) -> bool:
-    """Whether the wait for a human choice has run out."""
-    pending = state.get("auto_pick") or {}
-    try:
-        return (now or datetime.now()) >= datetime.fromisoformat(pending["deadline"])
-    except (KeyError, TypeError, ValueError):
-        return False
-
-
-def parked_expired(state: dict, now: datetime | None = None) -> bool:
-    """Whether a Parked Clip has waited for its Footage long enough."""
-    parked = state.get("parked") or {}
-    try:
-        born = datetime.fromisoformat(parked["created_at"])
-    except (KeyError, TypeError, ValueError):
-        return False
-    return (now or datetime.now()) - born > PARK_LIFETIME
-
-
 def take_auto_pick(state: dict, now: datetime | None = None) -> bool:
-    """Claim an owed unattended pick, and say whether to act on it.
-
-    The pick is dropped either way. A human already busy with a Script of their
-    own — or off generating Footage for a Parked Clip — does not get a second
-    one queued behind it, and leaving it pending would fire the round later,
-    off a /trends list from hours ago.
-    """
-    if not auto_pick_due(state, now):
+    """Claim an owed unattended pick, and say whether to act on it. The
+    transition lives in `state.claim_auto_pick`; the save stays here."""
+    claimed = st.claim_auto_pick(state, now)
+    if claimed is None:
         return False
-    state.pop("auto_pick", None)
     save_state(state)
-    return state.get("mode", "idle") == "idle" and not state.get("parked")
+    return claimed
 
 
 # --- telegram ----------------------------------------------------------------
+# Thin names over app/telegram.py (vendored from shared/). They stay as
+# module-level functions because that is what the rest of this file and the
+# tests know; the transport rules themselves live in one place now.
+
+def _bot(client: httpx.AsyncClient) -> telegram.Bot:
+    return telegram.Bot(client, TOKEN, CHAT_ID)
+
+
+chunks = telegram.chunks
+
 
 async def api(client: httpx.AsyncClient, method: str, **payload):
-    reply = await client.post(f"{API}/{method}", json=payload, timeout=60)
-    body = reply.json()
-    if not body.get("ok"):
-        logger.error("telegram %s: %s", method, body.get("description"))
-    return body.get("result")
-
-
-def chunks(text: str, limit: int = TELEGRAM_TEXT_LIMIT) -> list[str]:
-    """`text` cut into pieces Telegram will accept, on blank lines by choice.
-
-    Paragraph breaks first, then single lines: a help page split mid-sentence
-    reads as a bug. A single line longer than the limit is cut where it falls,
-    which nothing here produces.
-    """
-    parts: list[str] = []
-    buffer = ""
-    for block in text.split("\n\n"):
-        joined = f"{buffer}\n\n{block}" if buffer else block
-        if len(joined) <= limit:
-            buffer = joined
-            continue
-        if buffer:
-            parts.append(buffer)
-        buffer = ""
-        for line in block.split("\n"):
-            joined = f"{buffer}\n{line}" if buffer else line
-            if len(joined) <= limit:
-                buffer = joined
-                continue
-            if buffer:
-                parts.append(buffer)
-            buffer = line[:limit]
-    if buffer:
-        parts.append(buffer)
-    return parts or [text[:limit]]
+    return await _bot(client).api(method, **payload)
 
 
 async def say(client: httpx.AsyncClient, text: str, **extra):
-    # Over the limit Telegram answers 400 and delivers nothing at all, so the
-    # message does not arrive truncated — it does not arrive. /help grew past
-    # 4096 characters and went silent for days (2026-09-08). Buttons and the
-    # returned message_id belong to the last piece: the caller tracks one id to
-    # edit later, and a keyboard under anything but the final message would
-    # have text posted below it.
-    # parse_mode is the exception: it belongs on every piece, or piece one
-    # renders its <pre> as literal angle brackets and piece two carries an
-    # unbalanced tag into a 400 — the same "delivers nothing" failure again.
-    # ponytail: splits on paragraph breaks, so a single <pre> block longer than
-    # the limit would still be cut open. Nothing sends one; send_prompt() caps
-    # its own body instead.
-    markup = {key: extra.pop(key) for key in ("reply_markup",) if key in extra}
-    result = None
-    pieces = chunks(text)
-    for index, piece in enumerate(pieces):
-        tail = index == len(pieces) - 1
-        result = await api(client, "sendMessage", chat_id=CHAT_ID, text=piece,
-                           **extra, **(markup if tail else {}))
-    return result
+    return await _bot(client).say(text, **extra)
 
 
 async def send_video(client: httpx.AsyncClient, path: Path, caption: str, **extra) -> dict | None:
-    with path.open("rb") as handle:
-        data = {"chat_id": CHAT_ID, "caption": caption[:1024], "supports_streaming": "true"}
-        data.update({k: json.dumps(v) for k, v in extra.items()})
-        reply = await client.post(
-            f"{API}/sendVideo",
-            data=data,
-            files={"video": (path.name, handle, "video/mp4")},
-            timeout=600,
-        )
-    body = reply.json()
-    if not body.get("ok"):
-        logger.error("sendVideo: %s", reply.text[:400])
+    sent = await _bot(client).send_video(path, caption, **extra)
+    if sent is None:
         await say(client, "ส่งไฟล์เข้า Telegram ไม่ผ่าน แต่คลิปอยู่บน NAS แล้ว")
-        return None
-    return body.get("result")
+    return sent
 
 
 async def close_prompt(client: httpx.AsyncClient, message_id: int | None, note: str) -> None:
-    """Retire a message's buttons in place.
-
-    editMessageText fires no notification, so anything the human must see is
-    sent as a fresh message afterwards — same rule torrentwatch follows.
-    """
-    if message_id and note:
-        await api(client, "editMessageText", chat_id=CHAT_ID, message_id=message_id, text=note)
+    """Retire a message's buttons in place. editMessageText fires no
+    notification, so anything the human must see follows as a fresh message."""
+    await _bot(client).edit(message_id, note)
 
 
 # --- presentation ------------------------------------------------------------
@@ -651,8 +545,7 @@ async def make_script(client: httpx.AsyncClient, state: dict, topic: str,
             # makes the model return junk shows up as its own number.
             manifest.update(state.get("clip_id"), outcome="generate_failed",
                             error=str(exc)[:500])
-            state.update(mode="idle", script=None, clip_id=None, style="",
-                         locale=locales.DEFAULT)
+            st.to_idle(state)
             state.pop("pair", None)
         save_state(state)
         await say(client, f"เขียนสคริปต์ไม่สำเร็จ: {exc}")
@@ -704,8 +597,7 @@ async def do_render(client: httpx.AsyncClient, state: dict,
     finally:
         # Intermediate PNG/audio dwarf the mp4; never leave them behind.
         shutil.rmtree(workdir, ignore_errors=True)
-        state.update(mode="idle", script=None, topic=None, clip_id=None, style="",
-                     locale=locales.DEFAULT)
+        st.to_idle(state)
         save_state(state)
     # Outside the finally: the second half starts from an idle bot, exactly as
     # a Topic typed by hand would, and only once the first Clip is really out.
@@ -791,8 +683,7 @@ async def on_flow(client: httpx.AsyncClient, state: dict) -> None:
         "prompt_message_id": (sent or {}).get("message_id"),
         "created_at": datetime.now().isoformat(timespec="seconds"),
     }
-    state.update(mode="idle", script=None, topic=None, clip_id=None, style="",
-                 locale=locales.DEFAULT, message_id=None)
+    st.to_idle(state)
     save_state(state)
 
 
@@ -877,8 +768,7 @@ async def render_parked(client: httpx.AsyncClient, state: dict) -> None:
     # starts in between would leave the reply with no button and a message
     # telling the human to press one.
     if mode in BUSY_MODES:
-        job = "เขียนสคริปต์" if mode == "writing" else "render"
-        await say(client, f"⏳ กำลัง{job}อยู่ รอให้เสร็จก่อนนะ", reply_markup=PARK_KEYBOARD)
+        await say(client, st.busy_note(mode), reply_markup=PARK_KEYBOARD)
         return
     if mode == "review":
         # Rendering the parked Script here would overwrite the one on screen
@@ -1409,8 +1299,7 @@ async def on_english(client: httpx.AsyncClient, state: dict, topic: str) -> None
         return
     mode = state.get("mode", "idle")
     if mode in BUSY_MODES:
-        job = "เขียนสคริปต์" if mode == "writing" else "render"
-        await say(client, f"⏳ กำลัง{job}อยู่ รอให้เสร็จก่อนนะ")
+        await say(client, st.busy_note(mode))
         return
     if mode == "review":
         await say(client, "ยังมีสคริปต์ค้างรีวิวอยู่ กด 🎬 หรือ 🗑 ให้อันนั้นก่อนนะ")
@@ -1429,8 +1318,7 @@ async def on_both(client: httpx.AsyncClient, state: dict, topic: str) -> None:
         return
     mode = state.get("mode", "idle")
     if mode in BUSY_MODES:
-        job = "เขียนสคริปต์" if mode == "writing" else "render"
-        await say(client, f"⏳ กำลัง{job}อยู่ รอให้เสร็จก่อนนะ")
+        await say(client, st.busy_note(mode))
         return
     if mode == "review":
         await say(client, "ยังมีสคริปต์ค้างรีวิวอยู่ กด 🎬 หรือ 🗑 ให้อันนั้นก่อนนะ")
@@ -1500,8 +1388,7 @@ async def on_text(client: httpx.AsyncClient, state: dict, text: str) -> None:
 
     mode = state.get("mode", "idle")
     if mode in BUSY_MODES:
-        job = "เขียนสคริปต์" if mode == "writing" else "render"
-        await say(client, f"⏳ กำลัง{job}อยู่ รอให้เสร็จก่อนนะ")
+        await say(client, st.busy_note(mode))
     elif mode == "review":
         # A pending Script is work in progress: plain text revises it rather
         # than silently discarding it. Starting over is the 🗑 button.
@@ -1552,7 +1439,7 @@ async def on_callback(client: httpx.AsyncClient, state: dict, query: dict) -> No
         await close_prompt(client, state.get("message_id"), "🗑 ทิ้งสคริปต์แล้ว")
         manifest.update(state.get("clip_id"), outcome="discarded")
         dropped_pair = state.pop("pair", None)
-        state.update(mode="idle", script=None, topic=None, message_id=None, clip_id=None, style="")
+        st.to_idle(state)
         save_state(state)
         note = "ทิ้งแล้ว ส่งหัวข้อใหม่มาได้เลย"
         if dropped_pair:
@@ -1633,8 +1520,7 @@ async def on_pick(client: httpx.AsyncClient, state: dict, data: str,
         return
     mode = state.get("mode", "idle")
     if mode in BUSY_MODES:
-        job = "เขียนสคริปต์" if mode == "writing" else "render"
-        await say(client, f"⏳ กำลัง{job}อยู่ รอให้เสร็จก่อนนะ")
+        await say(client, st.busy_note(mode))
         return
     if mode == "review":
         # Starting a new Topic here would abandon the pending Script without
@@ -1658,8 +1544,7 @@ async def on_pick(client: httpx.AsyncClient, state: dict, data: str,
 
 def is_ours(update: dict) -> bool:
     """The only trust boundary this stack has — see docs/adr/0002."""
-    message = update.get("message") or update.get("callback_query", {}).get("message") or {}
-    return message.get("chat", {}).get("id") == CHAT_ID
+    return telegram.chat_of(update) == CHAT_ID
 
 
 async def handle(client: httpx.AsyncClient, state: dict, update: dict) -> None:
@@ -1684,7 +1569,7 @@ async def main() -> None:
     state = load_state()
     if state.get("mode") in BUSY_MODES:
         # Crashed or restarted mid-job; the workdir is gone either way.
-        state.update(mode="idle", script=None, topic=None)
+        st.to_idle(state)
         save_state(state)
     if state.pop("trends_running", None):
         # Set for the length of a round and cleared in a `finally` that a kill
