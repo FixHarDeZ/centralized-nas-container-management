@@ -18,6 +18,8 @@ ARG CLAUDE_VERSION=2.1.272
 ARG SKILLS_REF=34040c9c568585f6929bedeaad110ad08f079624
 ARG TTYD_VERSION=1.7.7
 ARG TTYD_SHA256=8a217c968aba172e0dbf3f34447218dc015bc4d5e59bf51db2f2cd12b7be4f55
+ARG RTK_VERSION=0.49.0
+ARG RTK_SHA256=7278231dfd7e6a730a4ab7f847b195bcf02289c2d57622b0dab75a6411100c8f
 
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
@@ -48,6 +50,17 @@ RUN set -eu; \
         "https://github.com/tsl0922/ttyd/releases/download/${TTYD_VERSION}/ttyd.x86_64"; \
     echo "${TTYD_SHA256}  /usr/local/bin/ttyd" | sha256sum -c -; \
     chmod 0755 /usr/local/bin/ttyd
+
+# rtk — same token-trimming Bash hook the workstation uses (rtk hook claude
+# rewrites Claude's Bash calls to `rtk <cmd>` and filters the output).
+# Static musl build; wired in via claude-settings.json + entrypoint.sh.
+RUN set -eu; \
+    curl -fsSL --retry 3 -o /tmp/rtk.tgz \
+        "https://github.com/rtk-ai/rtk/releases/download/v${RTK_VERSION}/rtk-x86_64-unknown-linux-musl.tar.gz"; \
+    echo "${RTK_SHA256}  /tmp/rtk.tgz" | sha256sum -c -; \
+    tar -xzf /tmp/rtk.tgz -C /usr/local/bin rtk; \
+    chmod 0755 /usr/local/bin/rtk; rm /tmp/rtk.tgz; \
+    rtk --version
 
 # Claude Code + the node side of the office skills (pptxgenjs for decks,
 # docx for documents, react-icons/sharp for icon rasterising). Global so the
@@ -83,6 +96,7 @@ COPY --chmod=0644 tmux.conf /etc/tmux.conf
 # Baked in, not bind-mounted from ./work: directories under /volume2/docker
 # carry the DSM share ACL and uid 1000 cannot read through them.
 COPY --chmod=0644 work/CLAUDE.md /opt/claude-desk/work/CLAUDE.md
+COPY --chmod=0644 claude-settings.json /opt/claude-desk/claude-settings.json
 COPY --chmod=0644 profile.sh /etc/profile.d/claude-desk.sh
 COPY --chmod=0755 entrypoint.sh /usr/local/bin/entrypoint.sh
 

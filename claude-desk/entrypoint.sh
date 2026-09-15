@@ -31,6 +31,27 @@ PS1='\[\e[38;5;214m\]desk\[\e[0m\] \[\e[38;5;245m\]\w\[\e[0m\] › '
 EOF
 fi
 
+# Merge the stack's Claude Code settings (rtk hook) into the home volume's
+# ~/.claude/settings.json without clobbering anything set from inside the
+# desk (theme, model, ...). Hooks from the template are added once, keyed by
+# their command string.
+python3 - "$HOME/.claude/settings.json" /opt/claude-desk/claude-settings.json <<'PY'
+import json, sys, os
+dst, src = sys.argv[1], sys.argv[2]
+tmpl = json.load(open(src))
+cur = json.load(open(dst)) if os.path.exists(dst) else {}
+hooks = cur.setdefault("hooks", {})
+for event, entries in tmpl.get("hooks", {}).items():
+    have = {h.get("command") for e in hooks.get(event, []) for h in e.get("hooks", [])}
+    for entry in entries:
+        if not all(h.get("command") in have for h in entry.get("hooks", [])):
+            hooks.setdefault(event, []).append(entry)
+for k, v in tmpl.items():
+    if k != "hooks":
+        cur.setdefault(k, v)
+json.dump(cur, open(dst, "w"), indent=2)
+PY
+
 if [[ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]]; then
     echo "WARNING: CLAUDE_CODE_OAUTH_TOKEN is empty — claude will ask you to log in" >&2
 fi

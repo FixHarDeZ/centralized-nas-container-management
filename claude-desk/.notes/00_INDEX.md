@@ -20,7 +20,8 @@ Claude Code reached from a phone browser, for generating pptx/docx/xlsx — not 
 | File | Role |
 |---|---|
 | `Dockerfile` | image; pins CLAUDE_VERSION / SKILLS_REF / TTYD_VERSION(+sha256); build-time asserts soffice/claude/pptxgenjs/python libs |
-| `entrypoint.sh` | mkdir in/out, symlink skills into home volume, copy `work/CLAUDE.md`, exec ttyd |
+| `entrypoint.sh` | mkdir in/out, symlink skills into home volume, copy `work/CLAUDE.md`, merge `claude-settings.json` hooks into `~/.claude/settings.json`, append prompt to `~/.bashrc`, exec ttyd |
+| `claude-settings.json` | Claude Code settings template: `PreToolUse Bash → rtk hook claude` (rtk binary pinned in Dockerfile `RTK_VERSION`/`RTK_SHA256`) |
 | `tmux.conf` | `escape-time 10`, `status off`, `mouse off`, login shell in /work |
 | `profile.sh` | `/etc/profile.d`: alias `claude` → `--dangerously-skip-permissions`, `r` = `--continue`, banner |
 | `docker-compose.yml` | two built services; `claude_desk_home` volume; `${CLAUDE_WORK_DIR}` bind (desk `/work`, nginx `/files` ro); `mem_limit: 2g`; watchtower off on both |
@@ -71,4 +72,5 @@ Claude Code reached from a phone browser, for generating pptx/docx/xlsx — not 
 
 ## Change log
 
+- **2026-09-15** — rtk 0.49.0 added (binary + settings merge in entrypoint); Headroom deliberately not added (2 GB ML install, would be a proxy sidecar — see daily_log)
 - **2026-09-15** — stack created (Dockerfile, compose, nginx, UI, docs, vault keys, deploy.sh `ALL_STACKS`, homepage tile, root README/CLAUDE.md rows)
