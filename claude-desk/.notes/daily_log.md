@@ -1,5 +1,26 @@
 # claude-desk — Daily Log
 
+## 2026-09-15 — `mimo-code`: agent harness สมอง mimo (ต่อจาก one-shot)
+
+**ฟีดแบ็ก:** one-shot `mimo` "ไม่ตอบโจทย์" — อยากได้ mimo ขับ **harness** แบบ agent จริง และถามว่าต้องแยก stack `mimo-desk` ไหม
+
+**ตอบเรื่องแยก stack: ไม่แยก** — เดสก์เป็น single-session โดยโครงสร้างอยู่แล้ว (`ttyd -m 1` ปฏิเสธเบราว์เซอร์ตัวที่สอง + `tmux new -A -s main` จอเดียว) สอง agent จึงรันพร้อมกันไม่ได้อยู่ดี = isolation ที่ได้มาใช้ไม่ได้จริง ขณะที่ต้องซ้ำ nginx sidecar + `.htpasswd` + DSM RP entry ตัวที่สอง (ตัวแรกยังค้างเรื่อง WebSocket header) + share + `ui/` key bar ทั้งชุด. **จะแยกก็ต่อเมื่อ**อยากให้ mimo รันงานยาวไปพร้อมกับใช้ `claude` อยู่ — ซึ่งต้องรื้อ `-m 1` ด้วย
+
+**เลือก harness ด้วยการลองจริง ไม่ใช่เลือกจาก README** — ทดสอบในคอนเทนเนอร์ที่รันอยู่ (`docker exec`) ไม่ rebuild image เลย เพราะ `MIMO_API_KEY`/`MIMO_BASE_URL` อยู่ใน env ของมันอยู่แล้ว:
+- **aider** (venv ใน /tmp): ผ่าน — `--model openai/mimo-v2.5-pro --reasoning-effort low` แก้ไฟล์สำเร็จ แต่เป็น edit loop ไม่ใช่ tool loop (ไม่มี read/bash/glob เป็นเครื่องมือของตัวเอง)
+- **opencode** (`npm i -g --prefix /tmp/oc opencode-ai`): ผ่านแบบเต็ม — provider `@ai-sdk/openai-compatible` + `baseURL`/`apiKey` ชี้ mimo แล้วสั่ง "create hello.py that prints hi, then run it" → เห็น `Write hello.py` แล้ว `$ python hello.py` → `hi` **tool call จริง + รัน bash เอง** = ตรงกับที่ขอ
+- **ไม่เอา claude-code-router**: ข้อดีเดียวคือได้ skills pptx/docx กลับมาใช้ ซึ่ง coding agent ไม่ใช้ แลกกับ Node proxy แปลง wire เพิ่มใน container `mem_limit: 2g` ที่มี Claude Code + LibreOffice อยู่แล้ว (โฮสต์ swap เต็ม 2047/2047 เหลือ available 4.4 GB)
+
+**ที่ทำ:** `opencode-ai@1.18.31` pin `ARG OPENCODE_VERSION` ใน npm global บรรทัดเดียวกับ claude + `opencode.json` ที่ `/opt/claude-desk/` (ไม่ใช่ `/home/claude` — บทเรียน seed named volume) + wrapper `/usr/local/bin/mimo-code` (`mimo-code.sh`) ตั้ง `OPENCODE_CONFIG`, เช็ค env, `cd /work` ถ้าอยู่นอก, `unset CLAUDE_CODE_OAUTH_TOKEN` ก่อน exec (agent permission เปิดหมด ไม่มีเหตุให้เห็น subscription token). alias `m` ในแบนเนอร์เพราะพิมพ์บนมือถือ
+
+**config ที่สำคัญ:** `reasoning_effort: low` ใน `models.*.options` (default เผา 10,457 tokens/161 วิ vs 3,796/79), `limit.output: 32000` ใหญ่ไว้เพราะ cap เล็กถูกเผาไปกับการคิดก่อนแล้วได้ turn ว่าง, `permission: allow` ทุกอัน (ปุ่มอนุมัติรายเครื่องมือบนมือถือ = ใช้ไม่ได้จริง คอนเทนเนอร์คือกรง)
+
+**สะดุดระหว่างทาง:** opencode มองไดเรกทอรีนอก project เป็น `external_directory` แล้ว auto-reject (เทสต์ใน `/tmp` เลยเขียนไฟล์ไม่ได้) — ของจริง cwd = `/work` ไม่เจอปัญหานี้
+
+**verify หลัง deploy:** `which mimo-code opencode` ครบ, `opencode --version` = 1.18.31, `mimo-code run "reply OK"` → `> build · mimo-v2.5-pro` แล้วตอบ `OK` = config จาก `/opt` โหลดจริง provider/model resolve ผ่าน
+
+**ยังไม่ได้วัด:** TUI เต็มจอของ opencode ผ่าน key bar บนมือถือ (Esc/⇧Tab/Ctrl) ใช้ดีแค่ไหน — ต้องลองจากเครื่องจริง ถ้าฝืดค่อยใช้ `mimo-code run "<task>"` แทน
+
 ## 2026-09-15 — `mimo <ask>` ในเดสก์ (คำถามครั้งเดียว ไม่ใช่ agent ตัวที่สอง)
 
 **โจทย์:** "ทำให้ support ใช้ mimo ด้วยได้ไหม" — mimo คือ endpoint OpenAI-wire ที่ shorts-factory/news-feed/ops-bot ใช้อยู่

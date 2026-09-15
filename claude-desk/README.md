@@ -78,7 +78,7 @@ printf '%s:%s\n' "$U" "$(openssl passwd -apr1 "$P")" > nginx/.htpasswd
 chmod 644 nginx/.htpasswd
 ```
 
-- `shared.llm.mimo_api_key` → `MIMO_API_KEY` — the same key the bots use, for the `mimo` command below. Already in the vault, so nothing to add there.
+- `shared.llm.mimo_api_key` → `MIMO_API_KEY` — the same key the bots use, for `mimo` and `mimo-code` below. Already in the vault, so nothing to add there.
 
 Literals: `CLAUDE_WORK_DIR=/volume2/claude-work`, `MIMO_BASE_URL`, `MIMO_MODEL=mimo-v2.5-pro`.
 
@@ -109,13 +109,16 @@ look the same in both themes.
 - Tap the folder icon → **in/** → **Add files** to upload sources from the phone (or drop them into `claude-work/in/` from DS File — same folder). Type `claude` (alias for `claude --dangerously-skip-permissions`), describe the document. `r` resumes the last session.
 - Finished files appear under **out/** in the same drawer: tap to open (iOS previews pptx/xlsx inline), ⬇ to save to Files.
 - **Clear in/** and **Clear out/** at the bottom of the drawer empty the folder. The first tap arms the button and shows the count, the second one does it, and it disarms itself after four seconds. **This is permanent** — DSM's recycle bin is a file-service feature and a delete from inside the container goes straight past it.
+- **`mimo-code` (alias `m`) is the second agent: the same kind of tool loop as Claude Code, with mimo as the brain** — opencode (pinned `ARG OPENCODE_VERSION`) pointed at the mimo endpoint by `/opt/claude-desk/opencode.json`. It reads, writes and runs things in `/work` by itself. `mimo-code` opens the TUI, `mimo-code run "<task>"` does one task and prints what it did. Slow and free where `claude` is fast and spends subscription quota — a trivial agent turn measured ~28s, and mimo's wall time tracks the tokens it thinks (~30 tok/s), so pick per job rather than per habit.
 - `mimo <ask>` is a **one-shot question**, not a second agent: it prints one answer and touches nothing. `cat out/notes.md | mimo "สรุปสั้นๆ"` pipes the material in; the answer goes to stdout so it redirects into a file, and the seconds counter goes to stderr. For the small asks (translate, rewrite, explain an error) that would otherwise spend Claude subscription quota.
 - Close the tab any time — tmux keeps the session; reopening attaches to the same screen.
 - `?demo=1&mobile=1` on the URL shows the UI with a canned session and no server, for design work.
 
 ## Limits accepted
 
+- `mimo-code` runs with permissions allowed (`opencode.json`), the same bargain as `claude --dangerously-skip-permissions`: a tap per tool call makes the desk unusable from a phone, and the container is the cage. The wrapper unsets `CLAUDE_CODE_OAUTH_TOKEN` before exec — the mimo agent has no use for the subscription token and it does not expire on its own.
 - Basic auth is the only gate in front of a shell with permission prompts off. The container is the sandbox: no docker socket, no other mounts, `mem_limit: 2g`. Keep the password long; `-m 1` refuses a second concurrent browser.
 - One session, one person. Not multi-user.
 - `cpus:` does nothing on DSM; a heavy soffice render can pin a few cores for a minute.
-- **mimo answers, Claude Code works.** Driving Claude Code's tool loop through mimo was probed (2026-09-15) and rejected, not blocked: the endpoint does return `tool_calls`, and `max_tokens` came back with real content on a trivial prompt (not tested under reasoning load — keep not sending it), but a zero-context tool call already costs ~28s and mimo's latency tracks the tokens it thinks (~30 tok/s), so a document job's dozens of growing turns is tens of minutes on a phone. `ask.py` is a thin client on purpose — no wire-translating router inside a 2 GB container that already holds Claude Code and LibreOffice.
+- **Two brains, one desk, no second stack.** `claude` and `mimo-code` share the image, `/work`, the port and the basic auth. Splitting a `mimo-desk` stack would duplicate the nginx sidecar, the `.htpasswd`, a second DSM reverse-proxy entry and the share, and buy isolation that cannot be used: `ttyd -m 1` + `tmux new -A -s main` means one browser and one screen, so the two agents can never run side by side anyway. If concurrent sessions ever become the point, that is when the split earns itself.
+- **mimo is the slow brain, not a router.** Claude Code was *not* rewired to speak to mimo through a translating proxy: that would put a Node router inside a 2 GB container that already holds Claude Code and LibreOffice, to gain skills a coding agent does not use. opencode speaks the OpenAI wire natively, so the harness talks to mimo directly. Probed on the live endpoint (2026-09-15): `tool_calls` come back correctly and the loop writes files and runs commands; `max_tokens` returned real content on a trivial prompt but was not tested under reasoning load, so nothing here sends a small one.
