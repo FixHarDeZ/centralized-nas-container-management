@@ -81,6 +81,14 @@ fi
 COMPACT=0
 [ "$LIMIT_BAR_W" -lt "$BAR_W_MIN" ] 2>/dev/null && COMPACT=1
 
+# A row that is about to blow its budget appends " ⚠ wall -17m" — ~12 cells the
+# other rows never pay for, which is enough to wrap a bar sized for the normal
+# tail. Keep the bar and drop the suffix when the extra does not fit; the
+# percentage and the ⚠ still say the same thing.
+WALL_ROOM=1
+[ -n "${COLUMNS:-}" ] && [ "$COLUMNS" -gt 0 ] 2>/dev/null \
+    && [ "$COLUMNS" -lt "$((LIMIT_BAR_W + LIMIT_ROW_COST + 12))" ] && WALL_ROOM=0
+
 # Calculate context usage percentage and create progress bar
 context_section=""
 if [ "$usage" != "null" ] && [ "$usage" != "" ]; then
@@ -271,7 +279,7 @@ limit_row() {
         if [ "${delta#-}" = "$delta" ]; then dstr="+${delta}%"; else dstr="${delta}%"; fi
         local verdict
         if [ "$hit" = "1" ]; then
-            if [ "$wall" -gt 0 ] 2>/dev/null && [ "$COMPACT" != "1" ]; then
+            if [ "$wall" -gt 0 ] 2>/dev/null && [ "$COMPACT" != "1" ] && [ "$WALL_ROOM" = "1" ]; then
                 verdict=" ${BRIGHT_RED}⚠${RESET}${DIM} wall -$(fmt_reset "$wall")${RESET}"
             else
                 verdict=" ${BRIGHT_RED}⚠${RESET}"

@@ -55,6 +55,8 @@ Opus 5 | high | work | main*
   wk  61% → 91% ✓ ↻2d
 ```
 
+A row that is about to blow its budget appends ` ⚠ wall -17m`, ~12 cells the other rows never pay for — enough to wrap a bar sized for the normal tail. That suffix is dropped when it does not fit (the ⚠ and the projection still say it), so the bars keep their width instead of shrinking for a case most renders never hit.
+
 `STATUSLINE_BAR_W` overrides the arithmetic (`0` forces the narrow layout), but compose deliberately does not set it: the same desk is opened from a phone and from a laptop, and pinning the variable would give both the same layout. That was the first cut of this and it showed up as missing bars on a wide screen.
 
 At 36 the output is byte-identical to the workstation copy, which keeps re-vendoring a clean diff.
