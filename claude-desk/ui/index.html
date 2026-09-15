@@ -8,6 +8,21 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Desk">
   <title>claude-desk</title>
+  <script>
+    // Before the stylesheet, so a light-preference phone never flashes dark.
+    // app.js owns the same resolution afterwards; this is only the first paint.
+    (function () {
+      var t = 'dark';
+      try {
+        var saved = localStorage.getItem('claude-desk.theme');
+        t = (saved === 'dark' || saved === 'light') ? saved
+          : (window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+        var forced = new URLSearchParams(location.search).get('theme');
+        if (forced === 'dark' || forced === 'light') t = forced;
+      } catch (e) { /* private mode: stay dark */ }
+      document.documentElement.setAttribute('data-theme', t);
+    })();
+  </script>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -23,6 +38,10 @@
     </div>
     <div class="top-actions">
       <span id="status-text" class="status">connecting</span>
+      <button id="theme-btn" class="icon-btn" title="Switch theme" aria-label="Switch theme">
+        <svg class="ico-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.2M12 19.8V22M2 12h2.2M19.8 12H22M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M19.1 4.9l-1.6 1.6M6.5 17.5l-1.6 1.6"/></svg>
+        <svg class="ico-moon" viewBox="0 0 24 24"><path d="M20.5 14.6A8.6 8.6 0 0 1 9.4 3.5a8.6 8.6 0 1 0 11.1 11.1z"/></svg>
+      </button>
       <button id="files-btn" class="icon-btn" title="Files in out/" aria-label="Files">
         <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
       </button>

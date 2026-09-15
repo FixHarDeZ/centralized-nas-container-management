@@ -5,6 +5,7 @@ write code — a place to say "make me an 8-slide deck from `in/sales.xlsx`"
 and download the `.pptx` a few minutes later.
 
 ![phone](../screenshots/claude-desk-phone.png)
+![light theme](../screenshots/claude-desk-light.png)
 ![files drawer](../screenshots/claude-desk-files.png)
 ![upload](../screenshots/claude-desk-upload.png)
 
@@ -21,7 +22,7 @@ phone ──HTTPS :15072 (DSM RP)──▶ claude-desk-nginx :5072
 - **`upload.py`** — stdlib HTTP server in the desk container (port 7682, only nginx can reach it): `PUT /upload/<name>` streams the body into `/work/in/<name>` via a `.part` temp file + atomic rename, `DELETE` removes. Flat names only, no `..`/slashes/dot-files. Size cap is nginx's `client_max_body_size 300m` on `/upload/` (DSM's reverse proxy has its own cap too).
 - **`claude-desk`** — Debian + Node 22 + `@anthropic-ai/claude-code` (pinned `ARG CLAUDE_VERSION`), LibreOffice `*-nogui`, poppler, qpdf, Thai fonts, the Python and npm packages the official office skills need. PID 1 is `ttyd -W -m 1 -P 30 tmux new -A -s main`. Runs as uid 1000 (Claude Code refuses `--dangerously-skip-permissions` as root). Never published on the host.
 - **`claude-desk-nginx`** — `nginx:alpine` with `ui/` baked in (`nginx/Dockerfile`): basic auth on every path (`nginx/.htpasswd` from the vault), proxies only the websocket and token endpoints to ttyd, and lists `out/` as JSON. `ui/` cannot be bind-mounted: directories under `/volume2/docker` carry the DSM share ACL, which the nginx worker (uid 101) cannot traverse → 403 on every file. Single-file binds (`nginx.conf`, `.htpasswd`) are read by the root master process and work.
-- **`ui/`** — our own page instead of ttyd's: xterm.js 5.3 (vendored, no CDN), Inter + JetBrains Mono self-hosted, a key bar with `Esc ⇧Tab Tab Ctrl ↑↓←→ ↵NL` and `Paste / ^C A− A+ ⌨`, a right-hand drawer with `in/` (Add files → PUT, 🗑 delete) and `out/` (tap to open, ⬇ to save) tabs, PWA manifest for Add-to-Home-Screen. Speaks ttyd's websocket protocol directly (touch scrolling and the iOS keyboard handling adapted from `pawprint0706/ttyd-wrapper`, MIT).
+- **`ui/`** — our own page instead of ttyd's: xterm.js 5.3 (vendored, no CDN), Inter + JetBrains Mono self-hosted, a key bar with `Esc ⇧Tab Tab Ctrl ↑↓←→ ↵NL` and `Paste / ^C A− A+ ⌨`, a right-hand drawer with `in/` (Add files → PUT, 🗑 delete) and `out/` (tap to open, ⬇ to save) tabs, a dark/light theme toggle, PWA manifest for Add-to-Home-Screen. Speaks ttyd's websocket protocol directly (touch scrolling and the iOS keyboard handling adapted from `pawprint0706/ttyd-wrapper`, MIT).
 
 ## Volumes
 
@@ -59,6 +60,20 @@ Literal: `CLAUDE_WORK_DIR=/volume2/claude-work`.
 3. DSM → Login Portal → Reverse Proxy: `https://<domain>:15072` → `http://localhost:5072`, WebSocket enabled (the RP must pass `Upgrade`; DSM's "Enable WebSocket" checkbox on the rule).
 4. `./scripts/deploy.sh -y -s claude-desk` — first build pulls LibreOffice, takes several minutes.
 5. Open `https://<domain>:15072` on the phone, sign in, tap ⋯ → Add to Home Screen.
+
+## Theme
+
+The sun/moon button in the header switches dark ↔ light and remembers the
+choice in `localStorage`. Until it is tapped once the page follows the phone's
+appearance setting and keeps following it, so a nightly auto-switch works
+without doing anything. Both palettes live in `style.css` (`[data-theme]`
+blocks) and `app.js` (`THEMES`, the terminal's own ANSI set — xterm paints
+from its palette, not from CSS, so the two must be kept in step). `?theme=light`
+forces one for a screenshot.
+
+Colours emitted as 256-palette codes (the shell banner and prompt from
+`profile.sh`, and some Claude Code output) are not part of either palette and
+look the same in both themes.
 
 ## Using it
 

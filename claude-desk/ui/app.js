@@ -26,6 +26,59 @@
     || /Android|iPhone|iPod|iPad/i.test(navigator.userAgent)
     || (/Mac/i.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
 
+  // ── Theme ─────────────────────────────────────────────
+  // Two palettes, one per CSS [data-theme]. With no stored choice the page
+  // follows the system and keeps following it (matchMedia listener below);
+  // the first tap on the header button pins a theme for good.
+  // Light's ANSI colours are the darker shade of each hue — a light terminal
+  // painted with the dark set is unreadable on white.
+  const THEME_KEY = 'claude-desk.theme';
+  const THEMES = {
+    dark: {
+      meta: '#0b0f19',
+      xterm: {
+        background: '#0b0f19', foreground: '#e5e7eb',
+        cursor: '#f59e0b', cursorAccent: '#0b0f19',
+        selectionBackground: 'rgba(245, 158, 11, 0.28)',
+        black: '#111827', red: '#f87171', green: '#34d399', yellow: '#fbbf24',
+        blue: '#60a5fa', magenta: '#c084fc', cyan: '#22d3ee', white: '#d1d5db',
+        brightBlack: '#4b5563', brightRed: '#fca5a5', brightGreen: '#6ee7b7',
+        brightYellow: '#fde68a', brightBlue: '#93c5fd', brightMagenta: '#d8b4fe',
+        brightCyan: '#67e8f9', brightWhite: '#f9fafb',
+      },
+    },
+    light: {
+      meta: '#f6f7f9',
+      xterm: {
+        background: '#f6f7f9', foreground: '#0f172a',
+        cursor: '#b45309', cursorAccent: '#f6f7f9',
+        selectionBackground: 'rgba(180, 83, 9, 0.22)',
+        black: '#1e293b', red: '#b91c1c', green: '#047857', yellow: '#a16207',
+        blue: '#1d4ed8', magenta: '#7e22ce', cyan: '#0e7490', white: '#475569',
+        // On white the "bright" end has to go darker, not lighter: programs
+        // use it for emphasis, and brightWhite as #fff would be invisible.
+        brightBlack: '#64748b', brightRed: '#dc2626', brightGreen: '#059669',
+        brightYellow: '#b45309', brightBlue: '#2563eb', brightMagenta: '#9333ea',
+        brightCyan: '#0891b2', brightWhite: '#0f172a',
+      },
+    },
+  };
+
+  const prefersLight = window.matchMedia ? matchMedia('(prefers-color-scheme: light)') : null;
+  const forcedTheme = ['dark', 'light'].includes(PARAMS.get('theme')) ? PARAMS.get('theme') : null;
+
+  function storedTheme() {
+    try {
+      const v = localStorage.getItem(THEME_KEY);
+      return v === 'dark' || v === 'light' ? v : null;
+    } catch (_) { return null; }
+  }
+  function resolveTheme() {
+    return forcedTheme || storedTheme() || (prefersLight && prefersLight.matches ? 'light' : 'dark');
+  }
+
+  let theme = resolveTheme();
+
   // ── Font size ─────────────────────────────────────────
   const FONT_SIZES = [11, 12, 13, 14, 15, 16, 18, 20, 22];
   const FONT_KEY = 'claude-desk.fontSize';
@@ -46,29 +99,7 @@
     cursorStyle: 'bar',
     scrollback: 8000,
     allowProposedApi: true,
-    theme: {
-      background: '#0b0f19',
-      foreground: '#e5e7eb',
-      cursor: '#f59e0b',
-      cursorAccent: '#0b0f19',
-      selectionBackground: 'rgba(245, 158, 11, 0.28)',
-      black: '#111827',
-      red: '#f87171',
-      green: '#34d399',
-      yellow: '#fbbf24',
-      blue: '#60a5fa',
-      magenta: '#c084fc',
-      cyan: '#22d3ee',
-      white: '#d1d5db',
-      brightBlack: '#4b5563',
-      brightRed: '#fca5a5',
-      brightGreen: '#6ee7b7',
-      brightYellow: '#fde68a',
-      brightBlue: '#93c5fd',
-      brightMagenta: '#d8b4fe',
-      brightCyan: '#67e8f9',
-      brightWhite: '#f9fafb',
-    },
+    theme: THEMES[theme].xterm,
   });
   const fit = new FitAddon.FitAddon();
   term.loadAddon(fit);
@@ -254,6 +285,40 @@
     const i = FONT_SIZES.indexOf(fontSize);
     if (i < FONT_SIZES.length - 1) setFont(FONT_SIZES[i + 1]);
   });
+
+  // ── Theme button ──────────────────────────────────────
+  const themeBtn = document.getElementById('theme-btn');
+
+  function applyTheme(next) {
+    theme = next;
+    document.documentElement.setAttribute('data-theme', theme);
+    // xterm paints from its own palette, not CSS: hand it the new one and
+    // repaint the rows already on screen (a plain assignment only affects
+    // what is written afterwards).
+    term.options.theme = THEMES[theme].xterm;
+    term.refresh(0, term.rows - 1);
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', THEMES[theme].meta);
+    const other = theme === 'dark' ? 'light' : 'dark';
+    themeBtn.title = 'Switch to ' + other + ' mode';
+    themeBtn.setAttribute('aria-label', themeBtn.title);
+  }
+
+  themeBtn.addEventListener('click', () => {
+    const next = theme === 'dark' ? 'light' : 'dark';
+    try { localStorage.setItem(THEME_KEY, next); } catch (_) { /* not persisted */ }
+    applyTheme(next);
+  });
+
+  // Until the button is tapped once, track the system (iOS flips it on a
+  // schedule, and the desk is used both in daylight and in bed).
+  if (prefersLight && prefersLight.addEventListener) {
+    prefersLight.addEventListener('change', (e) => {
+      if (!forcedTheme && !storedTheme()) applyTheme(e.matches ? 'light' : 'dark');
+    });
+  }
+
+  applyTheme(theme);
 
   // ── Paste ─────────────────────────────────────────────
   document.getElementById('paste-btn').addEventListener('click', async () => {

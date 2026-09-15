@@ -31,7 +31,7 @@ Claude Code reached from a phone browser, for generating pptx/docx/xlsx — not 
 | `nginx/Dockerfile` | `nginx:alpine` + `COPY ui/` — dir binds from the project dir are ACL-blocked for the worker uid |
 | `.dockerignore` | keeps `.env`/`.htpasswd`/notes out of both build contexts |
 | `secrets.manifest.yaml` | `CLAUDE_CODE_OAUTH_TOKEN`, `DASHBOARD_BASIC_AUTH_*`, literal `CLAUDE_WORK_DIR` |
-| `ui/index.html` `style.css` `app.js` | the page; `?demo=1&mobile=1[&drawer=1]` = design preview with no server |
+| `ui/index.html` `style.css` `app.js` | the page; `?demo=1&mobile=1[&drawer=in|out][&theme=dark|light]` = design preview with no server |
 | `ui/vendor/` | xterm 5.3.0, fit 0.8.0, web-links 0.9.0 (unpkg), `LICENSE.ttyd-wrapper` |
 | `ui/fonts/` | Inter 4.1 Regular/SemiBold, JetBrains Mono 2.304 Regular/Bold (woff2) |
 | `work/CLAUDE.md` | rules Claude sees inside `/work` (in/ read-only, out/ naming, render-and-look for decks) |
@@ -52,6 +52,9 @@ Claude Code reached from a phone browser, for generating pptx/docx/xlsx — not 
 - **Never bind-mount a directory from `/volume2/docker/<stack>` into a non-root process.** The project tree carries the `docker` share's ACL; uid 1000 got `Permission denied` on `./work`, and nginx's worker served 403 for the whole `./ui` bind. File binds are fine (read by root before privilege drop). Bake dirs into the image instead.
 - **`tar | ssh` upload lands every file as 0700.** Anything COPYed into an image and read by a non-root uid needs `COPY --chmod=0644` (tmux.conf was silently ignored → status bar on, escape-time 500) or a `RUN chmod -R a+rX` (nginx html dir served 403). Bind-mounted single files are read as root, which is why other stacks never hit this.
 - **DSM Reverse Proxy: "WebSocket" lives under the rule's *Custom Header* tab (Create → WebSocket)**, not the General tab. Without it the generated block has no `Upgrade`/`Connection` headers and `/ws` returns a DSM 404 page while `/` and `/token` work. Check with `sudo grep -A30 'listen 15072' /etc/nginx/sites-enabled/server.ReverseProxy.conf` — look for `proxy_set_header Upgrade`. The block also has `proxy_read_timeout 60`; ttyd's `-P 30` ping keeps the socket alive through it.
+- **Theme lives in two places that must agree**: CSS `[data-theme="dark"|"light"]` blocks in `style.css` and the `THEMES` table in `app.js`. xterm paints from its own palette, so a CSS-only change leaves the terminal on the old colours. After swapping it, `term.refresh(0, term.rows - 1)` is required — a bare `term.options.theme = ...` only affects rows written afterwards (verified: without it, rows drawn under light stay dark-on-dark).
+- Light mode inverts the ANSI "bright" end: `brightWhite` is the **darkest** colour there, because programs use bright for emphasis and `#fff` on white is invisible.
+- **Headless Chrome reports `prefers-color-scheme: light`**, so screenshots need an explicit `?theme=dark` now that the page follows the system — otherwise the "dark" screenshots come out light.
 - `PS1` cannot be set from `/etc/profile.d` — Debian's skel `~/.bashrc` overrides it later; entrypoint appends the prompt to `~/.bashrc` once.
 - `claude` in the shell is an alias; `command claude` for the bare binary.
 - ttyd ≥ 1.7 is read-only without `-W`.
@@ -75,6 +78,7 @@ Claude Code reached from a phone browser, for generating pptx/docx/xlsx — not 
 
 ## Change log
 
+- **2026-09-15** — dark/light theme toggle (header sun/moon, follows the system until first tap)
 - **2026-09-15** — drawer gets in/ tab with upload (+delete) and ⬇ on out/; `upload.py` + `/upload/` + `/files/{in,out}/`
 - **2026-09-15** — rtk 0.49.0 added (binary + settings merge in entrypoint); Headroom deliberately not added (2 GB ML install, would be a proxy sidecar — see daily_log)
 - **2026-09-15** — stack created (Dockerfile, compose, nginx, UI, docs, vault keys, deploy.sh `ALL_STACKS`, homepage tile, root README/CLAUDE.md rows)
