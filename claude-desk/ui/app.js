@@ -320,6 +320,27 @@
 
   applyTheme(theme);
 
+  // ── Copy ──────────────────────────────────────────────
+  // xterm paints the screen, so a selection in it is not a DOM selection and
+  // the browser's own copy has nothing to take — without this button text can
+  // be pasted into the desk but never out of it. The click is also the user
+  // gesture iOS demands before writeText() is allowed.
+  const copyBtn = document.getElementById('copy-btn');
+  copyBtn.addEventListener('click', async () => {
+    const text = term.getSelection();
+    const say = (label) => {
+      copyBtn.textContent = label;
+      setTimeout(() => { copyBtn.textContent = '⧉ Copy'; }, 1200);
+    };
+    if (!text) { say('select first'); return; }
+    try {
+      await navigator.clipboard.writeText(text);
+      say('✓ copied');
+    } catch (_) {
+      say('blocked');
+    }
+  });
+
   // ── Paste ─────────────────────────────────────────────
   document.getElementById('paste-btn').addEventListener('click', async () => {
     try {

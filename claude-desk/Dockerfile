@@ -18,7 +18,7 @@ ARG CLAUDE_VERSION=2.1.272
 ARG SKILLS_REF=34040c9c568585f6929bedeaad110ad08f079624
 ARG TTYD_VERSION=1.7.7
 ARG TTYD_SHA256=8a217c968aba172e0dbf3f34447218dc015bc4d5e59bf51db2f2cd12b7be4f55
-ARG OPENCODE_VERSION=1.18.31
+ARG MIMO_CODE_VERSION=0.1.14
 ARG RTK_VERSION=0.49.0
 ARG RTK_SHA256=7278231dfd7e6a730a4ab7f847b195bcf02289c2d57622b0dab75a6411100c8f
 
@@ -66,12 +66,13 @@ RUN set -eu; \
 # Claude Code + the node side of the office skills (pptxgenjs for decks,
 # docx for documents, react-icons/sharp for icon rasterising). Global so the
 # skills' bare require() finds them without an npm install per job.
-# opencode is the `mimo-code` harness: the same kind of tool loop as Claude
-# Code, but pointed at the mimo endpoint (opencode.json). Pinned like
-# everything else here — watchtower never touches a locally built image.
+# MiMoCode (XiaomiMiMo/MiMo-Code) is the `mimo` harness: the same kind of
+# tool loop as Claude Code, pointed at our mimo endpoint (mimocode.jsonc).
+# npm rather than the curl|bash installer upstream also offers: this one
+# takes a version pin, and everything in this image is pinned on purpose.
 RUN npm install -g --no-fund --no-audit \
         "@anthropic-ai/claude-code@${CLAUDE_VERSION}" \
-        "opencode-ai@${OPENCODE_VERSION}" \
+        "@mimo-ai/cli@${MIMO_CODE_VERSION}" \
         pptxgenjs docx react-icons react react-dom sharp \
     && npm cache clean --force
 
@@ -104,12 +105,12 @@ COPY --chmod=0644 work/CLAUDE.md /opt/claude-desk/work/CLAUDE.md
 COPY --chmod=0644 claude-settings.json /opt/claude-desk/claude-settings.json
 COPY --chmod=0755 statusline.sh /opt/claude-desk/statusline.sh
 COPY --chmod=0644 upload.py /opt/claude-desk/upload.py
-# `mimo <ask>` — one-shot questions on the OpenAI wire, stdlib only. Lives in
-# the image, not the home volume: docker seeds a named volume once, so a file
-# placed under /home/claude never reaches a desk that is already deployed.
-COPY --chmod=0755 ask.py /usr/local/bin/mimo
-COPY --chmod=0644 opencode.json /opt/claude-desk/opencode.json
-COPY --chmod=0755 mimo-code.sh /usr/local/bin/mimo-code
+# `ask <question>` — one-shot questions on the OpenAI wire, stdlib only. The
+# name is `ask` and not `mimo` because MiMoCode's own binary is `mimo`.
+# In the image, not the home volume: docker seeds a named volume once, so a
+# file placed under /home/claude never reaches an already-deployed desk.
+COPY --chmod=0755 ask.py /usr/local/bin/ask
+COPY --chmod=0644 mimocode.jsonc /opt/claude-desk/mimocode.jsonc
 COPY --chmod=0644 profile.sh /etc/profile.d/claude-desk.sh
 COPY --chmod=0755 entrypoint.sh /usr/local/bin/entrypoint.sh
 
@@ -120,7 +121,7 @@ ENV NODE_PATH=/usr/local/lib/node_modules
 # Build-time sanity: the pieces the skills lean on must actually be here.
 RUN soffice --version | head -1 \
     && claude --version \
-    && opencode --version \
+    && mimo --version \
     && node -e "require('pptxgenjs'); require('docx')" \
     && python3 -c "import pptx, docx, openpyxl, markitdown, pypdf"
 

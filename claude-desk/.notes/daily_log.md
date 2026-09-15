@@ -1,5 +1,35 @@
 # claude-desk — Daily Log
 
+## 2026-09-16 — เปลี่ยน harness เป็น MiMoCode (`mimo`) + คำสั่งถามครั้งเดียวเปลี่ยนชื่อเป็น `ask`
+
+**โจทย์:** อยากได้ harness เป็น `XiaomiMiMo/MiMo-Code` แทน opencode
+
+**ชื่อชนกันก่อนเลย:** binary ของ MiMoCode ชื่อ **`mimo`** ซึ่งเป็นชื่อที่เราเพิ่งใช้กับคำสั่งถามครั้งเดียวไปเมื่อวาน → ยกชื่อ `mimo` ให้ upstream (เอกสารเขาทั้งหมดเรียกชื่อนี้) แล้วเปลี่ยนของเราเป็น **`ask`** (ไฟล์ยังเป็น `ask.py` อยู่แล้ว) — `mimo-code.sh` + `opencode.json` + opencode ถอดออกทั้งชุด
+
+**MiMoCode = fork ของ opencode** config หน้าตาเดียวกัน (`npm: @ai-sdk/openai-compatible`, `options.baseURL/apiKey`, `model: "<provider>/<model>"`) แต่ **ห้ามเชื่อว่าเหมือนกันหมด** เจอต่างจริง 2 จุด:
+1. **`"_comment"` ใช้ไม่ได้** — MiMoCode validate schema แล้วตีตกทันที `Error: Configuration is invalid ... Unrecognized key: "_comment"` ทำให้ `mimo models` และทุก session ตาย (opencode ปล่อยผ่านมาตลอด). ไฟล์เป็น `.jsonc` อยู่แล้ว → ย้ายไปใช้คอมเมนต์ `//` ทดสอบแล้วผ่าน
+2. **`limit.output` มันไม่สน** — จับ body จริงได้ `max_tokens: 128000` ของมันเอง (opencode ส่ง 32000 ตามที่ตั้ง). ไม่เป็นไร กฎที่แคร์คือห้ามส่งค่าเล็ก
+
+**ที่เหมือนกันและตรวจซ้ำแล้ว (ไม่ได้อนุมานจาก opencode):** `reasoningEffort` camelCase ออกไปเป็น `reasoning_effort: low` จริง — ยิงผ่าน echo server เหมือนเดิม และรอบสุดท้ายยิงด้วย **config ตัวที่ deploy จริง** (sed เปลี่ยนแค่ baseURL) ไม่ใช่ไฟล์ทดสอบ
+
+**path ของ config:** `MIMOCODE_HOME=/tmp/x` แล้ววาง `mimocode.jsonc` ที่ root ของมัน → provider ไม่โผล่ใน `mimo models`. ที่อ่านจริงคือ **`$HOME/.config/mimocode/mimocode.jsonc`** ซึ่งอยู่ใน home volume = กับดัก seed เดิม → `entrypoint.sh` เขียนทับจาก `/opt/claude-desk/mimocode.jsonc` ทุกครั้งที่ start พร้อม **แทนคีย์ด้วย `sed`** (ไฟล์ใน git เก็บ placeholder `__MIMO_API_KEY__`, ไฟล์ที่ render แล้ว `chmod 600`)
+
+**pin ไม่ใช้ latest:** ที่บอกว่า "ท่าเดียวกับ claude คือ latest เสมอ" — จริงๆ claude ใน stack นี้ **pin** (`ARG CLAUDE_VERSION=2.1.272`) เหมือน `SKILLS_REF`/`TTYD_VERSION`/`RTK_VERSION` และ watchtower ปิดไว้ทั้ง stack ท่าของ claude จึงคือ pin → `ARG MIMO_CODE_VERSION=0.1.14` (dist-tag latest ตอนนี้ = 0.1.14 พอดี) อัปเกรดคือแก้ ARG แล้ว deploy
+
+**permission:** MiMoCode มี `--dangerously-skip-permissions` + `MIMOCODE_DANGEROUSLY_SKIP_PERMISSIONS=1` ของตัวเอง → ใช้ flag ใน alias อย่างเดียว ไม่เขียน rule ซ้ำในไฟล์ config. alias ยังเคลียร์ `CLAUDE_CODE_OAUTH_TOKEN` ด้วย เพราะ first-run auth ของมัน**เสนอ import credential ของ Claude Code** (เอกสาร upstream บอกเอง) — เป็นสุขอนามัย ไม่ใช่กำแพง (bash เปิด, ttyd uid เดียวกัน)
+
+**verify หลัง deploy:** `which ask mimo` ครบ · `~/.config/mimocode/mimocode.jsonc` render แล้ว mode 600 มี base url จริง · `mimo models` เห็น `mimo/mimo-v2.5-pro` + `mimo/mimo-v2.5` · `mimo run "reply READY"` → `> build · mimo-v2.5-pro` แล้ว `READY` · `ask "3+4"` → `7` · body จาก config จริง = `reasoning_effort: low`
+
+## 2026-09-15 — clipboard: copy ออกไม่ได้ (paste เข้าได้)
+
+**อาการที่แจ้ง:** paste ข้อความเข้าไปในแชทของ claude ได้ปกติ แต่ copy ข้อความ**ออก**มาแล้วไป paste ที่ editor ไม่ได้ + แปะรูปจากข้างนอกเข้าไปก็ไม่ได้
+
+**สาเหตุ copy ออกไม่ได้:** `ui/app.js` มีแต่ `paste-btn` (`navigator.clipboard.readText()`) **ไม่มีทาง copy เลย** — xterm วาดจอลง canvas/WebGL selection ที่ลากในเทอร์มินัลจึงไม่ใช่ DOM selection เบราว์เซอร์กด Cmd/Ctrl+C ไปก็ไม่มีอะไรให้หยิบ. เพิ่มปุ่ม **⧉ Copy** ข้างๆ Paste: `term.getSelection()` → `navigator.clipboard.writeText()` (การกดปุ่มคือ user gesture ที่ iOS บังคับ, หน้าเว็บเป็น https อยู่แล้ว = secure context) พร้อมฟีดแบ็กบนตัวปุ่มเอง (`✓ copied` / `select first` / `blocked`) เพราะบนมือถือไม่มี toast ให้ดู
+
+**รูป: ทำให้ได้ไม่ได้ ไม่ใช่ยังไม่ได้ทำ** — Claude Code อ่านรูปจาก clipboard ของ**เครื่องที่มันรันอยู่** ซึ่งคือคอนเทนเนอร์: ไม่มี display server ไม่มี clipboard และ websocket ของ ttyd ส่งแต่คีย์สโตรก ไม่ได้ส่ง clipboard object. ไม่เกี่ยวกับ harness ที่ใช้ (เปลี่ยนไป MiMoCode ก็เหมือนเดิม). ทางที่มีอยู่แล้วคือ drawer → Add files → ไฟล์ลง `/work/in/` แล้วพิมพ์พาธในพรอมป์
+
+**verify:** `node --check ui/app.js` ผ่าน, deploy แล้ว `docker exec claude-desk-nginx grep copy-btn` เจอทั้ง `app.js` และ `index.html` ในอิมเมจที่รันอยู่ (nginx COPY `ui/` เข้าอิมเมจ ไม่ได้ bind mount — ต้อง rebuild ทุกครั้งที่แก้หน้าเว็บ)
+
 ## 2026-09-15 — `mimo-code`: agent harness สมอง mimo (ต่อจาก one-shot)
 
 **ฟีดแบ็ก:** one-shot `mimo` "ไม่ตอบโจทย์" — อยากได้ mimo ขับ **harness** แบบ agent จริง และถามว่าต้องแยก stack `mimo-desk` ไหม
