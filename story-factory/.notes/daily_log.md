@@ -280,3 +280,35 @@ advisor จับอีก 2 ข้อ ที่เทสต์รอบแร�
 ต่อไป: shared/mimo.py + shared/telegram.py แล้วรื้อ hedge ใน shorts
 
 **2026-09-15** — `shared/telegram.py` mutes `httpx` logger at import: INFO log line carries the bot token in the URL. Inherited via vendored copy.
+
+## 2026-09-15 — ตรวจสถานะก่อนเริ่มใช้งานจริง
+
+ไม่แตะโค้ด สำรวจอย่างเดียว แล้วเขียน `.notes/GO_LIVE_CHECKLIST.md`
+
+ข้อเท็จจริงที่ตรวจแล้ว (ต่างจากที่ `00_INDEX.md` เขียนไว้ 2026-09-14):
+- `story-factory/.env` **ถูก render แล้ว** (literals 19 ค่า) → pre-upload verify ของ deploy.sh
+  ผ่าน แม้ manifest ยังไม่มี `env:` — deploy ทั้ง repo ไม่ได้พังอย่างที่กลัว
+- `scripts/deploy.sh` เติม `story-factory` ใน `ALL_STACKS` แล้ว แต่ยัง uncommitted
+- `app/mimo.py`/`app/telegram.py` ตรงกับ `shared/` (รวม fix token-logging 296e557) ไม่ drift
+
+กับดักที่เพิ่งเจอ เพิ่มเข้า checklist:
+- **ชื่อ vault path ขัดกัน** — manifest = `stacks.story_factory.google.credentials_b64`
+  (nested) แต่ root `CLAUDE.md` = `stacks.story_factory.google_credentials_b64` (flat)
+  เลือกผิดทาง = `missing vault path` แล้ว `make secrets` พังทั้ง repo. ตัดสินใช้ nested
+- **รอบทดสอบเสียงใช้โค้ดใน stack ไม่ได้** — `tts._synthesize()` ใช้ `TextToSpeechClient()`
+  ซึ่งรับแค่ ADC/service account ป้อน API key ไม่ได้ → รอบทดสอบต้องยิง REST
+  `v1/text:synthesize?key=` เอง (ข้อ 4 รอยต่อ chunk ยังใช้ `chunking.py` + concat ในรีโปได้ ไม่ต้อง credential)
+- **Backdrop เป็น prereq ที่ลิสต์ "ต้องมีก่อน deploy" ลืมเขียน** — `main.py:234` อ่าน
+  `/volume1/stories/backdrop.mp4` แล้ว `backdrop.png` ชื่อตายตัว ไม่มีไฟล์ = ปฏิเสธหลังอนุมัติ Outline
+- **`write_credentials()` เงียบเมื่อ blob ว่าง** → บอทบูตผ่าน เขียนครบ 7 บท แล้วตายตอน TTS
+  ต้อง smoke test ด้วย `docker exec` ก่อนพิมพ์ `/story` รอบแรก
+- `secrets/test-vault.sops.yaml` dirty อยู่ (ciphertext churn) ต้องเคลียร์ก่อนใส่คีย์ใหม่
+
+**พักงานไว้ (2026-09-15)** — คนตัดสินใจว่ายังไม่อยากมีค่าใช้จ่ายเพิ่ม. Cloud TTS
+คิดเงินจาก billing account ของ GCP project แยกจาก subscription Gemini Pro
+(consumer sub ไม่ให้เครดิต GCP) และโควตาฟรีแยกตามชนิดเสียง ไม่ pool.
+ยิงหน้า pricing แล้วเนื้อหาถูกตัด → **ตัวเลข $0.60/Story + ฟรี 1M chars/เดือน
+ยังไม่ได้ verify กับหน้า pricing จริง** ต้องเช็คแถว Chirp 3: HD เอง (บางชั้นคิดต่อไบต์
+ไม่ใช่ต่อ character = ไทย 3 ไบต์/ตัว แพงขึ้น 3 เท่า).
+งานฝั่งโค้ดไม่มีอะไรค้าง — blocker เดียวคือการตัดสินใจเรื่องค่าใช้จ่าย.
+ทางเลือกถ้าไม่ผูกบัตร = edge-tts (ฟรี) แต่เท่ากับพลิก ADR 0012.

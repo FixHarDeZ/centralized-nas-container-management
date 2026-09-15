@@ -1,6 +1,6 @@
 # story-factory — index
 
-**สถานะ: scaffold แล้ว ยังรันไม่ได้** (2026-09-14) — มี compose/Dockerfile/app/tests
+**สถานะ: scaffold แล้ว ยังรันไม่ได้ — พักงาน 2026-09-15 รอตัดสินใจเรื่องค่า Cloud TTS (ดู .notes/GO_LIVE_CHECKLIST.md)** (2026-09-14) — มี compose/Dockerfile/app/tests
 ครบ เทสต์ 35 ข้อผ่าน แต่ยังไม่มี secret ตัวไหนใน vault และยังไม่เคย deploy
 
 - `secrets.manifest.yaml` มีแต่ `literals:` — บรรทัด `env:` comment ไว้พร้อม vault path
