@@ -99,6 +99,10 @@ COPY --chmod=0644 work/CLAUDE.md /opt/claude-desk/work/CLAUDE.md
 COPY --chmod=0644 claude-settings.json /opt/claude-desk/claude-settings.json
 COPY --chmod=0755 statusline.sh /opt/claude-desk/statusline.sh
 COPY --chmod=0644 upload.py /opt/claude-desk/upload.py
+# `mimo <ask>` — one-shot questions on the OpenAI wire, stdlib only. Lives in
+# the image, not the home volume: docker seeds a named volume once, so a file
+# placed under /home/claude never reaches a desk that is already deployed.
+COPY --chmod=0755 ask.py /usr/local/bin/mimo
 COPY --chmod=0644 profile.sh /etc/profile.d/claude-desk.sh
 COPY --chmod=0755 entrypoint.sh /usr/local/bin/entrypoint.sh
 

@@ -1,5 +1,21 @@
 # claude-desk — Daily Log
 
+## 2026-09-15 — `mimo <ask>` ในเดสก์ (คำถามครั้งเดียว ไม่ใช่ agent ตัวที่สอง)
+
+**โจทย์:** "ทำให้ support ใช้ mimo ด้วยได้ไหม" — mimo คือ endpoint OpenAI-wire ที่ shorts-factory/news-feed/ops-bot ใช้อยู่
+
+**probe ก่อนออกแบบ** (รันในคอนเทนเนอร์ `shorts-factory` บน NAS เพราะ workstation ยิงออกไม่ได้ ดู memory `sandbox_outbound_blocked`): สองข้อที่คิดว่าจะบล็อก **ไม่บล็อก** — ส่ง `tools:[...]` แล้วได้ `finish_reason=tool_calls` + `tool_calls` ที่ถูกต้องกลับมาใน 27.8 วิ, ส่ง `max_tokens=64` แล้วได้ content จริง (`'Hi there, friend! 👋'`) ใน 2.8 วิ ไม่ใช่ `''`. **แต่พรอมป์นั้นคือ "Say hi in 3 words"** = โมเดลแทบไม่ได้คิด 64 tokens เลยไม่มีวันหมดไปกับ reasoning — **ไม่ได้ทดสอบข้ออ้างจริงของ `shared/mimo.py`** (budget ถูกเผาไปกับการคิดก่อนแล้ว content กลับมาว่าง) `ask.py` จึงยังไม่ส่ง `max_tokens` เหมือนเดิม
+
+**แต่ตัวเลขที่ตัดสินคือ latency:** tool call ที่ไม่มี context เลยยัง 28 วิ = พื้น ไม่ใช่ค่าเฉลี่ย. เวลาของ mimo โตตาม token ที่คิด (~30 tok/s) และลูปของ Claude Code มี context โตทุกเทิร์น → งาน pptx หนึ่งชิ้น (หลายสิบเทิร์น) = หลายสิบนาทีบนมือถือ. **ตัดทาง claude-code-router ทิ้ง** (ต้องยัด Node proxy แปลง Anthropic↔OpenAI เข้าคอนเทนเนอร์ `mem_limit: 2g` ที่ถือ Claude Code + LibreOffice อยู่แล้ว บนโฮสต์ที่ OOM มาสองครั้ง) และตัด opencode/aider ทิ้งด้วยเหตุผลเดียวกัน + dependency ของ agent ตัวที่สอง
+
+**ที่ทำ:** `ask.py` → COPY เป็น `/usr/local/bin/mimo` (stdlib urllib ล้วน ไม่ใช้ `openai` — อิมเมจไม่มี และไม่ต้องมี). รับ prompt จาก argv, จาก stdin, หรือทั้งคู่ (argv = คำถาม, stdin = วัตถุดิบ ต่อท้ายด้วย `---`). คำตอบออก **stdout** ตัวนับวินาทีออก **stderr** (ไพป์/redirect ได้สะอาด, มือถือไม่นึกว่าค้าง). ไม่ส่ง `max_tokens`, `reasoning_effort=low`, deadline `MIMO_ASK_TIMEOUT_SECONDS` default 300. **ไม่ stream** (คำตอบเดียวกัน stream 400 วิ vs 137 วิ) **ไม่ retry** (stall เป็น window ไม่ใช่ราย request — บอกให้รอสักครู่แล้วถามใหม่)
+
+**ที่วางไฟล์:** `/usr/local/bin` ในอิมเมจ ไม่ใช่ใต้ `/home/claude` — บทเรียนเดียวกับ `statusline.sh`: docker seed named volume จากอิมเมจ**เฉพาะตอน volume ว่าง** เดสก์ที่ deploy ไปแล้วจะไม่เห็นไฟล์เลย
+
+**secrets ฟรี:** `MIMO_API_KEY` → `shared.llm.mimo_api_key` **มีใน vault อยู่แล้ว** (bots ใช้ร่วมกัน) + literal `MIMO_BASE_URL`/`MIMO_MODEL` → ไม่ต้อง `make edit-vault` เลย เลี่ยงกับดักลำดับ (ใส่คีย์ใน manifest ก่อนมีค่าใน vault = `render_env.py` โยน `missing vault path` แล้ว `make secrets` พังทั้ง repo)
+
+**verify บน NAS หลัง deploy:** `mimo "ตอบสั้นๆ: 2+2"` → `4`; `printf ... | mimo "บรรทัดนี้แปลว่าอะไร"` → คำแปลไทยของ error ffmpeg. banner ใน `profile.sh` เพิ่ม `mimo <ask> = one-shot answer`
+
 ## 2026-09-15 — สร้าง stack (design → scaffold → build)
 
 **โจทย์:** ใช้ Claude Code จากมือถือโดยไม่เปิด MacBook สำหรับงาน pptx/docx/xlsx พร้อม upload/download — และ "UI modern"
