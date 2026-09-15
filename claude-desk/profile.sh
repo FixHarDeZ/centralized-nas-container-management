@@ -18,7 +18,11 @@ alias soffice-kill='pkill -f soffice.bin || true'
 # offers to import Claude Code credentials — it has its own key and no
 # business with the subscription one. Hygiene, not a wall: bash is allowed
 # and ttyd runs as this same uid.
-alias mimo='CLAUDE_CODE_OAUTH_TOKEN= command mimo --dangerously-skip-permissions'
+# The env var, not --dangerously-skip-permissions: MiMoCode is yargs with a
+# default command that takes a positional, so the flag placed before a
+# subcommand (`mimo --yolo run "..."`, which is what an alias produces)
+# prints help instead of running. The variable works whatever the argv.
+alias mimo='CLAUDE_CODE_OAUTH_TOKEN= MIMOCODE_DANGEROUSLY_SKIP_PERMISSIONS=1 command mimo'
 alias m='mimo'
 
 if [ -z "${CLAUDE_DESK_BANNER_SHOWN:-}" ]; then

@@ -60,9 +60,15 @@ PY
 # The key is substituted here so it lives in .env rather than in git.
 if [[ -n "${MIMO_API_KEY:-}" && -n "${MIMO_BASE_URL:-}" ]]; then
     mkdir -p "$HOME/.config/mimocode"
-    sed -e "s|__MIMO_BASE_URL__|${MIMO_BASE_URL}|" \
-        -e "s|__MIMO_API_KEY__|${MIMO_API_KEY}|" \
-        /opt/claude-desk/mimocode.jsonc > "$HOME/.config/mimocode/mimocode.jsonc"
+    # python rather than sed: an & or a | in a rotated key would be taken as
+    # sed syntax and silently write the placeholder back.
+    python3 - "$HOME/.config/mimocode/mimocode.jsonc" <<'PY'
+import os, sys
+src = open("/opt/claude-desk/mimocode.jsonc").read()
+src = src.replace("__MIMO_BASE_URL__", os.environ["MIMO_BASE_URL"])
+src = src.replace("__MIMO_API_KEY__", os.environ["MIMO_API_KEY"])
+open(sys.argv[1], "w").write(src)
+PY
     chmod 600 "$HOME/.config/mimocode/mimocode.jsonc"
 else
     echo "WARNING: MIMO_API_KEY / MIMO_BASE_URL are empty — \`mimo\` and \`ask\` will not work" >&2

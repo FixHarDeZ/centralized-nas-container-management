@@ -18,6 +18,12 @@
 
 **permission:** MiMoCode มี `--dangerously-skip-permissions` + `MIMOCODE_DANGEROUSLY_SKIP_PERMISSIONS=1` ของตัวเอง → ใช้ flag ใน alias อย่างเดียว ไม่เขียน rule ซ้ำในไฟล์ config. alias ยังเคลียร์ `CLAUDE_CODE_OAUTH_TOKEN` ด้วย เพราะ first-run auth ของมัน**เสนอ import credential ของ Claude Code** (เอกสาร upstream บอกเอง) — เป็นสุขอนามัย ไม่ใช่กำแพง (bash เปิด, ttyd uid เดียวกัน)
 
+**alias ใช้ flag ไม่ได้ (จับได้ตอนทดสอบท่าที่คนพิมพ์จริง):** ทุกรอบที่เทสต์ก่อนหน้านี้ยิง `mimo run --dangerously-skip-permissions "..."` = flag อยู่**หลัง** subcommand ผ่านหมด แต่ alias มันแตกเป็น `mimo --dangerously-skip-permissions run "..."` = flag อยู่**หน้า** → yargs พ่น help ออกมาเฉยๆ ไม่รันอะไรเลย (MiMoCode มี default command ที่กิน positional). เปลี่ยนไปใช้ **`MIMOCODE_DANGEROUSLY_SKIP_PERMISSIONS=1`** ใน alias แทน ไม่ขึ้นกับตำแหน่ง argv. **บทเรียน: `bash -lc` ไม่ขยาย alias** (non-interactive) และ `timeout <cmd>` ก็ไม่ขยายด้วย (มันรัน binary) — ต้อง `bash -lic` และไม่ห่อ timeout ถึงจะเทสต์ของจริง
+
+**ซ่อน catalog `xiaomi/*` ที่ไม่มี credential:** `only_configured_models: true` **ไม่พอ** (มันคุมเฉพาะ provider ของเราเอง วัดแล้วยังเห็น 3 รายการ) ต้อง **`disabled_providers: ["xiaomi"]`** ที่ระดับบนสุด — หลังใส่ `mimo models` เหลือ `mimo/mimo-v2.5-pro` กับ `mimo/mimo-v2.5` เท่านั้น ไม่งั้นกดเลือกในตัวสลับโมเดลแล้วพังหรือเด้ง OAuth บนมือถือ
+
+**แทนคีย์ด้วย python ไม่ใช่ sed:** คีย์ที่มี `&` หรือ `|` จะโดน sed ตีความเป็นไวยากรณ์แล้วเขียน placeholder กลับไปเงียบๆ ตอน rotate คีย์
+
 **verify หลัง deploy:** `which ask mimo` ครบ · `~/.config/mimocode/mimocode.jsonc` render แล้ว mode 600 มี base url จริง · `mimo models` เห็น `mimo/mimo-v2.5-pro` + `mimo/mimo-v2.5` · `mimo run "reply READY"` → `> build · mimo-v2.5-pro` แล้ว `READY` · `ask "3+4"` → `7` · body จาก config จริง = `reasoning_effort: low`
 
 ## 2026-09-15 — clipboard: copy ออกไม่ได้ (paste เข้าได้)

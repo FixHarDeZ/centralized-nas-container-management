@@ -32,13 +32,22 @@
 // points it at the same house rules entrypoint.sh drops in /work instead of
 // keeping a second copy that drifts. Confirmed in the captured system prompt.
 //
-// Permissions are skipped by the flag in profile.sh, not by a rule block
-// here — one mechanism, and it is the one upstream documents.
+// Permissions are skipped by MIMOCODE_DANGEROUSLY_SKIP_PERMISSIONS in the
+// profile.sh alias, not by a rule block here — one mechanism. The flag form
+// cannot be used from an alias: it lands before the subcommand and yargs
+// prints help instead of running.
 {
+  // MiMoCode ships a xiaomi/* catalog we have no credentials for; left in,
+  // `mimo models` lists it and picking one in the model switcher fails or
+  // starts an OAuth flow nobody wants to meet on a phone. only_configured_models
+  // alone does not hide it — that flag scopes our own provider — so the
+  // catalog provider is disabled outright.
+  "disabled_providers": ["xiaomi"],
   "provider": {
     "mimo": {
       "npm": "@ai-sdk/openai-compatible",
       "name": "mimo",
+      "only_configured_models": true,
       "options": {
         "baseURL": "__MIMO_BASE_URL__",
         "apiKey": "__MIMO_API_KEY__"
