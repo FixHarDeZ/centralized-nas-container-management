@@ -53,3 +53,17 @@
 **ค้าง/ยังไม่ทำ:** (1) `apple-mobile-web-app-status-bar-style` ยังเป็น `black-translucent` — ใน PWA standalone โหมด light ตัวหนังสือ status bar อาจเป็นสีขาวบนพื้นสว่าง แก้ทีหลังไม่ได้ด้วย JS (iOS อ่านตอน launch) และเปลี่ยนเป็น `default` จะทำให้ `safe-area-inset-top` = 0 layout ขยับ — **รอผู้ใช้ยืนยันจากมือถือจริงก่อนค่อยแก้**. (2) สีที่ส่งมาเป็น 256-palette (`\e[38;5;214m` ใน `profile.sh`, output บางส่วนของ Claude Code) ไม่ได้อยู่ใน palette ไหน เหมือนกันทั้งสองธีม. (3) `manifest.webmanifest` `theme_color`/`background_color` ยังเป็นสีมืดค่าเดียว (ใช้ตอน launch splash เท่านั้น).
 
 **ยังไม่ deploy** — ผู้ใช้กำลังเทสต์อยู่ ห้าม restart container. `ui/` ถูก bake เข้า nginx image แล้ว ต้อง rebuild ถึงจะเห็นบนมือถือ.
+
+## 2026-09-15 (ต่อ) — ปุ่ม Clear in/ out
+
+**โจทย์:** ผู้ใช้ขอปุ่มเคลียร์ไฟล์ทั้งโฟลเดอร์ทั้ง in และ out จากหน้าเว็บ
+
+**API เปลี่ยนรูป:** `upload.py` เดิมผูกกับ `/work/in` อย่างเดียว (`PUT /upload/<name>`) → เป็น `/upload/<dir>/[name]` โดย `dir` allowlist แค่ `in`/`out` (ห้ามถึง share root ที่มี `#recycle`/`@eaDir`). `PUT` ลง `out/` ตอบ 403 (out เป็นของ Claude อัปทับไม่มีความหมาย). `DELETE` ไม่มีชื่อ = เคลียร์ทั้งโฟลเดอร์ ตอบจำนวนที่ลบกลับมาเป็น text. เคลียร์ใช้ `os.scandir` ลบเฉพาะ `is_file(follow_symlinks=False)` ชั้นบนสุด ข้ามชื่อขึ้นต้นจุด → `@eaDir` กับโฟลเดอร์ที่ Claude จัดไว้รอด.
+
+**⚠️ ด่าน traversal เดิมไม่เคยถูกทดสอบจริง** — เทสต์รอบก่อนที่ได้ `405` คือ **nginx** decode `%2F` แล้ว resolve `..` ก่อน match location ทำให้ `/upload/..%2Fetc%2Fx` กลายเป็น `/etc/x` ตกไป `location /` (405) **ไม่เคยถึง `upload.py`**. รอบนี้เพิ่ม path segment = parsing surface ใหม่ เลยเปลี่ยนวิธี: **split raw path ด้วย `/` ก่อน บังคับ 4 ส่วนพอดี แล้วค่อย unquote ทีละส่วน** (encoded separator จึงตกด่านที่ regex ไม่ใช่กลายเป็น step). เพิ่ม `WORK_DIR` env (default `/work`) เพื่อรันทดสอบนอกคอนเทนเนอร์ได้ → รันบน Mac ยิงตรง 7682 ผ่าน **13 เคส**: put in 201 / put out 403 / `..%2F` 400 / `..%5C` 400 / dotfile 400 / `in/sub/x` 404 / `etc/x` 404 / `../x` 404 / delete missing 404 / delete one 204 / clear in = 2 / clear out = 1 / clear ซ้ำ = 0, และยืนยันว่า `.hidden` กับ `@eaDir/keep` รอด ไม่มีอะไรหลุดออกนอก `in`/`out`.
+
+**UI:** ปุ่มอยู่ใน footer ของ drawer (ไกลจากปุ่มรายไฟล์ กันกดพลาด) label ตาม tab. **กด 2 ครั้ง**: ครั้งแรกติดอาวุธเป็นสีแดง "Delete N files for good?" หมดเวลาเอง 4 วิ, ครั้งที่สองลบจริงแล้วโชว์ "Cleared N files" 2 วิ. ใช้ two-tap แทน `confirm()` เพราะ modal บล็อกทั้งหน้าและเทสต์ด้วย headless ไม่ได้.
+
+**⚠️ `[hidden]` ไม่มีผลถ้า CSS ตั้ง `display` ให้** — `.clear-btn { display: inline-flex }` ชนะ UA rule `[hidden] { display: none }` ปุ่มเลยยังโผล่ตอนโฟลเดอร์ว่าง (เห็นจาก screenshot หลังเคลียร์). แก้ด้วย `.clear-btn[hidden] { display: none }` ยืนยันด้วย probe: `visible=false hidden=true`.
+
+**ยังไม่ deploy** (ผู้ใช้สั่งไม่ให้ restart) — `upload.py` อยู่ใน desk image, `ui/` อยู่ใน nginx image ต้อง rebuild ทั้งคู่ถึงจะใช้ได้จริง ตอนนี้ของบน NAS ยังเป็น API เดิม `/upload/<name>`.

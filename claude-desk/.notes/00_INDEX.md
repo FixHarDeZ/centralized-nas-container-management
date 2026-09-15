@@ -13,7 +13,7 @@ Claude Code reached from a phone browser, for generating pptx/docx/xlsx — not 
 
 - `claude-desk` container: Debian bookworm-slim + Node 22 + `@anthropic-ai/claude-code@ARG CLAUDE_VERSION` + LibreOffice `*-nogui` + skills from `anthropics/skills@ARG SKILLS_REF`. PID 1 = `ttyd -W -m 1 -P 30 tmux new -A -s main`. uid 1000. `expose: 7681` only.
 - `claude-desk-nginx`: `5072:80`, basic auth everywhere, serves `ui/`, proxies `/ws` + `/token` to ttyd, `/upload/` to upload.py (7682, `client_max_body_size 300m`), `autoindex_format json` on `/files/in/` and `/files/out/` (share mounted ro; `/files/` root itself 404).
-- `upload.py` in the desk: stdlib `ThreadingHTTPServer`, PUT → `/work/in/<name>` (.part + `os.replace`), DELETE; rejects `..`, slashes, dot-files, >200 chars. Respawned by a loop in entrypoint if it dies; ttyd stays PID 1.
+- `upload.py` in the desk: stdlib `ThreadingHTTPServer`. `PUT /upload/in/<name>` (.part + `os.replace`; `out/` → 403), `DELETE /upload/<dir>/<name>` one file, `DELETE /upload/<dir>/` clears the folder and answers with the count. Only `in`/`out` route; names are one flat segment (no `..`, slashes, dot-files, >200 chars). `WORK_DIR` env (default `/work`) makes it runnable outside the container for tests. Respawned by a loop in entrypoint if it dies; ttyd stays PID 1.
 - `ui/`: own page (xterm.js vendored) that speaks ttyd's ws protocol. Key bar for the keys iOS lacks. Files drawer over `/files/`. PWA.
 
 ## File map
@@ -22,7 +22,7 @@ Claude Code reached from a phone browser, for generating pptx/docx/xlsx — not 
 |---|---|
 | `Dockerfile` | image; pins CLAUDE_VERSION / SKILLS_REF / TTYD_VERSION(+sha256); build-time asserts soffice/claude/pptxgenjs/python libs |
 | `entrypoint.sh` | mkdir in/out, symlink skills into home volume, copy `work/CLAUDE.md`, merge `claude-settings.json` hooks into `~/.claude/settings.json`, append prompt to `~/.bashrc`, exec ttyd |
-| `upload.py` | PUT/DELETE receiver for the drawer's in/ tab (see architecture) |
+| `upload.py` | PUT/DELETE/clear receiver behind the drawer (see architecture); `WORK_DIR=/tmp/x python3 upload.py` to exercise it locally |
 | `claude-settings.json` | Claude Code settings template: `PreToolUse Bash → rtk hook claude` (rtk binary pinned in Dockerfile `RTK_VERSION`/`RTK_SHA256`) |
 | `tmux.conf` | `escape-time 10`, `status off`, `mouse off`, login shell in /work |
 | `profile.sh` | `/etc/profile.d`: alias `claude` → `--dangerously-skip-permissions`, `r` = `--continue`, banner |
@@ -52,6 +52,9 @@ Claude Code reached from a phone browser, for generating pptx/docx/xlsx — not 
 - **Never bind-mount a directory from `/volume2/docker/<stack>` into a non-root process.** The project tree carries the `docker` share's ACL; uid 1000 got `Permission denied` on `./work`, and nginx's worker served 403 for the whole `./ui` bind. File binds are fine (read by root before privilege drop). Bake dirs into the image instead.
 - **`tar | ssh` upload lands every file as 0700.** Anything COPYed into an image and read by a non-root uid needs `COPY --chmod=0644` (tmux.conf was silently ignored → status bar on, escape-time 500) or a `RUN chmod -R a+rX` (nginx html dir served 403). Bind-mounted single files are read as root, which is why other stacks never hit this.
 - **DSM Reverse Proxy: "WebSocket" lives under the rule's *Custom Header* tab (Create → WebSocket)**, not the General tab. Without it the generated block has no `Upgrade`/`Connection` headers and `/ws` returns a DSM 404 page while `/` and `/token` work. Check with `sudo grep -A30 'listen 15072' /etc/nginx/sites-enabled/server.ReverseProxy.conf` — look for `proxy_set_header Upgrade`. The block also has `proxy_read_timeout 60`; ttyd's `-P 30` ping keeps the socket alive through it.
+- **Clearing a folder is permanent.** The share has a recycle bin, but DSM implements that in the file services — `os.unlink` from a container never touches `#recycle`. Hence the two-tap arm on the Clear button.
+- **`[hidden]` does nothing on an element the stylesheet gives a `display`.** `.clear-btn` is `display: inline-flex`, which outranks the UA's `[hidden] { display: none }`, so the button stayed on screen for an empty folder until an explicit `.clear-btn[hidden] { display: none }` was added. Any future `hidden` toggle in this page needs the same.
+- **The old traversal test proved nginx, not the app**: nginx decodes `%2F` and resolves `..` before matching locations, so `/upload/..%2Fetc%2Fx` became `/etc/x`, missed `location /upload/` and got 405 from `location /` — the request never reached `upload.py`. Test the app on 7682 directly (`WORK_DIR=… python3 upload.py` locally, or `docker exec claude-desk curl 127.0.0.1:7682/...`). Done for the current routing: 13 cases including `..%2F`, `..%5C`, dot-files, extra path segments, unknown folder, and clear-skips-dirs.
 - **Theme lives in two places that must agree**: CSS `[data-theme="dark"|"light"]` blocks in `style.css` and the `THEMES` table in `app.js`. xterm paints from its own palette, so a CSS-only change leaves the terminal on the old colours. After swapping it, `term.refresh(0, term.rows - 1)` is required — a bare `term.options.theme = ...` only affects rows written afterwards (verified: without it, rows drawn under light stay dark-on-dark).
 - Light mode inverts the ANSI "bright" end: `brightWhite` is the **darkest** colour there, because programs use bright for emphasis and `#fff` on white is invisible.
 - **Headless Chrome reports `prefers-color-scheme: light`**, so screenshots need an explicit `?theme=dark` now that the page follows the system — otherwise the "dark" screenshots come out light.
@@ -78,6 +81,7 @@ Claude Code reached from a phone browser, for generating pptx/docx/xlsx — not 
 
 ## Change log
 
+- **2026-09-15** — Clear in/ and Clear out/ in the drawer; file API becomes `/upload/<dir>/[name]`
 - **2026-09-15** — dark/light theme toggle (header sun/moon, follows the system until first tap)
 - **2026-09-15** — drawer gets in/ tab with upload (+delete) and ⬇ on out/; `upload.py` + `/upload/` + `/files/{in,out}/`
 - **2026-09-15** — rtk 0.49.0 added (binary + settings merge in entrypoint); Headroom deliberately not added (2 GB ML install, would be a proxy sidecar — see daily_log)

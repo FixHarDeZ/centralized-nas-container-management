@@ -419,7 +419,10 @@
   const inActions = document.getElementById('in-actions');
   const fileInput = document.getElementById('file-input');
   const upStatus = document.getElementById('upload-status');
+  const clearBtn = document.getElementById('clear-btn');
+  const clearLabel = document.getElementById('clear-label');
   let dir = 'out';
+  let shown = 0;          // files listed in the current tab, for the arm label
 
   const ICON_DL = '<svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>';
   const ICON_DEL = '<svg viewBox="0 0 24 24"><path d="M5 7h14M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
@@ -441,6 +444,8 @@
     files = files.filter((f) => f.type === 'file' && !f.name.startsWith('.') && !f.name.endsWith('.part'))
       .sort((a, b) => new Date(b.mtime) - new Date(a.mtime));
     empty.hidden = files.length > 0;
+    shown = files.length;
+    disarmClear();
     empty.innerHTML = dir === 'out' ? 'Nothing in <code>out/</code> yet.' : 'Nothing in <code>in/</code>. Add a file for Claude to work on.';
     for (const f of files) {
       const ext = (f.name.split('.').pop() || '').toLowerCase();
@@ -468,8 +473,10 @@
     a.href = href; a.download = name;
     document.body.appendChild(a); a.click(); a.remove();
   }
+  const demoCleared = { in: false, out: false };
   async function loadFiles() {
     if (DEMO) {
+      if (demoCleared[dir]) { render([]); return; }
       render(dir === 'out' ? [
         { name: '2026-09-15-q3-review.pptx', type: 'file', size: 2411520, mtime: new Date().toISOString() },
         { name: '2026-09-15-budget.xlsx', type: 'file', size: 88123, mtime: new Date(Date.now() - 3.6e6).toISOString() },
@@ -502,7 +509,7 @@
   function putFile(file) {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.open('PUT', 'upload/' + encodeURIComponent(file.name));
+      xhr.open('PUT', 'upload/in/' + encodeURIComponent(file.name));
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) setProgress(file.name, e.loaded / e.total);
       };
@@ -538,10 +545,53 @@
   async function removeFile(name) {
     if (DEMO) return;
     try {
-      await fetch('upload/' + encodeURIComponent(name), { method: 'DELETE' });
+      await fetch('upload/' + dir + '/' + encodeURIComponent(name), { method: 'DELETE' });
     } catch (_) { /* listing refresh shows the truth */ }
     loadFiles();
   }
+
+  // Clearing a folder is permanent — the share's recycle bin is a file-service
+  // feature and os.unlink in the container walks straight past it. So the
+  // button arms on the first tap and only deletes on the second.
+  let armTimer = null;
+
+  function disarmClear() {
+    clearTimeout(armTimer);
+    armTimer = null;
+    clearBtn.classList.remove('armed');
+    clearBtn.disabled = false;
+    clearBtn.hidden = shown === 0;
+    clearLabel.textContent = 'Clear ' + dir + '/';
+  }
+
+  clearBtn.addEventListener('click', async () => {
+    if (!armTimer) {
+      clearBtn.classList.add('armed');
+      clearLabel.textContent = 'Delete ' + shown + (shown === 1 ? ' file' : ' files') + ' for good?';
+      armTimer = setTimeout(disarmClear, 4000);
+      return;
+    }
+    clearTimeout(armTimer);
+    armTimer = null;
+    clearBtn.disabled = true;
+    clearLabel.textContent = 'Clearing…';
+    let gone = shown;
+    if (DEMO) { demoCleared[dir] = true; } else {
+      try {
+        const r = await fetch('upload/' + dir + '/', { method: 'DELETE' });
+        gone = r.ok ? parseInt(await r.text(), 10) || 0 : 0;
+      } catch (_) {
+        gone = 0;
+      }
+    }
+    await loadFiles();        // resets the button through disarmClear
+    if (gone) {
+      clearBtn.hidden = false;
+      clearBtn.disabled = true;
+      clearLabel.textContent = 'Cleared ' + gone + (gone === 1 ? ' file' : ' files');
+      setTimeout(disarmClear, 2000);
+    }
+  });
 
   function openDrawer() {
     document.body.classList.add('drawer-open');
