@@ -47,7 +47,9 @@ for event, entries in tmpl.get("hooks", {}).items():
         if not all(h.get("command") in have for h in entry.get("hooks", [])):
             hooks.setdefault(event, []).append(entry)
 for k, v in tmpl.items():
-    if k != "hooks":
+    # _-prefixed keys are comments for whoever reads the template — JSON has
+    # none of its own — and must not end up in Claude Code's settings.
+    if k != "hooks" and not k.startswith("_"):
         cur.setdefault(k, v)
 json.dump(cur, open(dst, "w"), indent=2)
 PY

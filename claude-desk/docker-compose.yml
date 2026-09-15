@@ -13,6 +13,11 @@ services:
     env_file: .env
     environment:
       - TZ=Asia/Bangkok
+      # Status-line bar width. Below 20 the rows drop the bars and the budget
+      # breakdown so they fit a phone terminal (~47 columns); 36 is the wide
+      # workstation layout. Literal, not interpolated: this is not a secret and
+      # ${...} here would need an entry in secrets.manifest.yaml.
+      - STATUSLINE_BAR_W=0
     expose:
       - "7681"   # ttyd
       - "7682"   # upload.py (PUT /upload/<name> → /work/in)

@@ -1,4 +1,9 @@
 {
+  "_comment": "entrypoint.sh merges this into the home volume's settings.json with setdefault: a key lands once and later edits here do NOT reach a desk that already has it. Change a value in the volume too, or delete the key there.",
+  "statusLine": {
+    "type": "command",
+    "command": "bash /opt/claude-desk/statusline.sh"
+  },
   "hooks": {
     "PreToolUse": [
       {

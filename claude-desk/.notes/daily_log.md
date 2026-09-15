@@ -67,3 +67,19 @@
 **⚠️ `[hidden]` ไม่มีผลถ้า CSS ตั้ง `display` ให้** — `.clear-btn { display: inline-flex }` ชนะ UA rule `[hidden] { display: none }` ปุ่มเลยยังโผล่ตอนโฟลเดอร์ว่าง (เห็นจาก screenshot หลังเคลียร์). แก้ด้วย `.clear-btn[hidden] { display: none }` ยืนยันด้วย probe: `visible=false hidden=true`.
 
 **ยังไม่ deploy** (ผู้ใช้สั่งไม่ให้ restart) — `upload.py` อยู่ใน desk image, `ui/` อยู่ใน nginx image ต้อง rebuild ทั้งคู่ถึงจะใช้ได้จริง ตอนนี้ของบน NAS ยังเป็น API เดิม `/upload/<name>`.
+
+## 2026-09-15 — ยก status line ของ workstation มาใส่เดสก์
+
+**โจทย์:** เอา `statusLine` ใน `~/.claude/settings.json` (สคริปต์ `~/.claude/statusline-script.sh`) มาใช้ใน stack นี้ด้วย
+
+**vendor ไม่ใช่ mount:** ก๊อปเป็น `claude-desk/statusline.sh` ในโปรเจกต์ **ตัดสองก้อนทิ้ง** — Jira segment (ต้องมี cred + `jira-status-fetch.py` ที่ไม่ได้ส่งมาด้วย แถม `stat -f %m` เป็นของ macOS Linux ต้อง `stat -c %Y`) และ `dwidth()` ที่ไม่มีใครเรียก (เป็นที่เดียวที่ใช้ perl) เหลือ dep แค่ `bash jq awk git` ซึ่งอิมเมจมีครบอยู่แล้ว (`jq` มาจาก Dockerfile บรรทัด apt เดิม)
+
+**ห้ามวางใน `/home/claude`:** เป็น named volume `claude_desk_home` — docker seed volume จากอิมเมจ**เฉพาะตอน volume ว่าง** deploy ที่มีอยู่แล้วจะไม่เห็นไฟล์เลย (เงียบสนิท ไม่ error). วางที่ `/opt/claude-desk/statusline.sh` แล้วให้ `claude-settings.json` ชี้ path นั้น — merge ตัวเดิมใน entrypoint ติดตั้งคีย์ `statusLine` ให้พร้อมกับ hook ของ rtk. เพิ่มเงื่อนไขข้ามคีย์ที่ขึ้นต้นด้วย `_` ในลูป merge เพื่อเขียนคอมเมนต์ในไฟล์ JSON ได้ (JSON ไม่มีคอมเมนต์) โดยไม่หลุดลง settings จริง
+
+**merge เป็น one-way — จำไว้:** `cur.setdefault(k, v)` แปลว่าคีย์ลงครั้งเดียว แก้ template ทีหลังไม่ไปถึงเดสก์ที่มีคีย์นั้นแล้ว (hook ไม่เป็นเพราะ key ด้วย command string) → ตัวสคริปต์จึงต้องอยู่ในอิมเมจ ส่วนคีย์ใน settings เป็นแค่ path นิ่งๆ
+
+**จอมือถือแคบเกินกว่าจะย่อบาร์อย่างเดียว:** วัดจริง — แถว 5h เต็มรูปแบบ 79 คอลัมน์, หางที่ตายตัว `(bud 61%, -19% → 69%) ✓  ↻ 1h59m` กินไป ~31 คอลัมน์ ไม่ว่าบาร์จะสั้นแค่ไหน (W=10 ยังได้ 53) ส่วนมือถือ 390px ที่ JetBrains Mono 13px ได้ ~47 คอลัมน์ → **ย่อบาร์อย่างเดียวไม่มีทางพอ ต้องตัดหาง**. ทำเป็นโหมด compact ขับด้วยตัวแปรเดิม (`STATUSLINE_BAR_W` < 20 = ทิ้งบาร์ + ทิ้ง budget breakdown เหลือ `42% → 69% ✓ ↻1h56m` = 24 คอลัมน์) ไม่เพิ่ม env ตัวที่สอง. ตั้ง `STATUSLINE_BAR_W=0` ใน compose แบบ**ค่าตรงๆ ไม่ใช่ `${...}`** จะได้ไม่ลาก `secrets.manifest.yaml` + `make secrets` เข้ามาทั้งที่ไม่ใช่ secret
+
+**ที่ 36 เอาต์พุตเท่าเดิมเป๊ะ** — `diff` กับสคริปต์ workstation ผ่าน byte-identical เพื่อให้ก๊อปรุ่นใหม่มาทีหลัง diff สะอาด
+
+**ยังไม่ได้ยืนยัน:** ตัวเลขคอลัมน์ของมือถือจริง (ยังติดด่าน DSM RP WebSocket ตาม 00_INDEX) — headless Chrome บนแมคบีบความกว้างขั้นต่ำ ~500px `term.cols` จะรายงาน ~64 แล้วหลอกว่าพอดี เลยเลือกเลขจาก worst case ไปก่อน

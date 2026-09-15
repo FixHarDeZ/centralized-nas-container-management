@@ -40,6 +40,23 @@ phone ──HTTPS :15072 (DSM RP)──▶ claude-desk-nginx :5072
 
 **rtk** (the same Bash-output trimmer the workstation runs) is in the image, pinned like ttyd, and `entrypoint.sh` merges `claude-settings.json` (the `PreToolUse Bash → rtk hook claude` hook) into the home volume's `~/.claude/settings.json` on every start — additive, keyed by command string, so settings changed from inside the desk survive. `rtk gain` in the shell shows what it saved.
 
+## Status line
+
+`statusline.sh` is the workstation's status line vendored into the stack — model, effort, cwd, git branch, the context bar, and the 5h / 7d rate-limit rows with a pace projection. The Jira segment did not come along (it needs credentials and a fetch script that never ship here, and its `stat -f` is macOS-only), nor did an unused helper that was the only caller of perl. Everything it does need — `bash jq awk git` — is already in the image.
+
+It sits in the image at `/opt/claude-desk/statusline.sh`, **not** in `~/.claude`: a named volume is only seeded from the image while it is empty, so anything written under `/home/claude` in the Dockerfile never reaches a desk that already exists. `claude-settings.json` points at the image path, and the same merge that installs the rtk hook installs the `statusLine` key.
+
+A phone terminal is about 47 columns and the full-width rows need 79. `STATUSLINE_BAR_W` (compose `environment`, `0` here) picks the layout: below 20 the rows drop the bars and the `(bud 61%, -19% → 69%)` breakdown and keep the percentage, where the current pace lands, and the reset — 24 columns, nothing wraps.
+
+```
+Opus 5 | high | work | main*
+  ctx 65% (131K)
+  5h  42% → 69% ✓ ↻1h56m
+  wk  61% → 91% ✓ ↻2d
+```
+
+At 36 the output is byte-identical to the workstation copy, which keeps re-vendoring a clean diff.
+
 Skills live in the image at `/opt/skills` (clone of `anthropics/skills`, pinned `ARG SKILLS_REF`); `entrypoint.sh` re-links `pptx docx xlsx pdf` into `~/.claude/skills` on every start so a ref bump reaches the volume.
 
 ## Secrets

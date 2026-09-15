@@ -23,7 +23,8 @@ Claude Code reached from a phone browser, for generating pptx/docx/xlsx — not 
 | `Dockerfile` | image; pins CLAUDE_VERSION / SKILLS_REF / TTYD_VERSION(+sha256); build-time asserts soffice/claude/pptxgenjs/python libs |
 | `entrypoint.sh` | mkdir in/out, symlink skills into home volume, copy `work/CLAUDE.md`, merge `claude-settings.json` hooks into `~/.claude/settings.json`, append prompt to `~/.bashrc`, exec ttyd |
 | `upload.py` | PUT/DELETE/clear receiver behind the drawer (see architecture); `WORK_DIR=/tmp/x python3 upload.py` to exercise it locally |
-| `claude-settings.json` | Claude Code settings template: `PreToolUse Bash → rtk hook claude` (rtk binary pinned in Dockerfile `RTK_VERSION`/`RTK_SHA256`) |
+| `claude-settings.json` | Claude Code settings template: `PreToolUse Bash → rtk hook claude` (rtk binary pinned in Dockerfile `RTK_VERSION`/`RTK_SHA256`) + `statusLine` → `/opt/claude-desk/statusline.sh`; `_`-prefixed keys are comments and are skipped by the merge |
+| `statusline.sh` | status line vendored from the workstation (`~/.claude/statusline-script.sh`) minus the Jira segment and the perl `dwidth` helper; `STATUSLINE_BAR_W` < 20 = phone layout (no bars, no budget breakdown, 24 cols), 36 = byte-identical to the original |
 | `tmux.conf` | `escape-time 10`, `status off`, `mouse off`, login shell in /work |
 | `profile.sh` | `/etc/profile.d`: alias `claude` → `--dangerously-skip-permissions`, `r` = `--continue`, banner |
 | `docker-compose.yml` | two built services; `claude_desk_home` volume; `${CLAUDE_WORK_DIR}` bind (desk `/work`, nginx `/files` ro); `mem_limit: 2g`; watchtower off on both |
@@ -47,6 +48,8 @@ Claude Code reached from a phone browser, for generating pptx/docx/xlsx — not 
 ## Gotchas
 
 - **Do not `compose up` before the DSM shared folder `claude-work` exists** — docker creates a plain root dir at the bind path and DSM then refuses to create a share of that name.
+- **A named volume is seeded from the image only while it is empty.** `/home/claude` is `claude_desk_home`, so anything COPYed under it in the Dockerfile appears on a fresh volume and never on an existing deploy. Files that must reach a running desk go to `/opt/claude-desk/` and are referenced by path (`statusline.sh`) or copied by `entrypoint.sh` (`work/CLAUDE.md`, skills symlinks).
+- **The settings merge is one-way, by design.** `cur.setdefault(k, v)` means a template key lands once; editing `claude-settings.json` afterwards does *not* change a desk that already has that key (hooks are keyed by command string and do get added). To change a value on a live desk, edit `~/.claude/settings.json` there or delete the key first. Hence the script body lives in the image and the settings key is only a stable path.
 - Claude Code refuses `--dangerously-skip-permissions` as root → `user: 1000:100` + `useradd -u 1000 -g 100` in the image.
 - **Synology share ACL, not mode bits, decides access.** `claude-work` came as `drwxrwxrwx+` with ACL entries only for `group:administrators` and one user → uid 1000 *and* uid 1026 (share owner, admin via supplementary gid 101 over SSH) both got `Permission denied` inside a container (`mkdir: cannot create directory '/work'` — looks like a missing mount, is an ACL traverse denial). Fixed once with `synoacltool -add /volume2/claude-work group:users:allow:rwxpdDaARWc--:fd--` (sudo password needed; `sudo -n` only covers docker) and the container runs with gid 100. Re-do the ACL if the share is ever recreated.
 - **Never bind-mount a directory from `/volume2/docker/<stack>` into a non-root process.** The project tree carries the `docker` share's ACL; uid 1000 got `Permission denied` on `./work`, and nginx's worker served 403 for the whole `./ui` bind. File binds are fine (read by root before privilege drop). Bake dirs into the image instead.
@@ -77,10 +80,11 @@ Claude Code reached from a phone browser, for generating pptx/docx/xlsx — not 
 - [x] `claude -p` inside the container authenticates with the vault token (`DESK_OK`)
 - [x] ttyd session via raw ws client on the NAS spawns tmux `main`, banner + shell in `/work`
 - [x] upload path on the NAS: 3 MB PUT → byte-identical in `in/`, traversal name → 400, `/files/in/` JSON lists it, GET returns it, DELETE → 204
-- [ ] end-to-end from phone: key bar, `claude` interactive, drawer upload/download
+- [ ] end-to-end from phone: key bar, `claude` interactive, drawer upload/download, status line fits without wrapping
 
 ## Change log
 
+- **2026-09-15** — status line vendored from the workstation (`statusline.sh`, phone layout via `STATUSLINE_BAR_W`)
 - **2026-09-15** — Clear in/ and Clear out/ in the drawer; file API becomes `/upload/<dir>/[name]`
 - **2026-09-15** — dark/light theme toggle (header sun/moon, follows the system until first tap)
 - **2026-09-15** — drawer gets in/ tab with upload (+delete) and ⬇ on out/; `upload.py` + `/upload/` + `/files/{in,out}/`
