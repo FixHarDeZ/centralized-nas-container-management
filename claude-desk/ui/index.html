@@ -60,16 +60,25 @@
 
   <aside id="drawer" aria-hidden="true">
     <div class="drawer-head">
-      <div>
-        <div class="drawer-title">out/</div>
-        <div class="drawer-sub">finished files · tap to open</div>
+      <div class="tabs" role="tablist">
+        <button class="tab" data-dir="in" role="tab">in/</button>
+        <button class="tab on" data-dir="out" role="tab">out/</button>
       </div>
       <button id="drawer-close" class="icon-btn" aria-label="Close">
         <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
     </div>
+    <div class="drawer-sub" id="drawer-sub">finished files · tap to open, ⬇ to save</div>
+    <div class="drawer-actions" id="in-actions" hidden>
+      <input type="file" id="file-input" multiple hidden>
+      <button id="add-btn" class="add-btn">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        Add files
+      </button>
+      <div id="upload-status" class="upload-status" hidden></div>
+    </div>
     <ul id="file-list" class="file-list"></ul>
-    <div id="file-empty" class="file-empty" hidden>Nothing in <code>out/</code> yet.</div>
+    <div id="file-empty" class="file-empty" hidden></div>
   </aside>
   <div id="scrim"></div>
 

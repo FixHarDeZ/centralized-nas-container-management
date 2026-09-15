@@ -97,6 +97,7 @@ COPY --chmod=0644 tmux.conf /etc/tmux.conf
 # carry the DSM share ACL and uid 1000 cannot read through them.
 COPY --chmod=0644 work/CLAUDE.md /opt/claude-desk/work/CLAUDE.md
 COPY --chmod=0644 claude-settings.json /opt/claude-desk/claude-settings.json
+COPY --chmod=0644 upload.py /opt/claude-desk/upload.py
 COPY --chmod=0644 profile.sh /etc/profile.d/claude-desk.sh
 COPY --chmod=0755 entrypoint.sh /usr/local/bin/entrypoint.sh
 
@@ -116,5 +117,5 @@ ENV HOME=/home/claude \
     TERM=xterm-256color \
     DISABLE_AUTOUPDATER=1
 
-EXPOSE 7681
+EXPOSE 7681 7682
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

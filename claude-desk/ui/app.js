@@ -344,9 +344,20 @@
   });
 
   // ── Files drawer ──────────────────────────────────────
+  // Two folders on the share: in/ (yours → Claude, with upload + delete)
+  // and out/ (Claude → you, tap to open, ⬇ to save). Listing comes from
+  // nginx's JSON autoindex; uploads go to upload.py in the desk container.
   const drawer = document.getElementById('drawer');
   const list = document.getElementById('file-list');
   const empty = document.getElementById('file-empty');
+  const sub = document.getElementById('drawer-sub');
+  const inActions = document.getElementById('in-actions');
+  const fileInput = document.getElementById('file-input');
+  const upStatus = document.getElementById('upload-status');
+  let dir = 'out';
+
+  const ICON_DL = '<svg viewBox="0 0 24 24"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>';
+  const ICON_DEL = '<svg viewBox="0 0 24 24"><path d="M5 7h14M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
 
   function fmtSize(n) {
     if (n < 1024) return n + ' B';
@@ -356,53 +367,121 @@
   function fmtTime(s) {
     const d = new Date(s);
     if (isNaN(d)) return '';
-    const now = new Date();
-    const same = d.toDateString() === now.toDateString();
+    const same = d.toDateString() === new Date().toDateString();
     return same ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       : d.toLocaleDateString([], { day: 'numeric', month: 'short' });
   }
   function render(files) {
     list.innerHTML = '';
-    files = files.filter((f) => f.type === 'file' && !f.name.startsWith('.'))
+    files = files.filter((f) => f.type === 'file' && !f.name.startsWith('.') && !f.name.endsWith('.part'))
       .sort((a, b) => new Date(b.mtime) - new Date(a.mtime));
     empty.hidden = files.length > 0;
+    empty.innerHTML = dir === 'out' ? 'Nothing in <code>out/</code> yet.' : 'Nothing in <code>in/</code>. Add a file for Claude to work on.';
     for (const f of files) {
       const ext = (f.name.split('.').pop() || '').toLowerCase();
+      const href = 'files/' + dir + '/' + encodeURIComponent(f.name);
       const li = document.createElement('li');
       const a = document.createElement('a');
-      a.href = 'files/' + encodeURIComponent(f.name);
-      a.target = '_blank';
-      a.rel = 'noopener';
+      a.href = href; a.target = '_blank'; a.rel = 'noopener';
       a.innerHTML = '<span class="file-ico"></span><span class="file-name"></span><span class="file-meta"></span>';
       a.querySelector('.file-ico').textContent = ext.slice(0, 4).toUpperCase();
       a.querySelector('.file-ico').classList.add(ext);
       a.querySelector('.file-name').textContent = f.name;
       a.querySelector('.file-meta').textContent = fmtSize(f.size) + ' · ' + fmtTime(f.mtime);
       li.appendChild(a);
+      const act = document.createElement('button');
+      act.className = 'file-act' + (dir === 'in' ? ' del' : '');
+      act.innerHTML = dir === 'in' ? ICON_DEL : ICON_DL;
+      act.title = dir === 'in' ? 'Delete' : 'Download';
+      act.addEventListener('click', () => (dir === 'in' ? removeFile(f.name) : saveFile(href, f.name)));
+      li.appendChild(act);
       list.appendChild(li);
     }
   }
+  function saveFile(href, name) {
+    const a = document.createElement('a');
+    a.href = href; a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+  }
   async function loadFiles() {
     if (DEMO) {
-      render([
+      render(dir === 'out' ? [
         { name: '2026-09-15-q3-review.pptx', type: 'file', size: 2411520, mtime: new Date().toISOString() },
         { name: '2026-09-15-budget.xlsx', type: 'file', size: 88123, mtime: new Date(Date.now() - 3.6e6).toISOString() },
         { name: '2026-09-14-proposal.docx', type: 'file', size: 421000, mtime: new Date(Date.now() - 9e7).toISOString() },
         { name: 'slide-03.png', type: 'file', size: 310000, mtime: new Date(Date.now() - 9.1e7).toISOString() },
+      ] : [
+        { name: 'sales-q3.xlsx', type: 'file', size: 150000, mtime: new Date().toISOString() },
+        { name: 'brand-template.pptx', type: 'file', size: 3900000, mtime: new Date(Date.now() - 2e8).toISOString() },
       ]);
       return;
     }
     try {
-      const r = await fetch('files/', { cache: 'no-store', headers: { Accept: 'application/json' } });
+      const r = await fetch('files/' + dir + '/', { cache: 'no-store', headers: { Accept: 'application/json' } });
       render(r.ok ? await r.json() : []);
     } catch (_) {
       render([]);
     }
   }
+  function setDir(next) {
+    dir = next;
+    drawer.querySelectorAll('.tab').forEach((t) => t.classList.toggle('on', t.dataset.dir === dir));
+    inActions.hidden = dir !== 'in';
+    sub.textContent = dir === 'out' ? 'finished files · tap to open, ⬇ to save' : 'source files for Claude · tap to open, 🗑 to remove';
+    loadFiles();
+  }
+  drawer.querySelectorAll('.tab').forEach((t) => t.addEventListener('click', () => setDir(t.dataset.dir)));
+
+  // Upload: one PUT per file, sequential, with a progress bar. XHR rather
+  // than fetch because fetch has no upload progress.
+  function putFile(file) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('PUT', 'upload/' + encodeURIComponent(file.name));
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) setProgress(file.name, e.loaded / e.total);
+      };
+      xhr.onload = () => (xhr.status === 201 ? resolve() : reject(new Error(xhr.status + ' ' + xhr.responseText)));
+      xhr.onerror = () => reject(new Error('network'));
+      xhr.send(file);
+    });
+  }
+  function setProgress(name, frac, err) {
+    upStatus.hidden = false;
+    upStatus.innerHTML = '<span></span><div class="bar"><i></i></div>';
+    upStatus.querySelector('span').textContent = err ? ('✕ ' + name + ' — ' + err) : ((frac >= 1 ? '✓ ' : '↑ ') + name + ' ' + Math.round(frac * 100) + '%');
+    upStatus.querySelector('i').style.width = Math.round(frac * 100) + '%';
+  }
+  document.getElementById('add-btn').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', async () => {
+    const files = Array.from(fileInput.files || []);
+    fileInput.value = '';
+    for (const f of files) {
+      try {
+        setProgress(f.name, 0);
+        if (DEMO) { await new Promise((r) => setTimeout(r, 400)); setProgress(f.name, 1); }
+        else await putFile(f);
+        setProgress(f.name, 1);
+      } catch (e) {
+        setProgress(f.name, 0, e.message);
+        break;
+      }
+    }
+    loadFiles();
+    setTimeout(() => { upStatus.hidden = true; }, 2500);
+  });
+  async function removeFile(name) {
+    if (DEMO) return;
+    try {
+      await fetch('upload/' + encodeURIComponent(name), { method: 'DELETE' });
+    } catch (_) { /* listing refresh shows the truth */ }
+    loadFiles();
+  }
+
   function openDrawer() {
     document.body.classList.add('drawer-open');
     drawer.setAttribute('aria-hidden', 'false');
-    loadFiles();
+    setDir(dir);
   }
   function closeDrawer() {
     document.body.classList.remove('drawer-open');
@@ -433,7 +512,7 @@
     term.writeln('  out/2026-09-15-q3-review.pptx — 8 slides, Thai fonts OK');
     term.writeln('');
     term.write('\x1b[38;5;245m > \x1b[0m');
-    if (PARAMS.has('drawer')) openDrawer();
+    if (PARAMS.has('drawer')) { openDrawer(); if (PARAMS.get('drawer') === 'in') setDir('in'); }
   } else {
     connect();
   }

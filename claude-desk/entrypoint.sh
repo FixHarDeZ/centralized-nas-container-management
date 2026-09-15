@@ -56,6 +56,15 @@ if [[ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]]; then
     echo "WARNING: CLAUDE_CODE_OAUTH_TOKEN is empty — claude will ask you to log in" >&2
 fi
 
+# Upload receiver for the page's "Add files" button (PUT /upload/<name> →
+# /work/in). Restarted by the loop if it ever dies; ttyd stays PID 1.
+(
+    while true; do
+        python3 /opt/claude-desk/upload.py
+        sleep 2
+    done
+) &
+
 # -W        writable (ttyd >= 1.7 is read-only by default)
 # -m 1      one browser at a time; the tmux session is shared anyway, and a
 #           second client is either you on another device or an intruder

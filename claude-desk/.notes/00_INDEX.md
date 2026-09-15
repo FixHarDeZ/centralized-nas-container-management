@@ -12,7 +12,8 @@ Claude Code reached from a phone browser, for generating pptx/docx/xlsx — not 
 ## Architecture
 
 - `claude-desk` container: Debian bookworm-slim + Node 22 + `@anthropic-ai/claude-code@ARG CLAUDE_VERSION` + LibreOffice `*-nogui` + skills from `anthropics/skills@ARG SKILLS_REF`. PID 1 = `ttyd -W -m 1 -P 30 tmux new -A -s main`. uid 1000. `expose: 7681` only.
-- `claude-desk-nginx`: `5072:80`, basic auth everywhere, serves `ui/`, proxies `/ws` + `/token` to ttyd, `autoindex_format json` on `/files/` (= `<work>/out/`, ro).
+- `claude-desk-nginx`: `5072:80`, basic auth everywhere, serves `ui/`, proxies `/ws` + `/token` to ttyd, `/upload/` to upload.py (7682, `client_max_body_size 300m`), `autoindex_format json` on `/files/in/` and `/files/out/` (share mounted ro; `/files/` root itself 404).
+- `upload.py` in the desk: stdlib `ThreadingHTTPServer`, PUT → `/work/in/<name>` (.part + `os.replace`), DELETE; rejects `..`, slashes, dot-files, >200 chars. Respawned by a loop in entrypoint if it dies; ttyd stays PID 1.
 - `ui/`: own page (xterm.js vendored) that speaks ttyd's ws protocol. Key bar for the keys iOS lacks. Files drawer over `/files/`. PWA.
 
 ## File map
@@ -21,6 +22,7 @@ Claude Code reached from a phone browser, for generating pptx/docx/xlsx — not 
 |---|---|
 | `Dockerfile` | image; pins CLAUDE_VERSION / SKILLS_REF / TTYD_VERSION(+sha256); build-time asserts soffice/claude/pptxgenjs/python libs |
 | `entrypoint.sh` | mkdir in/out, symlink skills into home volume, copy `work/CLAUDE.md`, merge `claude-settings.json` hooks into `~/.claude/settings.json`, append prompt to `~/.bashrc`, exec ttyd |
+| `upload.py` | PUT/DELETE receiver for the drawer's in/ tab (see architecture) |
 | `claude-settings.json` | Claude Code settings template: `PreToolUse Bash → rtk hook claude` (rtk binary pinned in Dockerfile `RTK_VERSION`/`RTK_SHA256`) |
 | `tmux.conf` | `escape-time 10`, `status off`, `mouse off`, login shell in /work |
 | `profile.sh` | `/etc/profile.d`: alias `claude` → `--dangerously-skip-permissions`, `r` = `--continue`, banner |
@@ -68,9 +70,11 @@ Claude Code reached from a phone browser, for generating pptx/docx/xlsx — not 
 - [x] DSM RP 15072 reaches nginx (401 → 200 with auth, `/files/` JSON) — **websocket 404 until the Custom Header → WebSocket entry is added**
 - [x] `claude -p` inside the container authenticates with the vault token (`DESK_OK`)
 - [x] ttyd session via raw ws client on the NAS spawns tmux `main`, banner + shell in `/work`
-- [ ] end-to-end from phone: key bar, `claude` interactive, drawer download
+- [x] upload path on the NAS: 3 MB PUT → byte-identical in `in/`, traversal name → 400, `/files/in/` JSON lists it, GET returns it, DELETE → 204
+- [ ] end-to-end from phone: key bar, `claude` interactive, drawer upload/download
 
 ## Change log
 
+- **2026-09-15** — drawer gets in/ tab with upload (+delete) and ⬇ on out/; `upload.py` + `/upload/` + `/files/{in,out}/`
 - **2026-09-15** — rtk 0.49.0 added (binary + settings merge in entrypoint); Headroom deliberately not added (2 GB ML install, would be a proxy sidecar — see daily_log)
 - **2026-09-15** — stack created (Dockerfile, compose, nginx, UI, docs, vault keys, deploy.sh `ALL_STACKS`, homepage tile, root README/CLAUDE.md rows)

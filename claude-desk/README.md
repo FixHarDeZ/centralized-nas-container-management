@@ -6,6 +6,7 @@ and download the `.pptx` a few minutes later.
 
 ![phone](../screenshots/claude-desk-phone.png)
 ![files drawer](../screenshots/claude-desk-files.png)
+![upload](../screenshots/claude-desk-upload.png)
 
 ## What runs
 
@@ -13,12 +14,14 @@ and download the `.pptx` a few minutes later.
 phone ──HTTPS :15072 (DSM RP)──▶ claude-desk-nginx :5072
                                    ├─ /            static UI  (ui/)
                                    ├─ /ws, /token  ──▶ claude-desk :7681 (ttyd → tmux → bash → claude)
-                                   └─ /files/      autoindex JSON of <work>/out/  (read-only)
+                                   ├─ /files/in/, /files/out/   autoindex JSON + the files (read-only)
+                                   └─ /upload/<name>  PUT/DELETE ──▶ claude-desk :7682 (upload.py → /work/in)
 ```
 
+- **`upload.py`** — stdlib HTTP server in the desk container (port 7682, only nginx can reach it): `PUT /upload/<name>` streams the body into `/work/in/<name>` via a `.part` temp file + atomic rename, `DELETE` removes. Flat names only, no `..`/slashes/dot-files. Size cap is nginx's `client_max_body_size 300m` on `/upload/` (DSM's reverse proxy has its own cap too).
 - **`claude-desk`** — Debian + Node 22 + `@anthropic-ai/claude-code` (pinned `ARG CLAUDE_VERSION`), LibreOffice `*-nogui`, poppler, qpdf, Thai fonts, the Python and npm packages the official office skills need. PID 1 is `ttyd -W -m 1 -P 30 tmux new -A -s main`. Runs as uid 1000 (Claude Code refuses `--dangerously-skip-permissions` as root). Never published on the host.
 - **`claude-desk-nginx`** — `nginx:alpine` with `ui/` baked in (`nginx/Dockerfile`): basic auth on every path (`nginx/.htpasswd` from the vault), proxies only the websocket and token endpoints to ttyd, and lists `out/` as JSON. `ui/` cannot be bind-mounted: directories under `/volume2/docker` carry the DSM share ACL, which the nginx worker (uid 101) cannot traverse → 403 on every file. Single-file binds (`nginx.conf`, `.htpasswd`) are read by the root master process and work.
-- **`ui/`** — our own page instead of ttyd's: xterm.js 5.3 (vendored, no CDN), Inter + JetBrains Mono self-hosted, a key bar with `Esc ⇧Tab Tab Ctrl ↑↓←→ ↵NL` and `Paste / ^C A− A+ ⌨`, a right-hand drawer over `/files/`, PWA manifest for Add-to-Home-Screen. Speaks ttyd's websocket protocol directly (touch scrolling and the iOS keyboard handling adapted from `pawprint0706/ttyd-wrapper`, MIT).
+- **`ui/`** — our own page instead of ttyd's: xterm.js 5.3 (vendored, no CDN), Inter + JetBrains Mono self-hosted, a key bar with `Esc ⇧Tab Tab Ctrl ↑↓←→ ↵NL` and `Paste / ^C A− A+ ⌨`, a right-hand drawer with `in/` (Add files → PUT, 🗑 delete) and `out/` (tap to open, ⬇ to save) tabs, PWA manifest for Add-to-Home-Screen. Speaks ttyd's websocket protocol directly (touch scrolling and the iOS keyboard handling adapted from `pawprint0706/ttyd-wrapper`, MIT).
 
 ## Volumes
 
@@ -59,8 +62,8 @@ Literal: `CLAUDE_WORK_DIR=/volume2/claude-work`.
 
 ## Using it
 
-- Drop source files into `claude-work/in/` from DS File. Type `claude` (alias for `claude --dangerously-skip-permissions`), describe the document. `r` resumes the last session.
-- Finished files appear under `out/`; the folder button (top right) lists them, tap to open/download. iOS previews pptx/xlsx inline.
+- Tap the folder icon → **in/** → **Add files** to upload sources from the phone (or drop them into `claude-work/in/` from DS File — same folder). Type `claude` (alias for `claude --dangerously-skip-permissions`), describe the document. `r` resumes the last session.
+- Finished files appear under **out/** in the same drawer: tap to open (iOS previews pptx/xlsx inline), ⬇ to save to Files.
 - Close the tab any time — tmux keeps the session; reopening attaches to the same screen.
 - `?demo=1&mobile=1` on the URL shows the UI with a canned session and no server, for design work.
 
@@ -68,5 +71,4 @@ Literal: `CLAUDE_WORK_DIR=/volume2/claude-work`.
 
 - Basic auth is the only gate in front of a shell with permission prompts off. The container is the sandbox: no docker socket, no other mounts, `mem_limit: 2g`. Keep the password long; `-m 1` refuses a second concurrent browser.
 - One session, one person. Not multi-user.
-- Upload is DS File, not the page. The page only reads `out/`.
 - `cpus:` does nothing on DSM; a heavy soffice render can pin a few cores for a minute.
