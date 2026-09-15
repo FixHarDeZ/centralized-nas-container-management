@@ -129,3 +129,13 @@ All config files in `config/` are hot-reloaded — no container restart needed a
 | `bookmarks.yaml` | Quick-access links |
 | `docker.yaml` | Docker socket connection for container status widgets |
 
+### Widget notes
+
+- **Public IP** — a `customapi` card in `🌐 Remote Access` calling `https://ipinfo.io/json`. The
+  request is made by the homepage container, so the address shown is the NAS's outbound IP, not the
+  IP of whoever opens the dashboard. No credential, so nothing to add to the vault.
+- **Jellyfin** — Jellyfin 12 dropped the `/emby` path prefix and stopped accepting `?api_key=`, so
+  the built-in `type: jellyfin` widget returns 404. Both Jellyfin cards use `customapi` against
+  `/Items/Counts` with `Authorization: MediaBrowser Token={{HOMEPAGE_VAR_JELLYFIN_KEY}}` instead.
+  `{{HOMEPAGE_VAR_*}}` substitution works inside `headers:`, not just `url:`.
+

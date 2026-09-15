@@ -146,18 +146,50 @@
 
 # ─── 🌐 Remote Access ─────────────────────────────────────────────────────────
 - 🌐 Remote Access:
+    # ipinfo.io ยิงจาก container ฝั่ง server = เห็น public IP ของ NAS จริง
+    # (ไม่ใช่ IP ของ browser) — ไม่มี key ไม่ต้องเข้า vault
+    - Public IP:
+        icon: mdi-ip-network
+        href: https://ipinfo.io/
+        description: WAN address ของบ้าน
+        widget:
+          type: customapi
+          url: https://ipinfo.io/json
+          refreshInterval: 300000
+          mappings:
+            - field: ip
+              label: IP
+              format: text
+            - field: org
+              label: ISP
+              format: text
+            - field: city
+              label: City
+              format: text
+
     - Jellyfin (DDNS):
         icon: jellyfin.png
         href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:18096"
         description: External Media Streaming
         ping: "{{HOMEPAGE_VAR_DDNS_BASE_HTTP}}:8096"
+        # Jellyfin 12 ตัด prefix /emby และเลิกรับ api_key= ที่ query string
+        # widget type: jellyfin ของ homepage 2.3.0 จึงได้ 404 — ใช้ customapi + header แทน
         widget:
-          type: jellyfin
-          url: "{{HOMEPAGE_VAR_JELLYFIN_URL}}"
-          key: "{{HOMEPAGE_VAR_JELLYFIN_KEY}}"
-          enableNowPlaying: false
-          enableBlocks: true
-          fields: ["movies", "series", "episodes"]
+          type: customapi
+          url: "{{HOMEPAGE_VAR_JELLYFIN_URL}}/Items/Counts"
+          refreshInterval: 60000
+          headers:
+            Authorization: MediaBrowser Token={{HOMEPAGE_VAR_JELLYFIN_KEY}}
+          mappings:
+            - field: MovieCount
+              label: Movies
+              format: number
+            - field: SeriesCount
+              label: Series
+              format: number
+            - field: EpisodeCount
+              label: Episodes
+              format: number
 
     - Plex (DDNS):
         icon: plex.png
@@ -188,12 +220,21 @@
         href: "{{HOMEPAGE_VAR_JELLYFIN_URL}}"
         description: High-speed Local Stream
         widget:
-          type: jellyfin
-          url: "{{HOMEPAGE_VAR_JELLYFIN_URL}}"
-          key: "{{HOMEPAGE_VAR_JELLYFIN_KEY}}"
-          enableNowPlaying: false
-          enableBlocks: true
-          fields: ["movies", "series", "episodes"]
+          type: customapi
+          url: "{{HOMEPAGE_VAR_JELLYFIN_URL}}/Items/Counts"
+          refreshInterval: 60000
+          headers:
+            Authorization: MediaBrowser Token={{HOMEPAGE_VAR_JELLYFIN_KEY}}
+          mappings:
+            - field: MovieCount
+              label: Movies
+              format: number
+            - field: SeriesCount
+              label: Series
+              format: number
+            - field: EpisodeCount
+              label: Episodes
+              format: number
 
     - Plex (LAN):
         icon: plex.png

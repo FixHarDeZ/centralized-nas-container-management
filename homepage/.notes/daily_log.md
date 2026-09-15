@@ -183,3 +183,45 @@ forward 8443 ที่ router แล้วให้ n8n มี RP entry ขอ�
 บริบท: ช่วงเดียวกันแก้ dashboard port ของ shorts-factory เอง `5069 → 5071` (ชนกับ dupe-sweeper) และผู้ใช้แจ้งว่าตั้ง DSM Reverse Proxy `15071 → localhost:5071` แล้ว จึงอัปเดต root `README.md`/`CLAUDE.md` จาก "LAN only" เป็น `https://…:15071` ด้วย — **ยังไม่ verify จริงว่า RP rule มีอยู่จริง** แค่เชื่อคำผู้ใช้ ต้องเช็ค `curl -o /dev/null -w "%{http_code}" https://fixhardez.synology.me:15071` (คาด 401) ตอน deploy รอบหน้า
 
 **Deploy:** `scripts/deploy.sh -s homepage -y` — verify ด้วย `docker exec homepage grep -A3 shorts-factory /app/config/services.yaml`
+
+## 2026-09-15 — Public IP tile + ซ่อม Jellyfin widget (Jellyfin 12)
+
+**อาการ:** การ์ด Jellyfin ทั้ง DDNS และ LAN ขึ้น "API Error Information"
+
+**สาเหตุ:** Jellyfin บน NAS อัปเป็น **12.0.0** แล้ว
+- prefix `/emby/...` ถูกถอดออก → `GET http://<LAN_IP>:8096/emby/Items` = **404** (ตรงกับ log `<jellyfinProxyHandler> HTTP Error 404`)
+- auth แบบ `?api_key=<key>` ไม่รับแล้ว → `/Items/Counts?api_key=...` = **401**
+- key เดิมยังใช้ได้ วัดจริง: `-H 'Authorization: MediaBrowser Token=<key>'` → **200** (ทั้งแบบใส่ `"` ครอบ token และไม่ใส่ — เลือกแบบไม่ใส่เพราะ YAML ง่ายกว่า) ส่วน `X-Emby-Token` = 401
+- homepage เป็น `:latest` (image อายุ 5 วัน, v2.3.0) แล้ว → **ไม่มีเวอร์ชันใหม่กว่าให้รอ** widget `type: jellyfin` ในตัวยังยิง `/emby` อยู่
+
+**ทางแก้:** เปลี่ยนทั้งสองการ์ดจาก `type: jellyfin` → `type: customapi` ยิง `/Items/Counts` ตรงๆ พร้อม header
+
+```yaml
+widget:
+  type: customapi
+  url: "{{HOMEPAGE_VAR_JELLYFIN_URL}}/Items/Counts"
+  headers:
+    Authorization: MediaBrowser Token={{HOMEPAGE_VAR_JELLYFIN_KEY}}
+  mappings: [MovieCount / SeriesCount / EpisodeCount]
+```
+
+ไม่ต้องแตะ vault/manifest เลย ใช้ `HOMEPAGE_VAR_JELLYFIN_*` ตัวเดิม (ยืนยันว่า `{{HOMEPAGE_VAR_*}}` ถูกแทนค่าใน `headers:` ด้วย ไม่ใช่เฉพาะ `url:`) แลกกับการเสีย `enableBlocks`/now-playing ของ widget เดิมไป
+
+**Public IP:** เพิ่มการ์ด `Public IP` ใน group `🌐 Remote Access` — `customapi` ยิง `https://ipinfo.io/json` map `ip`/`org`/`city` refresh 5 นาที
+- **ยิงจากฝั่ง server (container) ไม่ใช่ browser** → ได้ IP ขาออกของ NAS จริง ไม่ใช่ IP ของเครื่องที่เปิดหน้าเว็บ
+- ไม่มี key ไม่ต้องเข้า vault (ใส่ URL ตรงๆ — เพิ่มคีย์ใน `secrets.manifest.yaml` โดยไม่มีค่าใน vault = `make secrets` พังทั้ง repo)
+- ทดสอบ egress จากใน container ก่อนแล้ว: `ipinfo.io/json`, `ifconfig.co/json` ผ่าน ส่วน `api.ipify.org?format=json` ต้องมี **trailing slash** (`api.ipify.org/?format=json`) ไม่งั้น busybox wget ได้ 404
+- **ไม่ได้ใช้ info widget (แถบบนสุด)** เพราะ homepage 2.3.0 ไม่มี `customapi` ในกลุ่ม info widget — service card เท่านั้น
+
+**วิธี verify widget โดยไม่ต้องเปิด browser:** หน้าเว็บอยู่หลัง nginx basic auth และ widget ดึงข้อมูลฝั่ง client จึง curl หน้า HTML เฉยๆ ไม่พอ ให้ยิง proxy API ตรงที่ container IP พร้อม `Host:` ที่อยู่ใน `HOMEPAGE_ALLOWED_HOSTS` (ไม่งั้น **403**):
+
+```bash
+IP=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' homepage)
+curl -s -H "Host: <LAN_IP>:3000" "http://$IP:3000/api/services/proxy?group=<group urlencode>&service=<service urlencode>"
+```
+
+**ห้ามใส่ `&endpoint=...`** สำหรับ customapi — ได้ `{"error":"Unmapped proxy request."}` 403
+
+การ์ด `Synology DSM (Remote)` (widget `diskstation`) ตอบ 403 ทั้งแบบมีและไม่มี `endpoint` (`Unmapped proxy request.` / `Unsupported service endpoint` — ลองชื่อ endpoint ที่เดาได้ 7 แบบไม่ตรงสักอัน) → **วิธี verify ด้านบนใช้ได้กับ customapi เท่านั้น ไม่ใช่ widget มี type เฉพาะ** และ **ยังไม่ได้ยืนยันว่าการ์ด DSM ใช้งานได้หรือไม่ในรอบนี้** (ยืนยันตรงๆ ต้องอ่าน `HOMEPAGE_VAR_NAS_PASSWORD` มายิง DSM เอง — ไม่ทำ) ให้ดูด้วยตาบนหน้า dashboard
+
+**ผลหลัง deploy + restart:** Jellyfin (LAN)/(DDNS) = 200 (`MovieCount 109 / SeriesCount 62 / EpisodeCount 1919`), Public IP = 200, Plex ทั้งสองการ์ด = 200 ไม่กระทบ, log ไม่มี error ใหม่หลัง restart
