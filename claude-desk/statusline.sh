@@ -12,8 +12,8 @@
 # from the image while it is empty, so a copy under /home/claude would never
 # reach an existing deploy. Referenced by path from claude-settings.json.
 #
-# Bars are $LIMIT_BAR_W cells wide; set STATUSLINE_BAR_W in the compose env to
-# retune for the phone without rebuilding the image.
+# The rows size themselves from COLUMNS on every render — see the block below
+# — so one image serves the phone and the laptop.
 
 # Read input JSON from stdin
 input=$(cat)
@@ -47,17 +47,39 @@ context_size=$(echo "$input" | jq -r '.context_window.context_window_size')
 # Autocompact buffer is ~22.5% of context window
 BUFFER_PCT=23
 
-# Fixed width (cells) shared by the context, 5h and wk bars so they align.
-LIMIT_BAR_W=${STATUSLINE_BAR_W:-36}
+# Width of the bars shared by the context, 5h and wk rows so they align.
+#
+# The same desk is opened from a phone and from a laptop, so the layout is
+# decided per render rather than pinned per container. Claude Code captures the
+# script's output instead of connecting it to the terminal — `tput cols` and
+# `stty` cannot see the real size from in here — but it does export the current
+# dimensions as COLUMNS before each run, which is what this reads.
+#
+# A limit row costs its bar plus ~43 cells of label and tail, so the bar takes
+# whatever is left, capped at the workstation's 36. Under ~51 columns (a phone)
+# nothing useful is left: those rows drop the bar and the
+# "(bud 61%, -19% → 69%)" breakdown and keep the percentage, where the current
+# pace lands, and the reset — a row that wraps is worse than no bar at all.
+#
+# STATUSLINE_BAR_W overrides the arithmetic; 0 forces the narrow layout.
+LIMIT_ROW_COST=43
+BAR_W_MAX=36
+BAR_W_MIN=8
 
-# A phone terminal is ~47 columns; the bars plus the "(bud 60%, -18% → 70%)"
-# detail need ~79 and a row that wraps is worse than no bar at all. Below the
-# threshold the rows drop the bar and the budget breakdown and keep what the
-# small screen can actually use: the percentage, where the pace lands, and the
-# reset. At the default width the output is unchanged from the workstation
-# copy, so re-vendoring stays a clean diff.
+if [ -n "${STATUSLINE_BAR_W:-}" ]; then
+    LIMIT_BAR_W=$STATUSLINE_BAR_W
+elif [ -n "${COLUMNS:-}" ] && [ "$COLUMNS" -gt 0 ] 2>/dev/null; then
+    LIMIT_BAR_W=$((COLUMNS - LIMIT_ROW_COST))
+    [ "$LIMIT_BAR_W" -gt "$BAR_W_MAX" ] && LIMIT_BAR_W=$BAR_W_MAX
+    [ "$LIMIT_BAR_W" -lt 0 ] && LIMIT_BAR_W=0
+else
+    # No COLUMNS (older Claude Code, or a hand run): the wide layout is what
+    # the workstation has always produced.
+    LIMIT_BAR_W=$BAR_W_MAX
+fi
+
 COMPACT=0
-[ "$LIMIT_BAR_W" -lt 20 ] 2>/dev/null && COMPACT=1
+[ "$LIMIT_BAR_W" -lt "$BAR_W_MIN" ] 2>/dev/null && COMPACT=1
 
 # Calculate context usage percentage and create progress bar
 context_section=""

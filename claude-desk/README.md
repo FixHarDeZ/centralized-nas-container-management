@@ -46,7 +46,7 @@ phone ──HTTPS :15072 (DSM RP)──▶ claude-desk-nginx :5072
 
 It sits in the image at `/opt/claude-desk/statusline.sh`, **not** in `~/.claude`: a named volume is only seeded from the image while it is empty, so anything written under `/home/claude` in the Dockerfile never reaches a desk that already exists. `claude-settings.json` points at the image path, and the same merge that installs the rtk hook installs the `statusLine` key.
 
-A phone terminal is about 47 columns and the full-width rows need 79. `STATUSLINE_BAR_W` (compose `environment`, `0` here) picks the layout: below 20 the rows drop the bars and the `(bud 61%, -19% → 69%)` breakdown and keep the percentage, where the current pace lands, and the reset — 24 columns, nothing wraps.
+The rows size themselves on every render. Claude Code captures the script's output rather than connecting it to the terminal — `tput cols` and `stty` see nothing from in there — but it exports the current `COLUMNS` before each run, which is what the script reads. A limit row costs its bar plus ~43 cells of label and tail, so the bar takes what is left, capped at 36. Under ~51 columns (a phone) nothing useful is left and the rows drop the bar and the `(bud 61%, -19% → 69%)` breakdown, keeping the percentage, where the pace lands, and the reset — 24 columns, nothing wraps:
 
 ```
 Opus 5 | high | work | main*
@@ -54,6 +54,8 @@ Opus 5 | high | work | main*
   5h  42% → 69% ✓ ↻1h56m
   wk  61% → 91% ✓ ↻2d
 ```
+
+`STATUSLINE_BAR_W` overrides the arithmetic (`0` forces the narrow layout), but compose deliberately does not set it: the same desk is opened from a phone and from a laptop, and pinning the variable would give both the same layout. That was the first cut of this and it showed up as missing bars on a wide screen.
 
 At 36 the output is byte-identical to the workstation copy, which keeps re-vendoring a clean diff.
 

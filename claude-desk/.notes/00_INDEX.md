@@ -24,7 +24,7 @@ Claude Code reached from a phone browser, for generating pptx/docx/xlsx — not 
 | `entrypoint.sh` | mkdir in/out, symlink skills into home volume, copy `work/CLAUDE.md`, merge `claude-settings.json` hooks into `~/.claude/settings.json`, append prompt to `~/.bashrc`, exec ttyd |
 | `upload.py` | PUT/DELETE/clear receiver behind the drawer (see architecture); `WORK_DIR=/tmp/x python3 upload.py` to exercise it locally |
 | `claude-settings.json` | Claude Code settings template: `PreToolUse Bash → rtk hook claude` (rtk binary pinned in Dockerfile `RTK_VERSION`/`RTK_SHA256`) + `statusLine` → `/opt/claude-desk/statusline.sh`; `_`-prefixed keys are comments and are skipped by the merge |
-| `statusline.sh` | status line vendored from the workstation (`~/.claude/statusline-script.sh`) minus the Jira segment and the perl `dwidth` helper; `STATUSLINE_BAR_W` < 20 = phone layout (no bars, no budget breakdown, 24 cols), 36 = byte-identical to the original |
+| `statusline.sh` | status line vendored from the workstation (`~/.claude/statusline-script.sh`) minus the Jira segment and the perl `dwidth` helper; sizes itself from `COLUMNS` each render (bar = cols − 43, cap 36; < 8 → phone layout: no bars, no budget breakdown, 24 cols). `STATUSLINE_BAR_W` overrides, compose does not set it |
 | `tmux.conf` | `escape-time 10`, `status off`, `mouse off`, login shell in /work |
 | `profile.sh` | `/etc/profile.d`: alias `claude` → `--dangerously-skip-permissions`, `r` = `--continue`, banner |
 | `docker-compose.yml` | two built services; `claude_desk_home` volume; `${CLAUDE_WORK_DIR}` bind (desk `/work`, nginx `/files` ro); `mem_limit: 2g`; watchtower off on both |
@@ -48,6 +48,7 @@ Claude Code reached from a phone browser, for generating pptx/docx/xlsx — not 
 ## Gotchas
 
 - **Do not `compose up` before the DSM shared folder `claude-work` exists** — docker creates a plain root dir at the bind path and DSM then refuses to create a share of that name.
+- **`tput cols`/`stty` see nothing from a status-line script** — Claude Code captures the output instead of attaching a terminal — but it exports `COLUMNS` (and `LINES`) before each run ([docs](https://code.claude.com/docs/en/statusline)). That is the only way to size rows, and it must be read per render: the first cut pinned `STATUSLINE_BAR_W=0` in compose for the phone and the bars then vanished on a laptop too.
 - **A named volume is seeded from the image only while it is empty.** `/home/claude` is `claude_desk_home`, so anything COPYed under it in the Dockerfile appears on a fresh volume and never on an existing deploy. Files that must reach a running desk go to `/opt/claude-desk/` and are referenced by path (`statusline.sh`) or copied by `entrypoint.sh` (`work/CLAUDE.md`, skills symlinks).
 - **The settings merge is one-way, by design.** `cur.setdefault(k, v)` means a template key lands once; editing `claude-settings.json` afterwards does *not* change a desk that already has that key (hooks are keyed by command string and do get added). To change a value on a live desk, edit `~/.claude/settings.json` there or delete the key first. Hence the script body lives in the image and the settings key is only a stable path.
 - Claude Code refuses `--dangerously-skip-permissions` as root → `user: 1000:100` + `useradd -u 1000 -g 100` in the image.
@@ -84,7 +85,8 @@ Claude Code reached from a phone browser, for generating pptx/docx/xlsx — not 
 
 ## Change log
 
-- **2026-09-15** — status line vendored from the workstation (`statusline.sh`, phone layout via `STATUSLINE_BAR_W`)
+- **2026-09-15** — status line sizes itself from `COLUMNS` per render (fix: pinned env gave a laptop the phone layout)
+- **2026-09-15** — status line vendored from the workstation (`statusline.sh`)
 - **2026-09-15** — Clear in/ and Clear out/ in the drawer; file API becomes `/upload/<dir>/[name]`
 - **2026-09-15** — dark/light theme toggle (header sun/moon, follows the system until first tap)
 - **2026-09-15** — drawer gets in/ tab with upload (+delete) and ⬇ on out/; `upload.py` + `/upload/` + `/files/{in,out}/`

@@ -13,11 +13,9 @@ services:
     env_file: .env
     environment:
       - TZ=Asia/Bangkok
-      # Status-line bar width. Below 20 the rows drop the bars and the budget
-      # breakdown so they fit a phone terminal (~47 columns); 36 is the wide
-      # workstation layout. Literal, not interpolated: this is not a secret and
-      # ${...} here would need an entry in secrets.manifest.yaml.
-      - STATUSLINE_BAR_W=0
+      # No STATUSLINE_BAR_W here on purpose: the status line sizes itself from
+      # COLUMNS on every render, and the same desk is opened from both a phone
+      # and a laptop. Setting it would pin one layout for both.
     expose:
       - "7681"   # ttyd
       - "7682"   # upload.py (PUT /upload/<name> → /work/in)
