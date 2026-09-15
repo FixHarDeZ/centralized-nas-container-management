@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Prepare the home volume, then hand PID 1 to ttyd.
+#
+# /home/claude is a named volume so `claude --resume` and the onboarding
+# state survive restarts. The skills live in the image (/opt/skills) and are
+# re-linked on every start so a SKILLS_REF bump shows up without touching the
+# volume.
+set -euo pipefail
+
+SKILLS_DIR="$HOME/.claude/skills"
+mkdir -p "$SKILLS_DIR" /work/in /work/out
+
+for skill in pptx docx xlsx pdf; do
+    ln -sfn "/opt/skills/skills/$skill" "$SKILLS_DIR/$skill"
+done
+
+# The work-folder rules travel with the stack (work/CLAUDE.md) but live on
+# the NAS share — copy on start so an edit in git reaches the desk.
+if [[ -f /opt/claude-desk/work/CLAUDE.md ]]; then
+    cp /opt/claude-desk/work/CLAUDE.md /work/CLAUDE.md
+fi
+
+# Debian's skeleton ~/.bashrc (copied into the home volume on first run)
+# sets PS1 after /etc/profile.d has run, so the prompt has to be appended
+# here rather than set in profile.sh. Idempotent.
+if ! grep -q 'claude-desk prompt' "$HOME/.bashrc" 2>/dev/null; then
+    cat >> "$HOME/.bashrc" <<'EOF'
+
+# claude-desk prompt
+PS1='\[\e[38;5;214m\]desk\[\e[0m\] \[\e[38;5;245m\]\w\[\e[0m\] › '
+EOF
+fi
+
+if [[ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]]; then
+    echo "WARNING: CLAUDE_CODE_OAUTH_TOKEN is empty — claude will ask you to log in" >&2
+fi
+
+# -W        writable (ttyd >= 1.7 is read-only by default)
+# -m 1      one browser at a time; the tmux session is shared anyway, and a
+#           second client is either you on another device or an intruder
+# -P 30     websocket ping so the DSM reverse proxy never idles us out
+# tmux new -A: attach if `main` exists, create otherwise — a closed tab is
+#           not a lost job
+exec ttyd -W -p 7681 -m 1 -P 30 \
+    -t disableLeaveAlert=true \
+    tmux new-session -A -s main

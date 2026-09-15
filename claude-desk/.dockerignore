@@ -1,0 +1,4 @@
+.env
+nginx/.htpasswd
+.notes
+README.md

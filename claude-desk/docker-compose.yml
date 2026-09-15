@@ -1,0 +1,54 @@
+services:
+  claude-desk:
+    build:
+      context: .
+      args:
+        CLAUDE_VERSION: "2.1.272"
+        SKILLS_REF: "34040c9c568585f6929bedeaad110ad08f079624"
+    container_name: claude-desk
+    restart: unless-stopped
+    # gid 100 (users) is what the share's Synology ACL grants — see Dockerfile.
+    user: "1000:100"
+    init: true
+    env_file: .env
+    environment:
+      - TZ=Asia/Bangkok
+    expose:
+      - "7681"
+    volumes:
+      # Whole home, not just ~/.claude: onboarding state lives in ~/.claude.json
+      - claude_desk_home:/home/claude
+      - ${CLAUDE_WORK_DIR}:/work
+    # 2g is the whole budget: node + soffice render + python. The host has
+    # ~4.5 GB free and has been OOM-killed twice — this cap means a runaway
+    # deck kills this container, not the NAS. cpus: is a no-op on DSM.
+    mem_limit: 2g
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+
+  nginx:
+    # Built, not stock: ui/ is COPYed in (see nginx/Dockerfile for why a
+    # directory bind does not work here).
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+    container_name: claude-desk-nginx
+    restart: unless-stopped
+    ports:
+      - "5072:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/.htpasswd:/etc/nginx/.htpasswd:ro
+      # Download side of the desk — read-only; nginx.conf only exposes out/.
+      # Whole share, not out/ itself: the desk's entrypoint creates out/ and
+      # nginx starts at the same moment, so a bind on out/ races it.
+      - ${CLAUDE_WORK_DIR}:/files:ro
+    environment:
+      - TZ=Asia/Bangkok
+    depends_on:
+      - claude-desk
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+
+volumes:
+  claude_desk_home:
