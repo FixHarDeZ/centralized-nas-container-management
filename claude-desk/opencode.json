@@ -10,11 +10,20 @@
     "--dangerously-skip-permissions` here. The container is the cage (no docker",
     "socket, /work is the only mount from outside) and a per-tool tap on a phone",
     "makes the desk unusable.",
-    "reasoning_effort=low is not a saving, it is the working setting: the",
+    "reasoningEffort (camelCase) is the key that reaches the wire as",
+    "reasoning_effort: verified by pointing the harness at a local echo",
+    "server and reading the body opencode actually sent. The snake_case",
+    "spelling is accepted by the config and silently dropped, which would",
+    "have left every turn on the default effort and looked like mimo being",
+    "slow. It is not a saving, it is the working setting: the",
     "default burned 10,457 tokens/161s against 3,796/79s for a worse answer, and",
     "mimo's wall time tracks the tokens it thinks (~30 tok/s).",
-    "limit.output is generous on purpose — a small cap is spent on thinking",
-    "first and the turn comes back empty (shared/mimo.py)."
+    "limit.output is generous on purpose: opencode sends it as max_tokens",
+    "(seen in the captured body), and a small cap is spent on thinking first",
+    "so the turn comes back empty (shared/mimo.py).",
+    "instructions: opencode reads AGENTS.md, Claude Code reads CLAUDE.md —",
+    "this points the harness at the same house rules entrypoint.sh drops in",
+    "/work, instead of keeping a second copy that drifts."
   ],
   "provider": {
     "mimo": {
@@ -30,18 +39,19 @@
           "tools": true,
           "reasoning": true,
           "limit": { "context": 200000, "output": 32000 },
-          "options": { "reasoning_effort": "low" }
+          "options": { "reasoningEffort": "low" }
         },
         "mimo-v2.5": {
           "name": "mimo-v2.5 (smaller, faster)",
           "tools": true,
           "reasoning": true,
           "limit": { "context": 200000, "output": 32000 },
-          "options": { "reasoning_effort": "low" }
+          "options": { "reasoningEffort": "low" }
         }
       }
     }
   },
+  "instructions": ["/work/CLAUDE.md"],
   "permission": {
     "edit": "allow",
     "bash": "allow",

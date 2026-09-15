@@ -17,6 +17,12 @@
 
 **สะดุดระหว่างทาง:** opencode มองไดเรกทอรีนอก project เป็น `external_directory` แล้ว auto-reject (เทสต์ใน `/tmp` เลยเขียนไฟล์ไม่ได้) — ของจริง cwd = `/work` ไม่เจอปัญหานี้
 
+**กับดักที่เกือบหลุด — `reasoning_effort` ไม่เคยถูกส่งเลย:** ตั้ง `"reasoning_effort": "low"` ใน `models.*.options` ตามสัญชาตญาณ แล้ว **config รับเฉยๆ แต่ไม่ส่งออกไป**. จับได้เพราะไปไล่ดู body จริง: log ของ opencode (แม้ `--log-level DEBUG`) ไม่ดัมป์ request body → เลยเขียน echo server stdlib ฟัง `127.0.0.1:8899` ตอบ chat.completion ปลอม แล้วรัน `MIMO_BASE_URL=http://127.0.0.1:8899/v1 mimo-code run hi` อ่านไฟล์ที่มันบันทึกไว้. ผลรอบแรก: มี `max_tokens: 32000` (มาจาก `limit.output`) แต่ **ไม่มี `reasoning_effort` เลย**. ลอง 3 แบบด้วย echo server ตัวเดิม: `provider.options.reasoning_effort` → ไม่ส่ง, `models.*.options.providerOptions.mimo.reasoning_effort` → ส่ง, **`models.*.options.reasoningEffort` → ส่ง** (AI SDK แปลง camelCase→snake_case เอง) เลือกอันหลังเพราะสั้นสุด. **อาการถ้าพลาด = ทุกเทิร์นวิ่งที่ effort default** (10,457 tokens/161 วิ vs 3,796/79) ซึ่งอ่านออกมาเหมือน "mimo ช้าเป็นปกติ" พอดี — และเป็นประโยคที่เพิ่งเขียนลง doc ไปเองด้วย
+
+**`instructions: ["/work/CLAUDE.md"]`:** opencode อ่าน `AGENTS.md` ไม่ใช่ `CLAUDE.md` → ถ้าไม่ตั้ง harness จะไม่รู้กฎ in/out ที่ `entrypoint.sh` ก๊อปลงไป ทั้งที่เปิด edit+bash อยู่ในแชร์เดียวกัน. ยืนยันแล้วว่าเข้าจริง: system prompt ที่จับได้ 14,387 ตัวอักษร มีบรรทัดจาก `/work/CLAUDE.md` ครบ
+
+**แบนเนอร์:** ตัดเหลือ `claude | r = resume | m = mimo agent` + `mimo <ask> = one answer` เพราะบรรทัดเดิม ~70 คอลัมน์ ล้นจอมือถือที่วัดไว้ ~47
+
 **verify หลัง deploy:** `which mimo-code opencode` ครบ, `opencode --version` = 1.18.31, `mimo-code run "reply OK"` → `> build · mimo-v2.5-pro` แล้วตอบ `OK` = config จาก `/opt` โหลดจริง provider/model resolve ผ่าน
 
 **ยังไม่ได้วัด:** TUI เต็มจอของ opencode ผ่าน key bar บนมือถือ (Esc/⇧Tab/Ctrl) ใช้ดีแค่ไหน — ต้องลองจากเครื่องจริง ถ้าฝืดค่อยใช้ `mimo-code run "<task>"` แทน
