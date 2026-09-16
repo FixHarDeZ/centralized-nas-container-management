@@ -1,5 +1,21 @@
 # claude-desk — Daily Log
 
+## 2026-09-16 — copy ออกจาก Claude Code ยังไม่ได้ (ปุ่ม Copy รอบแรกแก้ไม่ตรงจุด)
+
+**อาการ:** ใส่ปุ่ม ⧉ Copy ไปแล้ว แต่ copy ข้อความออกจากหน้าจอ Claude Code ยังไม่ได้ ในรูปที่ส่งมามีบรรทัด **`copied 30 chars to tmux buffer · paste with prefix + ]`** อยู่มุมขวา — นั่นคือเบาะแสทั้งหมด
+
+**สาเหตุจริง (คนละอันกับรอบแรก):** Claude Code **เปิด mouse tracking** ตอนรัน TUI → การ drag ในนั้นไม่เคยกลายเป็น selection ของ xterm เลย แอปกินอีเวนต์เมาส์ไปเก็บ selection ของตัวเอง แล้วก๊อปด้วย `tmux load-buffer -w` (grep จากไบนารี `claude` เจอโค้ด `clipboard: tmux load-buffer -w -` และ branch `osc52`) → `term.getSelection()` ที่ปุ่มเรียกจึงคืนค่าว่างเสมอ. ปุ่มรอบแรกใช้ได้เฉพาะตอนอยู่ที่ shell prompt ธรรมดา
+
+**ต้องต่อท่อ 2 ข้อ:**
+1. **`set-clipboard on` ใน `tmux.conf`** — ของเดิมเป็น default `external` ซึ่งส่งต่อเฉพาะ OSC 52 ที่ **แอป** ยิงเอง ไม่ยิง buffer ที่ **tmux** ถือ. ตรวจแล้ว: `terminal-features` มี `clipboard` และ terminfo มี `Ms` อยู่แล้ว ขาดแค่ option นี้
+2. **`ui/app.js` ดัก OSC 52 เอง** — `term.parser.registerOscHandler(52, ...)` เพราะ **xterm.js ไม่ได้ handle OSC 52 ให้** (ต้องมี `allowProposedApi: true` ซึ่งมีอยู่แล้ว) แล้ว decode base64 → `navigator.clipboard.writeText()`; iOS เขียนนอก user gesture ไม่ได้ → เก็บไว้ในตัวแปรแล้วขึ้นป้าย `tap to copy` ปุ่มเดิมกดแล้ว fallback ไปใช้ค่านี้
+
+**วัดจริง 2 ชั้น ไม่ได้เดา:**
+- **ฝั่ง tmux:** เขียนสคริปต์ `pty.fork()` เปิด tmux จริงในคอนเทนเนอร์ แล้วสั่ง `printf 'hello-osc' | tmux load-buffer -w -` → อ่านไบต์จาก pty เจอ `ESC]52;;aGVsbG8tb3Nj` = ยิงออกจริงหลังเปลี่ยน option. **kind ว่าง ไม่ใช่ `c`** (tmux 3.3a) handler เลยต้องรับทั้ง `;c;<b64>` และ `;;<b64>`
+- **ฝั่งเบราว์เซอร์:** เสิร์ฟ `ui/` ด้วย `python3 -m http.server` แล้วเปิดหน้า `?demo=1` ใน iframe จาก headless Chrome (extension ต่อไม่ติด) — เพิ่ม `if (DEMO) window.term = term;` ไว้ให้ทดสอบยิง escape sequence เข้าไปได้ (live ไม่ expose). **ต้อง stub `navigator.clipboard.writeText` ก่อน** เพราะ headless ไม่มี user activation แล้ว promise ค้างไม่ settle เลย (อาการตอนแรก: handler ทำงานแต่ป้ายปุ่มไม่เปลี่ยน ดูเหมือน handler ไม่ยิง) → ผลลัพธ์ `clipboardGot=[hello-from-tmux] btn=[✓ copied]` ทั้งรูปแบบ `;c;` และ `;;`
+
+**ที่เสียเวลา:** grep หา `cli.js` ไม่เจอ เพราะ claude 2.1.272 ลงเป็น **native binary 227 MB** (`node_modules/@anthropic-ai/claude-code-linux-x64/claude`) ไม่ใช่ JS bundle แล้ว — ต้อง `grep -a` บนไบนารี
+
 ## 2026-09-16 — เปลี่ยน harness เป็น MiMoCode (`mimo`) + คำสั่งถามครั้งเดียวเปลี่ยนชื่อเป็น `ask`
 
 **โจทย์:** อยากได้ harness เป็น `XiaomiMiMo/MiMo-Code` แทน opencode

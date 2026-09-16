@@ -108,6 +108,9 @@
   const container = document.getElementById('terminal');
   term.open(container);
   if (!IS_MOBILE) term.focus();
+  // Demo only: lets a console poke escape sequences at the terminal (the
+  // OSC 52 handler below was checked this way). Never exposed on the live page.
+  if (DEMO) window.term = term;
 
   function refit() {
     fit.fit();
@@ -321,17 +324,42 @@
   applyTheme(theme);
 
   // ── Copy ──────────────────────────────────────────────
-  // xterm paints the screen, so a selection in it is not a DOM selection and
-  // the browser's own copy has nothing to take — without this button text can
-  // be pasted into the desk but never out of it. The click is also the user
-  // gesture iOS demands before writeText() is allowed.
+  // Two sources, because there are two kinds of selection on this screen.
+  //
+  // Claude Code turns mouse tracking on, so a drag inside it never becomes an
+  // xterm selection: the app takes the mouse events, keeps the selection
+  // itself, and copies via `tmux load-buffer -w`. With set-clipboard on
+  // (tmux.conf) tmux then emits OSC 52 to us — xterm.js does not handle that
+  // sequence on its own, so it is caught here and written to the clipboard.
+  // Safari refuses writeText() outside a tap, which is why the text is also
+  // kept for the button: Claude Code copies, the user taps ⧉ Copy, done.
+  //
+  // A shell prompt has no mouse tracking, so there a drag is a real xterm
+  // selection and the button reads that instead.
   const copyBtn = document.getElementById('copy-btn');
+  const say = (label) => {
+    copyBtn.textContent = label;
+    setTimeout(() => { copyBtn.textContent = '⧉ Copy'; }, 1200);
+  };
+  let oscClip = '';
+  term.parser.registerOscHandler(52, (data) => {
+    // "c;<base64>" — selection kind, then payload. "?" is a read request;
+    // the browser never answers those.
+    const sep = data.indexOf(';');
+    const b64 = sep < 0 ? data : data.slice(sep + 1);
+    if (!b64 || b64 === '?') return true;
+    try {
+      const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+      oscClip = new TextDecoder().decode(bytes);
+    } catch (_) { return true; }
+    navigator.clipboard.writeText(oscClip).then(
+      () => say('✓ copied'),
+      () => say('tap to copy'),
+    );
+    return true;
+  });
   copyBtn.addEventListener('click', async () => {
-    const text = term.getSelection();
-    const say = (label) => {
-      copyBtn.textContent = label;
-      setTimeout(() => { copyBtn.textContent = '⧉ Copy'; }, 1200);
-    };
+    const text = term.getSelection() || oscClip;
     if (!text) { say('select first'); return; }
     try {
       await navigator.clipboard.writeText(text);
