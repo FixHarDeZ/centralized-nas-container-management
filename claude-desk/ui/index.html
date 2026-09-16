@@ -37,7 +37,13 @@
       <span class="name">claude<span class="accent">-desk</span></span>
     </div>
     <div class="top-actions">
+      <button id="quota" class="quota" type="button" hidden title="Rate limits">
+        <span class="q-5h"></span><span class="q-sep">·</span><span class="q-wk"></span>
+      </button>
       <span id="status-text" class="status">connecting</span>
+      <button id="sessions-btn" class="icon-btn" title="Past sessions" aria-label="Past sessions">
+        <svg viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1M3.5 4.7V9h4.3M12 7.5V12l3 1.8"/></svg>
+      </button>
       <button id="theme-btn" class="icon-btn" title="Switch theme" aria-label="Switch theme">
         <svg class="ico-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.2M12 19.8V22M2 12h2.2M19.8 12H22M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M19.1 4.9l-1.6 1.6M6.5 17.5l-1.6 1.6"/></svg>
         <svg class="ico-moon" viewBox="0 0 24 24"><path d="M20.5 14.6A8.6 8.6 0 0 1 9.4 3.5a8.6 8.6 0 1 0 11.1 11.1z"/></svg>
@@ -106,6 +112,29 @@
       </button>
     </div>
   </aside>
+
+  <!-- Past Claude Code sessions in /work. Tapping one types
+       `claude --resume <id>` into the tmux pane (see upload.py) — the shell
+       is the only thing that can start it, so the sheet refuses while a
+       program is already holding the pane. -->
+  <aside id="sessions" aria-hidden="true">
+    <div class="drawer-head">
+      <div class="sheet-title">Sessions</div>
+      <button id="sessions-close" class="icon-btn" aria-label="Close">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="drawer-sub" id="sessions-sub">past work in <code>/work</code> · tap to resume</div>
+    <div class="drawer-actions">
+      <button id="new-session" class="add-btn">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        New session
+      </button>
+    </div>
+    <ul id="session-list" class="file-list"></ul>
+    <div id="session-empty" class="file-empty" hidden></div>
+  </aside>
+
   <div id="scrim"></div>
 
   <script src="vendor/xterm.min.js"></script>

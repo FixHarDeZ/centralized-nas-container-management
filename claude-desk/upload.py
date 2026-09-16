@@ -1,34 +1,74 @@
 #!/usr/bin/env python3
-"""File side of the desk, for the drawer in the page.
+"""The desk's small HTTP side, for the drawer and the header in the page.
+
+Files (the drawer):
 
     PUT    /upload/in/<name>    write a source file into <work>/in
     DELETE /upload/<dir>/<name> remove one file from <work>/in or <work>/out
     DELETE /upload/<dir>/       remove every file in that folder
+
+Desk (the header and the sessions sheet):
+
+    GET    /api/status          the rate-limit numbers statusline.sh last saw
+    GET    /api/sessions        past Claude Code sessions in /work, newest first
+    POST   /api/resume {"id":…} type `claude --resume <id>` into the tmux pane
+    POST   /api/new             type `claude` into the tmux pane
 
 Runs inside the desk container (which already owns /work) next to ttyd on
 port 7682. The nginx sidecar is the only thing that can reach it, and it sits
 behind basic auth there; nginx also caps the body size. This process only
 enforces which paths are legal.
 
+The two POSTs drive tmux rather than the page's websocket on purpose: keys
+sent down the socket land wherever the pane's focus happens to be, and the
+pane usually has Claude Code in it — `claude --resume <uuid>` would be typed
+into Claude's prompt as a message. So they refuse unless the pane is sitting
+at a shell, and the page says so instead of doing something surprising.
+
 Deletes are permanent. DSM's recycle bin is implemented by the file services,
 not the filesystem, so os.unlink from a container skips it entirely.
 
 Set WORK_DIR to run it anywhere (used to exercise it outside the container).
 """
+import json
 import os
 import re
+import subprocess
 import sys
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote
 
 WORK_DIR = os.environ.get("WORK_DIR", "/work")
 PORT = int(os.environ.get("UPLOAD_PORT", "7682"))
+HOME = os.environ.get("HOME", "/home/claude")
+
+# Claude Code names a project directory after its cwd with the separators
+# replaced, so the desk's /work is "-work".
+SESSION_DIR = os.environ.get(
+    "DESK_SESSION_DIR", os.path.join(HOME, ".claude", "projects", "-work")
+)
+STATUS_FILE = os.environ.get(
+    "DESK_STATUS_FILE", os.path.join(HOME, ".claude", "desk-status.json")
+)
+TMUX_TARGET = os.environ.get("DESK_TMUX_TARGET", "main:0.0")
 
 # The two folders the page knows about. Anything else is a 404: the share
 # root holds #recycle and @eaDir, which must never be reachable from here.
 DIRS = {"in": os.path.join(WORK_DIR, "in"), "out": os.path.join(WORK_DIR, "out")}
 
 SAFE = re.compile(r"^[^/\\\x00]{1,200}$")
+UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+
+# What counts as "the pane is free". Anything else — node (Claude Code or
+# MiMoCode), vim, less — means a program owns the keyboard.
+SHELLS = {"bash", "sh", "zsh", "-bash", "dash"}
+
+SESSION_LIMIT = 30          # newest N transcripts; the rest are not findable anyway
+TITLE_BUDGET = 256 * 1024   # bytes read per transcript while hunting for a title
+MAX_LINE = 64 * 1024        # a file-history-snapshot record can be megabytes on
+                            # its own — readline(size) keeps one line bounded
+TITLE_CHARS = 90
 
 
 def safe_name(segment: str):
@@ -44,6 +84,137 @@ def safe_name(segment: str):
     return name
 
 
+# ── Desk status ───────────────────────────────────────────────────────────
+# statusline.sh writes the file; it is the only thing that sees the numbers,
+# because Claude Code hands them to the status line and nowhere else. That
+# also means they stand still whenever no session is running, so the age of
+# the file is reported with them and the page dims a stale reading rather
+# than passing it off as live.
+def status() -> dict:
+    try:
+        with open(STATUS_FILE, encoding="utf-8") as f:
+            data = json.load(f)
+        age = time.time() - os.path.getmtime(STATUS_FILE)
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    data["age"] = int(max(age, 0))
+    return data
+
+
+# ── Sessions ──────────────────────────────────────────────────────────────
+def _user_text(record: dict):
+    """The words someone typed in this record, or None.
+
+    Claude Code stores plenty of user-role records nobody typed: replayed
+    slash commands arrive wrapped in <local-command-caveat>, tool results
+    come back as the user turn. Both start with '<' or carry no text block,
+    which is enough to tell them apart from a real first message.
+    """
+    content = (record.get("message") or {}).get("content")
+    if isinstance(content, str):
+        text = content
+    elif isinstance(content, list):
+        text = ""
+        for block in content:
+            if isinstance(block, dict) and block.get("type") == "text":
+                text = block.get("text") or ""
+                break
+    else:
+        return None
+    text = " ".join(text.split())
+    if not text or text.startswith("<"):
+        return None
+    return text
+
+
+def title_of(path: str) -> str:
+    """A name for a transcript: its summary if it has one, else the opener.
+
+    Reads a bounded prefix of the file. One of these is 4.6 MB and grows,
+    and the title always lives in the first few records.
+    """
+    first = None
+    read = 0
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            while read < TITLE_BUDGET:
+                line = f.readline(MAX_LINE)
+                if not line:
+                    break
+                read += len(line)
+                # Cheap reject before parsing: most records are neither.
+                if '"summary"' not in line and '"user"' not in line:
+                    continue
+                try:
+                    record = json.loads(line)
+                except ValueError:
+                    continue        # a line clipped at MAX_LINE lands here
+                if not isinstance(record, dict):
+                    continue
+                if record.get("type") == "summary" and record.get("summary"):
+                    return str(record["summary"])[:TITLE_CHARS]
+                if first is None and record.get("type") == "user":
+                    first = _user_text(record)
+    except OSError:
+        return ""
+    return (first or "")[:TITLE_CHARS]
+
+
+def sessions() -> list:
+    try:
+        found = [
+            e for e in os.scandir(SESSION_DIR)
+            if e.name.endswith(".jsonl") and e.is_file(follow_symlinks=False)
+        ]
+    except OSError:
+        return []
+    found.sort(key=lambda e: e.stat().st_mtime, reverse=True)
+    out = []
+    for entry in found[:SESSION_LIMIT]:
+        stat = entry.stat()
+        out.append({
+            "id": entry.name[:-len(".jsonl")],
+            "title": title_of(entry.path),
+            "mtime": int(stat.st_mtime),
+            "size": stat.st_size,
+        })
+    return out
+
+
+# ── The tmux pane ─────────────────────────────────────────────────────────
+def _tmux(*args) -> tuple:
+    """(ok, stdout). tmux missing or no server is a plain failure, not a raise."""
+    try:
+        done = subprocess.run(
+            ["tmux", *args], capture_output=True, text=True, timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False, ""
+    return done.returncode == 0, done.stdout.strip()
+
+
+def pane_command():
+    """Name of the program with the keyboard in the desk's pane, or None."""
+    ok, name = _tmux(
+        "display-message", "-p", "-t", TMUX_TARGET, "#{pane_current_command}"
+    )
+    return name if ok and name else None
+
+
+def type_into_pane(line: str) -> tuple:
+    """(code, message). Refuses while a program owns the pane."""
+    current = pane_command()
+    if current is None:
+        return 503, "no tmux pane"
+    if current not in SHELLS:
+        # The page turns this into "something is running — quit it first".
+        return 409, "busy:" + current
+    ok, _ = _tmux("send-keys", "-t", TMUX_TARGET, line, "Enter")
+    return (200, "ok") if ok else (503, "send-keys failed")
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "claude-desk-files/2"
 
@@ -55,6 +226,15 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         if data:
             self.wfile.write(data)
+
+    def _json(self, payload):
+        data = json.dumps(payload, ensure_ascii=False).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(data)
 
     def _route(self):
         """('in'|'out', name or None) — None name means "the whole folder"."""
@@ -75,6 +255,41 @@ class Handler(BaseHTTPRequestHandler):
             self._reply(400, "bad name")
             return None, None
         return folder, name
+
+    def do_GET(self):
+        path = self.path.split("?", 1)[0]
+        if path == "/api/status":
+            self._json(status())
+        elif path == "/api/sessions":
+            # The pane's state ships with the list so the sheet can say up
+            # front that resuming is not possible right now, rather than
+            # letting every tap come back 409.
+            self._json({"sessions": sessions(), "pane": pane_command()})
+        else:
+            self._reply(404, "not here")
+
+    def do_POST(self):
+        path = self.path.split("?", 1)[0]
+        if path == "/api/new":
+            code, message = type_into_pane("claude")
+        elif path == "/api/resume":
+            length = int(self.headers.get("Content-Length") or 0)
+            try:
+                body = json.loads(self.rfile.read(min(length, 4096)) or b"{}")
+                session_id = str(body.get("id", ""))
+            except ValueError:
+                self._reply(400, "bad json")
+                return
+            # A uuid and nothing else: this string is about to be typed into
+            # an interactive shell.
+            if not UUID.match(session_id):
+                self._reply(400, "bad id")
+                return
+            code, message = type_into_pane("claude --resume " + session_id)
+        else:
+            self._reply(404, "not here")
+            return
+        self._reply(code, message)
 
     def do_PUT(self):
         folder, name = self._route()

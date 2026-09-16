@@ -136,6 +136,11 @@
     document.body.classList.remove('connected', 'reconnecting');
     if (state) document.body.classList.add(state);
     statusText.textContent = label;
+    // Attaching is what spawns tmux, so a sessions sheet that came up before
+    // the socket did has a pane to ask about only now.
+    if (state === 'connected' && document.body.classList.contains('sessions-open')) {
+      loadSessions();
+    }
   }
 
   async function refreshToken() {
@@ -650,6 +655,7 @@
   });
 
   function openDrawer() {
+    closeSessions();
     document.body.classList.add('drawer-open');
     drawer.setAttribute('aria-hidden', 'false');
     setDir(dir);
@@ -660,7 +666,190 @@
   }
   document.getElementById('files-btn').addEventListener('click', openDrawer);
   document.getElementById('drawer-close').addEventListener('click', closeDrawer);
-  document.getElementById('scrim').addEventListener('click', closeDrawer);
+  document.getElementById('scrim').addEventListener('click', () => { closeDrawer(); closeSessions(); });
+
+  // ── Rate-limit chip ───────────────────────────────────
+  // The numbers come from statusline.sh, which is the only thing Claude Code
+  // shows them to; upload.py serves its file and tells us how old it is.
+  // Nothing is running most of the time, so a reading that has stopped moving
+  // is dimmed rather than presented as current.
+  const quota = document.getElementById('quota');
+  const STALE_AFTER = 20 * 60;   // seconds; longer than a pause for coffee
+
+  function pctClass(pct) {
+    return pct >= 95 ? 'full' : pct >= 80 ? 'hot' : '';
+  }
+  function fmtReset(seconds) {
+    if (!(seconds > 0)) return '';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.round((seconds % 3600) / 60);
+    return h ? h + 'h' + (m ? String(m).padStart(2, '0') + 'm' : '') : m + 'm';
+  }
+  function fillWindow(el, win, label) {
+    if (!win || typeof win.pct !== 'number') { el.textContent = ''; el.title = ''; return ''; }
+    const pct = Math.round(win.pct);
+    el.textContent = label + ' ' + pct + '%';
+    el.className = el.className.replace(/\s*(hot|full)\b/g, '') + ' ' + pctClass(pct);
+    const left = win.resets_at ? fmtReset(win.resets_at - Date.now() / 1000) : '';
+    return label + ' ' + pct + '%' + (left ? ' · resets in ' + left : '');
+  }
+  function renderQuota(data) {
+    const five = data && data.five_hour;
+    const week = data && data.seven_day;
+    if (!five && !week) { quota.hidden = true; return; }
+    const tips = [
+      fillWindow(quota.querySelector('.q-5h'), five, '5h'),
+      fillWindow(quota.querySelector('.q-wk'), week, 'wk'),
+    ].filter(Boolean);
+    // Only one window on a plan without the other, and a lone "·" reads as a
+    // bug. (The narrow layout hides the separator in CSS for the same reason.)
+    quota.querySelector('.q-sep').hidden = tips.length < 2;
+    const stale = (data.age || 0) > STALE_AFTER;
+    quota.classList.toggle('stale', stale);
+    quota.title = tips.join(' · ') + (stale ? ' (no session running — last seen reading)' : '');
+    quota.hidden = false;
+  }
+  async function loadQuota() {
+    if (DEMO) { renderQuota({ five_hour: { pct: 39, resets_at: Date.now() / 1000 + 6900 }, seven_day: { pct: 54 }, age: 5 }); return; }
+    try {
+      const r = await fetch('api/status', { cache: 'no-store' });
+      if (r.ok) renderQuota(await r.json());
+    } catch (_) { /* leave the last reading up */ }
+  }
+  quota.addEventListener('click', loadQuota);
+  loadQuota();
+  setInterval(loadQuota, 60000);
+  // Coming back to a phone that slept: the chip is the first thing that is wrong.
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) loadQuota(); });
+
+  // ── Sessions sheet ────────────────────────────────────
+  // Resume is typed into the tmux pane by upload.py rather than sent down
+  // this websocket: keys on the socket land wherever the pane's focus is, and
+  // that is usually Claude Code's prompt box, where `claude --resume <uuid>`
+  // would be read as a message instead of run.
+  const sessionsSheet = document.getElementById('sessions');
+  const sessionList = document.getElementById('session-list');
+  const sessionEmpty = document.getElementById('session-empty');
+  const sessionsSub = document.getElementById('sessions-sub');
+
+  function fmtWhen(epoch) {
+    const d = new Date(epoch * 1000);
+    if (isNaN(d)) return '';
+    const mins = (Date.now() - d) / 60000;
+    if (mins < 60) return Math.max(1, Math.round(mins)) + ' min ago';
+    if (d.toDateString() === new Date().toDateString()) {
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    return d.toLocaleDateString([], { day: 'numeric', month: 'short' })
+      + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function renderSessions(data) {
+    const list = (data && data.sessions) || [];
+    const pane = data && data.pane;
+    // No pane at all means tmux has not been spawned yet: ttyd starts it when
+    // a browser attaches, so a sheet opened the moment a home-screen PWA wakes
+    // can get here before the handshake. Resuming would answer 503 and read as
+    // broken, so the rows wait for the socket instead (see connect()).
+    const ready = !!pane;
+    // A shell means the prompt is free. Anything else (`claude`, `mimo`, an
+    // editor, a pager) has the keyboard and must be quit first.
+    const free = ready && ['bash', 'sh', 'zsh', '-bash', 'dash'].includes(pane);
+    sessionsSheet.classList.toggle('blocked', !free);
+    sessionsSub.classList.toggle('blocked', !free);
+    sessionsSub.innerHTML = !ready
+      ? 'waiting for the terminal…'
+      : free
+        ? 'past work in <code>/work</code> · tap to resume'
+        : 'the terminal is busy — quit what is running there first';
+
+    sessionList.innerHTML = '';
+    sessionEmpty.hidden = list.length > 0;
+    sessionEmpty.innerHTML = 'No past sessions in <code>/work</code> yet.';
+    for (const s of list) {
+      const li = document.createElement('li');
+      const row = document.createElement('button');
+      row.className = 'session-row';
+      row.type = 'button';
+      row.innerHTML = '<div class="s-title"></div><div class="s-meta"></div>';
+      const title = row.querySelector('.s-title');
+      title.textContent = s.title || 'untitled';
+      if (!s.title) title.classList.add('untitled');
+      row.querySelector('.s-meta').innerHTML = fmtWhen(s.mtime)
+        + ' · <span class="s-id">' + s.id.slice(0, 8) + '</span>';
+      row.addEventListener('click', () => resume(s.id, row));
+      li.appendChild(row);
+      sessionList.appendChild(li);
+    }
+  }
+
+  async function post(path, body) {
+    const r = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return { ok: r.ok, text: (await r.text()).trim() };
+  }
+
+  function sheetError(text) {
+    sessionsSub.classList.add('blocked');
+    sessionsSub.textContent = text.startsWith('busy:')
+      ? '“' + text.slice(5) + '” is running in the terminal — quit it first'
+      : 'could not reach the terminal (' + (text || 'no answer') + ')';
+  }
+
+  async function resume(id, row) {
+    if (DEMO) { closeSessions(); return; }
+    row.disabled = true;
+    try {
+      const r = await post('api/resume', { id: id });
+      if (r.ok) { closeSessions(); return; }
+      sheetError(r.text);
+    } catch (_) {
+      sheetError('');
+    }
+    row.disabled = false;
+  }
+
+  document.getElementById('new-session').addEventListener('click', async () => {
+    if (DEMO) { closeSessions(); return; }
+    try {
+      const r = await post('api/new');
+      if (r.ok) { closeSessions(); return; }
+      sheetError(r.text);
+    } catch (_) { sheetError(''); }
+  });
+
+  async function loadSessions() {
+    if (DEMO) {
+      renderSessions({ pane: 'bash', sessions: [
+        { id: '3bb7d4ca-216a-4893-a150-b2b9aea26b72', title: 'ทำ slide สรุปยอดขาย Q3 จาก in/sales-q3.xlsx 8 หน้า', mtime: Date.now() / 1000 - 900 },
+        { id: '7508d99d-ae2d-45c6-9139-269008b26b5e', title: 'แปลง proposal.docx เป็น pdf แล้วใส่หน้าปก', mtime: Date.now() / 1000 - 7200 },
+        { id: 'f2cae4c0-0119-4fde-901b-52ff2f7a163a', title: '', mtime: Date.now() / 1000 - 180000 },
+      ] });
+      return;
+    }
+    try {
+      const r = await fetch('api/sessions', { cache: 'no-store' });
+      renderSessions(r.ok ? await r.json() : {});
+    } catch (_) {
+      renderSessions({});
+    }
+  }
+
+  function openSessions() {
+    closeDrawer();
+    document.body.classList.add('sessions-open');
+    sessionsSheet.setAttribute('aria-hidden', 'false');
+    loadSessions();
+  }
+  function closeSessions() {
+    document.body.classList.remove('sessions-open');
+    sessionsSheet.setAttribute('aria-hidden', 'true');
+  }
+  document.getElementById('sessions-btn').addEventListener('click', openSessions);
+  document.getElementById('sessions-close').addEventListener('click', closeSessions);
 
   // ── Go ────────────────────────────────────────────────
   if (DEMO) {
@@ -685,6 +874,7 @@
     term.writeln('');
     term.write('\x1b[38;5;245m > \x1b[0m');
     if (PARAMS.has('drawer')) { openDrawer(); if (PARAMS.get('drawer') === 'in') setDir('in'); }
+    if (PARAMS.has('sessions')) openSessions();
   } else {
     connect();
   }

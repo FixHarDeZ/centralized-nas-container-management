@@ -325,5 +325,36 @@ if [ -n "$week_pct" ]; then
     limits_section="${limits_section}$(limit_row "wk" "$week_pct" "$week_reset" "$W_7D")"
 fi
 
+# Mirror the two limit rows into a file the page's header reads through
+# /api/status. Claude Code hands these numbers to the status line and to
+# nothing else, so this is the only place they can be picked up — and only
+# while a session is running, which is why upload.py reports the file's age
+# alongside them.
+#
+# Rewritten only when a number actually changed; an unchanged render just
+# touches the file, so the page can still tell a live desk from a stale one
+# without the volume taking a write per frame. Written through a temp name
+# because upload.py reads it at the same time.
+desk_status_file="${DESK_STATUS_FILE:-$HOME/.claude/desk-status.json}"
+desk_status=$(echo "$input" | jq -c '{
+    model: (.model.display_name // null),
+    five_hour: (.rate_limits.five_hour
+        | if .used_percentage == null then null
+          else {pct: .used_percentage, resets_at: .resets_at} end),
+    seven_day: (.rate_limits.seven_day
+        | if .used_percentage == null then null
+          else {pct: .used_percentage, resets_at: .resets_at} end)
+}' 2>/dev/null)
+if [ -n "$desk_status" ]; then
+    if [ "$desk_status" = "$(cat "$desk_status_file" 2>/dev/null)" ]; then
+        touch "$desk_status_file" 2>/dev/null
+    else
+        desk_tmp="${desk_status_file}.$$"
+        if printf '%s' "$desk_status" > "$desk_tmp" 2>/dev/null; then
+            mv -f "$desk_tmp" "$desk_status_file" 2>/dev/null || rm -f "$desk_tmp" 2>/dev/null
+        fi
+    fi
+fi
+
 # Render
 printf '%b\n' "${line1}${limits_section}"

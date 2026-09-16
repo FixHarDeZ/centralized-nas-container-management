@@ -177,6 +177,34 @@ body.reconnecting .dot { background: var(--warn); box-shadow: 0 0 0 3px var(--ri
 }
 body.connected .status { color: var(--ok); }
 
+/* Rate limits, up here rather than only in the status line: the phone layout
+   of statusline.sh drops the limit bars to fit 24 columns, so the small
+   screen was the one that could not see them. Stale (no session running, so
+   the number has stopped moving) dims the whole chip. */
+.quota {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 26px; padding: 0 9px; margin-right: 2px;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: var(--btn); color: var(--muted);
+  font-family: var(--ui); font-size: 11px; font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap; cursor: pointer;
+  transition: opacity var(--t), border-color var(--t);
+}
+.quota[hidden] { display: none; }
+.quota.stale { opacity: 0.45; }
+/* Explicit, like .clear-btn[hidden] below: a span would fall back to the UA
+   rule here, but every other hidden element in this file needed one. */
+.quota .q-sep { color: var(--line-strong); }
+.quota .q-sep[hidden] { display: none; }
+.quota .q-5h.hot, .quota .q-wk.hot { color: var(--warn); }
+.quota .q-5h.full, .quota .q-wk.full { color: var(--bad); }
+/* Under ~400px the header has room for one number, and the 5h window is the
+   one that stops you working today. */
+@media (max-width: 400px) {
+  .quota .q-sep, .quota .q-wk { display: none; }
+}
+
 .icon-btn {
   width: 36px; height: 36px;
   display: inline-flex; align-items: center; justify-content: center;
@@ -255,8 +283,11 @@ body.kb-open #toolbar { padding-bottom: 8px; }   /* keyboard covers the home bar
 .row button[data-key="up"], .row button[data-key="down"],
 .row button[data-key="left"], .row button[data-key="right"] { font-size: 16px; font-weight: 500; }
 
-/* ── Files drawer ───────────────────────────────────── */
-#drawer {
+/* ── Side sheets: files drawer and sessions ─────────── */
+/* Two panels, one geometry and one scrim. They are mutually exclusive — the
+   body class decides which slides in — so sharing the rules keeps a change
+   to the shape from having to be made twice. */
+#drawer, #sessions {
   position: fixed;
   top: 0; right: 0; bottom: 0;
   width: min(86vw, 380px);
@@ -271,7 +302,8 @@ body.kb-open #toolbar { padding-bottom: 8px; }   /* keyboard covers the home bar
   padding-top: var(--safe-top);
   padding-bottom: var(--safe-bottom);
 }
-body.drawer-open #drawer { transform: translateX(0); }
+body.drawer-open #drawer,
+body.sessions-open #sessions { transform: translateX(0); }
 #scrim {
   position: fixed; inset: 0;
   background: var(--scrim);
@@ -279,7 +311,42 @@ body.drawer-open #drawer { transform: translateX(0); }
   transition: opacity 220ms ease;
   z-index: 20;
 }
-body.drawer-open #scrim { opacity: 1; pointer-events: auto; }
+body.drawer-open #scrim,
+body.sessions-open #scrim { opacity: 1; pointer-events: auto; }
+
+.sheet-title { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+.drawer-sub code { font-family: var(--mono); color: var(--accent); }
+/* Resuming needs a shell prompt; while Claude Code or mimo owns the pane the
+   list stays readable but every row is inert, and the subtitle says why. */
+.drawer-sub.blocked { color: var(--warn); }
+#sessions.blocked .session-row { opacity: 0.45; pointer-events: none; }
+#sessions.blocked .add-btn { opacity: 0.45; pointer-events: none; }
+
+.session-row {
+  width: 100%;
+  display: block;
+  text-align: left;
+  padding: 11px 12px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--fg);
+  font-family: var(--ui);
+  cursor: pointer;
+  transition: background var(--t);
+}
+.session-row:active { background: var(--btn-hi); }
+.session-row .s-title {
+  font-size: 14px; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.session-row .s-title.untitled { color: var(--muted); font-weight: 500; }
+.session-row .s-meta {
+  margin-top: 3px;
+  font-size: 12px; color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.session-row .s-id { font-family: var(--mono); }
 
 .drawer-head {
   display: flex; align-items: center; justify-content: space-between;

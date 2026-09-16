@@ -17,18 +17,36 @@ phone ──HTTPS :15072 (DSM RP)──▶ claude-desk-nginx :5072
                                    ├─ /            static UI  (ui/)
                                    ├─ /ws, /token  ──▶ claude-desk :7681 (ttyd → tmux → bash → claude)
                                    ├─ /files/in/, /files/out/   autoindex JSON + the files (read-only)
-                                   └─ /upload/<dir>/[name]      ──▶ claude-desk :7682 (upload.py → /work/<dir>)
+                                   ├─ /upload/<dir>/[name]      ──▶ claude-desk :7682 (upload.py → /work/<dir>)
+                                   └─ /api/…                    ──▶ claude-desk :7682 (upload.py → ~/.claude, tmux)
 ```
 
-- **`upload.py`** — stdlib HTTP server in the desk container (port 7682, only nginx can reach it):
+- **`upload.py`** — stdlib HTTP server in the desk container (port 7682, only nginx can reach it). Files, for the drawer:
   - `PUT /upload/in/<name>` streams the body into `/work/in/<name>` via a `.part` temp file + atomic rename, so Claude never reads a half-written source. `out/` refuses uploads (403).
   - `DELETE /upload/<dir>/<name>` removes one file from `in/` or `out/`.
   - `DELETE /upload/<dir>/` clears the folder — top-level plain files only, so subdirectories and Synology's `@eaDir` survive.
 
   Only `in` and `out` are routable, names are one flat segment (no `..`, slashes, or dot-files), and the raw path is split before unquoting so an encoded separator is rejected here rather than becoming a directory step. Size cap is nginx's `client_max_body_size 300m` on `/upload/` (DSM's reverse proxy has its own too).
+
+  Desk, for the header and the sessions sheet — see [Rate-limit chip](#rate-limit-chip) and [Sessions](#sessions):
+  - `GET /api/status` — the numbers `statusline.sh` last saw, plus their `age` in seconds.
+  - `GET /api/sessions` — past transcripts in `/work`, newest first, with the pane's current command.
+  - `POST /api/resume {"id": "<uuid>"}` / `POST /api/new` — type the command into the tmux pane.
 - **`claude-desk`** — Debian + Node 22 + `@anthropic-ai/claude-code` (pinned `ARG CLAUDE_VERSION`), LibreOffice `*-nogui`, poppler, qpdf, Thai fonts, the Python and npm packages the official office skills need. PID 1 is `ttyd -W -m 1 -P 30 tmux new -A -s main`. Runs as uid 1000 (Claude Code refuses `--dangerously-skip-permissions` as root). Never published on the host.
 - **`claude-desk-nginx`** — `nginx:alpine` with `ui/` baked in (`nginx/Dockerfile`): basic auth on every path (`nginx/.htpasswd` from the vault), proxies only the websocket and token endpoints to ttyd, and lists `out/` as JSON. `ui/` cannot be bind-mounted: directories under `/volume2/docker` carry the DSM share ACL, which the nginx worker (uid 101) cannot traverse → 403 on every file. Single-file binds (`nginx.conf`, `.htpasswd`) are read by the root master process and work.
-- **`ui/`** — our own page instead of ttyd's: xterm.js 5.3 (vendored, no CDN), Inter + JetBrains Mono self-hosted, a key bar with `Esc ⇧Tab Tab Ctrl ↑↓←→ ↵NL` and `Paste / ^C A− A+ ⌨`, a right-hand drawer with `in/` (Add files → PUT, 🗑 delete) and `out/` (tap to open, ⬇ to save) tabs, a dark/light theme toggle, PWA manifest for Add-to-Home-Screen. Speaks ttyd's websocket protocol directly (touch scrolling and the iOS keyboard handling adapted from `pawprint0706/ttyd-wrapper`, MIT).
+- **`ui/`** — our own page instead of ttyd's: xterm.js 5.3 (vendored, no CDN), Inter + JetBrains Mono self-hosted, a key bar with `Esc ⇧Tab Tab Ctrl ↑↓←→ ↵NL` and `Paste / ^C A− A+ ⌨`, a rate-limit chip in the header, two right-hand sheets — files (`in/` Add files → PUT, 🗑 delete; `out/` tap to open, ⬇ to save) and sessions — a dark/light theme toggle, PWA manifest for Add-to-Home-Screen. Speaks ttyd's websocket protocol directly (touch scrolling and the iOS keyboard handling adapted from `pawprint0706/ttyd-wrapper`, MIT).
+
+## Sessions
+
+The history button opens a list of past Claude Code sessions in `/work`, newest first; tapping one resumes it. Before this the only way back was the `r` alias (`claude --continue`), which reaches exactly one session — yesterday's work was unfindable from a phone.
+
+The list is built from `~/.claude/projects/-work/*.jsonl`. A row's name is the transcript's `summary` record if it has one, otherwise the first thing someone actually typed — user-role records also carry replayed slash commands (`<local-command-caveat>…`) and tool results, and those are skipped, which leaves a real opener or nothing. The date and the short id are shown regardless, because plenty of sessions honestly open with `hi`.
+
+Reading is bounded twice: the newest 30 files by mtime, and 256 KB per file with each `readline` capped at 64 KB. A single `file-history-snapshot` record can be megabytes on its own (one transcript here is 4.6 MB), so a line budget would not have been a budget.
+
+**Tapping a row types `claude --resume <id>` into the tmux pane** (`tmux send-keys`), rather than sending keys down the page's websocket. Keys on the socket land wherever the pane's focus is, and the pane usually has Claude Code in it — the command would arrive in Claude's prompt box as a message to read, not a command to run. So the endpoint asks `tmux display-message -p '#{pane_current_command}'` first and refuses with `409 busy:<program>` unless a shell is at the prompt (`claude` is what a running session reports); the sheet greys the rows out and says which program to quit. The id is matched against a uuid pattern before it goes anywhere near a shell.
+
+`+ New session` is the same path with a bare `claude`. Both pick up the `--dangerously-skip-permissions` alias from `profile.sh`, because an interactive login shell is what is typing.
 
 ## Volumes
 
@@ -60,6 +78,16 @@ A row that is about to blow its budget appends ` ⚠ wall -17m`, ~12 cells the o
 `STATUSLINE_BAR_W` overrides the arithmetic (`0` forces the narrow layout), but compose deliberately does not set it: the same desk is opened from a phone and from a laptop, and pinning the variable would give both the same layout. That was the first cut of this and it showed up as missing bars on a wide screen.
 
 At 36 the output is byte-identical to the workstation copy, which keeps re-vendoring a clean diff.
+
+### Rate-limit chip
+
+The header shows `5h 39% · wk 54%` (just the 5h number under 400px, which is the one that stops you working today), amber from 80%, red from 95%.
+
+It is fed by the status line, because Claude Code hands the rate-limit numbers to the status line and to nothing else. `statusline.sh` therefore also writes `~/.claude/desk-status.json` — `{model, five_hour: {pct, resets_at}, seven_day: {…}}` — and `GET /api/status` serves it with an `age`. Written through a temp name and `mv`, since the server reads it concurrently; rewritten only when a number changed, and otherwise just touched, so the page can still tell a live desk from a stale one without the volume taking a write per frame.
+
+The consequence of that source: with no session running the numbers stand still. Past 20 minutes of age the chip dims rather than presenting a frozen reading as current. Tapping it refetches; it also refetches every minute and whenever the phone comes back from sleep.
+
+This is not a duplicate of the status-line rows — the phone layout drops those bars to fit 24 columns, so the small screen was the one that could not see them.
 
 Skills live in the image at `/opt/skills` (clone of `anthropics/skills`, pinned `ARG SKILLS_REF`); `entrypoint.sh` re-links `pptx docx xlsx pdf` into `~/.claude/skills` on every start so a ref bump reaches the volume.
 
@@ -107,6 +135,8 @@ look the same in both themes.
 ## Using it
 
 - Tap the folder icon → **in/** → **Add files** to upload sources from the phone (or drop them into `claude-work/in/` from DS File — same folder). Type `claude` (alias for `claude --dangerously-skip-permissions`), describe the document. `r` resumes the last session.
+- Tap the history icon for **past sessions** — the list is every session that ran in `/work`, newest first; tapping one resumes it, `+ New session` starts a fresh one. Both need the terminal to be at a shell prompt: quit whatever is running there first (the sheet says which program is holding it).
+- The chip beside the connection dot is the **5h / 7d rate limit**. It dims when nothing has run for a while, because that is when the number stops being current.
 - Finished files appear under **out/** in the same drawer: tap to open (iOS previews pptx/xlsx inline), ⬇ to save to Files.
 - **Clear in/** and **Clear out/** at the bottom of the drawer empty the folder. The first tap arms the button and shows the count, the second one does it, and it disarms itself after four seconds. **This is permanent** — DSM's recycle bin is a file-service feature and a delete from inside the container goes straight past it.
 - **`mimo` (alias `m`) is the second agent: MiMoCode ([XiaomiMiMo/MiMo-Code](https://github.com/XiaomiMiMo/MiMo-Code), a fork of opencode) with our mimo endpoint behind it** — `ARG MIMO_CODE_VERSION`, installed from npm (`@mimo-ai/cli`) rather than the `curl | bash` installer upstream also offers, because npm takes a version pin. A real tool loop: it reads, writes and runs things in `/work` by itself. `mimo` opens the TUI, `mimo run "<task>"` does one task. Slow and free where `claude` is fast and spends subscription quota — a tool-using turn costs tens of seconds and mimo's wall time tracks the tokens it thinks (~30 tok/s), so pick per job. It reads the same `/work/CLAUDE.md` house rules `claude` does (MiMoCode's own convention is `AGENTS.md`; the `instructions` key points it at ours).
@@ -114,7 +144,7 @@ look the same in both themes.
 - **Copy / Paste** are both buttons on the key bar, and Copy has two sources because the screen has two kinds of selection. At a shell prompt a drag is an ordinary xterm selection and the button reads it. Inside Claude Code it is not: Claude Code turns on mouse tracking, keeps the selection itself, and copies with `tmux load-buffer -w` — the terminal never sees a selection at all (this is the `copied N chars to tmux buffer` line it prints). `set-clipboard on` in `tmux.conf` makes tmux forward that buffer to us as an OSC 52 sequence, `ui/app.js` catches it (xterm.js has no handler of its own) and writes it to the clipboard. On iOS the write needs a tap, so the text is held and the button says `tap to copy` — tap it and the copy lands. `mimo` copies a third way again: MiMoCode writes OSC 52 itself and, seeing `$TMUX`, wraps it in a DCS passthrough — which tmux drops unless `allow-passthrough on` is set, so the copy went nowhere at all. With that on, all three paths end at the same handler. MiMoCode also copies **on mouse-up**, with no key to press: finish the selection and it is sent.
 - **Pasting an image does not work and cannot be made to.** Claude Code reads images from the clipboard of the machine it runs on; here that machine is a container with no display server and no clipboard, and the websocket carries keystrokes rather than clipboard objects. Send pictures the same way as any other source file: drawer → **Add files** → it lands in `/work/in/` → name the path in the prompt.
 - Close the tab any time — tmux keeps the session; reopening attaches to the same screen.
-- `?demo=1&mobile=1` on the URL shows the UI with a canned session and no server, for design work.
+- `?demo=1&mobile=1` on the URL shows the UI with a canned session and no server, for design work; add `&drawer=in|out` or `&sessions` to open a sheet.
 
 ## Limits accepted
 
@@ -123,6 +153,8 @@ look the same in both themes.
 - `set-clipboard on` plus `allow-passthrough on` lets anything in the container push text to the phone's system clipboard through OSC 52, and write escape sequences straight to the browser's terminal — including `mimo` with permissions skipped. The handler in `ui/app.js` refuses OSC 52 *read* requests (`?`), which is the direction that would leak the clipboard back out. Bash in that container is trusted anyway; this is the shape of the trust, written down.
 - Basic auth is the only gate in front of a shell with permission prompts off. The container is the sandbox: no docker socket, no other mounts, `mem_limit: 2g`. Keep the password long; `-m 1` refuses a second concurrent browser.
 - One session, one person. Not multi-user.
+- **Resume and New session need a free prompt.** They type into the pane, and there is only one pane (`ttyd -m 1`, `tmux new -A -s main`), so a running agent has to be quit first. Starting a second agent behind the running one would put two of them in `/work` at once, which is the same reason `mimo` did not get a stack of its own.
+- The rate-limit chip is only as fresh as the last status-line render — it has no other source. A desk that has been idle since yesterday shows yesterday's percentage, dimmed.
 - `cpus:` does nothing on DSM; a heavy soffice render can pin a few cores for a minute.
 - **Two brains, one desk, no second stack.** `claude` and `mimo` share the image, `/work`, the port and the basic auth. Splitting a `mimo-desk` stack would duplicate the nginx sidecar, the `.htpasswd`, a second DSM reverse-proxy entry and the share, and buy isolation that cannot be used: `ttyd -m 1` + `tmux new -A -s main` means one browser and one screen, so the two agents can never run side by side anyway. If concurrent sessions ever become the point, that is when the split earns itself.
 - **`reasoningEffort`, not `reasoning_effort`, in `mimocode.jsonc`.** The snake_case spelling is accepted by the config and silently dropped; the camelCase one is what the AI SDK maps onto the wire. Verified by pointing the harness at a local echo server and reading the body it actually sent — the symptom of getting this wrong is every turn running at mimo's default effort (measured elsewhere at 10,457 tokens/161s against 3,796/79s), which is indistinguishable from "mimo is just slow". Re-checked against MiMoCode itself rather than inherited from opencode — the same capture shows it ignoring `limit.output` and sending `max_tokens: 128000` of its own, which is fine: the rule is that nothing *small* goes out.

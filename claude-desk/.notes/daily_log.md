@@ -1,5 +1,39 @@
 # claude-desk — Daily Log
 
+## 2026-09-16 — sessions sheet + rate-limit chip (หยิบจากคลิป UI ของ Codex)
+
+**โจทย์:** คลิป PWA ฐาน Codex (แชท bubble, การ์ดโควตา, ลิสต์ session, cost/token ต่อ session) — "ครอบแบบนี้ได้ไหมโดยไม่เสียของเดิม"
+
+**ตอบ: ได้ แต่เป็น view ที่สอง ไม่ใช่ครอบทับเทอร์มินัล** ครอบทับ = ขูด ANSI จาก xterm.js มาประกอบ bubble พังทุกครั้งที่ Claude Code เปลี่ยนหน้าตา — นั่นคือทางที่ *ทำให้เสียของเดิม*
+
+**probe บน NAS (claude 2.1.272, read-only)** — `claude -p --output-format stream-json --verbose` คายทุกอย่างที่ UI ในคลิปต้องใช้: `rate_limit_event.unifiedWindows.{five_hour,seven_day}.utilization` (0.39/0.54), `result.total_cost_usd`, `usage.*`, `tool_use`/`tool_result`, `system/init.session_id`; มี `--input-format stream-json`, `--include-partial-messages`, `--session-id`, `-r/--resume`, `--bg` + `claude agents|attach|logs|stop`. **รันคู่กับ tmux session ที่เปิดอยู่ได้ ไม่ตีกัน** (OAuth ใบเดียว)
+
+**แต่ของดีส่วนใหญ่ไม่ต้องรอ chat UI** — ลงมือ 2 อันแรกก่อน ทั้งคู่เป็นของ *เพิ่ม* เทอร์มินัลไม่ถูกแตะสักบรรทัด:
+
+### 1. Sessions sheet
+
+ปุ่ม history → ลิสต์ `~/.claude/projects/-work/*.jsonl` newest first → แตะ = resume
+
+- **ชื่อแถว**: `summary` record ก่อน → ไม่มีก็เอา user message แรกที่คนพิมพ์จริง. **ต้องกรอง**: probe พบว่า 11 session ที่มีอยู่ 4 อันขึ้นต้นด้วย `<local-command-caveat>` (slash command ที่ replay) และ tool_result ก็มาเป็น user turn — ทั้งคู่ขึ้นต้น `<` เลยใช้เป็นด่านได้. อีก 4 อันชื่อ `'hi'` จริงๆ → เลยโชว์วันที่ + id สั้นเสมอ ไม่ได้พึ่งชื่ออย่างเดียว. ยังไม่เจอ `summary` record สักไฟล์ (grep = 0) แต่รองรับไว้
+- **งบการอ่านเป็นไบต์ ไม่ใช่บรรทัด**: `d45e192a.jsonl` = 4.6 MB และ `file-history-snapshot` หนึ่ง record ใหญ่เป็น MB ได้ → `readline(64KB)` + เพดาน 256KB/ไฟล์ + 30 ไฟล์ล่าสุด. บรรทัดที่โดนตัดกลางทาง = JSON พัง = ข้ามไปเอง
+- **⚠️ resume ต้องยิงผ่าน tmux ไม่ใช่ websocket ของหน้าเว็บ** — คีย์ที่ส่งลง ws ไปโผล่ตรงที่ pane โฟกัสอยู่ ซึ่งปกติคือ **กล่องพิมพ์ของ Claude Code** → `claude --resume <uuid>` จะกลายเป็น*ข้อความถาม Claude* ไม่ใช่คำสั่ง (บนมือถือกู้ยาก). `upload.py` อยู่ในคอนเทนเนอร์ที่ถือ tmux server อยู่แล้ว (`docker exec` = uid 1000 = เจ้าของ socket) → `tmux send-keys`. ยืนยันแล้ว: `tmux display-message -p '#{pane_current_command}'` คืน `bash` ตอนว่าง และ **`claude` (ไม่ใช่ `node`)** ตอน Claude Code รัน → ไม่อยู่ใน `SHELLS` = ตอบ `409 busy:claude` ไม่ยิงอะไรเลย
+- uuid regex กั้นก่อนถึง shell (สตริงนี้กำลังจะถูกพิมพ์ลง interactive bash)
+- `+ New session` = ทางเดียวกัน ส่ง `claude` เปล่า. alias จาก `profile.sh` ติดมาเองเพราะคนพิมพ์คือ login shell
+
+### 2. Rate-limit chip บน header
+
+`5h 39% · wk 54%` — ต่ำกว่า 400px เหลือแค่ 5h (ตัวที่หยุดงานวันนี้), 80% เหลือง 95% แดง
+
+- **ตัวเลขมีที่เดียวคือ status line** — Claude Code ส่ง rate limit ให้ statusLine hook เท่านั้น → `statusline.sh` เขียน `~/.claude/desk-status.json` เพิ่ม, `GET /api/status` เสิร์ฟพร้อม `age`
+- **ทำไมต้องมีทั้งที่ status line มีอยู่แล้ว**: โหมดมือถือของ `statusline.sh` (< 51 คอลัมน์) ตัดบาร์ limit ทิ้งเพื่อให้พอ 24 คอลัมน์ = **จอเล็กคือจอที่มองไม่เห็นโควตา**
+- เขียนเฉพาะตอนค่าเปลี่ยน ไม่งั้นแค่ `touch` — ไม่เอา write ต่อเฟรมลง volume แต่ยังบอก "live vs stale" ได้จาก mtime. เขียนผ่าน temp + `mv` เพราะ `upload.py` อ่านพร้อมกัน
+- ไม่มี session รัน = ตัวเลขหยุดนิ่ง → เกิน 20 นาที chip จางลง ไม่แกล้งทำเป็นสด
+- units: `.rate_limits.*.used_percentage` เป็น **0–100** (ยืนยันจาก `limit_row()` ที่ `printf "%.0f"` แล้วต่อ `%`) — **คนละสเกลกับ `utilization` ใน stream-json ที่เป็น 0–1** อย่าสลับ
+
+**verify บนเครื่องจริง** (deploy แล้ว): `/api/sessions` ไม่มี auth = 401, มี auth ผ่าน nginx = 1173 bytes/11 sessions; `statusline.sh` render เหมือนเดิม + เขียนไฟล์ + touch ตอนค่าเดิม; `/api/status` คืน `age`; resume จริง pane `bash → claude` แล้วรอบสองตอบ `409 busy:claude`; `503 no tmux pane` ตอนไม่มี server; `400 bad id` ตอน id ไม่ใช่ uuid. 23 เทสต์ใหม่ที่ `claude-desk/tests/`
+
+**ยังไม่ทำ (รอตัดสินใจ):** แจ้งเตือนตอนงานเสร็จ — in-page notification ใช้ไม่ได้ตอนปิดจอ (PWA บน iOS ถูก suspend), Web Push จริงต้อง VAPID + push service = งานแยก, ทางที่เวิร์กจริงคือ Stop hook → Telegram ซึ่งต้องเพิ่ม secret ใน vault
+
 ## 2026-09-16 — copy จาก `mimo` (MiMoCode) ด้วย: `allow-passthrough`
 
 **โจทย์:** copy ที่ claude ได้แล้ว อยากให้ฝั่ง mimo ได้ด้วย

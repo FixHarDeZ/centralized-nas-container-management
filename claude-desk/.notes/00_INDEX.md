@@ -14,6 +14,8 @@ Claude Code reached from a phone browser, for generating pptx/docx/xlsx — not 
 - `claude-desk` container: Debian bookworm-slim + Node 22 + `@anthropic-ai/claude-code@ARG CLAUDE_VERSION` + LibreOffice `*-nogui` + skills from `anthropics/skills@ARG SKILLS_REF`. PID 1 = `ttyd -W -m 1 -P 30 tmux new -A -s main`. uid 1000. `expose: 7681` only.
 - `claude-desk-nginx`: `5072:80`, basic auth everywhere, serves `ui/`, proxies `/ws` + `/token` to ttyd, `/upload/` to upload.py (7682, `client_max_body_size 300m`), `autoindex_format json` on `/files/in/` and `/files/out/` (share mounted ro; `/files/` root itself 404).
 - `upload.py` in the desk: stdlib `ThreadingHTTPServer`. `PUT /upload/in/<name>` (.part + `os.replace`; `out/` → 403), `DELETE /upload/<dir>/<name>` one file, `DELETE /upload/<dir>/` clears the folder and answers with the count. Only `in`/`out` route; names are one flat segment (no `..`, slashes, dot-files, >200 chars). `WORK_DIR` env (default `/work`) makes it runnable outside the container for tests. Respawned by a loop in entrypoint if it dies; ttyd stays PID 1.
+- Same process also serves `/api/`: `GET /api/status` (the rate-limit numbers `statusline.sh` last wrote, plus their `age`), `GET /api/sessions` (newest 30 transcripts in `~/.claude/projects/-work` + `pane_current_command`), `POST /api/resume {"id":<uuid>}` and `POST /api/new`. The two POSTs drive `tmux send-keys`, **not** the page's websocket — keys on the socket land wherever the pane's focus is, which is normally Claude Code's prompt box, so `claude --resume <uuid>` would be typed as a message to read. They refuse with `409 busy:<program>` unless the pane reports a shell; a live Claude Code reports `claude`, not `node`. The id is uuid-matched before it can reach a shell. Session titles prefer a `summary` record, else the first user message that is not `<`-wrapped bookkeeping (replayed slash commands, tool results); reading is capped at 256 KB/file with `readline(64 KB)`, because one transcript here is 4.6 MB and a single `file-history-snapshot` record can be megabytes.
+- `statusline.sh` additionally writes `~/.claude/desk-status.json` (temp + `mv`; rewritten only on change, otherwise touched) — Claude Code hands the rate-limit numbers to the status line and nowhere else, and the phone layout drops those rows to fit 24 columns, so the header chip is the only place a small screen can see them. `used_percentage` is 0–100; the `utilization` in stream-json is 0–1 — different surfaces, different scales.
 - `ui/` assets are served `no-cache` (only `vendor/` and `fonts/` keep `max-age=604800`): the previous blanket week-long cache meant a deployed UI fix never reached the home-screen PWA, which reads as "still broken".
 - Three copy paths, one handler: xterm selection at a shell, tmux buffer from Claude Code (`set-clipboard on`), and MiMoCode's own DCS-wrapped OSC 52 (`allow-passthrough on` — off by default in tmux 3.3, and the copy vanishes silently without it). MiMoCode copies on mouse-up, no key.
 - Clipboard out of the desk needs both halves: `set-clipboard on` (tmux.conf) so tmux forwards Claude Code's `load-buffer -w` as OSC 52, and `term.parser.registerOscHandler(52, ...)` in `ui/app.js` because xterm.js does not handle OSC 52 itself. tmux 3.3a sends the empty-kind form `ESC]52;;<b64>`. Inside Claude Code `term.getSelection()` is always empty — mouse tracking means the terminal never owns the selection.
@@ -74,7 +76,7 @@ Claude Code reached from a phone browser, for generating pptx/docx/xlsx — not 
 - The ws URL in `app.js` is built relative to the page path, so the page works under a subpath too.
 - Headless Chrome on macOS clamps window width to ~500 px — a 390 px screenshot is a crop, not a layout bug. Verify phone layout on the phone.
 - `?demo=1` short-circuits `sendInput` to echo locally; never ship a page with that default on.
-- Test suite: `tests/test_manifest_schema.py` needs `jsonschema` in the venv (missing on this Mac) — `pytest --ignore` it; 39 others pass.
+- Test suite: `tests/test_manifest_schema.py` needs `jsonschema` in the venv (missing on this Mac) — `pytest --ignore` it; 39 others pass. The stack's own tests are `python3 -m pytest claude-desk/tests -q` (23) — `conftest.py` puts the stack root on `sys.path` because `upload.py` is not in a package.
 
 ## Verification status
 
@@ -91,6 +93,7 @@ Claude Code reached from a phone browser, for generating pptx/docx/xlsx — not 
 
 ## Change log
 
+- **2026-09-16** — sessions sheet (`/api/sessions` + `/api/resume` via `tmux send-keys`) and a rate-limit chip in the header (`statusline.sh` → `desk-status.json` → `/api/status`); first tests for the stack at `claude-desk/tests/`
 - **2026-09-15** — status line sizes itself from `COLUMNS` per render (fix: pinned env gave a laptop the phone layout)
 - **2026-09-15** — status line vendored from the workstation (`statusline.sh`)
 - **2026-09-15** — Clear in/ and Clear out/ in the drawer; file API becomes `/upload/<dir>/[name]`
