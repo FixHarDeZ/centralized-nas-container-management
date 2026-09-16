@@ -176,34 +176,42 @@ body.reconnecting .dot { background: var(--warn); box-shadow: 0 0 0 3px var(--ri
   font-variant-numeric: tabular-nums;
 }
 body.connected .status { color: var(--ok); }
+/* On a phone the header's width goes to the limit chip instead. The dot is
+   already green, and nobody opening this from their home screen needs to be
+   told which app it is. "connecting" and "reconnecting" still show — those
+   say something the dot's colour alone does not. */
+@media (max-width: 430px) {
+  body.connected .status { display: none; }
+  .brand .name { display: none; }
+}
 
 /* Rate limits, up here rather than only in the status line: the phone layout
    of statusline.sh drops the limit bars to fit 24 columns, so the small
    screen was the one that could not see them. Stale (no session running, so
    the number has stopped moving) dims the whole chip. */
 .quota {
-  display: inline-flex; align-items: center; gap: 5px;
-  height: 26px; padding: 0 9px; margin-right: 2px;
-  border: 1px solid var(--line); border-radius: 999px;
+  display: inline-flex; flex-direction: column; align-items: stretch; gap: 1px;
+  padding: 4px 9px; margin-right: 2px;
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
   background: var(--btn); color: var(--muted);
-  font-family: var(--ui); font-size: 11px; font-weight: 600;
+  font-family: var(--ui); font-size: 11px; font-weight: 600; line-height: 1.25;
   font-variant-numeric: tabular-nums;
   white-space: nowrap; cursor: pointer;
   transition: opacity var(--t), border-color var(--t);
 }
 .quota[hidden] { display: none; }
 .quota.stale { opacity: 0.45; }
-/* Explicit, like .clear-btn[hidden] below: a span would fall back to the UA
-   rule here, but every other hidden element in this file needed one. */
-.quota .q-sep { color: var(--line-strong); }
-.quota .q-sep[hidden] { display: none; }
-.quota .q-5h.hot, .quota .q-wk.hot { color: var(--warn); }
-.quota .q-5h.full, .quota .q-wk.full { color: var(--bad); }
-/* Under ~400px the header has room for one number, and the 5h window is the
-   one that stops you working today. */
-@media (max-width: 400px) {
-  .quota .q-sep, .quota .q-wk { display: none; }
-}
+.quota:active { background: var(--btn-hi); }
+/* Explicit, like .clear-btn[hidden] below: display is set above, so the UA
+   rule for [hidden] would lose without this. */
+.q-row { display: flex; align-items: baseline; gap: 5px; }
+.q-row[hidden] { display: none; }
+.q-row b { font-weight: 600; color: var(--muted); opacity: 0.75; }
+/* The percentage carries the colour; the countdown stays quiet next to it. */
+.q-row .q-pct { margin-left: auto; }
+.q-row.hot .q-pct { color: var(--warn); }
+.q-row.full .q-pct { color: var(--bad); }
+.q-row .q-in { min-width: 44px; text-align: right; opacity: 0.7; }
 
 .icon-btn {
   width: 36px; height: 36px;

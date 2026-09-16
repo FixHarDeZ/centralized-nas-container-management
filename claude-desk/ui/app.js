@@ -675,42 +675,58 @@
   // is dimmed rather than presented as current.
   const quota = document.getElementById('quota');
   const STALE_AFTER = 20 * 60;   // seconds; longer than a pause for coffee
+  let lastQuota = null;          // last answer, redrawn by the ticker below
 
   function pctClass(pct) {
     return pct >= 95 ? 'full' : pct >= 80 ? 'hot' : '';
   }
+  // Same shape as the status line's fmt_reset, so the chip and the rows below
+  // it never disagree about how long is left.
   function fmtReset(seconds) {
-    if (!(seconds > 0)) return '';
-    const h = Math.floor(seconds / 3600);
-    const m = Math.round((seconds % 3600) / 60);
-    return h ? h + 'h' + (m ? String(m).padStart(2, '0') + 'm' : '') : m + 'm';
+    if (!(seconds > 0)) return 'now';
+    const d = Math.floor(seconds / 86400);
+    const h = Math.floor((seconds % 86400) / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    if (d > 0) return d + 'd';
+    if (h > 0) return h + 'h' + m + 'm';
+    return m + 'm';
   }
-  function fillWindow(el, win, label) {
-    if (!win || typeof win.pct !== 'number') { el.textContent = ''; el.title = ''; return ''; }
+  function fillWindow(row, win, label) {
+    if (!win || typeof win.pct !== 'number') { row.hidden = true; return ''; }
     const pct = Math.round(win.pct);
-    el.textContent = label + ' ' + pct + '%';
-    el.className = el.className.replace(/\s*(hot|full)\b/g, '') + ' ' + pctClass(pct);
+    row.hidden = false;
+    row.classList.remove('hot', 'full');
+    if (pctClass(pct)) row.classList.add(pctClass(pct));
+    row.querySelector('.q-pct').textContent = pct + '%';
+    // Counted from resets_at here rather than taken from the server, so the
+    // number keeps falling between polls (see the ticker below).
     const left = win.resets_at ? fmtReset(win.resets_at - Date.now() / 1000) : '';
+    row.querySelector('.q-in').textContent = left ? '↻' + left : '';
     return label + ' ' + pct + '%' + (left ? ' · resets in ' + left : '');
   }
   function renderQuota(data) {
     const five = data && data.five_hour;
     const week = data && data.seven_day;
     if (!five && !week) { quota.hidden = true; return; }
+    lastQuota = data;
     const tips = [
       fillWindow(quota.querySelector('.q-5h'), five, '5h'),
       fillWindow(quota.querySelector('.q-wk'), week, 'wk'),
     ].filter(Boolean);
-    // Only one window on a plan without the other, and a lone "·" reads as a
-    // bug. (The narrow layout hides the separator in CSS for the same reason.)
-    quota.querySelector('.q-sep').hidden = tips.length < 2;
     const stale = (data.age || 0) > STALE_AFTER;
     quota.classList.toggle('stale', stale);
     quota.title = tips.join(' · ') + (stale ? ' (no session running — last seen reading)' : '');
     quota.hidden = false;
   }
   async function loadQuota() {
-    if (DEMO) { renderQuota({ five_hour: { pct: 39, resets_at: Date.now() / 1000 + 6900 }, seven_day: { pct: 54 }, age: 5 }); return; }
+    if (DEMO) {
+      renderQuota({
+        five_hour: { pct: 72, resets_at: Date.now() / 1000 + 7560 },
+        seven_day: { pct: 58, resets_at: Date.now() / 1000 + 22560 },
+        age: 5,
+      });
+      return;
+    }
     try {
       const r = await fetch('api/status', { cache: 'no-store' });
       if (!r.ok) return;
@@ -724,6 +740,10 @@
   // 15s rather than a minute because the same poll carries the "Claude
   // finished" mark; a browser throttles it while the tab is hidden anyway.
   setInterval(loadQuota, 15000);
+  // The countdown is computed from resets_at, so it can keep falling off the
+  // last answer without asking the desk again — and it still moves while the
+  // desk is idle and the percentages have stopped changing.
+  setInterval(() => { if (lastQuota && !document.hidden) renderQuota(lastQuota); }, 20000);
   // Coming back to a phone that slept: the chip is the first thing that is wrong.
   document.addEventListener('visibilitychange', () => { if (!document.hidden) loadQuota(); });
 

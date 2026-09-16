@@ -37,8 +37,12 @@
       <span class="name">claude<span class="accent">-desk</span></span>
     </div>
     <div class="top-actions">
+      <!-- Two rows rather than one line: the reset countdown is the half that
+           decides whether to wait or stop, and 5h + wk + both countdowns do
+           not fit across a phone. -->
       <button id="quota" class="quota" type="button" hidden title="Rate limits">
-        <span class="q-5h"></span><span class="q-sep">·</span><span class="q-wk"></span>
+        <span class="q-row q-5h" hidden><b>5h</b><span class="q-pct"></span><span class="q-in"></span></span>
+        <span class="q-row q-wk" hidden><b>wk</b><span class="q-pct"></span><span class="q-in"></span></span>
       </button>
       <span id="status-text" class="status">connecting</span>
       <button id="sessions-btn" class="icon-btn" title="Past sessions" aria-label="Past sessions">

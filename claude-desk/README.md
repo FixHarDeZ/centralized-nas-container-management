@@ -81,7 +81,14 @@ At 36 the output is byte-identical to the workstation copy, which keeps re-vendo
 
 ### Rate-limit chip
 
-The header shows `5h 39% · wk 54%` (just the 5h number under 400px, which is the one that stops you working today), amber from 80%, red from 95%.
+The header shows both windows with how long until each one resets, amber from 80%, red from 95%:
+
+```
+5h  72% ↻2h6m
+wk  58% ↻6h16m
+```
+
+Two rows rather than one line because the countdown is the half that decides whether to wait or stop, and four values do not fit across a phone. Under 430px the brand text and the `live` label give up their cells to it — the dot is already green, and nobody opening this from their home screen needs to be told which app it is. The countdown is computed from `resets_at` in the page, so it keeps falling between polls and keeps moving even when the desk is idle and the percentages have stopped. Same format as the status-line rows (`2d`, `2h6m`, `14m`), so the two never disagree.
 
 It is fed by the status line, because Claude Code hands the rate-limit numbers to the status line and to nothing else. `statusline.sh` therefore also writes `~/.claude/desk-status.json` — `{model, five_hour: {pct, resets_at}, seven_day: {…}}` — and `GET /api/status` serves it with an `age`. Written through a temp name and `mv`, since the server reads it concurrently; rewritten only when a number changed, and otherwise just touched, so the page can still tell a live desk from a stale one without the volume taking a write per frame.
 
@@ -146,7 +153,7 @@ look the same in both themes.
 
 - Tap the folder icon → **in/** → **Add files** to upload sources from the phone (or drop them into `claude-work/in/` from DS File — same folder). Type `claude` (alias for `claude --dangerously-skip-permissions`), describe the document. `r` resumes the last session.
 - Tap the history icon for **past sessions** — the list is every session that ran in `/work`, newest first; tapping one resumes it, `+ New session` starts a fresh one. Both need the terminal to be at a shell prompt: quit whatever is running there first (the sheet says which program is holding it).
-- The chip beside the connection dot is the **5h / 7d rate limit**. It dims when nothing has run for a while, because that is when the number stops being current.
+- The chip beside the connection dot is the **5h / 7d rate limit and how long until each resets**. It dims when nothing has run for a while, because that is when the percentage stops being current — the countdown keeps running regardless. Tap it to refetch.
 - **Notify when Claude finishes** at the bottom of the sessions sheet raises a notification at the end of a turn — while this page is still running. Lock the phone and it is not: iOS suspends a backgrounded PWA.
 - Finished files appear under **out/** in the same drawer: tap to open (iOS previews pptx/xlsx inline), ⬇ to save to Files.
 - **Clear in/** and **Clear out/** at the bottom of the drawer empty the folder. The first tap arms the button and shows the count, the second one does it, and it disarms itself after four seconds. **This is permanent** — DSM's recycle bin is a file-service feature and a delete from inside the container goes straight past it.
