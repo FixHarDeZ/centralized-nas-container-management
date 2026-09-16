@@ -62,6 +62,13 @@ What the page gets, over server-sent events:
 - one pill per tool call — name and the one useful argument (a command, a path,
   a search pattern) — going green or red when its result lands;
 - the end of a turn, told apart from a failure by its reason.
+- what the turn cost, under the answer: `24k ctx · 1.2k out · $0.04 · 48s`,
+  with the session's running total in the bar above.
+
+`total_cost_usd` is the **session** total, not the turn's — measured across
+three turns as 0.0607 → 0.0701 → 0.1049, never decreasing — so a turn is
+charged the difference. `usage`, by contrast, is per turn. Billing each answer
+the raw total would have charged the whole session again every time.
 
 The send button becomes a stop button while a turn is running. Stop is a control
 request rather than a signal: the child ends the turn in about half a second and
@@ -71,7 +78,20 @@ and the only thing distinguishing it from a real failure is `terminal_reason` �
 the prefix is what is tested. Calling a stop the user asked for a failure would
 be a lie.
 
-`New chat` throws the session away and starts another.
+`New chat` throws the session away and starts another, and the history button
+works here too: tapping a past conversation reopens it **in this view**, with
+its earlier messages painted back. Before that the sheet only ever typed into
+the tmux pane, so from chat it brought the conversation back in the *other*
+view, which reads as the list being broken. Nothing is kept in memory on this
+side — the messages come from the transcript Claude Code writes
+(`~/.claude/projects/-work/<id>.jsonl`), because `--resume` gives the agent
+the context but replays nothing. The same read repaints the view after a plain
+reload.
+
+The sheet acts on whichever view it was opened over: in chat it never touches
+the terminal, so the "terminal is busy" rule does not apply there — gating on
+it would have greyed out every row for the ordinary case of Claude Code
+sitting open in the other view.
 
 The desk opens on this view unless the terminal was the last one used — from a
 phone, chat is what it is for, and the terminal is one tap away.

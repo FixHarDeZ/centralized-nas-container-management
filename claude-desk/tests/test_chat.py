@@ -108,7 +108,9 @@ def test_a_turn_streams_text_and_reports_its_tool(agent):
     assert tool["name"] == "Bash"
     assert tool["detail"] == "echo hi"
     assert next(e for e in events if e["t"] == "tool_done")["ok"] is True
-    assert events[-1] == {"t": "turn", "status": "done", "text": ""}
+    assert events[-1]["t"] == "turn"
+    assert events[-1]["status"] == "done"
+    assert events[-1]["text"] == ""
 
 
 def test_the_finished_assistant_text_is_not_rendered_twice(agent):
@@ -178,7 +180,8 @@ def test_every_kind_of_abort_reads_as_stopped(agent, reason):
         "type": "result", "subtype": "error_during_execution",
         "is_error": True, "terminal_reason": reason, "result": None,
     })
-    assert channel.get(timeout=5) == {"t": "turn", "status": "stopped", "text": ""}
+    end = channel.get(timeout=5)
+    assert (end["t"], end["status"], end["text"]) == ("turn", "stopped", "")
 
 
 def test_a_genuine_failure_is_still_an_error(agent):
@@ -187,7 +190,8 @@ def test_a_genuine_failure_is_still_an_error(agent):
         "type": "result", "subtype": "error_during_execution",
         "is_error": True, "terminal_reason": "completed", "result": "no such tool",
     })
-    assert channel.get(timeout=5) == {"t": "turn", "status": "error", "text": "no such tool"}
+    end = channel.get(timeout=5)
+    assert (end["status"], end["text"]) == ("error", "no such tool")
 
 
 def test_an_error_result_is_reported_with_its_text(agent):
@@ -276,6 +280,155 @@ def _fake_proc():
         "wait": lambda self, timeout=None: 0,
         "kill": lambda self: None,
     })()
+
+
+# ── Cost and tokens ───────────────────────────────────────────────────────
+# Measured on the real agent: total_cost_usd is the **session** running total
+# (three turns came back 0.0607 → 0.0701 → 0.1049, never decreasing), while
+# `usage` is per turn. Charging a turn the raw total would bill the whole
+# session again on every answer.
+def test_a_turn_is_charged_the_difference_not_the_running_total(agent):
+    channel = agent.subscribe()
+    for total in (0.0607, 0.0701, 0.1049):
+        agent._translate({"type": "result", "subtype": "success", "is_error": False,
+                          "terminal_reason": "completed", "result": "",
+                          "total_cost_usd": total,
+                          "usage": {"output_tokens": 3, "input_tokens": 2,
+                                    "cache_read_input_tokens": 12673,
+                                    "cache_creation_input_tokens": 5327},
+                          "duration_ms": 4120})
+    turns = [e for e in _flush(channel) if e["t"] == "turn"]
+    assert [round(t["cost"], 4) for t in turns] == [0.0607, 0.0094, 0.0348]
+    assert [t["total"] for t in turns] == [0.0607, 0.0701, 0.1049]
+
+
+def test_context_is_every_input_token_the_turn_paid_for(agent):
+    channel = agent.subscribe()
+    agent._translate({"type": "result", "subtype": "success", "is_error": False,
+                      "terminal_reason": "completed", "result": "",
+                      "total_cost_usd": 1.0,
+                      "usage": {"input_tokens": 2, "cache_read_input_tokens": 18000,
+                                "cache_creation_input_tokens": 37,
+                                "output_tokens": 1011},
+                      "duration_ms": 12064})
+    turn = channel.get(timeout=5)
+    assert turn["context"] == 18039
+    assert turn["out"] == 1011
+    assert turn["ms"] == 12064
+
+
+def test_a_result_without_cost_does_not_invent_one(agent):
+    channel = agent.subscribe()
+    agent._translate({"type": "result", "subtype": "success", "is_error": False,
+                      "terminal_reason": "completed", "result": ""})
+    turn = channel.get(timeout=5)
+    assert turn["cost"] is None
+    assert turn["context"] == 0
+
+
+def test_the_running_total_restarts_with_the_session(agent):
+    agent.subscribe()
+    agent._translate({"type": "result", "subtype": "success", "is_error": False,
+                      "terminal_reason": "completed", "total_cost_usd": 5.0, "result": ""})
+    assert agent.spent == 5.0
+    agent.reset()
+    assert agent.spent == 0.0
+
+
+# ── Which session this is ─────────────────────────────────────────────────
+def test_the_session_id_comes_from_the_agent(agent):
+    """The page reloads a conversation's transcript from it."""
+    agent.subscribe()
+    agent._translate({"type": "system", "subtype": "init",
+                      "session_id": "f763ee82-7025-443b-bbf0-42227badf2f0"})
+    assert agent.session_id == "f763ee82-7025-443b-bbf0-42227badf2f0"
+
+
+def test_resuming_puts_the_id_on_the_command_line(agent, monkeypatch):
+    started = []
+    monkeypatch.setattr(chat.subprocess, "Popen",
+                        lambda cmd, **kw: started.append(cmd) or _DeadProc())
+    agent.reset(resume="f763ee82-7025-443b-bbf0-42227badf2f0")
+    assert started[0][-2:] == ["--resume", "f763ee82-7025-443b-bbf0-42227badf2f0"]
+
+
+def test_a_plain_reset_carries_no_resume_flag(agent, monkeypatch):
+    started = []
+    monkeypatch.setattr(chat.subprocess, "Popen",
+                        lambda cmd, **kw: started.append(cmd) or _DeadProc())
+    agent.reset()
+    # Nothing spawns until the first message — an idle desk holds no agent.
+    assert started == []
+
+
+class _DeadProc:
+    def poll(self): return None
+    def __init__(self):
+        self.stdin = io.StringIO()
+        self.stdout = io.StringIO()
+    def wait(self, timeout=None): return 0
+    def kill(self): pass
+
+
+# ── Replaying a past conversation ─────────────────────────────────────────
+# The agent replays nothing on --resume, so the earlier messages come from
+# the transcript Claude Code writes. Same reader repaints after a reload.
+@pytest.fixture
+def transcripts(tmp_path, monkeypatch):
+    monkeypatch.setattr(chat, "SESSION_DIR", str(tmp_path))
+    return tmp_path
+
+
+def write_session(folder, name, records):
+    (folder / (name + ".jsonl")).write_text(
+        "".join(json.dumps(r) + "\n" for r in records), encoding="utf-8")
+
+
+def test_a_transcript_replays_as_the_page_renders_it(transcripts):
+    write_session(transcripts, "s", [
+        {"type": "user", "message": {"content": "ทำ slide ให้หน่อย"}},
+        {"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "name": "Read", "input": {"file_path": "/work/in/a.xlsx"}}]}},
+        {"type": "user", "message": {"content": [
+            {"type": "tool_result", "content": "ok", "is_error": False}]}},
+        {"type": "assistant", "message": {"content": [{"type": "text", "text": "เสร็จแล้ว"}]}},
+    ])
+    assert chat.transcript("s") == [
+        {"k": "you", "text": "ทำ slide ให้หน่อย"},
+        {"k": "tool", "name": "Read", "detail": "/work/in/a.xlsx"},
+        {"k": "tool_done", "ok": True},
+        {"k": "claude", "text": "เสร็จแล้ว"},
+    ]
+
+
+def test_replayed_slash_commands_are_not_shown_as_things_you_typed(transcripts):
+    write_session(transcripts, "s", [
+        {"type": "user", "message": {"content": "<local-command-caveat>…</local-command-caveat>"}},
+        {"type": "user", "message": {"content": "the real question"}},
+    ])
+    assert chat.transcript("s") == [{"k": "you", "text": "the real question"}]
+
+
+def test_only_the_tail_of_a_long_conversation_is_kept(transcripts, monkeypatch):
+    monkeypatch.setattr(chat, "HISTORY_ITEMS", 3)
+    write_session(transcripts, "s", [
+        {"type": "user", "message": {"content": str(i)} } for i in range(10)])
+    assert [i["text"] for i in chat.transcript("s")] == ["7", "8", "9"]
+
+
+def test_a_huge_transcript_is_bounded(transcripts, monkeypatch):
+    """One of these files is 4.6 MB and a single record can be megabytes."""
+    monkeypatch.setattr(chat, "HISTORY_BUDGET", 64 * 1024)
+    path = transcripts / "s.jsonl"
+    path.write_text(
+        json.dumps({"type": "file-history-snapshot", "blob": "z" * 3_000_000}) + "\n"
+        + json.dumps({"type": "user", "message": {"content": "after the wall"}}) + "\n",
+        encoding="utf-8")
+    assert chat.transcript("s") == []
+
+
+def test_a_missing_transcript_is_empty_not_an_error(transcripts):
+    assert chat.transcript("nope") == []
 
 
 # ── The command it actually runs ──────────────────────────────────────────

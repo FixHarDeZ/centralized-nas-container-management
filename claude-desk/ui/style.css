@@ -294,6 +294,16 @@ body.chat-view #terminal, body.chat-view #toolbar { display: none; }
 }
 .chat-state { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-state.warn { color: var(--warn); }
+.chat-spent { flex: 0 0 auto; font-variant-numeric: tabular-nums; opacity: 0.8; }
+
+/* What a turn cost, under its answer. Quiet on purpose — it is a thing to
+   glance at when deciding whether to keep going, not part of the reply. */
+.meter {
+  align-self: stretch;
+  padding: 0 2px;
+  font-size: 11px; color: var(--muted); opacity: 0.75;
+  font-variant-numeric: tabular-nums;
+}
 .chat-new {
   flex: 0 0 auto;
   padding: 4px 10px;

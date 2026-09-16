@@ -844,18 +844,26 @@
     const ready = !!pane;
     // A shell means the prompt is free. Anything else (`claude`, `mimo`, an
     // editor, a pager) has the keyboard and must be quit first.
-    const free = ready && ['bash', 'sh', 'zsh', '-bash', 'dash'].includes(pane);
+    //
+    // None of which applies in chat: resuming there restarts the chat's own
+    // agent and never touches the pane, so gating on the terminal would have
+    // left every row greyed out for the usual case of Claude Code sitting
+    // open in the other view.
+    const free = chatOn || (ready && ['bash', 'sh', 'zsh', '-bash', 'dash'].includes(pane));
     sessionsSheet.classList.toggle('blocked', !free);
     sessionsSub.classList.toggle('blocked', !free);
-    sessionsSub.innerHTML = !ready
-      ? 'waiting for the terminal…'
-      : free
-        ? 'past work in <code>/work</code> · tap to resume'
-        : 'the terminal is busy — quit it to use this list';
-    // Without a way out from here the sheet is a trap: "New session" leaves
-    // Claude Code sitting in the pane, and every later visit is refused until
-    // someone quits it by typing in the terminal — the thing this avoids.
-    quitBtn.hidden = free || !ready;
+    sessionsSub.innerHTML = chatOn
+      ? 'past work in <code>/work</code> · tap to open it here'
+      : !ready
+        ? 'waiting for the terminal…'
+        : free
+          ? 'past work in <code>/work</code> · tap to resume'
+          : 'the terminal is busy — quit it to use this list';
+    // Without a way out from here the sheet is a trap in the terminal view:
+    // "New session" leaves Claude Code sitting in the pane, and every later
+    // visit is refused until someone quits it by typing in the terminal — the
+    // thing this avoids.
+    quitBtn.hidden = chatOn || free || !ready;
     quitBtn.disabled = false;
     quitLabel.textContent = pane ? 'Quit “' + pane + '”' : 'Quit it';
 
@@ -898,14 +906,49 @@
   async function resume(id, row) {
     if (DEMO) { closeSessions(); return; }
     row.disabled = true;
+    // The sheet opens over whichever view is showing, so it resumes into that
+    // one. Tapping a past conversation while looking at chat used to bring it
+    // back in the *terminal*, which reads as the list not working.
+    const into = chatOn ? resumeInChat : resumeInTerminal;
     try {
-      const r = await post('api/resume', { id: id });
+      const r = await into(id);
       if (r.ok) { closeSessions(); return; }
       sheetError(r.text);
     } catch (_) {
       sheetError('');
     }
     row.disabled = false;
+  }
+  function resumeInTerminal(id) { return post('api/resume', { id: id }); }
+  function resumeInChat(id) { return post('chat/new', { id: id }); }
+
+  // The agent replays nothing on --resume — it just knows the context — so
+  // the earlier messages come from the transcript Claude Code wrote. Same
+  // path repaints the view after a plain reload.
+  async function paintHistory(id) {
+    if (!id || DEMO) return;
+    let items = [];
+    try {
+      const r = await fetch('chat/history?id=' + encodeURIComponent(id), { cache: 'no-store' });
+      if (r.ok) items = (await r.json()).items || [];
+    } catch (_) { return; }
+    if (!items.length) return;
+    chatLog.querySelector('.chat-empty')?.remove();
+    for (const item of items) {
+      if (item.k === 'you') {
+        add(el('div', 'bubble me', item.text));
+      } else if (item.k === 'claude') {
+        const box = add(el('div', 'bubble them'));
+        box.dataset.raw = item.text;
+        markdown(box, item.text);
+      } else if (item.k === 'tool') {
+        onChatEvent({ t: 'tool', name: item.name, detail: item.detail });
+      } else if (item.k === 'tool_done') {
+        onChatEvent({ t: 'tool_done', ok: item.ok });
+      }
+    }
+    bubble = null;
+    chatLog.scrollTop = chatLog.scrollHeight;
   }
 
   quitBtn.addEventListener('click', async () => {
@@ -925,7 +968,8 @@
   document.getElementById('new-session').addEventListener('click', async () => {
     if (DEMO) { closeSessions(); return; }
     try {
-      const r = await post('api/new');
+      // Same rule as the rows: the sheet acts on the view it opened over.
+      const r = chatOn ? await post('chat/new', {}) : await post('api/new');
       if (r.ok) { closeSessions(); return; }
       sheetError(r.text);
     } catch (_) { sheetError(''); }
@@ -1032,6 +1076,33 @@
     });
   }
 
+  // What the turn cost, under the answer. `total` is the session running
+  // total the agent reports — measured as never decreasing across turns — so
+  // what *this* turn cost is the difference, which the backend works out.
+  let spent = 0;
+  function money(n) {
+    if (typeof n !== 'number') return '';
+    return n < 0.01 ? '<$0.01' : '$' + n.toFixed(2);
+  }
+  function tokens(n) {
+    if (!n) return '';
+    return n >= 1000 ? (n / 1000).toFixed(n >= 10000 ? 0 : 1) + 'k' : String(n);
+  }
+  function addMeter(ev) {
+    const bits = [];
+    if (ev.context) bits.push(tokens(ev.context) + ' ctx');
+    if (ev.out) bits.push(tokens(ev.out) + ' out');
+    if (money(ev.cost)) bits.push(money(ev.cost));
+    if (ev.ms) bits.push(ev.ms >= 60000 ? Math.round(ev.ms / 60000) + 'm' : Math.round(ev.ms / 1000) + 's');
+    if (!bits.length) return;
+    add(el('div', 'meter', bits.join(' · ')));
+  }
+  function paintSpent() {
+    const label = document.getElementById('chat-spent');
+    if (!label) return;
+    label.textContent = spent ? money(spent) + ' this session' : '';
+  }
+
   function showTyping(on) {
     if (on && !typing) {
       typing = el('div', 'typing');
@@ -1072,7 +1143,17 @@
 
   function onChatEvent(ev) {
     if (ev.t === 'busy') { setChatBusy(ev.on); return; }
-    if (ev.t === 'reset') { clearLog(); note(''); return; }
+    if (ev.t === 'reset') {
+      // The stream is the single place a reset is acted on, so a resume
+      // repaints once — whichever page asked for it, and any other that has
+      // the view open. Painting in the caller too would double the history.
+      clearLog();
+      note('');
+      spent = 0;
+      paintSpent();
+      if (ev.session_id) paintHistory(ev.session_id);
+      return;
+    }
     if (ev.t === 'gone') {
       setChatBusy(false);
       if (bubble) bubble = null;
@@ -1124,6 +1205,9 @@
         const box = add(el('div', 'bubble them err'));
         box.textContent = ev.text || 'ทำงานไม่สำเร็จ';
       }
+      addMeter(ev);
+      if (typeof ev.total === 'number') spent = ev.total;
+      paintSpent();
     }
   }
 
@@ -1176,8 +1260,10 @@
   });
 
   document.getElementById('chat-new').addEventListener('click', async () => {
-    try { await chatPost('chat/new'); } catch (_) { /* nothing to undo */ }
+    try { await chatPost('chat/new', {}); } catch (_) { /* nothing to undo */ }
     clearLog();
+    spent = 0;
+    paintSpent();
   });
 
   // Enter sends, Shift+Enter is a newline — on a phone the key says "send"
@@ -1228,7 +1314,18 @@
       if (!DEMO) {
         fetch('chat/state', { cache: 'no-store' })
           .then((r) => (r.ok ? r.json() : null))
-          .then((s) => { if (s) setChatBusy(!!s.busy); })
+          .then((s) => {
+            if (!s) return;
+            setChatBusy(!!s.busy);
+            spent = s.spent || 0;
+            paintSpent();
+            // Nothing is kept in memory on the server; the conversation is
+            // repainted from the transcript Claude Code writes. Only when the
+            // log is empty — switching views mid-answer must not duplicate it.
+            if (s.session_id && !chatLog.querySelector('.bubble')) {
+              paintHistory(s.session_id);
+            }
+          })
           .catch(() => {});
       }
       if (!IS_MOBILE) chatInput.focus();
@@ -1292,7 +1389,7 @@
     onChatEvent({ t: 'say_start' });
     onChatEvent({ t: 'say', text: 'เสร็จแล้วครับ — 8 สไลด์ อยู่ที่ `out/2026-09-15-q3-review.pptx`\n\nสรุปที่ใส่ไว้:\n- ยอดรวม Q3 โตจาก Q2 12%\n- ภาคเหนือเป็นตัวฉุด ติดลบ 4%\n- ฟอนต์ไทยเรนเดอร์ถูกต้องทุกหน้า ตรวจจากภาพแล้ว' });
     onChatEvent({ t: 'say_end' });
-    onChatEvent({ t: 'turn', status: 'done', text: '' });
+    onChatEvent({ t: 'turn', status: 'done', text: '', cost: 0.037, total: 0.11, context: 24100, out: 1180, ms: 48000 });
   }
 
   window._term = term;
