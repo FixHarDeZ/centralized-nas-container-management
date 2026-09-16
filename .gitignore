@@ -16,6 +16,7 @@ __pycache__/
 .roo/
 .ruff_cache/
 .serena/
+.refinventory/
 
 # headroom wrap runtime state (per-machine PIDs, not shared config)
 .claude/.headroom_wrap_marker.json
