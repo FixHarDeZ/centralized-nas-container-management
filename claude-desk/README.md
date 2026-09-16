@@ -33,6 +33,7 @@ phone ──HTTPS :15072 (DSM RP)──▶ claude-desk-nginx :5072
   - `GET /api/status` — the numbers `statusline.sh` last saw, plus their `age` in seconds.
   - `GET /api/sessions` — past transcripts in `/work`, newest first, with the pane's current command.
   - `POST /api/resume {"id": "<uuid>"}` / `POST /api/new` — type the command into the tmux pane.
+  - `POST /api/quit` — Escape + `/exit` into the pane, then wait for a shell.
 - **`claude-desk`** — Debian + Node 22 + `@anthropic-ai/claude-code` (pinned `ARG CLAUDE_VERSION`), LibreOffice `*-nogui`, poppler, qpdf, Thai fonts, the Python and npm packages the official office skills need. PID 1 is `ttyd -W -m 1 -P 30 tmux new -A -s main`. Runs as uid 1000 (Claude Code refuses `--dangerously-skip-permissions` as root). Never published on the host.
 - **`claude-desk-nginx`** — `nginx:alpine` with `ui/` baked in (`nginx/Dockerfile`): basic auth on every path (`nginx/.htpasswd` from the vault), proxies only the websocket and token endpoints to ttyd, and lists `out/` as JSON. `ui/` cannot be bind-mounted: directories under `/volume2/docker` carry the DSM share ACL, which the nginx worker (uid 101) cannot traverse → 403 on every file. Single-file binds (`nginx.conf`, `.htpasswd`) are read by the root master process and work.
 - **`ui/`** — our own page instead of ttyd's: xterm.js 5.3 (vendored, no CDN), Inter + JetBrains Mono self-hosted, a key bar with `Esc ⇧Tab Tab Ctrl ↑↓←→ ↵NL` and `Paste / ^C A− A+ ⌨`, a rate-limit chip in the header, two right-hand sheets — files (`in/` Add files → PUT, 🗑 delete; `out/` tap to open, ⬇ to save) and sessions — a dark/light theme toggle, PWA manifest for Add-to-Home-Screen. Speaks ttyd's websocket protocol directly (touch scrolling and the iOS keyboard handling adapted from `pawprint0706/ttyd-wrapper`, MIT).
@@ -72,6 +73,9 @@ be a lie.
 
 `New chat` throws the session away and starts another.
 
+The desk opens on this view unless the terminal was the last one used — from a
+phone, chat is what it is for, and the terminal is one tap away.
+
 **Two agents in `/work` at once.** The chat runs its own Claude Code, so it can
 be working while the terminal's is too. That is a change from "one agent at a
 time", and it is not prevented: the only signal available is the pane's current
@@ -103,7 +107,16 @@ Reading is bounded twice: the newest 30 files by mtime, and 256 KB per file with
 
 **Tapping a row types `claude --resume <id>` into the tmux pane** (`tmux send-keys`), rather than sending keys down the page's websocket. Keys on the socket land wherever the pane's focus is, and the pane usually has Claude Code in it — the command would arrive in Claude's prompt box as a message to read, not a command to run. So the endpoint asks `tmux display-message -p '#{pane_current_command}'` first and refuses with `409 busy:<program>` unless a shell is at the prompt (`claude` is what a running session reports); the sheet greys the rows out and says which program to quit. The id is matched against a uuid pattern before it goes anywhere near a shell.
 
-`+ New session` is the same path with a bare `claude`. Both pick up the `--dangerously-skip-permissions` alias from `profile.sh`, because an interactive login shell is what is typing.
+`+ New session` is the same path with a bare `claude`, and **`Quit "claude"`
+is the way back out** — without it the sheet is a trap, because New session
+leaves Claude Code sitting in the pane and every later visit is refused until
+someone quits it by typing in the terminal, which is the thing the sheet
+exists to avoid. Quitting sends Escape (so the next line lands in an empty
+prompt box rather than being appended to a half-typed message or a running
+turn) then `/exit`, and waits for the pane to report a shell — about a second
+in practice. Ctrl-C twice is the documented way out of Claude Code and was
+measured **not** to work through `send-keys`; Escape + `/exit` returns the
+pane to `bash` both at an idle prompt and mid-turn. Both pick up the `--dangerously-skip-permissions` alias from `profile.sh`, because an interactive login shell is what is typing.
 
 ## Volumes
 
@@ -230,7 +243,7 @@ look the same in both themes.
 ## Using it
 
 - Tap the folder icon → **in/** → **Add files** to upload sources from the phone (or drop them into `claude-work/in/` from DS File — same folder). Type `claude` (alias for `claude --dangerously-skip-permissions`), describe the document. `r` resumes the last session.
-- Tap the history icon for **past sessions** — the list is every session that ran in `/work`, newest first; tapping one resumes it, `+ New session` starts a fresh one. Both need the terminal to be at a shell prompt: quit whatever is running there first (the sheet says which program is holding it).
+- Tap the history icon for **past sessions** — the list is every session that ran in `/work`, newest first; tapping one resumes it, `+ New session` starts a fresh one. Both need the terminal to be at a shell prompt: quit whatever is running there first — the sheet's own `Quit` button does it.
 - The chip beside the connection dot is the **5h / 7d rate limit and how long until each resets**. It dims when nothing has run for a while, because that is when the percentage stops being current — the countdown keeps running regardless. Tap it to refetch.
 - **Notify when Claude finishes** at the bottom of the sessions sheet raises a notification at the end of a turn — while this page is still running. Lock the phone and it is not: iOS suspends a backgrounded PWA.
 - Finished files appear under **out/** in the same drawer: tap to open (iOS previews pptx/xlsx inline), ⬇ to save to Files.

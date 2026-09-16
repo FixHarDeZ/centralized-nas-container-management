@@ -819,6 +819,8 @@
   const sessionList = document.getElementById('session-list');
   const sessionEmpty = document.getElementById('session-empty');
   const sessionsSub = document.getElementById('sessions-sub');
+  const quitBtn = document.getElementById('sessions-quit');
+  const quitLabel = document.getElementById('quit-label');
 
   function fmtWhen(epoch) {
     const d = new Date(epoch * 1000);
@@ -849,7 +851,13 @@
       ? 'waiting for the terminal…'
       : free
         ? 'past work in <code>/work</code> · tap to resume'
-        : 'the terminal is busy — quit what is running there first';
+        : 'the terminal is busy — quit it to use this list';
+    // Without a way out from here the sheet is a trap: "New session" leaves
+    // Claude Code sitting in the pane, and every later visit is refused until
+    // someone quits it by typing in the terminal — the thing this avoids.
+    quitBtn.hidden = free || !ready;
+    quitBtn.disabled = false;
+    quitLabel.textContent = pane ? 'Quit “' + pane + '”' : 'Quit it';
 
     sessionList.innerHTML = '';
     sessionEmpty.hidden = list.length > 0;
@@ -899,6 +907,20 @@
     }
     row.disabled = false;
   }
+
+  quitBtn.addEventListener('click', async () => {
+    quitBtn.disabled = true;
+    quitLabel.textContent = 'Quitting…';
+    try {
+      const r = await post('api/quit');
+      if (!r.ok) sheetError(r.text);
+    } catch (_) {
+      sheetError('');
+    }
+    // Either way the list is redrawn from what the pane actually reports —
+    // guessing at the outcome is how a sheet ends up lying about its state.
+    loadSessions();
+  });
 
   document.getElementById('new-session').addEventListener('click', async () => {
     if (DEMO) { closeSessions(); return; }
@@ -1250,11 +1272,12 @@
 
   // Whichever view was last used comes back on the next open: the desk is a
   // tool you return to mid-job, and landing on the wrong half of it costs a
-  // tap every single time.
+  // tap every single time. With no stored choice it opens on chat — that is
+  // what the desk is for from a phone, and the terminal is one tap away.
   if (!DEMO) {
     let saved = null;
     try { saved = localStorage.getItem(VIEW_KEY); } catch (_) { /* no storage */ }
-    if (saved === 'chat') setView('chat');
+    if (saved !== 'terminal') setView('chat');
   }
 
   function demoChat() {

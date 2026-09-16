@@ -206,6 +206,48 @@ def test_no_tmux_server_is_not_a_crash(monkeypatch):
     assert code == 503
 
 
+# ── Quitting the pane ─────────────────────────────────────────────────────
+# "New session" leaves Claude Code in the pane, so without this the sheet
+# refuses every later visit and the only fix is typing in the terminal.
+def test_quitting_sends_escape_then_exit(monkeypatch):
+    """Ctrl-C twice is the documented way out and measured not to work here."""
+    sent = []
+    seen = iter(["claude", "claude", "bash"])
+    monkeypatch.setattr(upload, "pane_command", lambda: next(seen))
+    monkeypatch.setattr(upload, "_tmux", lambda *a: (sent.append(a), (True, ""))[1])
+    monkeypatch.setattr(upload.time, "sleep", lambda _s: None)
+    code, _ = upload.quit_pane()
+    assert code == 200
+    assert sent == [
+        # Escape first, so /exit lands in an empty prompt box rather than
+        # being appended to a half-typed message or a running turn.
+        ("send-keys", "-t", upload.TMUX_TARGET, "Escape"),
+        ("send-keys", "-t", upload.TMUX_TARGET, "/exit", "Enter"),
+    ]
+
+
+def test_quitting_an_already_free_pane_types_nothing(monkeypatch):
+    sent = []
+    monkeypatch.setattr(upload, "pane_command", lambda: "bash")
+    monkeypatch.setattr(upload, "_tmux", lambda *a: (sent.append(a), (True, ""))[1])
+    assert upload.quit_pane()[0] == 200
+    assert sent == []
+
+
+def test_a_pane_that_ignores_exit_is_reported_not_assumed(monkeypatch):
+    monkeypatch.setattr(upload, "pane_command", lambda: "vim")
+    monkeypatch.setattr(upload, "_tmux", lambda *a: (True, ""))
+    monkeypatch.setattr(upload.time, "sleep", lambda _s: None)
+    code, message = upload.quit_pane()
+    assert code == 409
+    assert message == "busy:vim"
+
+
+def test_quitting_with_no_tmux_server_is_not_a_crash(monkeypatch):
+    monkeypatch.setattr(upload, "pane_command", lambda: None)
+    assert upload.quit_pane()[0] == 503
+
+
 @pytest.mark.parametrize("bad", [
     "", "not-a-uuid", "../../etc/passwd",
     "3bb7d4ca-216a-4893-a150-b2b9aea26b72; rm -rf /",

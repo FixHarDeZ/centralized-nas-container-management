@@ -13,6 +13,7 @@ Desk (the header and the sessions sheet):
     GET    /api/sessions        past Claude Code sessions in /work, newest first
     POST   /api/resume {"id":…} type `claude --resume <id>` into the tmux pane
     POST   /api/new             type `claude` into the tmux pane
+    POST   /api/quit            put the pane back at a shell prompt
 
 Runs inside the desk container (which already owns /work) next to ttyd on
 port 7682. The nginx sidecar is the only thing that can reach it, and it sits
@@ -67,6 +68,7 @@ UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 # MiMoCode), vim, less — means a program owns the keyboard.
 SHELLS = {"bash", "sh", "zsh", "-bash", "dash"}
 
+QUIT_WAIT = 10              # seconds to wait for the pane to come back to a shell
 SESSION_LIMIT = 30          # newest N transcripts; the rest are not findable anyway
 TITLE_BUDGET = 256 * 1024   # bytes read per transcript while hunting for a title
 MAX_LINE = 64 * 1024        # a file-history-snapshot record can be megabytes on
@@ -226,10 +228,44 @@ def type_into_pane(line: str) -> tuple:
     if current is None:
         return 503, "no tmux pane"
     if current not in SHELLS:
-        # The page turns this into "something is running — quit it first".
+        # The page turns this into "something is running — quit it first",
+        # and offers the button that calls quit_pane below.
         return 409, "busy:" + current
     ok, _ = _tmux("send-keys", "-t", TMUX_TARGET, line, "Enter")
     return (200, "ok") if ok else (503, "send-keys failed")
+
+
+def quit_pane() -> tuple:
+    """Put the pane back at a shell prompt.
+
+    Without this the sheet is a trap: "New session" starts Claude Code in the
+    pane, and from then on every row in the sheet is refused until someone
+    quits it by hand — which on a phone means typing into the terminal, the
+    thing the sheet exists to avoid.
+
+    Escape first, so the next line lands in an empty prompt box instead of
+    being appended to a half-typed message or a running turn. Then `/exit`,
+    which is what actually quits: Ctrl-C twice is the documented way out and
+    was measured **not** to work through `send-keys` (the pane still reported
+    `claude` afterwards), while Escape + `/exit` returned it to `bash` both at
+    an idle prompt and mid-turn.
+    """
+    current = pane_command()
+    if current is None:
+        return 503, "no tmux pane"
+    if current in SHELLS:
+        return 200, current
+    _tmux("send-keys", "-t", TMUX_TARGET, "Escape")
+    time.sleep(0.4)
+    _tmux("send-keys", "-t", TMUX_TARGET, "/exit", "Enter")
+    deadline = time.time() + QUIT_WAIT
+    while time.time() < deadline:
+        time.sleep(0.5)
+        now = pane_command()
+        if now is None or now in SHELLS:
+            return 200, now or "gone"
+    # Something that does not answer /exit — say so rather than pretending.
+    return 409, "busy:" + (pane_command() or "?")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -289,6 +325,8 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         if path == "/api/new":
             code, message = type_into_pane("claude")
+        elif path == "/api/quit":
+            code, message = quit_pane()
         elif path == "/api/resume":
             length = int(self.headers.get("Content-Length") or 0)
             try:

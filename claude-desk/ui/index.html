@@ -161,6 +161,13 @@
     </div>
     <div class="drawer-sub" id="sessions-sub">past work in <code>/work</code> · tap to resume</div>
     <div class="drawer-actions">
+      <!-- Without this the sheet is a trap: New session starts Claude Code in
+           the pane, and every row after that is refused until someone quits it
+           by hand in the terminal. -->
+      <button id="sessions-quit" class="quit-btn" type="button" hidden>
+        <svg viewBox="0 0 24 24"><path d="M16 17l5-5-5-5M21 12H9M13 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h7"/></svg>
+        <span id="quit-label">Quit it</span>
+      </button>
       <button id="new-session" class="add-btn">
         <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
         New session
