@@ -55,27 +55,6 @@
               label: Last Scrape
               format: string
 
-    - dupe-sweeper:
-        icon: mdi-content-duplicate
-        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15069"
-        description: หา+ลบวิดีโอซ้ำตามรหัส
-
-    - ops-bot:
-        icon: mdi-robot-love
-        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15070/dashboard"
-        description: AI Incident Response Bot
-
-    - shorts-factory:
-        icon: mdi-movie-open-outline
-        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15071"
-        description: YouTube Shorts Dashboard
-
-    # No ping/widget: basic auth on every path returns 401 = shows as down.
-    - claude-desk:
-        icon: mdi-console
-        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15072"
-        description: Claude Code document desk
-
     - Portainer:
         icon: portainer.png
         href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:19000"
@@ -85,6 +64,27 @@
           url: "{{HOMEPAGE_VAR_PORTAINER_URL}}"
           env: 3
           key: "{{HOMEPAGE_VAR_PORTAINER_KEY}}"
+
+    # ipinfo.io ยิงจาก container ฝั่ง server = เห็น public IP ของ NAS จริง
+    # (ไม่ใช่ IP ของ browser) — ไม่มี key ไม่ต้องเข้า vault
+    - Public IP:
+        icon: mdi-ip-network
+        href: https://ipinfo.io/
+        description: WAN address ของบ้าน
+        widget:
+          type: customapi
+          url: https://ipinfo.io/json
+          refreshInterval: 300000
+          mappings:
+            - field: ip
+              label: IP
+              format: text
+            - field: org
+              label: ISP
+              format: text
+            - field: city
+              label: City
+              format: text           
 
     - Uptime Kuma:
         icon: uptime-kuma.png
@@ -104,8 +104,29 @@
           server: my-docker
           container: watchtower
 
+    - dupe-sweeper:
+        icon: mdi-content-duplicate
+        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15069"
+        description: หา+ลบวิดีโอซ้ำตามรหัส
+
+    - ops-bot:
+        icon: mdi-robot-love
+        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15070/dashboard"
+        description: AI Incident Response Bot
+
+    - shorts-factory:
+        icon: mdi-movie-open-outline
+        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15071"
+        description: YouTube Shorts Dashboard
+
 # ─── 📝 Tools & Notes ─────────────────────────────────────────────────────────
 - 📝 Tools & Notes:
+    # No ping/widget: basic auth on every path returns 401 = shows as down.
+    - claude-desk:
+        icon: mdi-console
+        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15072"
+        description: Claude Code document desk
+
     - News Feed:
         icon: mdi-newspaper-variant-outline
         href: "{{HOMEPAGE_VAR_NEWS_FEED_HTTPS}}"
@@ -152,27 +173,6 @@
 
 # ─── 🌐 Remote Access ─────────────────────────────────────────────────────────
 - 🌐 Remote Access:
-    # ipinfo.io ยิงจาก container ฝั่ง server = เห็น public IP ของ NAS จริง
-    # (ไม่ใช่ IP ของ browser) — ไม่มี key ไม่ต้องเข้า vault
-    - Public IP:
-        icon: mdi-ip-network
-        href: https://ipinfo.io/
-        description: WAN address ของบ้าน
-        widget:
-          type: customapi
-          url: https://ipinfo.io/json
-          refreshInterval: 300000
-          mappings:
-            - field: ip
-              label: IP
-              format: text
-            - field: org
-              label: ISP
-              format: text
-            - field: city
-              label: City
-              format: text
-
     - Jellyfin (DDNS):
         icon: jellyfin.png
         href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:18096"
