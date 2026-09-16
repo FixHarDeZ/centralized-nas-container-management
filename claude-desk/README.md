@@ -119,6 +119,8 @@ look the same in both themes.
 ## Limits accepted
 
 - `mimo` runs with `MIMOCODE_DANGEROUSLY_SKIP_PERMISSIONS=1` (the alias in `profile.sh`; the flag form cannot be used from an alias — it lands before the subcommand and MiMoCode just prints help), the same bargain as `claude`: a tap per tool call makes the desk unusable from a phone, and the container is the cage. The alias also clears `CLAUDE_CODE_OAUTH_TOKEN`, because MiMoCode's first-run auth offers to *import Claude Code credentials* and it has its own key — hygiene rather than a boundary, since bash is allowed and ttyd runs as the same uid.
+- **A UI change needs a reload on the phone.** `ui/` is COPYed into the nginx image, so editing it means a rebuild — and `app.js`/`css`/icons are served `no-cache` (revalidate every load) precisely because a week-long cache once hid a deployed fix behind the home-screen PWA. `vendor/` and `fonts/` keep the long cache; they only change with a new image anyway.
+- `set-clipboard on` lets anything in the container push text to the phone's system clipboard through OSC 52 — including `mimo` with permissions skipped. The handler in `ui/app.js` refuses OSC 52 *read* requests (`?`), which is the direction that would leak the clipboard back out. Bash in that container is trusted anyway; this is the shape of the trust, written down.
 - Basic auth is the only gate in front of a shell with permission prompts off. The container is the sandbox: no docker socket, no other mounts, `mem_limit: 2g`. Keep the password long; `-m 1` refuses a second concurrent browser.
 - One session, one person. Not multi-user.
 - `cpus:` does nothing on DSM; a heavy soffice render can pin a few cores for a minute.

@@ -351,7 +351,14 @@
     try {
       const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
       oscClip = new TextDecoder().decode(bytes);
-    } catch (_) { return true; }
+    } catch (_) {
+      // A truncated payload looks exactly like the bug this fixes — say so
+      // rather than failing silently, and drop the stale text so the button
+      // cannot paste an older selection instead.
+      oscClip = '';
+      say('copy failed');
+      return true;
+    }
     navigator.clipboard.writeText(oscClip).then(
       () => say('✓ copied'),
       () => say('tap to copy'),
@@ -661,7 +668,8 @@
     term.writeln('\x1b[38;5;214m▌\x1b[0m claude-desk — 2.1.272 (Claude Code)');
     term.writeln('\x1b[38;5;245m  in/  ← drop source files here (DS File)');
     term.writeln('  out/ → finished pptx/docx/xlsx land here');
-    term.writeln('  type: claude  |  r = resume last\x1b[0m');
+    term.writeln('  claude | r = resume | m = mimo agent');
+    term.writeln('  ask <question> = one answer\x1b[0m');
     term.writeln('');
     term.writeln('\x1b[38;5;214mdesk\x1b[0m \x1b[38;5;245m/work\x1b[0m › claude');
     term.writeln('');

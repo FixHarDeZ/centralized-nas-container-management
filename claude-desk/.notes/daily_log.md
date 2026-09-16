@@ -14,6 +14,10 @@
 - **ฝั่ง tmux:** เขียนสคริปต์ `pty.fork()` เปิด tmux จริงในคอนเทนเนอร์ แล้วสั่ง `printf 'hello-osc' | tmux load-buffer -w -` → อ่านไบต์จาก pty เจอ `ESC]52;;aGVsbG8tb3Nj` = ยิงออกจริงหลังเปลี่ยน option. **kind ว่าง ไม่ใช่ `c`** (tmux 3.3a) handler เลยต้องรับทั้ง `;c;<b64>` และ `;;<b64>`
 - **ฝั่งเบราว์เซอร์:** เสิร์ฟ `ui/` ด้วย `python3 -m http.server` แล้วเปิดหน้า `?demo=1` ใน iframe จาก headless Chrome (extension ต่อไม่ติด) — เพิ่ม `if (DEMO) window.term = term;` ไว้ให้ทดสอบยิง escape sequence เข้าไปได้ (live ไม่ expose). **ต้อง stub `navigator.clipboard.writeText` ก่อน** เพราะ headless ไม่มี user activation แล้ว promise ค้างไม่ settle เลย (อาการตอนแรก: handler ทำงานแต่ป้ายปุ่มไม่เปลี่ยน ดูเหมือน handler ไม่ยิง) → ผลลัพธ์ `clipboardGot=[hello-from-tmux] btn=[✓ copied]` ทั้งรูปแบบ `;c;` และ `;;`
 
+**ทดสอบของใหญ่ ไม่ใช่แค่ 15 ไบต์:** ของจริงคือก๊อปโค้ดทั้งบล็อก → ยิงซ้ำทั้งสองฝั่งที่ 2K/16K/64K — tmux ส่งออกครบทุกขนาด (64,000 ไบต์ → base64 85,336 ตัวอักษรในซีเควนซ์เดียว) และ handler decode ครบทุกขนาด. เพิ่ม error path ด้วย: payload เสีย/โดนตัด เดิม `catch` แล้ว `return true` **เงียบสนิท** = หน้าตาเหมือนบั๊กเดิมเป๊ะ และ `oscClip` ค้างค่าเก่าไว้ กดปุ่มแล้วได้ selection เก่าไปแปะ → ตอนนี้ขึ้น `copy failed` + ล้างค่าเก่า (ทดสอบด้วย payload ที่ไม่ใช่ base64 แล้ว: `label=copyfailed, wrote=none`)
+
+**⚠️ กับดักที่ใหญ่กว่าตัวบั๊ก — แคช 7 วัน:** `nginx.conf` เสิร์ฟ `.js/.css/.svg/.png/.webmanifest` ด้วย `public, max-age=604800` ทั้งก้อน แปลว่า **ปุ่ม Copy ที่ deploy ไปเมื่อวานอาจไม่เคยถึงมือถือเลย** (หน้านี้ถูก Add to Home Screen เป็น PWA ยิ่งไม่ยอม refetch) — อ่านออกมาเหมือน "แก้แล้วยังไม่หาย" ทุกประการ. แยกเป็น: `vendor/` + `fonts/` (ไฟล์ pin เปลี่ยนเฉพาะตอน build ใหม่) คงแคช 7 วัน, ที่เหลือ = `no-cache` revalidate ทุกครั้ง. ยืนยันหลัง deploy: `app.js → no-cache`, `vendor/xterm.min.js → max-age=604800`
+
 **ที่เสียเวลา:** grep หา `cli.js` ไม่เจอ เพราะ claude 2.1.272 ลงเป็น **native binary 227 MB** (`node_modules/@anthropic-ai/claude-code-linux-x64/claude`) ไม่ใช่ JS bundle แล้ว — ต้อง `grep -a` บนไบนารี
 
 ## 2026-09-16 — เปลี่ยน harness เป็น MiMoCode (`mimo`) + คำสั่งถามครั้งเดียวเปลี่ยนชื่อเป็น `ask`
