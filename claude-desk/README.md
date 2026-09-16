@@ -18,7 +18,8 @@ phone ──HTTPS :15072 (DSM RP)──▶ claude-desk-nginx :5072
                                    ├─ /ws, /token  ──▶ claude-desk :7681 (ttyd → tmux → bash → claude)
                                    ├─ /files/in/, /files/out/   autoindex JSON + the files (read-only)
                                    ├─ /upload/<dir>/[name]      ──▶ claude-desk :7682 (upload.py → /work/<dir>)
-                                   └─ /api/…                    ──▶ claude-desk :7682 (upload.py → ~/.claude, tmux)
+                                   ├─ /api/…                    ──▶ claude-desk :7682 (upload.py → ~/.claude, tmux)
+                                   └─ /chat/…                   ──▶ claude-desk :7683 (chat.py → a second claude)
 ```
 
 - **`upload.py`** — stdlib HTTP server in the desk container (port 7682, only nginx can reach it). Files, for the drawer:
@@ -35,6 +36,62 @@ phone ──HTTPS :15072 (DSM RP)──▶ claude-desk-nginx :5072
 - **`claude-desk`** — Debian + Node 22 + `@anthropic-ai/claude-code` (pinned `ARG CLAUDE_VERSION`), LibreOffice `*-nogui`, poppler, qpdf, Thai fonts, the Python and npm packages the official office skills need. PID 1 is `ttyd -W -m 1 -P 30 tmux new -A -s main`. Runs as uid 1000 (Claude Code refuses `--dangerously-skip-permissions` as root). Never published on the host.
 - **`claude-desk-nginx`** — `nginx:alpine` with `ui/` baked in (`nginx/Dockerfile`): basic auth on every path (`nginx/.htpasswd` from the vault), proxies only the websocket and token endpoints to ttyd, and lists `out/` as JSON. `ui/` cannot be bind-mounted: directories under `/volume2/docker` carry the DSM share ACL, which the nginx worker (uid 101) cannot traverse → 403 on every file. Single-file binds (`nginx.conf`, `.htpasswd`) are read by the root master process and work.
 - **`ui/`** — our own page instead of ttyd's: xterm.js 5.3 (vendored, no CDN), Inter + JetBrains Mono self-hosted, a key bar with `Esc ⇧Tab Tab Ctrl ↑↓←→ ↵NL` and `Paste / ^C A− A+ ⌨`, a rate-limit chip in the header, two right-hand sheets — files (`in/` Add files → PUT, 🗑 delete; `out/` tap to open, ⬇ to save) and sessions — a dark/light theme toggle, PWA manifest for Add-to-Home-Screen. Speaks ttyd's websocket protocol directly (touch scrolling and the iOS keyboard handling adapted from `pawprint0706/ttyd-wrapper`, MIT).
+
+## Chat
+
+![chat](../screenshots/claude-desk-chat.png)
+
+The header switches between two views over the same desk. The terminal is the
+whole desk — a shell, `mimo`, `ask`, anything. Chat is bubbles, and it exists
+for one reason: **a terminal wraps hard at `COLUMNS`**, which on a phone is
+about 40 columns of Thai, and a long answer is painful to read there. Bubbles
+reflow, and the text is ordinary selectable HTML rather than something that has
+to come back through OSC 52.
+
+It is **not** a wrapper around the terminal. `chat.py` drives a *second* Claude
+Code over `--input-format stream-json --output-format stream-json` — a
+documented protocol, not a screen. Building bubbles by parsing ANSI out of
+xterm.js would break every time Claude Code changed how it draws, and would put
+the working half of the desk at the mercy of a cosmetic upstream change. See
+[ADR 0013](../docs/adr/0013-claude-desk-chat-is-a-second-view-not-a-wrapper.md).
+
+What the page gets, over server-sent events:
+
+- text token by token, from `content_block_delta`, so a bubble fills in;
+- one pill per tool call — name and the one useful argument (a command, a path,
+  a search pattern) — going green or red when its result lands;
+- the end of a turn, told apart from a failure by its reason.
+
+The send button becomes a stop button while a turn is running. Stop is a control
+request rather than a signal: the child ends the turn in about half a second and
+**stays up for the next message**. An interrupt comes back as an *error* result
+and the only thing distinguishing it from a real failure is `terminal_reason` —
+`aborted_tools` when a tool was running, `aborted_streaming` when text was — so
+the prefix is what is tested. Calling a stop the user asked for a failure would
+be a lie.
+
+`New chat` throws the session away and starts another.
+
+**Two agents in `/work` at once.** The chat runs its own Claude Code, so it can
+be working while the terminal's is too. That is a change from "one agent at a
+time", and it is not prevented: the only signal available is the pane's current
+command, and that reads `claude` whenever a session is merely *open*, so
+refusing on it would block the normal case and the feature would look broken.
+The line above the chat says when the terminal also has an agent up.
+
+**No transcript is kept.** A reload starts a fresh view of the same live session
+instead of replaying it; only "is a turn in flight" survives, so a page that
+comes back mid-turn shows the stop button rather than an idle one.
+
+Streaming needs `proxy_buffering off` on `/chat/` — otherwise nginx holds the
+whole turn and the page shows nothing until it ends, which is indistinguishable
+from a hung agent — plus a long `proxy_read_timeout` and a heartbeat comment
+every 20s, because a stream carrying nothing else looks idle to both nginx and
+DSM's reverse proxy. Verified from outside: a stream held open past 100s through
+`:15072` with five heartbeats and no disconnect.
+
+The chat covers `claude` only. `mimo` and `ask` do not speak this protocol — the
+terminal stays the only way to reach them.
 
 ## Sessions
 

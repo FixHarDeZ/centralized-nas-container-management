@@ -19,6 +19,7 @@ services:
     expose:
       - "7681"   # ttyd
       - "7682"   # upload.py (PUT /upload/<name> → /work/in)
+      - "7683"   # chat.py (SSE + POST, drives a second Claude Code)
     volumes:
       # Whole home, not just ~/.claude: onboarding state lives in ~/.claude.json
       - claude_desk_home:/home/claude

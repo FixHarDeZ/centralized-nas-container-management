@@ -183,7 +183,17 @@ body.connected .status { color: var(--ok); }
 @media (max-width: 430px) {
   body.connected .status { display: none; }
   .brand .name { display: none; }
+  /* The view switch costs about 70 cells, which a 390px header does not have
+     spare — the controls give up a few each rather than one falling off the
+     end. Measured in a 390px iframe; a narrow --window-size on macOS is a
+     crop, not a layout. */
+  .icon-btn { width: 32px; height: 32px; }
+  .view { width: 28px; height: 26px; }
+  #top { padding-left: 10px; padding-right: 10px; }
 }
+/* The key bar belongs to the terminal; in chat the phone's own keyboard is
+   the only one in play. */
+body.chat-view #toolbar-btn { display: none; }
 
 /* Rate limits, up here rather than only in the status line: the phone layout
    of statusline.sh drops the limit bars to fit 24 columns, so the small
@@ -232,6 +242,22 @@ body.connected .status { color: var(--ok); }
 [data-theme="dark"] #theme-btn .ico-sun { display: block; }
 [data-theme="light"] #theme-btn .ico-moon { display: block; }
 
+/* Terminal / chat switch. Two views over one desk — see #chat below. */
+.views {
+  display: flex; gap: 2px; margin-right: 4px;
+  padding: 3px; border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--btn);
+}
+.view {
+  width: 32px; height: 28px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 0; border-radius: 7px; background: transparent;
+  color: var(--muted); cursor: pointer;
+  transition: background var(--t), color var(--t);
+}
+.view.on { background: var(--accent-soft); color: var(--accent); }
+.view svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+
 /* ── Terminal ───────────────────────────────────────── */
 #terminal {
   flex: 1 1 auto;
@@ -245,6 +271,142 @@ body.connected .status { color: var(--ok); }
 #terminal .xterm { height: 100%; }
 #terminal .xterm-viewport { background: transparent !important; }
 #terminal .xterm-viewport::-webkit-scrollbar { width: 0; }
+
+/* ── Chat ───────────────────────────────────────────── */
+/* The reason this view exists: a terminal wraps hard at COLUMNS, which on a
+   phone is about 40 columns of Thai. Bubbles reflow. Everything here is
+   selectable text — unlike the terminal, where copying needs OSC 52. */
+#chat {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+#chat[hidden] { display: none; }
+body.chat-view #terminal, body.chat-view #toolbar { display: none; }
+
+.chat-bar {
+  flex: 0 0 auto;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: 11px; color: var(--muted);
+}
+.chat-state { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-state.warn { color: var(--warn); }
+.chat-new {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: var(--btn); color: var(--muted);
+  font-family: var(--ui); font-size: 11px; font-weight: 600; cursor: pointer;
+}
+.chat-new:active { background: var(--btn-hi); color: var(--fg); }
+
+.chat-log {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px 12px 4px;
+  display: flex; flex-direction: column; gap: 10px;
+  -webkit-user-select: text; user-select: text;
+}
+.chat-empty { margin: auto; padding: 24px; text-align: center; color: var(--muted); font-size: 14px; }
+.chat-empty code { font-family: var(--mono); color: var(--accent); }
+
+.bubble {
+  max-width: 86%;
+  padding: 9px 12px;
+  border-radius: var(--radius);
+  font-size: 15px; line-height: 1.45;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.bubble.me {
+  align-self: flex-end;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  color: var(--fg);
+}
+/* Claude's side is unboxed and full width: it is the long text, and a bubble
+   around it only narrows the thing this view exists to widen. */
+.bubble.them { align-self: stretch; max-width: 100%; padding: 0 2px; }
+.bubble.them.err { color: var(--bad); }
+.bubble code {
+  font-family: var(--mono); font-size: 0.88em;
+  padding: 1px 4px; border-radius: 5px;
+  background: var(--btn); border: 1px solid var(--line);
+}
+.bubble pre {
+  margin: 8px 0; padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--panel); border: 1px solid var(--line);
+  overflow-x: auto; white-space: pre;
+}
+.bubble pre code { padding: 0; background: none; border: 0; font-size: 12px; }
+
+/* One line per tool call, the way the transcript shows it: what ran, and
+   whether it came back clean. */
+.pill {
+  align-self: stretch;
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 5px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--btn); border: 1px solid var(--line);
+  font-size: 12px; color: var(--muted);
+  min-width: 0;
+}
+.pill .p-dot { flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.pill.ok .p-dot { background: var(--ok); }
+.pill.bad .p-dot { background: var(--bad); }
+.pill .p-name { flex: 0 0 auto; font-weight: 600; color: var(--fg); }
+.pill .p-detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: 11px; }
+
+.typing { align-self: flex-start; display: flex; gap: 4px; padding: 6px 2px; }
+.typing i { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); animation: blink 1.2s ease-in-out infinite; }
+.typing i:nth-child(2) { animation-delay: 0.2s; }
+.typing i:nth-child(3) { animation-delay: 0.4s; }
+@keyframes blink { 50% { opacity: 0.25; } }
+
+.chat-note { flex: 0 0 auto; padding: 6px 14px; font-size: 12px; color: var(--bad); }
+.chat-note[hidden] { display: none; }
+
+.chat-form {
+  flex: 0 0 auto;
+  display: flex; align-items: flex-end; gap: 8px;
+  padding: 8px 10px calc(8px + var(--safe-bottom));
+  border-top: 1px solid var(--line);
+  background: var(--panel-glass);
+  -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+}
+body.kb-open .chat-form { padding-bottom: 8px; }
+.chat-form textarea {
+  flex: 1 1 auto; min-width: 0;
+  max-height: 140px;
+  padding: 10px 12px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--btn); color: var(--fg);
+  font-family: var(--ui); font-size: 16px;   /* 16px: anything less and iOS zooms the page on focus */
+  line-height: 1.35; resize: none;
+  -webkit-user-select: text; user-select: text;
+}
+.chat-form textarea:focus { outline: none; border-color: var(--accent-line); }
+.chat-send {
+  flex: 0 0 auto;
+  width: 42px; height: 42px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid var(--accent); border-radius: var(--radius);
+  background: var(--accent); color: var(--accent-ink);
+  cursor: pointer;
+  transition: background var(--t), transform var(--t);
+}
+.chat-send:active { transform: scale(0.94); }
+.chat-send svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+/* The same button stops the turn while one is running — a second control for
+   that would sit unused most of the time. */
+.chat-send .ico-stop, body.chat-busy .chat-send .ico-send { display: none; }
+body.chat-busy .chat-send .ico-stop { display: block; }
+body.chat-busy .chat-send { background: var(--bad); border-color: var(--bad); color: var(--bg); }
 
 /* ── Toolbar ────────────────────────────────────────── */
 #toolbar {

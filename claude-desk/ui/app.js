@@ -939,6 +939,286 @@
   document.getElementById('sessions-btn').addEventListener('click', openSessions);
   document.getElementById('sessions-close').addEventListener('click', closeSessions);
 
+  // ── Chat view ─────────────────────────────────────────
+  // A second view over the same desk, not a wrapper around the terminal: it
+  // drives its own Claude Code through chat.py over a documented protocol.
+  // Scraping ANSI out of xterm to build bubbles would break every time Claude
+  // Code changed how it draws — and would have put the terminal, the thing
+  // that works, at risk of a UI change.
+  //
+  // It exists because a terminal wraps hard at COLUMNS: on a phone that is
+  // about 40 columns of Thai, and a long answer is painful to read. Bubbles
+  // reflow, and the text is selectable without going near OSC 52.
+  const chat = document.getElementById('chat');
+  const chatLog = document.getElementById('chat-log');
+  const chatForm = document.getElementById('chat-form');
+  const chatInput = document.getElementById('chat-input');
+  const chatNote = document.getElementById('chat-note');
+  const chatState = document.getElementById('chat-state');
+  const viewTermBtn = document.getElementById('view-term');
+  const viewChatBtn = document.getElementById('view-chat');
+
+  let chatOn = false;
+  let chatStream = null;
+  let chatBusy = false;
+  let bubble = null;        // the assistant bubble currently filling in
+  let typing = null;
+
+  function el(tag, cls, text) {
+    const node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text != null) node.textContent = text;
+    return node;
+  }
+  function atBottom() {
+    return chatLog.scrollHeight - chatLog.scrollTop - chatLog.clientHeight < 60;
+  }
+  function follow(was) {
+    // Only chase the bottom if that is where the reader already was —
+    // yanking the view down while they scroll back through an answer is the
+    // single most annoying thing a chat window can do.
+    if (was) chatLog.scrollTop = chatLog.scrollHeight;
+  }
+  function add(node) {
+    const was = atBottom();
+    if (typing) chatLog.insertBefore(node, typing); else chatLog.appendChild(node);
+    follow(was);
+    return node;
+  }
+
+  // Just enough markdown for what an agent writes: fenced blocks, inline
+  // code. Everything else stays literal — a full parser is a dependency and
+  // an escaping bug, and the text is already pre-wrapped by CSS.
+  function markdown(target, text) {
+    target.textContent = '';
+    const parts = text.split(/```/);
+    parts.forEach((part, i) => {
+      if (i % 2) {
+        const pre = el('pre');
+        // First line of a fence is the language, not content.
+        pre.appendChild(el('code', null, part.replace(/^[^\n]*\n/, '')));
+        target.appendChild(pre);
+        return;
+      }
+      part.split(/(`[^`\n]+`)/).forEach((piece) => {
+        if (piece.startsWith('`') && piece.endsWith('`') && piece.length > 2) {
+          target.appendChild(el('code', null, piece.slice(1, -1)));
+        } else if (piece) {
+          target.appendChild(document.createTextNode(piece));
+        }
+      });
+    });
+  }
+
+  function showTyping(on) {
+    if (on && !typing) {
+      typing = el('div', 'typing');
+      typing.innerHTML = '<i></i><i></i><i></i>';
+      const was = atBottom();
+      chatLog.appendChild(typing);
+      follow(was);
+    } else if (!on && typing) {
+      typing.remove();
+      typing = null;
+    }
+  }
+
+  function setChatBusy(on) {
+    chatBusy = on;
+    document.body.classList.toggle('chat-busy', on);
+    showTyping(on && !bubble);
+  }
+
+  function note(text) {
+    chatNote.textContent = text || '';
+    chatNote.hidden = !text;
+  }
+
+  function emptyState() {
+    if (chatLog.children.length) return;
+    const box = el('div', 'chat-empty');
+    box.innerHTML = 'Ask for a document.<br>Files live in <code>/work/in</code> and <code>/work/out</code>, same as the terminal.';
+    chatLog.appendChild(box);
+  }
+
+  function clearLog() {
+    chatLog.innerHTML = '';
+    bubble = null;
+    typing = null;
+    emptyState();
+  }
+
+  function onChatEvent(ev) {
+    if (ev.t === 'busy') { setChatBusy(ev.on); return; }
+    if (ev.t === 'reset') { clearLog(); note(''); return; }
+    if (ev.t === 'gone') {
+      setChatBusy(false);
+      if (bubble) bubble = null;
+      return;
+    }
+    if (ev.t === 'say_start') {
+      showTyping(false);
+      const first = chatLog.querySelector('.chat-empty');
+      if (first) first.remove();
+      bubble = add(el('div', 'bubble them'));
+      bubble.dataset.raw = '';
+      return;
+    }
+    if (ev.t === 'say') {
+      if (!bubble) { onChatEvent({ t: 'say_start' }); }
+      const was = atBottom();
+      bubble.dataset.raw += ev.text;
+      markdown(bubble, bubble.dataset.raw);
+      follow(was);
+      return;
+    }
+    if (ev.t === 'say_end') { bubble = null; return; }
+    if (ev.t === 'tool') {
+      showTyping(false);
+      const first = chatLog.querySelector('.chat-empty');
+      if (first) first.remove();
+      const pill = add(el('div', 'pill'));
+      pill.appendChild(el('span', 'p-dot'));
+      pill.appendChild(el('span', 'p-name', ev.name));
+      pill.appendChild(el('span', 'p-detail', ev.detail || ''));
+      pill.dataset.open = '1';
+      return;
+    }
+    if (ev.t === 'tool_done') {
+      // Pills finish in order, so the oldest unfinished one is this result's.
+      const open = chatLog.querySelector('.pill[data-open]');
+      if (open) {
+        delete open.dataset.open;
+        open.classList.add(ev.ok ? 'ok' : 'bad');
+      }
+      showTyping(chatBusy && !bubble);
+      return;
+    }
+    if (ev.t === 'turn') {
+      bubble = null;
+      setChatBusy(false);
+      if (ev.status === 'stopped') note('หยุดแล้ว');
+      else if (ev.status === 'error') {
+        const box = add(el('div', 'bubble them err'));
+        box.textContent = ev.text || 'ทำงานไม่สำเร็จ';
+      }
+    }
+  }
+
+  function openChatStream() {
+    if (chatStream || DEMO) return;
+    chatStream = new EventSource('chat/events');
+    chatStream.onmessage = (e) => {
+      try { onChatEvent(JSON.parse(e.data)); } catch (_) { /* ignore a bad frame */ }
+    };
+    // EventSource reconnects on its own; nothing to do but stop pretending
+    // the desk is reachable while it is down.
+    chatStream.onerror = () => { showTyping(false); };
+  }
+
+  async function chatPost(path, body) {
+    const r = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return { ok: r.ok, text: (await r.text()).trim() };
+  }
+
+  async function sendChat() {
+    const text = chatInput.value.trim();
+    if (!text) return;
+    const first = chatLog.querySelector('.chat-empty');
+    if (first) first.remove();
+    add(el('div', 'bubble me', text));
+    chatInput.value = '';
+    sizeInput();
+    note('');
+    setChatBusy(true);            // optimistic: the stream confirms it
+    try {
+      const r = await chatPost('chat/send', { text: text });
+      if (!r.ok) { setChatBusy(false); note(r.text || 'ส่งไม่สำเร็จ'); }
+    } catch (_) {
+      setChatBusy(false);
+      note('ต่อเดสก์ไม่ได้');
+    }
+  }
+
+  chatForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (chatBusy) {
+      try { await chatPost('chat/stop'); } catch (_) { /* the stream will say */ }
+      return;
+    }
+    sendChat();
+  });
+
+  document.getElementById('chat-new').addEventListener('click', async () => {
+    try { await chatPost('chat/new'); } catch (_) { /* nothing to undo */ }
+    clearLog();
+  });
+
+  // Enter sends, Shift+Enter is a newline — on a phone the key says "send"
+  // (enterkeyhint) and there is no Shift to hold anyway.
+  chatInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+      e.preventDefault();
+      if (!chatBusy) sendChat();
+    }
+  });
+  function sizeInput() {
+    chatInput.style.height = 'auto';
+    chatInput.style.height = Math.min(chatInput.scrollHeight, 140) + 'px';
+  }
+  chatInput.addEventListener('input', sizeInput);
+
+  async function refreshChatState() {
+    if (DEMO) return;
+    try {
+      const r = await fetch('api/sessions', { cache: 'no-store' });
+      if (!r.ok) return;
+      const pane = (await r.json()).pane;
+      const busyTerminal = pane && !['bash', 'sh', 'zsh', '-bash', 'dash'].includes(pane);
+      // Two agents in /work at once is allowed now — it is not prevented,
+      // because the pane reports `claude` whenever a session is merely open
+      // and refusing on that would block the normal case. Saying so is the
+      // honest surface.
+      chatState.textContent = busyTerminal
+        ? '“' + pane + '” is open in the terminal too — two agents in /work'
+        : 'this chat runs its own Claude Code in /work';
+      chatState.classList.toggle('warn', !!busyTerminal);
+    } catch (_) { /* leave the last line up */ }
+  }
+
+  function setView(which) {
+    chatOn = which === 'chat';
+    document.body.classList.toggle('chat-view', chatOn);
+    chat.hidden = !chatOn;
+    viewChatBtn.classList.toggle('on', chatOn);
+    viewTermBtn.classList.toggle('on', !chatOn);
+    try { localStorage.setItem(VIEW_KEY, which); } catch (_) { /* not persisted */ }
+    if (chatOn) {
+      emptyState();
+      openChatStream();
+      refreshChatState();
+      // A page that comes back to a turn already in progress should show the
+      // stop button, not an idle send button that would be refused anyway.
+      if (!DEMO) {
+        fetch('chat/state', { cache: 'no-store' })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((s) => { if (s) setChatBusy(!!s.busy); })
+          .catch(() => {});
+      }
+      if (!IS_MOBILE) chatInput.focus();
+    } else {
+      requestAnimationFrame(refit);
+      if (!IS_MOBILE) term.focus();
+    }
+  }
+  const VIEW_KEY = 'claude-desk.view';
+  viewTermBtn.addEventListener('click', () => setView('terminal'));
+  viewChatBtn.addEventListener('click', () => setView('chat'));
+
   // ── Go ────────────────────────────────────────────────
   if (DEMO) {
     setState('connected', 'live');
@@ -963,8 +1243,33 @@
     term.write('\x1b[38;5;245m > \x1b[0m');
     if (PARAMS.has('drawer')) { openDrawer(); if (PARAMS.get('drawer') === 'in') setDir('in'); }
     if (PARAMS.has('sessions')) openSessions();
+    if (PARAMS.has('chat')) { setView('chat'); demoChat(); }
   } else {
     connect();
+  }
+
+  // Whichever view was last used comes back on the next open: the desk is a
+  // tool you return to mid-job, and landing on the wrong half of it costs a
+  // tap every single time.
+  if (!DEMO) {
+    let saved = null;
+    try { saved = localStorage.getItem(VIEW_KEY); } catch (_) { /* no storage */ }
+    if (saved === 'chat') setView('chat');
+  }
+
+  function demoChat() {
+    clearLog();
+    chatLog.querySelector('.chat-empty')?.remove();
+    chatState.textContent = 'this chat runs its own Claude Code in /work';
+    add(el('div', 'bubble me', 'ทำ slide สรุปยอดขาย Q3 จาก in/sales-q3.xlsx 8 หน้า'));
+    onChatEvent({ t: 'tool', name: 'Read', detail: '/work/in/sales-q3.xlsx' });
+    onChatEvent({ t: 'tool_done', ok: true });
+    onChatEvent({ t: 'tool', name: 'Bash', detail: 'node build-deck.js' });
+    onChatEvent({ t: 'tool_done', ok: true });
+    onChatEvent({ t: 'say_start' });
+    onChatEvent({ t: 'say', text: 'เสร็จแล้วครับ — 8 สไลด์ อยู่ที่ `out/2026-09-15-q3-review.pptx`\n\nสรุปที่ใส่ไว้:\n- ยอดรวม Q3 โตจาก Q2 12%\n- ภาคเหนือเป็นตัวฉุด ติดลบ 4%\n- ฟอนต์ไทยเรนเดอร์ถูกต้องทุกหน้า ตรวจจากภาพแล้ว' });
+    onChatEvent({ t: 'say_end' });
+    onChatEvent({ t: 'turn', status: 'done', text: '' });
   }
 
   window._term = term;

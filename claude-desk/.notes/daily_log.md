@@ -1,5 +1,41 @@
 # claude-desk — Daily Log
 
+## 2026-09-16 (เย็น) — chat UI (ADR 0013)
+
+**ทำเป็น view ที่สอง ไม่ใช่ครอบทับเทอร์มินัล** — `chat.py` ขับ Claude Code **ตัวที่สอง** ผ่าน `--input-format stream-json --output-format stream-json` (โปรโตคอลมีสเปก) ไม่ใช่ขูด ANSI จาก xterm.js (= หน้าจอ ไม่ใช่ interface พังทุกครั้งที่ Claude Code เปลี่ยนวิธีวาด และเอาครึ่งที่ใช้งานได้ไปเสี่ยงกับการเปลี่ยนหน้าตาของ upstream)
+
+**เหตุผลที่ต้องมี:** เทอร์มินัลตัดบรรทัดตายที่ `COLUMNS` บนมือถือ = ~40 คอลัมน์ไทย คำตอบยาวๆ อ่านทรมาน — bubble มัน reflow เอง และเป็น HTML เลือกคัดลอกได้ตรงๆ ไม่ต้องผ่าน OSC 52
+
+**transport = SSE + POST 2 เส้น ไม่ใช่ websocket** — ทางหนึ่งสตรีม อีกทางเป็น request ธรรมดา และ SSE ไม่ต้องลง dependency (stdlib ล้วนเหมือนทั้ง stack)
+
+### probe ก่อนเขียน (2.1.273) — ยืนยันทุกข้อก่อนออกแบบ
+- multi-turn บนโปรเซสเดียว: ส่งข้อความที่สองได้ โปรเซสไม่ตาย
+- `stream_event.content_block_delta` → text ทีละ token
+- `assistant.tool_use` + `user.tool_result` → pill
+- **interrupt = `control_request` `{"subtype":"interrupt"}` ไม่ใช่ signal** ตอบใน ~1 วิ จบเทิร์นแล้ว**โปรเซสอยู่ต่อ** เทิร์นถัดไปใช้ได้
+- รันคู่กับ tmux session ได้ ไม่ตีกัน (OAuth ใบเดียว)
+
+### บั๊กที่เจอตอนรันจริง (เทสต์ปลอมจับไม่ได้)
+1. **`say_end` ยิงเกิน** — content_block มี `index` และ **tool block ก็ยิง start/stop ของตัวเอง** → stop ของ tool ไปปิด bubble ที่ text block ยังเขียนอยู่ คำตอบเลยแตกเป็นสองก้อน. แก้ด้วย `self.text_blocks` เก็บ index ที่เป็น text เท่านั้น (เคลียร์ตอน `message_start`) + เพิ่มเทสต์ที่ fake agent ยิง tool block ซ้อนกลาง text block
+2. **กด stop แล้วขึ้น "ทำงานไม่สำเร็จ"** — interrupt กลับมาเป็น **error result** ตัวที่แยกจาก failure จริงคือ `terminal_reason`: **`aborted_tools`** ตอนกำลังรัน tool, **`aborted_streaming`** ตอนกำลังพิมพ์ (วัดจริงทั้งคู่) → เช็ค prefix `aborted` ไม่ใช่ค่าเดียว
+3. **Grep pill โชว์ path ไม่ใช่ pattern** — เทสต์จับได้ก่อน deploy ลำดับ key ใน `tool_detail()` สำคัญ
+
+### เรื่อง concurrency (ย้อนหลักการเดิม)
+**สอง agent อยู่ใน `/work` พร้อมกันได้แล้ว** — ย้อน "ทีละตัว" ที่เป็นเหตุผลว่าทำไม `mimo` ไม่แยก stack. **ไม่กั้น** เพราะสัญญาณเดียวที่มีคือ `pane_current_command` ซึ่งขึ้น `claude` ตั้งแต่แค่**เปิดค้างไว้** กั้นตรงนั้น = บล็อกเคสปกติ ฟีเจอร์ดูเหมือนพัง → แถวบนของ chat บอกว่าเทอร์มินัลมี agent เปิดอยู่ด้วย แล้วปล่อยให้คนตัดสิน
+
+### SSE ผ่าน proxy
+`proxy_buffering off` **จำเป็นแต่ไม่พอ** — ต้อง `proxy_read_timeout 86400s` ด้วย (default 60 วิ) + **heartbeat `: ping` ทุก 20 วิ** เพราะสตรีมที่ไม่มีอะไรไหลดูเหมือน idle ทั้งกับ nginx และ DSM RP. app ยิง `X-Accel-Buffering: no` ซ้ำอีกชั้น
+**verify จากนอกบ้านจริง**: ถือสตรีมผ่าน `https://<domain>:15072` ครบ 100 วิ ได้ ping 5 ครั้ง ไม่หลุด (container-local ผ่านแม้เส้น RP พังก็เลยไม่นับ)
+
+### อื่นๆ
+- agent spawn **ตอนข้อความแรก ไม่ใช่ตอน boot** — เดสก์ว่างไม่ควรถือ node ตัวที่สองไว้ใน cap 2 GB, `POST /chat/new` ทิ้งได้
+- **child ต้องพก `--dangerously-skip-permissions` เอง** — ในเทอร์มินัลแฟล็กนี้มาจาก alias ของ shell
+- **ไม่เก็บ transcript** ฝั่ง server — รีโหลด = เริ่มดูใหม่ของ session เดิม, `GET /chat/state` บอกแค่ว่ามีเทิร์นค้างอยู่ไหม (หน้าเว็บกลับมากลางเทิร์นจะได้โชว์ปุ่ม stop ไม่ใช่ปุ่มส่ง)
+- markdown ในหน้าเว็บทำเองแค่ fenced block + inline code — parser เต็มตัวคือ dependency + บั๊ก escaping
+- **`font-size: 16px` ในช่องพิมพ์** ต่ำกว่านี้ iOS ซูมหน้าทั้งหน้าตอน focus
+- header 390px ล้นเพราะสวิตช์ view กิน ~70 cells → ≤430px ย่อ `.icon-btn` 36→32, `.view` 32→28, ซ่อนปุ่ม keybar ใน chat view. วัดใน iframe 390 (headless Chrome บน mac clamp ~500px)
+- เทสต์ใหม่ `tests/test_chat.py` ใช้ **fake agent ที่พูดโปรโตคอลเดียวกัน** (`CHAT_COMMAND` override) = ไล่ translation ทั้งเส้นโดยไม่กินโควตาทุกครั้งที่รันเทสต์
+
 ## 2026-09-16 (บ่าย) — `make desk-latest` + บั๊ก desk-status.json ถูกเขียนทับด้วย null
 
 **โจทย์:** "claude code / mimo code มี update จะอัปยังไง ให้ latest ตลอดได้ไหม"

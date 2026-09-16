@@ -106,6 +106,7 @@ COPY --chmod=0644 claude-settings.json /opt/claude-desk/claude-settings.json
 COPY --chmod=0755 statusline.sh /opt/claude-desk/statusline.sh
 COPY --chmod=0755 done-hook.sh /opt/claude-desk/done-hook.sh
 COPY --chmod=0644 upload.py /opt/claude-desk/upload.py
+COPY --chmod=0644 chat.py /opt/claude-desk/chat.py
 # `ask <question>` — one-shot questions on the OpenAI wire, stdlib only. The
 # name is `ask` and not `mimo` because MiMoCode's own binary is `mimo`.
 # In the image, not the home volume: docker seeds a named volume once, so a
@@ -132,5 +133,5 @@ ENV HOME=/home/claude \
     TERM=xterm-256color \
     DISABLE_AUTOUPDATER=1
 
-EXPOSE 7681 7682
+EXPOSE 7681 7682 7683
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

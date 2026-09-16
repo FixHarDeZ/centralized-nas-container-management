@@ -79,10 +79,21 @@ if [[ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]]; then
 fi
 
 # Upload receiver for the page's "Add files" button (PUT /upload/<name> →
-# /work/in). Restarted by the loop if it ever dies; ttyd stays PID 1.
+# /work/in), and the desk API behind the header and the sessions sheet.
+# Restarted by the loop if it ever dies; ttyd stays PID 1.
 (
     while true; do
         python3 /opt/claude-desk/upload.py
+        sleep 2
+    done
+) &
+
+# Chat view: drives a second Claude Code over stream-json. Same deal — its own
+# respawn loop, never PID 1. It spawns the agent on the first message, so an
+# idle desk pays nothing for this beyond the python process.
+(
+    while true; do
+        python3 /opt/claude-desk/chat.py
         sleep 2
     done
 ) &
