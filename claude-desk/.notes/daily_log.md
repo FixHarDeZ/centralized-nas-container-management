@@ -1,5 +1,27 @@
 # claude-desk — Daily Log
 
+## 2026-09-16 (บ่าย) — `make desk-latest` + บั๊ก desk-status.json ถูกเขียนทับด้วย null
+
+**โจทย์:** "claude code / mimo code มี update จะอัปยังไง ให้ latest ตลอดได้ไหม"
+
+**self-update ใช้ไม่ได้ในกรงนี้ (probe แล้ว):** ทั้งคู่ลง `npm install -g` เป็น root ที่ `/usr/local/lib/node_modules` แต่คอนเทนเนอร์รันเป็น uid 1000 → `touch` = `Permission denied` ตัวอัปเดตในตัวเขียนทับตัวเองไม่ได้ และต่อให้ได้ก็หายตอน deploy (recreate container). watchtower ก็ช่วยไม่ได้ — อิมเมจ `build:` เอง ไม่ได้ pull จาก registry
+
+**เลือกทางที่ 2 จาก 3 ทาง** (1 = pin มือ, 2 = สคริปต์ดึงเลข latest มาเขียน ARG, 3 = `@latest` ตรงๆ) — ข้อ 3 ตกเพราะ **layer `npm install -g` cache ด้วย command string ไม่มี cachebust = build ได้ของเก่าเงียบๆ** + ไม่รู้ว่ารันเวอร์ชันไหน + รีลีสที่พัง TUI (copy path / statusline) ถอยกลับจากมือถือไม่ได้ ส่วน pin ใน git `git revert` ทีเดียวจบ
+
+**`scripts/desk_latest.py` + `make desk-latest`** (`ARGS=-n` = รายงานเฉยๆ): อ่าน npm dist-tag `latest` ของ `@anthropic-ai/claude-code` + `@mimo-ai/cli` และ `anthropics/skills@main` จาก GitHub API → เขียนทับ pin. **`MIMO_CODE_VERSION` อยู่ใน Dockerfile ไม่ใช่ compose** (compose ส่งแค่ `CLAUDE_VERSION`/`SKILLS_REF`) จุดที่พลาดง่าย. regex บังคับเจอ pin **พอดี 1 ที่ต่อไฟล์** ไม่งั้นโยน error — ไฟล์เปลี่ยนรูปแล้วต้องรู้ ไม่ใช่เขียนผิดบรรทัดเงียบๆ. ไม่รวม ttyd/rtk (pin ด้วย sha256 ด้วย ต้องโหลดไฟล์มา hash; ปีละครั้ง). dry-run **exit 0** ไม่ใช่ 1 — ไม่งั้น `make` พิมพ์ `*** Error 1` ใส่คนที่ได้คำตอบที่ต้องการพอดี
+
+อัป claude 2.1.272 → **2.1.273** แล้ว (mimo 0.1.14 = latest, skills ref = HEAD อยู่แล้ว) · ทดสอบ write path ครบทั้ง 3 pin บน tree ชั่วคราว
+
+### ⚠️ บั๊กที่เจอตอน verify: `desk-status.json` ถูกเขียนทับด้วย null
+
+ไปดูไฟล์เจอ `{"model":"Opus 5","five_hour":null,"seven_day":null}` ทั้งที่ก่อนหน้ามี `pct 75`
+
+**เหตุ:** Claude Code **ยังไม่มีตัวเลข rate limit จนกว่าจะได้ API response แรก** (statusline.sh คอมเมนต์ไว้เองว่า "absent until first API response") → **ทุกครั้งที่เปิด `claude`** จะ render statusline ที่ไม่มี limit ออกมาก่อน แล้ว block ที่ผมเขียนก็เอา null ไปทับค่าดีทิ้ง = **chip หายทันทีที่เปิดเดสก์** ซึ่งเป็นจังหวะเดียวที่อยากเห็นมันพอดี
+
+**แก้:** เติม `| select(.five_hour != null or .seven_day != null)` ท้าย jq → render ที่ไม่มี limit **ไม่แตะไฟล์เลย** (ไม่เขียน ไม่ touch) ค่าเก่าอยู่ต่อแล้วค่อยๆ จางเป็น stale ตาม mtime ซึ่งตรงความจริง: เราไม่มีเลขใหม่
+
+verify บนเครื่องจริง: วางค่าดีไว้ → ยิง statusline ที่ไม่มี rate_limits → ไฟล์เหมือนเดิมเป๊ะ (PASS)
+
 ## 2026-09-16 — sessions sheet + rate-limit chip (หยิบจากคลิป UI ของ Codex)
 
 **โจทย์:** คลิป PWA ฐาน Codex (แชท bubble, การ์ดโควตา, ลิสต์ session, cost/token ต่อ session) — "ครอบแบบนี้ได้ไหมโดยไม่เสียของเดิม"

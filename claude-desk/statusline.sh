@@ -335,6 +335,12 @@ fi
 # touches the file, so the page can still tell a live desk from a stale one
 # without the volume taking a write per frame. Written through a temp name
 # because upload.py reads it at the same time.
+#
+# A render with no limits in it leaves the file alone rather than writing
+# nulls over it. Claude Code has no rate-limit numbers until the session's
+# first API response, so every `claude` that starts renders one of these —
+# and overwriting with them threw away the last known reading and made the
+# chip vanish the moment the desk was opened.
 desk_status_file="${DESK_STATUS_FILE:-$HOME/.claude/desk-status.json}"
 desk_status=$(echo "$input" | jq -c '{
     model: (.model.display_name // null),
@@ -344,7 +350,7 @@ desk_status=$(echo "$input" | jq -c '{
     seven_day: (.rate_limits.seven_day
         | if .used_percentage == null then null
           else {pct: .used_percentage, resets_at: .resets_at} end)
-}' 2>/dev/null)
+} | select(.five_hour != null or .seven_day != null)' 2>/dev/null)
 if [ -n "$desk_status" ]; then
     if [ "$desk_status" = "$(cat "$desk_status_file" 2>/dev/null)" ]; then
         touch "$desk_status_file" 2>/dev/null

@@ -88,6 +88,15 @@ make secrets          # regenerate all <stack>/.env + .env.deploy
 ./scripts/deploy.sh   # tar + ssh + restart
 ```
 
+Keeping the desk's agents current is its own one-liner, because nothing inside
+that container can update itself (npm globals owned by root, container runs as
+uid 1000, and a self-update would be discarded by the next deploy):
+
+```bash
+make desk-latest ARGS=-n   # what is behind: Claude Code, MiMoCode, office skills
+make desk-latest           # rewrite the pins, then deploy claude-desk
+```
+
 > **Adding a new secret?** `make check` validates manifests against **both**
 > `vault.sops.yaml` and `test-vault.sops.yaml`. A key that exists only in the
 > real vault fails check with `manifest references missing vault path ...`.

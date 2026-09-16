@@ -2,7 +2,7 @@ AGE_KEY ?= $(HOME)/.config/sops/age/keys.txt
 export SOPS_AGE_KEY_FILE = $(AGE_KEY)
 PY = .venv/bin/python
 
-.PHONY: secrets check edit-vault sync-test-vault rotate-key clean-env test sync-shared lint format help
+.PHONY: secrets check edit-vault sync-test-vault rotate-key clean-env test sync-shared desk-latest lint format help
 
 help:           ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -35,6 +35,9 @@ sync-shared:    ## Copy each shared/*.py over its existing vendored copies (disc
 			cp $$src $$dst && echo "synced $$dst"; \
 		done; \
 	done
+
+desk-latest:    ## Bump claude-desk's pinned Claude Code / MiMoCode / skills to upstream latest (ARGS=-n to only report)
+	@$(PY) scripts/desk_latest.py $(ARGS)
 
 test:           ## Run repo-level pytest suite
 	@$(PY) -m pytest tests/ -v

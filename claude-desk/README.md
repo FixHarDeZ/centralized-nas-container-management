@@ -92,6 +92,8 @@ Two rows rather than one line because the countdown is the half that decides whe
 
 It is fed by the status line, because Claude Code hands the rate-limit numbers to the status line and to nothing else. `statusline.sh` therefore also writes `~/.claude/desk-status.json` — `{model, five_hour: {pct, resets_at}, seven_day: {…}}` — and `GET /api/status` serves it with an `age`. Written through a temp name and `mv`, since the server reads it concurrently; rewritten only when a number changed, and otherwise just touched, so the page can still tell a live desk from a stale one without the volume taking a write per frame.
 
+A render carrying no limits at all leaves the file untouched instead of writing nulls into it. Claude Code has no rate-limit numbers until the session's first API response, so **every** `claude` that starts produces one of those — and writing them over the file destroyed the last known reading and made the chip disappear the moment the desk was opened, which is the one moment you wanted it.
+
 The consequence of that source: with no session running the numbers stand still. Past 20 minutes of age the chip dims rather than presenting a frozen reading as current. Tapping it refetches; it also refetches every minute and whenever the phone comes back from sleep.
 
 This is not a duplicate of the status-line rows — the phone layout drops those bars to fit 24 columns, so the small screen was the one that could not see them.
@@ -107,6 +109,25 @@ The first answer after a reload only establishes where the clock is — the turn
 **Limit, accepted deliberately:** this only works while the page is still running. A backgrounded PWA on iOS is suspended, so with the phone locked nothing arrives. The version that survives a locked phone is real Web Push — VAPID keys and a push service — which is a project rather than a toggle.
 
 Skills live in the image at `/opt/skills` (clone of `anthropics/skills`, pinned `ARG SKILLS_REF`); `entrypoint.sh` re-links `pptx docx xlsx pdf` into `~/.claude/skills` on every start so a ref bump reaches the volume.
+
+## Staying current
+
+Every piece of software here is pinned (`CLAUDE_VERSION` and `SKILLS_REF` in `docker-compose.yml`, `MIMO_CODE_VERSION` / `TTYD_VERSION` / `RTK_VERSION` in the `Dockerfile`), and **nothing in the container can update itself**: both agents are npm globals owned by root while the container runs as uid 1000, so `claude`'s own updater cannot write to its own install — and a self-update would be discarded by the next deploy anyway, since that recreates the container. Watchtower is no help either; this image is built here rather than pulled from a registry, which is why it is labelled off.
+
+So updating is: bump the pin, rebuild. From the repo root:
+
+```bash
+make desk-latest ARGS=-n     # what is behind, changes nothing
+make desk-latest             # rewrite the pins (Claude Code, MiMoCode, skills)
+git diff                     # one line per bump
+./scripts/deploy.sh -s claude-desk -y
+```
+
+`scripts/desk_latest.py` reads the npm registry's own `latest` dist-tag and `anthropics/skills@main`, then edits exactly one pin per file and refuses to write if a file's shape has changed. ttyd and rtk are left out: they are pinned by sha256 as well as version, so bumping them means downloading the artefact to hash it, and they move about once a year.
+
+A version rather than `@latest` on purpose. `@latest` in the Dockerfile would also need a cache-bust argument — the `npm install -g` layer is keyed by the command string, so without one a rebuild quietly reinstalls the same old version — and more importantly this desk is a working tool reached from a phone. A release that breaks the TUI (the copy path, the status line) leaves you with no way to roll back from a phone; a pin in git is one `git revert` away.
+
+A rebuild takes a few minutes and drops the open tmux session.
 
 ## Secrets
 
