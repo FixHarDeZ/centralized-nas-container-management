@@ -1,5 +1,28 @@
 # claude-desk — Daily Log
 
+## 2026-09-16 — copy จาก `mimo` (MiMoCode) ด้วย: `allow-passthrough`
+
+**โจทย์:** copy ที่ claude ได้แล้ว อยากให้ฝั่ง mimo ได้ด้วย
+
+**MiMoCode ก๊อปคนละท่ากับ Claude Code:** grep ไบนารี (`@mimo-ai/cli/bin/.mimocode`, bun bundle 134 MB) เจอฟังก์ชัน
+
+```js
+function UR0(A){ if(!process.stdout.isTTY) return;
+  let B=`\x1B]52;c;${Buffer.from(A).toString("base64")}\x07`,
+      F=process.env.TMUX||process.env.STY ? `\x1BPtmux;\x1B${B}\x1B\\` : B;
+  process.stdout.write(F) }
+```
+
+= **ยิง OSC 52 เอง** (ไม่ผ่าน `tmux load-buffer` แบบ Claude Code) และเมื่อเห็น `$TMUX` จะ **ห่อด้วย DCS passthrough** — ซึ่ง **tmux 3.3 ทิ้งทิ้งหมดถ้า `allow-passthrough` เป็น off (ค่า default)**. ตัวเรียกคือ `q6()` ผูกกับ `onMouseUp` → **ก๊อปตอนปล่อยเมาส์ทันที ไม่ต้องกดปุ่ม** (ปิดได้ด้วย `MIMOCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT`)
+
+**วัด A/B ด้วย pty harness ตัวเดิม** (ยิงซีเควนซ์ DCS ที่ MiMoCode เขียนเป๊ะๆ เข้า tmux แล้วอ่านฝั่ง pty):
+- conf เดิม (`allow-passthrough off`) → **ไม่มี OSC 52 ออกมาเลย** = ก๊อปแล้วเงียบหาย ไม่มี error ให้เห็นทั้งสองฝั่ง
+- conf ใหม่ (`allow-passthrough on`) → ได้ `mimo-copy-works` ครบ
+
+`ui/app.js` ไม่ต้องแก้อะไร — handler ตัวเดิมรับต่อได้เลย รวมเป็น 3 ทางที่ปลายทางเดียวกัน: xterm selection (shell) / tmux buffer (Claude Code) / OSC 52 ตรง (MiMoCode)
+
+**ราคาที่จ่าย:** `allow-passthrough on` = โปรแกรมใน container ยิง escape sequence ตรงเข้าเทอร์มินัลของเบราว์เซอร์ได้ ซึ่งในกรงนี้ไม่ได้เพิ่มความเสี่ยงจริง (ทั้ง `claude` และ `mimo` รันโดยปิด permission prompt อยู่แล้ว = bash เชื่อใจเต็มที่อยู่ก่อนแล้ว)
+
 ## 2026-09-16 — copy ออกจาก Claude Code ยังไม่ได้ (ปุ่ม Copy รอบแรกแก้ไม่ตรงจุด)
 
 **อาการ:** ใส่ปุ่ม ⧉ Copy ไปแล้ว แต่ copy ข้อความออกจากหน้าจอ Claude Code ยังไม่ได้ ในรูปที่ส่งมามีบรรทัด **`copied 30 chars to tmux buffer · paste with prefix + ]`** อยู่มุมขวา — นั่นคือเบาะแสทั้งหมด
