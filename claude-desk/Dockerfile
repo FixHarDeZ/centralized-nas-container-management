@@ -104,6 +104,7 @@ COPY --chmod=0644 tmux.conf /etc/tmux.conf
 COPY --chmod=0644 work/CLAUDE.md /opt/claude-desk/work/CLAUDE.md
 COPY --chmod=0644 claude-settings.json /opt/claude-desk/claude-settings.json
 COPY --chmod=0755 statusline.sh /opt/claude-desk/statusline.sh
+COPY --chmod=0755 done-hook.sh /opt/claude-desk/done-hook.sh
 COPY --chmod=0644 upload.py /opt/claude-desk/upload.py
 # `ask <question>` — one-shot questions on the OpenAI wire, stdlib only. The
 # name is `ask` and not `mimo` because MiMoCode's own binary is `mimo`.

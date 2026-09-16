@@ -713,14 +713,82 @@
     if (DEMO) { renderQuota({ five_hour: { pct: 39, resets_at: Date.now() / 1000 + 6900 }, seven_day: { pct: 54 }, age: 5 }); return; }
     try {
       const r = await fetch('api/status', { cache: 'no-store' });
-      if (r.ok) renderQuota(await r.json());
+      if (!r.ok) return;
+      const data = await r.json();
+      renderQuota(data);
+      noteFinished(data.done);
     } catch (_) { /* leave the last reading up */ }
   }
   quota.addEventListener('click', loadQuota);
   loadQuota();
-  setInterval(loadQuota, 60000);
+  // 15s rather than a minute because the same poll carries the "Claude
+  // finished" mark; a browser throttles it while the tab is hidden anyway.
+  setInterval(loadQuota, 15000);
   // Coming back to a phone that slept: the chip is the first thing that is wrong.
   document.addEventListener('visibilitychange', () => { if (!document.hidden) loadQuota(); });
+
+  // ── "Claude finished" ─────────────────────────────────
+  // A Stop hook in the desk writes a timestamp (done-hook.sh); the poll above
+  // carries it. There is no way to read this off the websocket — it delivers
+  // terminal bytes, and the end of a turn is a shape in Claude Code's drawing,
+  // not an event.
+  //
+  // Only useful while this page is still running. A backgrounded PWA on iOS is
+  // suspended, so with the phone locked nothing arrives — that is the deal
+  // this accepts, and the alternative (real Web Push) is a push service and
+  // VAPID keys, not a toggle.
+  const NOTIFY_KEY = 'claude-desk.notify';
+  const notifyBtn = document.getElementById('notify-btn');
+  const notifyLabel = document.getElementById('notify-label');
+  const canNotify = 'Notification' in window;
+  let lastDone = 0;
+  let notifyOn = false;
+  try { notifyOn = localStorage.getItem(NOTIFY_KEY) === '1'; } catch (_) { /* no storage */ }
+
+  function paintNotify() {
+    const granted = canNotify && Notification.permission === 'granted';
+    const on = notifyOn && granted;
+    notifyBtn.classList.toggle('armed', on);
+    notifyLabel.textContent = !canNotify ? 'Notifications not supported here'
+      : Notification.permission === 'denied' ? 'Notifications blocked in settings'
+      : on ? 'Notifying when Claude finishes'
+      : 'Notify when Claude finishes';
+    notifyBtn.disabled = !canNotify || Notification.permission === 'denied';
+  }
+
+  notifyBtn.addEventListener('click', async () => {
+    if (!canNotify) return;
+    if (notifyOn) {
+      notifyOn = false;
+    } else {
+      // Safari grants this only from inside a tap, which is why the toggle is
+      // a button in the sheet rather than something applied on load.
+      const permission = Notification.permission === 'granted'
+        ? 'granted' : await Notification.requestPermission();
+      notifyOn = permission === 'granted';
+    }
+    try { localStorage.setItem(NOTIFY_KEY, notifyOn ? '1' : '0'); } catch (_) { /* not persisted */ }
+    paintNotify();
+  });
+  paintNotify();
+
+  function noteFinished(done) {
+    const at = done && done.at;
+    if (!at) return;
+    // First answer after a reload only establishes where we are: the turn it
+    // reports finished before this page existed.
+    if (!lastDone) { lastDone = at; return; }
+    if (at <= lastDone) return;
+    lastDone = at;
+    // Looking at the terminal already shows it.
+    if (!document.hidden) return;
+    if (!notifyOn || !canNotify || Notification.permission !== 'granted') return;
+    try {
+      // One tag, so a desk left alone all afternoon leaves one notification
+      // rather than a column of them.
+      new Notification('claude-desk', { body: 'Claude finished.', tag: 'claude-desk-done' });
+    } catch (_) { /* some browsers only allow this from a service worker */ }
+  }
 
   // ── Sessions sheet ────────────────────────────────────
   // Resume is typed into the tmux pane by upload.py rather than sent down

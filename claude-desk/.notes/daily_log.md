@@ -32,7 +32,16 @@
 
 **verify บนเครื่องจริง** (deploy แล้ว): `/api/sessions` ไม่มี auth = 401, มี auth ผ่าน nginx = 1173 bytes/11 sessions; `statusline.sh` render เหมือนเดิม + เขียนไฟล์ + touch ตอนค่าเดิม; `/api/status` คืน `age`; resume จริง pane `bash → claude` แล้วรอบสองตอบ `409 busy:claude`; `503 no tmux pane` ตอนไม่มี server; `400 bad id` ตอน id ไม่ใช่ uuid. 23 เทสต์ใหม่ที่ `claude-desk/tests/`
 
-**ยังไม่ทำ (รอตัดสินใจ):** แจ้งเตือนตอนงานเสร็จ — in-page notification ใช้ไม่ได้ตอนปิดจอ (PWA บน iOS ถูก suspend), Web Push จริงต้อง VAPID + push service = งานแยก, ทางที่เวิร์กจริงคือ Stop hook → Telegram ซึ่งต้องเพิ่ม secret ใน vault
+### 3. แจ้งเตือนตอนงานเสร็จ — เลือก in-page (ไม่เอา Telegram)
+
+เสนอ 2 ทาง พี่เลือก in-page พอ **รู้ตัวว่าปิดจอแล้วไม่เด้ง** (iOS suspend JS ของ PWA ที่ backgrounded) — Telegram จะรอดเคสนั้นแต่ต้องเพิ่ม bot token ใน vault, Web Push จริงต้อง VAPID + push service = งานแยกก้อน
+
+- **จบเทิร์นอ่านจาก websocket ไม่ได้** — ws ส่ง terminal bytes ล้วน "Claude พูดจบ" เป็นรูปร่างในภาพที่ Claude Code วาด ไม่ใช่ event → ใช้ **`Stop` hook** (`done-hook.sh`) เขียน `~/.claude/desk-done.json` แล้ว `/api/status` (poll เดิม 15 วิ) พ่วงมาด้วย ไม่ต้องเปิด endpoint ใหม่
+- hook **exit 0 เสมอ** — Stop hook ที่ตอบ non-zero ถูกรายงานกลับเข้า session แจ้งเตือนไม่คุ้มให้ไปขัดจังหวะคน
+- ปุ่มเปิด/ปิดอยู่ท้าย sessions sheet เพราะ **Safari ให้ permission เฉพาะตอนอยู่ใน tap** จะขอตอนโหลดหน้าไม่ได้
+- poll แรกหลังรีโหลดแค่**ตั้งนาฬิกา** (เทิร์นที่มันรายงานจบไปก่อนหน้าเว็บนี้เกิด) และไม่เด้งตอนหน้าเว็บมองเห็นอยู่ เพราะมองจอก็เห็นแล้ว
+- **`hooks` เป็นส่วนเดียวของ `claude-settings.json` ที่ไปถึงเดสก์ที่มีอยู่แล้ว** — `entrypoint.sh` merge แบบ key ด้วย command string ต่อ event ไม่ใช่ `setdefault` (ยืนยันแล้ว: `Stop` ลงใน volume ที่มี `PreToolUse` อยู่ก่อน)
+- verify ด้วยเทิร์นจริง: `desk-done.json` = `{"at":1789527004,"session_id":"dab3fc78…"}`, `/api/status` คายทั้ง quota + done
 
 ## 2026-09-16 — copy จาก `mimo` (MiMoCode) ด้วย: `allow-passthrough`
 

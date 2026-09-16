@@ -133,6 +133,14 @@
     </div>
     <ul id="session-list" class="file-list"></ul>
     <div id="session-empty" class="file-empty" hidden></div>
+    <!-- Lives here because turning it on has to be a tap: Safari only grants
+         notification permission from a user gesture. -->
+    <div class="drawer-foot">
+      <button id="notify-btn" class="clear-btn" type="button">
+        <svg viewBox="0 0 24 24"><path d="M18 9a6 6 0 1 0-12 0c0 5-2 6-2 6h16s-2-1-2-6M13.7 20a2 2 0 0 1-3.4 0"/></svg>
+        <span id="notify-label">Notify when Claude finishes</span>
+      </button>
+    </div>
   </aside>
 
   <div id="scrim"></div>

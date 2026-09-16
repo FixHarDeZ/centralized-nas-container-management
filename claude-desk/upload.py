@@ -51,6 +51,9 @@ SESSION_DIR = os.environ.get(
 STATUS_FILE = os.environ.get(
     "DESK_STATUS_FILE", os.path.join(HOME, ".claude", "desk-status.json")
 )
+DONE_FILE = os.environ.get(
+    "DESK_DONE_FILE", os.path.join(HOME, ".claude", "desk-done.json")
+)
 TMUX_TARGET = os.environ.get("DESK_TMUX_TARGET", "main:0.0")
 
 # The two folders the page knows about. Anything else is a 404: the share
@@ -90,16 +93,30 @@ def safe_name(segment: str):
 # also means they stand still whenever no session is running, so the age of
 # the file is reported with them and the page dims a stale reading rather
 # than passing it off as live.
-def status() -> dict:
+def _read_json(path):
     try:
-        with open(STATUS_FILE, encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             data = json.load(f)
-        age = time.time() - os.path.getmtime(STATUS_FILE)
     except (OSError, ValueError):
-        return {}
-    if not isinstance(data, dict):
-        return {}
-    data["age"] = int(max(age, 0))
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def status() -> dict:
+    data = _read_json(STATUS_FILE)
+    if data is None:
+        data = {}
+    else:
+        try:
+            data["age"] = int(max(time.time() - os.path.getmtime(STATUS_FILE), 0))
+        except OSError:
+            pass
+    # When the last turn ended, from the Stop hook (done-hook.sh). It rides
+    # along here rather than on an endpoint of its own so the page's one poll
+    # answers both questions.
+    done = _read_json(DONE_FILE)
+    if done and done.get("at"):
+        data["done"] = done
     return data
 
 

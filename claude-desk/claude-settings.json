@@ -4,12 +4,20 @@
     "type": "command",
     "command": "bash /opt/claude-desk/statusline.sh"
   },
+  "_comment_hooks": "Hooks are the exception to the note above: the merge keys them by command string per event, so a new one here does reach a desk that already exists.",
   "hooks": {
     "PreToolUse": [
       {
         "matcher": "Bash",
         "hooks": [
           { "type": "command", "command": "rtk hook claude" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash /opt/claude-desk/done-hook.sh" }
         ]
       }
     ]

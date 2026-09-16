@@ -128,6 +128,13 @@ def test_a_missing_project_dir_is_an_empty_list(tmp_path, monkeypatch):
 
 
 # ── Status ────────────────────────────────────────────────────────────────
+@pytest.fixture(autouse=True)
+def no_stray_desk_files(tmp_path, monkeypatch):
+    """Point both files somewhere empty, so a real ~/.claude cannot leak in."""
+    monkeypatch.setattr(upload, "STATUS_FILE", str(tmp_path / "absent-status.json"))
+    monkeypatch.setattr(upload, "DONE_FILE", str(tmp_path / "absent-done.json"))
+
+
 def test_status_reports_how_old_the_reading_is(tmp_path, monkeypatch):
     f = tmp_path / "desk-status.json"
     f.write_text(json.dumps({"five_hour": {"pct": 39}}), encoding="utf-8")
@@ -145,9 +152,31 @@ def test_status_survives_a_half_written_file(tmp_path, monkeypatch):
     assert upload.status() == {}
 
 
-def test_status_with_no_file_is_empty(tmp_path, monkeypatch):
-    monkeypatch.setattr(upload, "STATUS_FILE", str(tmp_path / "nope.json"))
+def test_status_with_no_file_is_empty():
     assert upload.status() == {}
+
+
+def test_the_finished_mark_rides_along_with_the_status(tmp_path, monkeypatch):
+    done = tmp_path / "desk-done.json"
+    done.write_text(json.dumps({"at": 1789534200, "session_id": "abc"}), encoding="utf-8")
+    monkeypatch.setattr(upload, "DONE_FILE", str(done))
+    assert upload.status()["done"]["at"] == 1789534200
+
+
+def test_the_finished_mark_survives_no_status_file(tmp_path, monkeypatch):
+    """The chip and the notification fail independently of each other."""
+    done = tmp_path / "desk-done.json"
+    done.write_text(json.dumps({"at": 5, "session_id": ""}), encoding="utf-8")
+    monkeypatch.setattr(upload, "DONE_FILE", str(done))
+    got = upload.status()
+    assert got == {"done": {"at": 5, "session_id": ""}}
+
+
+def test_a_half_written_finished_mark_is_dropped(tmp_path, monkeypatch):
+    done = tmp_path / "desk-done.json"
+    done.write_text('{"at":', encoding="utf-8")
+    monkeypatch.setattr(upload, "DONE_FILE", str(done))
+    assert "done" not in upload.status()
 
 
 # ── The pane guard ────────────────────────────────────────────────────────

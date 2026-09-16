@@ -439,6 +439,9 @@ body.sessions-open #scrim { opacity: 1; pointer-events: auto; }
 .clear-btn:active { transform: scale(0.98); }
 .clear-btn svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
 .clear-btn.armed { background: var(--bad-soft); border-color: var(--bad-line); color: var(--bad); }
+/* Same shape as Clear, but this one is a setting rather than a loaded gun —
+   "on" is the accent, not the destructive red. */
+#notify-btn.armed { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); }
 .clear-btn[disabled] { opacity: 0.6; pointer-events: none; }
 /* display:inline-flex above outranks the UA rule for [hidden], so an empty
    folder would keep showing the button without this. */

@@ -89,6 +89,16 @@ The consequence of that source: with no session running the numbers stand still.
 
 This is not a duplicate of the status-line rows — the phone layout drops those bars to fit 24 columns, so the small screen was the one that could not see them.
 
+### "Claude finished"
+
+A toggle at the bottom of the sessions sheet raises a browser notification when a turn ends. It is a button rather than something applied on load because Safari only grants notification permission inside a tap; the choice is kept in `localStorage`.
+
+The end of a turn is not readable from the websocket — that carries terminal bytes, and "Claude stopped talking" is a shape in Claude Code's drawing, not an event. So a `Stop` hook (`done-hook.sh`, merged into `~/.claude/settings.json` by the entrypoint like the rtk hook) writes `~/.claude/desk-done.json`, and the same `/api/status` poll that feeds the chip carries it. The hook always exits 0: a non-zero Stop hook is reported back into the session, and a notification is not worth interrupting anyone over.
+
+The first answer after a reload only establishes where the clock is — the turn it reports finished before the page existed — and nothing fires while the page is visible, since the terminal is already showing it.
+
+**Limit, accepted deliberately:** this only works while the page is still running. A backgrounded PWA on iOS is suspended, so with the phone locked nothing arrives. The version that survives a locked phone is real Web Push — VAPID keys and a push service — which is a project rather than a toggle.
+
 Skills live in the image at `/opt/skills` (clone of `anthropics/skills`, pinned `ARG SKILLS_REF`); `entrypoint.sh` re-links `pptx docx xlsx pdf` into `~/.claude/skills` on every start so a ref bump reaches the volume.
 
 ## Secrets
@@ -137,6 +147,7 @@ look the same in both themes.
 - Tap the folder icon → **in/** → **Add files** to upload sources from the phone (or drop them into `claude-work/in/` from DS File — same folder). Type `claude` (alias for `claude --dangerously-skip-permissions`), describe the document. `r` resumes the last session.
 - Tap the history icon for **past sessions** — the list is every session that ran in `/work`, newest first; tapping one resumes it, `+ New session` starts a fresh one. Both need the terminal to be at a shell prompt: quit whatever is running there first (the sheet says which program is holding it).
 - The chip beside the connection dot is the **5h / 7d rate limit**. It dims when nothing has run for a while, because that is when the number stops being current.
+- **Notify when Claude finishes** at the bottom of the sessions sheet raises a notification at the end of a turn — while this page is still running. Lock the phone and it is not: iOS suspends a backgrounded PWA.
 - Finished files appear under **out/** in the same drawer: tap to open (iOS previews pptx/xlsx inline), ⬇ to save to Files.
 - **Clear in/** and **Clear out/** at the bottom of the drawer empty the folder. The first tap arms the button and shows the count, the second one does it, and it disarms itself after four seconds. **This is permanent** — DSM's recycle bin is a file-service feature and a delete from inside the container goes straight past it.
 - **`mimo` (alias `m`) is the second agent: MiMoCode ([XiaomiMiMo/MiMo-Code](https://github.com/XiaomiMiMo/MiMo-Code), a fork of opencode) with our mimo endpoint behind it** — `ARG MIMO_CODE_VERSION`, installed from npm (`@mimo-ai/cli`) rather than the `curl | bash` installer upstream also offers, because npm takes a version pin. A real tool loop: it reads, writes and runs things in `/work` by itself. `mimo` opens the TUI, `mimo run "<task>"` does one task. Slow and free where `claude` is fast and spends subscription quota — a tool-using turn costs tens of seconds and mimo's wall time tracks the tokens it thinks (~30 tok/s), so pick per job. It reads the same `/work/CLAUDE.md` house rules `claude` does (MiMoCode's own convention is `AGENTS.md`; the `instructions` key points it at ours).
@@ -155,6 +166,7 @@ look the same in both themes.
 - One session, one person. Not multi-user.
 - **Resume and New session need a free prompt.** They type into the pane, and there is only one pane (`ttyd -m 1`, `tmux new -A -s main`), so a running agent has to be quit first. Starting a second agent behind the running one would put two of them in `/work` at once, which is the same reason `mimo` did not get a stack of its own.
 - The rate-limit chip is only as fresh as the last status-line render — it has no other source. A desk that has been idle since yesterday shows yesterday's percentage, dimmed.
+- **The finish notification does not survive a locked phone.** It needs this page's JavaScript to be running, and iOS suspends a backgrounded PWA. Chosen over the alternative on purpose: a Telegram ping from the same `Stop` hook would work with the screen off, but it means a new bot token in the vault, and the desk deliberately holds one credential.
 - `cpus:` does nothing on DSM; a heavy soffice render can pin a few cores for a minute.
 - **Two brains, one desk, no second stack.** `claude` and `mimo` share the image, `/work`, the port and the basic auth. Splitting a `mimo-desk` stack would duplicate the nginx sidecar, the `.htpasswd`, a second DSM reverse-proxy entry and the share, and buy isolation that cannot be used: `ttyd -m 1` + `tmux new -A -s main` means one browser and one screen, so the two agents can never run side by side anyway. If concurrent sessions ever become the point, that is when the split earns itself.
 - **`reasoningEffort`, not `reasoning_effort`, in `mimocode.jsonc`.** The snake_case spelling is accepted by the config and silently dropped; the camelCase one is what the AI SDK maps onto the wire. Verified by pointing the harness at a local echo server and reading the body it actually sent — the symptom of getting this wrong is every turn running at mimo's default effort (measured elsewhere at 10,457 tokens/161s against 3,796/79s), which is indistinguishable from "mimo is just slow". Re-checked against MiMoCode itself rather than inherited from opencode — the same capture shows it ignoring `limit.output` and sending `max_tokens: 128000` of its own, which is fine: the rule is that nothing *small* goes out.
