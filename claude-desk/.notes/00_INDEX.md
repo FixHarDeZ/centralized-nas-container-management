@@ -36,6 +36,7 @@ Claude Code reached from a phone browser, for generating pptx/docx/xlsx — not 
 | `Dockerfile` | image; pins CLAUDE_VERSION / SKILLS_REF / TTYD_VERSION(+sha256) / **MIMO_CODE_VERSION (only here — compose does not pass it)** / RTK_VERSION(+sha256); build-time asserts soffice/claude/pptxgenjs/python libs. Bump with `make desk-latest` from the repo root |
 | `entrypoint.sh` | mkdir in/out, symlink skills into home volume, copy `work/CLAUDE.md`, merge `claude-settings.json` hooks into `~/.claude/settings.json`, append prompt to `~/.bashrc`, exec ttyd |
 | `chat.py` | the chat view's backend: SSE + POST, drives a second Claude Code over stream-json (ADR 0013); `CHAT_COMMAND`/`CHAT_CWD`/`CHAT_PORT` make it runnable outside the container |
+| `ui/stream.js` | how an answer fills in: deltas into the last paragraph's text node, one commit per frame, an `IntersectionObserver` for "is the reader at the bottom". Separate from `app.js` so `tests/stream_harness.html` can drive it in headless Chrome with no agent behind it |
 | `upload.py` | PUT/DELETE/clear receiver behind the drawer (see architecture); `WORK_DIR=/tmp/x python3 upload.py` to exercise it locally |
 | `claude-settings.json` | Claude Code settings template: `PreToolUse Bash → rtk hook claude` (rtk binary pinned in Dockerfile `RTK_VERSION`/`RTK_SHA256`) + `statusLine` → `/opt/claude-desk/statusline.sh`; `_`-prefixed keys are comments and are skipped by the merge |
 | `done-hook.sh` | `Stop` hook → `~/.claude/desk-done.json` (epoch + session id), so the page can notify when a turn ends; jq + date only, always exits 0 |
@@ -86,6 +87,11 @@ Claude Code reached from a phone browser, for generating pptx/docx/xlsx — not 
 - `?demo=1` short-circuits `sendInput` to echo locally; never ship a page with that default on.
 - Test suite: `tests/test_manifest_schema.py` needs `jsonschema` in the venv (missing on this Mac) — `pytest --ignore` it; 39 others pass. The stack's own tests are `python3 -m pytest claude-desk/tests -q` (23) — `conftest.py` puts the stack root on `sys.path` because `upload.py` is not in a package.
 
+- **Headless Chrome runs one frame and stops.** A chained `requestAnimationFrame` never gets past the first step there, which is why `tests/stream_harness.html` drives frames from a timer and why `app.js` passes `stream.js` a timer in demo mode. The live page always uses real frames.
+- **A replay and the live stream overlap by design.** `chat.py` subscribes a reconnecting page *before* it replays, so some events arrive twice; the page drops anything with a `seq` it has already applied. Removing that dedup duplicates a bubble on every reconnect.
+- **A page that has applied nothing is new, not behind.** `since(0)` returns a snapshot rather than the ring: replaying from the first event would redraw every past turn of the process on top of the transcript the page reads.
+- **The snapshot must carry only what the transcript lacks** — the half-said answer and the tools still running. Claude Code writes a message when it completes, so anything finished is already in the file and sending it again draws it twice.
+
 ## Verification status
 
 - [x] `make check` exit 0, `make secrets` wrote `.env`, `.htpasswd` generated
@@ -100,6 +106,7 @@ Claude Code reached from a phone browser, for generating pptx/docx/xlsx — not 
 - [ ] end-to-end from phone: key bar, `claude` interactive, drawer upload/download, status line fits without wrapping
 
 ## Change log
+- **2026-09-17** — chat: the answer is no longer rebuilt per token (`ui/stream.js`), the stream is numbered and a page that dropped it catches up (replay ≤4000 events, snapshot past that), a reloaded page asks from zero, jump-to-latest, ✓/✕ on tool pills, `:focus-visible` + `prefers-reduced-motion`, composer drafts, and a failure says its `terminal_reason` and offers the message back. Harvested from `.notes/relay-spec-harvest.md` §A1–A8
 
 - **2026-09-16** — chat view: second Claude Code over stream-json behind SSE (`chat.py`, ADR 0013)
 - **2026-09-16** — `make desk-latest` bumps the pins from upstream (Claude Code → 2.1.273); fixed a limitless status-line render blanking the rate-limit chip

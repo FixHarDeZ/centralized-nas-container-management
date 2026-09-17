@@ -361,3 +361,48 @@ function UR0(A){ if(!process.stdout.isTTY) return;
 **ยืนยัน `COLUMNS` ถึงสคริปต์จริง (ไม่ใช่เชื่อ doc อย่างเดียว):** วิธีที่ใช้ได้ผลคือรัน claude อีกตัวใน container ด้วย `HOME` แยก (`/tmp/slprobe`) ตั้ง `statusLine` เป็นสคริปต์ dump env+stdin แล้วเปิดใน tmux pane บังคับ `-x 47` — ได้ `COLUMNS=47 LINES=30` และเห็นคีย์ stdin ทั้งหมด **ไม่มีฟิลด์ความกว้างเลย** (`context_window cost cwd effort exceeds_200k_tokens fast_mode model output_style scratchpad_dir session_id thinking transcript_path version workspace`) = `COLUMNS` เป็นทางเดียวจริง. กว่าจะ probe ได้ต้องใส่ `hasCompletedOnboarding` + `bypassPermissionsModeAccepted` + project ที่ trust แล้วใน `$HOME/.claude.json` ไม่งั้น claude ตายที่หน้า prompt ก่อนจะ render (ครั้งแรก Enter ไปโดน "No, exit" ของหน้า Bypass Permissions)
 
 **แถวเตือนกว้างกว่าแถวปกติ ~12 คอลัมน์:** ตอน `hit=1` หางมี ` ⚠ wall -17m` เพิ่ม ทำให้แถวยาว 87 ทั้งที่บาร์คิดจากหางปกติ → ล้นช่วง 80–91 คอลัมน์ (จอกลางๆ). ไม่ลดบาร์ทั้งกระดานเพราะเป็นเคสส่วนน้อย — ตัดเฉพาะ `wall` เมื่อที่ไม่พอ (`WALL_ROOM`) ⚠ กับตัวเลขคาดการณ์ยังอยู่ครบ. วัดหลังแก้: 80→77, 91→87, 47→23 ไม่ล้นสักค่า
+
+## 2026-09-17 — what the Relay spec was worth taking
+
+Read `.refinventory/.claude-desk/relay-ai-workspace-build-spec-v1.md` (a build
+spec for a multi-tenant Next.js/Postgres AI workspace) against this desk, wrote
+the verdict to `.notes/relay-spec-harvest.md`, and built the eight items worth
+having. Most of the spec does not apply and the note says so out loud — the
+whole stack (Next/React/Tailwind/shadcn/Drizzle/Better Auth/S3/pgvector) is dead
+on arrival in a 2 GB container whose UI is vendored xterm.js with no bundler,
+and multi-tenancy has no meaning behind one basic-auth door.
+
+**The find.** `app.js` appended each delta to a string and re-ran the markdown
+pass over the whole answer — every token threw away and recreated every node of
+the reply. Quadratic over a turn, worst exactly where this view exists to help:
+a long Thai answer on a phone. It also read `scrollHeight` per delta to decide
+whether to follow the bottom. Spec §11 forbids both; §13.5 says the test must
+*fail* on it. The server was already right — `chat.py` emits `text_delta` only.
+
+**Shipped** (f827a01, b843a16, dec0d73, 57b4c2d, eb12c78):
+
+- `ui/stream.js` — paragraph-tail writes, markdown once at `say_end`, one commit
+  per frame, sentinel + `IntersectionObserver` instead of measuring.
+- Numbered events with `id:`, a 4000-event ring, `Last-Event-ID` replay, and a
+  snapshot when the ring has rolled past. iOS suspends a backgrounded PWA, so
+  this is the ordinary path on a phone, not an edge case.
+- A reloaded page asks from zero and gets the snapshot; `since(0)` deliberately
+  refuses to replay, which would redraw every past turn.
+- Jump-to-latest, ✓/✕ on finished pills, `:focus-visible`, reduced motion,
+  composer drafts per conversation, and a failure that says its
+  `terminal_reason` and offers the message back.
+
+**Tests** went from 26 to 90. Two browser harnesses under `tests/`: one drives
+`stream.js` directly, one frames the real page in demo mode through a
+demo-only `window._chat` hook. Both were mutation-checked — against the old
+per-delta shape the first reports 311 commits and 622 layout reads for 311
+deltas (32 and 32 now), and dropping the dedup or the repaint's `clearLog()`
+turns three of the second's assertions red.
+
+**Two traps worth remembering.** Headless Chrome produces one frame and then
+stops, so a chained `requestAnimationFrame` stalls — both harnesses drive frames
+from a timer. And the fake agent finishes a turn in milliseconds, so anything
+that has to be observed *mid-answer* is driven straight through `_translate`
+rather than raced against a child.
+
+Not deployed. `python3 -m pytest claude-desk/tests` → 90 passed.

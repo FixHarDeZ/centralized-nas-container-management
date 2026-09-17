@@ -36,7 +36,7 @@ phone ──HTTPS :15072 (DSM RP)──▶ claude-desk-nginx :5072
   - `POST /api/quit` — Escape + `/exit` into the pane, then wait for a shell.
 - **`claude-desk`** — Debian + Node 22 + `@anthropic-ai/claude-code` (pinned `ARG CLAUDE_VERSION`), LibreOffice `*-nogui`, poppler, qpdf, Thai fonts, the Python and npm packages the official office skills need. PID 1 is `ttyd -W -m 1 -P 30 tmux new -A -s main`. Runs as uid 1000 (Claude Code refuses `--dangerously-skip-permissions` as root). Never published on the host.
 - **`claude-desk-nginx`** — `nginx:alpine` with `ui/` baked in (`nginx/Dockerfile`): basic auth on every path (`nginx/.htpasswd` from the vault), proxies only the websocket and token endpoints to ttyd, and lists `out/` as JSON. `ui/` cannot be bind-mounted: directories under `/volume2/docker` carry the DSM share ACL, which the nginx worker (uid 101) cannot traverse → 403 on every file. Single-file binds (`nginx.conf`, `.htpasswd`) are read by the root master process and work.
-- **`ui/`** — our own page instead of ttyd's: xterm.js 5.3 (vendored, no CDN), Inter + JetBrains Mono self-hosted, a key bar with `Esc ⇧Tab Tab Ctrl ↑↓←→ ↵NL` and `Paste / ^C A− A+ ⌨`, a rate-limit chip in the header, two right-hand sheets — files (`in/` Add files → PUT, 🗑 delete; `out/` tap to open, ⬇ to save) and sessions — a dark/light theme toggle, PWA manifest for Add-to-Home-Screen. Speaks ttyd's websocket protocol directly (touch scrolling and the iOS keyboard handling adapted from `pawprint0706/ttyd-wrapper`, MIT).
+- **`ui/`** — our own page instead of ttyd's: xterm.js 5.3 (vendored, no CDN), Inter + JetBrains Mono self-hosted, a key bar with `Esc ⇧Tab Tab Ctrl ↑↓←→ ↵NL` and `Paste / ^C A− A+ ⌨`, a rate-limit chip in the header, two right-hand sheets — files (`in/` Add files → PUT, 🗑 delete; `out/` tap to open, ⬇ to save) and sessions — a dark/light theme toggle, PWA manifest for Add-to-Home-Screen. Speaks ttyd's websocket protocol directly (touch scrolling and the iOS keyboard handling adapted from `pawprint0706/ttyd-wrapper`, MIT). `ui/stream.js` holds how an answer fills in — paragraph-tail writes, one commit per frame, an `IntersectionObserver` for "is the reader at the bottom" — kept apart from `app.js` so `tests/stream_harness.html` can drive it in a browser with no agent behind it.
 
 ## Chat
 
@@ -106,6 +106,40 @@ The line above the chat says when the terminal also has an agent up.
 **No transcript is kept.** A reload starts a fresh view of the same live session
 instead of replaying it; only "is a turn in flight" survives, so a page that
 comes back mid-turn shows the stop button rather than an idle one.
+
+**Coming back after a drop.** iOS suspends a backgrounded PWA, so the phone
+loses this stream constantly and usually mid-answer — reconnecting is the
+ordinary case here, not an edge one. Every event is numbered and written with an
+`id:`, which the browser hands back as `Last-Event-ID` on its own reconnect;
+`chat.py` keeps the last 4000 and replays what was missed. The page ignores
+anything it has already applied, because the replay and the live stream overlap
+by design (the connection subscribes before it replays).
+
+When the ring has rolled past — or the page has applied *nothing*, which is what
+a reload looks like — it is sent a **snapshot** instead: the half-said answer and
+the tools still running, and nothing else. Claude Code writes a message when it
+completes, so everything finished comes from the transcript the page already
+reads, and nothing is drawn twice. Replaying from the first event instead would
+redraw every past turn of the process on top of it. Events that land while that
+transcript read is in flight are held and applied after it, in order.
+
+**An answer is not rebuilt while it arrives.** Deltas land in the last
+paragraph's text node; the markdown pass runs once, when the turn's text ends;
+and a burst of deltas costs one commit per frame. The first version appended to
+a string and re-parsed the whole answer per token, which recreates every node of
+the reply — quadratic over a turn, worst exactly where this view is used. Whether
+the reader is at the bottom comes from an `IntersectionObserver` on a sentinel
+rather than from measuring `scrollHeight` per delta, and the log never chases the
+bottom unless that is where the reader already was — a floating
+"ข้อความล่าสุด" button is the way back down. The rules live in `ui/stream.js`
+apart from the rest of the page so a browser test can hold them: against the old
+shape the harness reports 311 commits and 622 layout reads for 311 deltas,
+against this one 32 and 32.
+
+A half-typed message survives a reload, kept per conversation in `localStorage`
+and saved again on `visibilitychange` — the one that fires when a phone is put
+away. A failed turn shows the agent's own `terminal_reason` under it and offers
+the message back as "ลองใหม่".
 
 Streaming needs `proxy_buffering off` on `/chat/` — otherwise nginx holds the
 whole turn and the page shows nothing until it ends, which is indistinguishable
