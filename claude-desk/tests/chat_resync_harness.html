@@ -83,7 +83,27 @@
             const marks = Array.from(log.querySelectorAll('.pill .p-dot'))
               .map(function (dot) { return dot.textContent; });
             out.marks = marks;
-            done(out);
+
+            // A failure says why, and hands the message back.
+            chat.feed({ t: 'turn', status: 'error', text: 'ทำงานไม่สำเร็จ',
+                        reason: 'error_during_execution', seq: 54 });
+            const err = log.querySelector('.bubble.them.err');
+            out.errWhy = err ? (err.querySelector('.err-why') || {}).textContent : null;
+            // No message was typed in this harness, so there is nothing to
+            // offer back and no button.
+            out.retryWithoutAMessage = err ? log.querySelectorAll('.retry').length : -1;
+
+            // A half-typed message is kept: iOS evicts a backgrounded tab
+            // whenever it likes, and losing a paragraph typed one-thumbed is
+            // what stops someone using this from a phone.
+            const box = win.document.getElementById('chat-input');
+            box.value = 'ร่างที่ยังพิมพ์ไม่จบ';
+            box.dispatchEvent(new win.Event('input'));
+            setTimeout(function () {
+              out.draft = win.localStorage.getItem('claude-desk.draft');
+              win.localStorage.removeItem('claude-desk.draft');
+              done(out);
+            }, 500);
           }, 60);
         }, 80);
       }, 60);

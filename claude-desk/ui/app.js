@@ -1149,6 +1149,26 @@
     emptyState();
   }
 
+  // A failed turn used to be the words "ทำงานไม่สำเร็จ" and nothing else: no
+  // cause to report and nothing to do but retype the message. The agent's own
+  // reason goes underneath, and the message is still here — so offer it back.
+  let lastSent = '';
+  function failed(text, reason) {
+    const box = add(el('div', 'bubble them err'));
+    box.appendChild(el('div', null, text || 'ทำงานไม่สำเร็จ'));
+    if (reason) box.appendChild(el('div', 'err-why', reason));
+    if (!lastSent) return;
+    const again = el('button', 'retry', 'ลองใหม่');
+    again.type = 'button';
+    again.addEventListener('click', function () {
+      again.disabled = true;
+      chatInput.value = lastSent;
+      sizeInput();
+      sendChat();
+    });
+    box.appendChild(again);
+  }
+
   function addPill(name, detail) {
     const pill = add(el('div', 'pill'));
     pill.appendChild(el('span', 'p-dot'));
@@ -1168,6 +1188,7 @@
     held = [];
     try {
       setChatBusy(!!ev.busy);
+      loadDraft(ev.session_id);
       clearLog();
       note('');
       if (ev.session_id) await paintHistory(ev.session_id);
@@ -1221,6 +1242,7 @@
       note('');
       spent = 0;
       paintSpent();
+      loadDraft(ev.session_id);
       if (ev.session_id) paintHistory(ev.session_id);
       return;
     }
@@ -1269,10 +1291,7 @@
       stream.close(markdown);
       setChatBusy(false);
       if (ev.status === 'stopped') note('หยุดแล้ว');
-      else if (ev.status === 'error') {
-        const box = add(el('div', 'bubble them err'));
-        box.textContent = ev.text || 'ทำงานไม่สำเร็จ';
-      }
+      else if (ev.status === 'error') failed(ev.text, ev.reason);
       addMeter(ev);
       if (typeof ev.total === 'number') spent = ev.total;
       paintSpent();
@@ -1314,7 +1333,9 @@
     const first = chatLog.querySelector('.chat-empty');
     if (first) first.remove();
     add(el('div', 'bubble me', text));
+    lastSent = text;          // kept so a failure can offer it back
     chatInput.value = '';
+    dropDraft();
     sizeInput();
     note('');
     setChatBusy(true);            // optimistic: the stream confirms it
@@ -1355,7 +1376,48 @@
     chatInput.style.height = 'auto';
     chatInput.style.height = Math.min(chatInput.scrollHeight, 140) + 'px';
   }
-  chatInput.addEventListener('input', sizeInput);
+
+  // A half-typed message survives a reload. On a phone this is not a nicety:
+  // iOS evicts a backgrounded tab whenever it feels like it, and losing a
+  // paragraph someone typed one-thumbed is the kind of thing that stops them
+  // using the desk from a phone at all. Kept per conversation, so switching to
+  // a past session does not hand its draft to the wrong one.
+  const DRAFT_KEY = 'claude-desk.draft';
+  let draftSession = '';
+  let draftTimer = null;
+
+  function draftKey() { return DRAFT_KEY + (draftSession ? '.' + draftSession : ''); }
+  function saveDraft() {
+    draftTimer = null;
+    try {
+      const text = chatInput.value;
+      if (text) localStorage.setItem(draftKey(), text);
+      else localStorage.removeItem(draftKey());
+    } catch (_) { /* private mode: the draft is just not kept */ }
+  }
+  function loadDraft(session) {
+    draftSession = session || '';
+    if (chatInput.value) return;      // never overwrite what is being typed
+    try {
+      chatInput.value = localStorage.getItem(draftKey()) || '';
+    } catch (_) { /* no storage */ }
+    sizeInput();
+  }
+  function dropDraft() {
+    if (draftTimer) { clearTimeout(draftTimer); draftTimer = null; }
+    try { localStorage.removeItem(draftKey()); } catch (_) { /* no storage */ }
+  }
+
+  chatInput.addEventListener('input', function () {
+    sizeInput();
+    if (draftTimer) clearTimeout(draftTimer);
+    draftTimer = setTimeout(saveDraft, 400);
+  });
+  // A phone that is put away goes straight to hidden; the debounce may never
+  // fire, so this is the one that usually saves it.
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') saveDraft();
+  });
 
   async function refreshChatState() {
     if (DEMO) return;
@@ -1394,6 +1456,7 @@
           .then((s) => {
             if (!s) return;
             setChatBusy(!!s.busy);
+            loadDraft(s.session_id);
             spent = s.spent || 0;
             paintSpent();
             // Nothing is kept in memory on the server; the conversation is

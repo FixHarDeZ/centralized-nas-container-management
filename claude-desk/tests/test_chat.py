@@ -685,3 +685,13 @@ def test_a_fresh_page_asks_from_zero_and_gets_the_turn_it_walked_into():
     _delta(agent, 0, "ครึ่งแรก")
     assert agent.since(0) is None        # behind the ring's start → snapshot
     assert agent.snapshot()["partial"] == "ครึ่งแรก"
+
+
+def test_a_failure_carries_the_reason_it_ended_with(agent):
+    channel = agent.subscribe()
+    assert agent.send("boom")[0] == 200
+    turn = drain(channel, "turn")[-1]
+    assert turn["status"] == "error"
+    # Something to show under the failure and to put in a bug report; the
+    # bare word "ทำงานไม่สำเร็จ" leaves nothing to act on.
+    assert turn["reason"]

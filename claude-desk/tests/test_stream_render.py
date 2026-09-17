@@ -180,3 +180,15 @@ def test_a_finished_tool_is_marked_not_just_coloured(resync):
     # oldest pill still open. The snapshot's tool was the oldest, so it takes
     # the first result, and the one left running keeps its dot.
     assert resync["marks"] == ["✓", "✕", ""]
+
+
+def test_a_failed_turn_says_why(resync):
+    # "ทำงานไม่สำเร็จ" on its own leaves nothing to act on and nothing to
+    # report; the agent's own terminal_reason goes under it.
+    assert resync["errWhy"] == "error_during_execution"
+    # The retry button only appears when there is a message to offer back.
+    assert resync["retryWithoutAMessage"] == 0
+
+
+def test_a_half_typed_message_is_kept(resync):
+    assert resync["draft"] == "ร่างที่ยังพิมพ์ไม่จบ"

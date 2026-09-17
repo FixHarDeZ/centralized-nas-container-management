@@ -506,6 +506,10 @@ class Agent:
             self.emit(
                 t="turn",
                 status=status,
+                # Why it ended, in the agent's own words. The page shows it
+                # under a failure: "ทำงานไม่สำเร็จ" on its own leaves nothing
+                # to act on and nothing to report.
+                reason=reason or str(event.get("subtype") or ""),
                 # Only carried for the cases the page has to explain; a normal
                 # answer was already streamed as deltas.
                 text="" if status == "done" else str(event.get("result") or ""),

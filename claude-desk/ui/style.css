@@ -346,7 +346,17 @@ body.chat-view #terminal, body.chat-view #toolbar { display: none; }
 /* Claude's side is unboxed and full width: it is the long text, and a bubble
    around it only narrows the thing this view exists to widen. */
 .bubble.them { align-self: stretch; max-width: 100%; padding: 0 2px; }
-.bubble.them.err { color: var(--bad); }
+.bubble.them.err { color: var(--bad); display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+/* The agent's own words for why it stopped: quieter than the failure itself,
+   but there to copy into a bug report. */
+.err-why { font-family: var(--mono); font-size: 11px; opacity: 0.75; }
+.retry {
+  min-height: 32px; padding: 5px 12px;
+  border: 1px solid var(--bad-line); border-radius: 999px;
+  background: var(--bad-soft); color: var(--bad);
+  font-family: var(--ui); font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.retry[disabled] { opacity: 0.5; pointer-events: none; }
 .bubble code {
   font-family: var(--mono); font-size: 0.88em;
   padding: 1px 4px; border-radius: 5px;
