@@ -225,6 +225,9 @@ class Agent:
             self.subscribers.discard(channel)
 
     def emit(self, **event) -> None:
+        # The same lock covers the numbering and the ring: an event's seq and
+        # its place in the replay have to agree, or a reconnect gets them out
+        # of order.
         with self.subscribers_lock:
             self.seq += 1
             event["seq"] = self.seq
@@ -247,6 +250,11 @@ class Agent:
         with self.subscribers_lock:
             if after >= self.seq:
                 return []                       # nothing missed
+            if after <= 0:
+                # A page that has applied nothing is not behind, it is new.
+                # Replaying from the first event would draw every past turn of
+                # this process on top of the transcript it already reads.
+                return None
             if not self.ring or self.ring[0]["seq"] > after + 1:
                 return None                     # rolled past; too old to patch
             return [e for e in self.ring if e["seq"] > after]
@@ -262,6 +270,8 @@ class Agent:
             return {
                 "t": "resync",
                 "seq": self.seq,
+                # A hint, not a guarantee: `busy` is written under the other
+                # lock. The page is told again by the `busy` events either way.
                 "busy": self.busy,
                 "session_id": self.session_id or "",
                 "partial": self.partial,
@@ -358,6 +368,9 @@ class Agent:
             self.stop_child()
             self.session_id = resume or None
             self.spent = 0.0
+            # A new session owes nothing from the old one's turn.
+            self.partial = ""
+            self.open_tools = []
             if resume:
                 # Started now rather than on the first message, so a failed
                 # --resume is reported while the sheet is still open.

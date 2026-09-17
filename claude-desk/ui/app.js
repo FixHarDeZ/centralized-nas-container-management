@@ -1275,10 +1275,16 @@
 
   function openChatStream() {
     if (chatStream || DEMO) return;
-    // `after` covers the page reopening the stream itself (a view switch, a
-    // reload with events already applied); EventSource's own reconnect sends
-    // the same number back as a Last-Event-ID header without being asked.
-    chatStream = new EventSource('chat/events' + (lastSeq ? '?after=' + lastSeq : ''));
+    // `after` covers the page opening the stream itself (a view switch, a
+    // reload); EventSource's own reconnect sends the same number back as a
+    // Last-Event-ID header without being asked.
+    //
+    // Sent even when it is zero, which is the case that matters: a page
+    // reloaded in the middle of an answer has applied nothing, and without
+    // asking it would be handed the tail of the reply with the first half in
+    // neither the transcript nor the bubble. Zero is behind everything, so the
+    // server answers with a snapshot.
+    chatStream = new EventSource('chat/events?after=' + lastSeq);
     chatStream.onmessage = (e) => {
       try { onChatEvent(JSON.parse(e.data)); } catch (_) { /* ignore a bad frame */ }
     };
@@ -1387,7 +1393,10 @@
             // Nothing is kept in memory on the server; the conversation is
             // repainted from the transcript Claude Code writes. Only when the
             // log is empty — switching views mid-answer must not duplicate it.
-            if (s.session_id && !chatLog.querySelector('.bubble')) {
+            // Not while a snapshot is being drawn: that path clears the log
+            // and repaints it from the same transcript, and both running at
+            // once would show the conversation twice.
+            if (!repainting && s.session_id && !chatLog.querySelector('.bubble')) {
               paintHistory(s.session_id);
             }
           })

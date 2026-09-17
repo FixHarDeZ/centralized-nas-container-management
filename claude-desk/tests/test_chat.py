@@ -669,3 +669,19 @@ def test_a_reconnect_too_far_behind_is_sent_a_snapshot(monkeypatch, agent):
         conn.close()
     finally:
         server.shutdown()
+
+
+def test_a_fresh_page_asks_from_zero_and_gets_the_turn_it_walked_into():
+    """`after=0` is the reload case, and it has to answer with a snapshot.
+
+    A page reloaded mid-answer has applied nothing, so without this it would be
+    handed the tail of the reply and the first half would be in neither the
+    transcript nor the bubble.
+    """
+    agent = chat.Agent()
+    assert agent.since(0) == []          # nothing has happened yet: nothing to say
+
+    _block_start(agent, 0)
+    _delta(agent, 0, "ครึ่งแรก")
+    assert agent.since(0) is None        # behind the ring's start → snapshot
+    assert agent.snapshot()["partial"] == "ครึ่งแรก"
