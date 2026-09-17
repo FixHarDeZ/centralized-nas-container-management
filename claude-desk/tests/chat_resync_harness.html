@@ -74,6 +74,15 @@
           setTimeout(function () {
             out.textAfterMore = log.querySelector('.bubble.them').textContent;
             out.bubblesAtEnd = bubbles(log);
+
+            // A finished tool says so with a mark, not only a colour.
+            chat.feed({ t: 'tool', name: 'Write', detail: 'out/deck.pptx', seq: 50 });
+            chat.feed({ t: 'tool_done', ok: true, seq: 51 });
+            chat.feed({ t: 'tool', name: 'Bash', detail: 'false', seq: 52 });
+            chat.feed({ t: 'tool_done', ok: false, seq: 53 });
+            const marks = Array.from(log.querySelectorAll('.pill .p-dot'))
+              .map(function (dot) { return dot.textContent; });
+            out.marks = marks;
             done(out);
           }, 60);
         }, 80);

@@ -84,6 +84,12 @@
       <button id="chat-new" class="chat-new" type="button">New chat</button>
     </div>
     <div id="chat-log" class="chat-log"></div>
+    <!-- The log refuses to chase the bottom once the reader has scrolled up,
+         which left no way back down on a phone but a long swipe. -->
+    <button id="chat-jump" class="chat-jump" type="button" hidden>
+      <svg viewBox="0 0 24 24"><path d="M12 5v13M6 13l6 6 6-6"/></svg>
+      ข้อความล่าสุด
+    </button>
     <div id="chat-note" class="chat-note" hidden></div>
     <form id="chat-form" class="chat-form">
       <textarea id="chat-input" rows="1" placeholder="พิมพ์ข้อความ…"

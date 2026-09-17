@@ -1036,7 +1036,11 @@
   // Where the text goes and whether to chase it live in stream.js, so the
   // rules that keep a long answer cheap to draw can be tested in a browser
   // without an agent behind them.
-  const follower = DeskStream.createFollower(chatLog);
+  const jumpBtn = document.getElementById('chat-jump');
+  const follower = DeskStream.createFollower(chatLog, {
+    onChange: function (pinned) { jumpBtn.hidden = pinned; },
+  });
+  jumpBtn.addEventListener('click', function () { follower.toBottom(); });
   const stream = DeskStream.createStream({
     follower: follower,
     // Demo mode runs in headless Chrome for tests, which produces one frame
@@ -1253,6 +1257,8 @@
       if (open) {
         delete open.dataset.open;
         open.classList.add(ev.ok ? 'ok' : 'bad');
+        // A mark, not just a colour: the dot becomes the answer.
+        open.querySelector('.p-dot').textContent = ev.ok ? '✓' : '✕';
       }
       showTyping(chatBusy && !stream.active());
       return;

@@ -281,6 +281,7 @@ body.chat-view #toolbar-btn { display: none; }
   min-height: 0;
   display: flex;
   flex-direction: column;
+  position: relative;      /* the jump button floats over the log */
 }
 #chat[hidden] { display: none; }
 body.chat-view #terminal, body.chat-view #toolbar { display: none; }
@@ -370,9 +371,19 @@ body.chat-view #terminal, body.chat-view #toolbar { display: none; }
   font-size: 12px; color: var(--muted);
   min-width: 0;
 }
-.pill .p-dot { flex: 0 0 auto; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
-.pill.ok .p-dot { background: var(--ok); }
-.pill.bad .p-dot { background: var(--bad); }
+/* Running: a dot. Finished: a mark. Colour alone would say nothing to a
+   colour-blind reader, and on a phone in sunlight it says little to anyone. */
+.pill .p-dot {
+  flex: 0 0 auto; width: 6px; height: 6px;
+  border-radius: 50%; background: var(--accent);
+  font-size: 11px; line-height: 1;
+}
+.pill.ok .p-dot, .pill.bad .p-dot {
+  width: auto; height: auto; border-radius: 0; background: none;
+  font-weight: 700;
+}
+.pill.ok .p-dot { color: var(--ok); }
+.pill.bad .p-dot { color: var(--bad); }
 .pill .p-name { flex: 0 0 auto; font-weight: 600; color: var(--fg); }
 .pill .p-detail { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--mono); font-size: 11px; }
 
@@ -381,6 +392,24 @@ body.chat-view #terminal, body.chat-view #toolbar { display: none; }
 .typing i:nth-child(2) { animation-delay: 0.2s; }
 .typing i:nth-child(3) { animation-delay: 0.4s; }
 @keyframes blink { 50% { opacity: 0.25; } }
+
+/* Sits over the log rather than in the column: appearing must not reflow the
+   answer someone is reading. */
+.chat-jump {
+  position: absolute; left: 50%; transform: translateX(-50%);
+  bottom: calc(68px + var(--safe-bottom));
+  z-index: 3;
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 34px; padding: 6px 14px;
+  border: 1px solid var(--line-strong); border-radius: 999px;
+  background: var(--panel); color: var(--fg);
+  box-shadow: 0 6px 18px var(--scrim);
+  font-family: var(--ui); font-size: 12px; font-weight: 600;
+  cursor: pointer;
+}
+.chat-jump[hidden] { display: none; }
+.chat-jump svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+body.kb-open .chat-jump { bottom: 68px; }
 
 .chat-note { flex: 0 0 auto; padding: 6px 14px; font-size: 12px; color: var(--bad); }
 .chat-note[hidden] { display: none; }
@@ -654,4 +683,32 @@ body.sessions-open #scrim { opacity: 1; pointer-events: auto; }
 }
 @media (max-width: 380px) {
   .row button { height: 40px; font-size: 12px; }
+}
+
+/* ── Reach and motion ───────────────────────────────── */
+/* The desk is opened from a laptop as often as from the phone, and until now
+   a keyboard had whatever ring the browser felt like drawing — on the icon
+   buttons, nothing at all. :focus-visible only, so a tap never lights up. */
+button:focus-visible,
+a:focus-visible,
+textarea:focus-visible,
+[role="tab"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+.chat-form textarea:focus-visible { outline-offset: 0; }
+
+/* Someone who asked the system for less movement means it here too: the
+   typing dots pulse for as long as an answer takes, which is the longest
+   animation on the page. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .typing i { opacity: 0.55; }
+  .chat-send:active { transform: none; }
 }

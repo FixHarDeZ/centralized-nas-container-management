@@ -170,3 +170,13 @@ def test_a_snapshot_redraws_the_turn_it_came_back_to(resync):
 def test_the_turn_carries_on_into_the_same_bubble(resync):
     assert resync["textAfterMore"] == "หนึ่ง สอง สาม สี่"
     assert resync["bubblesAtEnd"] == 1
+
+
+def test_a_finished_tool_is_marked_not_just_coloured(resync):
+    # Colour alone says nothing to a colour-blind reader, and little to anyone
+    # holding a phone in sunlight, so a finished pill carries a mark.
+    #
+    # The order is the rule the page has always used: a result belongs to the
+    # oldest pill still open. The snapshot's tool was the oldest, so it takes
+    # the first result, and the one left running keeps its dot.
+    assert resync["marks"] == ["✓", "✕", ""]
