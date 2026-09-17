@@ -322,6 +322,10 @@ body.chat-view #terminal, body.chat-view #toolbar { display: none; }
   display: flex; flex-direction: column; gap: 10px;
   -webkit-user-select: text; user-select: text;
 }
+/* The follower's sentinel (stream.js): zero-height, and the negative margin
+   cancels the log's own gap so it costs no space at the end of the log. */
+.chat-end { flex: 0 0 auto; height: 0; margin-top: -10px; }
+
 .chat-empty { margin: auto; padding: 24px; text-align: center; color: var(--muted); font-size: 14px; }
 .chat-empty code { font-family: var(--mono); color: var(--accent); }
 

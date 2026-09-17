@@ -938,17 +938,15 @@
       if (item.k === 'you') {
         add(el('div', 'bubble me', item.text));
       } else if (item.k === 'claude') {
-        const box = add(el('div', 'bubble them'));
-        box.dataset.raw = item.text;
-        markdown(box, item.text);
+        markdown(add(el('div', 'bubble them')), item.text);
       } else if (item.k === 'tool') {
         onChatEvent({ t: 'tool', name: item.name, detail: item.detail });
       } else if (item.k === 'tool_done') {
         onChatEvent({ t: 'tool_done', ok: item.ok });
       }
     }
-    bubble = null;
-    chatLog.scrollTop = chatLog.scrollHeight;
+    stream.abandon();
+    follower.toBottom();
   }
 
   quitBtn.addEventListener('click', async () => {
@@ -1027,7 +1025,6 @@
   let chatOn = false;
   let chatStream = null;
   let chatBusy = false;
-  let bubble = null;        // the assistant bubble currently filling in
   let typing = null;
 
   function el(tag, cls, text) {
@@ -1036,19 +1033,14 @@
     if (text != null) node.textContent = text;
     return node;
   }
-  function atBottom() {
-    return chatLog.scrollHeight - chatLog.scrollTop - chatLog.clientHeight < 60;
-  }
-  function follow(was) {
-    // Only chase the bottom if that is where the reader already was —
-    // yanking the view down while they scroll back through an answer is the
-    // single most annoying thing a chat window can do.
-    if (was) chatLog.scrollTop = chatLog.scrollHeight;
-  }
+  // Where the text goes and whether to chase it live in stream.js, so the
+  // rules that keep a long answer cheap to draw can be tested in a browser
+  // without an agent behind them.
+  const follower = DeskStream.createFollower(chatLog);
+  const stream = DeskStream.createStream({ follower: follower });
   function add(node) {
-    const was = atBottom();
-    if (typing) chatLog.insertBefore(node, typing); else chatLog.appendChild(node);
-    follow(was);
+    follower.place(node, typing || null);
+    follower.followIfPinned();
     return node;
   }
 
@@ -1107,9 +1099,8 @@
     if (on && !typing) {
       typing = el('div', 'typing');
       typing.innerHTML = '<i></i><i></i><i></i>';
-      const was = atBottom();
-      chatLog.appendChild(typing);
-      follow(was);
+      follower.place(typing);
+      follower.followIfPinned();
     } else if (!on && typing) {
       typing.remove();
       typing = null;
@@ -1119,7 +1110,7 @@
   function setChatBusy(on) {
     chatBusy = on;
     document.body.classList.toggle('chat-busy', on);
-    showTyping(on && !bubble);
+    showTyping(on && !stream.active());
   }
 
   function note(text) {
@@ -1128,15 +1119,21 @@
   }
 
   function emptyState() {
-    if (chatLog.children.length) return;
+    // The log always holds the follower's sentinel, so "is it empty" is a
+    // question about content, not about child count.
+    if (chatLog.querySelector('.bubble, .pill, .chat-empty')) return;
     const box = el('div', 'chat-empty');
     box.innerHTML = 'Ask for a document.<br>Files live in <code>/work/in</code> and <code>/work/out</code>, same as the terminal.';
-    chatLog.appendChild(box);
+    follower.place(box);
   }
 
   function clearLog() {
-    chatLog.innerHTML = '';
-    bubble = null;
+    // Everything but the sentinel: losing it would leave the view unable to
+    // tell whether the reader is at the bottom.
+    for (const node of Array.from(chatLog.children)) {
+      if (node !== follower.sentinel) node.remove();
+    }
+    stream.abandon();
     typing = null;
     emptyState();
   }
@@ -1156,26 +1153,24 @@
     }
     if (ev.t === 'gone') {
       setChatBusy(false);
-      if (bubble) bubble = null;
+      // Whatever is on screen stays on screen; it is just no longer being
+      // written to, and never gets its markdown pass.
+      stream.abandon();
       return;
     }
     if (ev.t === 'say_start') {
       showTyping(false);
       const first = chatLog.querySelector('.chat-empty');
       if (first) first.remove();
-      bubble = add(el('div', 'bubble them'));
-      bubble.dataset.raw = '';
+      stream.open(add(el('div', 'bubble them')));
       return;
     }
     if (ev.t === 'say') {
-      if (!bubble) { onChatEvent({ t: 'say_start' }); }
-      const was = atBottom();
-      bubble.dataset.raw += ev.text;
-      markdown(bubble, bubble.dataset.raw);
-      follow(was);
+      if (!stream.active()) { onChatEvent({ t: 'say_start' }); }
+      stream.push(ev.text);
       return;
     }
-    if (ev.t === 'say_end') { bubble = null; return; }
+    if (ev.t === 'say_end') { stream.close(markdown); return; }
     if (ev.t === 'tool') {
       showTyping(false);
       const first = chatLog.querySelector('.chat-empty');
@@ -1194,11 +1189,13 @@
         delete open.dataset.open;
         open.classList.add(ev.ok ? 'ok' : 'bad');
       }
-      showTyping(chatBusy && !bubble);
+      showTyping(chatBusy && !stream.active());
       return;
     }
     if (ev.t === 'turn') {
-      bubble = null;
+      // A turn can end while text is still open — stopped mid-sentence, or an
+      // error. The partial answer earns its markdown pass all the same.
+      stream.close(markdown);
       setChatBusy(false);
       if (ev.status === 'stopped') note('หยุดแล้ว');
       else if (ev.status === 'error') {

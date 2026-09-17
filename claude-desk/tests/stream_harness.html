@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>stream.js harness</title>
+  <style>
+    /* The shape that matters: a scrolling log with a fixed height, the way
+       .chat-log is laid out. */
+    #log { height: 200px; overflow-y: auto; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <div id="log"></div>
+  <pre id="result">pending</pre>
+  <script src="../ui/stream.js"></script>
+  <!-- A thrown error would otherwise leave the page saying "pending", which
+       reads like a timeout rather than a bug. -->
+  <script>
+    window.onerror = function (msg, url, line) {
+      document.getElementById('result').textContent = 'ERR ' + msg + ' @' + line;
+    };
+  </script>
+  <script>
+    // Drives stream.js the way the page does — say_start, many small deltas,
+    // say_end — and reports what the DOM did, for test_stream_render.py to
+    // assert on. The point of every number here is the rule from §11 of the
+    // spec in .notes/relay-spec-harvest.md: nothing already on screen is
+    // rebuilt while text is arriving.
+    (function () {
+      // Count layout reads. `scrollHeight` is a prototype accessor, so the
+      // real property can be wrapped and still work.
+      let scrollReads = 0;
+      const desc = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollHeight');
+      Object.defineProperty(Element.prototype, 'scrollHeight', {
+        configurable: true,
+        get: function () { scrollReads += 1; return desc.get.call(this); },
+      });
+
+      // Frames come from a timer, not from `requestAnimationFrame`: headless
+      // Chrome runs one frame and then stops producing them, so a chained rAF
+      // never gets past the first step. What is under test is that a burst of
+      // deltas costs one scheduled commit — which clock schedules it does not
+      // change that, and the page passes the real rAF (see app.js).
+      const frame = function (fn) { setTimeout(fn, 0); };
+
+      const log = document.getElementById('log');
+      const follower = DeskStream.createFollower(log);
+      const stream = DeskStream.createStream({ follower: follower, raf: frame });
+
+      let renders = 0;
+      let rendersDuringStream = 0;
+      let streaming = false;
+      function render(node, text) {
+        renders += 1;
+        if (streaming) rendersDuringStream += 1;
+        node.textContent = text;   // stand-in for the page's markdown pass
+      }
+
+      const PARAS = 12;
+      const PER_PARA = 25;
+      const parts = [];
+      for (let p = 0; p < PARAS; p += 1) {
+        for (let i = 0; i < PER_PARA; i += 1) parts.push('ตัวอักษรไทย' + i + ' ');
+        if (p < PARAS - 1) parts.push('\n\n');
+      }
+      const whole = parts.join('');
+
+      const bubble = document.createElement('div');
+      bubble.className = 'bubble them';
+      follower.place(bubble);
+      stream.open(bubble);
+
+      // Deltas arrive in bursts between frames, which is what there is to
+      // coalesce — an SSE stream does not wait for the compositor.
+      const BURST = 10;
+      let i = 0;
+      let firstPara = null;        // the text node of paragraph 1
+      let firstParaText = '';
+      let firstParaStillThere = true;
+
+      streaming = true;
+      function step() {
+        if (i < parts.length) {
+          for (let n = 0; n < BURST && i < parts.length; n += 1, i += 1) {
+            stream.push(parts[i]);
+          }
+          // Watch paragraph 1 from the moment it is complete: it must be the
+          // same node, holding the same text, when the turn ends.
+          if (!firstPara && bubble.childNodes.length > 1) {
+            firstPara = bubble.childNodes[0];
+            firstParaText = firstPara.data;
+          } else if (firstPara) {
+            if (bubble.childNodes[0] !== firstPara || firstPara.data !== firstParaText) {
+              firstParaStillThere = false;
+            }
+          }
+          frame(step);
+          return;
+        }
+        const commitsWhileStreaming = stream.commits();
+        const readsWhileStreaming = scrollReads;
+        const nodesWhileStreaming = bubble.childNodes.length;
+        streaming = false;
+        stream.close(render);
+
+        document.getElementById('result').textContent = JSON.stringify({
+          deltas: parts.length,
+          burst: BURST,
+          commits: commitsWhileStreaming,
+          scrollReads: readsWhileStreaming,
+          renders: renders,
+          rendersDuringStream: rendersDuringStream,
+          firstParaStillThere: firstParaStillThere,
+          streamNodes: nodesWhileStreaming,
+          paragraphs: PARAS,
+          textOk: bubble.textContent === whole,
+        });
+      }
+      frame(step);
+    })();
+  </script>
+</body>
+</html>
