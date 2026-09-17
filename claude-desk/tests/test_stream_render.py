@@ -102,3 +102,71 @@ def test_layout_is_not_read_per_delta(result):
 
 def test_the_answer_survives_all_of_that(result):
     assert result["textOk"] is True
+
+
+# ── The page's half of a reconnect ────────────────────────────────────────
+# The rules being checked live in app.js, not stream.js: ignore an event
+# already applied, and redraw the turn when the server says everything since
+# the drop is gone. The page is driven in demo mode — no websocket, no stream,
+# no agent — through the `window._chat` hook app.js exposes only there.
+
+@pytest.fixture(scope="module")
+def resync():
+    import functools
+    import http.server
+    import socketserver
+    import threading
+
+    chrome = find_chrome()
+    if not chrome:
+        pytest.skip("no Chrome/Chromium to run the harness in")
+
+    root = Path(__file__).resolve().parents[1]
+    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(root))
+    # Over HTTP, not file://: the harness reaches into the page it frames, and
+    # Chrome gives every file:// document its own opaque origin.
+    server = socketserver.TCPServer(("127.0.0.1", 0), handler)
+    server.allow_reuse_address = True
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    url = "http://127.0.0.1:%d/tests/chat_resync_harness.html" % server.server_address[1]
+    try:
+        proc = subprocess.run(
+            [chrome, "--headless=new", "--disable-gpu", "--no-sandbox",
+             "--virtual-time-budget=20000", "--dump-dom", url],
+            capture_output=True, text=True, timeout=120,
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+
+    match = re.search(r'<pre id="result">(.*?)</pre>', proc.stdout, re.S)
+    assert match, f"harness produced no result\n{proc.stdout[-2000:]}"
+    payload = match.group(1).strip()
+    assert payload != "pending", "harness never finished"
+    data = json.loads(payload)
+    assert "error" not in data, data
+    return data
+
+
+def test_an_event_already_applied_is_ignored(resync):
+    # A replay and the live stream overlap by design: chat.py subscribes before
+    # it replays, so every reconnect delivers some events twice.
+    assert resync["seqFollowed"] is True
+    assert resync["afterReplayBubbles"] == 1
+    assert resync["textBeforeDrop"] == "หนึ่ง "
+    assert resync["textAfterMore"].count("ซ้ำ") == 0
+
+
+def test_a_snapshot_redraws_the_turn_it_came_back_to(resync):
+    # One bubble, holding what the agent has said so far, and the tool that is
+    # still running drawn as still running.
+    assert resync["bubblesAfterResync"] == 1
+    assert resync["textAfterResync"] == "หนึ่ง สอง สาม"
+    assert resync["pillsAfterResync"] == 1
+    assert resync["openPills"] == 1
+
+
+def test_the_turn_carries_on_into_the_same_bubble(resync):
+    assert resync["textAfterMore"] == "หนึ่ง สอง สาม สี่"
+    assert resync["bubblesAtEnd"] == 1

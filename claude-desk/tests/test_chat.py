@@ -5,11 +5,14 @@ here were captured from it (2.1.273) rather than guessed. Using a scripted
 child means the whole translation can be exercised without spending a
 subscription turn on every run.
 """
+import http.client
 import io
 import json
 import queue
 import sys
 import textwrap
+import threading
+import time
 
 import pytest
 
@@ -464,3 +467,205 @@ def test_interrupt_sends_a_control_request_not_a_signal(agent):
     assert sent[0]["type"] == "control_request"
     assert sent[0]["request"] == {"subtype": "interrupt"}
     assert sent[0]["request_id"]
+
+
+# ── Coming back after a drop ──────────────────────────────────────────────
+# A phone loses this stream constantly: iOS suspends a backgrounded PWA, so
+# reconnecting in the middle of an answer is the ordinary case rather than an
+# edge one. Every event is numbered for that reason.
+
+def test_every_event_is_numbered_in_order(agent):
+    channel = agent.subscribe()
+    assert agent.send("hello")[0] == 200
+    events = drain(channel, "turn")
+    seqs = [e["seq"] for e in events]
+    assert seqs == sorted(seqs)
+    assert len(set(seqs)) == len(seqs)
+
+
+def test_a_page_that_missed_events_is_given_exactly_those(agent):
+    channel = agent.subscribe()
+    assert agent.send("hello")[0] == 200
+    events = drain(channel, "turn")
+
+    # Pretend the page applied the first three and then the phone slept. The
+    # ring is the authority, not what this test drained — the turn ends with a
+    # `busy` event after the one drain stops on.
+    pivot = events[2]["seq"]
+    missed = agent.since(pivot)
+    assert [e["seq"] for e in missed] == [e["seq"] for e in agent.ring if e["seq"] > pivot]
+    # And a page that missed nothing is sent nothing.
+    assert agent.since(agent.seq) == []
+
+
+def test_a_page_too_far_behind_is_told_to_repaint(agent):
+    channel = agent.subscribe()
+    assert agent.send("hello")[0] == 200
+    drain(channel, "turn")
+    # The ring has rolled past what this page last saw.
+    agent.ring.clear()
+    assert agent.since(1) is None
+
+
+# The bookkeeping behind a snapshot is driven straight through the translator:
+# the fake agent finishes a turn in milliseconds, so asking it to hold still
+# mid-answer is a race, and what matters here is which events leave which
+# residue rather than how fast a child runs.
+def _block_start(agent, index, kind="text"):
+    agent._translate({"type": "stream_event", "event": {
+        "type": "content_block_start", "index": index,
+        "content_block": {"type": kind}}})
+
+
+def _delta(agent, index, text):
+    agent._translate({"type": "stream_event", "event": {
+        "type": "content_block_delta", "index": index,
+        "delta": {"type": "text_delta", "text": text}}})
+
+
+def _block_stop(agent, index):
+    agent._translate({"type": "stream_event", "event": {
+        "type": "content_block_stop", "index": index}})
+
+
+def test_the_snapshot_carries_only_what_the_transcript_lacks():
+    """The half-said answer and the tools still running, and nothing else.
+
+    Everything that finished is already in the file the page reads; sending it
+    here as well would draw every message twice.
+    """
+    agent = chat.Agent()
+    _block_start(agent, 0)
+    _delta(agent, 0, "กำลัง")
+    _delta(agent, 0, "ทำอยู่")
+
+    snap = agent.snapshot()
+    assert snap["t"] == "resync"
+    assert snap["partial"] == "กำลังทำอยู่"
+    assert snap["tools"] == []
+    assert snap["seq"] == agent.seq
+
+    _block_stop(agent, 0)
+    # Said in full, so Claude Code has written it: the transcript is where a
+    # page gets it back, and repeating it here would double it.
+    assert agent.snapshot()["partial"] == ""
+
+
+def test_a_tool_still_running_is_in_the_snapshot():
+    agent = chat.Agent()
+    agent._translate({"type": "assistant", "message": {"content": [
+        {"type": "tool_use", "name": "Bash", "input": {"command": "echo hi"}}]}})
+    assert agent.snapshot()["tools"] == [{"name": "Bash", "detail": "echo hi"}]
+
+    agent._translate({"type": "user", "message": {"content": [
+        {"type": "tool_result", "is_error": False}]}})
+    assert agent.snapshot()["tools"] == []
+
+
+def test_a_finished_turn_leaves_nothing_unwritten():
+    agent = chat.Agent()
+    _block_start(agent, 0)
+    _delta(agent, 0, "ครึ่งทาง")
+    agent._translate({"type": "assistant", "message": {"content": [
+        {"type": "tool_use", "name": "Bash", "input": {"command": "echo hi"}}]}})
+
+    agent._translate({"type": "result", "subtype": "success", "is_error": False,
+                      "terminal_reason": "completed", "result": ""})
+    snap = agent.snapshot()
+    assert snap["partial"] == ""
+    assert snap["tools"] == []
+    assert snap["busy"] is False
+
+
+# ── The wire, not just the bookkeeping ────────────────────────────────────
+def _serve(monkeypatch, agent):
+    """The real handler, on a throwaway port, talking to this fake agent."""
+    from http.server import ThreadingHTTPServer
+
+    monkeypatch.setattr(chat, "AGENT", agent)
+    server = ThreadingHTTPServer(("127.0.0.1", 0), chat.Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return server
+
+
+def _frames(response, count, timeout=10):
+    """Parse `id:`/`data:` frames off an open SSE response."""
+    out = []
+    seq = None
+    deadline = time.time() + timeout
+    while len(out) < count and time.time() < deadline:
+        line = response.fp.readline()
+        if not line:
+            break
+        line = line.decode().strip()
+        if line.startswith("id:"):
+            seq = int(line[3:])
+        elif line.startswith("data:"):
+            event = json.loads(line[5:])
+            event["_id"] = seq
+            seq = None
+            out.append(event)
+    return out
+
+
+def _subscribe(server, headers=None, path="/chat/events"):
+    conn = http.client.HTTPConnection(*server.server_address, timeout=10)
+    conn.request("GET", path, headers=headers or {})
+    response = conn.getresponse()
+    assert response.status == 200
+    return conn, response
+
+
+def test_the_stream_numbers_its_events_on_the_wire(monkeypatch, agent):
+    server = _serve(monkeypatch, agent)
+    try:
+        conn, response = _subscribe(server)
+        events = _frames(response, 1)          # the composer's state, first
+        assert agent.send("hello")[0] == 200
+        events += _frames(response, 3)
+        # The first frame is the composer's state and carries no id; every
+        # event of the turn does, and it is the seq the page counts with.
+        numbered = [e for e in events if e["_id"] is not None]
+        assert numbered, events
+        assert all(e["_id"] == e["seq"] for e in numbered)
+        conn.close()
+    finally:
+        server.shutdown()
+
+
+def test_a_reconnect_replays_what_the_page_missed(monkeypatch, agent):
+    server = _serve(monkeypatch, agent)
+    try:
+        channel = agent.subscribe()
+        assert agent.send("hello")[0] == 200
+        drain(channel, "turn")
+
+        # A phone that slept after the third event and came back: EventSource
+        # sends the last id it saw as a header, without being asked.
+        pivot = agent.ring[2]["seq"]
+        expected = [e["seq"] for e in agent.ring if e["seq"] > pivot]
+        conn, response = _subscribe(server, {"Last-Event-ID": str(pivot)})
+        events = _frames(response, 1 + len(expected))
+        assert [e["seq"] for e in events if "seq" in e] == expected
+        conn.close()
+    finally:
+        server.shutdown()
+
+
+def test_a_reconnect_too_far_behind_is_sent_a_snapshot(monkeypatch, agent):
+    server = _serve(monkeypatch, agent)
+    try:
+        channel = agent.subscribe()
+        assert agent.send("hello")[0] == 200
+        drain(channel, "turn")
+        agent.ring.clear()
+
+        conn, response = _subscribe(server, path="/chat/events?after=1")
+        events = _frames(response, 2)
+        resync = next(e for e in events if e["t"] == "resync")
+        assert resync["seq"] == agent.seq
+        assert resync["partial"] == ""
+        conn.close()
+    finally:
+        server.shutdown()

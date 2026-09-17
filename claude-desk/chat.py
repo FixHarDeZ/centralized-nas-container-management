@@ -72,6 +72,11 @@ COMMAND = shlex.split(os.environ.get("CHAT_COMMAND", "")) or [
 
 HEARTBEAT = 20          # seconds between SSE comment lines
 QUEUE_DEPTH = 2000      # events held for a subscriber that stopped reading
+# Events kept for a page that comes back. iOS suspends a backgrounded PWA, so
+# a phone reconnects constantly and mid-turn — it is the ordinary case, not an
+# edge one. A long answer is a few thousand deltas; past that the page is sent
+# a snapshot instead, which costs one transcript read rather than a wrong view.
+RING = 4000
 TOOL_DETAIL = 90        # characters of tool argument shown on a pill
 HISTORY_ITEMS = 300     # bubbles and pills kept from a past conversation
 HISTORY_BUDGET = 8 << 20  # bytes read from one transcript
@@ -198,6 +203,15 @@ class Agent:
         # Running total the agent reports, kept so each turn can be charged
         # the difference (see the result branch).
         self.spent = 0.0
+        # Everything said, numbered, so a page that dropped the connection can
+        # ask for what it missed instead of silently losing the middle of an
+        # answer. `partial` and `open_tools` are what is *not* in the
+        # transcript yet — Claude Code writes a message when it completes — and
+        # together with the transcript they are a whole view of the turn.
+        self.seq = 0
+        self.ring = collections.deque(maxlen=RING)
+        self.partial = ""
+        self.open_tools = []
 
     # ── fan-out ───────────────────────────────────────────────────────────
     def subscribe(self) -> queue.Queue:
@@ -212,6 +226,9 @@ class Agent:
 
     def emit(self, **event) -> None:
         with self.subscribers_lock:
+            self.seq += 1
+            event["seq"] = self.seq
+            self.ring.append(event)
             channels = list(self.subscribers)
         for channel in channels:
             try:
@@ -220,6 +237,36 @@ class Agent:
                 # A page that stopped reading is a page that went away; the
                 # socket write will fail and clean it up on its own.
                 pass
+
+    def since(self, after: int):
+        """Events the page missed, or None when they are no longer held.
+
+        None is not a failure — it means "repaint from `snapshot()`", which is
+        cheap and always right.
+        """
+        with self.subscribers_lock:
+            if after >= self.seq:
+                return []                       # nothing missed
+            if not self.ring or self.ring[0]["seq"] > after + 1:
+                return None                     # rolled past; too old to patch
+            return [e for e in self.ring if e["seq"] > after]
+
+    def snapshot(self) -> dict:
+        """Everything a page needs to draw the turn it came back to.
+
+        Deliberately *not* the whole conversation: the finished messages are in
+        the transcript the page already reads, and sending them here too would
+        draw each of them twice.
+        """
+        with self.subscribers_lock:
+            return {
+                "t": "resync",
+                "seq": self.seq,
+                "busy": self.busy,
+                "session_id": self.session_id or "",
+                "partial": self.partial,
+                "tools": list(self.open_tools),
+            }
 
     # ── lifecycle ─────────────────────────────────────────────────────────
     def running(self) -> bool:
@@ -363,6 +410,7 @@ class Agent:
             elif inner_type == "content_block_start":
                 if (inner.get("content_block") or {}).get("type") == "text":
                     self.text_blocks.add(index)
+                    self.partial = ""
                     self.emit(t="say_start")
             elif inner_type == "content_block_delta":
                 delta = inner.get("delta") or {}
@@ -371,9 +419,13 @@ class Agent:
                     and delta.get("text")
                     and index in self.text_blocks
                 ):
+                    self.partial += delta["text"]
                     self.emit(t="say", text=delta["text"])
             elif inner_type == "content_block_stop" and index in self.text_blocks:
                 self.text_blocks.discard(index)
+                # Complete, so it is in the transcript now; a page that comes
+                # back reads it from there rather than from the snapshot.
+                self.partial = ""
                 self.emit(t="say_end")
             return
 
@@ -383,16 +435,19 @@ class Agent:
             # have to be reassembled to say anything useful on a pill.
             for block in (event.get("message") or {}).get("content") or []:
                 if isinstance(block, dict) and block.get("type") == "tool_use":
-                    self.emit(
-                        t="tool",
-                        name=block.get("name") or "tool",
-                        detail=tool_detail(block.get("name") or "", block.get("input")),
-                    )
+                    name = block.get("name") or "tool"
+                    detail = tool_detail(name, block.get("input"))
+                    self.open_tools.append({"name": name, "detail": detail})
+                    self.emit(t="tool", name=name, detail=detail)
             return
 
         if kind == "user":
             for block in (event.get("message") or {}).get("content") or []:
                 if isinstance(block, dict) and block.get("type") == "tool_result":
+                    # Tools finish in the order they started, which is what the
+                    # page relies on to match a result to its pill.
+                    if self.open_tools:
+                        self.open_tools.pop(0)
                     self.emit(t="tool_done", ok=not block.get("is_error"))
             return
 
@@ -405,6 +460,9 @@ class Agent:
         if kind == "result":
             with self.lock:
                 self.busy = False
+            # Nothing of this turn is unwritten any more.
+            self.partial = ""
+            self.open_tools = []
             # `total_cost_usd` is the **session** total, measured: three turns
             # came back 0.0607 → 0.0701 → 0.1049, never decreasing. What the
             # turn cost is therefore the difference, and the running total is
@@ -516,9 +574,30 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Connection", "keep-alive")
         self.end_headers()
 
+        # Where the page got to before it lost the connection. EventSource
+        # sends the last id it saw back as a header on its own reconnect, and
+        # `?after=` covers a page that reopens the stream itself.
+        after = self.headers.get("Last-Event-ID")
+        if after is None:
+            after = parse_qs(urlparse(self.path).query).get("after", [""])[0]
+        try:
+            after = int(after)
+        except (TypeError, ValueError):
+            after = None
+
         channel = AGENT.subscribe()
         try:
             self._push({"t": "busy", "on": AGENT.busy})
+            if after is not None:
+                missed = AGENT.since(after)
+                if missed is None:
+                    # Too far behind to patch up. The snapshot plus the
+                    # transcript the page reads is a whole view of the turn,
+                    # and drawing it again is cheaper than being wrong.
+                    self._push(AGENT.snapshot())
+                else:
+                    for event in missed:
+                        self._push(event)
             while True:
                 try:
                     event = channel.get(timeout=HEARTBEAT)
@@ -535,7 +614,14 @@ class Handler(BaseHTTPRequestHandler):
             AGENT.unsubscribe(channel)
 
     def _push(self, event: dict) -> None:
-        self.wfile.write(b"data: " + json.dumps(event, ensure_ascii=False).encode() + b"\n\n")
+        # The id is what the browser hands back as Last-Event-ID after a drop.
+        # Replayed events keep their own, so a page never applies one twice.
+        line = b""
+        if isinstance(event.get("seq"), int):
+            line = b"id: %d\n" % event["seq"]
+        self.wfile.write(
+            line + b"data: " + json.dumps(event, ensure_ascii=False).encode() + b"\n\n"
+        )
         self.wfile.flush()
 
     def do_POST(self):

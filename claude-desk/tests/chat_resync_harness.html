@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>chat reconnect harness</title>
+  <style>iframe { width: 420px; height: 720px; border: 0; }</style>
+</head>
+<body>
+  <!-- The real page, in demo mode: no websocket, no stream, no agent. The
+       events a reconnect would deliver are fed in through window._chat, which
+       app.js only exposes in demo mode. -->
+  <iframe id="page" src="/ui/index.html?demo=1&chat=1&mobile=1"></iframe>
+  <pre id="result">pending</pre>
+  <script>
+    window.onerror = function (msg, url, line) {
+      document.getElementById('result').textContent = 'ERR ' + msg + ' @' + line;
+    };
+
+    function done(obj) {
+      document.getElementById('result').textContent = JSON.stringify(obj);
+    }
+
+    document.getElementById('page').addEventListener('load', function () {
+      const win = document.getElementById('page').contentWindow;
+      setTimeout(function () { run(win); }, 50);
+    });
+
+    function bubbles(log) { return log.querySelectorAll('.bubble.them').length; }
+
+    function run(win) {
+      const chat = win._chat;
+      if (!chat) { done({ error: 'no _chat: demo hook missing' }); return; }
+      const log = chat.log;
+      const out = {};
+
+      chat.clear();
+
+      // An answer arrives, numbered.
+      chat.feed({ t: 'busy', on: true, seq: 10 });
+      chat.feed({ t: 'say_start', seq: 11 });
+      chat.feed({ t: 'say', text: 'หนึ่ง ', seq: 12 });
+      out.seqFollowed = chat.seq() === 12;
+
+      // The same events again, as a replay overlapping the live stream —
+      // chat.py subscribes before it replays, so this happens on every
+      // reconnect and must change nothing.
+      chat.feed({ t: 'say', text: 'หนึ่ง ', seq: 12 });
+      chat.feed({ t: 'say_start', seq: 11 });
+      out.afterReplayBubbles = bubbles(log);
+
+      setTimeout(function () {
+        const before = log.querySelector('.bubble.them').textContent;
+        out.textBeforeDrop = before;
+
+        // The phone slept. Everything since is gone, so the server sends a
+        // snapshot: what is not in the transcript yet.
+        chat.feed({
+          t: 'resync', seq: 40, busy: true, session_id: '',
+          partial: 'หนึ่ง สอง สาม',
+          tools: [{ name: 'Bash', detail: 'echo hi' }],
+        });
+
+        setTimeout(function () {
+          out.pillsAfterResync = log.querySelectorAll('.pill').length;
+          out.openPills = log.querySelectorAll('.pill[data-open]').length;
+          out.bubblesAfterResync = bubbles(log);
+          out.textAfterResync = log.querySelector('.bubble.them').textContent;
+
+          // The turn carries on into the same bubble, and an event numbered
+          // below the snapshot is one the snapshot already covered.
+          chat.feed({ t: 'say', text: ' สี่', seq: 41 });
+          chat.feed({ t: 'say', text: 'ซ้ำ', seq: 30 });
+
+          setTimeout(function () {
+            out.textAfterMore = log.querySelector('.bubble.them').textContent;
+            out.bubblesAtEnd = bubbles(log);
+            done(out);
+          }, 60);
+        }, 80);
+      }, 60);
+    }
+  </script>
+</body>
+</html>

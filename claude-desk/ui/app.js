@@ -1037,7 +1037,14 @@
   // rules that keep a long answer cheap to draw can be tested in a browser
   // without an agent behind them.
   const follower = DeskStream.createFollower(chatLog);
-  const stream = DeskStream.createStream({ follower: follower });
+  const stream = DeskStream.createStream({
+    follower: follower,
+    // Demo mode runs in headless Chrome for tests, which produces one frame
+    // and then stops: a chained requestAnimationFrame never gets past the
+    // first step there, and the log would sit half-drawn. The live page always
+    // uses real frames.
+    raf: DEMO ? function (fn) { setTimeout(fn, 0); } : undefined,
+  });
   function add(node) {
     follower.place(node, typing || null);
     follower.followIfPinned();
@@ -1138,7 +1145,69 @@
     emptyState();
   }
 
+  function addPill(name, detail) {
+    const pill = add(el('div', 'pill'));
+    pill.appendChild(el('span', 'p-dot'));
+    pill.appendChild(el('span', 'p-name', name));
+    pill.appendChild(el('span', 'p-detail', detail || ''));
+    pill.dataset.open = '1';
+    return pill;
+  }
+
+  // Everything that was missed is gone: draw the turn again from the two
+  // places that still know it. The transcript has every message that
+  // finished — Claude Code writes one as it completes — and the snapshot has
+  // exactly what has not been written yet, the half-said answer and the tools
+  // still running. Sending both means nothing is drawn twice.
+  async function resync(ev) {
+    repainting = true;
+    held = [];
+    try {
+      setChatBusy(!!ev.busy);
+      clearLog();
+      note('');
+      if (ev.session_id) await paintHistory(ev.session_id);
+      for (const tool of ev.tools || []) addPill(tool.name, tool.detail);
+      if (ev.partial) {
+        stream.open(add(el('div', 'bubble them')));
+        stream.push(ev.partial);
+      }
+      showTyping(chatBusy && !stream.active());
+    } finally {
+      repainting = false;
+    }
+    // Deltas that arrived during the transcript read, in order.
+    const queued = held;
+    held = [];
+    for (const item of queued) applyChatEvent(item);
+    follower.followIfPinned();
+  }
+
+  // Every event the agent sends is numbered. A phone drops this connection
+  // constantly — iOS suspends a backgrounded PWA — so reconnecting mid-answer
+  // is the ordinary case, and EventSource hands the last id back as
+  // `Last-Event-ID` when it does. What the page owes in return is to ignore
+  // anything it has already applied, since a replay and the live stream
+  // overlap by design (chat.py subscribes before it replays).
+  let lastSeq = 0;
+  let repainting = false;
+  let held = [];
+
   function onChatEvent(ev) {
+    if (typeof ev.seq === 'number') {
+      if (ev.seq <= lastSeq) return;
+      lastSeq = ev.seq;
+    }
+    // A repaint reads the transcript over the network; events that land while
+    // it is in flight wait rather than draw into a log about to be cleared.
+    // They are held past this point, so they keep their place in the order and
+    // are not weighed against `lastSeq` a second time.
+    if (repainting && ev.t !== 'resync') { held.push(ev); return; }
+    applyChatEvent(ev);
+  }
+
+  function applyChatEvent(ev) {
+    if (ev.t === 'resync') { resync(ev); return; }
     if (ev.t === 'busy') { setChatBusy(ev.on); return; }
     if (ev.t === 'reset') {
       // The stream is the single place a reset is acted on, so a resume
@@ -1166,7 +1235,7 @@
       return;
     }
     if (ev.t === 'say') {
-      if (!stream.active()) { onChatEvent({ t: 'say_start' }); }
+      if (!stream.active()) { applyChatEvent({ t: 'say_start' }); }
       stream.push(ev.text);
       return;
     }
@@ -1175,11 +1244,7 @@
       showTyping(false);
       const first = chatLog.querySelector('.chat-empty');
       if (first) first.remove();
-      const pill = add(el('div', 'pill'));
-      pill.appendChild(el('span', 'p-dot'));
-      pill.appendChild(el('span', 'p-name', ev.name));
-      pill.appendChild(el('span', 'p-detail', ev.detail || ''));
-      pill.dataset.open = '1';
+      addPill(ev.name, ev.detail);
       return;
     }
     if (ev.t === 'tool_done') {
@@ -1210,7 +1275,10 @@
 
   function openChatStream() {
     if (chatStream || DEMO) return;
-    chatStream = new EventSource('chat/events');
+    // `after` covers the page reopening the stream itself (a view switch, a
+    // reload with events already applied); EventSource's own reconnect sends
+    // the same number back as a Last-Event-ID header without being asked.
+    chatStream = new EventSource('chat/events' + (lastSeq ? '?after=' + lastSeq : ''));
     chatStream.onmessage = (e) => {
       try { onChatEvent(JSON.parse(e.data)); } catch (_) { /* ignore a bad frame */ }
     };
@@ -1390,4 +1458,17 @@
   }
 
   window._term = term;
+
+  // Demo only, like `window.term` above: lets tests/chat_resync_harness.html
+  // feed the page the events a reconnect delivers and read back what the log
+  // did. Never exposed on the live page — there is no stream open in demo
+  // mode, so this is the only way in.
+  if (DEMO) {
+    window._chat = {
+      feed: onChatEvent,
+      clear: clearLog,
+      log: chatLog,
+      seq: function () { return lastSeq; },
+    };
+  }
 })();
