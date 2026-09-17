@@ -1036,12 +1036,40 @@
   // Where the text goes and whether to chase it live in stream.js, so the
   // rules that keep a long answer cheap to draw can be tested in a browser
   // without an agent behind them.
+  // stream.js is a separate file, and a page that got index.html but not it
+  // would throw here — taking the terminal down with it, which is the half of
+  // the desk that always works and has nothing to do with chat. The stand-in
+  // draws the same thing the slow way: correct, just without the coalescing
+  // and the paragraph tail.
+  const Stream = window.DeskStream || {
+    createFollower: function (log) {
+      return {
+        pinned: true, sentinel: null,
+        place: function (node, before) { log.insertBefore(node, before || null); return node; },
+        toBottom: function () { log.scrollTop = log.scrollHeight; },
+        followIfPinned: function () { log.scrollTop = log.scrollHeight; },
+      };
+    },
+    createStream: function () {
+      let node = null;
+      let raw = '';
+      return {
+        open: function (el) { node = el; node.textContent = ''; raw = ''; },
+        push: function (text) { if (node) { raw += text; node.textContent = raw; } },
+        close: function (render) { if (node && render) render(node, raw); node = null; raw = ''; },
+        abandon: function () { node = null; raw = ''; },
+        active: function () { return node; },
+        commits: function () { return 0; },
+      };
+    },
+  };
+
   const jumpBtn = document.getElementById('chat-jump');
-  const follower = DeskStream.createFollower(chatLog, {
+  const follower = Stream.createFollower(chatLog, {
     onChange: function (pinned) { jumpBtn.hidden = pinned; },
   });
   jumpBtn.addEventListener('click', function () { follower.toBottom(); });
-  const stream = DeskStream.createStream({
+  const stream = Stream.createStream({
     follower: follower,
     // Demo mode runs in headless Chrome for tests, which produces one frame
     // and then stops: a chained requestAnimationFrame never gets past the
@@ -1142,7 +1170,7 @@
     // Everything but the sentinel: losing it would leave the view unable to
     // tell whether the reader is at the bottom.
     for (const node of Array.from(chatLog.children)) {
-      if (node !== follower.sentinel) node.remove();
+      if (node !== follower.sentinel) node.remove();   // null sentinel: removes all
     }
     stream.abandon();
     typing = null;

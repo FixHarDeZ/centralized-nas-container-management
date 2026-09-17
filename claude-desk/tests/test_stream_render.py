@@ -192,3 +192,5 @@ def test_a_failed_turn_says_why(resync):
 
 def test_a_half_typed_message_is_kept(resync):
     assert resync["draft"] == "ร่างที่ยังพิมพ์ไม่จบ"
+    # Saving it is only half: a reload has to put it back in the box.
+    assert resync["draftRestored"] == "ร่างที่ยังพิมพ์ไม่จบ"

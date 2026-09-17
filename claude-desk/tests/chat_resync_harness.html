@@ -101,8 +101,16 @@
             box.dispatchEvent(new win.Event('input'));
             setTimeout(function () {
               out.draft = win.localStorage.getItem('claude-desk.draft');
-              win.localStorage.removeItem('claude-desk.draft');
-              done(out);
+              // And the half that matters: it comes back. A reset is what a
+              // reload looks like from here — the page asks who it is talking
+              // to and puts the draft for that conversation back in the box.
+              box.value = '';
+              chat.feed({ t: 'reset', session_id: '', seq: 55 });
+              setTimeout(function () {
+                out.draftRestored = box.value;
+                win.localStorage.removeItem('claude-desk.draft');
+                done(out);
+              }, 60);
             }, 500);
           }, 60);
         }, 80);
