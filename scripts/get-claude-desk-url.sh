@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # กำหนด Domain และ Port ที่ต้องการ
-DOMAIN="fixhardez.synology.me"
+DOMAIN=""
 PORT="15072"
 
 # ดึงเฉพาะ IPv4 จาก nslookup (ตัดข้อมูล header และเอาบรรทัด Address ล่าสุด)
