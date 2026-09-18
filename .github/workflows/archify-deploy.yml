@@ -1,0 +1,51 @@
+name: Update and Deploy Architecture Map
+
+on:
+  push:
+    branches:
+      - main # เปลี่ยนเป็นชื่อ branch หลักของคุณ
+    paths-ignore:
+      - 'README.md'
+      - '.gitignore'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: 'pages'
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # รันคำสั่ง generate ของ Archify เพื่อ parse stack/folder ใหม่
+      - name: Run Archify Generator
+        run: |
+          npx archify generate --output ./dist
+          # หรือคำสั่ง build script ตาม package.json ของโปรเจกต์คุณ
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './dist' # โฟลเดอร์ output ที่ได้จากการ build/generate
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
