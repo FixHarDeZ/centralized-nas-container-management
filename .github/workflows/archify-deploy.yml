@@ -3,10 +3,11 @@ name: Update and Deploy Architecture Map
 on:
   push:
     branches:
-      - main
+      - main # เปลี่ยนเป็น master หาก repo ของคุณใช้ branch master
     paths-ignore:
       - 'README.md'
       - '.gitignore'
+  workflow_dispatch: # รองรับการกด Run workflow แบบ manual จากหน้า GitHub Actions
 
 permissions:
   contents: read
@@ -43,8 +44,7 @@ jobs:
       - name: Install dependencies & Build
         run: |
           cd archify
-          npm ci
-          # แปลง data หรือ copy โครงสร้างจาก ../repo-data เข้ามาประมวลผล
+          npm install
           npm run build
 
       - name: Setup Pages
@@ -53,7 +53,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: './archify/dist' # หรือ ./archify/build ตาม output directory ของ archify
+          path: './archify/dist' # หาก output ของ archify ออกที่โฟลเดอร์ build ให้เปลี่ยนเป็น ./archify/build
 
       - name: Deploy to GitHub Pages
         id: deployment
