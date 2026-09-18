@@ -3,7 +3,7 @@ name: Update and Deploy Architecture Map
 on:
   push:
     branches:
-      - main # เปลี่ยนเป็นชื่อ branch หลักของคุณ
+      - main
     paths-ignore:
       - 'README.md'
       - '.gitignore'
@@ -24,19 +24,28 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout user repository
         uses: actions/checkout@v4
+        with:
+          path: 'repo-data'
+
+      - name: Checkout Archify Engine
+        uses: actions/checkout@v4
+        with:
+          repository: 'tt-a1i/archify'
+          path: 'archify'
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      # รันคำสั่ง generate ของ Archify เพื่อ parse stack/folder ใหม่
-      - name: Run Archify Generator
+      - name: Install dependencies & Build
         run: |
-          npx archify generate --output ./dist
-          # หรือคำสั่ง build script ตาม package.json ของโปรเจกต์คุณ
+          cd archify
+          npm ci
+          # แปลง data หรือ copy โครงสร้างจาก ../repo-data เข้ามาประมวลผล
+          npm run build
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
@@ -44,7 +53,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: './dist' # โฟลเดอร์ output ที่ได้จากการ build/generate
+          path: './archify/dist' # หรือ ./archify/build ตาม output directory ของ archify
 
       - name: Deploy to GitHub Pages
         id: deployment
