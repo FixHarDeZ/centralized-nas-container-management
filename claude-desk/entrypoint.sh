@@ -98,12 +98,61 @@ fi
     done
 ) &
 
+# ── The desks ─────────────────────────────────────────────────────────────
+# One ttyd per person, each with its own tmux session, because ttyd's
+# --max-clients is per instance and a shared `main` would mean two people on
+# one keyboard. DESK_USERS is the roster, `<basic auth user>:<port>`; nginx
+# routes /ws by $remote_user to the same ports (nginx/nginx.conf keeps its
+# own copy of this map — tests/test_desks.py fails if the two drift).
+#
 # -W        writable (ttyd >= 1.7 is read-only by default)
-# -m 1      one browser at a time; the tmux session is shared anyway, and a
-#           second client is either you on another device or an intruder
+# -m 2      two browsers per desk: one person on a phone and a laptop. Not
+#           more — the tmux session is shared, so every extra client is
+#           another keyboard in the same pane. A backgrounded iOS tab keeps
+#           its slot (the browser answers the ws ping without waking the
+#           page), which is what -m 1 made fatal: the second device could
+#           never get in and the page just said "reconnecting" forever.
 # -P 30     websocket ping so the DSM reverse proxy never idles us out
-# tmux new -A: attach if `main` exists, create otherwise — a closed tab is
-#           not a lost job
-exec ttyd -W -p 7681 -m 1 -P 30 \
+# tmux new -A: attach if the session exists, create otherwise — a closed tab
+#           is not a lost job
+desk_session() {
+    # tmux refuses '.' and ':' in a session name; the desk is named after the
+    # person either way. upload.py derives the same name from the same
+    # roster, so keep the two rules identical.
+    printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' '-'
+}
+
+run_desk() {
+    local port="$1" session="$2"
+    ttyd -W -p "$port" -m 2 -P 30 \
+        -t disableLeaveAlert=true \
+        tmux new-session -A -s "$session"
+}
+
+IFS=',' read -ra DESKS <<< "${DESK_USERS:-desk:7681}"
+primary_port=""
+primary_session=""
+for entry in "${DESKS[@]}"; do
+    user="${entry%%:*}"
+    port="${entry##*:}"
+    session="$(desk_session "$user")"
+    if [[ -z "$primary_port" ]]; then
+        primary_port="$port"
+        primary_session="$session"
+        continue
+    fi
+    echo "desk: $user -> tmux '$session' on :$port" >&2
+    (
+        while true; do
+            run_desk "$port" "$session"
+            sleep 2
+        done
+    ) &
+done
+
+# The first desk on the roster is PID 1: if it dies the container restarts,
+# which is the behaviour this stack had when there was only one.
+echo "desk: primary -> tmux '$primary_session' on :$primary_port" >&2
+exec ttyd -W -p "$primary_port" -m 2 -P 30 \
     -t disableLeaveAlert=true \
-    tmux new-session -A -s main
+    tmux new-session -A -s "$primary_session"

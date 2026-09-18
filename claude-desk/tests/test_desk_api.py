@@ -182,7 +182,7 @@ def test_a_half_written_finished_mark_is_dropped(tmp_path, monkeypatch):
 # ── The pane guard ────────────────────────────────────────────────────────
 def test_resume_is_refused_while_a_program_holds_the_pane(monkeypatch):
     """Otherwise the command is typed into Claude Code's prompt as a message."""
-    monkeypatch.setattr(upload, "pane_command", lambda: "node")
+    monkeypatch.setattr(upload, "pane_command", lambda _t=None: "node")
     sent = []
     monkeypatch.setattr(upload, "_tmux", lambda *a: (sent.append(a), (True, ""))[1])
     code, message = upload.type_into_pane("claude --resume x")
@@ -192,7 +192,7 @@ def test_resume_is_refused_while_a_program_holds_the_pane(monkeypatch):
 
 
 def test_resume_types_into_a_free_shell(monkeypatch):
-    monkeypatch.setattr(upload, "pane_command", lambda: "bash")
+    monkeypatch.setattr(upload, "pane_command", lambda _t=None: "bash")
     sent = []
     monkeypatch.setattr(upload, "_tmux", lambda *a: (sent.append(a), (True, ""))[1])
     code, _ = upload.type_into_pane("claude --resume x")
@@ -201,7 +201,7 @@ def test_resume_types_into_a_free_shell(monkeypatch):
 
 
 def test_no_tmux_server_is_not_a_crash(monkeypatch):
-    monkeypatch.setattr(upload, "pane_command", lambda: None)
+    monkeypatch.setattr(upload, "pane_command", lambda _t=None: None)
     code, _ = upload.type_into_pane("claude")
     assert code == 503
 
@@ -213,7 +213,7 @@ def test_quitting_sends_escape_then_exit(monkeypatch):
     """Ctrl-C twice is the documented way out and measured not to work here."""
     sent = []
     seen = iter(["claude", "claude", "bash"])
-    monkeypatch.setattr(upload, "pane_command", lambda: next(seen))
+    monkeypatch.setattr(upload, "pane_command", lambda _t=None: next(seen))
     monkeypatch.setattr(upload, "_tmux", lambda *a: (sent.append(a), (True, ""))[1])
     monkeypatch.setattr(upload.time, "sleep", lambda _s: None)
     code, _ = upload.quit_pane()
@@ -228,14 +228,14 @@ def test_quitting_sends_escape_then_exit(monkeypatch):
 
 def test_quitting_an_already_free_pane_types_nothing(monkeypatch):
     sent = []
-    monkeypatch.setattr(upload, "pane_command", lambda: "bash")
+    monkeypatch.setattr(upload, "pane_command", lambda _t=None: "bash")
     monkeypatch.setattr(upload, "_tmux", lambda *a: (sent.append(a), (True, ""))[1])
     assert upload.quit_pane()[0] == 200
     assert sent == []
 
 
 def test_a_pane_that_ignores_exit_is_reported_not_assumed(monkeypatch):
-    monkeypatch.setattr(upload, "pane_command", lambda: "vim")
+    monkeypatch.setattr(upload, "pane_command", lambda _t=None: "vim")
     monkeypatch.setattr(upload, "_tmux", lambda *a: (True, ""))
     monkeypatch.setattr(upload.time, "sleep", lambda _s: None)
     code, message = upload.quit_pane()
@@ -244,7 +244,7 @@ def test_a_pane_that_ignores_exit_is_reported_not_assumed(monkeypatch):
 
 
 def test_quitting_with_no_tmux_server_is_not_a_crash(monkeypatch):
-    monkeypatch.setattr(upload, "pane_command", lambda: None)
+    monkeypatch.setattr(upload, "pane_command", lambda _t=None: None)
     assert upload.quit_pane()[0] == 503
 
 

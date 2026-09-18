@@ -13,21 +13,29 @@ services:
     env_file: .env
     environment:
       - TZ=Asia/Bangkok
+      # The roster: one ttyd (and one tmux session) per basic auth user in
+      # nginx/.htpasswd, `<user>:<port>`. The first entry is the desk ttyd
+      # runs as PID 1 and the one anybody not listed lands on. nginx routes
+      # /ws by $remote_user to these same ports — its map is the second copy
+      # of this line, and tests/test_desks.py fails if they drift.
+      - DESK_USERS=fixhardez:7681,Pookzii:7684
       # No STATUSLINE_BAR_W here on purpose: the status line sizes itself from
       # COLUMNS on every render, and the same desk is opened from both a phone
       # and a laptop. Setting it would pin one layout for both.
     expose:
-      - "7681"   # ttyd
+      - "7681"   # ttyd, desk 1 (fixhardez)
+      - "7684"   # ttyd, desk 2 (Pookzii)
       - "7682"   # upload.py (PUT /upload/<name> → /work/in)
       - "7683"   # chat.py (SSE + POST, drives a second Claude Code)
     volumes:
       # Whole home, not just ~/.claude: onboarding state lives in ~/.claude.json
       - claude_desk_home:/home/claude
       - ${CLAUDE_WORK_DIR}:/work
-    # 2g is the whole budget: node + soffice render + python. The host has
-    # ~4.5 GB free and has been OOM-killed twice — this cap means a runaway
+    # 3g, not 2g: two desks means two Claude Code TUIs can be up at once,
+    # plus chat.py's own child and a soffice render. The host has ~4.3 GB
+    # free and has been OOM-killed twice — this cap still means a runaway
     # deck kills this container, not the NAS. cpus: is a no-op on DSM.
-    mem_limit: 2g
+    mem_limit: 3g
     labels:
       - "com.centurylinklabs.watchtower.enable=false"
 

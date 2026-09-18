@@ -57,6 +57,43 @@ DONE_FILE = os.environ.get(
 )
 TMUX_TARGET = os.environ.get("DESK_TMUX_TARGET", "main:0.0")
 
+# One tmux session per person — see entrypoint.sh. This process serves every
+# desk, so which session a request drives comes from the basic auth user
+# nginx forwards as X-Desk-User. Without that, one person's Quit button would
+# put an Escape and a /exit into the other person's running turn.
+DESK_USERS = os.environ.get("DESK_USERS", "")
+
+
+def roster(spec: str) -> dict:
+    """'fix:7681,Pook:7684' → {'fix': 'fix:0.0', 'pook': 'pook:0.0'}.
+
+    Keyed by the lowercased user because that is also how entrypoint.sh names
+    the session; both sides must sanitise identically or the API drives a
+    session nobody is attached to.
+    """
+    desks = {}
+    for entry in spec.split(","):
+        user = entry.split(":", 1)[0].strip()
+        if not user:
+            continue
+        session = re.sub(r"[^a-z0-9_-]", "-", user.lower())
+        desks[user.lower()] = session + ":0.0"
+    return desks
+
+
+DESKS = roster(DESK_USERS)
+
+
+def target_for(user: str) -> str:
+    """The tmux target for a request, or the default desk.
+
+    An unknown user (no roster, or a basic auth account that predates it)
+    lands on the first desk, which is the one ttyd runs as PID 1.
+    """
+    if not DESKS:
+        return TMUX_TARGET
+    return DESKS.get((user or "").lower(), next(iter(DESKS.values())))
+
 # The two folders the page knows about. Anything else is a 404: the share
 # root holds #recycle and @eaDir, which must never be reachable from here.
 DIRS = {"in": os.path.join(WORK_DIR, "in"), "out": os.path.join(WORK_DIR, "out")}
@@ -214,28 +251,30 @@ def _tmux(*args) -> tuple:
     return done.returncode == 0, done.stdout.strip()
 
 
-def pane_command():
+def pane_command(target: str = None):
     """Name of the program with the keyboard in the desk's pane, or None."""
     ok, name = _tmux(
-        "display-message", "-p", "-t", TMUX_TARGET, "#{pane_current_command}"
+        "display-message", "-p", "-t", target or TMUX_TARGET,
+        "#{pane_current_command}"
     )
     return name if ok and name else None
 
 
-def type_into_pane(line: str) -> tuple:
+def type_into_pane(line: str, target: str = None) -> tuple:
     """(code, message). Refuses while a program owns the pane."""
-    current = pane_command()
+    target = target or TMUX_TARGET
+    current = pane_command(target)
     if current is None:
         return 503, "no tmux pane"
     if current not in SHELLS:
         # The page turns this into "something is running — quit it first",
         # and offers the button that calls quit_pane below.
         return 409, "busy:" + current
-    ok, _ = _tmux("send-keys", "-t", TMUX_TARGET, line, "Enter")
+    ok, _ = _tmux("send-keys", "-t", target, line, "Enter")
     return (200, "ok") if ok else (503, "send-keys failed")
 
 
-def quit_pane() -> tuple:
+def quit_pane(target: str = None) -> tuple:
     """Put the pane back at a shell prompt.
 
     Without this the sheet is a trap: "New session" starts Claude Code in the
@@ -250,22 +289,23 @@ def quit_pane() -> tuple:
     `claude` afterwards), while Escape + `/exit` returned it to `bash` both at
     an idle prompt and mid-turn.
     """
-    current = pane_command()
+    target = target or TMUX_TARGET
+    current = pane_command(target)
     if current is None:
         return 503, "no tmux pane"
     if current in SHELLS:
         return 200, current
-    _tmux("send-keys", "-t", TMUX_TARGET, "Escape")
+    _tmux("send-keys", "-t", target, "Escape")
     time.sleep(0.4)
-    _tmux("send-keys", "-t", TMUX_TARGET, "/exit", "Enter")
+    _tmux("send-keys", "-t", target, "/exit", "Enter")
     deadline = time.time() + QUIT_WAIT
     while time.time() < deadline:
         time.sleep(0.5)
-        now = pane_command()
+        now = pane_command(target)
         if now is None or now in SHELLS:
             return 200, now or "gone"
     # Something that does not answer /exit — say so rather than pretending.
-    return 409, "busy:" + (pane_command() or "?")
+    return 409, "busy:" + (pane_command(target) or "?")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -288,6 +328,15 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(data)
+
+    def _desk(self) -> str:
+        """The tmux target this request may drive.
+
+        nginx overwrites X-Desk-User with $remote_user on the way in
+        (proxy_set_header wins over whatever the browser sent), and nginx is
+        the only thing that can reach this port.
+        """
+        return target_for(self.headers.get("X-Desk-User") or "")
 
     def _route(self):
         """('in'|'out', name or None) — None name means "the whole folder"."""
@@ -317,16 +366,16 @@ class Handler(BaseHTTPRequestHandler):
             # The pane's state ships with the list so the sheet can say up
             # front that resuming is not possible right now, rather than
             # letting every tap come back 409.
-            self._json({"sessions": sessions(), "pane": pane_command()})
+            self._json({"sessions": sessions(), "pane": pane_command(self._desk())})
         else:
             self._reply(404, "not here")
 
     def do_POST(self):
         path = self.path.split("?", 1)[0]
         if path == "/api/new":
-            code, message = type_into_pane("claude")
+            code, message = type_into_pane("claude", self._desk())
         elif path == "/api/quit":
-            code, message = quit_pane()
+            code, message = quit_pane(self._desk())
         elif path == "/api/resume":
             length = int(self.headers.get("Content-Length") or 0)
             try:
@@ -340,7 +389,9 @@ class Handler(BaseHTTPRequestHandler):
             if not UUID.match(session_id):
                 self._reply(400, "bad id")
                 return
-            code, message = type_into_pane("claude --resume " + session_id)
+            code, message = type_into_pane(
+                "claude --resume " + session_id, self._desk()
+            )
         else:
             self._reply(404, "not here")
             return

@@ -1,5 +1,30 @@
 # claude-desk — Daily Log
 
+## 2026-09-18 — สองคนสองโต๊ะ (แก้ reconnect รัวๆ)
+
+**อาการ:** แฟนเปิดใช้อยู่ก่อน แล้วเราเข้าด้วย basic auth user ของตัวเอง → หน้าเว็บขึ้น `reconnecting` วนไม่หยุด ใช้ไม่ได้เลย
+
+**เหตุ:** `ttyd -m 1` — `--max-clients` เป็นของ ttyd **แต่ละ instance** คนที่สองโดนปฏิเสธ websocket, `ui/app.js:181` `onclose` → `scheduleReconnect()` backoff ถึง 10 วิ วนตลอด. สัญญาณมีที่เดียวคือ log ของคอนเทนเนอร์:
+
+```
+W: refuse to serve WS client due to the --max-clients option.
+tmux list-clients -t main → /dev/pts/0: main [178x30] (attached)
+```
+
+**และ "ให้อีกคนปิดแท็บ" ไม่ใช่ทางแก้** — แท็บ iOS ที่ปิดจอทิ้งไว้ยังถือ slot เพราะเบราว์เซอร์ตอบ ws ping ที่ชั้น network เอง ไม่ต้องปลุกหน้าเว็บ (`-P 30` เลยไม่เก็บกวาด และ `proxy_read_timeout 86400s` ก็ไม่ตัด)
+
+**ทำ:** ttyd ตัวละคน คนละพอร์ต คนละ tmux session
+- roster = `DESK_USERS=fixhardez:7681,Pookzii:7684` ใน compose, `entrypoint.sh` spawn ตาม (ตัวแรก = PID 1, ที่เหลือมี respawn loop เหมือน upload.py/chat.py)
+- `nginx.conf` `map $remote_user $desk_port` + **`resolver 127.0.0.11`** (ตัวแปรใน `proxy_pass` = resolve ตอน request ไม่ใช่ตอน start ไม่มี resolver = 502 ทุกครั้ง)
+- map คือ**สำเนาที่สองของ roster** (nginx อ่าน env ไม่ได้) → `tests/test_desks.py` แดงถ้า drift — เพราะ drift = 502 ของคนเดียว ไม่ใช่ของทั้งสแตก
+- **`/api/` ต้อง route ตามคนด้วย** ไม่ใช่แค่ `/ws`: ทุก endpoint ที่นั่นพิมพ์ลง pane — nginx เขียนทับ `X-Desk-User` ด้วย `$remote_user` (`proxy_set_header` ชนะ header ที่เบราว์เซอร์ส่งเอง) แล้ว `upload.py:target_for()` map เป็น tmux target ไม่งั้น **ปุ่ม Quit ของคนหนึ่งยิง Escape+`/exit` เข้าเทิร์นที่อีกคนรันอยู่** ซึ่งแย่กว่าบั๊กเดิม
+- `-m 2` ต่อโต๊ะ (คนเดียวกันเปิดมือถือ+แล็ปท็อป, แท็บค้างไม่ล็อกตัวเองออก) + `window-size latest` ใน `tmux.conf` — default ของ tmux ย่อจอตาม client ที่**เล็กสุด** มือถือ ~40 คอลัมน์จะบีบแล็ปท็อป แล้ว `statusline.sh` เด้งเข้าโหมดมือถือบนจอกว้าง (เหตุผลเดียวกับที่ห้ามฟิก `STATUSLINE_BAR_W`)
+- `mem_limit` 2g → **3g**: สอง Claude Code TUI + child ของ chat.py + soffice; host เหลือว่าง ~4.3 GB (วัดตอนแก้) cap ยังทำหน้าที่เดิมคือให้คอนเทนเนอร์ตายก่อนเครื่อง
+
+**ยังแชร์กันตั้งใจ** (เขียนไว้ใน README หัวข้อ "Two people, two desks" ไม่ใช่โต๊ะส่วนตัวจริง): chat view (chat.py process เดียว agent เดียว session_id เดียว — stop ของคนหนึ่งตัดเทิร์นอีกคน), quota chip + noti จบเทิร์น (`desk-status.json`/`desk-done.json` ไฟล์เดียวใน home volume เดียว), sessions sheet (`~/.claude/projects/-work/` ที่เดียว), `/work`
+
+**verify หลัง deploy:** ttyd ฟังทั้ง 7681/7684, `nginx -t` ผ่าน, แฟนที่เปิดค้างอยู่เด้งเข้า tmux `pookzii` ทันทีจริง (`tmux ls`), ยิง `/api/sessions` ในคอนเทนเนอร์ด้วย header 3 แบบ → `Pookzii`=pane bash, `fixhardez`=None (ยังไม่มีใคร attach), `nobody`=None (ตกไปโต๊ะ default ถูกต้อง). เทสต์ 96 + 6 ใหม่ ผ่านหมด
+
 ## 2026-09-16 (ดึกมาก) — cost/token ต่อเทิร์น + history ใช้กับหน้าแชทได้
 
 **อาการที่แจ้ง:** กด history แล้วแชทเดิมกลับมาใน**หน้าเทอร์มินัล** แต่ใน**หน้าแชทไม่กลับมา** — เพราะ sheet ยิง `/api/resume` ที่พิมพ์ลง tmux อย่างเดียว ไม่ว่าจะเปิดจาก view ไหน

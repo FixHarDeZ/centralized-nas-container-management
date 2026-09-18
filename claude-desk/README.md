@@ -15,7 +15,8 @@ and download the `.pptx` a few minutes later.
 ```
 phone ──HTTPS :15072 (DSM RP)──▶ claude-desk-nginx :5072
                                    ├─ /            static UI  (ui/)
-                                   ├─ /ws, /token  ──▶ claude-desk :7681 (ttyd → tmux → bash → claude)
+                                   ├─ /ws, /token  ──▶ claude-desk :7681 (ttyd → tmux `fixhardez` → bash → claude)
+                                   │                └▶ claude-desk :7684 (ttyd → tmux `pookzii`, routed by basic auth user)
                                    ├─ /files/in/, /files/out/   autoindex JSON + the files (read-only)
                                    ├─ /upload/<dir>/[name]      ──▶ claude-desk :7682 (upload.py → /work/<dir>)
                                    ├─ /api/…                    ──▶ claude-desk :7682 (upload.py → ~/.claude, tmux)
@@ -34,7 +35,7 @@ phone ──HTTPS :15072 (DSM RP)──▶ claude-desk-nginx :5072
   - `GET /api/sessions` — past transcripts in `/work`, newest first, with the pane's current command.
   - `POST /api/resume {"id": "<uuid>"}` / `POST /api/new` — type the command into the tmux pane.
   - `POST /api/quit` — Escape + `/exit` into the pane, then wait for a shell.
-- **`claude-desk`** — Debian + Node 22 + `@anthropic-ai/claude-code` (pinned `ARG CLAUDE_VERSION`), LibreOffice `*-nogui`, poppler, qpdf, Thai fonts, the Python and npm packages the official office skills need. PID 1 is `ttyd -W -m 1 -P 30 tmux new -A -s main`. Runs as uid 1000 (Claude Code refuses `--dangerously-skip-permissions` as root). Never published on the host.
+- **`claude-desk`** — Debian + Node 22 + `@anthropic-ai/claude-code` (pinned `ARG CLAUDE_VERSION`), LibreOffice `*-nogui`, poppler, qpdf, Thai fonts, the Python and npm packages the official office skills need. PID 1 is `ttyd -W -m 2 -P 30 tmux new -A -s <desk>`, one ttyd per person — see [Two people, two desks](#two-people-two-desks). Runs as uid 1000 (Claude Code refuses `--dangerously-skip-permissions` as root). Never published on the host.
 - **`claude-desk-nginx`** — `nginx:alpine` with `ui/` baked in (`nginx/Dockerfile`): basic auth on every path (`nginx/.htpasswd` from the vault), proxies only the websocket and token endpoints to ttyd, and lists `out/` as JSON. `ui/` cannot be bind-mounted: directories under `/volume2/docker` carry the DSM share ACL, which the nginx worker (uid 101) cannot traverse → 403 on every file. Single-file binds (`nginx.conf`, `.htpasswd`) are read by the root master process and work.
 - **`ui/`** — our own page instead of ttyd's: xterm.js 5.3 (vendored, no CDN), Inter + JetBrains Mono self-hosted, a key bar with `Esc ⇧Tab Tab Ctrl ↑↓←→ ↵NL` and `Paste / ^C A− A+ ⌨`, a rate-limit chip in the header, two right-hand sheets — files (`in/` Add files → PUT, 🗑 delete; `out/` tap to open, ⬇ to save) and sessions — a dark/light theme toggle, PWA manifest for Add-to-Home-Screen. Speaks ttyd's websocket protocol directly (touch scrolling and the iOS keyboard handling adapted from `pawprint0706/ttyd-wrapper`, MIT). `ui/stream.js` holds how an answer fills in — paragraph-tail writes, one commit per frame, an `IntersectionObserver` for "is the reader at the bottom" — kept apart from `app.js` so `tests/stream_harness.html` can drive it in a browser with no agent behind it.
 
@@ -309,18 +310,73 @@ look the same in both themes.
 - Close the tab any time — tmux keeps the session; reopening attaches to the same screen.
 - `?demo=1&mobile=1` on the URL shows the UI with a canned session and no server, for design work; add `&drawer=in|out` or `&sessions` to open a sheet.
 
+## Two people, two desks
+
+Two of us use this desk with separate basic auth accounts. With a single
+`ttyd -m 1` that did not work at all: `--max-clients` is per ttyd instance, so
+whoever opened the page second was refused the websocket, and `ui/app.js` did
+the only thing it can with a closed socket — reconnect, back off, reconnect,
+forever. The container logged the reason and nothing else did:
+
+```
+W: refuse to serve WS client due to the --max-clients option.
+```
+
+"Ask them to close the tab" is not a workaround either: a backgrounded iOS tab
+keeps its slot, because the browser answers the websocket ping from the network
+stack without ever waking the page.
+
+So there is now one ttyd per person, each on its own port with its own tmux
+session, and nginx picks by `$remote_user`:
+
+| basic auth user | ttyd | tmux session |
+| :-- | :-- | :-- |
+| `fixhardez` (and anyone unlisted) | `:7681`, PID 1 | `fixhardez` |
+| `Pookzii` | `:7684` | `pookzii` |
+
+The roster lives in `DESK_USERS` in `docker-compose.yml` (`<user>:<port>`), and
+`nginx.conf` keeps a `map $remote_user $desk_port` copy of it because nginx
+cannot read the environment. `tests/test_desks.py` fails if the two drift —
+the failure mode otherwise is a 502 for one person only. Adding a person is:
+`htpasswd` entry, one entry in each of those two places, deploy.
+
+`/api/` is routed too. nginx sets `X-Desk-User` from `$remote_user` (overwriting
+whatever the browser sent) and `upload.py` maps it to a tmux target, because
+every one of those endpoints types into a pane — without it, **one person's
+Quit button would send Escape + `/exit` into the other person's running turn**.
+
+`-m 2` per desk, not `-m 1`: one person on a phone and a laptop is normal, and a
+stale suspended tab must not lock them out of their own desk. That needs
+`window-size latest` in `tmux.conf` — tmux otherwise sizes the window to the
+*smallest* attached client, so a phone at ~40 columns would clamp the laptop and
+flip `statusline.sh` into its mobile layout on a wide screen.
+
+**What is still shared, on purpose:**
+
+- **Chat.** `chat.py` is one process with one child agent, one SSE ring and one
+  `session_id`. Both views drive the same conversation, and either person's stop
+  button interrupts it.
+- **The quota chip and the finish notification.** `~/.claude/desk-status.json`
+  and `desk-done.json` are single files in one home volume; the numbers are the
+  account's anyway.
+- **The sessions sheet.** Transcripts all live in `~/.claude/projects/-work/`,
+  so the list shows both people's sessions. Resuming one is fine — it opens in
+  your own pane.
+- **`/work` and the drawer.** The share is the point; two agents in it at once
+  is normal now.
+
 ## Limits accepted
 
 - `mimo` runs with `MIMOCODE_DANGEROUSLY_SKIP_PERMISSIONS=1` (the alias in `profile.sh`; the flag form cannot be used from an alias — it lands before the subcommand and MiMoCode just prints help), the same bargain as `claude`: a tap per tool call makes the desk unusable from a phone, and the container is the cage. The alias also clears `CLAUDE_CODE_OAUTH_TOKEN`, because MiMoCode's first-run auth offers to *import Claude Code credentials* and it has its own key — hygiene rather than a boundary, since bash is allowed and ttyd runs as the same uid.
 - **A UI change needs a reload on the phone.** `ui/` is COPYed into the nginx image, so editing it means a rebuild — and `app.js`/`css`/icons are served `no-cache` (revalidate every load) precisely because a week-long cache once hid a deployed fix behind the home-screen PWA. `vendor/` and `fonts/` keep the long cache; they only change with a new image anyway.
 - `set-clipboard on` plus `allow-passthrough on` lets anything in the container push text to the phone's system clipboard through OSC 52, and write escape sequences straight to the browser's terminal — including `mimo` with permissions skipped. The handler in `ui/app.js` refuses OSC 52 *read* requests (`?`), which is the direction that would leak the clipboard back out. Bash in that container is trusted anyway; this is the shape of the trust, written down.
-- Basic auth is the only gate in front of a shell with permission prompts off. The container is the sandbox: no docker socket, no other mounts, `mem_limit: 2g`. Keep the password long; `-m 1` refuses a second concurrent browser.
-- One session, one person. Not multi-user.
-- **Resume and New session need a free prompt.** They type into the pane, and there is only one pane (`ttyd -m 1`, `tmux new -A -s main`), so a running agent has to be quit first. Starting a second agent behind the running one would put two of them in `/work` at once, which is the same reason `mimo` did not get a stack of its own.
+- Basic auth is the only gate in front of a shell with permission prompts off. The container is the sandbox: no docker socket, no other mounts, `mem_limit: 3g`. Keep the passwords long.
+- **Two desks, not two accounts.** Each person gets their own terminal and their own tmux session, but the home volume, `/work`, the chat view, the quota chip and the transcript list are shared — see [Two people, two desks](#two-people-two-desks) for what isolation does and does not buy.
+- **Resume and New session need a free prompt.** They type into *your* pane (`X-Desk-User` decides which), so a running agent there has to be quit first.
 - The rate-limit chip is only as fresh as the last status-line render — it has no other source. A desk that has been idle since yesterday shows yesterday's percentage, dimmed.
 - **The finish notification does not survive a locked phone.** It needs this page's JavaScript to be running, and iOS suspends a backgrounded PWA. Chosen over the alternative on purpose: a Telegram ping from the same `Stop` hook would work with the screen off, but it means a new bot token in the vault, and the desk deliberately holds one credential.
 - `cpus:` does nothing on DSM; a heavy soffice render can pin a few cores for a minute.
-- **Two brains, one desk, no second stack.** `claude` and `mimo` share the image, `/work`, the port and the basic auth. Splitting a `mimo-desk` stack would duplicate the nginx sidecar, the `.htpasswd`, a second DSM reverse-proxy entry and the share, and buy isolation that cannot be used: `ttyd -m 1` + `tmux new -A -s main` means one browser and one screen, so the two agents can never run side by side anyway. If concurrent sessions ever become the point, that is when the split earns itself.
+- **Two brains, one desk, no second stack.** `claude` and `mimo` share the image, `/work`, the port and the basic auth. Splitting a `mimo-desk` stack would duplicate the nginx sidecar, the `.htpasswd`, a second DSM reverse-proxy entry and the share. Running both at once is already possible — a second desk, or a second window in your own tmux session — so the split would buy a directory of duplicated config and nothing else.
 - **`reasoningEffort`, not `reasoning_effort`, in `mimocode.jsonc`.** The snake_case spelling is accepted by the config and silently dropped; the camelCase one is what the AI SDK maps onto the wire. Verified by pointing the harness at a local echo server and reading the body it actually sent — the symptom of getting this wrong is every turn running at mimo's default effort (measured elsewhere at 10,457 tokens/161s against 3,796/79s), which is indistinguishable from "mimo is just slow". Re-checked against MiMoCode itself rather than inherited from opencode — the same capture shows it ignoring `limit.output` and sending `max_tokens: 128000` of its own, which is fine: the rule is that nothing *small* goes out.
 - **The model switcher only offers our two models**, because `disabled_providers: ["xiaomi"]` turns off MiMoCode's built-in catalog — there are no credentials for it here, and `only_configured_models` alone does not hide it.
 - **Comments in `mimocode.jsonc` must be `//`.** MiMoCode validates its config and rejects unknown keys, so the `"_comment"` array opencode ignored takes down `mimo models` and every session with it. It is a `.jsonc` file and real comments parse fine.
