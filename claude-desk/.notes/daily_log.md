@@ -22,6 +22,14 @@
 
 **ผล:** 31 skills, 162 ไฟล์, 2.6 MB, เทสต์ `tests/test_skills.py` 4 ตัวผ่าน
 
+**chromium: ตัดสินใจยังไม่ใส่ (18/09)** — `archify visual-check` ไม่ได้ต้องการ "จอ" มันสั่ง `--headless=new --remote-debugging-pipe --disable-gpu` แล้วคุย CDP ทาง pipe (`bin/visual-check.mjs:249`) ไม่แตะ X11 เลย; ที่ล้มบนเดสก์คือ**หา binary ไม่เจอ** (`google-chrome`/`chromium`/`chromium-browser`). ถ้าจะใส่รอบหน้ามี 3 ด่าน:
+
+1. **sandbox** — โค้ดเติม `--no-sandbox` ให้เฉพาะตอนเป็น root หรือมี env `ARCHIFY_CHROME_NO_SANDBOX=1`; เดสก์เป็น uid 1000 และ DSM kernel มักปิด unprivileged userns (เครื่องเดียวกับที่ไม่มี CFS bandwidth ให้ `cpus:`) → ตั้ง env ตัวนี้ใน compose
+2. **`/dev/shm` 64 MB default ของ docker** — headless Chrome ตายเงียบตรงนี้ และ args ชุดนี้ **ไม่มี** `--disable-dev-shm-usage` → ต้อง `shm_size: 512m` ที่ service
+3. **ขนาด/หน่วยความจำ** — chromium + deps ~400 MB บนอิมเมจที่มี LibreOffice แล้ว และต้องแบ่งจาก `mem_limit: 3g` ตอน render (host เคย OOM 2 ครั้ง)
+
+เหตุผลที่รอ: `deliver` บนเดสก์ผ่าน 9 artifact checks + composition showcase อยู่แล้ว ที่ขาดคือหลักฐาน containment/readability ในเบราว์เซอร์จริง + screenshot ซึ่งงานจากมือถือส่วนใหญ่ไม่ต้องใช้
+
 ## 2026-09-18 — สองคนสองโต๊ะ (แก้ reconnect รัวๆ)
 
 **อาการ:** แฟนเปิดใช้อยู่ก่อน แล้วเราเข้าด้วย basic auth user ของตัวเอง → หน้าเว็บขึ้น `reconnecting` วนไม่หยุด ใช้ไม่ได้เลย
