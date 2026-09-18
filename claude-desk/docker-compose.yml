@@ -3,7 +3,7 @@ services:
     build:
       context: .
       args:
-        CLAUDE_VERSION: "2.1.273"
+        CLAUDE_VERSION: "2.1.276"
         SKILLS_REF: "34040c9c568585f6929bedeaad110ad08f079624"
     container_name: claude-desk
     restart: unless-stopped
