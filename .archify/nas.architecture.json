@@ -1,0 +1,391 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Centralized NAS Container Management",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1290,
+      640
+    ],
+    "repository": {
+      "url": "https://github.com/FixHarDeZ/centralized-nas-container-management",
+      "revision": "cce0674052308aeaa1d8a2f94de45d26fbedc2fe"
+    },
+    "views": [
+      {
+        "id": "secrets-to-nas",
+        "label": "Secrets to deploy",
+        "focus": [
+          "dev",
+          "vault",
+          "secrets",
+          "deploy",
+          "compose"
+        ],
+        "note": "sops+age vault decrypts on the workstation; the NAS only ever receives plaintext .env files."
+      },
+      {
+        "id": "inbound-traffic",
+        "label": "Inbound traffic",
+        "focus": [
+          "users",
+          "rp",
+          "nginx",
+          "apps"
+        ],
+        "note": "Every dashboard is reached through DSM reverse proxy then nginx basic auth."
+      },
+      {
+        "id": "bots-and-state",
+        "label": "Bots and state",
+        "focus": [
+          "compose",
+          "bots",
+          "apps",
+          "data",
+          "saas"
+        ],
+        "note": "Bot stacks poll Telegram and call LLM/media APIs outbound; all state lands on /volume2/docker."
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "dev",
+      "type": "external",
+      "label": "Workstation",
+      "sublabel": "macOS + age key",
+      "pos": [
+        40,
+        40
+      ],
+      "size": [
+        180,
+        60
+      ]
+    },
+    {
+      "id": "vault",
+      "type": "security",
+      "label": "vault.sops.yaml",
+      "sublabel": "sops + age",
+      "tag": "make edit-vault",
+      "pos": [
+        40,
+        190
+      ],
+      "size": [
+        180,
+        64
+      ],
+      "sources": [
+        {
+          "path": "secrets/vault.sops.yaml",
+          "label": "encrypted vault"
+        }
+      ]
+    },
+    {
+      "id": "secrets",
+      "type": "backend",
+      "label": "render_env.py",
+      "sublabel": "make secrets",
+      "tag": "manifest per stack",
+      "pos": [
+        40,
+        340
+      ],
+      "size": [
+        180,
+        64
+      ],
+      "sources": [
+        {
+          "path": "scripts/render_env.py",
+          "line": 1,
+          "end_line": 279,
+          "label": "env generator"
+        }
+      ]
+    },
+    {
+      "id": "deploy",
+      "type": "backend",
+      "label": "deploy.sh",
+      "sublabel": "tar | ssh :2222",
+      "tag": "no rsync on DSM",
+      "pos": [
+        40,
+        490
+      ],
+      "size": [
+        180,
+        64
+      ],
+      "sources": [
+        {
+          "path": "scripts/deploy.sh",
+          "line": 1,
+          "end_line": 346,
+          "label": "upload + restart"
+        }
+      ]
+    },
+    {
+      "id": "users",
+      "type": "external",
+      "label": "Phone / LAN browser",
+      "sublabel": "KOReader, PWA",
+      "pos": [
+        540,
+        30
+      ],
+      "size": [
+        180,
+        56
+      ]
+    },
+    {
+      "id": "rp",
+      "type": "security",
+      "label": "DSM Reverse Proxy",
+      "sublabel": "HTTPS :15xxx",
+      "pos": [
+        290,
+        160
+      ],
+      "size": [
+        180,
+        64
+      ]
+    },
+    {
+      "id": "nginx",
+      "type": "frontend",
+      "label": "homepage nginx",
+      "sublabel": ":443 basic auth",
+      "tag": "/webhook/ bypass",
+      "pos": [
+        540,
+        160
+      ],
+      "size": [
+        190,
+        64
+      ]
+    },
+    {
+      "id": "compose",
+      "type": "cloud",
+      "label": "Container Manager",
+      "sublabel": "compose project per stack",
+      "pos": [
+        290,
+        340
+      ],
+      "size": [
+        190,
+        64
+      ]
+    },
+    {
+      "id": "apps",
+      "type": "backend",
+      "label": "Dashboard stacks",
+      "sublabel": "FastAPI + nginx sidecars",
+      "pos": [
+        540,
+        340
+      ],
+      "size": [
+        240,
+        64
+      ]
+    },
+    {
+      "id": "bots",
+      "type": "backend",
+      "label": "Bot stacks",
+      "sublabel": "Telegram long-poll, no port",
+      "pos": [
+        540,
+        520
+      ],
+      "size": [
+        240,
+        64
+      ]
+    },
+    {
+      "id": "data",
+      "type": "database",
+      "label": "/volume2/docker",
+      "sublabel": "SQLite + volumes",
+      "pos": [
+        830,
+        340
+      ],
+      "size": [
+        170,
+        64
+      ]
+    },
+    {
+      "id": "saas",
+      "type": "external",
+      "label": "Telegram · LINE · mimo",
+      "sublabel": "outbound APIs",
+      "pos": [
+        1030,
+        520
+      ],
+      "size": [
+        200,
+        64
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Synology DS925+ · DSM 7.4",
+      "wraps": [
+        "rp",
+        "nginx",
+        "compose",
+        "apps",
+        "bots",
+        "data"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "basic auth + .htpasswd",
+      "wraps": [
+        "rp",
+        "nginx"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "edit-vault",
+      "from": "dev",
+      "to": "vault",
+      "label": "edit secrets",
+      "variant": "security",
+      "labelDy": 24
+    },
+    {
+      "id": "decrypt",
+      "from": "vault",
+      "to": "secrets",
+      "label": "decrypt on workstation",
+      "variant": "security",
+      "labelDy": 24
+    },
+    {
+      "id": "render",
+      "from": "secrets",
+      "to": "deploy",
+      "label": "<stack>/.env plaintext",
+      "labelDy": 24
+    },
+    {
+      "id": "upload",
+      "from": "deploy",
+      "to": "compose",
+      "label": "tar | ssh",
+      "variant": "emphasis"
+    },
+    {
+      "id": "up-apps",
+      "from": "compose",
+      "to": "apps",
+      "label": "up -d --build",
+      "labelDy": -28
+    },
+    {
+      "id": "up-bots",
+      "from": "compose",
+      "to": "bots",
+      "label": "up -d --build",
+      "fromSide": "bottom",
+      "toSide": "left"
+    },
+    {
+      "id": "browse",
+      "from": "users",
+      "to": "rp",
+      "label": "HTTPS",
+      "variant": "emphasis"
+    },
+    {
+      "id": "proxy",
+      "from": "rp",
+      "to": "nginx",
+      "label": "proxy_pass :443",
+      "labelDy": -55,
+      "labelDx": 115
+    },
+    {
+      "id": "auth",
+      "from": "nginx",
+      "to": "apps",
+      "label": "authenticated requests",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "app-state",
+      "from": "apps",
+      "to": "data",
+      "label": "SQLite /data",
+      "labelDy": -22
+    },
+    {
+      "id": "bot-state",
+      "from": "bots",
+      "to": "data",
+      "label": "manifests, /output"
+    },
+    {
+      "id": "poll",
+      "from": "bots",
+      "to": "saas",
+      "label": "getUpdates + LLM calls",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "Secrets",
+      "items": [
+        "One sops+age vault, committed encrypted",
+        "Each stack declares its keys in secrets.manifest.yaml",
+        "NAS never installs sops — it receives plaintext .env"
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "Edge",
+      "items": [
+        "DSM reverse proxy terminates :15xxx",
+        "homepage nginx holds :443 with basic auth",
+        "/webhook/ prefixes skip auth for n8n"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Runtime",
+      "items": [
+        "Dashboards: maid-tracker, torrentwatch, ink-reader, claude-desk",
+        "Bots: shorts-factory, ops-bot, news-feed (no HTTP surface)",
+        "mem_limit works on DSM; cpus: is a no-op"
+      ]
+    }
+  ]
+}
