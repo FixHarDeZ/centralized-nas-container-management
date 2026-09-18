@@ -6,8 +6,9 @@
 
 **ที่เลือก: allowlist + bind mount ไม่ใช่ mirror และไม่ bake ลงอิมเมจ**
 
-- `claude-desk/skills.list` (31 ชื่อ) → `make desk-skills` (`scripts/desk_skills.py`) ก๊อปจาก `~/.claude/skills` deref symlink ไป `~/.agents/skills` ลง `claude-desk/skills/` → compose bind `./skills:/opt/user-skills:ro` → `entrypoint.sh` symlink ทุก dir ที่มี `SKILL.md` เข้า `~/.claude/skills`
-- **bind ไม่ใช่ COPY** เพราะแก้ prompt บรรทัดเดียวไม่ควรต้อง rebuild npm/apt ทั้งอิมเมจ — แก้เนื้อ skill = deploy พอ, เพิ่มชื่อใหม่ = ต้อง restart ให้ลูป symlink รันใหม่ (deploy ทำให้อยู่แล้ว)
+- `claude-desk/skills.list` (31 ชื่อ) → `make desk-skills` (`scripts/desk_skills.py`) ก๊อปจาก `~/.claude/skills` deref symlink ไป `~/.agents/skills` ลง `claude-desk/skills/` → `COPY skills/ /opt/user-skills/` (layer สุดท้ายใน Dockerfile) → `entrypoint.sh` symlink ทุก dir ที่มี `SKILL.md` เข้า `~/.claude/skills`
+- **ลอง bind ก่อนแล้วไม่ได้ผล (วัดบนเครื่องจริง)**: `./skills:/opt/user-skills:ro` ขึ้น mount ปกติ ไฟล์อยู่ครบที่ `/volume2/docker/claude-desk/skills` (31 dir) แต่ในคอนเทนเนอร์ `stat` = `700` owner uid 1026 → `ls: cannot open directory '/opt/user-skills': Permission denied` = DSM share ACL เหมือนเคสของ `ui/` กับ `work/CLAUDE.md` และ **`sudo chmod -R a+rX` ที่ NAS ไม่ติด** (ACL ชนะ) — โหมดอ่านกลับมาเป็น 700 เหมือนเดิม. โทษของ bug นี้คือ**เงียบสนิท**: deploy เขียวหมด mount มีจริง แต่ agent ไม่เห็น skill สักอัน
+- เลย COPY แทน — แพงกว่านิดเดียวเพราะวางเป็น layer สุดท้ายก่อน sanity check (apt/npm/pip/clone cached หมด ~1 นาที) และ deploy recreate container ให้ลูป symlink รันใหม่อยู่แล้ว
 
 **ทำไมไม่ก๊อปทั้งโฟลเดอร์ (ข้อสำคัญที่สุด):** `~/.claude/skills/notebooklm/` = 196 MB มี `data/auth_info.json` + `browser_state/browser_profile/` (session Google ที่ล็อกอินค้าง) + venv patchright — ก๊อปทั้งดุ้น = เอา credential จริงขึ้น repo public. สคริปต์เลย **ปฏิเสธทั้ง skill** เมื่อเจอไฟล์ทรง credential (`auth_info`, `credentials`, `cookies`, `.env`, `id_ed25519`, `keys.txt`) ไม่ใช่กรองไฟล์นั้นทิ้งแล้วส่งที่เหลือ — "กรองความลับให้แล้ว" เป็นนิสัยที่แย่กว่า "อันนี้ไม่ต้องเดินทาง". `tests/test_skills.py` เช็คสำเนาซ้ำอีกชั้น (กันคนแปะไฟล์เข้ามาเองทีหลัง)
 

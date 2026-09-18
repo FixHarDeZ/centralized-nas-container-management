@@ -14,11 +14,11 @@ Claude Code reached from a phone browser, for generating pptx/docx/xlsx — not 
 Two sets in `~/.claude/skills` on the desk, both symlinks made by `entrypoint.sh` on every start:
 
 - `/opt/skills/skills/{pptx,docx,xlsx,pdf}` — official, cloned at build (`ARG SKILLS_REF`), bumped by `make desk-latest`.
-- `/opt/user-skills/*` — the workstation's own, listed in `skills.list` (31), copied by `make desk-skills` into `claude-desk/skills/` (git-tracked, 2.6 MB), bind-mounted read-only.
+- `/opt/user-skills/*` — the workstation's own, listed in `skills.list` (31), copied by `make desk-skills` into `claude-desk/skills/` (git-tracked, 2.6 MB) and baked in as the Dockerfile's last `COPY`. Not a bind: measured on the deployed desk, a `./skills` bind is 0700 to uid 1000 through the DSM share ACL and `chmod` on the NAS does not stick — the mount exists and the skills are invisible.
 
 Allowlist, not a mirror: `notebooklm/` alone is 196 MB and carries a live Google session (`data/auth_info.json` + a logged-in Chrome profile), so `scripts/desk_skills.py` refuses any skill holding a credential-shaped file, and `tests/test_skills.py` re-checks the copy. Browser-driven skills, vault/SSH-key skills, and coding-flow skills are out by design; plugin skills (`~/.claude/plugins`) are a different mechanism and not covered.
 
-Editing a skill is live after a deploy; adding a *name* needs the restart (the link loop only runs at start). `archify visual-check` cannot run here — no system Chrome in the image.
+Changing a skill means a rebuild, but a cheap one — the `COPY` sits after apt/npm/pip and the `anthropics/skills` clone, so only it and the sanity check re-run. `archify visual-check` cannot run here — no system Chrome in the image.
 
 ## Architecture
 

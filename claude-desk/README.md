@@ -180,7 +180,6 @@ pane to `bash` both at an idle prompt and mid-turn. Both pick up the `--dangerou
 | `claude_desk_home` → `/home/claude` | named volume | `claude --resume` across restarts; `~/.claude.json` lives outside `~/.claude`, hence the whole home |
 | `/volume2/claude-work` → `/work` | DSM shared folder | `in/` for source files (drop via DS File / Synology Drive), `out/` for deliverables. `work/CLAUDE.md` is baked into the image and copied to `/work` on every start (same ACL reason — a `./work` bind is unreadable to uid 1000) |
 | `/volume2/claude-work` → nginx `/files` (ro) | same share | download side; nginx only exposes `/files/out/` (binding `out/` directly races the entrypoint that creates it) |
-| `./skills` → `/opt/user-skills` (ro) | bind from the deployed repo | the workstation's own skills, vendored by `make desk-skills` — see [Skills](#skills). A bind, not a `COPY`, so changing a skill is a deploy rather than a rebuild |
 
 **rtk** (the same Bash-output trimmer the workstation runs) is in the image, pinned like ttyd, and `entrypoint.sh` merges `claude-settings.json` (the `PreToolUse Bash → rtk hook claude` hook) into the home volume's `~/.claude/settings.json` on every start — additive, keyed by command string, so settings changed from inside the desk survive. `rtk gain` in the shell shows what it saved.
 
@@ -241,7 +240,7 @@ Skills live in the image at `/opt/skills` (clone of `anthropics/skills`, pinned 
 Two sets, from two places:
 
 - **The official office set** — `pptx`, `docx`, `xlsx`, `pdf` cloned from `anthropics/skills` at build time (`ARG SKILLS_REF`) into `/opt/skills`, linked into `~/.claude/skills` on every start. Bumped by `make desk-latest` with everything else.
-- **The workstation's own skills** — listed in `skills.list`, copied into `claude-desk/skills/` by `make desk-skills`, bind-mounted read-only at `/opt/user-skills`, and linked by the same loop in `entrypoint.sh`.
+- **The workstation's own skills** — listed in `skills.list`, copied into `claude-desk/skills/` by `make desk-skills`, baked into the image at `/opt/user-skills` (last `COPY` in the Dockerfile), and linked by the same loop in `entrypoint.sh`.
 
 ```bash
 make desk-skills ARGS=-n     # what would change
@@ -249,7 +248,9 @@ make desk-skills             # copy them into claude-desk/skills/
 ./scripts/deploy.sh -s claude-desk -y
 ```
 
-Editing a skill reaches the desk with the upload alone; a *new name* in `skills.list` needs the link loop to run again, which the deploy's restart does.
+Baked, not bind-mounted: a `./skills` bind from `/volume2/docker` is `0700` to uid 1000 through the DSM share ACL — the same reason `work/CLAUDE.md` and `ui/` are baked — and `chmod -R a+rX` on the NAS does not stick. Measured on the deployed desk before this was changed: the mount was there, `/opt/user-skills` was unreadable, and the skills simply did not exist as far as the agent was concerned.
+
+So changing a skill is a rebuild. It is a cheap one: the `COPY` is the last layer before the build-time sanity check, so apt, npm, pip and the `anthropics/skills` clone all stay cached — about a minute, and the deploy recreates the container anyway, which is what the link loop needs in order to notice a *new* name.
 
 It is an allowlist, not a mirror of `~/.claude/skills`, for three reasons that are each worth a rule:
 

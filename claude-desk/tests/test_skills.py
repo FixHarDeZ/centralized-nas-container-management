@@ -59,11 +59,21 @@ def test_no_credential_shaped_files_travel():
         assert not any(m in rel for m in SECRET_MARKERS), f"{rel} looks like a secret"
 
 
-def test_compose_mounts_the_copy_where_the_entrypoint_looks():
-    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+def test_image_bakes_the_copy_where_the_entrypoint_looks():
+    """A ./skills bind would be 0700 to uid 1000 (DSM share ACL), so it is a
+    COPY. The Dockerfile's destination and the entrypoint's source are the
+    two halves of that, written in different files."""
+    dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
     entrypoint = (ROOT / "entrypoint.sh").read_text(encoding="utf-8")
-    mount = re.search(r"\./skills:(\S+?):ro", compose)
-    assert mount, "docker-compose.yml no longer bind-mounts ./skills"
-    assert mount.group(1) in entrypoint, (
-        f"entrypoint.sh does not link anything from {mount.group(1)}"
-    )
+    copied = re.search(r"^COPY[^\n]*\sskills/\s+(\S+)", dockerfile, re.M)
+    assert copied, "Dockerfile no longer COPYs skills/"
+    dest = copied.group(1).rstrip("/")
+    assert dest in entrypoint, f"entrypoint.sh does not link anything from {dest}"
+
+
+def test_skills_are_not_bind_mounted():
+    """The trap this stack has hit twice: a directory bind from
+    /volume2/docker is unreadable to uid 1000 and chmod on the NAS does not
+    stick, so the mount looks fine and the skills silently do not exist."""
+    compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "./skills:" not in compose

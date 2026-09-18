@@ -115,6 +115,13 @@ COPY --chmod=0755 ask.py /usr/local/bin/ask
 COPY --chmod=0644 mimocode.jsonc /opt/claude-desk/mimocode.jsonc
 COPY --chmod=0644 profile.sh /etc/profile.d/claude-desk.sh
 COPY --chmod=0755 entrypoint.sh /usr/local/bin/entrypoint.sh
+# The workstation's own skills (see skills.list, `make desk-skills`). Baked
+# for the same reason work/CLAUDE.md is: a ./skills bind from /volume2/docker
+# is 0700 to uid 1000 through the share ACL, and chmod on the NAS does not
+# stick. Last COPY on purpose — changing a skill rebuilds this layer and the
+# sanity check, not the apt/npm ones above. 0755 because archify ships
+# executables its own instructions tell the agent to run.
+COPY --chmod=0755 skills/ /opt/user-skills/
 
 # Global npm modules are not on require()'s path by default — the skills do a
 # bare require('pptxgenjs') from /work, so expose them.

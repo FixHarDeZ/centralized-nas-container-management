@@ -4,10 +4,12 @@
     make desk-skills          # copy every skill named in claude-desk/skills.list
     make desk-skills ARGS=-n  # report what would change, write nothing
 
-The desk gets its skills the same way it gets `work/CLAUDE.md`: a copy that
-travels in git and is bind-mounted into the container, so updating a skill is
-a deploy rather than an image rebuild. The image's own `/opt/skills` (the
-pinned Anthropic pptx/docx/xlsx/pdf set) is untouched by this.
+The desk gets its skills exactly the way it gets `work/CLAUDE.md`: a copy that
+travels in git and is baked into the image (`COPY skills/ /opt/user-skills/`,
+the last layer). A bind was tried first and does not work — a directory under
+/volume2/docker is 0700 to uid 1000 through the DSM share ACL, and chmod on
+the NAS does not stick. The image's own `/opt/skills` (the pinned Anthropic
+pptx/docx/xlsx/pdf set) is untouched by this.
 
 Why an allowlist instead of copying ~/.claude/skills wholesale:
 
@@ -178,7 +180,7 @@ def main() -> int:
         print(f"synced {name} ({written} files, {size_kb(dst)} KB)")
 
     print(f"\n{len(names)} skills, {total} files, {size_kb(DEST)} KB → {DEST.relative_to(ROOT)}")
-    print("next: ./scripts/deploy.sh -y  (edits to a skill go live with the upload;\n      a name added to skills.list needs the restart the deploy already does)")
+    print("next: ./scripts/deploy.sh -s claude-desk -y  (rebuilds the last image\n      layer, ~1 min: apt/npm/pip stay cached)")
     return 0
 
 
