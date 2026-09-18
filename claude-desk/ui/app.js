@@ -1386,7 +1386,13 @@
   });
 
   document.getElementById('chat-new').addEventListener('click', async () => {
-    try { await chatPost('chat/new', {}); } catch (_) { /* nothing to undo */ }
+    // Chat is one agent shared by both desks, so this can land mid-answer —
+    // the desk refuses then, and clearing the log anyway would hide a turn
+    // that is still running (possibly someone else's).
+    try {
+      const r = await chatPost('chat/new', {});
+      if (!r.ok) { note(r.text || 'ยังตอบอยู่'); return; }
+    } catch (_) { /* nothing to undo */ }
     clearLog();
     spent = 0;
     paintSpent();

@@ -215,6 +215,21 @@ def test_new_session_kills_the_child(agent):
     assert any(e["t"] == "reset" for e in _flush(channel))
 
 
+def test_a_running_turn_is_not_thrown_away(agent):
+    """Chat is one agent behind two desks: either person can press this.
+
+    Without the guard, opening a past conversation from the sheet would kill
+    an answer the other person is still waiting on.
+    """
+    agent.send("hello")
+    # Pinned rather than raced: the fake agent answers in milliseconds, and
+    # what is under test is the state, not how long a real turn takes.
+    agent.busy = True
+    code, message = agent.reset()
+    assert (code, message) == (409, "still working")
+    assert agent.running()
+
+
 def test_a_child_that_dies_is_announced(agent, tmp_path):
     """Otherwise the composer sits there accepting messages into nothing."""
     quitter = tmp_path / "quitter.py"

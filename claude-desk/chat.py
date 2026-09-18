@@ -363,8 +363,16 @@ class Agent:
         Resuming here rather than in the terminal is the point: the sessions
         sheet used to only ever type into the tmux pane, so from the chat view
         tapping a past conversation brought it back *in the other view*.
+
+        Refused mid-turn. The terminal has a desk per person but chat is one
+        process with one child, so this button is reachable by either of us:
+        without the guard, opening a past conversation would kill an answer
+        the other person is waiting on and send them a `reset` they did not
+        ask for. Stop first, then open — that path is one tap away.
         """
         with self.lock:
+            if self.busy:
+                return 409, "still working"
             self.stop_child()
             self.session_id = resume or None
             self.spent = 0.0

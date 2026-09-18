@@ -338,24 +338,38 @@ The roster lives in `DESK_USERS` in `docker-compose.yml` (`<user>:<port>`), and
 `nginx.conf` keeps a `map $remote_user $desk_port` copy of it because nginx
 cannot read the environment. `tests/test_desks.py` fails if the two drift —
 the failure mode otherwise is a 502 for one person only. Adding a person is:
-`htpasswd` entry, one entry in each of those two places, deploy.
+roster entry in `docker-compose.yml`, the matching line in `nginx.conf`, an
+`htpasswd` entry, deploy. **Roster first:** `.htpasswd` is gitignored so no test
+can compare against it, and an account with no roster line does not fail — it
+quietly shares desk 1 with whoever is there.
 
 `/api/` is routed too. nginx sets `X-Desk-User` from `$remote_user` (overwriting
 whatever the browser sent) and `upload.py` maps it to a tmux target, because
 every one of those endpoints types into a pane — without it, **one person's
 Quit button would send Escape + `/exit` into the other person's running turn**.
 
-`-m 2` per desk, not `-m 1`: one person on a phone and a laptop is normal, and a
-stale suspended tab must not lock them out of their own desk. That needs
-`window-size latest` in `tmux.conf` — tmux otherwise sizes the window to the
-*smallest* attached client, so a phone at ~40 columns would clamp the laptop and
-flip `statusline.sh` into its mobile layout on a wide screen.
+`-m 2` per desk, not `-m 1`: one person on a phone and a laptop is normal, and
+one stale suspended tab should not lock them out of their own desk. It defers
+that problem rather than solving it — the *second* stale tab locks you out just
+the same — but two is the number of devices one person actually uses at once.
+
+With two clients on one session, `window-size latest` in `tmux.conf` decides the
+width: **the device that last interacted sets it**. tmux's default is the
+*smallest* attached client, which would peg the laptop at the phone's ~40 columns
+permanently (and flip `statusline.sh` into its mobile layout on a wide screen);
+`latest` at least means the screen you are typing on is the one being sized for.
+Touching the phone while the laptop is open resizes the laptop.
 
 **What is still shared, on purpose:**
 
 - **Chat.** `chat.py` is one process with one child agent, one SSE ring and one
   `session_id`. Both views drive the same conversation, and either person's stop
-  button interrupts it.
+  button interrupts it. `POST /chat/new` — the New-session button, and opening a
+  past conversation from the sheet while in chat — therefore **refuses with 409
+  while a turn is running**, because it throws the session away: unguarded, a tap
+  here would kill an answer the other person is waiting on and hand them a
+  `reset` they did not ask for. Stop first, then open. (`/chat/` does get
+  `X-Desk-User`; nothing reads it yet.)
 - **The quota chip and the finish notification.** `~/.claude/desk-status.json`
   and `desk-done.json` are single files in one home volume; the numbers are the
   account's anyway.
