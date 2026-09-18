@@ -180,6 +180,7 @@ pane to `bash` both at an idle prompt and mid-turn. Both pick up the `--dangerou
 | `claude_desk_home` → `/home/claude` | named volume | `claude --resume` across restarts; `~/.claude.json` lives outside `~/.claude`, hence the whole home |
 | `/volume2/claude-work` → `/work` | DSM shared folder | `in/` for source files (drop via DS File / Synology Drive), `out/` for deliverables. `work/CLAUDE.md` is baked into the image and copied to `/work` on every start (same ACL reason — a `./work` bind is unreadable to uid 1000) |
 | `/volume2/claude-work` → nginx `/files` (ro) | same share | download side; nginx only exposes `/files/out/` (binding `out/` directly races the entrypoint that creates it) |
+| `./skills` → `/opt/user-skills` (ro) | bind from the deployed repo | the workstation's own skills, vendored by `make desk-skills` — see [Skills](#skills). A bind, not a `COPY`, so changing a skill is a deploy rather than a rebuild |
 
 **rtk** (the same Bash-output trimmer the workstation runs) is in the image, pinned like ttyd, and `entrypoint.sh` merges `claude-settings.json` (the `PreToolUse Bash → rtk hook claude` hook) into the home volume's `~/.claude/settings.json` on every start — additive, keyed by command string, so settings changed from inside the desk survive. `rtk gain` in the shell shows what it saved.
 
@@ -234,6 +235,31 @@ The first answer after a reload only establishes where the clock is — the turn
 **Limit, accepted deliberately:** this only works while the page is still running. A backgrounded PWA on iOS is suspended, so with the phone locked nothing arrives. The version that survives a locked phone is real Web Push — VAPID keys and a push service — which is a project rather than a toggle.
 
 Skills live in the image at `/opt/skills` (clone of `anthropics/skills`, pinned `ARG SKILLS_REF`); `entrypoint.sh` re-links `pptx docx xlsx pdf` into `~/.claude/skills` on every start so a ref bump reaches the volume.
+
+## Skills
+
+Two sets, from two places:
+
+- **The official office set** — `pptx`, `docx`, `xlsx`, `pdf` cloned from `anthropics/skills` at build time (`ARG SKILLS_REF`) into `/opt/skills`, linked into `~/.claude/skills` on every start. Bumped by `make desk-latest` with everything else.
+- **The workstation's own skills** — listed in `skills.list`, copied into `claude-desk/skills/` by `make desk-skills`, bind-mounted read-only at `/opt/user-skills`, and linked by the same loop in `entrypoint.sh`.
+
+```bash
+make desk-skills ARGS=-n     # what would change
+make desk-skills             # copy them into claude-desk/skills/
+./scripts/deploy.sh -s claude-desk -y
+```
+
+Editing a skill reaches the desk with the upload alone; a *new name* in `skills.list` needs the link loop to run again, which the deploy's restart does.
+
+It is an allowlist, not a mirror of `~/.claude/skills`, for three reasons that are each worth a rule:
+
+- **Credentials travel with skills.** `notebooklm/` is 196 MB and holds `data/auth_info.json` plus a logged-in Chrome profile; copying the tree would put a live Google session in a public repo. `scripts/desk_skills.py` refuses a whole skill when it finds a credential-shaped file rather than filtering it out — "we stripped the secret for you" is a worse habit than "this one does not travel" — and `tests/test_skills.py` re-checks the copy.
+- **Half of them cannot work here.** Anything that drives a browser has no display server and no Chrome; anything that touches the vault or the NAS needs the age key and the SSH key, which this container deliberately does not have.
+- **This is not where code gets edited.** The coding-flow skills would only be noise in the desk's skill list.
+
+Skills that come from *plugins* (`~/.claude/plugins`) are a separate mechanism and are not covered by this — they would have to be installed inside the container.
+
+Known gap: `archify`'s `validate` and `deliver` work here, but `visual-check` looks for a system Chrome binary the image does not carry, so it reports an environmental failure instead of browser evidence.
 
 ## Staying current
 

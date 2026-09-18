@@ -14,6 +14,30 @@ for skill in pptx docx xlsx pdf; do
     ln -sfn "/opt/skills/skills/$skill" "$SKILLS_DIR/$skill"
 done
 
+# The workstation's skills (claude-desk/skills, see skills.list). Linked, not
+# copied, so a deploy that changes one is live without touching the home
+# volume — but a skill added to the list still needs this loop to run, i.e. a
+# restart. Stale links are cleared first: dropping a name from skills.list
+# has to remove it from the desk too.
+for link in "$SKILLS_DIR"/*; do
+    [[ -L "$link" && "$(readlink "$link")" == /opt/user-skills/* ]] || continue
+    [[ -d "$link/" ]] || rm -f "$link"
+done
+if [[ -d /opt/user-skills ]]; then
+    for skill in /opt/user-skills/*/; do
+        [[ -f "$skill/SKILL.md" ]] || continue
+        name=$(basename "$skill")
+        # ln -sfn onto a real directory of the same name would put the link
+        # *inside* it (skill-creator run on the desk can make one). Leave the
+        # desk's own copy alone and say so.
+        if [[ -e "$SKILLS_DIR/$name" && ! -L "$SKILLS_DIR/$name" ]]; then
+            echo "skills: keeping the desk's own $name, not linking the vendored one" >&2
+            continue
+        fi
+        ln -sfn "${skill%/}" "$SKILLS_DIR/$name"
+    done
+fi
+
 # The work-folder rules travel with the stack (work/CLAUDE.md) but live on
 # the NAS share — copy on start so an edit in git reaches the desk.
 if [[ -f /opt/claude-desk/work/CLAUDE.md ]]; then

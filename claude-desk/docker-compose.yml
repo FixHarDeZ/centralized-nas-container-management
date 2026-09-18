@@ -31,6 +31,10 @@ services:
       # Whole home, not just ~/.claude: onboarding state lives in ~/.claude.json
       - claude_desk_home:/home/claude
       - ${CLAUDE_WORK_DIR}:/work
+      # The workstation's own skills, vendored by `make desk-skills` and
+      # linked into ~/.claude/skills on start. A bind rather than a COPY so
+      # editing a skill is a deploy, not an image rebuild.
+      - ./skills:/opt/user-skills:ro
     # 3g, not 2g: two desks means two Claude Code TUIs can be up at once,
     # plus chat.py's own child and a soffice render. The host has ~4.3 GB
     # free and has been OOM-killed twice — this cap still means a runaway

@@ -1,5 +1,26 @@
 # claude-desk — Daily Log
 
+## 2026-09-18 — skills ของ workstation ขึ้นเดสก์ (allowlist + bind mount)
+
+**โจทย์:** อยากให้เดสก์มี skill ชุดเดียวกับที่ใช้บน workstation และอัปเดตตามได้เรื่อยๆ
+
+**ที่เลือก: allowlist + bind mount ไม่ใช่ mirror และไม่ bake ลงอิมเมจ**
+
+- `claude-desk/skills.list` (31 ชื่อ) → `make desk-skills` (`scripts/desk_skills.py`) ก๊อปจาก `~/.claude/skills` deref symlink ไป `~/.agents/skills` ลง `claude-desk/skills/` → compose bind `./skills:/opt/user-skills:ro` → `entrypoint.sh` symlink ทุก dir ที่มี `SKILL.md` เข้า `~/.claude/skills`
+- **bind ไม่ใช่ COPY** เพราะแก้ prompt บรรทัดเดียวไม่ควรต้อง rebuild npm/apt ทั้งอิมเมจ — แก้เนื้อ skill = deploy พอ, เพิ่มชื่อใหม่ = ต้อง restart ให้ลูป symlink รันใหม่ (deploy ทำให้อยู่แล้ว)
+
+**ทำไมไม่ก๊อปทั้งโฟลเดอร์ (ข้อสำคัญที่สุด):** `~/.claude/skills/notebooklm/` = 196 MB มี `data/auth_info.json` + `browser_state/browser_profile/` (session Google ที่ล็อกอินค้าง) + venv patchright — ก๊อปทั้งดุ้น = เอา credential จริงขึ้น repo public. สคริปต์เลย **ปฏิเสธทั้ง skill** เมื่อเจอไฟล์ทรง credential (`auth_info`, `credentials`, `cookies`, `.env`, `id_ed25519`, `keys.txt`) ไม่ใช่กรองไฟล์นั้นทิ้งแล้วส่งที่เหลือ — "กรองความลับให้แล้ว" เป็นนิสัยที่แย่กว่า "อันนี้ไม่ต้องเดินทาง". `tests/test_skills.py` เช็คสำเนาซ้ำอีกชั้น (กันคนแปะไฟล์เข้ามาเองทีหลัง)
+
+**ตัดออกด้วยเหตุผลอื่น:** skill ที่ขับเบราว์เซอร์ (ไม่มี display server/Chrome), skill ที่ต้องใช้ age key / NAS SSH key (กรงนี้ตั้งใจไม่ให้มี), สาย coding (เดสก์ไม่ใช่ที่เขียนโค้ด), `synced/` (ซ้ำกับ `/opt/skills`), skill จาก plugin (คนละกลไก อยู่ `~/.claude/plugins`)
+
+**prune:** `test/ benchmarks/ node_modules/ .venv/ data/ browser_state/ generated/` + `*.png *.zip` + `examples/*.html` — archify 7 MB → 550 KB (ตัวอย่างที่ render แล้ว 4 ไฟล์ ~700 KB/ไฟล์ = 5 ใน 6 ของน้ำหนัก ส่วน spec JSON ที่ instruction สั่งให้อ่านยังอยู่ครบ) ยืนยันว่าสำเนาใช้ได้ด้วย `node skills/archify/bin/archify.mjs doctor` = ready
+
+**กับดักที่ดักไว้:** `ln -sfn` ลงชื่อที่เป็น **directory จริง** (เช่นใช้ skill-creator สร้างบนเดสก์ชื่อชน) จะวาง symlink **ไว้ข้างใน** ไม่ใช่ทับ — `-n` กันได้แค่เคส symlink→dir. entrypoint เลยข้ามพร้อม log, และล้าง symlink ที่ชี้ `/opt/user-skills/*` แบบค้าง (ชื่อที่ถอดออกจาก list) ทุกครั้งที่ start
+
+**ข้อจำกัดที่ยอมรับ:** `archify visual-check` บนเดสก์ใช้ไม่ได้ — มันหา binary chrome ของระบบ (ไม่ได้ bundle puppeteer) อิมเมจไม่มี; `validate`/`deliver` ใช้ได้ปกติ. อยากได้ต้องใส่ chromium ~300 MB
+
+**ผล:** 31 skills, 162 ไฟล์, 2.6 MB, เทสต์ `tests/test_skills.py` 4 ตัวผ่าน
+
 ## 2026-09-18 — สองคนสองโต๊ะ (แก้ reconnect รัวๆ)
 
 **อาการ:** แฟนเปิดใช้อยู่ก่อน แล้วเราเข้าด้วย basic auth user ของตัวเอง → หน้าเว็บขึ้น `reconnecting` วนไม่หยุด ใช้ไม่ได้เลย

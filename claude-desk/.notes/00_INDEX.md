@@ -9,6 +9,17 @@
 
 Claude Code reached from a phone browser, for generating pptx/docx/xlsx — not for coding. Design decisions were grilled in one session (2026-09-15); the outcome is the table in root `CLAUDE.md` and `README.md` here.
 
+## Skills
+
+Two sets in `~/.claude/skills` on the desk, both symlinks made by `entrypoint.sh` on every start:
+
+- `/opt/skills/skills/{pptx,docx,xlsx,pdf}` — official, cloned at build (`ARG SKILLS_REF`), bumped by `make desk-latest`.
+- `/opt/user-skills/*` — the workstation's own, listed in `skills.list` (31), copied by `make desk-skills` into `claude-desk/skills/` (git-tracked, 2.6 MB), bind-mounted read-only.
+
+Allowlist, not a mirror: `notebooklm/` alone is 196 MB and carries a live Google session (`data/auth_info.json` + a logged-in Chrome profile), so `scripts/desk_skills.py` refuses any skill holding a credential-shaped file, and `tests/test_skills.py` re-checks the copy. Browser-driven skills, vault/SSH-key skills, and coding-flow skills are out by design; plugin skills (`~/.claude/plugins`) are a different mechanism and not covered.
+
+Editing a skill is live after a deploy; adding a *name* needs the restart (the link loop only runs at start). `archify visual-check` cannot run here — no system Chrome in the image.
+
 ## Architecture
 
 - `claude-desk` container: Debian bookworm-slim + Node 22 + `@anthropic-ai/claude-code@ARG CLAUDE_VERSION` + LibreOffice `*-nogui` + skills from `anthropics/skills@ARG SKILLS_REF`. One ttyd per person (roster `DESK_USERS=<user>:<port>` in compose): PID 1 = `ttyd -W -m 2 -P 30 tmux new -A -s fixhardez` on 7681, a respawn-looped second on 7684 for `Pookzii`; nginx picks by `$remote_user`. uid 1000. `expose: 7681, 7684`.
