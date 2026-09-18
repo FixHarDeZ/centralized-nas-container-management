@@ -3,11 +3,11 @@ name: Update and Deploy Architecture Map
 on:
   push:
     branches:
-      - main # เปลี่ยนเป็น master หาก repo ของคุณใช้ branch master
+      - main # เปลี่ยนเป็นชื่อ branch หลักของคุณ เช่น master หรือ main
     paths-ignore:
       - 'README.md'
       - '.gitignore'
-  workflow_dispatch: # รองรับการกด Run workflow แบบ manual จากหน้า GitHub Actions
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -36,16 +36,25 @@ jobs:
           repository: 'tt-a1i/archify'
           path: 'archify'
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          node-version: 20
+          python-version: '3.11'
 
-      - name: Install dependencies & Build
+      - name: Inspect & Install Archify
         run: |
           cd archify
-          npm install
-          npm run build
+          ls -la
+          # ติดตั้ง dependencies หากมี pyproject.toml, setup.py หรือ requirements.txt
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f setup.py ] || [ -f pyproject.toml ]; then pip install .; fi
+
+      - name: Generate Architecture Map
+        run: |
+          mkdir -p dist
+          # รัน generator เพื่อ scan โฟลเดอร์ repo-data ออกมาไว้ที่ dist
+          # ตัวอย่าง: archify --input ./repo-data --output ./dist
+          # หรือ: python -m archify ./repo-data -o ./dist
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
@@ -53,7 +62,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: './archify/dist' # หาก output ของ archify ออกที่โฟลเดอร์ build ให้เปลี่ยนเป็น ./archify/build
+          path: './dist'
 
       - name: Deploy to GitHub Pages
         id: deployment
