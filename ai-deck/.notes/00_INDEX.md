@@ -1,3 +1,10 @@
+## 2026-09-20 — Editable starter prompts
+
+- Added **Edit prompt** to all three welcome cards. Save per-card templates in `localStorage` (`ai-deck.starter-prompts.v1`), shared by Claude/Codex in this browser. No cross-device sync. Selecting a card fills the composer; never sends automatically.
+- Accessible modal supports Save, Cancel/Escape and Restore default (save to apply). Rejects blank/oversized prompts; storage failure keeps edits visible. Prompt text stays literal, existing composer draft is preserved while editing.
+- Verification: 144 stack tests passed; browser checks cover persistence across reload/provider change, cancel/reset, storage failure, literal text and mobile layout. JavaScript syntax/diff checks and nginx image build passed; desktop/mobile screenshots inspected. Independent review found no concrete correctness issues.
+- No deployment. Git delivery follows this entry; unrelated `secrets/vault.sops.yaml` remains excluded.
+
 ## Git delivery — 2026-09-20
 
 - Implementation commit `0f1d3c1` pushed to `origin/main`; remote HEAD verified with `git ls-remote`.

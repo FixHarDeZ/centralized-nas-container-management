@@ -1192,12 +1192,17 @@
       '<button type="button" data-prompt="ช่วยวิเคราะห์ spreadsheet ใน in/ และเสนอ insight โดยไม่แก้ไฟล์ต้นฉบับ">' +
       '<span aria-hidden="true">▥</span><strong>Explore your data</strong><small>Turn a spreadsheet into insights</small></button></div>' +
       '<button type="button" class="welcome-upload">＋ Add source files</button><span class="welcome-foot">Your finished work appears in Files → out/</span>';
-    box.querySelectorAll('[data-prompt]').forEach(button => button.addEventListener('click', () => {
-      chatInput.value = button.dataset.prompt;
+    const usePrompt = (prompt) => {
+      chatInput.value = prompt;
       sizeInput();
       saveDraft();
       chatInput.focus();
-    }));
+    };
+    if (window.DeskStarters) window.DeskStarters.mount(box, usePrompt);
+    else box.querySelectorAll('[data-prompt]').forEach(button => {
+      button.classList.add('starter-use');
+      button.addEventListener('click', () => usePrompt(button.dataset.prompt));
+    });
     box.querySelector('.welcome-upload').addEventListener('click', () => {
       document.getElementById('files-btn').click();
       document.querySelector('[data-dir="in"]').click();

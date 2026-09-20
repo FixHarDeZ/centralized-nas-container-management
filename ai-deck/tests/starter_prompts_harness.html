@@ -1,0 +1,62 @@
+<!doctype html><meta charset="utf-8"><title>Starter prompt checks</title>
+<pre id="result">pending</pre>
+<script>
+const key = 'ai-deck.starter-prompts.v1';
+localStorage.removeItem(key);
+const failures = [];
+const check = (ok, message) => { if (!ok) failures.push(message); };
+const pause = () => new Promise(resolve => setTimeout(resolve, 60));
+(async () => {
+ try {
+  const frame = document.createElement('iframe');
+  frame.style = 'width:390px;height:844px';
+  const load = provider => new Promise(resolve => {
+   frame.onload = () => setTimeout(resolve, 100);
+   frame.src = '../ui/?demo=1&chat=1&welcome=1&provider=' + provider;
+   if (!frame.isConnected) document.body.append(frame);
+  });
+  await load('claude');
+  let doc = frame.contentDocument;
+  const open = () => { doc.querySelector('[data-edit-prompt="presentation"]').click(); return doc.querySelector('dialog'); };
+  const save = () => doc.querySelector('dialog form').requestSubmit();
+  const original = doc.querySelector('[data-prompt]').dataset.prompt;
+  const custom = 'My prompt <script>window.injected=true</' + 'script>\nภาษาไทย';
+  doc.getElementById('chat-input').value = 'Existing draft';
+  let dialog = open();
+  check(dialog.open, 'editor opens as modal');
+  const rect = dialog.getBoundingClientRect();
+  check(rect.left >= 0 && rect.right <= 390, 'editor fits phone');
+  check(Math.abs(rect.left - (390 - rect.width) / 2) < 2, 'editor is centered');
+  check(dialog.querySelector('textarea').value === original, 'editor contains default prompt');
+  dialog.querySelector('textarea').value = custom;
+  save(); await pause();
+  check(!doc.querySelector('dialog'), 'save closes editor');
+  check(doc.getElementById('chat-input').value === 'Existing draft', 'editing preserves composer');
+  check(JSON.parse(localStorage.getItem(key)).presentation === custom, 'prompt persists');
+  check(!frame.contentWindow.injected, 'prompt remains literal text');
+  doc.querySelector('[data-prompt]').click();
+  check(doc.getElementById('chat-input').value === custom, 'card uses saved prompt');
+  await load('codex'); doc = frame.contentDocument;
+  check(doc.querySelector('[data-prompt]').dataset.prompt === custom, 'reload and provider switch preserve prompt');
+  dialog = open(); dialog.querySelector('textarea').value = 'Discard';
+  dialog.querySelector('[data-prompt-cancel]').click(); await pause();
+  check(doc.querySelector('[data-prompt]').dataset.prompt === custom, 'cancel preserves saved prompt');
+  dialog = open(); dialog.querySelector('textarea').value = '   '; save();
+  check(dialog.open && !dialog.querySelector('[role="alert"]').hidden, 'whitespace rejected');
+  const originalSet = frame.contentWindow.Storage.prototype.setItem;
+  frame.contentWindow.Storage.prototype.setItem = () => { throw new Error('quota'); };
+  dialog.querySelector('textarea').value = 'Unsaved'; save();
+  check(dialog.open && dialog.querySelector('[role="alert"]').textContent.includes('Could not save'), 'storage failure preserves edits');
+  frame.contentWindow.Storage.prototype.setItem = originalSet;
+  dialog.querySelector('[data-prompt-reset]').click();
+  check(dialog.querySelector('textarea').value === original, 'reset restores default in editor');
+  save(); await pause();
+  check(doc.querySelector('[data-prompt]').dataset.prompt === original, 'saved reset applies');
+  check(!JSON.parse(localStorage.getItem(key)).presentation, 'reset removes override');
+  check(doc.activeElement.dataset.editPrompt === 'presentation', 'focus returns to edit button');
+  check(doc.querySelectorAll('[data-edit-prompt]').length === 3, 'all cards editable');
+ } catch (error) { failures.push(String(error)); }
+ localStorage.removeItem(key);
+ document.getElementById('result').textContent = JSON.stringify({failures});
+})();
+</script>

@@ -15,6 +15,7 @@ window.addEventListener('load', () => setTimeout(async () => {
       check(!!frame.contentWindow._chat, id + ': app initializes');
       check(doc.title === 'AI Deck', id + ': neutral brand');
       check(doc.querySelectorAll('[data-prompt]').length === 3, id + ': starters visible');
+      check(doc.querySelectorAll('[data-edit-prompt]').length === 3, id + ': each starter has an Edit prompt action');
       check(doc.documentElement.scrollWidth <= frame.clientWidth, id + ': no horizontal overflow');
       doc.querySelector('[data-prompt]').click();
       check(doc.getElementById('chat-input').value.includes('outline'), id + ': starter fills composer');

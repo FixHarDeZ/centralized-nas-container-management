@@ -13,6 +13,7 @@ and download the `.pptx` a few minutes later.
 1. Choose **Claude** or **Codex** in the Agent menu. Chat is the default view; **Open in Terminal** starts the selected CLI in your own terminal.
 2. For Codex, click **Sign in to Codex** once. The terminal runs `codex login --device-auth`; open the displayed verification page and enter its code using your ChatGPT account. Enable device-code login in your ChatGPT security settings if the CLI asks. After login, return to Chat with the speech-bubble tab. No API key is needed. Authentication persists in `~/.codex` inside the existing home volume.
 3. Click **Add source files**, upload inputs, then choose a starter or describe your task. Finished files appear under **Files → out/**. The history sheet lists the selected agent's conversations.
+   Each starter has **Edit prompt**: save its template for future visits in this browser, shared by Claude and Codex. **Cancel** discards edits; **Restore default** fills the original template (click **Save prompt** to apply). Selecting a card fills the composer for review; it does not send automatically. Templates are stored locally, not synced across browsers or devices.
 
 Switching agents preserves their separate conversations and composer drafts. It does not cancel a running turn. Claude streams text deltas; Codex displays completed message items as its CLI emits them, with live tool activity. Codex token counts are shown without fabricating dollar costs or Claude quota numbers.
 
