@@ -1,3 +1,10 @@
+## Git delivery — 2026-09-20
+
+- Implementation commit `0f1d3c1` pushed to `origin/main`; remote HEAD verified with `git ls-remote`.
+- Fresh pre-commit verification: 143 stack tests + 49 relevant repository tests = 192 passed, zero failures/errors/skips. Staged diff checked; no runtime credentials or unrelated vault change included.
+- No deployment performed. The web-quota fix still requires a separately authorized NAS deployment.
+- `secrets/vault.sops.yaml` remains modified locally from unrelated work and was intentionally left uncommitted.
+
 ## ปิดงาน — 2026-09-20
 
 - งานแก้โควตาหน้าเว็บเสร็จในเครื่อง; ผลล่าสุด 143 tests ผ่าน ชุดแก้นี้ยังไม่ได้ deploy/commit/push โดยผู้ช่วย รายละเอียดและขอบเขตอยู่ด้านล่าง

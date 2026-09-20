@@ -549,3 +549,13 @@ Validation: 143 stack tests, native app/nginx image builds, offline container st
 ผู้ใช้สั่งจบงาน: อัปเดต daily log และ index memory ของ ai-deck เรียบร้อย งานแก้โควตาหน้าเว็บผ่าน 143 tests ตามผลตรวจล่าสุด; ชุดแก้ยังอยู่ในเครื่อง ไม่ได้ deploy/commit/push โดยผู้ช่วย และไม่ได้แก้ข้อมูล NAS งานถัดไปหากผู้ใช้สั่งคือ deploy ชุดแก้และตรวจหน้าเว็บจริง
 
 เพิ่มกฎถาวรใน root CLAUDE.md และ AGENTS.md: เมื่อผู้ใช้บอก “จบงาน” ให้อัปเดต `<stack>/.notes/daily_log.md` และ `<stack>/.notes/00_INDEX.md` เสมอก่อนตอบปิดงาน แม้ไม่มี structural change ไม่ต้องขอให้ผู้ใช้ย้ำ และห้ามลง root .notes หากทำหลาย stack ต้องอัปเดตทุก stack ที่เกี่ยวข้อง ตรวจเนื้อหา/ตำแหน่งกฎและบันทึกแล้ว การปิดงานรอบนี้เปลี่ยนเฉพาะเอกสาร ไม่รันชุดทดสอบแอปซ้ำ
+
+
+## Git delivery — 2026-09-20
+
+- Implementation commit `0f1d3c1` pushed to `origin/main`; remote HEAD verified with `git ls-remote`.
+- Fresh pre-commit verification: 143 stack tests + 49 relevant repository tests = 192 passed, zero failures/errors/skips. Staged diff checked; no runtime credentials or unrelated vault change included.
+- No deployment performed. The web-quota fix still requires a separately authorized NAS deployment.
+- `secrets/vault.sops.yaml` remains modified locally from unrelated work and was intentionally left uncommitted.
+
+User requested commit + push. Delivered AI Deck rename/features/quota fixes and closing-memory rules in `0f1d3c1` (`feat(ai-deck)!: rename stack and fix chat status`). This follow-up memory entry records the verified push result.
