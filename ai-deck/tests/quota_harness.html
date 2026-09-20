@@ -1,0 +1,40 @@
+<!doctype html><meta charset="utf-8"><title>Quota integration checks</title>
+<pre id="result">pending</pre>
+<iframe id="claude" style="width:390px;height:844px" src="../ui/?demo=1&chat=1&welcome=1&provider=claude&mobile=1"></iframe>
+<iframe id="codex" style="width:390px;height:844px" src="../ui/?demo=1&chat=1&welcome=1&provider=codex&mobile=1"></iframe>
+<script>
+window.onerror = message => { document.getElementById('result').textContent = JSON.stringify({failures: [message]}); };
+window.addEventListener('load', () => setTimeout(() => {
+  const failures = [], now = Date.now() / 1000;
+  const check = (ok, label) => { if (!ok) failures.push(label); };
+  try {
+    for (const provider of ['claude', 'codex']) {
+      const frame = document.getElementById(provider), doc = frame.contentDocument, chat = frame.contentWindow._chat;
+      const quota = doc.getElementById('quota'), five = quota.querySelector('.q-5h');
+      check(!quota.hidden, provider + ': quota visible');
+      for (const control of doc.querySelectorAll('#top button')) {
+        if (control.getClientRects().length) check(control.getBoundingClientRect().right <= frame.clientWidth,
+          provider + ': header control not clipped: ' + control.id);
+      }
+      chat.renderQuota({provider});
+      check(!quota.querySelector('.q-state').hidden && quota.querySelector('.q-state').textContent === 'Quota pending', provider + ': no invented zero');
+      chat.feed({t:'quota', data:{provider, five_hour:{pct:34, observed_at:now, resets_at:now+3600}}});
+      check(five.querySelector('.q-pct').textContent === '34%', provider + ': chat updates quota');
+      chat.feed({t:'quota', data:{provider, five_hour:{pct:35, observed_at:now, resets_at:now+3600}}});
+      check(five.querySelector('.q-pct').textContent === '35%', provider + ': next observation moves number');
+      chat.renderQuota({provider:provider === 'claude' ? 'codex':'claude',five_hour:{pct:99, observed_at:now}});
+      check(five.querySelector('.q-pct').textContent === '35%', provider + ': other provider ignored');
+      chat.renderQuota({provider, five_hour:{pct:76,observed_at:now-325160,resets_at:now+3000}});
+      check(five.querySelector('.q-pct').textContent === '—' && five.querySelector('.q-in').textContent === 'stale', provider + ': old percentage not shown as current');
+      chat.renderQuota({provider, five_hour:{pct:76,observed_at:now,resets_at:now-1}});
+      check(five.querySelector('.q-in').textContent === 'stale', provider + ': expired window not reset to zero');
+      chat.renderQuota({provider,status:'unavailable'});
+      check(quota.querySelector('.q-state').textContent === 'Quota unavailable', provider + ': failed refresh explicit');
+      check(doc.documentElement.scrollWidth <= frame.clientWidth, provider + ': no overflow with unavailable quota');
+      chat.renderQuota({provider,five_hour:{pct:23,observed_at:now,resets_at:now+900,window_minutes:15}});
+      check(five.querySelector('b').textContent === '15m', provider + ': real window duration shown');
+    }
+  } catch (error) { failures.push(String(error)); }
+  document.getElementById('result').textContent=JSON.stringify({failures});
+}, 500));
+</script>

@@ -1,0 +1,60 @@
+<!doctype html><meta charset="utf-8"><title>AI Deck browser checks</title>
+<pre id="result">pending</pre>
+<iframe id="desktop" style="width:1280px;height:900px" src="../ui/?demo=1&chat=1&welcome=1&provider=codex&theme=light"></iframe>
+<iframe id="mobile" style="width:390px;height:844px" src="../ui/?demo=1&chat=1&welcome=1&provider=claude&theme=dark&mobile=1"></iframe>
+<iframe id="signed-in" style="width:390px;height:844px" src="../ui/?demo=1&chat=1&welcome=1&provider=codex&auth=signed_in&mobile=1"></iframe>
+<iframe id="unknown" style="width:390px;height:844px" src="../ui/?demo=1&chat=1&welcome=1&provider=codex&auth=unknown&mobile=1"></iframe>
+<script>
+window.onerror = message => { document.getElementById('result').textContent = JSON.stringify({failures: [message]}); };
+window.addEventListener('load', () => setTimeout(async () => {
+  const failures = [];
+  function check(ok, message) { if (!ok) failures.push(message); }
+  try {
+    for (const id of ['desktop', 'mobile', 'signed-in', 'unknown']) {
+      const frame = document.getElementById(id), doc = frame.contentDocument;
+      check(!!frame.contentWindow._chat, id + ': app initializes');
+      check(doc.title === 'AI Deck', id + ': neutral brand');
+      check(doc.querySelectorAll('[data-prompt]').length === 3, id + ': starters visible');
+      check(doc.documentElement.scrollWidth <= frame.clientWidth, id + ': no horizontal overflow');
+      doc.querySelector('[data-prompt]').click();
+      check(doc.getElementById('chat-input').value.includes('outline'), id + ': starter fills composer');
+      check(doc.getElementById('view-chat').getAttribute('aria-selected') === 'true', id + ': chat tab accessible');
+      doc.querySelector('.welcome-upload').click();
+      check(doc.getElementById('drawer').getAttribute('aria-hidden') === 'false', id + ': upload opens files');
+      check(!doc.getElementById('in-actions').hidden, id + ': upload selects input folder');
+      doc.getElementById('drawer-close').click();
+      const model = doc.getElementById('chat-model'), effort = doc.getElementById('chat-effort');
+      check(model.options.length > 1 && !model.disabled, id + ': models available');
+      model.selectedIndex = 1;
+      model.dispatchEvent(new frame.contentWindow.Event('change'));
+      check(!effort.disabled && [...effort.options].some(x => x.value === 'high'), id + ': effort follows model');
+      effort.value = 'high';
+      effort.dispatchEvent(new frame.contentWindow.Event('change'));
+    }
+    const desktopFrame = document.getElementById('desktop');
+    const desktop = desktopFrame.contentDocument;
+    const mobile = document.getElementById('mobile').contentDocument;
+    check(!desktop.getElementById('agent-login').hidden && !desktop.getElementById('agent-login').disabled, 'Signed-out Codex login offered');
+    check(mobile.getElementById('agent-login').hidden, 'Claude has no Codex login');
+    const signedIn = document.getElementById('signed-in').contentDocument.getElementById('agent-login');
+    check(signedIn.disabled && signedIn.textContent.includes('Signed in to Codex'), 'Signed-in Codex cannot launch duplicate login');
+    const unknown = document.getElementById('unknown').contentDocument.getElementById('agent-login');
+    check(!unknown.disabled && unknown.textContent === 'Check Codex sign-in', 'Unknown auth offers status retry');
+    const storage = desktopFrame.contentWindow.localStorage;
+    check(JSON.parse(storage.getItem('ai-deck.chat-options.codex')).model === 'demo-model', 'Codex preferences saved');
+    check(JSON.parse(storage.getItem('ai-deck.chat-options.claude')).model === 'sonnet', 'Claude preferences saved separately');
+    let sent;
+    desktopFrame.contentWindow.fetch = async (url, init) => {
+      if (String(url).includes('chat/send')) sent = JSON.parse(init.body);
+      return new Response('ok', {status: 200});
+    };
+    desktop.getElementById('chat-form').requestSubmit();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    check(sent && sent.model === 'demo-model' && sent.effort === 'high', 'Chosen model and effort reach chat API');
+    desktop.getElementById('agent-start').click();
+    await new Promise(resolve => setTimeout(resolve, 50));
+    check(!desktop.body.classList.contains('chat-view'), 'Open in Terminal switches view');
+  } catch (error) { failures.push(String(error)); }
+  document.getElementById('result').textContent = JSON.stringify({failures});
+}, 500));
+</script>

@@ -122,10 +122,10 @@
 # ─── 📝 Tools & Notes ─────────────────────────────────────────────────────────
 - 📝 Tools & Notes:
     # No ping/widget: basic auth on every path returns 401 = shows as down.
-    - claude-desk:
+    - AI Deck:
         icon: mdi-console
         href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15072"
-        description: Claude Code document desk
+        description: Documents and ideas with Claude & Codex
 
     - News Feed:
         icon: mdi-newspaper-variant-outline

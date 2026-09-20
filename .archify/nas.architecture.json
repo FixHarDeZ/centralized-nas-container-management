@@ -382,7 +382,7 @@
       "dot": "emerald",
       "title": "Runtime",
       "items": [
-        "Dashboards: maid-tracker, torrentwatch, ink-reader, claude-desk",
+        "Dashboards: maid-tracker, torrentwatch, ink-reader, ai-deck",
         "Bots: shorts-factory, ops-bot, news-feed (no HTTP surface)",
         "mem_limit works on DSM; cpus: is a no-op"
       ]

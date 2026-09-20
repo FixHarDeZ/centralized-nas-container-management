@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Vendor the workstation's Claude Code skills into claude-desk/skills/.
+"""Vendor the workstation's Claude Code skills into ai-deck/skills/.
 
-    make desk-skills          # copy every skill named in claude-desk/skills.list
+    make desk-skills          # copy every skill named in ai-deck/skills.list
     make desk-skills ARGS=-n  # report what would change, write nothing
 
 The desk gets its skills exactly the way it gets `work/CLAUDE.md`: a copy that
@@ -35,8 +35,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-LIST = ROOT / "claude-desk" / "skills.list"
-DEST = ROOT / "claude-desk" / "skills"
+LIST = ROOT / "ai-deck" / "skills.list"
+DEST = ROOT / "ai-deck" / "skills"
 SOURCE = Path.home() / ".claude" / "skills"
 
 # Pruned everywhere: build output and local state, none of which a skill needs
@@ -180,7 +180,7 @@ def main() -> int:
         print(f"synced {name} ({written} files, {size_kb(dst)} KB)")
 
     print(f"\n{len(names)} skills, {total} files, {size_kb(DEST)} KB → {DEST.relative_to(ROOT)}")
-    print("next: ./scripts/deploy.sh -s claude-desk -y  (rebuilds the last image\n      layer, ~1 min: apt/npm/pip stay cached)")
+    print("next: ./scripts/deploy.sh -s ai-deck -y  (rebuilds the last image\n      layer, ~1 min: apt/npm/pip stay cached)")
     return 0
 
 

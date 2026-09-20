@@ -1,0 +1,75 @@
+name: ai-deck
+
+services:
+  ai-deck:
+    # ttyd/rtk are checksum-pinned x86_64 binaries, matching the NAS.
+    platform: linux/amd64
+    build:
+      context: .
+      args:
+        CLAUDE_VERSION: "2.1.276"
+        SKILLS_REF: "34040c9c568585f6929bedeaad110ad08f079624"
+    container_name: ai-deck
+    restart: unless-stopped
+    # gid 100 (users) is what the share's Synology ACL grants — see Dockerfile.
+    user: "1000:100"
+    init: true
+    env_file: .env
+    environment:
+      - TZ=Asia/Bangkok
+      # The roster: one ttyd (and one tmux session) per basic auth user in
+      # nginx/.htpasswd, `<user>:<port>`. The first entry is the desk ttyd
+      # runs as PID 1 and the one anybody not listed lands on. nginx routes
+      # /ws by $remote_user to these same ports — its map is the second copy
+      # of this line, and tests/test_desks.py fails if they drift.
+      - DESK_USERS=fixhardez:7681,Pookzii:7684
+      # No STATUSLINE_BAR_W here on purpose: the status line sizes itself from
+      # COLUMNS on every render, and the same desk is opened from both a phone
+      # and a laptop. Setting it would pin one layout for both.
+    expose:
+      - "7681"   # ttyd, desk 1 (fixhardez)
+      - "7684"   # ttyd, desk 2 (Pookzii)
+      - "7682"   # upload.py (PUT /upload/<name> → /work/in)
+      - "7683"   # chat.py (SSE + POST, drives a second Claude Code)
+    volumes:
+      # Whole home, not just ~/.claude: onboarding state lives in ~/.claude.json
+      - home:/home/claude
+      - ${CLAUDE_WORK_DIR}:/work
+    # 3g, not 2g: two desks means two Claude Code TUIs can be up at once,
+    # plus chat.py's own child and a soffice render. The host has ~4.3 GB
+    # free and has been OOM-killed twice — this cap still means a runaway
+    # deck kills this container, not the NAS. cpus: is a no-op on DSM.
+    mem_limit: 3g
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+
+  nginx:
+    # Built, not stock: ui/ is COPYed in (see nginx/Dockerfile for why a
+    # directory bind does not work here).
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+    container_name: ai-deck-nginx
+    restart: unless-stopped
+    ports:
+      - "5072:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/.htpasswd:/etc/nginx/.htpasswd:ro
+      # Download side of the desk — read-only; nginx.conf only exposes out/.
+      # Whole share, not out/ itself: the desk's entrypoint creates out/ and
+      # nginx starts at the same moment, so a bind on out/ races it.
+      - ${CLAUDE_WORK_DIR}:/files:ro
+    environment:
+      - TZ=Asia/Bangkok
+    depends_on:
+      - ai-deck
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+
+volumes:
+  home:
+    # Existing credentials/history must survive the Compose project rename.
+    # Verify the old container's mount before the first cutover (MIGRATION.md).
+    external: true
+    name: ${AI_DECK_HOME_VOLUME:-claude-desk_claude_desk_home}

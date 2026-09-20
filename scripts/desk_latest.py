@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bump claude-desk's pinned versions to whatever upstream calls latest.
+"""Bump ai-deck's pinned versions to whatever upstream calls latest.
 
     make desk-latest          # rewrite the pins, then deploy the stack
     make desk-latest ARGS=-n  # just say what is behind, change nothing
@@ -89,8 +89,14 @@ def github_head(repo: str, branch: str = "main"):
 
 PINS = [
     Pin(
+        "Codex",
+        "ai-deck/Dockerfile",
+        r"(ARG CODEX_VERSION=)([^\s]+)(\n)",
+        npm("@openai/codex"),
+    ),
+    Pin(
         "Claude Code",
-        "claude-desk/docker-compose.yml",
+        "ai-deck/docker-compose.yml",
         r'(CLAUDE_VERSION:\s*")([^"]+)(")',
         npm("@anthropic-ai/claude-code"),
     ),
@@ -98,13 +104,13 @@ PINS = [
         "MiMoCode",
         # Not in compose with the other two: the image installs it and nothing
         # passes it as a build arg, so the Dockerfile default is the pin.
-        "claude-desk/Dockerfile",
+        "ai-deck/Dockerfile",
         r"(ARG MIMO_CODE_VERSION=)([^\s]+)(\n)",
         npm("@mimo-ai/cli"),
     ),
     Pin(
         "Office skills",
-        "claude-desk/docker-compose.yml",
+        "ai-deck/docker-compose.yml",
         r'(SKILLS_REF:\s*")([^"]+)(")',
         github_head("anthropics/skills"),
         note="anthropics/skills@main",
@@ -151,7 +157,7 @@ def main() -> int:
         touched.add(pin.path.relative_to(ROOT))
 
     print("\nRewrote: " + ", ".join(sorted(str(p) for p in touched)))
-    print("Next:    git diff  →  ./scripts/deploy.sh -s claude-desk -y")
+    print("Next:    git diff  →  ./scripts/deploy.sh -s ai-deck -y")
     print("The rebuild takes a few minutes and drops the open tmux session.")
     return 0
 

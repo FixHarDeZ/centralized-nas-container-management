@@ -1,0 +1,25 @@
+{
+  "_comment": "entrypoint.sh merges this into the home volume's settings.json with setdefault: a key lands once and later edits here do NOT reach a desk that already has it. Change a value in the volume too, or delete the key there.",
+  "statusLine": {
+    "type": "command",
+    "command": "bash /opt/ai-deck/statusline.sh"
+  },
+  "_comment_hooks": "Hooks are the exception to the note above: the merge keys them by command string per event, so a new one here does reach a desk that already exists.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "rtk hook claude" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "bash /opt/ai-deck/done-hook.sh" }
+        ]
+      }
+    ]
+  }
+}

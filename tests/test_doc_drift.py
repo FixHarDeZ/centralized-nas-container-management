@@ -75,8 +75,8 @@ def test_documented_stacks_stops_at_first_non_row_line():
 
 
 def test_deploy_stacks_parses_single_line_array():
-    text = "ALL_STACKS=(secretary n8n news-feed claude-desk)\n"
-    assert deploy_stacks(text) == {"secretary", "n8n", "news-feed", "claude-desk"}
+    text = "ALL_STACKS=(secretary n8n news-feed ai-deck)\n"
+    assert deploy_stacks(text) == {"secretary", "n8n", "news-feed", "ai-deck"}
 
 
 def test_deploy_stacks_parses_wrapped_array():
@@ -140,10 +140,10 @@ def test_find_drift_deploy_list_extra_name():
 
 
 def test_find_drift_clean_case_yields_no_findings():
-    disk = {"news-feed", "claude-desk"}
-    documented = {"news-feed": 33, "claude-desk": 34}
-    deployed = {"news-feed", "claude-desk"}
-    assert documented == {"news-feed": 33, "claude-desk": 34}
+    disk = {"news-feed", "ai-deck"}
+    documented = {"news-feed": 33, "ai-deck": 34}
+    deployed = {"news-feed", "ai-deck"}
+    assert documented == {"news-feed": 33, "ai-deck": 34}
     assert find_drift(disk, documented, deployed, deploy_sh_line=125) == []
 
 

@@ -36,10 +36,10 @@ sync-shared:    ## Copy each shared/*.py over its existing vendored copies (disc
 		done; \
 	done
 
-desk-skills:    ## Vendor the workstation skills named in claude-desk/skills.list into claude-desk/skills (ARGS=-n to only report)
+desk-skills:    ## Vendor the workstation skills named in ai-deck/skills.list into ai-deck/skills (ARGS=-n to only report)
 	@$(PY) scripts/desk_skills.py $(ARGS)
 
-desk-latest:    ## Bump claude-desk's pinned Claude Code / MiMoCode / skills to upstream latest (ARGS=-n to only report)
+desk-latest:    ## Bump ai-deck's pinned Claude Code / MiMoCode / skills to upstream latest (ARGS=-n to only report)
 	@$(PY) scripts/desk_latest.py $(ARGS)
 
 test:           ## Run repo-level pytest suite

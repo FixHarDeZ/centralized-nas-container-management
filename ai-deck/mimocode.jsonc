@@ -1,0 +1,75 @@
+// Config for `mimo` — MiMoCode (XiaomiMiMo/MiMo-Code, a fork of opencode)
+// driven by our own mimo endpoint.
+//
+// Baked into the image at /opt/ai-deck/ and copied to
+// ~/.config/mimocode/mimocode.jsonc by entrypoint.sh on every start. That is
+// the path MiMoCode actually reads: MIMOCODE_HOME with the file at its root
+// was tried and the provider never showed up in `mimo models`. It is copied
+// rather than shipped into the home volume because docker seeds a named
+// volume only while it is empty — a file written there would never reach a
+// desk that is already deployed.
+//
+// Comments are `//`, not a "_comment" key: MiMoCode validates the schema and
+// rejects unknown keys outright (opencode, its parent, ignored them), which
+// takes down `mimo models` and every session with it.
+//
+// The key is substituted at copy time by entrypoint.sh, so it stays in .env
+// and out of git.
+//
+// reasoningEffort (camelCase) is the key that reaches the wire as
+// reasoning_effort — verified for this fork by pointing the base URL at a
+// local echo server and reading the body it sent. The snake_case spelling is
+// accepted and silently dropped, which would leave every turn on the default
+// effort: 10,457 tokens/161s against 3,796/79s for a worse answer, and mimo's
+// wall time tracks the tokens it thinks (~30 tok/s).
+//
+// limit.output is advisory here — the same capture shows MiMoCode sending
+// max_tokens 128000 of its own. What matters is that nothing small is sent: a
+// small cap is spent on thinking first and the turn comes back empty
+// (shared/mimo.py).
+//
+// instructions: MiMoCode reads AGENTS.md, Claude Code reads CLAUDE.md — this
+// points it at the same house rules entrypoint.sh drops in /work instead of
+// keeping a second copy that drifts. Confirmed in the captured system prompt.
+//
+// Permissions are skipped by MIMOCODE_DANGEROUSLY_SKIP_PERMISSIONS in the
+// profile.sh alias, not by a rule block here — one mechanism. The flag form
+// cannot be used from an alias: it lands before the subcommand and yargs
+// prints help instead of running.
+{
+  // MiMoCode ships a xiaomi/* catalog we have no credentials for; left in,
+  // `mimo models` lists it and picking one in the model switcher fails or
+  // starts an OAuth flow nobody wants to meet on a phone. only_configured_models
+  // alone does not hide it — that flag scopes our own provider — so the
+  // catalog provider is disabled outright.
+  "disabled_providers": ["xiaomi"],
+  "provider": {
+    "mimo": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "mimo",
+      "only_configured_models": true,
+      "options": {
+        "baseURL": "__MIMO_BASE_URL__",
+        "apiKey": "__MIMO_API_KEY__"
+      },
+      "models": {
+        "mimo-v2.5-pro": {
+          "name": "mimo-v2.5-pro",
+          "tools": true,
+          "reasoning": true,
+          "limit": { "context": 200000, "output": 32000 },
+          "options": { "reasoningEffort": "low" }
+        },
+        "mimo-v2.5": {
+          "name": "mimo-v2.5 (smaller, faster)",
+          "tools": true,
+          "reasoning": true,
+          "limit": { "context": 200000, "output": 32000 },
+          "options": { "reasoningEffort": "low" }
+        }
+      }
+    }
+  },
+  "instructions": ["/work/CLAUDE.md"],
+  "model": "mimo/mimo-v2.5-pro"
+}
