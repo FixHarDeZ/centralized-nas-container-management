@@ -995,7 +995,8 @@ async def on_storyboard(client: httpx.AsyncClient, state: dict,
     locale = locale or state.get("locale", locales.DEFAULT)
     await say(client, "📋 กำลังวาง storyboard... (ระหว่างนี้ใช้คำสั่งอื่นได้)")
     try:
-        board = await storyboard.for_script(script, choice=choice, character=character)
+        board = await storyboard.for_script(script, choice=choice, character=character,
+                                            topic=topic or "")
     except Exception as exc:
         logger.exception("storyboard failed")
         await say(client, f"วาง storyboard ไม่สำเร็จ: {exc}")

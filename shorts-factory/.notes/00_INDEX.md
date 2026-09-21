@@ -1,6 +1,8 @@
 # shorts-factory — Index
 
-**2026-09-21:** 📋/`/storyboard` ถามตัวละครก่อนยิงโมเดล (🤖/✍️/🚫, `state['storyboard_wait']`) และรับคลิปที่ประกอบเสร็จกลับทาง reply (`state['clip_wait']` → uploads + ปุ่มอัปเดิม). ยังไม่ commit/deploy — ดู daily_log 21/09.
+**2026-09-21 (2):** **deploy แล้ว** (`deploy.sh -s shorts-factory -y`) — คำถามตัวละครไม่เคยขึ้นบนบอทจริงเพราะ image build 2026-09-14 ซอร์สใหม่นอนอยู่บน volume เฉยๆ (`grep SBCHAR_CB` ในคอนเทนเนอร์ = 0 ขณะที่บน `/volume2/docker/...` = 5) **เช็คในคอนเทนเนอร์เสมอ ไม่ใช่บน volume**. เพิ่ม: หัวข้อที่คนพิมพ์เองเข้า brief ของ storyboard แล้ว (`for_script(topic=)` → `_brief_from_script(script, topic)` กำกับว่าห้ามเปลี่ยนจำนวนฉาก) เดิมตกหายเพราะ Script เก็บแค่ title/cards → โหมด 🤖 แต่งคนใหม่ทุกครั้ง. commit + push แล้ว — ดู daily_log 21/09.
+
+**2026-09-21:** 📋/`/storyboard` ถามตัวละครก่อนยิงโมเดล (🤖/✍️/🚫, `state['storyboard_wait']`) และรับคลิปที่ประกอบเสร็จกลับทาง reply (`state['clip_wait']` → uploads + ปุ่มอัปเดิม).
 
 **2026-09-15:** hedge ใน `script._say` รื้อออกแล้ว (README อธิบาย), `app/mimo.py` +
 `app/telegram.py` เป็นสำเนาจาก `shared/` **ห้ามแก้ตรงๆ** (`make sync-shared`),
@@ -178,7 +180,11 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
   data, its branch sits *above* the `mode != review` guard (`/storyboard <brief>`
   asks it while idle), and with ✍️ pending a typed line is the character, not the
   next Topic — for 30 minutes (`CHARACTER_WAIT_LIFETIME`), then it is a Topic again.
-  📋 still mutates nothing that belongs to the Clip.
+  📋 still mutates nothing that belongs to the Clip. **The Topic as typed rides into
+  the brief** (`for_script(topic=)`): a Script keeps only hook/cards/title/description/
+  hashtags, so "ตัวละครหญิง 25 ปี สไตล์เกาหลี" is gone by planning time and 🤖 invents
+  somebody else — the line is labelled *visual detail only, the cards decide the scene
+  count*, because a Topic asking for six scenes against five cards burns a retry.
 - **A Storyboard's finished clip comes back by reply.** `send_storyboard()` returns
   the trailer's message id and `wait_for_clip()` parks it in `state['clip_wait']`
   with a snapshot of the Script, Topic and **Locale** (it picks the folder and

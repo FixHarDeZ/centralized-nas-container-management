@@ -2018,7 +2018,7 @@ def test_storyboard_button_leaves_the_script_in_review(monkeypatch, tmp_path):
 
     monkeypatch.setattr(main, "send_storyboard", fake_send)
 
-    async def fake_for_script(script, choice=storyboard.AUTO, character=""):
+    async def fake_for_script(script, choice=storyboard.AUTO, character="", topic=""):
         return storyboard.validate(a_board(scenes=len(script["cards"])), "9:16")
 
     monkeypatch.setattr(storyboard, "for_script", fake_for_script)
@@ -2044,7 +2044,7 @@ def test_a_storyboard_is_credited_to_the_clip_it_was_asked_for(monkeypatch, tmp_
     second = manifest.start("หัวข้อ B")
     state = {"mode": "review", "script": a_script(), "clip_id": first}
 
-    async def slow_for_script(script, choice=storyboard.AUTO, character=""):
+    async def slow_for_script(script, choice=storyboard.AUTO, character="", topic=""):
         state["clip_id"] = second      # the human moved on while this ran
         return storyboard.validate(a_board(scenes=len(script["cards"])), "9:16")
 
@@ -2067,6 +2067,38 @@ def test_a_scene_message_carries_the_thai_and_the_english(monkeypatch):
 
     assert posted["parse_mode"] == "HTML"
     assert "หัวเรื่อง" in posted["text"] and "<pre>A cinematic 9:16 shot</pre>" in posted["text"]
+
+
+def test_the_typed_topic_reaches_the_storyboard_brief():
+    """A Script keeps no record of how the human wanted the clip to look, so
+    the Topic as typed rides along — otherwise "ตัวละครหญิง 25 ปี สไตล์เกาหลี"
+    is gone by planning time and the model invents somebody else."""
+    brief = storyboard._brief_from_script(
+        a_script(), "work-life balance ตัวละครหญิง 25 ปี สไตล์เกาหลี")
+    assert "สไตล์เกาหลี" in brief
+    assert "ห้ามเปลี่ยนจำนวนฉาก" in brief, "the cards decide the scene count, not the Topic"
+    # The title on its own says nothing new; repeating it would only be noise.
+    assert "หัวข้อที่คนพิมพ์มาเอง" not in storyboard._brief_from_script(a_script(), "ทดสอบ")
+
+
+def test_a_boardless_of_people_does_not_get_a_person_in_its_brief(monkeypatch):
+    """🚫 and a Topic naming somebody argue with each other: the brief asks for
+    a woman, rule 1 forbids one, and validate() throws the board away after two
+    full model calls. The Topic is dropped for that answer only."""
+    seen = {}
+
+    async def fake_plan(brief, ratio, cards=None, choice=storyboard.AUTO, character=""):
+        seen.update(brief=brief, choice=choice)
+        return {}
+
+    monkeypatch.setattr(storyboard, "plan", fake_plan)
+    asyncio.run(storyboard.for_script(a_script(), choice=storyboard.NONE,
+                                      topic="ออฟฟิศซินโดรม ตัวละครหญิง 25 ปี"))
+    assert "ตัวละครหญิง" not in seen["brief"]
+
+    asyncio.run(storyboard.for_script(a_script(), choice=storyboard.AUTO,
+                                      topic="ออฟฟิศซินโดรม ตัวละครหญิง 25 ปี"))
+    assert "ตัวละครหญิง" in seen["brief"], "every other answer still gets the Topic"
 
 
 # --- who is in the storyboard ------------------------------------------------
@@ -2237,7 +2269,7 @@ def test_the_wait_belongs_to_the_locale_that_asked(monkeypatch, tmp_path):
     state = {"mode": "review", "script": a_script(), "clip_id": "c1",
              "topic": "หัวข้อไทย", "locale": "th"}
 
-    async def slow_for_script(script, choice=storyboard.AUTO, character=""):
+    async def slow_for_script(script, choice=storyboard.AUTO, character="", topic=""):
         state.update(locale="en", topic="an english topic")   # moved on meanwhile
         return storyboard.validate(a_board(scenes=len(script["cards"])), "9:16")
 

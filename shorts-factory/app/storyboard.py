@@ -140,9 +140,25 @@ def _system(ratio: str, shorts: bool, choice: str = AUTO) -> str:
     )
 
 
-def _brief_from_script(script: dict) -> str:
-    """The Script, laid out as the brief for its own storyboard."""
+def _brief_from_script(script: dict, topic: str = "") -> str:
+    """The Script, laid out as the brief for its own storyboard.
+
+    The Topic as it was typed rides along with the Script's own title: a Script
+    keeps only hook, cards, title, description and hashtags, so anything the
+    human said about how the clip should *look* ("ตัวละครหญิง 25 ปี สไตล์เกาหลี")
+    is gone by the time the board is planned, and the model invents somebody
+    else. Scene count still comes from the cards — the note says so, because a
+    Topic that asks for six scenes against five cards fails validation twice
+    and costs a retry.
+    """
     parts = [f"หัวข้อคลิป: {script['title']}", ""]
+    if topic and topic.strip() and topic.strip() != script["title"]:
+        parts = [
+            f"หัวข้อที่คนพิมพ์มาเอง: {topic.strip()}",
+            "  (ใช้เฉพาะรายละเอียดภาพ/ตัวละคร/อารมณ์ที่เขาบอก "
+            "ห้ามเปลี่ยนจำนวนฉาก จำนวนฉากยึดตามการ์ดข้างล่างเท่านั้น)",
+            "",
+        ] + parts
     for i, card in enumerate(script["cards"], 1):
         parts += [
             f"ฉากที่ {i}",
@@ -259,9 +275,14 @@ async def plan(brief: str, ratio: str, cards: list[dict] | None = None,
     raise ScriptError(str(last))
 
 
-async def for_script(script: dict, choice: str = AUTO, character: str = "") -> dict:
+async def for_script(script: dict, choice: str = AUTO, character: str = "",
+                     topic: str = "") -> dict:
     """The 9:16 storyboard for a Script that is waiting for review."""
-    return await plan(_brief_from_script(script), SHORTS_RATIO, cards=script["cards"],
+    # 🚫 means there is nobody in this board, and the Topic often names one:
+    # left in, the brief argues with rule 1 of its own system prompt and
+    # `validate(choice=NONE)` throws the board away after two full model calls.
+    return await plan(_brief_from_script(script, "" if choice == NONE else topic),
+                      SHORTS_RATIO, cards=script["cards"],
                       choice=choice, character=character)
 
 

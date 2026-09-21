@@ -352,6 +352,14 @@ character word for word — a board planned around the wrong person is a board
 thrown away. The answer is enforced in `validate()` the same way the lock is:
 🚫 with a character in the reply, or ✍️ with none, is rejected and re-asked.
 
+🤖 is not planning blind either: the topic **as you typed it** is put at the top
+of the brief, because a script keeps only its hook, cards, title, description
+and hashtags — ask for "ตัวละครหญิง 25 ปี สไตล์เกาหลี" in the topic and by
+planning time those words are gone, and the bot invents an office worker
+instead. The line is labelled as visual detail only: the cards decide how many
+scenes there are, so a topic that also asks for six scenes against five cards
+does not cost a rejected board.
+
 While ✍️ is pending, the next line you type is the character rather than your
 next topic. That is the one moment plain text means something else, so the bot
 says so, and the question expires after 30 minutes — an unanswered question
