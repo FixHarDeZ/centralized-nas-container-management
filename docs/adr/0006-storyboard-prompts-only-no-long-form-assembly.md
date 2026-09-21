@@ -47,6 +47,28 @@ One rule is relaxed against ADR 0005: storyboards allow an invented character
 with a face, because the human directs every step and nothing is published
 unattended. Real people, public figures and real brands stay banned in both.
 
+## Who the character is, is asked before the call
+
+The character was the one thing a board could not be corrected on afterwards:
+every scene repeats it word for word, so a board planned around the wrong
+person is a board thrown away — minutes of model time and, worse, credits spent
+in Flow before anyone notices. The board now opens with a question (bot
+invents / the human describes / nobody), the answer rides in the system prompt,
+and `validate()` enforces it exactly as it enforces the lock. The default
+answer produces the prompt this ADR was written about, unchanged.
+
+## Taking the assembled clip back is not assembling it
+
+The bot ingests the finished mp4 when the human replies to the storyboard's
+last message with it: the file is copied to `/volume1/shorts`, given a Manifest
+of its own and offered the same upload button a rendered Clip gets. No renderer,
+no script schema, no second experiment design — the boundary above is intact;
+what changed is that the human no longer has to move the file off the phone by
+hand to reach the channel, which was the only step of this route that needed a
+desktop. The 20MB `getFile` ceiling applies, and a long-form clip will often
+exceed it: that route ends at the prompts for anything bigger, which is the
+same answer this ADR already gave.
+
 If long-form turns out to be worth doing properly, this decision is what to
 revisit — and it should become its own stack rather than a mode flag threaded
 through this one.

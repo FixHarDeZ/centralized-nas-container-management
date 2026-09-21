@@ -37,6 +37,10 @@ IDLE_FIELDS = dict(
 
 # How long a Parked Clip waits for its Footage before it is written off.
 PARK_LIFETIME = timedelta(hours=int(os.environ.get("FLOW_PARK_HOURS", "24")))
+# How long a sent Storyboard waits for the finished clip the human assembles
+# from it. Longer than a Parked Clip on purpose: that one is a single 8-second
+# shot, this one is every scene generated, cut together and exported.
+CLIP_WAIT_LIFETIME = timedelta(hours=int(os.environ.get("STORYBOARD_CLIP_HOURS", "72")))
 
 
 def data_dir() -> Path:
@@ -97,14 +101,28 @@ def auto_pick_due(state: dict, now: datetime | None = None) -> bool:
         return False
 
 
-def parked_expired(state: dict, now: datetime | None = None) -> bool:
-    """Whether a Parked Clip has waited for its Footage long enough."""
-    parked = state.get("parked") or {}
+def _aged_out(record: dict, lifetime: timedelta, now: datetime | None) -> bool:
     try:
-        born = datetime.fromisoformat(parked["created_at"])
+        born = datetime.fromisoformat(record["created_at"])
     except (KeyError, TypeError, ValueError):
         return False
-    return (now or datetime.now()) - born > PARK_LIFETIME
+    return (now or datetime.now()) - born > lifetime
+
+
+def parked_expired(state: dict, now: datetime | None = None) -> bool:
+    """Whether a Parked Clip has waited for its Footage long enough."""
+    return _aged_out(state.get("parked") or {}, PARK_LIFETIME, now)
+
+
+def clip_wait_expired(state: dict, now: datetime | None = None) -> bool:
+    """Whether a sent Storyboard has waited long enough for its finished clip.
+
+    The wait holds nothing but a message id and the metadata to file the clip
+    under, so letting it go costs nothing — but leaving it forever means a
+    video replied to that message months later lands on a Topic nobody
+    remembers.
+    """
+    return _aged_out(state.get("clip_wait") or {}, CLIP_WAIT_LIFETIME, now)
 
 
 def claim_auto_pick(state: dict, now: datetime | None = None) -> bool | None:

@@ -336,12 +336,26 @@ rates. See `docs/adr/0005`.
 ## Storyboards
 
 Sometimes the shot list matters more than the stock clip. **📋 prompt ทำ
-storyboard** on a script plans one for it and sends it back one scene at a
-time: Thai above (what happens, what is heard, what the mood is), English
-below in copy blocks — one prompt to make the frame, one to make the video
-from it. The first message is the master character: generate that image in
-Flow before anything else and use it as an ingredient, or the face changes
-scene to scene.
+storyboard** on a script asks one question first — who is in it — and then
+plans the board and sends it back one scene at a time: Thai above (what
+happens, what is heard, what the mood is), English below in copy blocks — one
+prompt to make the frame, one to make the video from it. The first message is
+the master character: generate that image in Flow before anything else and use
+it as an ingredient, or the face changes scene to scene.
+
+The three answers are 🤖 (the bot invents the character), ✍️ (type the person
+you want, in Thai — the bot translates it into the locked English tag and uses
+nobody else) and 🚫 (no person at all: objects, places and hands, held
+together by one lighting and palette instead). It is asked **before** the model
+call, not offered as a revision afterwards, because every scene repeats the
+character word for word — a board planned around the wrong person is a board
+thrown away. The answer is enforced in `validate()` the same way the lock is:
+🚫 with a character in the reply, or ✍️ with none, is rejected and re-asked.
+
+While ✍️ is pending, the next line you type is the character rather than your
+next topic. That is the one moment plain text means something else, so the bot
+says so, and the question expires after 30 minutes — an unanswered question
+must not swallow a topic.
 
 The character lock is enforced, not requested. The storyboard names the
 character once in a `locked_prompt_tag`, and validation rejects any scene whose
@@ -361,6 +375,38 @@ is no script to lock against, so the voiceover is written by the model.
 Both stop at prompts — this stack does not assemble long-form video, and
 `docs/adr/0006` says why. Pressing 📋 changes nothing about the clip: the
 script keeps its buttons, and you can press it again.
+
+### Sending the finished clip back
+
+Assembling is still yours, but the file does not have to leave the phone to
+reach the channel. The last message of a storyboard is the one to **reply to
+with the finished mp4**: the bot files it under `/volume1/shorts` (English
+under `/en`) with its `.txt` metadata beside it, opens a Manifest of its own
+for it, and sends it back with the same ⬆️ upload button a rendered clip gets.
+
+Details worth knowing:
+
+- Which message the file replies to is the only thing that routes it. A Flow
+  shot for one card and a whole assembled clip look identical otherwise, and a
+  guess files the wrong video.
+- 20MB, like every other file the bot pulls back (`getFile`'s ceiling). Send it
+  as a video, not as a file.
+- A Shorts storyboard's clip inherits the script's title, description and
+  hashtags — it is the same clip shot another way. A long-form board has no
+  script, so it takes the board's title and an empty description; edit the rest
+  in Studio.
+- Its own Manifest, not the script's: the same script can be rendered by the
+  bot *and* shot in Flow, and one record cannot hold two videos without the
+  second publish erasing the first.
+- The wait lasts 72 hours (`STORYBOARD_CLIP_HOURS`) and stays open after a file
+  arrives — send a better cut and it is filed as its own clip with its own
+  button. One storyboard is waited on at a time; a new one replaces it.
+- The Locale the storyboard was asked in is snapshotted with the wait, not read
+  when the file lands: it picks the output folder *and* which channel's token
+  publishes the clip, and a board takes minutes to plan (`docs/adr/0008`).
+- Uploaded this way, the clip counts in `/stats` and toward the ADR 0004 Gate
+  like any other published clip — it is one. It carries no experiment variant,
+  so `/experiment`'s arms ignore it, which is correct: nothing was randomised.
 
 ## What it records
 
@@ -639,6 +685,7 @@ make secrets                    # render .env from vault + manifest
 | `FLOW_PARK_HOURS` | `24` | how long a clip waits for footage you generate in Flow |
 | `FLOW_PROMPT_TIMEOUT_SECONDS` | `180` | cap on writing one Flow Prompt |
 | `STORYBOARD_TIMEOUT_SECONDS` | `300` | cap on planning one storyboard |
+| `STORYBOARD_CLIP_HOURS` | `72` | how long a storyboard waits for the clip you assemble from it |
 | `TTS_VOICE_EN` | `en-US-AndrewNeural` | the English Locale's voice, used by `/en` and `/trends en` clips |
 | `TTS_ATTEMPTS` | `3` | tries per synthesis call; the endpoint drops whole calls at random (`No audio was received`) |
 | `TTS_BACKOFF_SECONDS` | `3` | wait before the next try, multiplied by the try number |

@@ -1,5 +1,7 @@
 # shorts-factory — Index
 
+**2026-09-21:** 📋/`/storyboard` ถามตัวละครก่อนยิงโมเดล (🤖/✍️/🚫, `state['storyboard_wait']`) และรับคลิปที่ประกอบเสร็จกลับทาง reply (`state['clip_wait']` → uploads + ปุ่มอัปเดิม). ยังไม่ commit/deploy — ดู daily_log 21/09.
+
 **2026-09-15:** hedge ใน `script._say` รื้อออกแล้ว (README อธิบาย), `app/mimo.py` +
 `app/telegram.py` เป็นสำเนาจาก `shared/` **ห้ามแก้ตรงๆ** (`make sync-shared`),
 `app/state.py` ถือ `to_idle()/busy_note()/claim_auto_pick()` — เพิ่มทางกลับ idle ที่ไหน
@@ -169,6 +171,30 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
   narration and on-screen lines are written back in from the Script
   (`lock_to_script`) rather than trusted to the model. 📋 mutates no state, and
   reads `clip_id` before the model call because the human can move on mid-run.
+  **Both ask who is in it first** (`storyboard.AUTO/OWN/NONE` → rule 1 of the
+  system prompt, enforced by `validate(choice=)`): the character is repeated word
+  for word in every scene, so it cannot be corrected after the board exists. The
+  question is parked in `state['storyboard_wait']` with a token in the callback
+  data, its branch sits *above* the `mode != review` guard (`/storyboard <brief>`
+  asks it while idle), and with ✍️ pending a typed line is the character, not the
+  next Topic — for 30 minutes (`CHARACTER_WAIT_LIFETIME`), then it is a Topic again.
+  📋 still mutates nothing that belongs to the Clip.
+- **A Storyboard's finished clip comes back by reply.** `send_storyboard()` returns
+  the trailer's message id and `wait_for_clip()` parks it in `state['clip_wait']`
+  with a snapshot of the Script, Topic and **Locale** (it picks the folder and
+  the channel, and a board takes minutes to plan — ADR 0008); `handle()` routes a
+  video by `reply_to_message`
+  alone (a Flow shot for one Card and a whole clip are indistinguishable
+  otherwise). `on_storyboard_clip()` files it under `/output`, opens **its own
+  Manifest** (one record cannot hold both a rendered and a Flow-shot video without
+  the second publish erasing the first) and writes the usual `state['uploads']`
+  entry, so `upload:<clip_id>` and `do_upload()` are untouched. 20MB getFile
+  ceiling; 72h wait (`STORYBOARD_CLIP_HOURS`), not closed when a file arrives.
+  Downloaded to `<stem>.mp4.part` and renamed, so a broken stream leaves nothing
+  in the library. Counts in the Gate and `/stats` (it is a published clip) but
+  carries no `variant`, so `experiment.tally()` skips it.
+  Long-form has no Script → `storyboard.as_script()` (title only, empty
+  description). The bot still assembles nothing (`docs/adr/0006`).
 - **Card joins are trimmed.** The paragraph break that produces the boundary
   events also produces ~1.0s of dead air per join (measured; clause breaks are
   0.12-0.53s). `render.tighten()` slices at the boundaries, trims each slice's

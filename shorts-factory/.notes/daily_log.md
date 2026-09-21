@@ -1703,3 +1703,41 @@ close_prompt` เป็นชื่อบางๆ ทับ `telegram.Bot` — 
 187 passed + 8 font/Raqm เดิม (HEAD ก็ 8). ยังไม่ commit — รอ /release พร้อม root docs.
 
 **Token leak in logs (fixed same day).** httpx INFO log printed the full Telegram URL = bot token on every request in `docker logs shorts-factory`. Muted `httpx` logger to WARNING at import in `shared/telegram.py` (covers story-factory too). ops-bot/torrentwatch checked on the NAS: 0 such lines in 48h (they do not set INFO). Redeployed.
+
+
+## 2026-09-21 — storyboard: ถามตัวละครก่อน, และรับคลิปที่ประกอบเสร็จกลับมาอัป
+
+ผู้ใช้ขอ 2 อย่างบนเส้น storyboard: (1) ยืนยันตัวละครก่อน ว่าจะให้บอทแต่งเองหรือระบุเอง
+(2) หลังส่ง prompt แล้ว ให้มีที่รับคลิปเพื่ออัป YouTube เหมือนโหมดอื่น
+
+**ถามตัวละครก่อนยิงโมเดล.** `storyboard.AUTO/OWN/NONE` + `CHARACTER_AUTO/OWN/NONE` เป็น rule 1
+ของ system prompt (เดิมฝังตายอยู่ก้อนเดียว) → `_system(..., choice)`. ปุ่ม 🤖/✍️/🚫 อยู่ใน
+`main.character_keyboard(token)`, callback `sbchar:<choice>:<token>` วาง**เหนือ** guard
+`mode != review` เพราะ `/storyboard <บรีฟ>` ถามตอน idle (guard นั้นจะกลืนการกดเงียบๆ เหมือนที่
+`PARK_RENDER_CB`/`CANCEL_CB` เคยเจอ). token อยู่ใน callback data + snapshot Script ลง
+`state['storyboard_wait']` เพราะคำถามอยู่ข้ามการกด 🗑 หรือหัวข้อใหม่ได้ (เหตุผลเดียวกับปุ่มอัปที่พก
+clip_id). ✍️ = ข้อความธรรมดาบรรทัดถัดไปคือลักษณะตัวละคร ดักใน `on_text` **ใต้บล็อกคำสั่ง `/`
+และเหนือ mode read** ไม่งั้นโหมด review จะกลืนไปเป็น feedback แก้สคริปต์ — หมดอายุ 30 นาที
+(`CHARACTER_WAIT_LIFETIME`) แล้วคืนข้อความนั้นเป็นหัวข้อตามปกติ. `validate(choice=)` ตีกลับ
+🚫-แต่มีตัวละคร และ ✍️-แต่ไม่มี (retry loop เดิมเขียนใหม่ให้เอง).
+
+**รับคลิปกลับ (ADR 0006 ไม่เปลี่ยนขอบเขต).** `send_storyboard()` คืน message_id ของข้อความท้าย
+แล้ว `wait_for_clip()` เก็บ `state['clip_wait']` (message_id + Script snapshot + locale + topic).
+`handle()` แยกทางจาก **`reply_to_message` เท่านั้น** — footage ของ card กับคลิปเต็มหน้าตาเหมือนกัน
+เดาผิดคือไฟล์ลงผิดคลิป. `on_storyboard_clip()` โหลดลง `output_dir(locale)` + `.txt`,
+`manifest.start()` **เปิด record ใหม่** (สคริปต์เดียวอาจถูก render เองด้วย ถ่าย Flow ด้วย — record
+เดียวกันแปลว่า video_id ทับกัน) แล้วใส่ `state['uploads'][clip_id]` ทรงเดิม → ปุ่ม `upload:<id>`
+กับ `do_upload()` เดิมทำงานต่อได้โดยไม่แตะ. คลิปยาวไม่มี Script → `storyboard.as_script()`
+ใช้แค่ title คำอธิบายว่าง (ไม่เอา stage direction ไปเป็น description บน YouTube). ไม่ปิด wait หลังได้
+ไฟล์ (ส่งเวอร์ชันใหม่ทับได้ นับเป็นคลิปใหม่) หมดอายุ 72 ชม. `STORYBOARD_CLIP_HOURS`
+(`st.clip_wait_expired`, sweep ใน poll loop คู่กับ `parked_expired`). เพดาน getFile 20MB เหมือนเดิม
+— คลิปยาวส่วนใหญ่เกิน = เส้นนั้นจบที่ prompt ตามเดิม (บอกไว้ในข้อความบอท + README + ADR).
+
+เทสต์ใหม่ 10 ข้อ (คำถามตัวละคร 5 + คลิปกลับ 5). **216 passed + 8 Raqm/font เดิม** (baseline HEAD
+ก็ 8 ข้อเดิมเป๊ะ). ruff ไม่มี error ใหม่ (diff กับ HEAD = แค่เลขบรรทัดขยับ).
+เทสต์รันด้วย venv ชั่วคราว: `.venv` ของ repo ถูก `uv sync` ถอด dep ออกหมดแล้ว (เหลือแต่ pytest)
+→ `uv venv /tmp/.../sfvenv -p 3.12` + `uv pip install -r shorts-factory/requirements.txt`.
+
+**ยังไม่ commit ไม่ deploy.**
+
+**รอบตรวจซ้ำ (advisor) แก้เพิ่ม 3 จุด.** (1) `topic`/`locale` เดิมอ่านจาก state สดตอนบอร์ดเสร็จ — คนเปิดหัวข้ออังกฤษระหว่างบอร์ดไทยกำลังวาง (ใช้เวลาเป็นนาที) = คลิปไทยลง `/output/en` และอัปขึ้นช่องอังกฤษเงียบๆ (ADR 0008 ห้ามไว้ตรงๆ) → snapshot ตั้งแต่ตอนถามตัวละคร ส่งผ่าน `start_storyboard` → `on_storyboard` → `wait_for_clip`. (2) โหลดไฟล์ลง `<stem>.mp4.part` แล้ว `replace()` (สตรีมขาดกลางทาง = mp4 ตัดครึ่งนอนอยู่ในคลังดูเหมือนไฟล์ดี; ทางอื่นในสแตกนี้ stage ก่อนทุกเส้น). (3) `on_footage` ที่ไม่มี parked ต่อท้ายว่า ถ้าเป็นคลิปจาก storyboard ให้ reply ข้อความท้าย storyboard (เดิมแนะนำให้ไปกด 🎨 ซึ่งผิดเรื่อง). ตรวจแล้วไม่ต้องแก้: `backfill.run()` ข้ามคลิปที่ `manifest.by_video(video_id)` เจอ = ไม่เกิด manifest ซ้ำหลัง restart, และ `experiment.tally()` ข้าม record ที่ `variant` เป็น None = คลิปจาก storyboard ไม่เข้า arm (เข้าแค่ Gate/`/stats` ในฐานะคลิปที่อัปจริง ซึ่งถูกแล้ว). 218 passed + 8 Raqm เดิม.
