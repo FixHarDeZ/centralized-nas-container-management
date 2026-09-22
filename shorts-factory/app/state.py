@@ -32,7 +32,7 @@ BUSY_MODES = {"writing", "rendering"}
 #: all of these — a field left behind is the next Clip's bug.
 IDLE_FIELDS = dict(
     script=None, topic=None, clip_id=None, style="", message_id=None,
-    locale=locales.DEFAULT,
+    locale=locales.DEFAULT, review_at=None,
 )
 
 # How long a Parked Clip waits for its Footage before it is written off.
@@ -41,6 +41,15 @@ PARK_LIFETIME = timedelta(hours=int(os.environ.get("FLOW_PARK_HOURS", "24")))
 # from it. Longer than a Parked Clip on purpose: that one is a single 8-second
 # shot, this one is every scene generated, cut together and exported.
 CLIP_WAIT_LIFETIME = timedelta(hours=int(os.environ.get("STORYBOARD_CLIP_HOURS", "72")))
+# How long a Script waits for the human to press one of its buttons. Review had
+# no clock until 2026-09-22, and the unattended trends round only fires from an
+# idle bot: one Script nobody answered silenced every channel's schedule for
+# good. A review left open at 15:05 on 09-21 ate th 17:00, en 19:00 and 23:00,
+# and th 08:00 the next morning, without one line in the log to say so.
+# Shorter than both waits above on purpose: those hold a human who is off doing
+# work elsewhere (generating footage, cutting a board together), this one is
+# waiting on a tap. A Script nobody has answered in this long is abandoned.
+REVIEW_LIFETIME = timedelta(hours=int(os.environ.get("REVIEW_LIFETIME_HOURS", "6")))
 
 
 def data_dir() -> Path:
@@ -73,6 +82,19 @@ def to_idle(state: dict) -> None:
     state.update(mode="idle", **IDLE_FIELDS)
 
 
+def to_review(state: dict, **fields) -> None:
+    """Hand a Script to the human and start its clock.
+
+    The stamp lives here rather than at the three call sites for the same
+    reason this module exists: a site that forgets it is a path back to a
+    review that never ends. `fields` is whatever that entrance also sets --
+    the Script itself, the Topic, the id of the message holding the buttons.
+    """
+    state.update(mode="review",
+                 review_at=datetime.now().isoformat(timespec="seconds"),
+                 **fields)
+
+
 def busy_note(mode: str) -> str:
     """What to tell a human who sent work while the bot is mid-job."""
     job = "เขียนสคริปต์" if mode == "writing" else "render"
@@ -101,9 +123,10 @@ def auto_pick_due(state: dict, now: datetime | None = None) -> bool:
         return False
 
 
-def _aged_out(record: dict, lifetime: timedelta, now: datetime | None) -> bool:
+def _aged_out(record: dict, lifetime: timedelta, now: datetime | None,
+              key: str = "created_at") -> bool:
     try:
-        born = datetime.fromisoformat(record["created_at"])
+        born = datetime.fromisoformat(record[key])
     except (KeyError, TypeError, ValueError):
         return False
     return (now or datetime.now()) - born > lifetime
@@ -123,6 +146,34 @@ def clip_wait_expired(state: dict, now: datetime | None = None) -> bool:
     remembers.
     """
     return _aged_out(state.get("clip_wait") or {}, CLIP_WAIT_LIFETIME, now)
+
+
+def review_expired(state: dict, now: datetime | None = None) -> bool:
+    """Whether a Script has waited for its button press long enough.
+
+    Reads the live state rather than a sub-record, because a review *is* the
+    live state -- there is no record to hand to the sweep, only `message_id`
+    and `clip_id`. An unstamped review never expires: _aged_out says False on
+    a missing key, so a Script mid-flight over an upgrade keeps the old
+    behaviour instead of being dropped on a guessed age. `stamp_review()`
+    closes that window at startup.
+    """
+    if state.get("mode") != "review":
+        return False
+    return _aged_out(state, REVIEW_LIFETIME, now, key="review_at")
+
+
+def stamp_review(state: dict) -> bool:
+    """Give a review that has no clock one, and say whether it needed it.
+
+    Called at startup. Without it the one review that was open when this
+    shipped -- and any review carried across a restart by a state file written
+    before it -- would still be immortal, which is the whole bug.
+    """
+    if state.get("mode") != "review" or state.get("review_at"):
+        return False
+    state["review_at"] = datetime.now().isoformat(timespec="seconds")
+    return True
 
 
 def claim_auto_pick(state: dict, now: datetime | None = None) -> bool | None:

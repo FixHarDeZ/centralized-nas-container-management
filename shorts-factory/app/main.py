@@ -22,7 +22,8 @@ from app import (analytics, backfill, experiment, history, locales, manifest, re
 from app import state as st
 # Re-exported: the tests and the dashboard reach these through `main`.
 from app.state import (BUSY_MODES, CLIP_WAIT_LIFETIME, PARK_LIFETIME,  # noqa: F401
-                       auto_pick_due, auto_slots, clip_wait_expired, parked_expired)
+                       REVIEW_LIFETIME, auto_pick_due, auto_slots,
+                       clip_wait_expired, parked_expired, review_expired)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("shorts-factory")
@@ -579,7 +580,7 @@ async def make_script(client: httpx.AsyncClient, state: dict, topic: str,
             # A blip during a revision must not throw away the script being
             # worked on; re-post it so its buttons come back.
             sent = await say(client, format_script(previous), reply_markup=REVIEW_KEYBOARD)
-            state.update(mode="review", script=previous,
+            st.to_review(state, script=previous,
                          message_id=(sent or {}).get("message_id"))
         else:
             # A Topic that never produced a Script is not a Clip. Recorded so
@@ -599,8 +600,8 @@ async def make_script(client: httpx.AsyncClient, state: dict, topic: str,
     # message with "กำลัง render", erasing the only copy of what it rendered.
     sent = await say(client, format_script(script),
                      **({} if auto else {"reply_markup": REVIEW_KEYBOARD}))
-    state.update(
-        mode="review", topic=topic, script=script,
+    st.to_review(
+        state, topic=topic, script=script,
         message_id=None if auto else (sent or {}).get("message_id"),
     )
     save_state(state)
@@ -696,7 +697,7 @@ async def on_flow(client: httpx.AsyncClient, state: dict) -> None:
         # The Script is not the casualty of a prompt that would not write:
         # re-post it so its buttons come back, exactly as a failed revision does.
         sent = await say(client, format_script(script), reply_markup=REVIEW_KEYBOARD)
-        state.update(mode="review", message_id=(sent or {}).get("message_id"))
+        st.to_review(state, message_id=(sent or {}).get("message_id"))
         save_state(state)
         await say(client, f"เขียน prompt ให้ Flow ไม่สำเร็จ: {exc}")
         return
@@ -1112,6 +1113,30 @@ async def on_storyboard_clip(client: httpx.AsyncClient, state: dict,
     # The wait stays: a better cut of the same storyboard can be sent again,
     # and each one is filed as its own clip with its own button.
     save_state(state)
+
+
+async def drop_review(client: httpx.AsyncClient, stale: dict) -> None:
+    """A Script nobody answered. Let go of, out loud, like a dropped Park.
+
+    Said out loud and not merely forgotten because the bot is about to look
+    busy on its own: the freed slot means the next tick may fire an owed
+    trends round, and a list arriving unexplained reads as the bot going off
+    on its own.
+    """
+    manifest.update(stale.get("clip_id"), outcome="abandoned")
+    await close_prompt(client, stale.get("message_id"), "⌛️ สคริปต์นี้ค้างรีวิวนานเกินไป")
+    hours = REVIEW_LIFETIME.total_seconds() / 3600
+    note = (f"⌛️ ปล่อยสคริปต์ที่ค้างรีวิวเกิน {hours:.0f} ชั่วโมงแล้ว "
+            "(ค้างอยู่ = รอบ /trends อัตโนมัติไม่ยิงเลย)\n"
+            "ส่งหัวข้อใหม่มาได้ หรือรอรอบอัตโนมัติรอบถัดไป")
+    # The storyboard wait is a separate record with its own 72-hour clock and
+    # its own copy of the Script, and to_idle() does not touch it -- say so,
+    # or letting the Script go reads as cancelling the board too.
+    if stale.get("clip_wait"):
+        note += "\n(storyboard ที่ส่งไว้ยังรออยู่ ตอบกลับแนบคลิปได้ตามเดิม)"
+    if stale.get("pair"):
+        note += "\n(ยกเลิกภาษาอังกฤษของหัวข้อนี้ด้วย)"
+    await say(client, note)
 
 
 async def drop_clip_wait(client: httpx.AsyncClient, wait: dict) -> None:
@@ -1885,6 +1910,12 @@ async def main() -> None:
         # Set for the length of a round and cleared in a `finally` that a kill
         # does not run. Left behind, it blocks every future round silently.
         save_state(state)
+    if st.stamp_review(state):
+        # A review carried over from a state file written before reviews had a
+        # clock. Dated from now rather than guessed at: the point is only that
+        # it can no longer wait forever.
+        logger.info("ตั้งนาฬิกาให้สคริปต์ที่ค้างรีวิวอยู่")
+        save_state(state)
 
     restored = backfill.run()
     if restored:
@@ -1915,6 +1946,17 @@ async def main() -> None:
                 save_state(state)
                 spawn(on_trends(client, state, auto=True, locale=locale),
                       f"auto_trends:{locale}")
+            if review_expired(state):
+                # Cleared before the notice goes out, same as the two sweeps
+                # below: a slow sendMessage would let the next tick find the
+                # review still there and drop it a second time.
+                stale = {"message_id": state.get("message_id"),
+                         "clip_id": state.get("clip_id"),
+                         "clip_wait": bool(state.get("clip_wait")),
+                         "pair": state.pop("pair", None)}
+                st.to_idle(state)
+                save_state(state)
+                spawn(drop_review(client, stale), "drop_review")
             if parked_expired(state):
                 expired = state.pop("parked", None)
                 save_state(state)

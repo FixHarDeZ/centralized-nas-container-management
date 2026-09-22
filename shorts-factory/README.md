@@ -326,6 +326,15 @@ What it will not do is park a second clip, or pick a topic on its own — you ar
 already busy with this one. A clip nobody sends footage for is written off
 after 24 hours (`FLOW_PARK_HOURS`) and recorded as `abandoned`.
 
+A script waiting for review has its own clock, for a reason that is not about
+tidiness: the unattended `/trends` round only fires from an idle bot, so one
+script nobody answered used to silence every channel's schedule indefinitely
+and without a line in the log. After `REVIEW_LIFETIME_HOURS` (6) the bot lets
+the script go, says so in chat, records the clip as `abandoned` and goes idle,
+which is the state the owed round needs. A storyboard already sent from that
+script keeps its own 72-hour wait and its own copy of the script -- replying to
+it with the finished clip still works, and the notice says so.
+
 Telegram's Bot API will not serve the bot a file over 20MB, so send the video
 normally and let Telegram compress it rather than sending it as a file.
 
@@ -694,6 +703,7 @@ make secrets                    # render .env from vault + manifest
 | `FLOW_PROMPT_TIMEOUT_SECONDS` | `180` | cap on writing one Flow Prompt |
 | `STORYBOARD_TIMEOUT_SECONDS` | `300` | cap on planning one storyboard |
 | `STORYBOARD_CLIP_HOURS` | `72` | how long a storyboard waits for the clip you assemble from it |
+| `REVIEW_LIFETIME_HOURS` | `6` | how long a script waits for you to press a button before it is let go |
 | `TTS_VOICE_EN` | `en-US-AndrewNeural` | the English Locale's voice, used by `/en` and `/trends en` clips |
 | `TTS_ATTEMPTS` | `3` | tries per synthesis call; the endpoint drops whole calls at random (`No audio was received`) |
 | `TTS_BACKOFF_SECONDS` | `3` | wait before the next try, multiplied by the try number |

@@ -1772,3 +1772,74 @@ hook/cards/title/description/hashtags — รายละเอียดภา�
 ทางเลือกที่ยังไม่ได้ทำ: ให้ปุ่ม 🎨 (footage เส้น Pexels-แทน) ถามตัวละครด้วย — ตอนนี้ยังไม่ถาม และ
 `FLOW_SYSTEM_PROMPT` ยัง**ห้ามใบหน้าที่ระบุตัวตนได้**โดยตั้งใจ (การ์ดมีข้อความทับกลางจอ) ถ้าจะทำ
 ต้องแยก system prompt 3 แบบ และ default ของเส้นนั้นคือ 🚫 ไม่ใช่ 🤖.
+
+## 2026-09-21 — YouTube AI label notice บนคลิปที่อัปแล้ว (ไม่ได้ self-declare)
+
+คนบ่น: คลิปที่อัปขึ้น YouTube ขึ้น notice "This video has an AI label" (ตรวจแล้วยังไม่ disclose
+เอง — YouTube auto-detect synthetic media เอง). สาเหตุ: `youtube.metadata()` ส่งแค่
+`privacyStatus` + `selfDeclaredMadeForKids` ใน `status`, ไม่เคยส่ง disclosure flag ของ AI content
+เลย ทั้งที่คลิปมีทั้งเสียง edge-tts และการ์ด/ฟุตเทจที่ประกอบขึ้น.
+
+แก้: เพิ่ม `"containsSyntheticMedia": True` ลงใน `status` ของ `metadata()`
+(`shorts-factory/app/youtube.py`) — `part=snippet,status` ที่ resumable upload ใช้อยู่แล้วครอบคลุม
+field นี้พอดี ไม่ต้องขอ scope ใหม่. เทสต์ `test_metadata_strips_hashes_into_tags` เพิ่ม assert
+`containsSyntheticMedia is True`.
+
+**สถานะ: ยังไม่ commit ไม่ deploy** (แก้ในเซสชันนี้ยังไม่ได้ทดสอบรันจริงเพราะ sandbox ไม่มี
+`aiohttp`/`pillow==12.3.0` ตรงเวอร์ชัน ต้องลง repo venv บนเครื่องจริงถึงรัน pytest ได้). งานค้าง:
+commit → deploy `./scripts/deploy.sh -s shorts-factory -y` → อัปคลิปใหม่ 1 อันทดสอบว่า notice
+หายจริง. คลิปเก่าที่อัปไปแล้วไม่ได้รับผลจาก fix นี้ ต้องแก้ label เองใน YouTube Studio รายคลิปถ้าต้องการ.
+
+## 2026-09-22 — auto `/trends` เงียบทั้งสองช่องเพราะ review ค้างใบเดียว + ใส่นาฬิกาให้ review
+
+คนบ่นว่ารอบ schedule ของ `/trends` กับ `/trends en` เงียบไปตั้งแต่เมื่อวาน. ไม่มี error ใน log
+เลยแม้แต่บรรทัดเดียว เพราะ branch มันถูก**ข้าม** ไม่ใช่ล้ม.
+
+**สาเหตุ:** `state.json` ในคอนเทนเนอร์มี `mode: "review"` ค้างตั้งแต่ `review`/`suggested_at`
+`2026-09-21T15:05:25` (สคริปต์ "ทำงาน 55 ชม.ต่อสัปดาห์ ผลิตภาพเพิ่ม = 0 จริงเหรอ?", `message_id`
+2324) และรอบอัตโนมัติยิงจาก `mode == "idle"` เท่านั้น (`main.py` branch `owed`). เทียบ
+`last_auto_trends = {"th": "2026-09-21T12", "en": "2026-09-20T23"}` กับ `/config/schedule.json`
+(th `[8,12,17]`, en `[19,23]` เปิดทั้งคู่) ได้รอบที่หายตรงกับที่บ่นเป๊ะ: th 17:00 (21/09),
+en 19:00 + 23:00 (21/09), th 08:00 (22/09). ตัวคลิปเองไม่ได้ค้าง — อัปคลิปสำเร็จ 21:44, 22:07
+เมื่อวาน และ 09:48 วันนี้ (อัปไม่แตะ `mode`).
+
+**ที่มาของ review ที่ค้าง:** สคริปต์นั้นถูกกด 📋 ไปทำ storyboard (มี `clip_wait` `message_id`
+2339 ถือสคริปต์เดียวกัน) แต่เส้น storyboard **ไม่แตะ state** ตามดีไซน์ (`main.py:46`) → review
+เดิมเปิดค้างไว้ ไม่มีใครกด 🗑/🎬. ตรวจก่อนแนะให้กด 🗑: `pair` = `null` (ไม่มีฝั่งอังกฤษพ่วงตาย),
+`parked`/`trends_running`/`auto_pick` ว่างหมด, และ `to_idle()` ไม่แตะ `clip_wait` → storyboard
+ที่รออยู่ไม่เสีย.
+
+**แก้:** ไม่ทำทางที่ดูง่ายกว่า (ให้ 📋 ปล่อยเป็น idle เหมือน 🎨) — 🎨 park เพราะคลิปนั้น render
+ทางอื่นไม่ได้แล้ว ส่วน 📋 คนอ่านบอร์ดแล้วเปลี่ยนใจกด 🎬 Pexels ได้ ถ้าไปเคลียร์ `script`
+ปุ่มบน 2324 กลายเป็นปุ่มตาย = ตัดฟีเจอร์ในนามการแก้บั๊ก แถมคนที่ไม่กดอะไรเลยก็ยังดับบอทได้อยู่.
+เลยปิดที่ invariant แทน: review เป็น wait ตัวเดียวที่ไม่มีอายุ. เพิ่ม `REVIEW_LIFETIME`
+(env `REVIEW_LIFETIME_HOURS` default 6), `to_review()`, `review_expired()`, `stamp_review()`
+ใน `state.py`; `review_at` เข้า `IDLE_FIELDS`; `_aged_out()` รับ `key=` เพราะ review คือ live
+state ไม่ใช่ sub-record. sweep วางข้างๆ `parked_expired`/`clip_wait_expired` (เคลียร์ state
+ก่อนส่งข้อความ ไม่งั้น sendMessage ช้า = tick ถัดไปทิ้งซ้ำ) → `drop_review()` บันทึก
+`outcome="abandoned"`, retire ปุ่มเก่า, บอกในแชทว่า storyboard ยังรออยู่ / ยกเลิกฝั่งอังกฤษด้วย
+ถ้ามี `pair`, และบอกว่า "ค้างอยู่ = รอบ /trends อัตโนมัติไม่ยิงเลย" เพราะ tick ถัดไปลิสต์ trends
+จะโผล่เองภายใน 30 วิ (ไม่บอก = อ่านเหมือนบอททำอะไรเอง). ไม่มี `review_at` = ไม่หมดอายุ
+(ไม่เดาอายุแล้วทิ้งงานคน) ปิดช่องด้วย `stamp_review()` ตอน startup. `README.md` เพิ่มย่อหน้า
++ แถว env; ไม่ใส่ `secrets.manifest.yaml` เพื่อให้ตรงกับ `FLOW_PARK_HOURS`/`STORYBOARD_CLIP_HOURS`
+ที่ไม่ได้อยู่ในนั้น.
+
+**เทสต์: 227 passed / 9 failed** — baseline HEAD = 219 passed / 9 failed failure list เดิมเป๊ะ
+(Raqm/font 8 + `test_no_drawing_library_in_this_process`). เทสต์ใหม่ 8 ข้อ รวม
+`test_every_entrance_to_review_starts_the_clock` ที่อ่านซอร์ส `main.py` แบบตัดช่องว่าง → เขียน
+`mode="review"` หรือ `mode = "review"` ที่ไหนก็ตาม = แดง. ruff ไม่มี finding ใหม่ (เทียบแบบตัด
+เลขบรรทัดแล้วเหมือนกันทุกบรรทัด). **venv:** `/tmp` เป็น symlink ไป `/private/tmp` บน macOS ทำให้
+venv ที่สร้างใต้ `/tmp` พัง — `sys.prefix` ชี้กลับไป homebrew, `import pytest` ไม่เจอ แม้ `uv pip
+install` จะสำเร็จ. ต้องสร้าง venv ใต้ real path (scratchpad ของเซสชัน) ถึงใช้ได้.
+
+**สถานะ: ยังไม่ commit ไม่ deploy.** ค้าง 2 เรื่อง:
+1. **เลข lifetime ยังไม่ฟันธง** — 6 ชม. (default ที่ใส่ไว้) กับ th slots `8,12,17` ที่ห่างสุด
+   5 ชม. หมายความว่า review ที่เปิดหลังรอบหนึ่งนิดเดียว ยังกินรอบถัดไปได้ทั้งรอบ. อยากให้
+   "เสียไม่เกิน 1 รอบ" ต้อง 4 ชม. รอคนเลือก (แก้ env ไม่ต้อง rebuild).
+2. **deploy ไม่ได้ปลดล็อกรอบวันนี้** — `stamp_review()` รันตอน startup เท่านั้น: deploy โดยไม่กด
+   🗑 = review ที่ค้างได้นาฬิกาใหม่นับจากตอน deploy แล้วหมดอายุอีก 6 ชม. ลำดับถูกคือ **กด 🗑
+   ในมือถือก่อน** แล้วค่อย commit + deploy. (ยังไม่ได้ยืนยันว่าคนกด 🗑 แล้วหรือยัง)
+
+ไฟล์ที่แก้รอบนี้: `app/state.py`, `app/main.py`, `tests/test_shorts_factory.py`, `README.md`.
+แยกจากของค้างเซสชันก่อนที่ยังไม่ commit: `app/youtube.py` (+1 บรรทัด `containsSyntheticMedia`)
+— คนละเหตุผล คนละคอมมิต ห้ามรวม.

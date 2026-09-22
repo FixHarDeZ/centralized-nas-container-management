@@ -422,3 +422,36 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
   (`drop_parked()`), and `render_parked()` hands `PARK_KEYBOARD` back on every
   refusal — `on_footage()` decides about the button from a mode read taken
   before its own sendMessage.
+- **Uploads now self-declare synthetic media (2026-09-21).** `youtube.metadata()`
+  never sent YouTube's AI-disclosure flag, so YouTube auto-detected the TTS
+  voice/generated footage and slapped its own "AI label" notice on the clip
+  after upload. Fixed by adding `"containsSyntheticMedia": True` to the
+  `status` object in `metadata()` (`part=snippet,status` already covers it —
+  no new API scope). Test `test_metadata_strips_hashes_into_tags` extended to
+  assert the field. **Not committed/deployed yet** — only affects future
+  uploads; clips already live keep whatever label YouTube auto-applied
+  (fix those manually in YouTube Studio if it matters).
+- **Review has a clock since 2026-09-22 (`REVIEW_LIFETIME_HOURS`, default 6).**
+  Every other wait in the bot ages out — `parked` at 24h, `clip_wait` at 72h,
+  `auto_pick` on a deadline — and review was the one that never did. Because
+  the unattended trends round only fires from `mode == "idle"`
+  (`main.py`, the `owed` branch), one Script nobody answered silenced *every*
+  channel's schedule indefinitely, with no error line anywhere: the branch is
+  simply skipped. `state.py` now has `REVIEW_LIFETIME`, `to_review()`,
+  `review_expired()` and `stamp_review()`; `review_at` joined `IDLE_FIELDS`,
+  and `_aged_out()` takes a `key=` because review *is* the live state, not a
+  sub-record. The stamp lives in the transition, not at the three call sites,
+  for the reason `state.py`'s own docstring gives — and
+  `test_every_entrance_to_review_starts_the_clock` reads `main.py` with spaces
+  stripped, so `mode="review"` or `mode = "review"` written anywhere turns the
+  suite red. On expiry the sweep (next to the other two, so the freed slot
+  fires on the *next* tick) clears state before the notice goes out, records
+  the clip `abandoned`, retires the old buttons and says why in chat —
+  including that the storyboard wait survives, since `to_idle()` does not touch
+  `clip_wait` and that record carries its own copy of everything. An unstamped
+  review never expires (no guessing an age); `stamp_review()` at startup closes
+  that window. **Deliberately not fixed: 📋.** Making the storyboard button go
+  idle was the tempting one-line fix and it is wrong — `main.py:46` says 📋
+  "Changes nothing about the Clip" on purpose, 🎨 parks because that clip cannot
+  be rendered any other way while 📋 leaves 🎬 Pexels available, and it would
+  not close the class anyway (a human who taps nothing still silences the bot).

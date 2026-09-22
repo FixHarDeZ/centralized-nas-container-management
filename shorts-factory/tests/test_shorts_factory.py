@@ -1430,6 +1430,7 @@ def test_metadata_strips_hashes_into_tags(monkeypatch):
     assert "#DevOps #AIOps" in body["snippet"]["description"]
     assert body["status"]["privacyStatus"] == "public"
     assert body["status"]["selfDeclaredMadeForKids"] is False
+    assert body["status"]["containsSyntheticMedia"] is True
 
 
 def test_metadata_respects_youtube_limits():
@@ -3243,3 +3244,117 @@ def test_two_trends_rounds_never_overlap(monkeypatch):
     with pytest.raises(RuntimeError):
         asyncio.run(main.on_trends(None, state))
     assert "trends_running" not in state
+
+
+# --- the review clock (a Script nobody answered) ------------------------------
+
+def _review_state(clip_id=None, **extra) -> dict:
+    state = {"mode": "review", "script": a_script(), "topic": "หัวข้อ",
+             "clip_id": clip_id, "message_id": 2324,
+             "review_at": datetime.datetime.now().isoformat(timespec="seconds")}
+    state.update(extra)
+    return state
+
+
+def _age_review(state: dict) -> None:
+    state["review_at"] = (
+        datetime.datetime.now() - main.REVIEW_LIFETIME - datetime.timedelta(minutes=1)
+    ).isoformat(timespec="seconds")
+
+
+def test_the_wait_for_a_button_press_runs_out():
+    """Review used to be the one wait with no clock, and the unattended trends
+    round only fires from an idle bot: a Script nobody answered silenced every
+    channel's schedule for good."""
+    state = _review_state()
+    assert not main.review_expired(state)
+    _age_review(state)
+    assert main.review_expired(state)
+
+
+def test_an_unstamped_review_is_not_dropped_on_a_guess():
+    """A Script mid-flight over the upgrade that added the clock keeps the old
+    behaviour rather than being written off at an age nobody measured."""
+    state = _review_state()
+    del state["review_at"]
+    assert not main.review_expired(state)
+
+
+def test_only_a_review_expires():
+    for mode in ("idle", "writing", "rendering"):
+        state = _review_state()
+        _age_review(state)
+        state["mode"] = mode
+        assert not main.review_expired(state), mode
+    assert not main.review_expired({}), "no review is not an expired review"
+
+
+def test_every_entrance_to_review_starts_the_clock():
+    """The stamp lives in the transition, not at the call sites: a site that
+    set the mode by hand would be a path back to the immortal review."""
+    # Spaces stripped so the spaced form is caught too: `mode = "review"` is
+    # the realistic drift, and it would be just as immortal.
+    source = pathlib.Path(main.__file__).read_text().replace(" ", "")
+    assert 'mode="review"' not in source, \
+        "set review through st.to_review() so the clock cannot be forgotten"
+
+    state = {"mode": "idle"}
+    main.st.to_review(state, script=a_script(), message_id=11)
+    assert state["mode"] == "review" and state["message_id"] == 11
+    assert datetime.datetime.fromisoformat(state["review_at"])
+
+
+def test_going_idle_clears_the_review_clock():
+    state = _review_state()
+    main.st.to_idle(state)
+    assert state["review_at"] is None
+
+
+def test_a_review_carried_over_a_restart_gets_a_clock():
+    state = _review_state()
+    del state["review_at"]
+    assert main.st.stamp_review(state) is True
+    assert datetime.datetime.fromisoformat(state["review_at"])
+    # Already ticking, or not a review at all: left alone.
+    assert main.st.stamp_review(state) is False
+    assert main.st.stamp_review({"mode": "idle"}) is False
+
+
+def test_a_stale_review_is_written_off_and_said_out_loud(monkeypatch, tmp_path):
+    monkeypatch.setattr(manifest, "DIR", tmp_path / "clips")
+    monkeypatch.setattr(main, "close_prompt", _nothing)
+    said = []
+
+    async def capture(client, text, **kwargs):
+        said.append(text)
+        return {"message_id": 1}
+
+    monkeypatch.setattr(main, "say", capture)
+
+    clip_id = manifest.start("หัวข้อ")
+    asyncio.run(main.drop_review(None, {"message_id": 2324, "clip_id": clip_id,
+                                        "clip_wait": True, "pair": {"topic": "x"}}))
+    assert manifest.load_all()[0]["outcome"] == "abandoned"
+    note = said[0]
+    # The board has its own 72-hour clock and its own copy of the Script, so
+    # letting the Script go must not read as cancelling it.
+    assert "storyboard" in note and "ยกเลิกภาษาอังกฤษ" in note
+    # The freed slot may fire an owed round seconds later; the notice says why.
+    assert "trends" in note
+
+
+def test_dropping_a_stale_review_frees_the_schedule(monkeypatch, tmp_path):
+    """The whole point: after the sweep the bot is idle, which is the one state
+    the unattended trends round fires from."""
+    monkeypatch.setattr(manifest, "DIR", tmp_path / "clips")
+    monkeypatch.setattr(main, "close_prompt", _nothing)
+    monkeypatch.setattr(main, "say", _nothing)
+
+    state = _review_state(clip_wait={"message_id": 2339})
+    _age_review(state)
+    assert main.review_expired(state)
+    main.st.to_idle(state)
+    assert state["mode"] == "idle" and not main.review_expired(state)
+    # to_idle() does not touch the storyboard wait, which holds its own copy of
+    # everything it needs.
+    assert state["clip_wait"] == {"message_id": 2339}
