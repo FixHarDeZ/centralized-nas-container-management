@@ -1,0 +1,27 @@
+.project-bar { display:flex; gap:.6rem; align-items:center; padding:.5rem 1rem; border-bottom:1px solid var(--line, #38423e); flex-wrap:wrap; }
+.project-bar label { font-size:.8rem; }
+.project-bar select { flex:1; min-width:120px; max-width:640px; }
+.project-bar select, .project-bar button, #project-dialog input, #project-dialog select, #project-dialog button { font:inherit; color:inherit; background:var(--surface, #18231f); border:1px solid var(--line, #53605b); border-radius:8px; padding:.55rem .7rem; }
+#project-dialog { color:var(--text, #e9eee9); background:var(--bg, #111715); border:1px solid var(--line, #53605b); border-radius:16px; width:min(760px, calc(100vw - 32px)); max-height:85dvh; box-sizing:border-box; padding:1.2rem; }
+#project-dialog::backdrop { background:#0009; }
+#project-dialog .project-heading { display:flex; align-items:center; justify-content:space-between; gap:1rem; }
+#project-dialog h2 { margin:0; font-size:1.2rem; }
+#project-dialog h3 { margin:1.2rem 0 .7rem; }
+#project-dialog form { display:grid; gap:.7rem; }
+#project-dialog label { display:grid; gap:.35rem; font-size:.85rem; }
+#project-dialog input, #project-dialog select { min-width:0; width:100%; box-sizing:border-box; }
+#project-dialog button { cursor:pointer; }
+#project-dialog button:disabled { opacity:.5; cursor:wait; }
+#project-dialog pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:250px; overflow:auto; font-size:.8rem; line-height:1.5; }
+#project-dialog [hidden], .coding-workspace #files-btn[hidden] { display:none; }
+#project-message { font-size:.85rem; overflow-wrap:anywhere; }
+.project-actions { display:flex; flex-wrap:wrap; gap:.5rem; }
+.coding-workspace .starter-grid button { background:#18231f; color:#e9eee9; border:1px solid #3c5045; border-radius:14px; padding:20px; min-height:96px; text-align:left; cursor:pointer; font:inherit; }
+.coding-workspace .starter-grid button strong, .coding-workspace .starter-grid button small { display:block; }
+.coding-workspace .starter-grid button strong { margin-bottom:.6rem; font-size:.95rem; }
+.coding-workspace .starter-grid button small { font-size:.8rem; opacity:.75; }
+.coding-workspace .starter-grid button:hover { border-color:#6caa85; }
+[data-theme="light"] .coding-workspace .starter-grid button { background:#fff; color:#17241c; border-color:#c8d8ce; }
+[data-theme="light"] #project-dialog { background:#f7f8f4; color:#17241c; }
+[data-theme="light"] .project-bar select, [data-theme="light"] .project-bar button, [data-theme="light"] #project-dialog input, [data-theme="light"] #project-dialog select, [data-theme="light"] #project-dialog button { background:#fff; color:#17241c; border-color:#becbc2; }
+@media(max-width:500px) { .project-bar { padding:.4rem .7rem; } #project-dialog { padding:.9rem; } }

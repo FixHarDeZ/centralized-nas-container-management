@@ -12,7 +12,7 @@
 # NodeSource, same trick hermes-agent uses.
 FROM node:22-bookworm-slim AS node_source
 
-FROM debian:bookworm-slim
+FROM debian:bookworm-slim AS desk_runtime
 
 ARG CODEX_VERSION=0.155.0
 ARG CLAUDE_VERSION=2.1.272
@@ -112,6 +112,7 @@ COPY --chmod=0644 codex_backend.py /opt/ai-deck/codex_backend.py
 COPY --chmod=0644 agent_options.py /opt/ai-deck/agent_options.py
 COPY --chmod=0644 usage_status.py /opt/ai-deck/usage_status.py
 COPY --chmod=0644 chat.py /opt/ai-deck/chat.py
+COPY --chmod=0644 workspace_api.py workspaces.py deploy_bridge.py coding_terminal.py /opt/ai-deck/
 # `ask <question>` — one-shot questions on the OpenAI wire, stdlib only. The
 # name is `ask` and not `mimo` because MiMoCode's own binary is `mimo`.
 # In the image, not the home volume: docker seeds a named volume once, so a
@@ -151,3 +152,19 @@ ENV HOME=/home/claude \
 
 EXPOSE 7681 7682 7683
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+
+# The optional coding service shares agent layers, but no document storage.
+FROM desk_runtime AS coding
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends gh openssh-client make gcc g++ python3-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /workspaces && chown 1000:100 /workspaces
+COPY --chmod=0644 coding-tmux.conf /etc/coding-tmux.conf
+COPY --chmod=0755 coding-entrypoint.sh /usr/local/bin/coding-entrypoint.sh
+USER claude
+WORKDIR /workspaces
+ENV CODE_WORKER=1 WORKSPACE_ROOT=/workspaces CHAT_CWD=/workspaces WORK_DIR=/workspaces
+ENTRYPOINT ["/usr/local/bin/coding-entrypoint.sh"]
+
+# Keep the existing default build as the document desk.
+FROM desk_runtime AS documents

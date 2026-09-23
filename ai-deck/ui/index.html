@@ -29,6 +29,7 @@
   <link rel="stylesheet" href="vendor/xterm.css">
   <link rel="stylesheet" href="style.css">
   <link rel="stylesheet" href="desk.css">
+  <link rel="stylesheet" href="workspaces.css">
 </head>
 <body>
 
@@ -83,6 +84,41 @@
       <button id="agent-start" type="button">Open in Terminal</button>
     </div>
   </nav>
+  <nav class="project-bar" aria-label="Projects">
+    <label for="project-select">Project</label>
+    <select id="project-select"><option value="">Documents</option></select>
+    <button id="project-manage" type="button">Projects &amp; deploy</button>
+  </nav>
+  <dialog id="project-dialog" aria-labelledby="project-title">
+    <div class="project-heading"><h2 id="project-title">Coding projects</h2><button id="project-close" type="button" aria-label="Close projects">Close</button></div>
+    <p>Connect a GitHub repository. Each new task gets its own branch and persistent workspace.</p>
+    <form id="project-form">
+      <label>GitHub repository URL<input id="project-url" type="url" required placeholder="https://github.com/owner/repository" autocomplete="off"></label>
+      <label>Base branch (optional)<input id="project-base" placeholder="Repository default" autocomplete="off"></label>
+      <button id="project-create" type="submit">Clone &amp; start task</button>
+    </form>
+    <p id="project-message" role="status"></p>
+    <button id="coding-terminal" type="button">Open coding Terminal / GitHub sign-in</button>
+    <p>In coding Terminal, use <code>gh auth login --web --git-protocol https</code> to connect private repositories. Configure your Git author before committing.</p>
+    <section id="project-details" hidden>
+      <h3>Current task</h3>
+      <div class="project-actions">
+        <button id="project-refresh" type="button">Refresh Git status</button>
+        <button type="button" data-code-prompt="Read this repository’s instructions, inspect the changes, run the appropriate tests and report the results.">Test changes</button>
+        <button type="button" data-code-prompt="Review the diff and test results, then commit the intended changes and push this task branch. Exclude credentials and unrelated changes. Report the commit SHA and remote branch.">Commit &amp; push…</button>
+      </div>
+      <pre id="project-status"></pre>
+      <details><summary>Tracked diff</summary><pre id="project-diff"></pre></details>
+    </section>
+    <h3>Deploy a pushed commit</h3>
+    <form id="deploy-form">
+      <label>Deployment profile<select id="deploy-profile" required><option value="">No profiles loaded</option></select></label>
+      <label>Full commit SHA<input id="deploy-sha" required pattern="[a-f0-9]{40}" placeholder="40-character commit SHA" autocomplete="off"></label>
+      <button id="deploy-submit" type="submit">Deploy this commit</button>
+    </form>
+    <pre id="deploy-message" role="status">Open Projects to check the deployment runner.</pre>
+  </dialog>
+
   <main id="terminal"></main>
 
   <section id="chat" hidden>
@@ -217,6 +253,7 @@
   <script src="vendor/xterm-addon-web-links.min.js"></script>
   <script src="stream.js"></script>
   <script src="starters.js"></script>
+  <script src="workspaces.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

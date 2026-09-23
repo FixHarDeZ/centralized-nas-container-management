@@ -1,8 +1,6 @@
 # AI Deck
 
-Claude and Codex in one document workspace, driven from a phone or desktop browser. Not a place to
-write code — a place to say "make me an 8-slide deck from `in/sales.xlsx`"
-and download the `.pptx` a few minutes later.
+Claude and Codex in a browser workspace for documents and source code. Document mode uses `in/` and `out/`; the optional coding worker clones GitHub repositories into persistent task workspaces and sends deployments to a separate trusted runner.
 
 ![AI Deck desktop](../screenshots/ai-deck-desktop.png)
 ![AI Deck mobile](../screenshots/ai-deck-mobile.png)
@@ -39,6 +37,26 @@ docker run --rm -i --network none --entrypoint /bin/bash IMAGE -s < ai-deck/test
 
 Implementation review and remaining improvements: [.notes/ai-desk-review.md](.notes/ai-desk-review.md).
 
+
+## Coding projects
+
+Enable the optional service with `docker compose --profile coding up -d --build` in this stack (or persist `COMPOSE_PROFILES=coding` in the deployment environment). The supplied NAS runner adapter enables it when deploying this stack. Preserve `code-home` and `code-workspaces` volumes across updates.
+
+1. Open **Projects & deploy → Open coding Terminal / GitHub sign-in**. For private repositories run `gh auth login --web --git-protocol https`. Configure `git config --global user.name` and `user.email` once. Git credentials remain in the coding home volume. Public clone does not require login.
+2. Open **Projects & deploy**, enter a GitHub HTTPS URL and optional base branch, then **Clone & start task**. Each task gets a `desk/<id>` branch/worktree; creating another task for the same repository reuses its cached Git objects. The project menu reopens previous work without uploading files.
+3. Chat works in the selected repository and reads its own instructions. Composer drafts, history, resume and agent processes are scoped to user/provider/workspace. Coding Terminal also uses a distinct tmux session per user/workspace, including when two project tabs are open.
+4. **Refresh Git status** shows branch, SHA, changes and tracked staged/unstaged diff. **Test changes** and **Commit & push…** fill the composer for review; they never send automatically. Agents run ordinary Git/test commands inside the worker. New untracked files appear in status; their contents appear in diff after staging. Ask the agent to inspect them too.
+5. **Deploy this commit** sends a selected profile plus full pushed SHA to the trusted runner. The NAS profile accepts only the current `main` tip; merge a task branch first. Push alone does not deploy. The panel polls durable job status and sanitized logs; success requires deployment and the profile's health command to pass.
+
+The coding worker has a separate home/workspace volume and Docker network; it receives the Claude subscription token explicitly, never the document `.env`, document share, SSH/age keys, runner token or Docker socket. Codex must be signed in separately in coding mode. It runs as uid 1000, with a 1536 MiB cap. Node/Python/Git/gh and native build tools are available; project-specific dependencies still need installation. Docker-based tests need a separate build service; no Docker daemon is exposed to the agent.
+
+This initial worker is for trusted household accounts: metadata/API ownership is enforced, but accounts share a Unix UID and provider/Git credentials inside the coding container. It is not an OS boundary between users or hostile repositories. Deploy commands execute trusted merged code on the runner host and carry that host's production privileges.
+
+The first runner is the Mac, supervised by `local.ai-deck.deploy-runner` after login. It must be awake and reachable. Its private configuration, credential files and logs live under `~/.config/ai-deck-runner/`, outside the repository. NAS-to-Mac communication uses HTTPS with a pinned local CA and a bearer credential. [Runner setup, profiles and recovery](docs/CODING_DEPLOY.md).
+
+New stack environment mappings: `AI_DECK_DEPLOY_URL`, `AI_DECK_DEPLOY_TOKEN`, `AI_DECK_DEPLOY_CA_B64` come from `stacks.ai_desk.deploy_runner.*`. The worker's explicit environment list excludes them. `AI_DECK_BUILD_SHA` identifies the deployed revision at the read-only `/health` endpoint. The NAS adapter writes it from the job checkout; its health command verifies equality with that SHA. Ordinary deployments that do not provide it return `unknown`.
+
+Git/workspace API: `/code/projects` GET/POST, `/code/projects/status?workspace=<id>`, `/code/chat/*?workspace=<id>`. Deploy API is `/deploy/profiles`, `/deploy/jobs`, `/deploy/jobs/<id>` via the document backend bridge. Coding routes resolve lazily so document mode starts when the coding profile is off; unavailable services return an error rather than falling back to document files.
 
 ## What runs
 
@@ -436,3 +454,7 @@ Touching the phone while the laptop is open resizes the laptop.
 - **The model switcher only offers our two models**, because `disabled_providers: ["xiaomi"]` turns off MiMoCode's built-in catalog — there are no credentials for it here, and `only_configured_models` alone does not hide it.
 - **Comments in `mimocode.jsonc` must be `//`.** MiMoCode validates its config and rejects unknown keys, so the `"_comment"` array opencode ignored takes down `mimo models` and every session with it. It is a `.jsonc` file and real comments parse fine.
 - **mimo is the slow brain, not a router.** Claude Code was *not* rewired to speak to mimo through a translating proxy: that would put a Node router inside a 2 GB container that already holds Claude Code and LibreOffice, to gain skills a coding agent does not use. MiMoCode speaks the OpenAI wire natively, so the harness talks to mimo directly. Probed on the live endpoint (2026-09-15): `tool_calls` come back correctly and the loop writes files and runs commands; `max_tokens` returned real content on a trivial prompt but was not tested under reasoning load, so nothing here sends a small one.
+
+### GitHub coding walkthrough
+
+ดูขั้นตอน clone → edit/test → commit/push → merge → deploy สำหรับ repo นี้ที่ [CODING_WALKTHROUGH.md](docs/CODING_WALKTHROUGH.md).

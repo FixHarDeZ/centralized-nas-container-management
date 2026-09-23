@@ -27,7 +27,9 @@
   }
   if (!['claude', 'codex'].includes(provider)) provider = 'claude';
   const providerName = provider === 'codex' ? 'Codex' : 'Claude';
+  const workspace = window.DeskWorkspace || {id: '', coding: false, url: p => p};
   function deskURL(path) {
+    path = workspace.url(path);
     return path + (path.includes('?') ? '&' : '?') + 'provider=' + provider;
   }
 
@@ -155,17 +157,18 @@
 
   async function refreshToken() {
     try {
-      const r = await fetch('token', { cache: 'no-store' });
+      const r = await fetch(workspace.coding ? 'code/token' : 'token', { cache: 'no-store' });
       if (r.ok) token = (await r.json()).token || '';
     } catch (_) { /* ttyd without -c: no token */ }
   }
 
   async function connect() {
+
     if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
     setState('reconnecting', 'connecting');
     await refreshToken();
     const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host
-      + location.pathname.replace(/[^/]*$/, '') + 'ws';
+      + location.pathname.replace(/[^/]*$/, '') + (workspace.coding ? 'code/ws' + (workspace.id ? '?arg=' + encodeURIComponent(workspace.id) : '') : 'ws');
     try {
       socket = new WebSocket(url, ['tty']);
       socket.binaryType = 'arraybuffer';
@@ -888,9 +891,10 @@
     quitBtn.disabled = false;
     quitLabel.textContent = pane ? 'Quit “' + pane + '”' : 'Quit it';
 
+    if (workspace.coding) sessionsSub.textContent = 'Sessions in this coding workspace';
     sessionList.innerHTML = '';
     sessionEmpty.hidden = list.length > 0;
-    sessionEmpty.innerHTML = 'No past sessions in <code>/work</code> yet.';
+    sessionEmpty.textContent = workspace.coding ? 'No past sessions in this workspace yet.' : 'No past sessions in /work yet.';
     for (const s of list) {
       const li = document.createElement('li');
       const row = document.createElement('button');
@@ -1004,7 +1008,7 @@
       return;
     }
     try {
-      const r = await fetch(deskURL('api/sessions'), { cache: 'no-store' });
+      const r = await fetch(deskURL(workspace.id && chatOn ? 'chat/sessions' : 'api/sessions'), { cache: 'no-store' });
       renderSessions(r.ok ? await r.json() : {});
     } catch (_) {
       renderSessions({});
@@ -1183,6 +1187,20 @@
     // question about content, not about child count.
     if (chatLog.querySelector('.bubble, .pill, .chat-empty')) return;
     const box = el('div', 'chat-empty');
+    if (workspace.coding) {
+      box.innerHTML = '<span class="welcome-kicker">YOUR CODING WORKSPACE</span><h1>What shall we work on?</h1>' +
+        '<p>Read the repository, make changes and test them.<br>Your work stays on this task branch.</p>' +
+        '<div class="starter-grid"><button type="button" data-prompt="Read the repository instructions and explain the architecture, how to run tests, and where to start making changes."><strong>Understand this project</strong><small>Code, instructions and tests</small></button>' +
+        '<button type="button" data-prompt="Inspect the current changes, identify correctness issues and run the appropriate tests. Report the evidence before changing anything."><strong>Review changes</strong><small>Find issues and verify behavior</small></button>' +
+        '<button type="button" data-prompt="Review the intended diff, run the relevant tests, then commit and push this task branch. Exclude credentials and unrelated changes. Report the commit SHA."><strong>Prepare a commit</strong><small>Test, commit and push</small></button></div>';
+      box.querySelectorAll('[data-prompt]').forEach(button => button.addEventListener('click', () => {
+        if (chatInput.value.trim()) { note('Your draft is still in the composer. Send or clear it first.'); return; }
+        chatInput.value = button.dataset.prompt; sizeInput(); saveDraft(); chatInput.focus();
+      }));
+      follower.place(box);
+      return;
+    }
+
     box.innerHTML = '<span class="welcome-kicker">A LITTLE SPACE TO MAKE THINGS</span>' +
       '<h1>What shall we create?</h1><p>Turn your files and ideas into something useful.<br>Choose an agent, add your files, and start a conversation.</p>' +
       '<div class="starter-grid"><button type="button" data-prompt="ช่วยทำสไลด์จากไฟล์ใน in/ โดยเริ่มจากเสนอ outline ให้ดูก่อน">' +
@@ -1373,7 +1391,7 @@
   }
 
   function openChatStream() {
-    if (chatStream || DEMO) return;
+    if (chatStream || DEMO || (workspace.coding && !workspace.id)) return;
     // `after` covers the page opening the stream itself (a view switch, a
     // reload); EventSource's own reconnect sends the same number back as a
     // Last-Event-ID header without being asked.
@@ -1402,6 +1420,7 @@
   }
 
   async function sendChat() {
+    if (workspace.coding && !workspace.id) { note('Choose or create a coding project first.'); return; }
     await optionsReady;
     const text = chatInput.value.trim();
     if (!text) return;
@@ -1465,7 +1484,7 @@
   // paragraph someone typed one-thumbed is the kind of thing that stops them
   // using the desk from a phone at all. Kept per conversation, so switching to
   // a past session does not hand its draft to the wrong one.
-  const DRAFT_KEY = 'claude-desk.draft';
+  const DRAFT_KEY = 'claude-desk.draft' + (workspace.coding ? '.workspace.' + (workspace.id || 'terminal') : '');
   let draftSession = '';
   let draftTimer = null;
 
@@ -1478,6 +1497,7 @@
       else localStorage.removeItem(draftKey());
     } catch (_) { /* private mode: the draft is just not kept */ }
   }
+  window.addEventListener('desk:save-draft', saveDraft);
   function loadDraft(session) {
     draftSession = session || '';
     if (chatInput.value) return;      // never overwrite what is being typed
@@ -1505,7 +1525,7 @@
   async function refreshChatState() {
     if (DEMO) return;
     try {
-      const r = await fetch(deskURL('api/sessions'), { cache: 'no-store' });
+      const r = await fetch(deskURL(workspace.id && chatOn ? 'chat/sessions' : 'api/sessions'), { cache: 'no-store' });
       if (!r.ok) return;
       const pane = (await r.json()).pane;
       const busyTerminal = pane && !['bash', 'sh', 'zsh', '-bash', 'dash'].includes(pane);
@@ -1515,7 +1535,7 @@
       // honest surface.
       chatState.textContent = busyTerminal
         ? '“' + pane + '” is open in the terminal too — two agents in /work'
-        : providerName + ' · Your files and conversation, in one place';
+        : providerName + (workspace.coding ? ' · Coding workspace' : ' · Your files and conversation, in one place');
       chatState.classList.toggle('warn', !!busyTerminal);
     } catch (_) { /* leave the last line up */ }
   }
@@ -1704,7 +1724,7 @@
   if (!DEMO) {
     let saved = null;
     try { saved = localStorage.getItem(VIEW_KEY); } catch (_) { /* no storage */ }
-    if (saved !== 'terminal') setView('chat');
+    if (saved !== 'terminal' && !(workspace.coding && !workspace.id)) setView('chat');
   }
 
   function demoChat() {

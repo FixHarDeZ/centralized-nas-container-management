@@ -17,6 +17,7 @@ services:
     env_file: .env
     environment:
       - TZ=Asia/Bangkok
+      - AI_DECK_BUILD_SHA=${AI_DECK_BUILD_SHA:-unknown}
       # The roster: one ttyd (and one tmux session) per basic auth user in
       # nginx/.htpasswd, `<user>:<port>`. The first entry is the desk ttyd
       # runs as PID 1 and the one anybody not listed lands on. nginx routes
@@ -43,6 +44,34 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=false"
 
+  ai-deck-code:
+    profiles: [coding]
+    platform: linux/amd64
+    build:
+      context: .
+      target: coding
+      args:
+        CLAUDE_VERSION: "2.1.276"
+        SKILLS_REF: "34040c9c568585f6929bedeaad110ad08f079624"
+    restart: unless-stopped
+    user: "1000:100"
+    init: true
+    environment:
+      - TZ=Asia/Bangkok
+      - CODE_WORKER=1
+      - WORKSPACE_ROOT=/workspaces
+      - CHAT_CWD=/workspaces
+      - WORK_DIR=/workspaces
+      - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN:-}
+      - DESK_USERS=fixhardez:7681,Pookzii:7684
+    volumes:
+      - code-home:/home/claude
+      - code-workspaces:/workspaces
+    networks: [coding]
+    mem_limit: 1536m
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+
   nginx:
     # Built, not stock: ui/ is COPYed in (see nginx/Dockerfile for why a
     # directory bind does not work here).
@@ -50,6 +79,7 @@ services:
       context: .
       dockerfile: nginx/Dockerfile
     container_name: ai-deck-nginx
+    networks: [default, coding]
     restart: unless-stopped
     ports:
       - "5072:80"
@@ -67,7 +97,12 @@ services:
     labels:
       - "com.centurylinklabs.watchtower.enable=false"
 
+networks:
+  coding: {}
+
 volumes:
+  code-home: {}
+  code-workspaces: {}
   home:
     # Existing credentials/history must survive the Compose project rename.
     # Verify the old container's mount before the first cutover (MIGRATION.md).

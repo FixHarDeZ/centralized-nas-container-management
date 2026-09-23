@@ -363,6 +363,11 @@ def test_the_session_id_comes_from_the_agent(agent):
 
 
 def test_resuming_puts_the_id_on_the_command_line(agent, monkeypatch):
+    from pathlib import Path
+    monkeypatch.setattr(chat, "HOME", agent.cwd)
+    directory = Path(chat.session_directory(agent.cwd))
+    directory.mkdir(parents=True, exist_ok=True)
+    (directory / "f763ee82-7025-443b-bbf0-42227badf2f0.jsonl").write_text("")
     started = []
     monkeypatch.setattr(chat.subprocess, "Popen",
                         lambda cmd, **kw: started.append(cmd) or _DeadProc())

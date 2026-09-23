@@ -1,0 +1,58 @@
+<!doctype html><meta charset="utf-8"><title>Coding workspace checks</title>
+<pre id="result">pending</pre>
+<script>
+const failures = [];
+const check = (ok, message) => { if (!ok) failures.push(message); };
+const pause = () => new Promise(resolve => setTimeout(resolve, 150));
+(async () => {
+  try {
+    const frame = document.createElement('iframe');
+    frame.style = 'width:390px;height:844px';
+    const id = 'a'.repeat(32);
+    await new Promise(resolve => {
+      frame.onload = () => setTimeout(resolve, 100);
+      frame.src = '../ui/?demo=1&chat=1&welcome=1&coding=1&workspace=' + id;
+      document.body.append(frame);
+    });
+    const win = frame.contentWindow, doc = frame.contentDocument;
+    const calls = [];
+    win.fetch = async (path, options = {}) => {
+      calls.push({path, options});
+      const data = path === 'deploy/profiles' ? {items:[{id:'nas-ai-deck'}]}
+        : path === 'deploy/jobs' ? {id:'b'.repeat(32), status:'queued'}
+        : path.startsWith('deploy/jobs/') ? {status:'succeeded',log:'Health check passed'}
+        : {branch:'desk/' + id,head:'c'.repeat(40),changes:'M app.py',diff:'diff --git a/app.py b/app.py\n+hello'};
+      return {ok:true, json:async () => data};
+    };
+    check(win.DeskWorkspace.url('chat/events?after=0') === 'code/chat/events?after=0&workspace=' + id, 'SSE URL includes workspace');
+    check(doc.getElementById('files-btn').hidden, 'document files hidden in coding mode');
+    doc.getElementById('project-manage').click();
+    await pause();
+    const dialog = doc.getElementById('project-dialog');
+    check(dialog.open, 'project dialog opens');
+    check(!doc.getElementById('project-details').hidden, 'current task controls visible');
+    const rect = dialog.getBoundingClientRect();
+    check(rect.left >= 0 && rect.right <= 390, 'project dialog fits phone');
+    doc.getElementById('project-refresh').click(); await pause();
+    check(doc.getElementById('project-diff').textContent.includes('+hello'), 'diff displayed literally');
+    check(doc.getElementById('deploy-sha').value === 'c'.repeat(40), 'deploy uses explicit full SHA');
+    const input = doc.getElementById('chat-input');
+    input.value = 'Existing draft';
+    doc.querySelector('[data-code-prompt]').click();
+    check(input.value === 'Existing draft', 'task shortcut preserves existing draft');
+    input.value = '';
+    doc.querySelector('[data-code-prompt]').click();
+    check(input.value.includes('appropriate tests'), 'test shortcut fills composer');
+    check(!calls.some(c => c.path.includes('chat/send')), 'shortcuts never auto-send');
+    doc.getElementById('project-manage').click(); await pause();
+    doc.getElementById('deploy-profile').value = 'nas-ai-deck';
+    doc.getElementById('deploy-form').requestSubmit(); await pause();
+    const call = calls.find(c => c.path === 'deploy/jobs');
+    check(call && JSON.parse(call.options.body).sha === 'c'.repeat(40), 'deployment sends selected full SHA');
+    check(doc.getElementById('deploy-message').textContent.includes('succeeded'), 'deployment reports runner result');
+    doc.getElementById('project-close').click();
+    check(!dialog.open, 'project dialog closes');
+  } catch (error) { failures.push(String(error)); }
+  document.getElementById('result').textContent = JSON.stringify({failures});
+})();
+</script>

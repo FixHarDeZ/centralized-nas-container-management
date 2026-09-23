@@ -1,0 +1,27 @@
+[
+  {
+    "id": "nas-ai-deck",
+    "repository": "https://github.com/REPLACE_OWNER/REPLACE_REPOSITORY.git",
+    "branch": "main",
+    "allowed_users": [
+      "REPLACE_DESK_USER"
+    ],
+    "command": [
+      "/opt/ai-deck-runner/run-nas-deploy.sh",
+      "ai-deck"
+    ],
+    "health_command": [
+      "/opt/ai-deck-runner/venv/bin/python",
+      "/opt/ai-deck-runner/deploy_health.py"
+    ],
+    "timeout": 900,
+    "environment_allowlist": [
+      "AI_DECK_NAS_DEPLOY_ENV",
+      "AI_DECK_DEPLOY_PYTHON",
+      "AI_DECK_NAS_HEALTH_URL",
+      "SOPS_AGE_KEY_FILE",
+      "SSH_AUTH_SOCK",
+      "GIT_ASKPASS"
+    ]
+  }
+]

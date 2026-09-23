@@ -42,6 +42,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, parse_qs, urlparse
 
 import codex_backend
+import workspace_api
+import shlex
 import agent_options
 import usage_status
 
@@ -338,7 +340,12 @@ class Handler(BaseHTTPRequestHandler):
         (proxy_set_header wins over whatever the browser sent), and nginx is
         the only thing that can reach this port.
         """
-        return target_for(self.headers.get("X-Desk-User") or "")
+        owner = self.headers.get("X-Desk-User") or ""
+        if workspace_api.enabled():
+            from coding_terminal import session_name
+            ident = parse_qs(urlparse(self.path).query).get('workspace', [''])[0]
+            return session_name(owner, ident)
+        return target_for(owner)
 
     def _route(self):
         """('in'|'out', name or None) — None name means "the whole folder"."""
@@ -361,6 +368,18 @@ class Handler(BaseHTTPRequestHandler):
         return folder, name
 
     def _provider(self):
+        if workspace_api.enabled():
+            if not self.headers.get('X-Desk-User'):
+                self._reply(401, 'Authentication required')
+                return None
+            ident = parse_qs(urlparse(self.path).query).get('workspace', [''])[0]
+            if ident:
+                from workspaces import WorkspaceError
+                try:
+                    workspace_api.workspace(self)
+                except WorkspaceError as exc:
+                    self._reply(exc.status, exc.message)
+                    return None
         provider = parse_qs(urlparse(self.path).query).get("provider", ["claude"])[0]
         if provider not in ("claude", "codex"):
             self._reply(400, "unknown provider")
@@ -378,6 +397,15 @@ class Handler(BaseHTTPRequestHandler):
             force = parse_qs(urlparse(self.path).query).get("refresh") == ["1"]
             self._json(usage_status.codex_status(force) if provider == "codex"
                        else usage_status.claude_status(status()))
+        elif path == "/api/sessions" and workspace_api.enabled():
+            from workspaces import WorkspaceError
+            try:
+                item = workspace_api.workspace(self)
+                import chat
+                items = codex_backend.sessions(item['path']) if provider == 'codex' else chat.workspace_sessions(item['path'])
+                self._json({'sessions': items, 'pane': pane_command(self._desk())})
+            except WorkspaceError as exc:
+                self._reply(exc.status, exc.message)
         elif path == "/api/sessions":
             # The pane's state ships with the list so the sheet can say up
             # front that resuming is not possible right now, rather than
@@ -391,8 +419,17 @@ class Handler(BaseHTTPRequestHandler):
         if provider is None:
             return
         path = self.path.split("?", 1)[0]
+        workspace_path = None
+        if workspace_api.enabled() and path in ("/api/new", "/api/resume"):
+            from workspaces import WorkspaceError
+            try:
+                workspace_path = workspace_api.workspace(self)['path']
+            except WorkspaceError as exc:
+                self._reply(exc.status, exc.message)
+                return
         if path == "/api/new":
-            code, message = type_into_pane(provider, self._desk())
+            command = ('cd -- ' + shlex.quote(workspace_path) + ' && ' if workspace_path else '') + provider
+            code, message = type_into_pane(command, self._desk())
         elif path == "/api/login" and provider == "codex":
             code, message = type_into_pane("codex login --device-auth", self._desk())
         elif path == "/api/quit":
@@ -416,8 +453,15 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(session_id, str) or not UUID.fullmatch(session_id):
                 self._reply(400, "bad id")
                 return
+            if workspace_path:
+                import chat
+                exists = codex_backend.rollout(session_id, workspace_path) if provider == 'codex' else chat.session_exists(session_id, workspace_path)
+                if not exists:
+                    self._reply(404, 'Session not found in this workspace')
+                    return
+            prefix = 'cd -- ' + shlex.quote(workspace_path) + ' && ' if workspace_path else ''
             code, message = type_into_pane(
-                ("codex resume " if provider == "codex" else "claude --resume ") + session_id, self._desk()
+                prefix + ("codex resume " if provider == "codex" else "claude --resume ") + session_id, self._desk()
             )
         else:
             self._reply(404, "not here")

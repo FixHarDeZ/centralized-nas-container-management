@@ -39,6 +39,8 @@ import collections
 import codex_backend
 import agent_options
 import usage_status
+import workspace_api
+import deploy_bridge
 import json
 import os
 import queue
@@ -107,7 +109,38 @@ def tool_detail(name: str, args) -> str:
     return ""
 
 
-def transcript(session_id: str) -> list:
+def session_directory(cwd=None):
+    if cwd is None or cwd == CWD:
+        return SESSION_DIR
+    # Claude uses non-alphanumeric cwd characters as separators.
+    return os.path.join(HOME, '.claude', 'projects', re.sub(r'[^a-zA-Z0-9]', '-', cwd))
+
+
+def session_exists(session_id, cwd):
+    return bool(UUID.fullmatch(session_id)) and os.path.isfile(
+        os.path.join(session_directory(cwd), session_id + '.jsonl'))
+
+
+def workspace_sessions(cwd):
+    # Reuse the bounded title reader without the document session directory.
+    from upload import title_of
+    found = []
+    try:
+        with os.scandir(session_directory(cwd)) as entries:
+            for entry in entries:
+                if not entry.name.endswith('.jsonl') or not UUID.fullmatch(entry.name[:-6]):
+                    continue
+                if not entry.is_file(follow_symlinks=False):
+                    continue
+                st = entry.stat()
+                found.append({'id': entry.name[:-6], 'title': title_of(entry.path),
+                              'mtime': st.st_mtime, 'size': st.st_size})
+    except OSError:
+        pass
+    return sorted(found, key=lambda item: item['mtime'], reverse=True)[:50]
+
+
+def transcript(session_id: str, cwd=None) -> list:
     """A past conversation, in the same shapes the live stream emits.
 
     Claude Code writes every session to `~/.claude/projects/-work/<id>.jsonl`,
@@ -122,7 +155,7 @@ def transcript(session_id: str) -> list:
     Only the tail is kept — that is the part of a long conversation anyone
     scrolls back to.
     """
-    path = os.path.join(SESSION_DIR, session_id + ".jsonl")
+    path = os.path.join(session_directory(cwd), session_id + ".jsonl")
     items = collections.deque(maxlen=HISTORY_ITEMS)
     read = 0
     try:
@@ -388,6 +421,8 @@ class Agent:
         with self.lock:
             if self.busy:
                 return 409, "still working"
+            if resume and not session_exists(resume, self.cwd):
+                return 404, "Session not found in this workspace"
             self.stop_child()
             self.session_id = resume or None
             self.spent = 0.0
@@ -560,15 +595,15 @@ AGENTS = {}
 AGENTS_LOCK = threading.Lock()
 
 
-def agent_for(user, provider):
+def agent_for(user, provider, workspace_id="", cwd=None):
     # Legacy/default agent keeps direct integrations compatible. nginx sets
     # the authenticated user; clients cannot choose another user's process.
-    if not user and provider == "claude":
+    if not user and provider == "claude" and not workspace_id:
         return AGENT
-    key = (user, provider)
+    key = (user, provider, workspace_id)
     with AGENTS_LOCK:
         if key not in AGENTS:
-            AGENTS[key] = CodexAgent() if provider == "codex" else Agent()
+            AGENTS[key] = CodexAgent(cwd=cwd) if provider == "codex" else Agent(cwd=cwd)
         return AGENTS[key]
 
 
@@ -602,15 +637,37 @@ class Handler(BaseHTTPRequestHandler):
             self._reply(400, "unknown provider")
             return None
         self.provider = provider
-        return agent_for(self.headers.get("X-Desk-User", ""), provider)
+        owner = self.headers.get("X-Desk-User", "")
+        if workspace_api.enabled():
+            from workspaces import WorkspaceError
+            try:
+                item = workspace_api.workspace(self)
+                return agent_for(owner, provider, item['id'], item['path'])
+            except WorkspaceError as exc:
+                self._reply(exc.status, exc.message)
+                return None
+            except OSError:
+                self._reply(503, "Workspace storage is unavailable")
+                return None
+        return agent_for(owner, provider)
 
     def do_GET(self):
+        if self.path == '/chat/health':
+            self._json_body(json.dumps({'status': 'ready', 'revision': os.environ.get('AI_DECK_BUILD_SHA', 'unknown')}))
+            return
+        if deploy_bridge.handle(self) or workspace_api.handle(self):
+            return
         agent = self._agent()
         if agent is None:
             return
         path = self.path.split("?", 1)[0]
         if path == "/chat/options":
             self._json_body(json.dumps(agent_options.catalog(self.provider)))
+            return
+        elif path == "/chat/sessions":
+            items = codex_backend.sessions(agent.cwd) if self.provider == 'codex' else workspace_sessions(agent.cwd)
+            self._json_body(json.dumps({'sessions': items, 'pane': None}))
+            return
         elif path == "/chat/state":
             # What the composer needs after a reconnect: a page that came back
             # to a turn already in progress should show the stop button, not
@@ -638,7 +695,7 @@ class Handler(BaseHTTPRequestHandler):
             if not UUID.match(wanted):
                 self._reply(400, "bad id")
                 return
-            self._json_body(json.dumps({"items": (codex_backend.transcript(wanted, CWD) if self.provider == "codex" else transcript(wanted))},
+            self._json_body(json.dumps({"items": (codex_backend.transcript(wanted, agent.cwd) if self.provider == "codex" else transcript(wanted, agent.cwd))},
                                        ensure_ascii=False))
             return
         if path != "/chat/events":
@@ -721,6 +778,8 @@ class Handler(BaseHTTPRequestHandler):
             return None
 
     def do_POST(self):
+        if deploy_bridge.handle(self) or workspace_api.handle(self):
+            return
         agent = self._agent()
         if agent is None:
             return

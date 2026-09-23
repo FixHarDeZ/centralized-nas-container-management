@@ -566,3 +566,15 @@ Validation: 143 stack tests, native app/nginx image builds, offline container st
 - `secrets/vault.sops.yaml` remains modified locally from unrelated work and was intentionally left uncommitted.
 
 User requested commit + push. Delivered AI Deck rename/features/quota fixes and closing-memory rules in `0f1d3c1` (`feat(ai-deck)!: rename stack and fix chat status`). This follow-up memory entry records the verified push result.
+
+
+## 2026-09-23 — GitHub coding workspaces and Mac deploy runner
+
+- Added opt-in `ai-deck-code` worker with owner-scoped GitHub caches, persistent per-task worktrees/branches, workspace-bound chat/history and terminal sessions, Git status/diff, test/commit prompt shortcuts, and exact-SHA deployment UI.
+- Document backend bridges authenticated deployment requests to an independent Mac runner. Runner validates allowed user/profile + current remote main tip, uses a clean checkout, serializes jobs, renders SOPS on the trusted Mac, and verifies the deployed SHA through `/health`.
+- Mac LaunchAgents `local.ai-deck.deploy-runner` and `local.ai-deck.deploy-tunnel` installed. Runner listens only on loopback TLS 8792; outgoing SSH exposes `/work/.runner/runner.sock` to document container. Health returns through Mac loopback 18793. Coding worker has no SSH deploy key, age key, runner token, or document share.
+- NAS SSH config backed up as `/etc/ssh/sshd_config.ai-deck-backup-20260921`, validated with sshd -t and reloaded. Scoped deploy-account forwarding permits only health TCP destination and remote Unix forwarding; no TCP reverse listener. Setgid socket directory + root:users 0660 socket required on Synology.
+- Verified complete stack and repository test suites, coding/document/nginx image builds, non-root worker startup, two task terminal cwd isolation, restart persistence, nginx coding-off/on routes, browser mobile/desktop checks, and live NAS container → SSH socket → TLS Mac profiles request. Independent reviews found no remaining actionable issues.
+- Deployment profile `nas-ai-deck` targets only ai-deck on repository main. GitHub device login and Codex coding-home login remain one-time user actions; public clone needs neither. Trusted-team logical isolation only; no Docker daemon in coding worker.
+- Usage: `docs/CODING_WALKTHROUGH.md`; operations: `docs/CODING_DEPLOY.md`. Mac must be awake, online and user logged in.
+- At this checkpoint code is tested locally; commit/push and NAS application rollout are pending. A subsequent entry records actual delivery result.
