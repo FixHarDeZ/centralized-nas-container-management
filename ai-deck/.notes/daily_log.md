@@ -628,3 +628,4 @@ User requested commit + push. Delivered AI Deck rename/features/quota fixes and 
 - Root cause: deploy 17:02 ผ่าน `scripts/deploy.sh` ไม่มี `COMPOSE_PROFILES=coding` (มีแค่ runner adapter ที่เติมให้) → container coding worker ไม่ถูกสร้าง → `code/ws` ต่อไม่ได้.
 - Fix: `secrets.manifest.yaml` literal `COMPOSE_PROFILES: coding` → อยู่ใน `ai-deck/.env` ทุก deploy path. `make secrets` + `deploy.sh -s ai-deck -y` → `ai-deck`, `ai-deck-nginx`, `ai-deck-ai-deck-code-1` Up. Tests 207 passed.
 - ค้าง: UI ยังวน reconnect เงียบๆ ถ้า worker ล่มอีก (ไม่มีข้อความบอก) — ยังไม่แก้.
+- ปิดงาน: commit `8b36fff` (ยังไม่ push), deploy แล้ว 3 container Up. ค้าง: UI reconnect เงียบเมื่อ worker ล่ม.
