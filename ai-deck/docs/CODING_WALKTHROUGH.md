@@ -4,7 +4,7 @@
 
 ## 1. เตรียมบัญชีครั้งแรก
 
-เปิด AI Deck → **Projects** → **Open coding Terminal / GitHub sign-in** แล้วรัน:
+เปิด AI Deck → **Projects & deploy → Project → Open Terminal** แล้วรัน:
 
 ```sh
 gh auth login --web --git-protocol https
@@ -50,7 +50,7 @@ python3 -m venv .venv
 
 ## 4. ตรวจ diff และทดสอบ
 
-เปิด **Projects → Refresh Git status** เพื่อดู branch, SHA, รายการไฟล์และ tracked diff ไฟล์ใหม่ที่ยังไม่ tracked จะแสดงใน status แต่ยังไม่มีเนื้อหาใน tracked diff ให้ AI หรือ terminal อ่านไฟล์นั้นเพิ่มเติม
+เปิด **Projects & deploy → Project → Refresh status** เพื่อดู branch, SHA, รายการไฟล์และ tracked diff ไฟล์ใหม่ที่ยังไม่ tracked จะแสดงใน status แต่ยังไม่มีเนื้อหาใน tracked diff ให้ AI หรือ terminal อ่านไฟล์นั้นเพิ่มเติม
 
 **Test changes** และ **Commit & push…** เติมข้อความลงช่อง chat ให้ตรวจและกดส่งเอง ปุ่มเหล่านี้ไม่ได้ commit/push ทันที
 
@@ -80,11 +80,11 @@ git fetch origin main
 git rev-parse refs/remotes/origin/main
 ```
 
-คัดลอก SHA 40 ตัว → **Projects → Deploy a pushed commit**:
+คัดลอก SHA 40 ตัว → **Projects & deploy → Deploy**:
 
 1. เลือก **nas-ai-deck**
 2. วาง SHA ของ `origin/main` ใน **Full commit SHA** แทนค่า task SHA ที่เติมให้อัตโนมัติ
-3. กด **Deploy this commit**
+3. กด **Deploy commit**
 4. ดูสถานะ `queued → running → succeeded` หรือ `failed` พร้อม log
 
 Mac จะ clone checkout ใหม่ ตรวจ SHA/branch อีกครั้ง ถอด SOPS บน Mac เรียก deployment script เดิม แล้วตรวจ `/health` ว่า NAS กำลังรัน revision ตรงกับ SHA ที่ขอจริง จึงรายงาน succeeded ข้อมูล document home, coding home และ workspaces อยู่ใน persistent volumes

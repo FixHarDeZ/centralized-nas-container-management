@@ -85,38 +85,61 @@
     </div>
   </nav>
   <nav class="project-bar" aria-label="Projects">
-    <label for="project-select">Project</label>
-    <select id="project-select"><option value="">Documents</option></select>
-    <button id="project-manage" type="button">Projects &amp; deploy</button>
+    <div class="project-picker">
+      <label for="project-select"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h7l2 2h9v11H3zM3 7V4h7l2 3"/></svg><span>Workspace</span></label>
+      <select id="project-select"><option value="">Documents</option></select>
+    </div>
+    <button id="project-manage" type="button" aria-haspopup="dialog"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM9 5v14M13 10h4M13 14h4"/></svg>Projects &amp; deploy</button>
   </nav>
-  <dialog id="project-dialog" aria-labelledby="project-title">
-    <div class="project-heading"><h2 id="project-title">Coding projects</h2><button id="project-close" type="button" aria-label="Close projects">Close</button></div>
-    <p>Connect a GitHub repository. Each new task gets its own branch and persistent workspace.</p>
-    <form id="project-form">
-      <label>GitHub repository URL<input id="project-url" type="url" required placeholder="https://github.com/owner/repository" autocomplete="off"></label>
-      <label>Base branch (optional)<input id="project-base" placeholder="Repository default" autocomplete="off"></label>
-      <button id="project-create" type="submit">Clone &amp; start task</button>
-    </form>
-    <p id="project-message" role="status"></p>
-    <button id="coding-terminal" type="button">Open coding Terminal / GitHub sign-in</button>
-    <p>In coding Terminal, use <code>gh auth login --web --git-protocol https</code> to connect private repositories. Configure your Git author before committing.</p>
-    <section id="project-details" hidden>
-      <h3>Current task</h3>
-      <div class="project-actions">
-        <button id="project-refresh" type="button">Refresh Git status</button>
-        <button type="button" data-code-prompt="Read this repository’s instructions, inspect the changes, run the appropriate tests and report the results.">Test changes</button>
-        <button type="button" data-code-prompt="Review the diff and test results, then commit the intended changes and push this task branch. Exclude credentials and unrelated changes. Report the commit SHA and remote branch.">Commit &amp; push…</button>
-      </div>
-      <pre id="project-status"></pre>
-      <details><summary>Tracked diff</summary><pre id="project-diff"></pre></details>
-    </section>
-    <h3>Deploy a pushed commit</h3>
-    <form id="deploy-form">
-      <label>Deployment profile<select id="deploy-profile" required><option value="">No profiles loaded</option></select></label>
-      <label>Full commit SHA<input id="deploy-sha" required pattern="[a-f0-9]{40}" placeholder="40-character commit SHA" autocomplete="off"></label>
-      <button id="deploy-submit" type="submit">Deploy this commit</button>
-    </form>
-    <pre id="deploy-message" role="status">Open Projects to check the deployment runner.</pre>
+  <dialog id="project-dialog" aria-labelledby="project-title" aria-describedby="project-description">
+    <header class="project-heading">
+      <div><h2 id="project-title">Projects &amp; deploy</h2><p id="project-description">Your repositories, tasks and releases.</p></div>
+      <button id="project-close" type="button" aria-label="Close projects"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+    </header>
+    <div class="project-tabs" role="tablist" aria-label="Project tools">
+      <button id="project-tab" type="button" role="tab" aria-selected="true" aria-controls="project-pane" tabindex="0">Project</button>
+      <button id="deploy-tab" type="button" role="tab" aria-selected="false" aria-controls="deploy-pane" tabindex="-1">Deploy</button>
+    </div>
+    <div class="project-body">
+      <section id="project-pane" role="tabpanel" aria-labelledby="project-tab">
+        <section id="project-details" class="project-task" hidden>
+          <div class="project-section-heading"><h3>Current task</h3><button id="project-refresh" type="button" class="project-quiet">Refresh status</button></div>
+          <pre id="project-status"></pre>
+          <div class="project-actions">
+            <button type="button" data-code-prompt="Read this repository’s instructions, inspect the changes, run the appropriate tests and report the results.">Test changes</button>
+            <button type="button" data-code-prompt="Review the diff and test results, then commit the intended changes and push this task branch. Exclude credentials and unrelated changes. Report the commit SHA and remote branch.">Commit &amp; push…</button>
+          </div>
+          <details class="project-diff-wrap"><summary>View tracked diff</summary><pre id="project-diff"></pre></details>
+        </section>
+        <details id="project-connect" class="project-connect" open>
+          <summary>Connect a repository <span>New task</span></summary>
+          <div class="project-connect-body">
+            <p class="project-hint">Start from GitHub. Each task gets its own branch.</p>
+            <form id="project-form">
+              <label for="project-url">Repository URL</label>
+              <input id="project-url" type="url" required placeholder="https://github.com/owner/repository" autocomplete="off" spellcheck="false">
+              <div class="project-form-bottom">
+                <label for="project-base">Base branch <span>Optional</span><input id="project-base" placeholder="Repository default" autocomplete="off" spellcheck="false"></label>
+                <button id="project-create" class="project-primary" type="submit">Clone &amp; start task <span aria-hidden="true">↗</span></button>
+              </div>
+            </form>
+          </div>
+        </details>
+        <p id="project-message" role="status"></p>
+        <div class="project-terminal-row"><div><strong>GitHub access</strong><p>Sign in to clone private repos or push changes.</p></div><button id="coding-terminal" type="button">Open Terminal <span aria-hidden="true">↗</span></button></div>
+        <details class="project-signin-help"><summary>First-time setup</summary><p>In coding Terminal, run <code>gh auth login --web --git-protocol https</code> and configure your Git author before committing.</p></details>
+      </section>
+      <section id="deploy-pane" role="tabpanel" aria-labelledby="deploy-tab" hidden>
+        <h3>Deploy a commit</h3>
+        <p class="project-hint">Choose a target and a commit already pushed to its approved branch.</p>
+        <form id="deploy-form">
+          <label for="deploy-profile">Deployment profile</label><select id="deploy-profile" required><option value="">Select deployment</option></select>
+          <label for="deploy-sha">Full commit SHA</label><input id="deploy-sha" required pattern="[a-f0-9]{40}" placeholder="Paste the 40-character commit SHA" autocomplete="off" spellcheck="false">
+          <div class="project-deploy-footer"><span>Deploy the exact revision you choose.</span><button id="deploy-submit" class="project-primary" type="submit">Deploy commit <span aria-hidden="true">↗</span></button></div>
+        </form>
+        <pre id="deploy-message" class="project-notice" role="status">Checking deployment availability…</pre>
+      </section>
+    </div>
   </dialog>
 
   <main id="terminal"></main>

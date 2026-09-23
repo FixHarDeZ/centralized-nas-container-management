@@ -23,6 +23,26 @@
   const statusText = document.getElementById('project-status');
   const diff = document.getElementById('project-diff');
   let projects = [], current = null;
+  const tabs = [...panel.querySelectorAll('[role="tab"]')];
+  function showTab(tab) {
+    tabs.forEach(item => {
+      const active = item === tab;
+      item.setAttribute('aria-selected', String(active));
+      item.tabIndex = active ? 0 : -1;
+      document.getElementById(item.getAttribute('aria-controls')).hidden = !active;
+    });
+  }
+  tabs.forEach((tab, index) => {
+    tab.addEventListener('click', () => showTab(tab));
+    tab.addEventListener('keydown', event => {
+      if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+      event.preventDefault();
+      const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
+        : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+      showTab(tabs[next]);
+      tabs[next].focus();
+    });
+  });
 
   function navigate(id, terminal = false) {
     window.dispatchEvent(new Event('desk:save-draft'));
@@ -58,6 +78,7 @@
       }
       select.value = workspace;
       details.hidden = !current;
+      document.getElementById('project-connect').open = !current;
     } catch (error) {
       message.textContent = error.message;
       if (workspace) {
@@ -68,6 +89,7 @@
   }
   select.addEventListener('change', () => navigate(select.value));
   document.getElementById('project-manage').addEventListener('click', () => {
+    showTab(tabs[0]);
     panel.showModal();
     if (current) refreshStatus();
   });
@@ -113,12 +135,18 @@
 
   const deployMessage = document.getElementById('deploy-message');
   const deployProfiles = document.getElementById('deploy-profile');
+  const deployButton = document.getElementById('deploy-submit');
+  let hasDeployProfiles = false;
   let poll = null;
   async function loadDeploy() {
+    hasDeployProfiles = false;
+    deployButton.disabled = true;
     try {
       const data = await request('deploy/profiles');
       deployProfiles.replaceChildren(new Option('Select deployment', ''));
       data.items.forEach(item => deployProfiles.add(new Option(item.id, item.id)));
+      hasDeployProfiles = data.items.length > 0;
+      deployButton.disabled = !hasDeployProfiles;
       deployMessage.textContent = data.items.length ? 'Deploy runs separately from your coding workspace.' : 'No deployment profiles are configured for your account.';
     } catch (_) { deployMessage.textContent = 'Deployment runner is not configured or unavailable.'; }
   }
@@ -141,7 +169,7 @@
       try { sessionStorage.setItem('ai-deck.deploy-job', job.id); } catch (_) {}
       clearTimeout(poll); pollJob(job.id);
     } catch (error) { deployMessage.textContent = error.message; }
-    finally { button.disabled = false; }
+    finally { button.disabled = !hasDeployProfiles; }
   });
   document.getElementById('project-manage').addEventListener('click', () => {
     loadDeploy();
