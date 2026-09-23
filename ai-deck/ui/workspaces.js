@@ -93,6 +93,26 @@
     panel.showModal();
     if (current) refreshStatus();
   });
+  // Signed-in gh account's repos; the URL field stays for anything else.
+  const repoWrap = document.getElementById('project-repo-wrap');
+  const repoSelect = document.getElementById('project-repo');
+  const urlInput = document.getElementById('project-url');
+  let reposLoaded = false;
+  async function loadRepositories() {
+    if (reposLoaded || demo) return;
+    try {
+      const data = await request('code/projects/repositories');
+      if (!data.signed_in || !data.items.length) return;
+      repoSelect.replaceChildren(new Option('Choose a repository…', ''));
+      data.items.forEach(item => repoSelect.add(new Option(item.name + (item.private ? ' · private' : ''), item.url)));
+      repoSelect.value = data.items.some(item => item.url === urlInput.value.trim()) ? urlInput.value.trim() : '';
+      repoWrap.hidden = false;
+      reposLoaded = true;
+    } catch (_) { /* Manual URL entry still works. */ }
+  }
+  repoSelect.addEventListener('change', () => { if (repoSelect.value) urlInput.value = repoSelect.value; });
+  urlInput.addEventListener('input', () => { if (repoSelect.value !== urlInput.value.trim()) repoSelect.value = ''; });
+  document.getElementById('project-manage').addEventListener('click', loadRepositories);
   document.getElementById('project-close').addEventListener('click', () => panel.close());
   document.getElementById('coding-terminal').addEventListener('click', () => navigate(workspace, true));
   form.addEventListener('submit', async (event) => {

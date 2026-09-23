@@ -32,6 +32,8 @@
 #project-dialog :is(input, select, button, summary):focus-visible, .project-bar :is(button, select):focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
 #project-dialog .project-form-bottom { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:14px; align-items:end; margin-top:8px; }
 #project-dialog .project-form-bottom input { margin-top:7px; }
+#project-dialog #project-repo-wrap { margin-bottom:12px; }
+#project-dialog #project-repo { margin-top:7px; }
 #project-dialog button.project-primary { display:inline-flex; align-items:center; justify-content:center; gap:12px; min-height:39px; background:var(--accent); color:var(--accent-ink); border-color:transparent; font-weight:600; padding:9px 14px; }
 #project-dialog button.project-primary:hover:not(:disabled) { background:var(--accent-hi); }
 #project-dialog .project-connect > summary { display:flex; align-items:center; justify-content:space-between; gap:8px; cursor:pointer; font-size:14px; font-weight:600; list-style:none; }

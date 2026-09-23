@@ -237,3 +237,40 @@ def test_concurrent_creates_have_unique_complete_metadata(store):
     assert len({item["id"] for item in made}) == 4
     assert len(store.list("alice")) == 4
     assert all(Path(item["path"]).is_dir() for item in made)
+
+
+def test_github_repositories_signed_out_is_not_an_error():
+    from workspaces import github_repositories
+
+    def run(args, **kwargs):
+        return subprocess.CompletedProcess(args, 4, b"", b"")
+
+    assert github_repositories(run) == {"signed_in": False, "items": []}
+
+
+def test_github_repositories_only_offers_clonable_urls():
+    from workspaces import github_repositories
+    lines = [
+        {"name": "me/app", "url": "https://github.com/me/app", "private": True},
+        {"name": "x", "url": "https://evil.example/me/app", "private": False},
+        {"name": "bad", "url": "https://github.com/me/a b", "private": False},
+    ]
+
+    def run(args, **kwargs):
+        out = "\n".join(json.dumps(line) for line in lines).encode() if args[1] == "api" else b""
+        return subprocess.CompletedProcess(args, 0, out, b"")
+
+    assert github_repositories(run) == {"signed_in": True, "items": [
+        {"name": "me/app", "url": "https://github.com/me/app", "private": True},
+    ]}
+
+
+def test_github_repositories_api_failure_is_502():
+    from workspaces import github_repositories
+
+    def run(args, **kwargs):
+        return subprocess.CompletedProcess(args, 0 if args[1] == "auth" else 1, b"", b"")
+
+    with pytest.raises(WorkspaceError) as caught:
+        github_repositories(run)
+    assert caught.value.status == 502

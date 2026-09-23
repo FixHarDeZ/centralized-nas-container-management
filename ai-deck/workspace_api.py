@@ -60,6 +60,9 @@ def handle(handler):
                 handler._reply(400, 'Expected a GitHub URL and optional base branch')
                 return True
             result = store().create(owner, body.get('url', ''), body.get('branch', ''))
+        elif path == '/projects/repositories' and handler.command == 'GET':
+            from workspaces import github_repositories
+            result = github_repositories()
         elif path == '/projects/status' and handler.command == 'GET':
             item = workspace(handler)
             result = store().status(owner, item['id'])

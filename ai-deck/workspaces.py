@@ -20,6 +20,44 @@ _GITHUB_PART = re.compile(r"^[A-Za-z0-9_.-]+$")
 _DIFF_LIMIT = 64 * 1024
 _OUTPUT_LIMIT = 64 * 1024
 _GIT_TIMEOUT = 90
+_REPO_LIMIT = 500
+
+
+def github_repositories(run=subprocess.run):
+    """Repositories visible to the worker's gh login, newest push first.
+
+    One gh login serves every desk user in the coding worker, so the list is
+    the same for all of them; not signed in returns signed_in False, not 502.
+    """
+    env = dict(os.environ, GH_PROMPT_DISABLED="1", GIT_TERMINAL_PROMPT="0")
+    try:
+        if run(["gh", "auth", "token"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+               stderr=subprocess.DEVNULL, timeout=15, check=False, env=env).returncode:
+            return {"signed_in": False, "items": []}
+        completed = run(
+            ["gh", "api", "--paginate", "user/repos?per_page=100&sort=pushed",
+             "--jq", ".[] | {name: .full_name, url: .html_url, private: .private}"],
+            stdin=subprocess.DEVNULL, capture_output=True, timeout=_GIT_TIMEOUT,
+            check=False, env=env,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        raise WorkspaceError("GitHub is unavailable", 502)
+    if completed.returncode:
+        raise WorkspaceError("GitHub is unavailable", 502)
+    items = []
+    for line in completed.stdout.decode("utf-8", "replace").splitlines()[:_REPO_LIMIT]:
+        try:
+            item = json.loads(line)
+        except ValueError:
+            continue
+        # Only offer what create() will accept.
+        if isinstance(item, dict) and isinstance(item.get("url"), str):
+            parts = urlsplit(item["url"]).path.strip("/").split("/")
+            if (item["url"].startswith("https://github.com/") and len(parts) == 2
+                    and all(_GITHUB_PART.fullmatch(part) for part in parts)):
+                items.append({"name": "/".join(parts), "url": item["url"],
+                              "private": bool(item.get("private"))})
+    return {"signed_in": True, "items": items}
 
 
 class WorkspaceError(Exception):

@@ -116,7 +116,8 @@
           <div class="project-connect-body">
             <p class="project-hint">Start from GitHub. Each task gets its own branch.</p>
             <form id="project-form">
-              <label for="project-url">Repository URL</label>
+              <div id="project-repo-wrap" hidden><label for="project-repo">Your repositories</label><select id="project-repo"><option value="">Choose a repository…</option></select></div>
+            <label for="project-url">Repository URL</label>
               <input id="project-url" type="url" required placeholder="https://github.com/owner/repository" autocomplete="off" spellcheck="false">
               <div class="project-form-bottom">
                 <label for="project-base">Base branch <span>Optional</span><input id="project-base" placeholder="Repository default" autocomplete="off" spellcheck="false"></label>

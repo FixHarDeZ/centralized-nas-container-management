@@ -615,3 +615,10 @@ User requested commit + push. Delivered AI Deck rename/features/quota fixes and 
 - Source/layout commit `5332ada` และ rollout-memory commit `99a6ce0` push ขึ้น main แล้ว ก่อนเพิ่มบันทึกปิดงาน working tree สะอาด บันทึกนี้เป็น documentation-only และไม่ต้อง deploy runtime ซ้ำ
 - เงื่อนไขใช้งานคงเดิม: GitHub sign-in/Git author สำหรับ push, Codex sign-in ใน coding home หากเลือกใช้, Mac ต้อง awake/online สำหรับ deploy; profile `nas-ai-deck` deploy เฉพาะ ai-deck ส่วนสิทธิ์ profile ของแต่ละบัญชียังคงเดิม
 - อัปเดตทั้ง `.notes/daily_log.md` และ `.notes/00_INDEX.md` ตามกฎปิดงาน ไม่เขียน memory ลง root `.notes/`
+
+## 2026-09-23 — GitHub repo dropdown in Projects dialog (uncommitted, not deployed)
+- `workspaces.github_repositories()` runs `gh auth token` then `gh api --paginate user/repos?sort=pushed`; filters to URLs `create()` accepts, cap 500. Not signed in = `{signed_in:false}` (not an error); API fail = 502.
+- `GET /projects/repositories` (existing nginx `/code/projects` prefix covers it). UI: `#project-repo` select above Repository URL, hidden until signed in, fetched on each dialog open until it succeeds; picking fills URL, URL field still free-form.
+- gh login is one per coding worker home → every desk user sees the same list.
+- Tests: 3 new in `tests/test_workspaces.py`; ai-deck suite 207 passed. Live check blocked: `ai-deck-code` container not running on NAS (dialog shows "Coding service is unavailable").
+- Status at close: not committed, not deployed. Next: commit, bring up coding profile, verify live.

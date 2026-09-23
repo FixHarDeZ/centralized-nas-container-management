@@ -1,3 +1,10 @@
+## 2026-09-23 — GitHub repo dropdown (uncommitted, not deployed)
+
+- Projects dialog มี select `#project-repo` เหนือ Repository URL: list จาก `GET /code/projects/repositories` → `workspaces.github_repositories()` (`gh auth token` เช็ค login, `gh api --paginate user/repos?sort=pushed`, กรองเฉพาะ URL ที่ `create()` รับ, cap 500). ไม่ได้ login = `signed_in:false` + dropdown ซ่อน; gh fail = 502 UI เงียบ พิมพ์ URL เองได้ตามเดิม.
+- gh login เป็นของ coding worker home เดียว → ทุก desk user เห็น list เดียวกัน.
+- Tests: ai-deck 207 passed (+3). **ยังไม่ verify จริง**: container `ai-deck-code` ไม่รันบน NAS (dialog โชว์ "Coding service is unavailable") — ต้อง deploy พร้อม `coding` profile ก่อน.
+- ค้าง: commit + deploy + ทดสอบ dropdown บน NAS หลัง `gh auth login`.
+
 ## 2026-09-23 — Terminal bottom row clipping fixed locally
 
 - Reproduced in real Chromium: at 1697×833 and 14px font the terminal screen extended 8px below its container. FitAddon treats the parent computed height/width as usable content, but global border-box included terminal padding.
