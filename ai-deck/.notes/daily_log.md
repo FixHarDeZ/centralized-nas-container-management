@@ -600,3 +600,11 @@ User requested commit + push. Delivered AI Deck rename/features/quota fixes and 
 - Verification: complete ai-deck tests passed, including real Chromium mobile/desktop dialog bounds/centering, tab keyboard navigation, empty-profile handling and existing diff/prefill/deploy checks. JS syntax and diff checks passed. Desktop/light, mobile/light and desktop/dark screenshots visually inspected. Independent review completed and finding corrected.
 - Commit `5332adabb7a498f4f83197b1dda6ec7892e4607e` pushed and deployed on NAS through Mac job `6ddf17a9b6924078bc0b761ef691bd3f` (**succeeded**). /health matched the exact revision; live index.html, workspaces.css and workspaces.js SHA-256 hashes matched tested local assets.
 - No deployment-account permissions changed. Accounts with no configured profile still see the explanatory message in the Deploy tab. Final memory commit is documentation-only; deployed runtime remains `5332ada`.
+
+## 2026-09-23 — ปิดงานตามคำสั่งผู้ใช้
+
+- งาน GitHub coding workspace, Mac deploy runner และ redesign ส่วน Workspace / Projects & deploy เสร็จแล้ว ไม่มีงาน implementation ค้างในขอบเขตนี้
+- ตรวจ NAS ตอนปิดงาน: `/health` ตอบ `ready` และ revision `5332adabb7a498f4f83197b1dda6ec7892e4607e` ตรงกับ UI ที่ deploy แล้ว ชุดทดสอบและ live asset verification ผ่านตามรายการบันทึกก่อนหน้า; ไม่มี code change เพิ่มจึงไม่รันทดสอบซ้ำ
+- Source/layout commit `5332ada` และ rollout-memory commit `99a6ce0` push ขึ้น main แล้ว ก่อนเพิ่มบันทึกปิดงาน working tree สะอาด บันทึกนี้เป็น documentation-only และไม่ต้อง deploy runtime ซ้ำ
+- เงื่อนไขใช้งานคงเดิม: GitHub sign-in/Git author สำหรับ push, Codex sign-in ใน coding home หากเลือกใช้, Mac ต้อง awake/online สำหรับ deploy; profile `nas-ai-deck` deploy เฉพาะ ai-deck ส่วนสิทธิ์ profile ของแต่ละบัญชียังคงเดิม
+- อัปเดตทั้ง `.notes/daily_log.md` และ `.notes/00_INDEX.md` ตามกฎปิดงาน ไม่เขียน memory ลง root `.notes/`

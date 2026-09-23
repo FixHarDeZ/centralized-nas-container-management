@@ -1,3 +1,11 @@
+## 2026-09-23 — ปิดงานตามคำสั่งผู้ใช้
+
+- งาน GitHub coding workspace, Mac deploy runner และ redesign ส่วน Workspace / Projects & deploy เสร็จแล้ว ไม่มีงาน implementation ค้างในขอบเขตนี้
+- ตรวจ NAS ตอนปิดงาน: `/health` ตอบ `ready` และ revision `5332adabb7a498f4f83197b1dda6ec7892e4607e` ตรงกับ UI ที่ deploy แล้ว ชุดทดสอบและ live asset verification ผ่านตามรายการบันทึกก่อนหน้า; ไม่มี code change เพิ่มจึงไม่รันทดสอบซ้ำ
+- Source/layout commit `5332ada` และ rollout-memory commit `99a6ce0` push ขึ้น main แล้ว ก่อนเพิ่มบันทึกปิดงาน working tree สะอาด บันทึกนี้เป็น documentation-only และไม่ต้อง deploy runtime ซ้ำ
+- เงื่อนไขใช้งานคงเดิม: GitHub sign-in/Git author สำหรับ push, Codex sign-in ใน coding home หากเลือกใช้, Mac ต้อง awake/online สำหรับ deploy; profile `nas-ai-deck` deploy เฉพาะ ai-deck ส่วนสิทธิ์ profile ของแต่ละบัญชียังคงเดิม
+- อัปเดตทั้ง `.notes/daily_log.md` และ `.notes/00_INDEX.md` ตามกฎปิดงาน ไม่เขียน memory ลง root `.notes/`
+
 ## 2026-09-23 — Compact Projects / Deploy redesign delivered
 
 - Redesigned the Documents/workspace selector as a compact single-row toolbar. Modal now explicitly centers with `margin:auto`, uses a 560px desktop width and responsive phone layout, and inherits the existing theme palette.
