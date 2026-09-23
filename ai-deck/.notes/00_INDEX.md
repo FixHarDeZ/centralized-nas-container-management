@@ -242,3 +242,5 @@ Changing a skill means a rebuild, but a cheap one — the `COPY` sits after apt/
 - **2026-09-15** — drawer gets in/ tab with upload (+delete) and ⬇ on out/; `upload.py` + `/upload/` + `/files/{in,out}/`
 - **2026-09-15** — rtk 0.49.0 added (binary + settings merge in entrypoint); Headroom deliberately not added (2 GB ML install, would be a proxy sidecar — see daily_log)
 - **2026-09-15** — stack created (Dockerfile, compose, nginx, UI, docs, vault keys, deploy.sh `ALL_STACKS`, homepage tile, root README/CLAUDE.md rows)
+
+- **`COMPOSE_PROFILES: coding` เป็น literal ใน `secrets.manifest.yaml`** (23/09) — ไม่มี = `deploy.sh` ทิ้ง coding worker แล้ว Open Terminal (`?coding=1`) วน reconnect ไม่จบ. ห้ามลบ.

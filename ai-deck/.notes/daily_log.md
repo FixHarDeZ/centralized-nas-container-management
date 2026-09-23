@@ -622,3 +622,9 @@ User requested commit + push. Delivered AI Deck rename/features/quota fixes and 
 - gh login is one per coding worker home → every desk user sees the same list.
 - Tests: 3 new in `tests/test_workspaces.py`; ai-deck suite 207 passed. Live check blocked: `ai-deck-code` container not running on NAS (dialog shows "Coding service is unavailable").
 - Status at close: not committed, not deployed. Next: commit, bring up coding profile, verify live.
+
+## 2026-09-23 — Fix: Open Terminal (coding) reconnect loop
+- อาการ: Projects & deploy → Open Terminal ไป `?coding=1` แล้วขึ้น `reconnecting` ไม่จบ, modal บอก "Coding service is unavailable"; ปิด tab เปิดใหม่ (URL ไม่มี `?coding`) ใช้ได้.
+- Root cause: deploy 17:02 ผ่าน `scripts/deploy.sh` ไม่มี `COMPOSE_PROFILES=coding` (มีแค่ runner adapter ที่เติมให้) → container coding worker ไม่ถูกสร้าง → `code/ws` ต่อไม่ได้.
+- Fix: `secrets.manifest.yaml` literal `COMPOSE_PROFILES: coding` → อยู่ใน `ai-deck/.env` ทุก deploy path. `make secrets` + `deploy.sh -s ai-deck -y` → `ai-deck`, `ai-deck-nginx`, `ai-deck-ai-deck-code-1` Up. Tests 207 passed.
+- ค้าง: UI ยังวน reconnect เงียบๆ ถ้า worker ล่มอีก (ไม่มีข้อความบอก) — ยังไม่แก้.
