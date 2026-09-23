@@ -62,3 +62,7 @@ Files: worker Dockerfile/entrypoint, Compose coding profile, nginx routing, READ
 
 ## 2026-09-23 delivery checkpoint
 Implementation, independent review and local verification complete. Mac runner/tunnel installed and live NAS-to-Mac TLS profiles check passed. Git delivery and NAS application rollout recorded in stack notes when complete.
+
+## Final delivery — 2026-09-23
+
+Complete. Source and fixes pushed to main; NAS deployed at `a03bcea` through Mac runner job `ab3c895ed715446e8f4aa3957853e4fe`, health SHA matched. Live default-user terminal and normal Git fetch regressions fixed and verified. Example GitHub workspace is ready under desk. Both stack memory files record actual results and one-time login requirements. User walkthrough: `ai-deck/docs/CODING_WALKTHROUGH.md`.
