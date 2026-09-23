@@ -1,3 +1,12 @@
+## 2026-09-23 — Compact Projects / Deploy redesign delivered
+
+- Redesigned the Documents/workspace selector as a compact single-row toolbar. Modal now explicitly centers with `margin:auto`, uses a 560px desktop width and responsive phone layout, and inherits the existing theme palette.
+- Split Project and Deploy into accessible keyboard-operated tabs. Project panel separates current task, collapsible new-repository form and compact GitHub terminal/setup help. Deploy form uses a distinct primary action and a compact status notice; deployment is disabled when no profile is available.
+- Existing clone, task shortcuts and deploy request semantics retained. Restored coding starter `<small>` styles after independent review caught a selector mismatch. Updated Thai walkthrough labels/navigation.
+- Verification: complete ai-deck tests passed, including real Chromium mobile/desktop dialog bounds/centering, tab keyboard navigation, empty-profile handling and existing diff/prefill/deploy checks. JS syntax and diff checks passed. Desktop/light, mobile/light and desktop/dark screenshots visually inspected. Independent review completed and finding corrected.
+- Commit `5332adabb7a498f4f83197b1dda6ec7892e4607e` pushed and deployed on NAS through Mac job `6ddf17a9b6924078bc0b761ef691bd3f` (**succeeded**). /health matched the exact revision; live index.html, workspaces.css and workspaces.js SHA-256 hashes matched tested local assets.
+- No deployment-account permissions changed. Accounts with no configured profile still see the explanatory message in the Deploy tab. Final memory commit is documentation-only; deployed runtime remains `5332ada`.
+
 ## 2026-09-23 — Delivered: GitHub coding + Mac deployment
 
 - Implementation and fixes pushed to `origin/main`: `febae58` (feature), `de9490b` (integration with current main), `2250f06` (terminal identity), `a03bcea` (normal Git fetch tracking refs).
