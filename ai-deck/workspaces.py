@@ -79,6 +79,13 @@ class WorkspaceStore:
                 elif not self._safe_existing_directory(cache):
                     raise WorkspaceError("Invalid workspace storage", 400)
 
+                # Bare clones omit the normal fetch mapping. Persist it so Git
+                # commands run inside task worktrees refresh origin/main too.
+                self._git(
+                    "-C", os.fspath(cache), "config", "--replace-all",
+                    "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*",
+                )
+
                 self._git(
                     "-C", os.fspath(cache), "fetch", "--prune", "origin",
                     "+refs/heads/*:refs/remotes/origin/*",

@@ -62,6 +62,16 @@ def test_create_clones_and_makes_independent_persistent_worktrees(store):
     }
 
 
+def test_normal_fetch_updates_remote_tracking_branch(store, repository):
+    made = store.create("alice", "https://github.com/example/project.git")
+    before = git("rev-parse", "refs/remotes/origin/main", cwd=made["path"])
+    git("update-ref", "refs/heads/main", "refs/heads/release", cwd=repository)
+    expected = git("rev-parse", "refs/heads/main", cwd=repository)
+    assert expected != before
+    git("fetch", "origin", "main", cwd=made["path"])
+    assert git("rev-parse", "refs/remotes/origin/main", cwd=made["path"]) == expected
+
+
 def test_requested_branch_is_the_start_point(store):
     made = store.create(
         "alice", "https://github.com/example/project.git", branch="release"
