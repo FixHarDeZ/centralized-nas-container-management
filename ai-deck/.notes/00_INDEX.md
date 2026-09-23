@@ -1,3 +1,10 @@
+## 2026-09-23 — Terminal bottom row clipping fixed locally
+
+- Reproduced in real Chromium: at 1697×833 and 14px font the terminal screen extended 8px below its container. FitAddon treats the parent computed height/width as usable content, but global border-box included terminal padding.
+- Set only `#terminal` to `box-sizing: content-box`, so fitting uses the actual content area while retaining existing responsive padding and resize behavior.
+- Added browser regression that fills the terminal to its final row and checks bottom/right bounds across desktop/mobile/short viewports and 13/14/18px fonts. Failed before the fix, passed afterward. All five UI harnesses passed; complete ai-deck suite: 204 passed, 1 warning (test HTTP thread connection reset / bad file descriptor). `git diff --check` passed.
+- Updated stack daily log and index. No commit, push or NAS deployment in this task; production remains unchanged. Deployment is the remaining delivery step.
+
 ## 2026-09-23 — ปิดงานตามคำสั่งผู้ใช้
 
 - งาน GitHub coding workspace, Mac deploy runner และ redesign ส่วน Workspace / Projects & deploy เสร็จแล้ว ไม่มีงาน implementation ค้างในขอบเขตนี้

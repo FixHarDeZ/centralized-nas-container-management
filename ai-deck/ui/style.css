@@ -260,6 +260,9 @@ body.chat-view #toolbar-btn { display: none; }
 
 /* ── Terminal ───────────────────────────────────────── */
 #terminal {
+  /* FitAddon reads the parent's computed size as usable space. Exclude
+     this container's padding so the final row/column stays inside it. */
+  box-sizing: content-box;
   flex: 1 1 auto;
   min-height: 0;
   min-width: 0;

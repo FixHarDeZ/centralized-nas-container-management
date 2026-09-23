@@ -1,3 +1,10 @@
+## 2026-09-23 — Terminal bottom row clipping fixed locally
+
+- Reproduced in real Chromium: at 1697×833 and 14px font the terminal screen extended 8px below its container. FitAddon treats the parent computed height/width as usable content, but global border-box included terminal padding.
+- Set only `#terminal` to `box-sizing: content-box`, so fitting uses the actual content area while retaining existing responsive padding and resize behavior.
+- Added browser regression that fills the terminal to its final row and checks bottom/right bounds across desktop/mobile/short viewports and 13/14/18px fonts. Failed before the fix, passed afterward. All five UI harnesses passed; complete ai-deck suite: 204 passed, 1 warning (test HTTP thread connection reset / bad file descriptor). `git diff --check` passed.
+- Updated stack daily log and index. No commit, push or NAS deployment in this task; production remains unchanged. Deployment is the remaining delivery step.
+
 ## 2026-09-20 — Editable starter prompts
 
 - Added **Edit prompt** to all three welcome cards. Save per-card templates in `localStorage` (`ai-deck.starter-prompts.v1`), shared by Claude/Codex in this browser. No cross-device sync. Selecting a card fills the composer; never sends automatically.

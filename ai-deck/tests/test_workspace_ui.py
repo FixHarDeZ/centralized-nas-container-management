@@ -12,7 +12,7 @@ import pytest
 from .test_stream_render import find_chrome
 
 
-@pytest.mark.parametrize('harness', ['workspace_harness.html', 'quota_harness.html', 'starter_prompts_harness.html', 'coding_harness.html'])
+@pytest.mark.parametrize('harness', ['workspace_harness.html', 'quota_harness.html', 'starter_prompts_harness.html', 'coding_harness.html', 'terminal_layout_harness.html'])
 def test_workspace_controls_and_mobile_layout(tmp_path, harness):
     chrome = find_chrome()
     if not chrome:

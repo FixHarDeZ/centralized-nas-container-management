@@ -1,0 +1,33 @@
+<!doctype html><meta charset="utf-8"><title>Terminal bottom row checks</title>
+<pre id="result">pending</pre>
+<iframe id="desk" style="width:1697px;height:833px" src="../ui/?demo=1&theme=light"></iframe>
+<script>
+window.onerror = message => { document.getElementById('result').textContent = JSON.stringify({failures: [message]}); };
+window.addEventListener('load', async () => {
+  const failures = [], frame = document.getElementById('desk');
+  const win = frame.contentWindow, doc = frame.contentDocument;
+  const settle = () => new Promise(resolve => setTimeout(resolve, 150));
+  try {
+    await doc.fonts.ready;
+    doc.getElementById('view-term').click();
+    for (const [width, height] of [[1697,833], [1280,720], [390,844], [390,500]]) {
+      frame.style.width = width + 'px'; frame.style.height = height + 'px';
+      for (const fontSize of [13,14,18]) {
+        win.term.options.fontSize = fontSize;
+        win.dispatchEvent(new Event('resize'));
+        await settle();
+        await new Promise(resolve => win.term.write('\r\n'.repeat(win.term.rows + 5) + 'LAST ROW', resolve));
+        await settle();
+        const screen = doc.querySelector('.xterm-screen').getBoundingClientRect();
+        const container = doc.getElementById('terminal').getBoundingClientRect();
+        const label = `${width}x${height} font ${fontSize}`;
+        if (screen.bottom > Math.min(container.bottom, height) + .5)
+          failures.push(`${label}: last row clipped by ${screen.bottom - Math.min(container.bottom, height)}px`);
+        if (screen.right > container.right + .5) failures.push(`${label}: rightmost column clipped`);
+        if (win.term.buffer.active.cursorY !== win.term.rows - 1) failures.push(`${label}: cursor not on last row`);
+      }
+    }
+  } catch (error) { failures.push(String(error)); }
+  document.getElementById('result').textContent = JSON.stringify({failures});
+});
+</script>
