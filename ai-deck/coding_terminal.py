@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ttyd passes one workspace ID, never a shell command, to this entry point."""
+"""ttyd receives the proxy-authenticated owner and optional workspace ID."""
 import hashlib
 import os
 import re

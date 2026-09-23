@@ -33,3 +33,16 @@ def test_optional_nginx_coding_routes_resolve_lazily():
     assert 'location /code/projects' in source
     assert 'proxy_set_header X-Desk-User $remote_user;' in source
     assert 'set $coding_chat ai-deck-code:7683;' in source
+
+
+def test_coding_terminal_preserves_authenticated_owner_on_default_port():
+    # The dashboard account can differ from the roster name on the default port.
+    # Passing raw query args would also let clients supply a different owner.
+    source = (ROOT / 'nginx/nginx.conf').read_text()
+    route = source.split('location = /code/ws {', 1)[1].split('location ', 1)[0]
+    assert 'if ($remote_user !~ "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$") { return 403; }' in route
+    assert '/ws?arg=$remote_user&arg=$arg_arg;' in route
+    assert '$args' not in route
+    entrypoint = (ROOT / 'coding-entrypoint.sh').read_text()
+    assert 'coding_terminal.py "$user"' not in entrypoint
+    assert 'coding_terminal.py "$primary_user"' not in entrypoint
