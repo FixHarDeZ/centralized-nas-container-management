@@ -1430,6 +1430,7 @@ def test_metadata_strips_hashes_into_tags(monkeypatch):
     assert "#DevOps #AIOps" in body["snippet"]["description"]
     assert body["status"]["privacyStatus"] == "public"
     assert body["status"]["selfDeclaredMadeForKids"] is False
+    assert body["status"]["containsSyntheticMedia"] is True
 
 
 def test_metadata_respects_youtube_limits():
@@ -2018,7 +2019,7 @@ def test_storyboard_button_leaves_the_script_in_review(monkeypatch, tmp_path):
 
     monkeypatch.setattr(main, "send_storyboard", fake_send)
 
-    async def fake_for_script(script):
+    async def fake_for_script(script, choice=storyboard.AUTO, character="", topic=""):
         return storyboard.validate(a_board(scenes=len(script["cards"])), "9:16")
 
     monkeypatch.setattr(storyboard, "for_script", fake_for_script)
@@ -2038,12 +2039,13 @@ def test_a_storyboard_is_credited_to_the_clip_it_was_asked_for(monkeypatch, tmp_
     monkeypatch.setattr(manifest, "DIR", tmp_path / "clips")
     monkeypatch.setattr(main, "say", _nothing)
     monkeypatch.setattr(main, "send_storyboard", _nothing)
+    monkeypatch.setattr(main, "save_state", lambda state: None)
 
     first = manifest.start("หัวข้อ A")
     second = manifest.start("หัวข้อ B")
     state = {"mode": "review", "script": a_script(), "clip_id": first}
 
-    async def slow_for_script(script):
+    async def slow_for_script(script, choice=storyboard.AUTO, character="", topic=""):
         state["clip_id"] = second      # the human moved on while this ran
         return storyboard.validate(a_board(scenes=len(script["cards"])), "9:16")
 
@@ -2066,6 +2068,306 @@ def test_a_scene_message_carries_the_thai_and_the_english(monkeypatch):
 
     assert posted["parse_mode"] == "HTML"
     assert "หัวเรื่อง" in posted["text"] and "<pre>A cinematic 9:16 shot</pre>" in posted["text"]
+
+
+def test_the_typed_topic_reaches_the_storyboard_brief():
+    """A Script keeps no record of how the human wanted the clip to look, so
+    the Topic as typed rides along — otherwise "ตัวละครหญิง 25 ปี สไตล์เกาหลี"
+    is gone by planning time and the model invents somebody else."""
+    brief = storyboard._brief_from_script(
+        a_script(), "work-life balance ตัวละครหญิง 25 ปี สไตล์เกาหลี")
+    assert "สไตล์เกาหลี" in brief
+    assert "ห้ามเปลี่ยนจำนวนฉาก" in brief, "the cards decide the scene count, not the Topic"
+    # The title on its own says nothing new; repeating it would only be noise.
+    assert "หัวข้อที่คนพิมพ์มาเอง" not in storyboard._brief_from_script(a_script(), "ทดสอบ")
+
+
+def test_a_boardless_of_people_does_not_get_a_person_in_its_brief(monkeypatch):
+    """🚫 and a Topic naming somebody argue with each other: the brief asks for
+    a woman, rule 1 forbids one, and validate() throws the board away after two
+    full model calls. The Topic is dropped for that answer only."""
+    seen = {}
+
+    async def fake_plan(brief, ratio, cards=None, choice=storyboard.AUTO, character=""):
+        seen.update(brief=brief, choice=choice)
+        return {}
+
+    monkeypatch.setattr(storyboard, "plan", fake_plan)
+    asyncio.run(storyboard.for_script(a_script(), choice=storyboard.NONE,
+                                      topic="ออฟฟิศซินโดรม ตัวละครหญิง 25 ปี"))
+    assert "ตัวละครหญิง" not in seen["brief"]
+
+    asyncio.run(storyboard.for_script(a_script(), choice=storyboard.AUTO,
+                                      topic="ออฟฟิศซินโดรม ตัวละครหญิง 25 ปี"))
+    assert "ตัวละครหญิง" in seen["brief"], "every other answer still gets the Topic"
+
+
+# --- who is in the storyboard ------------------------------------------------
+
+def test_the_character_question_comes_before_the_model_call(monkeypatch):
+    """Every scene repeats the character word for word, so a board planned
+    around the wrong person is a board thrown away — the question is asked
+    first, not offered as a revision afterwards."""
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+    sent = {}
+
+    async def fake_say(client, text, **extra):
+        sent.update(text=text, **extra)
+        return {"message_id": 11}
+
+    monkeypatch.setattr(main, "say", fake_say)
+    monkeypatch.setattr(main, "api", _nothing)
+    monkeypatch.setattr(main, "spawn", lambda *a, **kw: pytest.fail("asked the model too early"))
+
+    state = {"mode": "review", "script": a_script(), "clip_id": "c1"}
+    asyncio.run(main.on_callback(None, state, {"id": "1", "data": main.STORYBOARD_CB}))
+
+    wait = state["storyboard_wait"]
+    assert wait["kind"] == "script" and wait["script"] is state["script"]
+    choices = [b["callback_data"].split(":")[1]
+               for row in sent["reply_markup"]["inline_keyboard"] for b in row]
+    assert choices == [storyboard.AUTO, storyboard.OWN, storyboard.NONE]
+
+
+def test_an_answer_to_a_question_that_is_gone_is_refused(monkeypatch):
+    """The question outlives the Script it was asked for: 🗑 or another Topic
+    may have come first, and planning against the live slots would board the
+    wrong Script."""
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+    said = []
+    monkeypatch.setattr(main, "say", lambda client, text, **extra: said.append(text) or _nothing())
+    monkeypatch.setattr(main, "spawn", lambda *a, **kw: pytest.fail("planned a gone board"))
+
+    state = {"mode": "review", "storyboard_wait": {"kind": "script", "token": "111",
+                                                   "script": a_script()}}
+    asyncio.run(main.on_character_choice(
+        None, state, f"{main.SBCHAR_CB}:{storyboard.AUTO}:222"))
+    assert "เก่าแล้ว" in said[0] and state["storyboard_wait"]["token"] == "111"
+
+
+def test_a_typed_character_is_not_a_new_topic(monkeypatch):
+    """With ✍️ pending, the next line describes the character. Left to fall
+    through it would start a Topic named after somebody's haircut."""
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+    monkeypatch.setattr(main, "say", _nothing)
+    planned = {}
+    monkeypatch.setattr(
+        main, "start_storyboard",
+        lambda client, state, wait, choice, character="": planned.update(
+            choice=choice, character=character, kind=wait["kind"]))
+    monkeypatch.setattr(main, "make_script",
+                        lambda *a, **kw: pytest.fail("the character became a Topic"))
+
+    state = {"mode": "idle", "storyboard_wait": {
+        "kind": "brief", "token": "1", "brief": "โฆษณาบ้าน", "awaiting_text": True,
+        "created_at": datetime.datetime.now().isoformat(timespec="seconds")}}
+    asyncio.run(main.on_text(None, state, "ผู้หญิงไทย 25 ปี ผมบ๊อบ แว่นกลม"))
+
+    assert planned == {"choice": storyboard.OWN,
+                       "character": "ผู้หญิงไทย 25 ปี ผมบ๊อบ แว่นกลม", "kind": "brief"}
+    assert "storyboard_wait" not in state
+
+
+def test_a_forgotten_character_question_gives_the_topic_back(monkeypatch):
+    """A question nobody answered must not swallow Topics forever."""
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+    monkeypatch.setattr(main, "say", _nothing)
+    monkeypatch.setattr(main, "start_storyboard",
+                        lambda *a, **kw: pytest.fail("planned a board from a stale question"))
+    spawned = []
+    monkeypatch.setattr(main, "spawn",
+                        lambda coro, label: spawned.append(label) or coro.close())
+
+    old = datetime.datetime.now() - main.CHARACTER_WAIT_LIFETIME - datetime.timedelta(minutes=1)
+    state = {"mode": "idle", "storyboard_wait": {
+        "kind": "script", "token": "1", "script": a_script(), "awaiting_text": True,
+        "created_at": old.isoformat(timespec="seconds")}}
+    asyncio.run(main.on_text(None, state, "วิธีตั้ง docker ให้เร็วขึ้น"))
+
+    assert spawned == ["make_script"] and "storyboard_wait" not in state
+
+
+def test_the_human_owns_the_character_answer():
+    """A board that invented somebody after being told there is nobody — or
+    dropped the person that was described — is the wrong board."""
+    with pytest.raises(script_gen.ScriptError, match="null"):
+        storyboard.validate(a_board(), "9:16", choice=storyboard.NONE)
+    with pytest.raises(script_gen.ScriptError, match="ระบุตัวละคร"):
+        storyboard.validate(a_board(character=False), "9:16", choice=storyboard.OWN)
+    assert storyboard.validate(a_board(character=False), "9:16", choice=storyboard.NONE)
+
+    brief = storyboard._with_character("บรีฟ", storyboard.OWN, "หญิงไทย 25 ปี")
+    assert brief.startswith("บรีฟ") and "หญิงไทย 25 ปี" in brief
+    # ...and the other two answers leave the brief exactly as it was
+    assert storyboard._with_character("บรีฟ", storyboard.AUTO, "") == "บรีฟ"
+    assert storyboard._with_character("บรีฟ", storyboard.NONE, "") == "บรีฟ"
+    assert "ไม่มีตัวละคร" not in storyboard._system("9:16", shorts=True, choice=storyboard.AUTO)
+    assert "NO CHARACTER" in storyboard._system("9:16", shorts=True, choice=storyboard.NONE)
+
+
+# --- the clip the human assembles from a Storyboard --------------------------
+
+def _clip_wait_state(script=None, locale="th") -> dict:
+    return {
+        "mode": "idle",
+        "clip_wait": {
+            "message_id": 42,
+            "script": script or a_script(),
+            "topic": "หัวข้อ",
+            "locale": locale,
+            "created_at": datetime.datetime.now().isoformat(timespec="seconds"),
+        },
+    }
+
+
+def test_a_storyboard_clip_is_filed_and_offered_for_upload(monkeypatch, tmp_path):
+    monkeypatch.setattr(main, "OUTPUT_DIR", tmp_path)
+    monkeypatch.setattr(manifest, "DIR", tmp_path / "clips")
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+    monkeypatch.setattr(main.youtube, "configured", lambda locale="th": True)
+    keyboards = []
+
+    async def fake_say(client, text, **extra):
+        keyboards.append(extra.get("reply_markup"))
+        return {"message_id": 9}
+
+    monkeypatch.setattr(main, "say", fake_say)
+
+    async def fake_download(client, file_id, dest):
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"mp4")
+        return True
+
+    monkeypatch.setattr(main, "download_footage", fake_download)
+
+    state = _clip_wait_state()
+    asyncio.run(main.on_storyboard_clip(None, state, {
+        "video": {"file_id": "f1", "file_size": 5_000_000},
+        "reply_to_message": {"message_id": 42},
+    }))
+
+    clip_id, entry = next(iter(state["uploads"].items()))
+    assert pathlib.Path(entry["clip"]).is_file() and entry["srt"] is None
+    assert pathlib.Path(entry["clip"]).with_suffix(".txt").is_file()
+    assert keyboards[-1] == main.upload_keyboard(clip_id)
+    # its own Manifest: the same Script may also have been rendered by the bot,
+    # and one record cannot hold two videos without the second erasing the first
+    record = manifest.load(clip_id)
+    assert record["source"] == "storyboard" and record["scripts"]
+    assert state["clip_wait"], "a better cut of the same storyboard can follow"
+
+
+def test_the_wait_belongs_to_the_locale_that_asked(monkeypatch, tmp_path):
+    """The Locale decides the output folder *and* which channel's token
+    publishes the clip. Read live after a model call that takes minutes, a Thai
+    board whose human started an English Topic meanwhile would file the clip
+    under /output/en and publish it to the other channel (docs/adr/0008)."""
+    monkeypatch.setattr(manifest, "DIR", tmp_path / "clips")
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+    monkeypatch.setattr(main, "say", _nothing)
+    monkeypatch.setattr(main, "send_storyboard", _nothing)
+
+    state = {"mode": "review", "script": a_script(), "clip_id": "c1",
+             "topic": "หัวข้อไทย", "locale": "th"}
+
+    async def slow_for_script(script, choice=storyboard.AUTO, character="", topic=""):
+        state.update(locale="en", topic="an english topic")   # moved on meanwhile
+        return storyboard.validate(a_board(scenes=len(script["cards"])), "9:16")
+
+    monkeypatch.setattr(storyboard, "for_script", slow_for_script)
+    asyncio.run(main.on_storyboard(None, state, storyboard.AUTO, "",
+                                   script=state["script"], clip_id="c1",
+                                   topic="หัวข้อไทย", locale="th"))
+
+    assert state["clip_wait"]["locale"] == "th"
+    assert state["clip_wait"]["topic"] == "หัวข้อไทย"
+
+
+def test_a_broken_download_leaves_nothing_in_the_library(monkeypatch, tmp_path):
+    """A stream that breaks mid-write must not leave a truncated mp4 sitting
+    among the finished clips looking finished."""
+    monkeypatch.setattr(main, "OUTPUT_DIR", tmp_path)
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+    monkeypatch.setattr(main, "say", _nothing)
+
+    async def half_a_file(client, file_id, dest):
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"half")
+        return False
+
+    monkeypatch.setattr(main, "download_footage", half_a_file)
+    state = _clip_wait_state()
+    asyncio.run(main.on_storyboard_clip(None, state, {
+        "video": {"file_id": "f1"}, "reply_to_message": {"message_id": 42},
+    }))
+    assert not list(tmp_path.rglob("*.mp4")) and not list(tmp_path.rglob("*.part"))
+    assert "uploads" not in state
+
+
+def test_a_storyboard_clip_without_a_channel_is_still_kept(monkeypatch, tmp_path):
+    monkeypatch.setattr(main, "OUTPUT_DIR", tmp_path)
+    monkeypatch.setattr(manifest, "DIR", tmp_path / "clips")
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+    monkeypatch.setattr(main.youtube, "configured", lambda locale="th": False)
+    said = []
+    monkeypatch.setattr(main, "say", lambda client, text, **extra: said.append(extra) or _nothing())
+
+    async def fake_download(client, file_id, dest):
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"mp4")
+        return True
+
+    monkeypatch.setattr(main, "download_footage", fake_download)
+    state = _clip_wait_state()
+    asyncio.run(main.on_storyboard_clip(None, state, {
+        "video": {"file_id": "f1"}, "reply_to_message": {"message_id": 42},
+    }))
+    assert "uploads" not in state and all("reply_markup" not in e for e in said)
+
+
+def test_an_oversize_storyboard_clip_is_refused_with_a_way_out(monkeypatch, tmp_path):
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+    said = []
+    monkeypatch.setattr(main, "say", lambda client, text, **extra: said.append(text) or _nothing())
+
+    async def never(*args, **kwargs):
+        raise AssertionError("must not download an oversize file")
+
+    monkeypatch.setattr(main, "download_footage", never)
+    state = _clip_wait_state()
+    asyncio.run(main.on_storyboard_clip(None, state, {
+        "document": {"file_id": "f1", "file_size": main.TELEGRAM_FILE_LIMIT + 1},
+        "reply_to_message": {"message_id": 42},
+    }))
+    assert "20MB" in said[0] and "uploads" not in state
+
+
+def test_a_file_goes_to_the_message_it_replied_to(monkeypatch, tmp_path):
+    """A Flow shot for one Card and a whole assembled clip look identical; what
+    tells them apart is which message the human replied to."""
+    monkeypatch.setattr(main, "is_ours", lambda update: True)
+    spawned = []
+    monkeypatch.setattr(main, "spawn",
+                        lambda coro, label: spawned.append(label) or coro.close())
+
+    state = {**_parked_state(tmp_path), **_clip_wait_state()}
+    state["parked"] = _parked_state(tmp_path)["parked"]
+    for replied, expected in ((42, "on_storyboard_clip"), (7, "on_footage"), (None, "on_footage")):
+        message = {"video": {"file_id": "f1"}}
+        if replied:
+            message["reply_to_message"] = {"message_id": replied}
+        asyncio.run(main.handle(None, state, {"message": message}))
+    assert spawned == ["on_storyboard_clip", "on_footage", "on_footage"]
+
+
+def test_the_wait_for_a_storyboard_clip_runs_out():
+    state = _clip_wait_state()
+    assert not main.st.clip_wait_expired(state)
+    state["clip_wait"]["created_at"] = (
+        datetime.datetime.now() - main.st.CLIP_WAIT_LIFETIME - datetime.timedelta(minutes=1)
+    ).isoformat(timespec="seconds")
+    assert main.st.clip_wait_expired(state)
+    assert not main.st.clip_wait_expired({}), "no wait is not an expired wait"
 
 
 # --- Locales (English clips) -------------------------------------------------
@@ -2942,3 +3244,117 @@ def test_two_trends_rounds_never_overlap(monkeypatch):
     with pytest.raises(RuntimeError):
         asyncio.run(main.on_trends(None, state))
     assert "trends_running" not in state
+
+
+# --- the review clock (a Script nobody answered) ------------------------------
+
+def _review_state(clip_id=None, **extra) -> dict:
+    state = {"mode": "review", "script": a_script(), "topic": "หัวข้อ",
+             "clip_id": clip_id, "message_id": 2324,
+             "review_at": datetime.datetime.now().isoformat(timespec="seconds")}
+    state.update(extra)
+    return state
+
+
+def _age_review(state: dict) -> None:
+    state["review_at"] = (
+        datetime.datetime.now() - main.REVIEW_LIFETIME - datetime.timedelta(minutes=1)
+    ).isoformat(timespec="seconds")
+
+
+def test_the_wait_for_a_button_press_runs_out():
+    """Review used to be the one wait with no clock, and the unattended trends
+    round only fires from an idle bot: a Script nobody answered silenced every
+    channel's schedule for good."""
+    state = _review_state()
+    assert not main.review_expired(state)
+    _age_review(state)
+    assert main.review_expired(state)
+
+
+def test_an_unstamped_review_is_not_dropped_on_a_guess():
+    """A Script mid-flight over the upgrade that added the clock keeps the old
+    behaviour rather than being written off at an age nobody measured."""
+    state = _review_state()
+    del state["review_at"]
+    assert not main.review_expired(state)
+
+
+def test_only_a_review_expires():
+    for mode in ("idle", "writing", "rendering"):
+        state = _review_state()
+        _age_review(state)
+        state["mode"] = mode
+        assert not main.review_expired(state), mode
+    assert not main.review_expired({}), "no review is not an expired review"
+
+
+def test_every_entrance_to_review_starts_the_clock():
+    """The stamp lives in the transition, not at the call sites: a site that
+    set the mode by hand would be a path back to the immortal review."""
+    # Spaces stripped so the spaced form is caught too: `mode = "review"` is
+    # the realistic drift, and it would be just as immortal.
+    source = pathlib.Path(main.__file__).read_text().replace(" ", "")
+    assert 'mode="review"' not in source, \
+        "set review through st.to_review() so the clock cannot be forgotten"
+
+    state = {"mode": "idle"}
+    main.st.to_review(state, script=a_script(), message_id=11)
+    assert state["mode"] == "review" and state["message_id"] == 11
+    assert datetime.datetime.fromisoformat(state["review_at"])
+
+
+def test_going_idle_clears_the_review_clock():
+    state = _review_state()
+    main.st.to_idle(state)
+    assert state["review_at"] is None
+
+
+def test_a_review_carried_over_a_restart_gets_a_clock():
+    state = _review_state()
+    del state["review_at"]
+    assert main.st.stamp_review(state) is True
+    assert datetime.datetime.fromisoformat(state["review_at"])
+    # Already ticking, or not a review at all: left alone.
+    assert main.st.stamp_review(state) is False
+    assert main.st.stamp_review({"mode": "idle"}) is False
+
+
+def test_a_stale_review_is_written_off_and_said_out_loud(monkeypatch, tmp_path):
+    monkeypatch.setattr(manifest, "DIR", tmp_path / "clips")
+    monkeypatch.setattr(main, "close_prompt", _nothing)
+    said = []
+
+    async def capture(client, text, **kwargs):
+        said.append(text)
+        return {"message_id": 1}
+
+    monkeypatch.setattr(main, "say", capture)
+
+    clip_id = manifest.start("หัวข้อ")
+    asyncio.run(main.drop_review(None, {"message_id": 2324, "clip_id": clip_id,
+                                        "clip_wait": True, "pair": {"topic": "x"}}))
+    assert manifest.load_all()[0]["outcome"] == "abandoned"
+    note = said[0]
+    # The board has its own 72-hour clock and its own copy of the Script, so
+    # letting the Script go must not read as cancelling it.
+    assert "storyboard" in note and "ยกเลิกภาษาอังกฤษ" in note
+    # The freed slot may fire an owed round seconds later; the notice says why.
+    assert "trends" in note
+
+
+def test_dropping_a_stale_review_frees_the_schedule(monkeypatch, tmp_path):
+    """The whole point: after the sweep the bot is idle, which is the one state
+    the unattended trends round fires from."""
+    monkeypatch.setattr(manifest, "DIR", tmp_path / "clips")
+    monkeypatch.setattr(main, "close_prompt", _nothing)
+    monkeypatch.setattr(main, "say", _nothing)
+
+    state = _review_state(clip_wait={"message_id": 2339})
+    _age_review(state)
+    assert main.review_expired(state)
+    main.st.to_idle(state)
+    assert state["mode"] == "idle" and not main.review_expired(state)
+    # to_idle() does not touch the storyboard wait, which holds its own copy of
+    # everything it needs.
+    assert state["clip_wait"] == {"message_id": 2339}

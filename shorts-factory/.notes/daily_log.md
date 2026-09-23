@@ -1703,3 +1703,143 @@ close_prompt` เป็นชื่อบางๆ ทับ `telegram.Bot` — 
 187 passed + 8 font/Raqm เดิม (HEAD ก็ 8). ยังไม่ commit — รอ /release พร้อม root docs.
 
 **Token leak in logs (fixed same day).** httpx INFO log printed the full Telegram URL = bot token on every request in `docker logs shorts-factory`. Muted `httpx` logger to WARNING at import in `shared/telegram.py` (covers story-factory too). ops-bot/torrentwatch checked on the NAS: 0 such lines in 48h (they do not set INFO). Redeployed.
+
+
+## 2026-09-21 — storyboard: ถามตัวละครก่อน, และรับคลิปที่ประกอบเสร็จกลับมาอัป
+
+ผู้ใช้ขอ 2 อย่างบนเส้น storyboard: (1) ยืนยันตัวละครก่อน ว่าจะให้บอทแต่งเองหรือระบุเอง
+(2) หลังส่ง prompt แล้ว ให้มีที่รับคลิปเพื่ออัป YouTube เหมือนโหมดอื่น
+
+**ถามตัวละครก่อนยิงโมเดล.** `storyboard.AUTO/OWN/NONE` + `CHARACTER_AUTO/OWN/NONE` เป็น rule 1
+ของ system prompt (เดิมฝังตายอยู่ก้อนเดียว) → `_system(..., choice)`. ปุ่ม 🤖/✍️/🚫 อยู่ใน
+`main.character_keyboard(token)`, callback `sbchar:<choice>:<token>` วาง**เหนือ** guard
+`mode != review` เพราะ `/storyboard <บรีฟ>` ถามตอน idle (guard นั้นจะกลืนการกดเงียบๆ เหมือนที่
+`PARK_RENDER_CB`/`CANCEL_CB` เคยเจอ). token อยู่ใน callback data + snapshot Script ลง
+`state['storyboard_wait']` เพราะคำถามอยู่ข้ามการกด 🗑 หรือหัวข้อใหม่ได้ (เหตุผลเดียวกับปุ่มอัปที่พก
+clip_id). ✍️ = ข้อความธรรมดาบรรทัดถัดไปคือลักษณะตัวละคร ดักใน `on_text` **ใต้บล็อกคำสั่ง `/`
+และเหนือ mode read** ไม่งั้นโหมด review จะกลืนไปเป็น feedback แก้สคริปต์ — หมดอายุ 30 นาที
+(`CHARACTER_WAIT_LIFETIME`) แล้วคืนข้อความนั้นเป็นหัวข้อตามปกติ. `validate(choice=)` ตีกลับ
+🚫-แต่มีตัวละคร และ ✍️-แต่ไม่มี (retry loop เดิมเขียนใหม่ให้เอง).
+
+**รับคลิปกลับ (ADR 0006 ไม่เปลี่ยนขอบเขต).** `send_storyboard()` คืน message_id ของข้อความท้าย
+แล้ว `wait_for_clip()` เก็บ `state['clip_wait']` (message_id + Script snapshot + locale + topic).
+`handle()` แยกทางจาก **`reply_to_message` เท่านั้น** — footage ของ card กับคลิปเต็มหน้าตาเหมือนกัน
+เดาผิดคือไฟล์ลงผิดคลิป. `on_storyboard_clip()` โหลดลง `output_dir(locale)` + `.txt`,
+`manifest.start()` **เปิด record ใหม่** (สคริปต์เดียวอาจถูก render เองด้วย ถ่าย Flow ด้วย — record
+เดียวกันแปลว่า video_id ทับกัน) แล้วใส่ `state['uploads'][clip_id]` ทรงเดิม → ปุ่ม `upload:<id>`
+กับ `do_upload()` เดิมทำงานต่อได้โดยไม่แตะ. คลิปยาวไม่มี Script → `storyboard.as_script()`
+ใช้แค่ title คำอธิบายว่าง (ไม่เอา stage direction ไปเป็น description บน YouTube). ไม่ปิด wait หลังได้
+ไฟล์ (ส่งเวอร์ชันใหม่ทับได้ นับเป็นคลิปใหม่) หมดอายุ 72 ชม. `STORYBOARD_CLIP_HOURS`
+(`st.clip_wait_expired`, sweep ใน poll loop คู่กับ `parked_expired`). เพดาน getFile 20MB เหมือนเดิม
+— คลิปยาวส่วนใหญ่เกิน = เส้นนั้นจบที่ prompt ตามเดิม (บอกไว้ในข้อความบอท + README + ADR).
+
+เทสต์ใหม่ 10 ข้อ (คำถามตัวละคร 5 + คลิปกลับ 5). **216 passed + 8 Raqm/font เดิม** (baseline HEAD
+ก็ 8 ข้อเดิมเป๊ะ). ruff ไม่มี error ใหม่ (diff กับ HEAD = แค่เลขบรรทัดขยับ).
+เทสต์รันด้วย venv ชั่วคราว: `.venv` ของ repo ถูก `uv sync` ถอด dep ออกหมดแล้ว (เหลือแต่ pytest)
+→ `uv venv /tmp/.../sfvenv -p 3.12` + `uv pip install -r shorts-factory/requirements.txt`.
+
+**ยังไม่ commit ไม่ deploy** (ตอนนั้น — commit + deploy จริง 21/09 รอบถัดไปข้างล่าง)**.**
+
+**รอบตรวจซ้ำ (advisor) แก้เพิ่ม 3 จุด.** (1) `topic`/`locale` เดิมอ่านจาก state สดตอนบอร์ดเสร็จ — คนเปิดหัวข้ออังกฤษระหว่างบอร์ดไทยกำลังวาง (ใช้เวลาเป็นนาที) = คลิปไทยลง `/output/en` และอัปขึ้นช่องอังกฤษเงียบๆ (ADR 0008 ห้ามไว้ตรงๆ) → snapshot ตั้งแต่ตอนถามตัวละคร ส่งผ่าน `start_storyboard` → `on_storyboard` → `wait_for_clip`. (2) โหลดไฟล์ลง `<stem>.mp4.part` แล้ว `replace()` (สตรีมขาดกลางทาง = mp4 ตัดครึ่งนอนอยู่ในคลังดูเหมือนไฟล์ดี; ทางอื่นในสแตกนี้ stage ก่อนทุกเส้น). (3) `on_footage` ที่ไม่มี parked ต่อท้ายว่า ถ้าเป็นคลิปจาก storyboard ให้ reply ข้อความท้าย storyboard (เดิมแนะนำให้ไปกด 🎨 ซึ่งผิดเรื่อง). ตรวจแล้วไม่ต้องแก้: `backfill.run()` ข้ามคลิปที่ `manifest.by_video(video_id)` เจอ = ไม่เกิด manifest ซ้ำหลัง restart, และ `experiment.tally()` ข้าม record ที่ `variant` เป็น None = คลิปจาก storyboard ไม่เข้า arm (เข้าแค่ Gate/`/stats` ในฐานะคลิปที่อัปจริง ซึ่งถูกแล้ว). 218 passed + 8 Raqm เดิม.
+
+## 2026-09-21 — คำถามตัวละครไม่เคยขึ้นเพราะ container เก่า + หัวข้อที่พิมพ์เองตกหายก่อนถึง storyboard
+
+คนบ่นว่า กด 📋 แล้วบอท "เลือกมิ้นให้เองตลอด" ทั้งที่พิมพ์หัวข้อมาว่า *ตัวละครหญิง 25 ปีหมวยๆ
+สไตล์เกาหลีคล้ายๆ IU 6 ฉาก*. ใน transcript ที่ส่งมา **ไม่มีทั้งคำถาม 🎭 และบรรทัด
+`🤖 บอทแต่งตัวละครให้เอง`** — สองอย่างหายพร้อมกัน แปลว่าไม่ใช่ "กด 🤖 เอง" แต่คือไม่เคยถูกถาม.
+
+**เหตุที่หนึ่ง: โค้ดที่รันอยู่ไม่มีฟีเจอร์นี้.** ซอร์สบน NAS มี (`grep -c SBCHAR_CB
+/volume2/docker/shorts-factory/app/main.py` = 5) แต่ **ในคอนเทนเนอร์ = 0** (image build
+2026-09-14, ก่อน commit b575cf5/c265ae4). `deploy.sh` อัปไฟล์ขึ้นไปแล้ว แต่รอบนั้นไม่ได้ restart
+→ ซอร์สใหม่นอนอยู่บนดิสก์ ส่วนบอทยังรันของเก่ามา 6 วัน. บทเรียน: เทียบไฟล์ใน**คอนเทนเนอร์**
+ไม่ใช่บน volume ก่อนสรุปว่าฟีเจอร์พัง — สองที่นี้ไม่ตรงกันได้ทั้งสัปดาห์โดยไม่มีสัญญาณอะไรเลย.
+แก้ด้วย `./scripts/deploy.sh -s shorts-factory -y` (rebuild + recreate) แล้ว verify ซ้ำในคอนเทนเนอร์.
+
+**เหตุที่สอง (ยังอยู่แม้ deploy แล้ว): brief ของ storyboard ไม่มีหัวข้อที่คนพิมพ์.**
+`_brief_from_script()` ประกอบ brief จาก `title` + cards เท่านั้น และ Script schema เก็บแค่
+hook/cards/title/description/hashtags — รายละเอียดภาพที่คนพิมพ์มากับหัวข้อ ("หมวยๆ สไตล์เกาหลี")
+ตายตั้งแต่ตอนเขียนสคริปต์ ส่วน `_with_character()` เติมให้เฉพาะตอน `choice == OWN` → โหมด 🤖
+จึงแต่งคนใหม่ทุกครั้งอย่างถูกต้องตามที่เขียนไว้ ไม่ใช่บั๊กของโมเดล. แก้: `for_script(..., topic=)`
+ส่งหัวข้อดิบเข้าไป และ `_brief_from_script(script, topic)` วางไว้หัว brief พร้อมกำกับว่า
+**ใช้เฉพาะรายละเอียดภาพ/ตัวละคร ห้ามเปลี่ยนจำนวนฉาก** (หัวข้อที่เขียน "6 ฉาก" ขณะสคริปต์มี 5 การ์ด
+จะทำให้ `validate()` ตีกลับแล้วเสีย retry ฟรีๆ). ข้ามการเติมเมื่อ topic เท่ากับ title (ไม่มีข้อมูลใหม่).
+`on_storyboard()` ส่ง `topic` ที่ snapshot ไว้ตั้งแต่ตอนถามตัวละครอยู่แล้ว — ไม่ต้องอ่าน state สด.
+
+เทสต์: `test_the_typed_topic_reaches_the_storyboard_brief` (+ fake `for_script` 3 ตัวในสวีตรับ
+`topic=`). **219 passed + 8 Raqm/font เดิม** (baseline เท่าเดิมเป๊ะ).
+
+**สถานะ: deploy แล้ว verify ในคอนเทนเนอร์แล้ว (`SBCHAR_CB` 5 จุด, brief ใหม่ 1 จุด, `RestartCount 0`) commit + push แล้ว.**
+ทางเลือกที่ยังไม่ได้ทำ: ให้ปุ่ม 🎨 (footage เส้น Pexels-แทน) ถามตัวละครด้วย — ตอนนี้ยังไม่ถาม และ
+`FLOW_SYSTEM_PROMPT` ยัง**ห้ามใบหน้าที่ระบุตัวตนได้**โดยตั้งใจ (การ์ดมีข้อความทับกลางจอ) ถ้าจะทำ
+ต้องแยก system prompt 3 แบบ และ default ของเส้นนั้นคือ 🚫 ไม่ใช่ 🤖.
+
+## 2026-09-21 — YouTube AI label notice บนคลิปที่อัปแล้ว (ไม่ได้ self-declare)
+
+คนบ่น: คลิปที่อัปขึ้น YouTube ขึ้น notice "This video has an AI label" (ตรวจแล้วยังไม่ disclose
+เอง — YouTube auto-detect synthetic media เอง). สาเหตุ: `youtube.metadata()` ส่งแค่
+`privacyStatus` + `selfDeclaredMadeForKids` ใน `status`, ไม่เคยส่ง disclosure flag ของ AI content
+เลย ทั้งที่คลิปมีทั้งเสียง edge-tts และการ์ด/ฟุตเทจที่ประกอบขึ้น.
+
+แก้: เพิ่ม `"containsSyntheticMedia": True` ลงใน `status` ของ `metadata()`
+(`shorts-factory/app/youtube.py`) — `part=snippet,status` ที่ resumable upload ใช้อยู่แล้วครอบคลุม
+field นี้พอดี ไม่ต้องขอ scope ใหม่. เทสต์ `test_metadata_strips_hashes_into_tags` เพิ่ม assert
+`containsSyntheticMedia is True`.
+
+**สถานะ: ยังไม่ commit ไม่ deploy** (แก้ในเซสชันนี้ยังไม่ได้ทดสอบรันจริงเพราะ sandbox ไม่มี
+`aiohttp`/`pillow==12.3.0` ตรงเวอร์ชัน ต้องลง repo venv บนเครื่องจริงถึงรัน pytest ได้). งานค้าง:
+commit → deploy `./scripts/deploy.sh -s shorts-factory -y` → อัปคลิปใหม่ 1 อันทดสอบว่า notice
+หายจริง. คลิปเก่าที่อัปไปแล้วไม่ได้รับผลจาก fix นี้ ต้องแก้ label เองใน YouTube Studio รายคลิปถ้าต้องการ.
+
+## 2026-09-22 — auto `/trends` เงียบทั้งสองช่องเพราะ review ค้างใบเดียว + ใส่นาฬิกาให้ review
+
+คนบ่นว่ารอบ schedule ของ `/trends` กับ `/trends en` เงียบไปตั้งแต่เมื่อวาน. ไม่มี error ใน log
+เลยแม้แต่บรรทัดเดียว เพราะ branch มันถูก**ข้าม** ไม่ใช่ล้ม.
+
+**สาเหตุ:** `state.json` ในคอนเทนเนอร์มี `mode: "review"` ค้างตั้งแต่ `review`/`suggested_at`
+`2026-09-21T15:05:25` (สคริปต์ "ทำงาน 55 ชม.ต่อสัปดาห์ ผลิตภาพเพิ่ม = 0 จริงเหรอ?", `message_id`
+2324) และรอบอัตโนมัติยิงจาก `mode == "idle"` เท่านั้น (`main.py` branch `owed`). เทียบ
+`last_auto_trends = {"th": "2026-09-21T12", "en": "2026-09-20T23"}` กับ `/config/schedule.json`
+(th `[8,12,17]`, en `[19,23]` เปิดทั้งคู่) ได้รอบที่หายตรงกับที่บ่นเป๊ะ: th 17:00 (21/09),
+en 19:00 + 23:00 (21/09), th 08:00 (22/09). ตัวคลิปเองไม่ได้ค้าง — อัปคลิปสำเร็จ 21:44, 22:07
+เมื่อวาน และ 09:48 วันนี้ (อัปไม่แตะ `mode`).
+
+**ที่มาของ review ที่ค้าง:** สคริปต์นั้นถูกกด 📋 ไปทำ storyboard (มี `clip_wait` `message_id`
+2339 ถือสคริปต์เดียวกัน) แต่เส้น storyboard **ไม่แตะ state** ตามดีไซน์ (`main.py:46`) → review
+เดิมเปิดค้างไว้ ไม่มีใครกด 🗑/🎬. ตรวจก่อนแนะให้กด 🗑: `pair` = `null` (ไม่มีฝั่งอังกฤษพ่วงตาย),
+`parked`/`trends_running`/`auto_pick` ว่างหมด, และ `to_idle()` ไม่แตะ `clip_wait` → storyboard
+ที่รออยู่ไม่เสีย.
+
+**แก้:** ไม่ทำทางที่ดูง่ายกว่า (ให้ 📋 ปล่อยเป็น idle เหมือน 🎨) — 🎨 park เพราะคลิปนั้น render
+ทางอื่นไม่ได้แล้ว ส่วน 📋 คนอ่านบอร์ดแล้วเปลี่ยนใจกด 🎬 Pexels ได้ ถ้าไปเคลียร์ `script`
+ปุ่มบน 2324 กลายเป็นปุ่มตาย = ตัดฟีเจอร์ในนามการแก้บั๊ก แถมคนที่ไม่กดอะไรเลยก็ยังดับบอทได้อยู่.
+เลยปิดที่ invariant แทน: review เป็น wait ตัวเดียวที่ไม่มีอายุ. เพิ่ม `REVIEW_LIFETIME`
+(env `REVIEW_LIFETIME_HOURS` default 6), `to_review()`, `review_expired()`, `stamp_review()`
+ใน `state.py`; `review_at` เข้า `IDLE_FIELDS`; `_aged_out()` รับ `key=` เพราะ review คือ live
+state ไม่ใช่ sub-record. sweep วางข้างๆ `parked_expired`/`clip_wait_expired` (เคลียร์ state
+ก่อนส่งข้อความ ไม่งั้น sendMessage ช้า = tick ถัดไปทิ้งซ้ำ) → `drop_review()` บันทึก
+`outcome="abandoned"`, retire ปุ่มเก่า, บอกในแชทว่า storyboard ยังรออยู่ / ยกเลิกฝั่งอังกฤษด้วย
+ถ้ามี `pair`, และบอกว่า "ค้างอยู่ = รอบ /trends อัตโนมัติไม่ยิงเลย" เพราะ tick ถัดไปลิสต์ trends
+จะโผล่เองภายใน 30 วิ (ไม่บอก = อ่านเหมือนบอททำอะไรเอง). ไม่มี `review_at` = ไม่หมดอายุ
+(ไม่เดาอายุแล้วทิ้งงานคน) ปิดช่องด้วย `stamp_review()` ตอน startup. `README.md` เพิ่มย่อหน้า
++ แถว env; ไม่ใส่ `secrets.manifest.yaml` เพื่อให้ตรงกับ `FLOW_PARK_HOURS`/`STORYBOARD_CLIP_HOURS`
+ที่ไม่ได้อยู่ในนั้น.
+
+**เทสต์: 227 passed / 9 failed** — baseline HEAD = 219 passed / 9 failed failure list เดิมเป๊ะ
+(Raqm/font 8 + `test_no_drawing_library_in_this_process`). เทสต์ใหม่ 8 ข้อ รวม
+`test_every_entrance_to_review_starts_the_clock` ที่อ่านซอร์ส `main.py` แบบตัดช่องว่าง → เขียน
+`mode="review"` หรือ `mode = "review"` ที่ไหนก็ตาม = แดง. ruff ไม่มี finding ใหม่ (เทียบแบบตัด
+เลขบรรทัดแล้วเหมือนกันทุกบรรทัด). **venv:** `/tmp` เป็น symlink ไป `/private/tmp` บน macOS ทำให้
+venv ที่สร้างใต้ `/tmp` พัง — `sys.prefix` ชี้กลับไป homebrew, `import pytest` ไม่เจอ แม้ `uv pip
+install` จะสำเร็จ. ต้องสร้าง venv ใต้ real path (scratchpad ของเซสชัน) ถึงใช้ได้.
+
+**สถานะ: ยังไม่ commit ไม่ deploy.** ค้าง 2 เรื่อง:
+1. **เลข lifetime ยังไม่ฟันธง** — 6 ชม. (default ที่ใส่ไว้) กับ th slots `8,12,17` ที่ห่างสุด
+   5 ชม. หมายความว่า review ที่เปิดหลังรอบหนึ่งนิดเดียว ยังกินรอบถัดไปได้ทั้งรอบ. อยากให้
+   "เสียไม่เกิน 1 รอบ" ต้อง 4 ชม. รอคนเลือก (แก้ env ไม่ต้อง rebuild).
+2. **deploy ไม่ได้ปลดล็อกรอบวันนี้** — `stamp_review()` รันตอน startup เท่านั้น: deploy โดยไม่กด
+   🗑 = review ที่ค้างได้นาฬิกาใหม่นับจากตอน deploy แล้วหมดอายุอีก 6 ชม. ลำดับถูกคือ **กด 🗑
+   ในมือถือก่อน** แล้วค่อย commit + deploy. (ยังไม่ได้ยืนยันว่าคนกด 🗑 แล้วหรือยัง)
+
+ไฟล์ที่แก้รอบนี้: `app/state.py`, `app/main.py`, `tests/test_shorts_factory.py`, `README.md`.
+แยกจากของค้างเซสชันก่อนที่ยังไม่ commit: `app/youtube.py` (+1 บรรทัด `containsSyntheticMedia`)
+— คนละเหตุผล คนละคอมมิต ห้ามรวม.

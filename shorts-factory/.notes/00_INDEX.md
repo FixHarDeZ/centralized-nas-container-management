@@ -1,5 +1,9 @@
 # shorts-factory — Index
 
+**2026-09-21 (2):** **deploy แล้ว** (`deploy.sh -s shorts-factory -y`) — คำถามตัวละครไม่เคยขึ้นบนบอทจริงเพราะ image build 2026-09-14 ซอร์สใหม่นอนอยู่บน volume เฉยๆ (`grep SBCHAR_CB` ในคอนเทนเนอร์ = 0 ขณะที่บน `/volume2/docker/...` = 5) **เช็คในคอนเทนเนอร์เสมอ ไม่ใช่บน volume**. เพิ่ม: หัวข้อที่คนพิมพ์เองเข้า brief ของ storyboard แล้ว (`for_script(topic=)` → `_brief_from_script(script, topic)` กำกับว่าห้ามเปลี่ยนจำนวนฉาก) เดิมตกหายเพราะ Script เก็บแค่ title/cards → โหมด 🤖 แต่งคนใหม่ทุกครั้ง. commit + push แล้ว — ดู daily_log 21/09.
+
+**2026-09-21:** 📋/`/storyboard` ถามตัวละครก่อนยิงโมเดล (🤖/✍️/🚫, `state['storyboard_wait']`) และรับคลิปที่ประกอบเสร็จกลับทาง reply (`state['clip_wait']` → uploads + ปุ่มอัปเดิม).
+
 **2026-09-15:** hedge ใน `script._say` รื้อออกแล้ว (README อธิบาย), `app/mimo.py` +
 `app/telegram.py` เป็นสำเนาจาก `shared/` **ห้ามแก้ตรงๆ** (`make sync-shared`),
 `app/state.py` ถือ `to_idle()/busy_note()/claim_auto_pick()` — เพิ่มทางกลับ idle ที่ไหน
@@ -169,6 +173,34 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
   narration and on-screen lines are written back in from the Script
   (`lock_to_script`) rather than trusted to the model. 📋 mutates no state, and
   reads `clip_id` before the model call because the human can move on mid-run.
+  **Both ask who is in it first** (`storyboard.AUTO/OWN/NONE` → rule 1 of the
+  system prompt, enforced by `validate(choice=)`): the character is repeated word
+  for word in every scene, so it cannot be corrected after the board exists. The
+  question is parked in `state['storyboard_wait']` with a token in the callback
+  data, its branch sits *above* the `mode != review` guard (`/storyboard <brief>`
+  asks it while idle), and with ✍️ pending a typed line is the character, not the
+  next Topic — for 30 minutes (`CHARACTER_WAIT_LIFETIME`), then it is a Topic again.
+  📋 still mutates nothing that belongs to the Clip. **The Topic as typed rides into
+  the brief** (`for_script(topic=)`): a Script keeps only hook/cards/title/description/
+  hashtags, so "ตัวละครหญิง 25 ปี สไตล์เกาหลี" is gone by planning time and 🤖 invents
+  somebody else — the line is labelled *visual detail only, the cards decide the scene
+  count*, because a Topic asking for six scenes against five cards burns a retry.
+- **A Storyboard's finished clip comes back by reply.** `send_storyboard()` returns
+  the trailer's message id and `wait_for_clip()` parks it in `state['clip_wait']`
+  with a snapshot of the Script, Topic and **Locale** (it picks the folder and
+  the channel, and a board takes minutes to plan — ADR 0008); `handle()` routes a
+  video by `reply_to_message`
+  alone (a Flow shot for one Card and a whole clip are indistinguishable
+  otherwise). `on_storyboard_clip()` files it under `/output`, opens **its own
+  Manifest** (one record cannot hold both a rendered and a Flow-shot video without
+  the second publish erasing the first) and writes the usual `state['uploads']`
+  entry, so `upload:<clip_id>` and `do_upload()` are untouched. 20MB getFile
+  ceiling; 72h wait (`STORYBOARD_CLIP_HOURS`), not closed when a file arrives.
+  Downloaded to `<stem>.mp4.part` and renamed, so a broken stream leaves nothing
+  in the library. Counts in the Gate and `/stats` (it is a published clip) but
+  carries no `variant`, so `experiment.tally()` skips it.
+  Long-form has no Script → `storyboard.as_script()` (title only, empty
+  description). The bot still assembles nothing (`docs/adr/0006`).
 - **Card joins are trimmed.** The paragraph break that produces the boundary
   events also produces ~1.0s of dead air per join (measured; clause breaks are
   0.12-0.53s). `render.tighten()` slices at the boundaries, trims each slice's
@@ -390,3 +422,36 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
   (`drop_parked()`), and `render_parked()` hands `PARK_KEYBOARD` back on every
   refusal — `on_footage()` decides about the button from a mode read taken
   before its own sendMessage.
+- **Uploads now self-declare synthetic media (2026-09-21).** `youtube.metadata()`
+  never sent YouTube's AI-disclosure flag, so YouTube auto-detected the TTS
+  voice/generated footage and slapped its own "AI label" notice on the clip
+  after upload. Fixed by adding `"containsSyntheticMedia": True` to the
+  `status` object in `metadata()` (`part=snippet,status` already covers it —
+  no new API scope). Test `test_metadata_strips_hashes_into_tags` extended to
+  assert the field. **Not committed/deployed yet** — only affects future
+  uploads; clips already live keep whatever label YouTube auto-applied
+  (fix those manually in YouTube Studio if it matters).
+- **Review has a clock since 2026-09-22 (`REVIEW_LIFETIME_HOURS`, default 6).**
+  Every other wait in the bot ages out — `parked` at 24h, `clip_wait` at 72h,
+  `auto_pick` on a deadline — and review was the one that never did. Because
+  the unattended trends round only fires from `mode == "idle"`
+  (`main.py`, the `owed` branch), one Script nobody answered silenced *every*
+  channel's schedule indefinitely, with no error line anywhere: the branch is
+  simply skipped. `state.py` now has `REVIEW_LIFETIME`, `to_review()`,
+  `review_expired()` and `stamp_review()`; `review_at` joined `IDLE_FIELDS`,
+  and `_aged_out()` takes a `key=` because review *is* the live state, not a
+  sub-record. The stamp lives in the transition, not at the three call sites,
+  for the reason `state.py`'s own docstring gives — and
+  `test_every_entrance_to_review_starts_the_clock` reads `main.py` with spaces
+  stripped, so `mode="review"` or `mode = "review"` written anywhere turns the
+  suite red. On expiry the sweep (next to the other two, so the freed slot
+  fires on the *next* tick) clears state before the notice goes out, records
+  the clip `abandoned`, retires the old buttons and says why in chat —
+  including that the storyboard wait survives, since `to_idle()` does not touch
+  `clip_wait` and that record carries its own copy of everything. An unstamped
+  review never expires (no guessing an age); `stamp_review()` at startup closes
+  that window. **Deliberately not fixed: 📋.** Making the storyboard button go
+  idle was the tempting one-line fix and it is wrong — `main.py:46` says 📋
+  "Changes nothing about the Clip" on purpose, 🎨 parks because that clip cannot
+  be rendered any other way while 📋 leaves 🎬 Pexels available, and it would
+  not close the class anyway (a human who taps nothing still silences the bot).

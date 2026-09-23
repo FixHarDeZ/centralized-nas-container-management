@@ -140,6 +140,7 @@ def metadata(script: dict, locale: str = locales.DEFAULT) -> dict:
         "status": {
             "privacyStatus": _env("PRIVACY", locale) or "public",
             "selfDeclaredMadeForKids": False,
+            "containsSyntheticMedia": True,
         },
     }
 

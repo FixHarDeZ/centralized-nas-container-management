@@ -30,13 +30,15 @@ THAI = re.compile(r"[ก-๙]")
 # captions and split panels, which are useless as Flow ingredients.
 NEGATIVES = "no text, no watermark, no UI, no split-screen"
 
-SYSTEM_PROMPT = """You are an expert storyboard artist and short-form video director.
-Convert the brief into a cohesive storyboard with strict visual consistency, to be
-generated in Google Flow.
+# Who the master character is, asked before the board is planned. "Let the bot
+# invent one" and "there is nobody in this clip" are different storyboards, not
+# the same one with a field left blank — and a character the human already has
+# in mind is the one thing the model cannot guess. AUTO is what every board was
+# before the question existed, so it stays the default everywhere.
+AUTO, OWN, NONE = "auto", "own", "none"
+CHOICES = (AUTO, OWN, NONE)
 
-RULES:
-
-1. MASTER CHARACTER LOCK
+CHARACTER_AUTO = """1. MASTER CHARACTER LOCK
    - If the story needs a person, define exactly ONE fictional master character with
      concrete physical attributes (age, ethnicity, hair, glasses/accessories, clothing
      colours and style) and write `locked_prompt_tag`: one English noun phrase naming
@@ -46,7 +48,34 @@ RULES:
      word, or the character changes face between scenes.
    - If the story needs no person, set `master_character` to null and keep the visual
      style identical across scenes instead.
-   - Never reference real people, celebrities, brands or news events.
+   - Never reference real people, celebrities, brands or news events."""
+
+CHARACTER_OWN = """1. MASTER CHARACTER LOCK — THE HUMAN HAS ALREADY CHOSEN THE CHARACTER
+   - The brief ends with the character the human wants. Use that person and nobody
+     else: keep every detail they gave (age, gender, look, clothing) exactly.
+   - Fill in only what they left out, and write `locked_prompt_tag` in English as one
+     noun phrase naming all of it, e.g. "the same 28-year-old Thai woman with a short
+     bob, round glasses, and a beige linen shirt". Translate their words to English —
+     the tag and every image prompt are English even when they wrote in Thai.
+   - `master_character` must not be null, and every scene's `image_gen_prompt` MUST
+     contain that `locked_prompt_tag` word for word, or the face changes between
+     scenes.
+   - Never reference real people, celebrities, brands or news events."""
+
+CHARACTER_NONE = """1. NO CHARACTER
+   - This storyboard has no person in it. Set `master_character` to null.
+   - Show no recognisable human face in any scene: objects, places, screens, hands or
+     silhouettes only.
+   - Consistency comes from the look instead — repeat the same lighting, palette and
+     lens language in every `image_gen_prompt`."""
+
+SYSTEM_PROMPT = """You are an expert storyboard artist and short-form video director.
+Convert the brief into a cohesive storyboard with strict visual consistency, to be
+generated in Google Flow.
+
+RULES:
+
+{character_rule}
 
 2. IMAGE PROMPTS (`image_gen_prompt`)
    - English only. One single photorealistic frame — never a collage, comic strip or
@@ -98,18 +127,38 @@ SCENE_FIELDS = ("camera", "scene_description", "visual_details", "scene_mood_not
                 "image_gen_prompt", "motion")
 
 
-def _system(ratio: str, shorts: bool) -> str:
+CHARACTER_RULES = {AUTO: CHARACTER_AUTO, OWN: CHARACTER_OWN, NONE: CHARACTER_NONE}
+
+
+def _system(ratio: str, shorts: bool, choice: str = AUTO) -> str:
     return SYSTEM_PROMPT.format(
         ratio=ratio,
         negatives=NEGATIVES,
         layout=SHORTS_LAYOUT if shorts else LONG_LAYOUT,
         script_rule=SHORTS_SCRIPT_RULE if shorts else LONG_SCRIPT_RULE,
+        character_rule=CHARACTER_RULES.get(choice, CHARACTER_AUTO),
     )
 
 
-def _brief_from_script(script: dict) -> str:
-    """The Script, laid out as the brief for its own storyboard."""
+def _brief_from_script(script: dict, topic: str = "") -> str:
+    """The Script, laid out as the brief for its own storyboard.
+
+    The Topic as it was typed rides along with the Script's own title: a Script
+    keeps only hook, cards, title, description and hashtags, so anything the
+    human said about how the clip should *look* ("ตัวละครหญิง 25 ปี สไตล์เกาหลี")
+    is gone by the time the board is planned, and the model invents somebody
+    else. Scene count still comes from the cards — the note says so, because a
+    Topic that asks for six scenes against five cards fails validation twice
+    and costs a retry.
+    """
     parts = [f"หัวข้อคลิป: {script['title']}", ""]
+    if topic and topic.strip() and topic.strip() != script["title"]:
+        parts = [
+            f"หัวข้อที่คนพิมพ์มาเอง: {topic.strip()}",
+            "  (ใช้เฉพาะรายละเอียดภาพ/ตัวละคร/อารมณ์ที่เขาบอก "
+            "ห้ามเปลี่ยนจำนวนฉาก จำนวนฉากยึดตามการ์ดข้างล่างเท่านั้น)",
+            "",
+        ] + parts
     for i, card in enumerate(script["cards"], 1):
         parts += [
             f"ฉากที่ {i}",
@@ -120,7 +169,8 @@ def _brief_from_script(script: dict) -> str:
     return "\n".join(parts)
 
 
-def validate(data: dict, ratio: str, scenes_wanted: int | None = None) -> dict:
+def validate(data: dict, ratio: str, scenes_wanted: int | None = None,
+             choice: str = AUTO) -> dict:
     """Reject a storyboard that would send the human to Flow with holes in it."""
     overview = data.get("overview")
     if not isinstance(overview, dict):
@@ -141,6 +191,14 @@ def validate(data: dict, ratio: str, scenes_wanted: int | None = None) -> dict:
     tag = str((character or {}).get("locked_prompt_tag") or "").strip()
     if character and not tag:
         raise ScriptError("master_character: ไม่มี locked_prompt_tag")
+    # The answer to the character question is the human's, not the model's: a
+    # board that invented somebody after being told there is nobody — or
+    # dropped the person the human described — is the wrong board, however
+    # well-formed the rest of it is.
+    if choice == NONE and character:
+        raise ScriptError("คนสั่งเลือก 'ไม่มีตัวละคร' — master_character ต้องเป็น null")
+    if choice == OWN and not character:
+        raise ScriptError("คนสั่งระบุตัวละครมาแล้ว — master_character ต้องไม่เป็น null")
 
     for i, scene in enumerate(scenes, 1):
         if not isinstance(scene, dict):
@@ -182,17 +240,30 @@ def lock_to_script(data: dict, cards: list[dict]) -> dict:
     return data
 
 
-async def plan(brief: str, ratio: str, cards: list[dict] | None = None) -> dict:
+def _with_character(brief: str, choice: str, character: str) -> str:
+    """The brief, with the character the human asked for written onto the end."""
+    if choice != OWN or not character.strip():
+        return brief
+    return (f"{brief}\n\n"
+            f"ตัวละครหลักที่ต้องใช้ (ห้ามเปลี่ยนเป็นคนอื่น): {character.strip()}")
+
+
+async def plan(brief: str, ratio: str, cards: list[dict] | None = None,
+               choice: str = AUTO, character: str = "") -> dict:
     """A brief (or a Script) → a validated storyboard. One retry, told what broke."""
-    messages = [{"role": "system", "content": _system(ratio, shorts=cards is not None)},
-                {"role": "user", "content": brief}]
+    if choice not in CHOICES:
+        choice = AUTO
+    messages = [
+        {"role": "system", "content": _system(ratio, shorts=cards is not None, choice=choice)},
+        {"role": "user", "content": _with_character(brief, choice, character)},
+    ]
     client = _client()
     wanted = len(cards) if cards else None
     last: Exception | None = None
     for attempt in range(2):
         raw = await _say(client, messages, temperature=0.8, budget=BUDGET_SECONDS)
         try:
-            data = validate(_parse(raw), ratio, wanted)
+            data = validate(_parse(raw), ratio, wanted, choice)
             return lock_to_script(data, cards) if cards else data
         except ScriptError as exc:
             logger.warning("storyboard ผิดกติกา: %s", exc)
@@ -204,14 +275,32 @@ async def plan(brief: str, ratio: str, cards: list[dict] | None = None) -> dict:
     raise ScriptError(str(last))
 
 
-async def for_script(script: dict) -> dict:
+async def for_script(script: dict, choice: str = AUTO, character: str = "",
+                     topic: str = "") -> dict:
     """The 9:16 storyboard for a Script that is waiting for review."""
-    return await plan(_brief_from_script(script), SHORTS_RATIO, cards=script["cards"])
+    # 🚫 means there is nobody in this board, and the Topic often names one:
+    # left in, the brief argues with rule 1 of its own system prompt and
+    # `validate(choice=NONE)` throws the board away after two full model calls.
+    return await plan(_brief_from_script(script, "" if choice == NONE else topic),
+                      SHORTS_RATIO, cards=script["cards"],
+                      choice=choice, character=character)
 
 
-async def for_brief(brief: str) -> dict:
+async def for_brief(brief: str, choice: str = AUTO, character: str = "") -> dict:
     """The 16:9 storyboard for a long-form video, from a one-line brief."""
-    return await plan(brief, LONG_RATIO)
+    return await plan(brief, LONG_RATIO, choice=choice, character=character)
+
+
+def as_script(data: dict) -> dict:
+    """The board's overview, shaped like a Script so a clip assembled from it
+    can be filed and uploaded through the paths a rendered Clip already uses.
+
+    Only the title is real: a long-form board has no narration, no description
+    and no hashtags, and inventing them here would publish the storyboard's
+    stage directions as the video's description. The human edits the rest in
+    Studio — which the bot says when it hands the upload button over.
+    """
+    return {"title": data["overview"]["title"], "description": "", "hashtags": []}
 
 
 def character_message(data: dict) -> dict | None:
