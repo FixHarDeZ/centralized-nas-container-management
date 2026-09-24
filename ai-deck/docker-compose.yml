@@ -7,7 +7,7 @@ services:
     build:
       context: .
       args:
-        CLAUDE_VERSION: "2.1.276"
+        CLAUDE_VERSION: "2.1.281"
         SKILLS_REF: "34040c9c568585f6929bedeaad110ad08f079624"
     container_name: ai-deck
     restart: unless-stopped
@@ -51,7 +51,7 @@ services:
       context: .
       target: coding
       args:
-        CLAUDE_VERSION: "2.1.276"
+        CLAUDE_VERSION: "2.1.281"
         SKILLS_REF: "34040c9c568585f6929bedeaad110ad08f079624"
     restart: unless-stopped
     user: "1000:100"

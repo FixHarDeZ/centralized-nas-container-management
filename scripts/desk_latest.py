@@ -50,18 +50,20 @@ class Pin:
 
     def current(self) -> str:
         text = self.path.read_text(encoding="utf-8")
-        found = self.pattern.findall(text)
-        if len(found) != 1:
+        # The same pin may appear once per service (desk + coding worker);
+        # they must agree, or a bump would silently leave one behind.
+        values = {m[1] for m in self.pattern.findall(text)}
+        if len(values) != 1:
             raise SystemExit(
-                f"{self.label}: expected exactly one pin in {self.path.relative_to(ROOT)}, "
-                f"found {len(found)} — the file's shape changed, fix this script"
+                f"{self.label}: expected one pinned value in {self.path.relative_to(ROOT)}, "
+                f"found {sorted(values) or 'none'} — the file's shape changed, fix this script"
             )
-        return found[0][1]
+        return values.pop()
 
     def write(self, value: str) -> None:
         text = self.path.read_text(encoding="utf-8")
-        new, count = self.pattern.subn(lambda m: m[1] + value + m[3], text, count=1)
-        if count != 1:
+        new, count = self.pattern.subn(lambda m: m[1] + value + m[3], text)
+        if count < 1:
             raise SystemExit(f"{self.label}: rewrite did not apply")
         self.path.write_text(new, encoding="utf-8")
 
