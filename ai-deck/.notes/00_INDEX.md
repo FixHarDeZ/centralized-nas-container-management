@@ -1,3 +1,11 @@
+## 2026-09-24 — Chat provider reconnect status
+
+- User confirmed deploying the preceding Claude model/quota fix; current source baseline is `efcb809`. The new issue was prolonged `reconnecting` when switching Chat providers, especially Claude → Codex.
+- Diagnosis: provider selection reloads the page, which eagerly attached ttyd even in Chat; the shared header reflected only the Terminal WebSocket, not the Chat SSE connection. Read-only NAS probes returned Codex state in 0.01s, model options in 0.20s and quota in 1.13s during this check; these are sampled backend times, not a full browser-switch benchmark.
+- Fix: header connection state follows the active Chat/SSE or Terminal/WebSocket view. Chat loads without opening a hidden terminal; Terminal attaches on demand. Hidden terminal reconnects cannot overwrite Chat status or steal composer focus. A pending token fetch is shared across repeated view toggles. Start/Login first opens Terminal and waits (bounded to 10s) for output before sending its tmux command.
+- Chromium regression uses the real app outside demo mode with delayed/unavailable metadata and terminal transport; verifies Claude → Codex → Claude page entries, stream error/recovery, on-demand terminal, rapid view toggles, hidden-terminal failures and Start readiness. Regression failed before each relevant fix and passes afterward. No live model turn sent.
+- Delivery: this follow-up is not committed or deployed. README updated. Final verification: 214 ai-deck tests passed, including all six Chromium UI harnesses; JavaScript syntax and diff checks passed. The existing non-failing HTTP test connection-reset diagnostic appeared again.
+
 ## 2026-09-24 — Claude model versions and quota refresh (local; not deployed)
 
 - User requested model version labels in Chat and repair of the Claude web quota bar (Codex already worked). NAS diagnosis: CLI 2.1.281; existing Claude observations ~4 days old. Environment setup-token took precedence over saved login, exposes inference-only scope, `get_usage` returned `rate_limits_available:false`; direct usage endpoint with that token returned 403. No token values recorded.

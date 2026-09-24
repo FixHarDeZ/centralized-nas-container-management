@@ -143,8 +143,30 @@
   let token = '';
   let reconnectTimer = null;
   let reconnectDelay = 1000;
+  let connecting = false;
+  let terminalReady = false;
+  const terminalWaiters = new Set();
 
-  function setState(state, label) {
+  function waitForTerminal() {
+    if (terminalReady) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const ready = () => { clearTimeout(timer); terminalWaiters.delete(ready); resolve(); };
+      const timer = setTimeout(() => {
+        terminalWaiters.delete(ready);
+        reject(new Error('Terminal is not ready'));
+      }, 10000);
+      terminalWaiters.add(ready);
+    });
+  }
+
+  const connectionStates = {
+    terminal: ['reconnecting', 'connecting'],
+    chat: DEMO ? ['connected', 'live'] : ['reconnecting', 'connecting'],
+  };
+
+  function setState(state, label, source = 'terminal') {
+    connectionStates[source] = [state, label];
+    if (source !== (chatOn ? 'chat' : 'terminal')) return;
     document.body.classList.remove('connected', 'reconnecting');
     if (state) document.body.classList.add(state);
     statusText.textContent = label;
@@ -164,9 +186,11 @@
 
   async function connect() {
 
-    if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) return;
+    if (connecting || (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING))) return;
+    connecting = true;
     setState('reconnecting', 'connecting');
     await refreshToken();
+    connecting = false;
     const url = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host
       + location.pathname.replace(/[^/]*$/, '') + (workspace.coding ? 'code/ws' + (workspace.id ? '?arg=' + encodeURIComponent(workspace.id) : '') : 'ws');
     try {
@@ -177,7 +201,7 @@
         reconnectDelay = 1000;
         socket.send(encoder.encode(JSON.stringify({ AuthToken: token, columns: term.cols, rows: term.rows })));
         term.reset();
-        if (!IS_MOBILE) term.focus();
+        if (!IS_MOBILE && !chatOn) term.focus();
       };
       socket.onmessage = (ev) => {
         if (!(ev.data instanceof ArrayBuffer)) return;
@@ -185,13 +209,17 @@
         if (!bytes.length) return;
         const payload = bytes.subarray(1);
         switch (bytes[0]) {
-          case SVR_OUTPUT: term.write(payload); break;
+          case SVR_OUTPUT:
+            terminalReady = true;
+            for (const ready of terminalWaiters) ready();
+            term.write(payload);
+            break;
           case SVR_TITLE: document.title = 'AI Deck · ' + (decoder.decode(payload) || providerName); break;
           case SVR_PREFS: break; // our own page decides fonts
           default: break;
         }
       };
-      socket.onclose = () => { setState('reconnecting', 'reconnecting'); scheduleReconnect(); };
+      socket.onclose = () => { terminalReady = false; setState('reconnecting', 'reconnecting'); scheduleReconnect(); };
       socket.onerror = () => {};
     } catch (_) {
       scheduleReconnect();
@@ -1405,12 +1433,16 @@
     // neither the transcript nor the bubble. Zero is behind everything, so the
     // server answers with a snapshot.
     chatStream = new EventSource(deskURL('chat/events?after=' + lastSeq));
+    chatStream.onopen = () => setState('connected', 'live', 'chat');
     chatStream.onmessage = (e) => {
       try { onChatEvent(JSON.parse(e.data)); } catch (_) { /* ignore a bad frame */ }
     };
     // EventSource reconnects on its own; nothing to do but stop pretending
     // the desk is reachable while it is down.
-    chatStream.onerror = () => { showTyping(false); };
+    chatStream.onerror = () => {
+      setState('reconnecting', 'reconnecting', 'chat');
+      showTyping(false);
+    };
   }
 
   async function chatPost(path, body) {
@@ -1545,6 +1577,8 @@
 
   function setView(which) {
     chatOn = which === 'chat';
+    const source = chatOn ? 'chat' : 'terminal';
+    setState(...connectionStates[source], source);
     document.body.classList.toggle('chat-view', chatOn);
     chat.hidden = !chatOn;
     viewChatBtn.classList.toggle('on', chatOn);
@@ -1581,6 +1615,7 @@
       }
       if (!IS_MOBILE) chatInput.focus();
     } else {
+      if (!DEMO) connect();
       requestAnimationFrame(refit);
       if (!IS_MOBILE) term.focus();
     }
@@ -1675,6 +1710,10 @@
   async function openAgent(path, button) {
     button.disabled = true;
     try {
+      if (!DEMO) {
+        setView('terminal');
+        await waitForTerminal();
+      }
       const result = DEMO ? { ok: true } : await post(path);
       if (result.ok) setView('terminal');
       else { setView('chat'); note(result.text.startsWith('busy:') ? 'Terminal is busy. Quit the current program first.' : result.text); }
@@ -1716,8 +1755,6 @@
     if (PARAMS.has('drawer')) { openDrawer(); if (PARAMS.get('drawer') === 'in') setDir('in'); }
     if (PARAMS.has('sessions')) openSessions();
     if (PARAMS.has('chat')) { setView('chat'); if (!PARAMS.has('welcome')) demoChat(); }
-  } else {
-    connect();
   }
 
   // Whichever view was last used comes back on the next open: the desk is a
@@ -1727,7 +1764,7 @@
   if (!DEMO) {
     let saved = null;
     try { saved = localStorage.getItem(VIEW_KEY); } catch (_) { /* no storage */ }
-    if (saved !== 'terminal' && !(workspace.coding && !workspace.id)) setView('chat');
+    setView(saved !== 'terminal' && !(workspace.coding && !workspace.id) ? 'chat' : 'terminal');
   }
 
   function demoChat() {

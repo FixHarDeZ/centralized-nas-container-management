@@ -1,0 +1,75 @@
+<!doctype html><meta charset="utf-8"><title>Chat connection independence</title>
+<pre id="result">pending</pre>
+<script>
+(async () => {
+  const failures = [];
+  const check = (value, text) => { if (!value) failures.push(text); };
+  const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+  try {
+    const page = await (await fetch('../ui/index.html')).text();
+    for (const provider of ['claude', 'codex', 'claude']) {
+      localStorage.setItem('ai-desk.provider', provider);
+      localStorage.setItem('claude-desk.view', 'chat');
+      const frame = document.createElement('iframe');
+      frame.style = 'width:390px;height:844px';
+      const setup = `
+        window.posts = []; window.calls = []; window.streams = []; window.sockets = [];
+        window.fetch = async (path, options) => {
+          if (options?.method === 'POST') { window.posts.push(String(path)); return {ok:true,text:async()=>''}; }
+          window.calls.push(String(path));
+          if (String(path) === 'token') return new Promise(resolve => window.releaseToken = () => resolve({ok:true,json:async()=>({token:''})}));
+          if (/chat\\/options|api\\/status|api\\/auth/.test(path)) return new Promise(() => {});
+          return {ok:true,json:async()=>({sessions:[],items:[],busy:false,session_id:'',spent:0})};
+        };
+        window.EventSource = class {
+          constructor(url) { this.url=url; window.streams.push(this); setTimeout(()=>this.onopen?.({}), 10); }
+          close() {}
+        };
+        window.WebSocket = class {
+          static OPEN=1; static CONNECTING=0;
+          constructor() { this.readyState=0; window.sockets.push(this); }
+          send() {} close() {}
+        };
+      `;
+      frame.srcdoc = page.replace('<head>', '<head><base href="' + new URL('../ui/', location.href) + '"><script>' + setup + '<\/script>');
+      document.body.append(frame);
+      await new Promise(resolve => frame.onload = resolve);
+      await delay(80);
+      const doc = frame.contentDocument, win = frame.contentWindow;
+      check(doc.body.classList.contains('chat-view'), provider + ': opens in chat');
+      check(doc.getElementById('status-text').textContent === 'live', provider + ': live while metadata and terminal unavailable');
+      check(!win.calls.some(path => path === 'token'), provider + ': no hidden terminal connection');
+      check(win.streams[0]?.url.includes('provider=' + provider), provider + ': correct chat stream');
+      win.streams[0]?.onerror?.({});
+      check(doc.getElementById('status-text').textContent === 'reconnecting', provider + ': stream error shown');
+      win.streams[0]?.onopen?.({});
+      check(doc.getElementById('status-text').textContent === 'live', provider + ': stream recovery shown');
+      doc.getElementById('agent-start').click();
+      check(win.posts.length === 0, provider + ': start waits for terminal shell');
+      check(win.calls.filter(path => path === 'token').length === 1, provider + ': terminal connects on demand');
+      doc.getElementById('view-chat').click();
+      doc.getElementById('view-term').click();
+      check(win.calls.filter(path => path === 'token').length === 1, provider + ': no duplicate token request during view toggle');
+      doc.getElementById('view-chat').click();
+      win.releaseToken();
+      await delay(10);
+      win.sockets[0].readyState = 1;
+      win.sockets[0].onopen();
+      check(win.posts.length === 0, provider + ': socket handshake is not shell readiness');
+      win.sockets[0].onmessage({data:new win.TextEncoder().encode('0ready').buffer});
+      await delay(10);
+      check(win.posts.length === 1, provider + ': start proceeds after shell output');
+      doc.getElementById('view-chat').click();
+      win.sockets[0].readyState = 3;
+      win.sockets[0].onclose();
+      check(doc.getElementById('status-text').textContent === 'live', provider + ': hidden terminal failure cannot override chat');
+      doc.getElementById('view-term').click();
+      check(doc.getElementById('status-text').textContent !== 'live', provider + ': terminal shows own connection status');
+      doc.getElementById('view-chat').click();
+      check(doc.getElementById('status-text').textContent === 'live', provider + ': chat still connected after view toggle');
+      frame.remove();
+    }
+  } catch (error) { failures.push(String(error)); }
+  document.getElementById('result').textContent = JSON.stringify({failures});
+})();
+</script>
