@@ -1,4 +1,5 @@
 """Provider quota snapshots. Percentages come from CLI data, never token estimates."""
+from datetime import datetime
 import json
 import math
 import os
@@ -7,12 +8,17 @@ import tempfile
 import threading
 import time
 
+from claude_metadata import read as claude_read
 import agent_options
 
 CLAUDE_CHAT_FILE = Path(os.environ.get('DESK_CHAT_STATUS_FILE',
                                     str(Path.home() / '.claude/desk-chat-status.json')))
 WINDOWS = ('five_hour', 'seven_day')
 _claude_lock = threading.Lock()
+_claude_poll_lock = threading.Lock()
+_claude_attempt = float('-inf')
+_claude_reason = None
+_claude_ok = False
 _codex_lock = threading.Lock()
 _codex_cache = {}
 _codex_attempt = float('-inf')
@@ -86,7 +92,40 @@ def record_claude(info):
         return aged(data, 'claude')
 
 
-def claude_status(terminal):
+def _refresh_claude(force):
+    global _claude_attempt, _claude_ok, _claude_reason
+    with _claude_poll_lock:
+        if time.monotonic() - _claude_attempt < (15 if force else 60):
+            return
+        _claude_attempt = time.monotonic()
+        _claude_ok, _claude_reason = False, None
+        try:
+            result = claude_read('get_usage')
+            if result.get('rate_limits_available') is False:
+                _claude_reason = 'quota_access_unavailable'
+                return
+            limits = result.get('rate_limits') or {}
+            windows = {}
+            for key in WINDOWS:
+                win = limits.get(key)
+                if not isinstance(win, dict) or not number(win.get('utilization')) or win['utilization'] < 0:
+                    continue
+                reset = win.get('resets_at')
+                try:
+                    reset = datetime.fromisoformat(reset.replace('Z', '+00:00')).timestamp() if isinstance(reset, str) else None
+                except (ValueError, OverflowError):
+                    reset = None
+                # get_usage reports 0–100; stream rate_limit_event uses 0–1.
+                windows[key] = {'utilization': win['utilization'] / 100, 'resetsAt': reset}
+            if windows:
+                record_claude({'unifiedWindows': windows})
+                _claude_ok = True
+        except (OSError, ValueError, TypeError, AttributeError):
+            pass
+
+
+def claude_status(terminal, force=False):
+    _refresh_claude(force)
     now = time.time()
     merged = {}
     for key in WINDOWS:
@@ -99,6 +138,9 @@ def claude_status(terminal):
         if win['observed_at'] >= merged.get(key, {}).get('observed_at', 0):
             merged[key] = win
     out = aged(merged, 'claude')
+    out['status'] = 'ok' if _claude_ok else 'unavailable'
+    if _claude_reason:
+        out['reason'] = _claude_reason
     if 'done' in terminal:
         out['done'] = terminal['done']
     return out

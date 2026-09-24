@@ -31,6 +31,12 @@ window.addEventListener('load', () => setTimeout(() => {
       chat.renderQuota({provider,status:'unavailable'});
       check(quota.querySelector('.q-state').textContent === 'Quota unavailable', provider + ': failed refresh explicit');
       check(doc.documentElement.scrollWidth <= frame.clientWidth, provider + ': no overflow with unavailable quota');
+      if (provider === 'claude') {
+        chat.renderQuota({provider,status:'unavailable',reason:'quota_access_unavailable'});
+        check(quota.querySelector('.q-state').textContent === 'Claude sign-in required', 'Claude: explain missing quota access');
+        check(quota.title.includes('claude auth login'), 'Claude: show login recovery');
+        check(doc.documentElement.scrollWidth <= frame.clientWidth, 'Claude: login notice fits phone');
+      }
       chat.renderQuota({provider,five_hour:{pct:23,observed_at:now,resets_at:now+900,window_minutes:15}});
       check(five.querySelector('b').textContent === '15m', provider + ': real window duration shown');
     }

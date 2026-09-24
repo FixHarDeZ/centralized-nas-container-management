@@ -6,6 +6,8 @@
 # re-linked on every start so a SKILLS_REF bump shows up without touching the
 # volume.
 set -euo pipefail
+# Chat, terminal and quota must use the same saved Claude login.
+unset CLAUDE_CODE_OAUTH_TOKEN
 
 SKILLS_DIR="$HOME/.claude/skills"
 mkdir -p "$SKILLS_DIR" /work/in /work/out
@@ -123,8 +125,8 @@ else
     echo "WARNING: MIMO_API_KEY / MIMO_BASE_URL are empty — \`mimo\` and \`ask\` will not work" >&2
 fi
 
-if [[ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ]]; then
-    echo "WARNING: CLAUDE_CODE_OAUTH_TOKEN is empty — claude will ask you to log in" >&2
+if [[ ! -f "$HOME/.claude/.credentials.json" ]]; then
+    echo "WARNING: Claude login missing — run claude auth login in this desk" >&2
 fi
 
 # Upload receiver for the page's "Add files" button (PUT /upload/<name> →

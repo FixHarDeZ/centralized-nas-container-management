@@ -629,3 +629,20 @@ User requested commit + push. Delivered AI Deck rename/features/quota fixes and 
 - Fix: `secrets.manifest.yaml` literal `COMPOSE_PROFILES: coding` → อยู่ใน `ai-deck/.env` ทุก deploy path. `make secrets` + `deploy.sh -s ai-deck -y` → `ai-deck`, `ai-deck-nginx`, `ai-deck-ai-deck-code-1` Up. Tests 207 passed.
 - ค้าง: UI ยังวน reconnect เงียบๆ ถ้า worker ล่มอีก (ไม่มีข้อความบอก) — ยังไม่แก้.
 - ปิดงาน: commit `8b36fff` (ยังไม่ push), deploy แล้ว 3 container Up. ค้าง: UI reconnect เงียบเมื่อ worker ล่ม.
+
+## 2026-09-24 — Fix `make desk-latest` + Base branch default
+- อาการ: `make desk-latest` → `Claude Code: expected exactly one pin in ai-deck/docker-compose.yml, found 2` เพราะ compose มี `CLAUDE_VERSION` 2 ที่ (desk + coding worker).
+- Fix `scripts/desk_latest.py` `Pin`: หลาย occurrence ได้ถ้าค่าเท่ากัน (ต่างกัน = หยุด), `write()` เขียนทับทุกที่. `-n` ผ่าน: Codex 0.155.0→0.156.1, Claude Code 2.1.276→2.1.281, MiMoCode 0.1.14→0.1.15.
+- UI: `#project-base` ใส่ `value="main"` เป็นค่าเริ่มต้น (ลบทิ้ง = default branch ของ repo).
+- Tests ai-deck 207 passed.
+- ปิดงาน: ยังไม่ commit, ยังไม่ deploy, ยังไม่รัน `make desk-latest` จริง (pin ยังเป็นค่าเก่า).
+
+## 2026-09-24 — Claude model versions and quota refresh (local; not deployed)
+
+- User requested model version labels in Chat and repair of the Claude web quota bar (Codex already worked). NAS diagnosis: CLI 2.1.281; existing Claude observations ~4 days old. Environment setup-token took precedence over saved login, exposes inference-only scope, `get_usage` returned `rate_limits_available:false`; direct usage endpoint with that token returned 403. No token values recorded.
+- User explicitly chose the saved Claude login for both Chat and quota. `claude_metadata.py` reads initialize/get_usage via native control requests with no model turn, no session persistence, hooks/MCP disabled, bounded timeout/output. Chat and both entrypoints clear the legacy token override. Vault entry is retained, not modified.
+- Model labels and effort choices come from installed CLI metadata, including Default's resolved version; support returned `[1m]` model IDs. Version-unavailable fallback preserves aliases. Live document-worker metadata: Default/Opus 5.5, Sonnet 5, Haiku 4.5, Fable 5.1.
+- Claude quota now actively refreshes (60-second cache, 15-second forced-refresh cooldown), normalizes native 0–100 percentages and ISO resets, and retains per-window stream/terminal observations. Missing profile/login gets an explicit sign-in message; failures never invent zero or refresh old timestamps. Codex behavior retained.
+- Verification: regression tests failed before implementation; full ai-deck suite 213 passed (non-failing pre-existing HTTP connection-reset diagnostic). After final fallback/UI adjustments, targeted metadata/quota/preferences + all five Chromium UI harnesses: 27 passed. JS/shell syntax and git diff checks passed. New metadata code executed in memory against actual NAS CLI, temporary quota file only: status ok, 5h 7%, week 6%, both age 0. No model turn was sent.
+- README and coding walkthrough updated. Document home has working saved login; coding worker has no saved Claude credentials and needs `claude auth login` in its own Terminal. Do not copy credentials across homes automatically.
+- Delivery: no commit, push, image rebuild, production file replacement, restart or deployment. CLI may refresh its own saved OAuth credentials during metadata reads. Remaining delivery: deploy this code; coding-worker first login when needed. Existing unrelated memory/.codex changes preserved.

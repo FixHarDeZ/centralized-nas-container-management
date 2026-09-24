@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Code worker owns its home and /workspaces; production credentials stay elsewhere.
 set -euo pipefail
+# Chat, terminal and quota must use the same saved Claude login.
+unset CLAUDE_CODE_OAUTH_TOKEN
 mkdir -p /workspaces "$HOME/.claude/skills" "$HOME/.agents/skills" "$HOME/.codex"
 for skill in /opt/user-skills/*/; do
     [[ -f "$skill/SKILL.md" ]] || continue

@@ -396,7 +396,7 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/status":
             force = parse_qs(urlparse(self.path).query).get("refresh") == ["1"]
             self._json(usage_status.codex_status(force) if provider == "codex"
-                       else usage_status.claude_status(status()))
+                       else usage_status.claude_status(status(), force))
         elif path == "/api/sessions" and workspace_api.enabled():
             from workspaces import WorkspaceError
             try:

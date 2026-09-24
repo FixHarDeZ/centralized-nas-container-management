@@ -8,9 +8,13 @@ import subprocess
 import threading
 import time
 
+from claude_metadata import read as claude_read
+
 EFFORTS = ('none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra')
-MODEL_ID = re.compile(r'[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,127}\Z')
+MODEL_ID = re.compile(r'[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,127}(?:\[1m\])?\Z')
 _lock = threading.Lock()
+_claude_lock = threading.Lock()
+_claude_cached = (float('-inf'), [])
 _cached = (float('-inf'), [])
 
 
@@ -110,14 +114,45 @@ def _codex_models():
         return models
 
 
+def _claude_models():
+    global _claude_cached
+    with _claude_lock:
+        if time.monotonic() - _claude_cached[0] < 60:
+            return _claude_cached[1]
+        try:
+            raw = claude_read('initialize').get('models', [])
+        except (OSError, ValueError):
+            raw = []
+        models = []
+        for item in raw if isinstance(raw, list) else []:
+            if not isinstance(item, dict):
+                continue
+            model = item.get('value')
+            if not isinstance(model, str) or not MODEL_ID.fullmatch(model):
+                continue
+            resolved = item.get('resolvedModel', '')
+            match = re.fullmatch(r'claude-([a-z]+)-(\d+(?:-\d+)*?)(?:-\d{8})?', resolved) if isinstance(resolved, str) else None
+            label = (match[1].title() + ' ' + match[2].replace('-', '.')) if match else str(item.get('displayName') or model)
+            levels = item.get('supportedEffortLevels', [])
+            models.append({'id': '' if model == 'default' else model,
+                           'label': f'Default ({label})' if model == 'default' else label,
+                           'efforts': [e for e in levels if e in EFFORTS] if isinstance(levels, list) else []})
+        if not models:
+            # Preserve usable aliases if the installed CLI cannot answer metadata.
+            models = [{'id': name, 'label': name.title() + ' (version unavailable)',
+                       'efforts': [] if name == 'haiku' else ['low', 'medium', 'high']
+                       + (['xhigh', 'max'] if name in ('opus', 'fable') else [])}
+                      for name in ('sonnet', 'opus', 'fable', 'haiku')]
+        if not any(model['id'] == '' for model in models):
+            models.insert(0, {'id': '', 'label': 'Default', 'efforts': []})
+        _claude_cached = (time.monotonic(), models)
+        return models
+
+
 def catalog(provider):
-    models = _codex_models() if provider == 'codex' else [
-        {'id': 'sonnet', 'label': 'Sonnet', 'efforts': ['low', 'medium', 'high']},
-        {'id': 'opus', 'label': 'Opus', 'efforts': ['low', 'medium', 'high', 'xhigh', 'max']},
-        {'id': 'fable', 'label': 'Fable', 'efforts': ['low', 'medium', 'high', 'xhigh', 'max']},
-        {'id': 'haiku', 'label': 'Haiku', 'efforts': []},
-    ]
-    return {'models': [{'id': '', 'label': 'Default', 'efforts': []}] + models}
+    if provider == 'claude':
+        return {'models': _claude_models()}
+    return {'models': [{'id': '', 'label': 'Default', 'efforts': []}] + _codex_models()}
 
 
 def validate(provider, model, effort):

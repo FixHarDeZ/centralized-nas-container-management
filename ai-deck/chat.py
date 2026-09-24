@@ -38,6 +38,7 @@ outside the container.
 import collections
 import codex_backend
 import agent_options
+import claude_metadata
 import usage_status
 import workspace_api
 import deploy_bridge
@@ -329,6 +330,7 @@ class Agent:
             + (["--effort", self.effort] if self.effort else [])
             + (["--resume", resume] if resume else []),
             cwd=self.cwd,
+            env=claude_metadata.environment(),
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,

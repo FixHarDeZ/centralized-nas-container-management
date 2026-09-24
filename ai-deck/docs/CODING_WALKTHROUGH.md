@@ -16,7 +16,7 @@ gh auth status
 
 ทำ device login ตาม URL/code ที่ terminal แสดง และเลือกบัญชีที่มีสิทธิ์ push repo นี้ การ clone public repo ไม่ต้อง login แต่ push และ private repo ต้องมีสิทธิ์ GitHub ก่อน ข้อมูล login อยู่ใน coding home แยกจากโหมดเอกสาร รุ่นนี้ใช้ coding worker/home ร่วมกันภายในทีมที่ไว้ใจกัน ไม่เหมาะกับผู้ใช้ที่ไม่ไว้ใจกัน
 
-Claude ใช้ OAuth ที่ตั้งไว้ใน stack ส่วน Codex ต้องลงชื่อเข้าใช้ใน **coding Terminal** อีกครั้ง (`codex login --device-auth`) เพราะ coding home แยกจาก document home
+Claude ใช้บัญชีที่ login ไว้ใน worker home (`claude auth login` ใน **coding Terminal**; ไม่ใช้ setup-token จาก environment) เพื่อให้แชทและโควตาใช้บัญชีเดียวกัน ส่วน Codex ต้องลงชื่อเข้าใช้ใน **coding Terminal** อีกครั้ง (`codex login --device-auth`) เพราะ coding home แยกจาก document home
 
 ## 2. เปิดงานใหม่จาก GitHub
 

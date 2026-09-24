@@ -737,9 +737,12 @@
     ].filter(Boolean);
     const state = quota.querySelector('.q-state');
     state.hidden = tips.length > 0 && data.status !== 'unavailable';
-    state.textContent = data.status === 'unavailable' ? 'Quota unavailable' : 'Quota pending';
+    const needsLogin = data.reason === 'quota_access_unavailable';
+    state.textContent = needsLogin ? 'Claude sign-in required'
+      : data.status === 'unavailable' ? 'Quota unavailable' : 'Quota pending';
     quota.title = providerName + ' · ' + (tips.length ? tips.join(' · ') : state.textContent)
-      + (data.status === 'unavailable' ? ' · Could not refresh' : '') + ' · Click to refresh';
+      + (needsLogin ? ' · Run claude auth login in this workspace terminal'
+        : data.status === 'unavailable' ? ' · Could not refresh' : '') + ' · Click to refresh';
     quota.setAttribute('aria-label', quota.title);
     quota.hidden = false;
   }
