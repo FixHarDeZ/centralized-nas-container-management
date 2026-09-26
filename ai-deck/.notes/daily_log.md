@@ -654,3 +654,12 @@ User requested commit + push. Delivered AI Deck rename/features/quota fixes and 
 - Fix: header connection state follows the active Chat/SSE or Terminal/WebSocket view. Chat loads without opening a hidden terminal; Terminal attaches on demand. Hidden terminal reconnects cannot overwrite Chat status or steal composer focus. A pending token fetch is shared across repeated view toggles. Start/Login first opens Terminal and waits (bounded to 10s) for output before sending its tmux command.
 - Chromium regression uses the real app outside demo mode with delayed/unavailable metadata and terminal transport; verifies Claude → Codex → Claude page entries, stream error/recovery, on-demand terminal, rapid view toggles, hidden-terminal failures and Start readiness. Regression failed before each relevant fix and passes afterward. No live model turn sent.
 - Delivery: this follow-up is not committed or deployed. README updated. Final verification: 214 ai-deck tests passed, including all six Chromium UI harnesses; JavaScript syntax and diff checks passed. The existing non-failing HTTP test connection-reset diagnostic appeared again.
+
+## 2026-09-26 — MiMoCode ใน Chat view
+- เพิ่ม provider `mimo` ใน chat (เหมือน Codex): `mimo_backend.py` รัน `mimo run --format json [-m mimo/<id>] [-s <ses>] -- <text>` ต่อเทิร์น, stdin=DEVNULL (run เอา stdin ที่ไม่ใช่ TTY ไปต่อท้ายข้อความ), env `MIMOCODE_DANGEROUSLY_SKIP_PERMISSIONS=1` + เคลียร์ `CLAUDE_CODE_OAUTH_TOKEN`.
+- Probe จริงบน NAS (0.1.15): event `step_start`/`tool_use`(จบแล้วพร้อม state)/`text`(ทั้งก้อน ไม่ใช่ delta)/`step_finish`(tokens), model พัง = event `error` แต่ **exit 0**. `--` กันข้อความขึ้นต้น `-` ได้. `-s` resume ข้าม cwd ได้ → เช็ค workspace เอง.
+- Sessions/history อ่าน `~/.local/share/mimocode/mimocode.db` (read-only) กรอง directory=cwd, parent_id NULL, ไม่เอา session ที่ MiMoCode import มาจาก Claude (message providerID=anthropic). Session id `ses_...` regex แน่น (resume พิมพ์เข้า shell `mimo -s`).
+- Model menu = รายการใน `mimocode.jsonc` ไม่มี effort (คง `reasoningEffort: low`), ไม่มี quota chip (`status: none`), draft แยก key ต่อ provider. Coding workspace ซ่อน MiMo (worker ไม่มี mimo key) + chat.py ตอบ 400.
+- Tests: `tests/test_mimo.py` 9 อัน, ทั้งชุด 223 passed. Dockerfile เพิ่ม COPY `mimo_backend.py`.
+- Commit `d271445` (ยังไม่ push). Deploy `deploy.sh -s ai-deck -y` แล้ว; live turn ผ่าน chat.py ใน container ตอบ `pong` status done, sessions list ใช้ได้. ยังไม่ได้เปิดดูหน้าเว็บบนมือถือจริง.
+- หมายเหตุ: probe สร้าง session ทดสอบ 3-4 อันใน `/work` (ขึ้นใน history ของ MiMo).
