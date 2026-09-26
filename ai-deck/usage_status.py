@@ -9,6 +9,7 @@ import threading
 import time
 
 from claude_metadata import read as claude_read
+import claude_metadata
 import agent_options
 
 CLAUDE_CHAT_FILE = Path(os.environ.get('DESK_CHAT_STATUS_FILE',
@@ -101,6 +102,9 @@ def _refresh_claude(force):
         _claude_ok, _claude_reason = False, None
         try:
             result = claude_read('get_usage')
+            if not result.get('rate_limits') and claude_metadata.login_expired():
+                claude_metadata.refresh_login()
+                result = claude_read('get_usage')
             if result.get('rate_limits_available') is False:
                 _claude_reason = 'quota_access_unavailable'
                 return

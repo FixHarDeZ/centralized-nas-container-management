@@ -3,8 +3,11 @@ import json
 import os
 import time
 
+import pytest
+
 import chat
 import upload
+import usage_status
 from .test_codex import api  # noqa: F401
 
 
@@ -104,3 +107,26 @@ def test_claude_overage_above_one_is_not_dropped(tmp_path, monkeypatch):
     monkeypatch.setattr(usage_status, 'CLAUDE_CHAT_FILE', tmp_path / 'chat.json')
     data = usage_status.record_claude({'unifiedWindows': {'five_hour': {'utilization': 1.05}}})
     assert data['five_hour']['pct'] == 105
+
+
+def test_expired_login_is_refreshed_then_retried(tmp_path, monkeypatch):
+    monkeypatch.setattr(usage_status, 'CLAUDE_CHAT_FILE', tmp_path / 'chat.json')
+    monkeypatch.setattr(usage_status, '_claude_attempt', float('-inf'))
+    fresh = {'rate_limits': {'five_hour': {'utilization': 18, 'resets_at': None}}}
+    answers, refreshed = [{}, fresh], []
+    monkeypatch.setattr(usage_status, 'claude_read', lambda method: answers.pop(0))
+    monkeypatch.setattr(usage_status.claude_metadata, 'login_expired', lambda: True)
+    monkeypatch.setattr(usage_status.claude_metadata, 'refresh_login', lambda: refreshed.append(1))
+    usage_status._refresh_claude(True)
+    assert refreshed == [1] and usage_status._claude_ok
+    assert usage_status.aged(usage_status.read_chat(), 'claude')['five_hour']['pct'] == 18
+
+
+def test_valid_login_is_not_refreshed(tmp_path, monkeypatch):
+    monkeypatch.setattr(usage_status, 'CLAUDE_CHAT_FILE', tmp_path / 'chat.json')
+    monkeypatch.setattr(usage_status, '_claude_attempt', float('-inf'))
+    monkeypatch.setattr(usage_status, 'claude_read', lambda method: {})
+    monkeypatch.setattr(usage_status.claude_metadata, 'login_expired', lambda: False)
+    monkeypatch.setattr(usage_status.claude_metadata, 'refresh_login', lambda: pytest.fail('refreshed'))
+    usage_status._refresh_claude(True)
+    assert not usage_status._claude_ok

@@ -15,6 +15,32 @@ def environment():
     return env
 
 
+def login_expired():
+    """True when the saved login's access token is past expiry (~8h lifetime)."""
+    path = os.path.join(os.path.expanduser('~'), '.claude', '.credentials.json')
+    try:
+        with open(path, encoding='utf-8') as source:
+            expires = json.load(source)['claudeAiOauth']['expiresAt']
+        return expires / 1000 < time.time() + 60
+    except (OSError, ValueError, KeyError, TypeError):
+        return False
+
+
+def refresh_login():
+    """Let the CLI refresh an expired access token; no model turn.
+
+    The control-protocol get_usage does not refresh on its own, so after an
+    idle night the quota chip stayed "unavailable" until something else ran
+    claude. `claude auth status` rewrites .credentials.json (seen 2026-09-26).
+    """
+    try:
+        subprocess.run(['claude', 'auth', 'status'], env=environment(), timeout=20,
+                       stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL, cwd=tempfile.gettempdir())
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
 def read(method):
     if method not in ('initialize', 'get_usage'):
         raise ValueError('unsupported metadata request')
