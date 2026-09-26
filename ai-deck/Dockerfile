@@ -109,6 +109,7 @@ COPY --chmod=0755 statusline.sh /opt/ai-deck/statusline.sh
 COPY --chmod=0755 done-hook.sh /opt/ai-deck/done-hook.sh
 COPY --chmod=0644 upload.py /opt/ai-deck/upload.py
 COPY --chmod=0644 codex_backend.py /opt/ai-deck/codex_backend.py
+COPY --chmod=0644 mimo_backend.py /opt/ai-deck/mimo_backend.py
 COPY --chmod=0644 agent_options.py claude_metadata.py /opt/ai-deck/
 COPY --chmod=0644 usage_status.py /opt/ai-deck/usage_status.py
 COPY --chmod=0644 chat.py /opt/ai-deck/chat.py

@@ -9,6 +9,7 @@ import threading
 import time
 
 from claude_metadata import read as claude_read
+import mimo_backend
 
 EFFORTS = ('none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra')
 MODEL_ID = re.compile(r'[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,127}(?:\[1m\])?\Z')
@@ -152,6 +153,8 @@ def _claude_models():
 def catalog(provider):
     if provider == 'claude':
         return {'models': _claude_models()}
+    if provider == 'mimo':
+        return {'models': mimo_backend.MODELS}
     return {'models': [{'id': '', 'label': 'Default', 'efforts': []}] + _codex_models()}
 
 

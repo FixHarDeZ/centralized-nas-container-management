@@ -37,6 +37,7 @@ outside the container.
 """
 import collections
 import codex_backend
+import mimo_backend
 import agent_options
 import claude_metadata
 import usage_status
@@ -592,6 +593,13 @@ class CodexAgent(codex_backend.CodexMixin, Agent):
     pass
 
 
+class MimoAgent(mimo_backend.MimoMixin, Agent):
+    pass
+
+
+PROVIDERS = {"codex": CodexAgent, "mimo": MimoAgent}
+
+
 AGENT = Agent()
 AGENTS = {}
 AGENTS_LOCK = threading.Lock()
@@ -605,7 +613,7 @@ def agent_for(user, provider, workspace_id="", cwd=None):
     key = (user, provider, workspace_id)
     with AGENTS_LOCK:
         if key not in AGENTS:
-            AGENTS[key] = CodexAgent(cwd=cwd) if provider == "codex" else Agent(cwd=cwd)
+            AGENTS[key] = PROVIDERS.get(provider, Agent)(cwd=cwd)
         return AGENTS[key]
 
 
@@ -635,8 +643,12 @@ class Handler(BaseHTTPRequestHandler):
 
     def _agent(self):
         provider = parse_qs(urlparse(self.path).query).get("provider", ["claude"])[0]
-        if provider not in ("claude", "codex"):
+        if provider not in ("claude", "codex", "mimo"):
             self._reply(400, "unknown provider")
+            return None
+        # The coding worker has no mimo key by design (see coding-entrypoint.sh).
+        if provider == "mimo" and os.environ.get("CODE_WORKER"):
+            self._reply(400, "MiMoCode is not available in coding workspaces")
             return None
         self.provider = provider
         owner = self.headers.get("X-Desk-User", "")
@@ -667,7 +679,9 @@ class Handler(BaseHTTPRequestHandler):
             self._json_body(json.dumps(agent_options.catalog(self.provider)))
             return
         elif path == "/chat/sessions":
-            items = codex_backend.sessions(agent.cwd) if self.provider == 'codex' else workspace_sessions(agent.cwd)
+            items = (codex_backend.sessions(agent.cwd) if self.provider == 'codex'
+                     else mimo_backend.sessions(agent.cwd) if self.provider == 'mimo'
+                     else workspace_sessions(agent.cwd))
             self._json_body(json.dumps({'sessions': items, 'pane': None}))
             return
         elif path == "/chat/state":
@@ -694,10 +708,13 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/chat/history":
             wanted = parse_qs(urlparse(self.path).query).get("id", [""])[0]
             # A uuid or nothing: this becomes a filename.
-            if not UUID.match(wanted):
+            if not (mimo_backend.SESSION_ID if self.provider == "mimo" else UUID).match(wanted):
                 self._reply(400, "bad id")
                 return
-            self._json_body(json.dumps({"items": (codex_backend.transcript(wanted, agent.cwd) if self.provider == "codex" else transcript(wanted, agent.cwd))},
+            items = (codex_backend.transcript(wanted, agent.cwd) if self.provider == "codex"
+                     else mimo_backend.transcript(wanted, agent.cwd) if self.provider == "mimo"
+                     else transcript(wanted, agent.cwd))
+            self._json_body(json.dumps({"items": items},
                                        ensure_ascii=False))
             return
         if path != "/chat/events":
@@ -807,7 +824,8 @@ class Handler(BaseHTTPRequestHandler):
             code, message = agent.interrupt()
         elif path == "/chat/new":
             wanted = body.get("id") or ""
-            if not isinstance(wanted, str) or (wanted and not UUID.fullmatch(wanted)):
+            id_rule = mimo_backend.SESSION_ID if self.provider == "mimo" else UUID
+            if not isinstance(wanted, str) or (wanted and not id_rule.fullmatch(wanted)):
                 self._reply(400, "bad id")
                 return
             code, message = agent.reset(resume=wanted)

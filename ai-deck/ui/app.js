@@ -21,13 +21,16 @@
   // ?mobile=1 forces the phone layout so a desktop screenshot shows it.
   const PARAMS = new URLSearchParams(location.search);
   const DEMO = PARAMS.has('demo');
+  const workspace = window.DeskWorkspace || {id: '', coding: false, url: p => p};
+  // The coding worker carries no mimo key, so MiMoCode is documents-only.
+  const PROVIDERS = { claude: 'Claude', codex: 'Codex' };
+  if (!workspace.coding) PROVIDERS.mimo = 'MiMo';
   let provider = PARAMS.get('provider');
-  if (!['claude', 'codex'].includes(provider)) {
+  if (!(provider in PROVIDERS)) {
     try { provider = localStorage.getItem('ai-desk.provider'); } catch (_) {}
   }
-  if (!['claude', 'codex'].includes(provider)) provider = 'claude';
-  const providerName = provider === 'codex' ? 'Codex' : 'Claude';
-  const workspace = window.DeskWorkspace || {id: '', coding: false, url: p => p};
+  if (!(provider in PROVIDERS)) provider = 'claude';
+  const providerName = PROVIDERS[provider];
   function deskURL(path) {
     path = workspace.url(path);
     return path + (path.includes('?') ? '&' : '?') + 'provider=' + provider;
@@ -756,6 +759,7 @@
 
   function renderQuota(data) {
     if (data && data.provider && data.provider !== provider) return;
+    if (data && data.status === 'none') { quota.hidden = true; return; }   // API key: no quota
     data = data || {};
     if (!data.received_at) data.received_at = Date.now() / 1000;
     lastQuota = data;
@@ -780,6 +784,7 @@
   async function loadQuota(force = false) {
     if (quotaPending) return;
     if (DEMO) {
+      if (provider === 'mimo') return renderQuota({ provider, status: 'none' });
       renderQuota({ provider, five_hour: { pct: 72, resets_at: Date.now() / 1000 + 7560 },
         seven_day: { pct: 58, resets_at: Date.now() / 1000 + 22560 }, age: 5 });
       return;
@@ -1523,7 +1528,7 @@
   let draftSession = '';
   let draftTimer = null;
 
-  function draftKey() { return DRAFT_KEY + (provider === 'codex' ? '.codex' : '') + (draftSession ? '.' + draftSession : ''); }
+  function draftKey() { return DRAFT_KEY + (provider === 'claude' ? '' : '.' + provider) + (draftSession ? '.' + draftSession : ''); }
   function saveDraft() {
     draftTimer = null;
     try {
@@ -1625,6 +1630,7 @@
   viewChatBtn.addEventListener('click', () => setView('chat'));
 
   const providerSelect = document.getElementById('provider-select');
+  providerSelect.replaceChildren(...Object.entries(PROVIDERS).map(([id, name]) => new Option(name, id)));
   providerSelect.value = provider;
   providerSelect.addEventListener('change', () => {
     saveDraft();

@@ -42,6 +42,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import unquote, parse_qs, urlparse
 
 import codex_backend
+import mimo_backend
 import workspace_api
 import shlex
 import agent_options
@@ -381,7 +382,7 @@ class Handler(BaseHTTPRequestHandler):
                     self._reply(exc.status, exc.message)
                     return None
         provider = parse_qs(urlparse(self.path).query).get("provider", ["claude"])[0]
-        if provider not in ("claude", "codex"):
+        if provider not in ("claude", "codex", "mimo"):
             self._reply(400, "unknown provider")
             return None
         return provider
@@ -395,14 +396,20 @@ class Handler(BaseHTTPRequestHandler):
             self._json(agent_options.auth_status())
         elif path == "/api/status":
             force = parse_qs(urlparse(self.path).query).get("refresh") == ["1"]
-            self._json(usage_status.codex_status(force) if provider == "codex"
-                       else usage_status.claude_status(status(), force))
+            if provider == "mimo":
+                # Pay-per-token API key: there is no quota window to show.
+                self._json({"provider": "mimo", "status": "none"})
+            else:
+                self._json(usage_status.codex_status(force) if provider == "codex"
+                           else usage_status.claude_status(status(), force))
         elif path == "/api/sessions" and workspace_api.enabled():
             from workspaces import WorkspaceError
             try:
                 item = workspace_api.workspace(self)
                 import chat
-                items = codex_backend.sessions(item['path']) if provider == 'codex' else chat.workspace_sessions(item['path'])
+                items = (codex_backend.sessions(item['path']) if provider == 'codex'
+                         else mimo_backend.sessions(item['path']) if provider == 'mimo'
+                         else chat.workspace_sessions(item['path']))
                 self._json({'sessions': items, 'pane': pane_command(self._desk())})
             except WorkspaceError as exc:
                 self._reply(exc.status, exc.message)
@@ -410,7 +417,9 @@ class Handler(BaseHTTPRequestHandler):
             # The pane's state ships with the list so the sheet can say up
             # front that resuming is not possible right now, rather than
             # letting every tap come back 409.
-            self._json({"sessions": codex_backend.sessions(WORK_DIR) if provider == "codex" else sessions() if provider == "claude" else [], "pane": pane_command(self._desk())})
+            self._json({"sessions": codex_backend.sessions(WORK_DIR) if provider == "codex"
+                        else mimo_backend.sessions(WORK_DIR) if provider == "mimo"
+                        else sessions(), "pane": pane_command(self._desk())})
         else:
             self._reply(404, "not here")
 
@@ -450,18 +459,21 @@ class Handler(BaseHTTPRequestHandler):
                 return
             # A uuid and nothing else: this string is about to be typed into
             # an interactive shell.
-            if not isinstance(session_id, str) or not UUID.fullmatch(session_id):
+            id_rule = mimo_backend.SESSION_ID if provider == "mimo" else UUID
+            if not isinstance(session_id, str) or not id_rule.fullmatch(session_id):
                 self._reply(400, "bad id")
                 return
             if workspace_path:
                 import chat
-                exists = codex_backend.rollout(session_id, workspace_path) if provider == 'codex' else chat.session_exists(session_id, workspace_path)
+                exists = (codex_backend.rollout(session_id, workspace_path) if provider == 'codex'
+                          else mimo_backend.session_exists(session_id, workspace_path) if provider == 'mimo'
+                          else chat.session_exists(session_id, workspace_path))
                 if not exists:
                     self._reply(404, 'Session not found in this workspace')
                     return
             prefix = 'cd -- ' + shlex.quote(workspace_path) + ' && ' if workspace_path else ''
             code, message = type_into_pane(
-                prefix + ("codex resume " if provider == "codex" else "claude --resume ") + session_id, self._desk()
+                prefix + {"codex": "codex resume ", "mimo": "mimo -s "}.get(provider, "claude --resume ") + session_id, self._desk()
             )
         else:
             self._reply(404, "not here")
