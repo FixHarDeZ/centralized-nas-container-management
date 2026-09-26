@@ -154,7 +154,7 @@ def catalog(provider):
     if provider == 'claude':
         return {'models': _claude_models()}
     if provider == 'mimo':
-        return {'models': mimo_backend.MODELS}
+        return {'models': mimo_backend.models()}
     return {'models': [{'id': '', 'label': 'Default', 'efforts': []}] + _codex_models()}
 
 

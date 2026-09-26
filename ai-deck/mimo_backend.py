@@ -12,12 +12,26 @@ import threading
 
 # Typed into a shell by upload.py's resume, so tight: ses_ + base62.
 SESSION_ID = re.compile(r"^ses_[A-Za-z0-9]{16,40}$")
-# Mirrors the models in mimocode.jsonc (tests/test_mimo.py checks the drift).
-# No efforts: reasoningEffort=low is pinned in that config on purpose, and
-# `--variant` could override it.
-MODELS = [{"id": "", "label": "Default", "efforts": []},
-          {"id": "mimo-v2.5-pro", "label": "mimo-v2.5-pro", "efforts": []},
-          {"id": "mimo-v2.5", "label": "mimo-v2.5 (smaller, faster)", "efforts": []}]
+CONFIG = Path(__file__).resolve().parent / "mimocode.jsonc"
+# MiMoCode's own variants for a reasoning model on an openai-compatible
+# provider (`mimo models --verbose`): each sets reasoningEffort. Default
+# (no --variant) keeps the config's pinned `low`.
+EFFORTS = ["low", "medium", "high"]
+
+
+def models():
+    """The model menu, read from the same mimocode.jsonc MiMoCode runs with."""
+    try:
+        # Comments in that file are whole `//` lines only.
+        text = "\n".join(line for line in CONFIG.read_text().splitlines()
+                         if not line.lstrip().startswith("//"))
+        configured = json.loads(text)["provider"]["mimo"]["models"]
+    except (OSError, ValueError, KeyError):
+        configured = {}
+    return [{"id": "", "label": "Default", "efforts": []}] + [
+        {"id": name, "label": item.get("name") or name,
+         "efforts": EFFORTS if item.get("reasoning") else []}
+        for name, item in configured.items()]
 
 
 def db_path():
@@ -87,10 +101,12 @@ class MimoMixin:
             if self.busy:
                 return 409, "still working"
             self.model = self.model if model is None else model
-            self.effort = ""
+            self.effort = self.effort if effort is None else effort
             args = ["mimo", "run", "--format", "json"]
             if self.model:
                 args += ["-m", "mimo/" + self.model]
+            if self.effort:
+                args += ["--variant", self.effort]
             if self.session_id:
                 args += ["-s", self.session_id]
             # `--` so a message starting with a dash stays the message.

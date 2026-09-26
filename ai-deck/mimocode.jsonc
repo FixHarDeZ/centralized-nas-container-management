@@ -66,6 +66,22 @@
           "reasoning": true,
           "limit": { "context": 200000, "output": 32000 },
           "options": { "reasoningEffort": "low" }
+        },
+        // v2.6 appeared on the endpoint's /models 2026-09-26; tool calls and
+        // reasoning_effort low/high both answered 200 with tool_calls.
+        "mimo-v2.6-pro": {
+          "name": "mimo-v2.6-pro",
+          "tools": true,
+          "reasoning": true,
+          "limit": { "context": 200000, "output": 32000 },
+          "options": { "reasoningEffort": "low" }
+        },
+        "mimo-v2.6-flash": {
+          "name": "mimo-v2.6-flash",
+          "tools": true,
+          "reasoning": true,
+          "limit": { "context": 200000, "output": 32000 },
+          "options": { "reasoningEffort": "low" }
         }
       }
     }

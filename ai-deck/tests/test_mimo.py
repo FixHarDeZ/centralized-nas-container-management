@@ -166,12 +166,28 @@ def test_session_id_rule_is_shell_safe():
         assert not mimo_backend.SESSION_ID.fullmatch(bad)
 
 
-def test_models_match_mimocode_config():
-    source = (ROOT / "mimocode.jsonc").read_text()
-    configured = re.search(r'"models":\s*\{(.*?)\n        \}\n      \}', source, re.S).group(1)
-    names = re.findall(r'^        "([^"]+)": \{', configured, re.M)
-    assert [m["id"] for m in mimo_backend.MODELS if m["id"]] == names
-    assert all(m["efforts"] == [] for m in mimo_backend.MODELS)
+def test_models_come_from_mimocode_config():
+    ids = [m["id"] for m in mimo_backend.models()]
+    assert ids[0] == "" and {"mimo-v2.5-pro", "mimo-v2.6-pro", "mimo-v2.6-flash"} <= set(ids)
+    assert all(m["efforts"] == ["low", "medium", "high"] for m in mimo_backend.models()[1:])
+    assert agent_options.validate("mimo", "mimo-v2.6-pro", "high")
     assert agent_options.validate("mimo", "mimo-v2.5-pro", "")
-    assert not agent_options.validate("mimo", "mimo-v2.5-pro", "high")
+    assert not agent_options.validate("mimo", "mimo-v2.5-pro", "max")
     assert not agent_options.validate("mimo", "gpt-5", "")
+
+
+def test_unreadable_config_still_offers_default(monkeypatch, tmp_path):
+    monkeypatch.setattr(mimo_backend, "CONFIG", tmp_path / "missing.jsonc")
+    assert mimo_backend.models() == [{"id": "", "label": "Default", "efforts": []}]
+
+
+def test_effort_becomes_variant(fake_mimo):
+    agent = chat.MimoAgent(cwd=str(fake_mimo))
+    channel = agent.subscribe()
+    agent.send("hi", model="mimo-v2.6-pro", effort="high")
+    events_until(channel, "turn")
+    args = json.loads((fake_mimo / "received.json").read_text())["args"]
+    assert args[args.index("--variant") + 1] == "high"
+    agent.send("hi", model="", effort="")
+    events_until(channel, "turn")
+    assert "--variant" not in json.loads((fake_mimo / "received.json").read_text())["args"]
