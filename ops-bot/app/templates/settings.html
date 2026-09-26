@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block title %}AI Settings{% endblock %}
+{% block breadcrumb %}AI Settings{% endblock %}
+{% block content %}
+<section class="page-heading"><div><p class="eyebrow">CONFIGURE YOUR ANALYST</p><h1>AI Settings<span class="accent">.</span></h1><p class="subtitle">เลือกโมเดล MiMo ให้เหมาะกับงานวิเคราะห์ของคุณ</p></div><span class="badge info">MiMo / OpenAI-compatible</span></section>
+<div class="settings-layout">
+<section class="panel settings-panel"><div class="panel-heading"><div><h2>Analysis model</h2><p>บันทึกแล้วมีผลกับงานวิเคราะห์ครั้งถัดไป</p></div><span class="model-icon" aria-hidden="true">✧</span></div>
+<form id="settings-form" class="settings-form">
+  <div class="current-model"><span class="eyebrow">CURRENT MODEL</span><strong id="current-model">{{ settings.model }}</strong><span id="model-source" class="muted small">{{ 'ตั้งค่าจาก Dashboard' if settings.source == 'dashboard' else 'ใช้ค่าเริ่มต้นจาก Environment' }}</span></div>
+  <label for="model-select">เลือกโมเดล</label><div class="model-picker"><select id="model-select"><option value="{{ settings.model }}">{{ settings.model }}</option>{% if settings.default != settings.model %}<option value="{{ settings.default }}">{{ settings.default }} (default)</option>{% endif %}<option value="__custom__">ระบุ Model ID เอง…</option></select><button type="button" class="button secondary" id="load-models">ดึงรายชื่อโมเดล</button></div>
+  <p class="field-help">ดึงรายชื่อจาก MiMo endpoint ที่ตั้งค่าไว้ หากไม่รองรับ ให้ระบุ Model ID เอง</p>
+  <label for="model-input">Model ID</label><input id="model-input" name="model" type="text" value="{{ settings.model }}" required maxlength="128" pattern="[A-Za-z0-9][A-Za-z0-9._:\/\-]{0,127}" autocomplete="off" spellcheck="false" aria-describedby="model-help">
+  <p class="field-help" id="model-help">ต้องเป็นโมเดลที่บัญชีและ endpoint นี้รองรับ รวมถึง function calling สำหรับวิเคราะห์ การบันทึกยังไม่ทดสอบเรียกโมเดล</p>
+  <div class="form-actions"><button type="submit" class="button primary">บันทึกการตั้งค่า <span aria-hidden="true">→</span></button><button type="button" id="reset-model" class="button secondary">คืนค่าเริ่มต้น</button></div>
+  <p id="settings-status" class="form-status" role="status" aria-live="polite"></p>
+  <noscript><p class="notice">เปิด JavaScript เพื่อบันทึกการตั้งค่า</p></noscript>
+</form></section>
+<aside class="settings-aside"><div class="panel info-panel"><span class="eyebrow">HOW IT WORKS</span><h2>เปลี่ยนโมเดล<br>โดยไม่ต้อง restart</h2><ol class="steps"><li><strong>เลือกหรือระบุโมเดล</strong><p>ใช้ Model ID จากบัญชี MiMo ของคุณ</p></li><li><strong>บันทึกการตั้งค่า</strong><p>ค่าเก็บในฐานข้อมูล อยู่ต่อหลัง restart</p></li><li><strong>เริ่มใช้ในงานถัดไป</strong><p>งานที่กำลังวิเคราะห์จะใช้โมเดลเดิมจนจบ</p></li></ol></div><div class="default-note"><span class="eyebrow">ENVIRONMENT DEFAULT</span><code>{{ settings.default }}</code><p>คืนค่าเริ่มต้นจะลบค่าที่ตั้งจาก Dashboard แล้วกลับไปใช้ค่าของระบบ</p></div><p class="muted small">API key และ endpoint จัดการผ่าน deployment configuration ตามเดิม</p></aside>
+</div>
+{% endblock %}

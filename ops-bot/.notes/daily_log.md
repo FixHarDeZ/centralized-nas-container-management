@@ -192,3 +192,19 @@ data. Also update the Kuma webhook URL to include `?secret=…` if it doesn't.
 - RP entry fixed by user (hostname corrected, port 15070) — `https://<NAS_DOMAIN>:15070/dashboard` reachable from WAN. Added an `ops-bot` tile to `homepage/config/services.yaml` under "📥 Downloads & Monitoring" (`{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15070/dashboard`, icon `mdi-robot-love`). No `ping` and no widget: every path except the Kuma webhook is behind basic auth, so a ping would render 401 as red — same reason dupe-sweeper and friendly-reminder omit it. Deployed and confirmed the tile is in the container's config with no homepage errors.
 
 **Session end state:** ops-bot + ops-bot-nginx running, dashboard reachable from WAN behind basic auth, Kuma webhook working with the rotated secret, homepage tile live. Leftover on the NAS: `/volume2/docker/uptime-kuma/kuma.db.bak-rotate` (pre-rotation backup) — safe to delete once the Kuma notification has fired successfully at least once.
+
+## 2026-09-26 — Dashboard redesign and model settings discovery
+- Reviewed dashboard/templates, config, DB, LLM loop, webhook, and orchestrator for requested UI redesign, feature recommendations, and runtime MiMo model selection.
+- Findings: dashboard is last-50 history without filters/settings; cached LLM client snapshots env model; recovery only sends Telegram and does not persist recovery state; LLM call sends max_tokens=1200 and lacks an explicit overall asyncio deadline.
+- Proposed: responsive overview/history/detail/settings, persisted model override applied at start of each diagnosis, model provenance per analysis, validation and protected settings writes; improve LLM deadline/reasoning configuration.
+- Verification: source inspection only; no tests run and no runtime behavior changed. Design approval pending under brainstorming skill. No commit or deployment performed.
+
+### Implementation after design approval
+- User approved proposed dashboard redesign + runtime model setting + LLM deadline corrections. Implemented on new branch `codex/ops-bot-dashboard`.
+- Added shared responsive charcoal/teal UI with summary cards, literal service/container search, severity filter, 25-row pagination, report/evidence/fix cards, collapsible diagnostics/actions, empty states, keyboard focus and mobile layouts.
+- Added persistent SQLite model override, reset to environment, optional provider model discovery (10s bound); same-origin JSON/custom-header write protection under unchanged nginx basic auth. No API key/endpoint editor.
+- Model snapshot at diagnosis start persists in report_json; removed max_tokens=1200, added reasoning_effort=low, disabled implicit SDK retries, overall 600s timeout. Timeout report retains received tokens/findings.
+- Regression verification: 60 tests passed, including persistence/reset/validation, cross-origin rejection, query filtering/pagination/latest-report behavior, corrupt legacy JSON, model discovery failure, in-flight model stability and deadline cancellation. Independent reviewer found only invalid HTML pattern slash escaping; fixed and verified actual browser validity rejects spaces and accepts valid model IDs.
+- Browser verification on isolated localhost preview with synthetic incidents: desktop 1440px and mobile 390px, no horizontal overflow in overview/settings/detail; save survives reload, reset works, discovery failure is readable, search narrows results, logs expand. Preview has dashboard only, no webhook/SSH/Telegram and no provider credential.
+- README and stack index updated; recommendations: recovery timestamps/lifecycle first, durable diagnosis state, re-analysis/version comparison, recurring incident grouping.
+- Actual delivery status: local code only, no commit/push/PR/NAS deployment. No live MiMo request; selected models still require account/endpoint capability. Preview at http://127.0.0.1:18770/dashboard is temporary synthetic data.

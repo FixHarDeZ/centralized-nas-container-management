@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>{% block title %}Overview{% endblock %} · ops-bot</title>
+  <link rel="stylesheet" href="/static/dashboard.css?v=20260926">
+  <script src="/static/dashboard.js?v=20260926" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#main">ข้ามไปเนื้อหา</a>
+<aside class="sidebar">
+  <a class="brand" href="/dashboard"><span class="brand-symbol" aria-hidden="true">⌘</span><span>ops<span class="brand-light">-bot</span><small>OPERATIONS INTELLIGENCE</small></span></a>
+  <div class="nav-label">WORKSPACE</div>
+  <nav aria-label="เมนูหลัก">
+    <a class="nav-item {{ 'active' if active == 'overview' }}" {% if active == 'overview' %}aria-current="page"{% endif %} href="/dashboard"><span aria-hidden="true">▦</span> Overview</a>
+    <a class="nav-item {{ 'active' if active == 'settings' }}" {% if active == 'settings' %}aria-current="page"{% endif %} href="/dashboard/settings"><span aria-hidden="true">⚙</span> AI Settings</a>
+  </nav>
+  <div class="sidebar-note"><span class="eyebrow">DESIGNED FOR CLARITY</span><p>จากสัญญาณผิดปกติ<br>สู่คำตอบที่มีหลักฐาน</p><span class="badge neutral">Read-only diagnostics</span></div>
+  <div class="sidebar-footer">NAS / INCIDENT RESPONSE<span>Uptime Kuma → MiMo → Telegram</span></div>
+</aside>
+<div class="workspace">
+  <header class="topbar"><span>Workspace <span class="slash">/</span> <strong>{% block breadcrumb %}Overview{% endblock %}</strong></span><span class="topbar-label">OPS CONSOLE <span class="dot"></span></span></header>
+  <main id="main">{% block content %}{% endblock %}</main>
+  <footer class="page-footer"><span>ops-bot · Evidence before action.</span><span>เวลาตามที่ระบบบันทึกบน NAS</span></footer>
+</div>
+</body>
+</html>

@@ -97,7 +97,8 @@ def _mk_response(tool_calls, tokens=100):
 
 
 @pytest.fixture
-def mock_config(monkeypatch):
+def mock_config(monkeypatch, tmp_path):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "llm.db"))
     monkeypatch.setenv("MIMO_API_KEY", "k")
     monkeypatch.setenv("MIMO_BASE_URL", "https://x/v1")
     import app.config
@@ -162,3 +163,60 @@ async def test_diagnose_agentic_mimo_error_returns_fallback(mock_config):
         report = await client.diagnose_agentic("S", "c", "down", execute=execute, narrate=narrate)
     assert report.truncated is True
     assert "boom" in report.summary
+
+
+@pytest.mark.asyncio
+async def test_model_setting_snapshot_and_next_run(mock_config, tmp_path, monkeypatch):
+    monkeypatch.setenv('DB_PATH', str(tmp_path / 'models.db'))
+    from app.model_settings import save_model
+    await save_model('mimo-first')
+    calls = []
+    async def create(**kwargs):
+        calls.append(kwargs)
+        if len(calls) == 1:
+            await save_model('mimo-next')
+            return _mk_response([_mk_toolcall('a', 'note_finding', {'text': 'found'})])
+        return _mk_response([_mk_toolcall('b', 'submit_report', {'summary': 'done'})])
+    with patch('app.llm_client.AsyncOpenAI') as factory:
+        factory.return_value.chat.completions.create = AsyncMock(side_effect=create)
+        client = LLMClient()
+        report = await client.diagnose_agentic('s', 'c', 'down', execute=AsyncMock(), narrate=AsyncMock())
+        assert report.model_used == 'mimo-first'
+        assert [call['model'] for call in calls] == ['mimo-first', 'mimo-first']
+        assert all('max_tokens' not in call and call['reasoning_effort'] == 'low' for call in calls)
+        next_report = await client.diagnose_agentic('s', 'c', 'down', execute=AsyncMock(), narrate=AsyncMock())
+        assert next_report.model_used == 'mimo-next'
+
+
+@pytest.mark.asyncio
+async def test_overall_deadline_cancels_slow_request(mock_config, tmp_path, monkeypatch):
+    import asyncio
+    monkeypatch.setenv('DB_PATH', str(tmp_path / 'deadline.db'))
+    monkeypatch.setattr('app.llm_client.DIAGNOSIS_TIMEOUT_SECONDS', 0.01, raising=False)
+    cancelled = []
+    async def slow(**kwargs):
+        try:
+            await asyncio.sleep(60)
+        finally:
+            cancelled.append(True)
+    with patch('app.llm_client.AsyncOpenAI') as factory:
+        factory.return_value.chat.completions.create = AsyncMock(side_effect=slow)
+        report = await asyncio.wait_for(LLMClient().diagnose_agentic('s', 'c', 'down', execute=AsyncMock(), narrate=AsyncMock()), timeout=0.2)
+    assert report.truncated
+    assert cancelled == [True]
+    assert report.model_used == 'mimo-v2.5-pro'
+
+
+@pytest.mark.asyncio
+async def test_deadline_keeps_tokens_and_findings(mock_config, monkeypatch):
+    import asyncio
+    monkeypatch.setattr('app.llm_client.DIAGNOSIS_TIMEOUT_SECONDS', 0.02)
+    async def slow_note(text):
+        await asyncio.sleep(60)
+    with patch('app.llm_client.AsyncOpenAI') as factory:
+        factory.return_value.chat.completions.create = AsyncMock(return_value=_mk_response([
+            _mk_toolcall('a', 'note_finding', {'text': 'container restarted'})], tokens=123))
+        report = await LLMClient().diagnose_agentic('s', 'c', 'down', execute=AsyncMock(), narrate=slow_note)
+    assert report.truncated
+    assert report.tokens_used == 123
+    assert report.findings == ['container restarted']

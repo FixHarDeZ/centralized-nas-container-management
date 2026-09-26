@@ -1,103 +1,22 @@
-<!DOCTYPE html>
-<html lang="th">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Incident #{{ incident['id'] }} — ops-bot</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #eee; padding: 20px; }
-        h1, h2 { color: #00d4ff; margin: 20px 0 10px; }
-        .card { background: #16213e; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
-        .severity-critical { color: #e74c3c; }
-        .severity-warning { color: #f39c12; }
-        .severity-info { color: #3498db; }
-        pre { background: #0d1b2a; padding: 12px; border-radius: 4px; overflow-x: auto; white-space: pre-wrap; }
-        .back { color: #00d4ff; text-decoration: none; }
-        .back:hover { text-decoration: underline; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 8px; text-align: left; border-bottom: 1px solid #1a1a2e; }
-        th { background: #0f3460; }
-        .success { color: #27ae60; }
-        .fail { color: #e74c3c; }
-    </style>
-</head>
-<body>
-    <a class="back" href="/dashboard">← กลับ</a>
-    <h1>Incident #{{ incident['id'] }}</h1>
-
-    <div class="card">
-        <strong>Service:</strong> {{ incident['service_name'] }}<br>
-        <strong>Container:</strong> {{ incident['container_name'] or '-' }}<br>
-        <strong>Status:</strong> {{ incident['status'] }}<br>
-        <strong>Watchtower:</strong> {% if incident['is_watchtower_update'] %}ใช่{% else %}ไม่{% endif %}<br>
-        <strong>Time:</strong> {{ incident['created_at'] }}
-    </div>
-
-    {% if report %}
-    <h2>ผลการวินิจฉัย</h2>
-    <div class="card">
-        <strong>สรุปสาเหตุ:</strong> {{ report.summary }}<br>
-        <strong>Severity:</strong> <span class="severity-{{ report.severity }}">{{ report.severity }}</span>
-        {% if report.truncated %}<br><em>⚠️ วิเคราะห์ไม่ครบ (ถึงเพดานรอบ)</em>{% endif %}
-    </div>
-    {% if report.evidence %}
-    <div class="card">
-        <strong>ปัจจัย</strong>
-        <table>
-            <tr><th>ปัจจัย</th><th>ค่า</th></tr>
-            {% for e in report.evidence %}
-            <tr><td>{{ e.factor }}</td><td>{{ e.value }}</td></tr>
-            {% endfor %}
-        </table>
-    </div>
-    {% endif %}
-    {% if report.machine_status %}
-    <div class="card"><strong>สถานะเครื่อง:</strong> {{ report.machine_status }}</div>
-    {% endif %}
-    {% if report.fix_options %}
-    <h2>ขั้นตอนแก้ (รออนุมัติ)</h2>
-    {% for o in report.fix_options %}
-    <div class="card">
-        <strong>{% if o.recommended %}⭐ {% endif %}{{ o.title }}</strong><br>
-        {{ o.detail }}
-        {% if o.commands %}<pre>{{ o.commands | join('\n') }}</pre>{% endif %}
-    </div>
-    {% endfor %}
-    {% endif %}
-    {% elif analysis %}
-    <h2>ผลวิเคราะห์</h2>
-    <div class="card">
-        <strong>Root Cause:</strong> {{ analysis[0] }}<br>
-        <strong>Severity:</strong> <span class="severity-{{ analysis[1] }}">{{ analysis[1] }}</span><br>
-        <strong>แนะนำ:</strong> {{ analysis[2] }}
-    </div>
-    {% endif %}
-
-    {% if diagnostics %}
-    <h2>Diagnostic Details</h2>
-    {% for diag in diagnostics %}
-    <div class="card">
-        <strong>{{ diag[0] }}</strong>
-        <pre>{{ diag[1] }}</pre>
-    </div>
-    {% endfor %}
-    {% endif %}
-
-    {% if actions %}
-    <h2>Actions</h2>
-    <table>
-        <tr><th>Type</th><th>Commands</th><th>Result</th><th>Success</th><th>Time</th></tr>
-        {% for act in actions %}
-        <tr>
-            <td>{{ act[0] }}</td>
-            <td><pre>{{ act[1] }}</pre></td>
-            <td><pre>{{ act[2][:500] }}</pre></td>
-            <td class="{{ 'success' if act[3] else 'fail' }}">{{ '✅' if act[3] else '❌' }}</td>
-            <td>{{ act[4] }}</td>
-        </tr>
-        {% endfor %}
-    </table>
-    {% endif %}
-</body>
-</html>
+{% extends 'base.html' %}
+{% block title %}Incident #{{ incident.id }}{% endblock %}
+{% block breadcrumb %}Incident #{{ incident.id }}{% endblock %}
+{% block content %}
+<a class="back-link" href="/dashboard">← กลับไปภาพรวม</a>
+<section class="page-heading"><div><p class="eyebrow">INCIDENT #{{ incident.id }}</p><h1>{{ incident.service_name }}<span class="accent">.</span></h1><p class="subtitle">{{ incident.container_name or 'ไม่ระบุ container' }} <span class="slash">/</span> {{ incident.created_at }}</p></div><span class="badge neutral">เหตุการณ์ {{ incident.status | upper }}</span></section>
+<div class="detail-layout"><div class="detail-main">
+<section class="panel"><div class="panel-heading"><div><span class="eyebrow">AI DIAGNOSIS</span><h2>สรุปการวิเคราะห์</h2></div>{% if analysis %}<span class="badge {{ analysis.severity if analysis.severity in ['critical','warning','info'] else 'neutral' }}">{{ analysis.severity }}</span>{% endif %}</div><div class="panel-body">
+{% if report %}<p class="report-summary">{{ report.summary }}</p>{% if report.truncated %}<p class="notice">วิเคราะห์ไม่ครบ — อาจถึงเพดานเวลา/รอบ หรือเกิดข้อผิดพลาด โปรดตรวจสอบสรุปและหลักฐานก่อนดำเนินการ</p>{% endif %}
+{% elif analysis %}<p class="report-summary">{{ analysis.root_cause }}</p>{% else %}<div class="empty-state compact-empty"><h3>{{ 'ข้ามการวิเคราะห์ในช่วง Watchtower update' if incident.is_watchtower_update else 'ยังไม่มีผลวิเคราะห์ที่บันทึก' }}</h3><p>ตรวจสอบอีกครั้งภายหลัง หรือดูสถานะบอทใน Telegram</p></div>{% endif %}
+{% if report and report.machine_status %}<div class="machine-status"><span class="eyebrow">MACHINE CONTEXT</span><p>{{ report.machine_status }}</p></div>{% endif %}
+</div></section>
+{% if report and report.evidence %}<section class="panel"><div class="panel-heading"><h2>หลักฐานที่พบ</h2><span class="count">{{ report.evidence | length }}</span></div><div class="evidence-list">{% for e in report.evidence %}<div class="evidence"><span>{{ e.factor }}</span><strong>{{ e.value }}</strong></div>{% endfor %}</div></section>{% endif %}
+{% if report and report.fix_options %}<section><div class="section-heading"><h2>แนวทางแก้ไข</h2><span class="muted small">ข้อเสนอ · ยังไม่ได้ดำเนินการ</span></div>{% for option in report.fix_options %}<article class="panel fix-option {{ 'recommended' if option.recommended }}"><div class="fix-heading"><span class="step-number">{{ '%02d' | format(loop.index) }}</span><h3>{{ option.title }}</h3>{% if option.recommended %}<span class="badge info">แนะนำ</span>{% endif %}</div><p>{{ option.detail }}</p>{% if option.commands %}<pre><code>{{ option.commands | join('\n') }}</code></pre>{% endif %}</article>{% endfor %}</section>
+{% elif analysis and analysis.suggested_fix %}<section class="panel"><div class="panel-heading"><h2>แนวทางแก้ไข</h2></div><div class="panel-body"><p>{{ analysis.suggested_fix }}</p>{% if fix_commands %}<pre><code>{{ fix_commands | join('\n') }}</code></pre>{% endif %}</div></section>{% endif %}
+<section class="panel"><div class="panel-heading"><h2>Diagnostic logs</h2><span class="count">{{ diagnostics | length }}</span></div>{% for diag in diagnostics %}<details class="log-entry"><summary><span class="log-index">{{ '%02d' | format(loop.index) }}</span><code>{{ diag.step_name }}</code><span class="expand-icon" aria-hidden="true">+</span></summary><pre><code>{{ diag.raw_output or '(ไม่มี output)' }}</code></pre><small class="muted">{{ diag.created_at }}</small></details>{% else %}<p class="panel-body muted">ยังไม่มี diagnostic logs</p>{% endfor %}</section>
+{% if actions %}<section class="panel"><div class="panel-heading"><h2>ประวัติการดำเนินการ</h2><span class="count">{{ actions | length }}</span></div>{% for action in actions %}<details class="log-entry"><summary><span class="badge {{ 'info' if action.success else 'critical' }}">{{ 'สำเร็จ' if action.success else 'ไม่สำเร็จ' }}</span><strong>{{ action.action_type }}</strong><span class="muted small">{{ action.executed_at }}</span></summary><pre><code>{{ action.commands_executed or '' }}
+{{ action.result_output or '(ไม่มี output)' }}</code></pre></details>{% endfor %}</section>{% endif %}
+</div><aside class="detail-aside"><section class="panel info-panel"><span class="eyebrow">INCIDENT CONTEXT</span><dl class="context-list"><dt>Incident</dt><dd>#{{ incident.id }}</dd><dt>Container</dt><dd><code>{{ incident.container_name or '—' }}</code></dd><dt>Watchtower update</dt><dd>{{ 'ใช่ · ข้ามแจ้งเตือน' if incident.is_watchtower_update else 'ไม่ใช่' }}</dd><dt>โมเดลที่ใช้วิเคราะห์</dt><dd><code>{{ report.model_used if report and report.model_used else 'ไม่ได้บันทึกไว้' }}</code></dd><dt>Tokens ที่บันทึก</dt><dd>{{ analysis.llm_tokens_used if analysis and analysis.llm_tokens_used is not none else '—' }}</dd></dl></section>
+{% if incident.alert_message %}<section class="panel info-panel"><span class="eyebrow">ORIGINAL ALERT</span><p class="alert-message">{{ incident.alert_message }}</p></section>{% endif %}
+{% if report and report.findings %}<section class="panel info-panel"><span class="eyebrow">FINDINGS</span><ol class="findings">{% for finding in report.findings %}<li>{{ finding }}</li>{% endfor %}</ol></section>{% endif %}<p class="muted small">DOWN คือสถานะเมื่อเกิดเหตุ ระบบยังไม่บันทึก recovery เพื่อยืนยันสถานะปัจจุบัน</p></aside></div>
+{% endblock %}

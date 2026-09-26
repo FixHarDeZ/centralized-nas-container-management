@@ -1,6 +1,7 @@
 # ops-bot/app/llm_client.py
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from dataclasses import dataclass, field
@@ -9,10 +10,12 @@ from typing import Awaitable, Callable, Optional
 from openai import AsyncOpenAI
 
 from app.config import get_config
+from app.model_settings import model_settings
 
 logger = logging.getLogger(__name__)
 
 MAX_ITERS = 10
+DIAGNOSIS_TIMEOUT_SECONDS = 600
 
 SYSTEM_PROMPT = """คุณเป็น AI ops engineer เชี่ยวชาญ Docker diagnostics บน Synology NAS
 
@@ -123,6 +126,7 @@ class AgenticReport:
     tokens_used: int
     findings: list = field(default_factory=list)
     truncated: bool = False
+    model_used: str = ""
 
 
 def parse_report(args: dict, *, tokens_used: int, findings: list, truncated: bool) -> AgenticReport:
@@ -154,8 +158,8 @@ class LLMClient:
         self.client = AsyncOpenAI(
             api_key=cfg.mimo_api_key,
             base_url=cfg.mimo_base_url,
+            max_retries=0,
         )
-        self.model = cfg.mimo_model
 
     async def diagnose_agentic(
         self,
@@ -166,6 +170,29 @@ class LLMClient:
         execute: Callable[[str], Awaitable[str]],
         narrate: Callable[[str], Awaitable[None]],
     ) -> AgenticReport:
+        model = (await model_settings())["model"]
+        progress = {"tokens": 0, "findings": []}
+        try:
+            report = await asyncio.wait_for(
+                self._diagnose_agentic(service_name, container_name, alert_message,
+                                       model=model, execute=execute, narrate=narrate, progress=progress),
+                timeout=DIAGNOSIS_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError:
+            report = AgenticReport(
+                summary="วิเคราะห์ไม่ครบ — เกินเวลาที่กำหนด กรุณาลองใหม่",
+                severity="warning", evidence=[], machine_status="",
+                fix_options=[], tokens_used=progress["tokens"],
+                findings=progress["findings"], truncated=True,
+            )
+        report.model_used = model
+        return report
+
+    async def _diagnose_agentic(
+        self, service_name: str, container_name: str, alert_message: str, *,
+        model: str, execute: Callable[[str], Awaitable[str]],
+        narrate: Callable[[str], Awaitable[None]], progress: dict,
+    ) -> AgenticReport:
         messages = [
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": (
@@ -174,13 +201,13 @@ class LLMClient:
             )},
         ]
         tokens = 0
-        findings: list = []
+        findings: list = progress["findings"]
 
         for _ in range(MAX_ITERS):
             try:
                 resp = await self.client.chat.completions.create(
-                    model=self.model, messages=messages, tools=TOOLS,
-                    tool_choice="auto", temperature=0.1, max_tokens=1200,
+                    model=model, messages=messages, tools=TOOLS,
+                    tool_choice="auto", temperature=0.1, reasoning_effort="low",
                 )
             except Exception as e:
                 logger.error(f"diagnose_agentic mimo call failed: {e}")
@@ -191,6 +218,7 @@ class LLMClient:
                 )
 
             tokens += resp.usage.total_tokens if resp.usage else 0
+            progress["tokens"] = tokens
             msg = resp.choices[0].message
             tool_calls = msg.tool_calls or []
 

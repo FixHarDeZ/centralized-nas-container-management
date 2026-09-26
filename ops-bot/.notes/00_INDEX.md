@@ -36,7 +36,7 @@ Python 3.12, FastAPI, Paramiko, OpenAI SDK, python-telegram-bot, aiosqlite, Jinj
 - `execute_fix(incident_id, action_type) -> tuple[bool, str]`
 - `POST /webhook/uptime-kuma` — Uptime Kuma webhook endpoint
 - `start_telegram_polling()` / `stop_telegram_polling()` — Telegram command polling lifecycle
-- `GET /dashboard` — incident list (last 50)
+- `GET /dashboard` — searchable incident history, severity filters, 25/page, historical summary cards
 - `GET /dashboard/incident/{id}` — incident detail with diagnostics, analysis, actions
 
 ## Implementation Status
@@ -116,3 +116,14 @@ Via `secrets.manifest.yaml`:
   - `logs:{id}` → `/logs` handler
   - `pr:{id}:{idx}` → calls `create_fix_pr(incident_id, title, file_changes)` and sends result URL to Telegram
 - DB schema: `actions` table tracks `action_type='open_pr'` with `result_output` = PR URL or error
+
+## Current work — 2026-09-26
+Implemented locally on `codex/ops-bot-dashboard` (uncommitted; NOT deployed):
+- Responsive charcoal/teal shared UI (`base.html`, local `static/dashboard.css`/`.js`), overview/history/detail/settings. Literal service/container search, latest-analysis severity filter, 25/page; historical summary totals are NOT live outage counts. Recovery remains Telegram-only.
+- `app/model_settings.py`: SQLite `settings(key,value)` stores `mimo_model` override; fallback/reset to env default. Schema initialization adds table to existing installations. `model_settings()` returns model/default/source; `save_model(str | None)` validates and saves/resets.
+- `GET /dashboard/settings`, JSON `POST /dashboard/settings` (same-host Origin + Content-Type application/json + X-Ops-Settings:1), `GET /dashboard/api/models` (explicit provider discovery, 10s timeout, sanitized errors). Existing nginx basic auth covers these routes; app port remains internal. No CORS allowlist.
+- Each `diagnose_agentic` snapshots model from DB once; report.model_used persists in report_json. Entire agent/tool loop bounded by 600s asyncio.wait_for; cap stays 10; SDK retries off, reasoning_effort=low, no max_tokens. Timeout preserves already-received tokens/findings.
+- Old reports retain fallback rendering; absent model shown as unknown; invalid JSON handled; missing incident returns 404.
+- Verified 60 tests, independent review and browser save/reload/reset/error flow plus desktop 1440px/mobile 390px checks. No live provider analysis or NAS deployment tested. Provider/account must support selected ID + function calling + low reasoning; saving only validates syntax.
+- Follow-ups prioritized in README: persistent recovery/lifecycle, durable job state/restart recovery, re-analysis/version comparison, recurring incident grouping.
+ See daily_log.md for findings.

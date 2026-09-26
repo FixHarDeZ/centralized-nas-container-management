@@ -1,50 +1,26 @@
-<!DOCTYPE html>
-<html lang="th">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ops-bot Dashboard</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #1a1a2e; color: #eee; padding: 20px; }
-        h1 { color: #00d4ff; margin-bottom: 20px; }
-        table { width: 100%; border-collapse: collapse; background: #16213e; border-radius: 8px; overflow: hidden; }
-        th { background: #0f3460; padding: 12px; text-align: left; }
-        td { padding: 10px 12px; border-bottom: 1px solid #1a1a2e; }
-        tr:hover { background: #1a3a5c; }
-        .badge { padding: 2px 8px; border-radius: 4px; font-size: 0.85em; }
-        .badge-down { background: #e74c3c; color: white; }
-        .badge-up { background: #27ae60; color: white; }
-        .badge-watchtower { background: #f39c12; color: white; }
-        a { color: #00d4ff; text-decoration: none; }
-        a:hover { text-decoration: underline; }
-    </style>
-</head>
-<body>
-    <h1>ops-bot Dashboard</h1>
-    <table>
-        <thead>
-            <tr>
-                <th>ID</th>
-                <th>Service</th>
-                <th>Container</th>
-                <th>Status</th>
-                <th>Watchtower</th>
-                <th>Time</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for inc in incidents %}
-            <tr>
-                <td><a href="/dashboard/incident/{{ inc[0] }}">#{{ inc[0] }}</a></td>
-                <td>{{ inc[1] }}</td>
-                <td>{{ inc[2] or '-' }}</td>
-                <td><span class="badge badge-{{ inc[3] }}">{{ inc[3] }}</span></td>
-                <td>{% if inc[4] %}<span class="badge badge-watchtower">watchtower</span>{% else %}-{% endif %}</td>
-                <td>{{ inc[5] }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</body>
-</html>
+{% extends 'base.html' %}
+{% block content %}
+<section class="page-heading"><div><p class="eyebrow">YOUR OPERATIONS, IN FOCUS</p><h1>ภาพรวมเหตุการณ์<span class="accent">.</span></h1><p class="subtitle">ติดตามสัญญาณ เข้าใจสาเหตุ และวางแผนแก้ไขจากจุดเดียว</p></div><a class="button secondary" href="/dashboard">↻ รีเฟรชข้อมูล</a></section>
+<section class="metrics" aria-label="สถิติประวัติเหตุการณ์ทั้งหมด">
+  <article class="metric"><div class="metric-label">เหตุการณ์ทั้งหมด <span>↗</span></div><strong>{{ stats.total }}</strong><small>ประวัติที่บันทึกในระบบ</small></article>
+  <article class="metric"><div class="metric-label">ใน 24 ชั่วโมง <span>◷</span></div><strong>{{ stats.recent }}</strong><small>เหตุการณ์ที่เข้ามาล่าสุด</small></article>
+  <article class="metric"><div class="metric-label">รายงาน Critical <span class="text-red">!</span></div><strong class="text-red">{{ stats.critical }}</strong><small>ความรุนแรงจากผลวิเคราะห์ล่าสุด</small></article>
+  <article class="metric"><div class="metric-label">Watchtower <span class="accent">⟳</span></div><strong>{{ stats.suppressed }}</strong><small>ข้ามการแจ้งเตือนช่วงอัปเดต</small></article>
+</section>
+<section class="model-strip"><div class="model-icon" aria-hidden="true">✧</div><div><span class="eyebrow">ANALYSIS ENGINE</span><strong>{{ settings.model }}</strong></div><span class="model-description">โมเดลสำหรับการวิเคราะห์ครั้งถัดไป</span><a href="/dashboard/settings" class="text-link">ตั้งค่าโมเดล <span aria-hidden="true">↗</span></a></section>
+<section class="panel history" aria-labelledby="history-title">
+  <div class="panel-heading"><div><h2 id="history-title">Incident history <span class="count">{{ total }}</span></h2><p>ประวัติเหตุการณ์ ไม่ใช่สถานะบริการแบบสด</p></div><span class="muted small">ล่าสุดก่อน</span></div>
+  <form class="filters" method="get" action="/dashboard">
+    <div class="search-field"><label class="sr-only" for="search">ค้นหาบริการหรือ container</label><span aria-hidden="true">⌕</span><input id="search" name="q" value="{{ q }}" maxlength="100" placeholder="ค้นหาบริการหรือ container…" type="search"></div>
+    <div><label class="sr-only" for="severity">ความรุนแรง</label><select id="severity" name="severity"><option value="">ทุกความรุนแรง</option value="critical" {{ 'selected' if severity == 'critical' }}>Critical</option><option value="warning" {{ 'selected' if severity == 'warning' }}>Warning</option><option value="info" {{ 'selected' if severity == 'info' }}>Info</option></select></div>
+    <button class="button secondary" type="submit">กรองข้อมูล</button>{% if q or severity %}<a class="clear-link" href="/dashboard">ล้างตัวกรอง</a>{% endif %}
+  </form>
+  {% if incidents %}
+  <div class="table-wrap"><table class="incident-table"><thead><tr><th>INCIDENT / SERVICE</th><th>ผลวิเคราะห์</th><th>เหตุการณ์</th><th>บันทึกเมื่อ</th><th><span class="sr-only">รายละเอียด</span></th></tr></thead><tbody>
+    {% for inc in incidents %}<tr><td><div class="service-cell"><span class="service-icon" aria-hidden="true">{{ inc.service_name[:1] | upper }}</span><div><a class="service-link" href="/dashboard/incident/{{ inc.id }}">{{ inc.service_name }}</a><small>#{{ inc.id }} <span class="slash">/</span> {{ inc.container_name or 'ไม่ระบุ container' }}</small></div></div></td><td>{% if inc.severity %}<span class="badge {{ inc.severity if inc.severity in ['critical','warning','info'] else 'neutral' }}">{{ inc.severity }}</span><p class="summary-snippet">{{ inc.root_cause or 'ไม่มีข้อความสรุป' }}</p>{% elif inc.is_watchtower_update %}<span class="badge neutral">ข้ามการวิเคราะห์</span>{% else %}<span class="badge neutral">ยังไม่มีรายงาน</span>{% endif %}</td><td><span class="badge {{ 'warning' if inc.is_watchtower_update else 'neutral' }}">{{ 'Watchtower' if inc.is_watchtower_update else inc.status | upper }}</span></td><td class="time-cell">{{ inc.created_at }}</td><td><a class="row-arrow" aria-label="ดู incident {{ inc.id }}" href="/dashboard/incident/{{ inc.id }}">↗</a></td></tr>{% endfor %}
+  </tbody></table></div>
+  <div class="pagination"><span>{{ total }} รายการ <span class="slash">·</span> หน้า {{ page }} / {{ pages }}</span><div>{% if page > 1 %}<a class="button secondary compact" href="{{ previous_url }}">← ก่อนหน้า</a>{% endif %}{% if page < pages %}<a class="button secondary compact" href="{{ next_url }}">ถัดไป →</a>{% endif %}</div></div>
+  {% else %}<div class="empty-state"><span aria-hidden="true">◎</span><h3>{{ 'ไม่พบเหตุการณ์ที่ตรงกับตัวกรอง' if q or severity else 'ยังไม่มีเหตุการณ์' }}</h3><p>{{ 'ลองเปลี่ยนคำค้นหรือความรุนแรงที่เลือก' if q or severity else 'เมื่อ Uptime Kuma ส่งการแจ้งเตือน ประวัติและผลวิเคราะห์จะแสดงที่นี่' }}</p></div>{% endif %}
+</section>
+<div class="bottom-note"><span aria-hidden="true">ⓘ</span> การวินิจฉัยตรวจสอบแบบ read-only · ข้อเสนอแก้ไขยังต้องได้รับการอนุมัติ</div>
+{% endblock %}

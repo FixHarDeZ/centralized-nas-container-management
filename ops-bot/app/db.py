@@ -9,6 +9,11 @@ from app.config import get_config
 _db: Optional[aiosqlite.Connection] = None
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS incidents (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     kuma_event_id TEXT,

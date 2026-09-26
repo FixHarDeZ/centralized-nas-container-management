@@ -1,6 +1,9 @@
 from contextlib import asynccontextmanager
 
+from pathlib import Path
+
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from app.db import init_db, close_db
 from app.webhook import router as webhook_router
@@ -20,3 +23,5 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="ops-bot", lifespan=lifespan)
 app.include_router(webhook_router)
 app.include_router(dashboard_router)
+
+app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")

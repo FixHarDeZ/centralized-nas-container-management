@@ -1,6 +1,6 @@
 # ops-bot
 
-AI-powered incident response bot. Receives alerts from Uptime Kuma, auto-diagnoses via SSH, analyzes with LLM (mimo-v2.5-pro), and notifies Telegram with fix suggestions.
+AI-powered incident response bot. Receives alerts from Uptime Kuma, auto-diagnoses via SSH, analyzes with a selectable MiMo model (default: mimo-v2.5-pro), and notifies Telegram with fix suggestions.
 
 ## Services
 
@@ -12,12 +12,13 @@ AI-powered incident response bot. Receives alerts from Uptime Kuma, auto-diagnos
 ## Features
 
 - **Auto-diagnose**: SSH into NAS host, run container/system diagnostics (read-only)
-- **LLM Analysis**: mimo-v2.5-pro analyzes root cause (Thai language)
+- **LLM Analysis**: selectable MiMo model analyzes root cause in Thai; model recorded per report
 - **Telegram**: InlineKeyboard for log inspection
 - **Commands**: `/status`, `/diagnose <service>`, `/logs <service> [lines]`
 - **Watchtower**: Grace period 5 min after image updates (skip alerts during update)
 - **Debounce**: 15 min cooldown between repeated alerts for the same service
-- **Dashboard**: Web UI at `/dashboard` for incident history
+- **Dashboard**: responsive overview, search by service/container, severity filters, and paginated incident history
+- **AI Settings**: `/dashboard/settings` changes the analysis model without a restart; persistent override with reset to environment default
 
 ## Setup
 
@@ -53,7 +54,7 @@ Read-only safety is enforced app-side by the command whitelist in
 
 ### 3. LLM
 
-Uses mimo-v2.5-pro via Xiaomi subscription:
+Uses Xiaomi MiMo through the configured OpenAI-compatible endpoint (default model: `mimo-v2.5-pro`):
 
 - `stacks.ops_bot.mimo_api_key` — API key
 - `stacks.ops_bot.mimo_base_url` — Base URL
@@ -210,3 +211,65 @@ Add these via `make edit-vault`, then `make secrets && ./scripts/deploy.sh -s op
   sidecar deliberately does **not** — it runs `nginx:alpine` and should keep
   receiving security patches
 - Fix-as-PR uses GitHub fine-grained PAT with minimal scopes (this repo only)
+
+## Dashboard and model settings
+
+Open `/dashboard` through the existing nginx basic-auth proxy. Overview cards
+summarize **historical incidents**, not live outages: recovery currently only
+sends a Telegram notification and does not update incident status in SQLite.
+Search matches service/container text literally; severity filtering uses the
+latest analysis, with 25 incidents per page. Details show evidence, suggested
+fixes, model provenance, token usage, collapsible diagnostic logs and actions.
+Older reports without model provenance display “ไม่ได้บันทึกไว้”.
+
+In **AI Settings** (`/dashboard/settings`):
+
+1. Select a model, or enter its exact Model ID. **ดึงรายชื่อโมเดล** calls the
+   configured provider's `/models` endpoint with a 10-second timeout. Endpoints
+   that do not expose model discovery can still use manual Model IDs.
+2. Click **บันทึกการตั้งค่า**. The override is saved in SQLite `settings`, key
+   `mimo_model`, in the existing data volume. No restart or environment edit.
+3. **คืนค่าเริ่มต้น** deletes the override; `MIMO_MODEL` (or its application
+   default) becomes effective again. Subsequent environment changes only affect
+   the active model when no dashboard override exists.
+
+Saving validates ID syntax, **not provider availability or model capability**.
+Choose a model supported by the configured endpoint/account and compatible with
+function calling and `reasoning_effort=low`. API keys and endpoint configuration
+remain managed via vault/deployment; the dashboard does not expose/edit them.
+
+Each diagnosis snapshots its model once; a settings change never switches models
+mid-run. All resulting reports include `model_used` in `analyses.report_json`.
+The agent loop has a 600-second overall `asyncio.wait_for` deadline and a 10-round
+cap, disables implicit SDK retries, uses `reasoning_effort=low`, and does not send
+`max_tokens`. Timeout reports retain already-received token counts and findings
+(tokens from an unfinished provider response are unavailable).
+
+Settings writes are `POST /dashboard/settings` with JSON `{ "model": "..." }`
+(or `null` to reset), a same-host HTTP(S) `Origin`, and `X-Ops-Settings: 1`.
+Browser cross-origin requests cannot pass the custom-header preflight; no CORS
+allowlist is configured. These checks supplement **nginx basic auth**, not replace
+it. Keep the app port internal. Model discovery is `GET /dashboard/api/models`.
+
+## Suggested next improvements
+
+1. **Persist incident lifecycle:** record recovery timestamps and distinguish
+   open/resolved incidents before adding live outage counts or time-to-recovery.
+2. **Durable diagnosis state:** queued/running/completed/failed, start/end times,
+   and restart recovery. Current background tasks do not survive container restarts.
+3. **Re-analyze from dashboard:** explicit action with duplicate-run protection,
+   immutable analysis versions and comparison of findings/models/tokens.
+4. **Group recurring incidents:** persistent debounce and recurring-cause history
+   by service; prioritize services that repeatedly fail instead of expanding alerts.
+
+## Verification
+
+```bash
+cd ops-bot
+.venv/bin/python -m pytest tests -q
+```
+
+Tests isolate rendered `.env`, use temporary SQLite databases and mock external
+providers/SSH/Telegram. Dashboard model save/reset, validation, cross-origin
+rejection, model discovery failure, history pagination, legacy reports, per-run
+model snapshot and overall deadline cancellation have regression coverage.

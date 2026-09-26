@@ -81,6 +81,7 @@ async def handle_incident(
                 ],
                 "findings": report.findings,
                 "truncated": report.truncated,
+                "model_used": report.model_used,
             }, ensure_ascii=False),
             report.tokens_used,
         ),
