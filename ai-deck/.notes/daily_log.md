@@ -674,3 +674,8 @@ User requested commit + push. Delivered AI Deck rename/features/quota fixes and 
 - Push `7e80eea..588f66b` ขึ้น origin/main แล้ว (d271445, de1208a, f758b65, 588f66b). NAS deploy ที่ f758b65 (runtime ล่าสุด; 588f66b เป็น notes อย่างเดียว).
 - Verified: 225 tests, live turn `pong`, `/chat/options?provider=mimo` 4 model + effort, wire effort ตรง.
 - ค้าง: ยังไม่ได้ลองหน้าเว็บบนมือถือจริง / ยังไม่ได้ส่งเทิร์นจริงด้วย v2.6 ผ่านหน้าแชท; session ทดสอบ 4-5 อันใน `/work` history ของ MiMo ลบได้.
+
+## 2026-09-26 — Claude quota unavailable + MiMo quota chip
+- Claude "Quota unavailable": saved OAuth access token (~8h) หมดอายุ (refresh ล่าสุด 25/09 09:24) → `get_usage` ผ่าน control protocol คืนค่าว่าง ไม่ refresh เอง. แก้: `claude_metadata.login_expired()` + `refresh_login()` (`claude auth status`) แล้ว read ซ้ำ 1 ครั้ง. **ยังไม่พิสูจน์** ว่า `auth status` เป็นตัว refresh (เช้านี้ token ถูก refresh ตอนผมรัน read+auth status ติดกัน แยกไม่ออก) — ไม่ทดสอบด้วย token หมดอายุจำลองเพราะ refresh จากสำเนาอาจ rotate refresh token ของตัวจริง. ต้องดูหลังเครื่องว่างข้ามคืน.
+- MiMo quota: Token Plan key (`token-plan-sgp`) ไม่มี usage endpoint (probe 404 หมด, ไม่มี rate-limit header); ของจริงอยู่ที่ console `platform.xiaomimimo.com/api/v1/tokenPlan/usage` ต้องใช้ cookie `api-platform_serviceToken`+`userId` อายุ ~24h (ผู้ใช้เลือกไม่เอา). ทำ chip แบบนับเอง: `mimo_backend.tokens_since()` รวม `tokens.total` ของ step-finish (providerID mimo) เดือนปฏิทินนี้ → `mo 357k ↻4d`, % เทียบ `MIMO_MONTHLY_TOKEN_LIMIT` default 4.1B (ตัวเลขจาก OmniRoute ไม่ใช่ของ Xiaomi). ไม่นับ `ask`/stack อื่น/session ที่ลบ.
+- Tests 229 passed; demo screenshot chip ok. Deploy แล้ว live: mimo used 356,977, claude 5h 27% status ok.
