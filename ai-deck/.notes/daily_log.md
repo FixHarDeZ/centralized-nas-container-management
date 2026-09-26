@@ -669,3 +669,8 @@ User requested commit + push. Delivered AI Deck rename/features/quota fixes and 
 - เมนู model อ่านจาก `mimocode.jsonc` ตรงๆ (`mimo_backend.models()`, ไฟล์อยู่ข้าง module ใน `/opt/ai-deck/`) — เพิ่ม model ในไฟล์นั้นที่เดียว. Effort = variant ของ MiMoCode `low/medium/high` → `mimo run --variant`; Default ไม่ส่ง variant = `low` ตาม config.
 - ยืนยันบน wire ด้วย echo server + config ชั่วคราว: Default→`reasoning_effort: low`, `--variant high`→`high`, `medium`→`medium`.
 - Tests 225 passed. Commit แล้ว deploy แล้ว; `/chat/options?provider=mimo` live โชว์ 4 model พร้อม effort. ยังไม่ push.
+
+## 2026-09-26 — ปิดงาน (MiMo chat)
+- Push `7e80eea..588f66b` ขึ้น origin/main แล้ว (d271445, de1208a, f758b65, 588f66b). NAS deploy ที่ f758b65 (runtime ล่าสุด; 588f66b เป็น notes อย่างเดียว).
+- Verified: 225 tests, live turn `pong`, `/chat/options?provider=mimo` 4 model + effort, wire effort ตรง.
+- ค้าง: ยังไม่ได้ลองหน้าเว็บบนมือถือจริง / ยังไม่ได้ส่งเทิร์นจริงด้วย v2.6 ผ่านหน้าแชท; session ทดสอบ 4-5 อันใน `/work` history ของ MiMo ลบได้.
