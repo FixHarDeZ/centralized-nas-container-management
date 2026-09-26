@@ -663,3 +663,9 @@ User requested commit + push. Delivered AI Deck rename/features/quota fixes and 
 - Tests: `tests/test_mimo.py` 9 อัน, ทั้งชุด 223 passed. Dockerfile เพิ่ม COPY `mimo_backend.py`.
 - Commit `d271445` (ยังไม่ push). Deploy `deploy.sh -s ai-deck -y` แล้ว; live turn ผ่าน chat.py ใน container ตอบ `pong` status done, sessions list ใช้ได้. ยังไม่ได้เปิดดูหน้าเว็บบนมือถือจริง.
 - หมายเหตุ: probe สร้าง session ทดสอบ 3-4 อันใน `/work` (ขึ้นใน history ของ MiMo).
+
+## 2026-09-26 — MiMo chat: model list เต็ม + effort
+- Endpoint `/models` มี chat model ใหม่ `mimo-v2.6-pro`, `mimo-v2.6-flash` (ที่เหลือเป็น asr/tts ไม่ใช่ chat). curl ทดสอบ tool_calls + reasoning_effort low/high ผ่านทั้งคู่ → เพิ่มใน `mimocode.jsonc`.
+- เมนู model อ่านจาก `mimocode.jsonc` ตรงๆ (`mimo_backend.models()`, ไฟล์อยู่ข้าง module ใน `/opt/ai-deck/`) — เพิ่ม model ในไฟล์นั้นที่เดียว. Effort = variant ของ MiMoCode `low/medium/high` → `mimo run --variant`; Default ไม่ส่ง variant = `low` ตาม config.
+- ยืนยันบน wire ด้วย echo server + config ชั่วคราว: Default→`reasoning_effort: low`, `--variant high`→`high`, `medium`→`medium`.
+- Tests 225 passed. Commit แล้ว deploy แล้ว; `/chat/options?provider=mimo` live โชว์ 4 model พร้อม effort. ยังไม่ push.

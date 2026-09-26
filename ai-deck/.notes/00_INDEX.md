@@ -123,7 +123,7 @@ deployed. Current UI screenshots are in `screenshots/ai-desk-*.png`.
 - Claude/Codex selector, ChatGPT device sign-in, revised light/dark workspace UI.
 - Chat agents keyed by authenticated user + provider; files/accounts/history lists still shared.
 - `codex_backend.py`: Codex exec JSONL, resume/history, errors and process-group cancellation.
-- `mimo_backend.py` (2026-09-26, commit `d271445`, deployed): MiMoCode in Chat. `mimo run --format json -s <ses> -- <text>` per turn, stdin DEVNULL; model error = `error` event with exit 0; history from `~/.local/share/mimocode/mimocode.db` read-only filtered by directory/top-level/non-imported-Claude; `ses_` id regex (shell-typed resume `mimo -s`); models mirror `mimocode.jsonc`, no effort, no quota chip; hidden in coding workspaces (no mimo key there).
+- `mimo_backend.py` (2026-09-26, commit `d271445`, deployed): MiMoCode in Chat. `mimo run --format json -s <ses> -- <text>` per turn, stdin DEVNULL; model error = `error` event with exit 0; history from `~/.local/share/mimocode/mimocode.db` read-only filtered by directory/top-level/non-imported-Claude; `ses_` id regex (shell-typed resume `mimo -s`); model menu read from `mimocode.jsonc` (v2.5-pro/v2.5/v2.6-pro/v2.6-flash), effort low/medium/high → `--variant` (wire-verified; Default = pinned low), no quota chip; hidden in coding workspaces (no mimo key there).
 - Codex CLI 0.155.0 pinned in Dockerfile and supported by `make desk-latest`; Compose amd64 explicit.
 - Startup links common skills into `~/.agents/skills` and generates `/work/AGENTS.md`.
 - Unique upload temp files; incomplete uploads do not replace originals. Downloads limited to in/out, no symlinks.
