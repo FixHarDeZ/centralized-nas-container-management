@@ -191,3 +191,34 @@ def test_effort_becomes_variant(fake_mimo):
     agent.send("hi", model="", effort="")
     events_until(channel, "turn")
     assert "--variant" not in json.loads((fake_mimo / "received.json").read_text())["args"]
+
+
+def test_month_tokens_count_mimo_steps_only(tmp_path, monkeypatch):
+    path = tmp_path / "mimocode.db"
+    db = sqlite3.connect(path)
+    db.executescript("""
+      CREATE TABLE message (id text, data text);
+      CREATE TABLE part (id text, message_id text, time_created integer, data text);
+    """)
+    db.execute("INSERT INTO message VALUES ('m1', ?)", (json.dumps({"providerID": "mimo"}),))
+    db.execute("INSERT INTO message VALUES ('m2', ?)", (json.dumps({"providerID": "anthropic"}),))
+    step = lambda total: json.dumps({"type": "step-finish", "tokens": {"total": total}})
+    db.executemany("INSERT INTO part VALUES (?,?,?,?)", [
+        ("a", "m1", 2000, step(29167)), ("b", "m1", 3000, step(29202)),
+        ("c", "m1", 500, step(999)),                        # before the month
+        ("d", "m2", 3000, step(777)),                       # imported Claude
+        ("e", "m1", 3000, json.dumps({"type": "text", "text": "x"}))])
+    db.commit()
+    monkeypatch.setenv("MIMOCODE_DB", str(path))
+    assert mimo_backend.tokens_since(1000) == 29167 + 29202
+
+
+def test_mimo_quota_is_a_labelled_monthly_estimate(monkeypatch):
+    import usage_status
+    monkeypatch.setattr(mimo_backend, "tokens_since", lambda since: 41_000_000)
+    monkeypatch.setenv("MIMO_MONTHLY_TOKEN_LIMIT", "4100000000")
+    data = usage_status.mimo_status()
+    win = data["five_hour"]
+    assert data["estimate"] and win["label"] == "mo" and win["used"] == 41_000_000
+    assert round(win["pct"], 6) == 1.0
+    assert win["resets_at"] > win["observed_at"]

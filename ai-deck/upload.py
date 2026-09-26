@@ -397,8 +397,7 @@ class Handler(BaseHTTPRequestHandler):
         elif path == "/api/status":
             force = parse_qs(urlparse(self.path).query).get("refresh") == ["1"]
             if provider == "mimo":
-                # Pay-per-token API key: there is no quota window to show.
-                self._json({"provider": "mimo", "status": "none"})
+                self._json(usage_status.mimo_status())
             else:
                 self._json(usage_status.codex_status(force) if provider == "codex"
                            else usage_status.claude_status(status(), force))

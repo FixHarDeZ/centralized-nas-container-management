@@ -60,6 +60,20 @@ _OWN = """s.parent_id IS NULL AND s.time_archived IS NULL AND s.directory = ?
                   AND json_extract(m.data, '$.model.providerID') = 'anthropic')"""
 
 
+def tokens_since(since_ms):
+    """Tokens MiMoCode logged since `since_ms`, from every chat and terminal session.
+
+    `tokens.total` of each step already includes cache reads. Only mimo
+    provider steps (imported Claude transcripts carry their own). Not seen:
+    `ask`, other stacks sharing the key, and sessions deleted since.
+    """
+    rows = _query("""SELECT SUM(json_extract(p.data, '$.tokens.total')) FROM part p
+                     JOIN message m ON m.id = p.message_id
+                     WHERE p.time_created >= ? AND json_extract(p.data, '$.type') = 'step-finish'
+                       AND json_extract(m.data, '$.providerID') = 'mimo'""", (since_ms,))
+    return int(rows[0][0] or 0) if rows else 0
+
+
 def session_exists(session_id, cwd):
     if not SESSION_ID.fullmatch(session_id or ""):
         return False

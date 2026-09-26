@@ -733,6 +733,10 @@
     if (h > 0) return h + 'h' + m + 'm';
     return m + 'm';
   }
+  function fmtTokens(n) {
+    return n >= 1e9 ? (n / 1e9).toFixed(1) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M'
+      : n >= 1e3 ? Math.round(n / 1e3) + 'k' : String(n);
+  }
   function quotaAge(win, data) {
     if (typeof win.observed_at === 'number') return Math.max(0, Date.now() / 1000 - win.observed_at);
     return (win.age ?? data.age ?? 0) + Math.max(0, Date.now() / 1000 - (data.received_at || Date.now() / 1000));
@@ -743,6 +747,7 @@
     const minutes = win.window_minutes;
     if (typeof minutes === 'number') label = minutes === 10080 ? 'wk'
       : minutes >= 60 && minutes % 60 === 0 ? (minutes / 60) + 'h' : minutes + 'm';
+    if (win.label) label = win.label;
     row.querySelector('b').textContent = label;
     const pct = Math.round(win.pct);
     const stale = quotaAge(win, data) > STALE_AFTER || (win.resets_at && win.resets_at <= Date.now() / 1000);
@@ -750,16 +755,17 @@
     row.classList.remove('hot', 'full');
     row.classList.toggle('stale', !!stale);
     if (!stale && pctClass(pct)) row.classList.add(pctClass(pct));
-    row.querySelector('.q-pct').textContent = stale ? '—' : pct + '%';
+    row.querySelector('.q-pct').textContent = stale ? '—' : typeof win.used === 'number' ? fmtTokens(win.used) : pct + '%';
     const left = win.resets_at ? fmtReset(win.resets_at - Date.now() / 1000) : '';
     row.querySelector('.q-in').textContent = stale ? 'stale' : left ? '↻' + left : '';
-    return label + ': ' + (stale ? 'stale; last reading ' : '') + pct + '% used'
+    const counted = typeof win.used === 'number'
+      ? ' (' + fmtTokens(win.used) + ' of ' + fmtTokens(win.limit) + ' tokens counted here, estimate)' : '';
+    return label + ': ' + (stale ? 'stale; last reading ' : '') + pct + '% used' + counted
       + (left && !stale ? ' · resets in ' + left : '');
   }
 
   function renderQuota(data) {
     if (data && data.provider && data.provider !== provider) return;
-    if (data && data.status === 'none') { quota.hidden = true; return; }   // API key: no quota
     data = data || {};
     if (!data.received_at) data.received_at = Date.now() / 1000;
     lastQuota = data;
@@ -784,7 +790,8 @@
   async function loadQuota(force = false) {
     if (quotaPending) return;
     if (DEMO) {
-      if (provider === 'mimo') return renderQuota({ provider, status: 'none' });
+      if (provider === 'mimo') return renderQuota({ provider, estimate: true, five_hour: { pct: 0.3,
+        used: 12300000, limit: 4100000000, label: 'mo', resets_at: Date.now() / 1000 + 400000 } });
       renderQuota({ provider, five_hour: { pct: 72, resets_at: Date.now() / 1000 + 7560 },
         seven_day: { pct: 58, resets_at: Date.now() / 1000 + 22560 }, age: 5 });
       return;

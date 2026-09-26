@@ -150,6 +150,28 @@ def claude_status(terminal, force=False):
     return out
 
 
+# Token Plan quota is readable only from the web console with a ~24h login
+# cookie, so the chip counts locally instead. The limit is the figure another
+# project hardcoded (OmniRoute XIAOMI_MIMO_MONTHLY_TOKEN_LIMIT), not Xiaomi's
+# own; override it with MIMO_MONTHLY_TOKEN_LIMIT.
+MIMO_MONTHLY_LIMIT = 4_100_000_000
+
+
+def mimo_status():
+    import mimo_backend
+    now = datetime.now()
+    start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    reset = start.replace(year=start.year + (start.month == 12), month=start.month % 12 + 1)
+    try:
+        limit = int(os.environ.get('MIMO_MONTHLY_TOKEN_LIMIT') or MIMO_MONTHLY_LIMIT)
+    except ValueError:
+        limit = MIMO_MONTHLY_LIMIT
+    used = mimo_backend.tokens_since(int(start.timestamp() * 1000))
+    return {'provider': 'mimo', 'status': 'ok', 'estimate': True,
+            'five_hour': {'pct': 100 * used / limit, 'used': used, 'limit': limit, 'label': 'mo',
+                          'resets_at': reset.timestamp(), 'observed_at': time.time(), 'age': 0}}
+
+
 def codex_status(force=False):
     global _codex_cache, _codex_attempt, _codex_ok
     with _codex_lock:
