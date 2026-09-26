@@ -29,4 +29,4 @@ alerts, model spending or deployment during verification. Production rollout
 remains separate; this work produces a reviewable local implementation.
 
 Result: 60 stack tests pass; desktop/mobile browser interactions checked; independent
-review completed (HTML pattern escaping corrected). No commit, push or deployment.
+review completed (HTML pattern escaping corrected). Implementation committed as `1950b77`, merged into main and pushed. Deployment is reserved for the user.

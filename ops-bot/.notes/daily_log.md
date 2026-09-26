@@ -208,3 +208,9 @@ data. Also update the Kuma webhook URL to include `?secret=…` if it doesn't.
 - Browser verification on isolated localhost preview with synthetic incidents: desktop 1440px and mobile 390px, no horizontal overflow in overview/settings/detail; save survives reload, reset works, discovery failure is readable, search narrows results, logs expand. Preview has dashboard only, no webhook/SSH/Telegram and no provider credential.
 - README and stack index updated; recommendations: recovery timestamps/lifecycle first, durable diagnosis state, re-analysis/version comparison, recurring incident grouping.
 - Actual delivery status: local code only, no commit/push/PR/NAS deployment. No live MiMo request; selected models still require account/endpoint capability. Preview at http://127.0.0.1:18770/dashboard is temporary synthetic data.
+
+### Merge and push requested by user
+- Found implementation already committed as `1950b77` (`enhance ops-bot`); working tree was clean.
+- Fetched origin; main and origin/main matched before integration. Fast-forward merged `codex/ops-bot-dashboard` into main without conflicts.
+- Re-ran the complete ops-bot suite on main: 60 passed. Pushed implementation to origin/main successfully (`732ac9f..1950b77`).
+- Updated stack index and this log in a follow-up documentation commit. No NAS deployment performed: user explicitly takes ownership of deployment.

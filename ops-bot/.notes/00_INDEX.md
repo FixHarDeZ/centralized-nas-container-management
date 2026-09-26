@@ -118,7 +118,7 @@ Via `secrets.manifest.yaml`:
 - DB schema: `actions` table tracks `action_type='open_pr'` with `result_output` = PR URL or error
 
 ## Current work — 2026-09-26
-Implemented locally on `codex/ops-bot-dashboard` (uncommitted; NOT deployed):
+Implementation commit `1950b77` (`enhance ops-bot`) fast-forward merged into `main` and pushed to `origin/main` on 2026-09-26. NOT deployed; user will deploy:
 - Responsive charcoal/teal shared UI (`base.html`, local `static/dashboard.css`/`.js`), overview/history/detail/settings. Literal service/container search, latest-analysis severity filter, 25/page; historical summary totals are NOT live outage counts. Recovery remains Telegram-only.
 - `app/model_settings.py`: SQLite `settings(key,value)` stores `mimo_model` override; fallback/reset to env default. Schema initialization adds table to existing installations. `model_settings()` returns model/default/source; `save_model(str | None)` validates and saves/resets.
 - `GET /dashboard/settings`, JSON `POST /dashboard/settings` (same-host Origin + Content-Type application/json + X-Ops-Settings:1), `GET /dashboard/api/models` (explicit provider discovery, 10s timeout, sanitized errors). Existing nginx basic auth covers these routes; app port remains internal. No CORS allowlist.
