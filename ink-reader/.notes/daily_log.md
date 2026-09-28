@@ -315,3 +315,23 @@ Added 2 new scraper sources and multi-page listing support.
 - Vault fix: Direct edits to sops-encrypted files broke MAC. Restored from
   git, used sops decrypt → edit → re-encrypt cycle properly. Regenerated
   test-vault via `make sync-test-vault`. CI validation passes.
+
+## 2026-09-28 — Web reader + black–cream redesign
+
+- **Web reader**: tap cover/title on dashboard → `/read/{id}` (`static/reader.html`).
+  Vertical continuous scroll, pages streamed from CBZ via `/read/{id}/{n}`
+  (sorted image members, non-images skipped, `Cache-Control: max-age=7d`),
+  `/api/titles/{id}/pages` gives count. Auto-hiding top/bottom bars, progress
+  bar, resume last page (localStorage `ink-pos-<id>`, reset to 1 at end).
+  Unloaded pages take page 1's aspect ratio so resume scroll doesn't drift.
+  Position persist held off until restore lands (else page-1 observer
+  overwrote saved position — caught in browser check).
+- **Redesign**: black–cream + gold accent, serif titles, underline tabs,
+  SVG icon actions, gold reading-progress strip on cards. Titles/errors now
+  HTML-escaped.
+- Fixed stats "Invalid Date" (run_at pre-formatted server-side).
+- Tests: +3 reader tests; suite 55 pass / 1 fail (`test_scrape_log`,
+  pre-existing — confirmed via stash).
+- Verified locally: seeded library, headless screenshots, Chrome check of
+  resume (page 10 restored at top) + card progress 22%.
+- **Not committed / not deployed yet.**

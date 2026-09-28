@@ -1,6 +1,6 @@
 # ink-reader — Project Index (Memory Blueprint)
 
-> อัปเดตล่าสุด: 2026-07-13 (runtime settings, kept removed, "หน้าเยอะ" filter, dashboard redesign)
+> อัปเดตล่าสุด: 2026-09-28 (web reader `/read/{id}`, black–cream redesign)
 > ใช้ไฟล์นี้เป็น cold-start memory ก่อนเริ่มงานทุกครั้ง
 
 ---
@@ -37,7 +37,7 @@ and set `needs_episode_fetch = True`.
 | Scraper | httpx client + BeautifulSoup4 (multi-source plugins) |
 | Dedup | Pillow (cover average-hash) — title-normalize match + image confirm |
 | Scheduler | APScheduler `BackgroundScheduler` |
-| Frontend | Vanilla JS, no build step, Thai UI (mobile-first dark theme, redesigned 2026-07-13), tabs ทั้งหมด/หน้าเยอะ, `<dialog>` settings modal, client-side pagination (60/page), go-to-top button |
+| Frontend | Vanilla JS, no build step, Thai UI (mobile-first black–cream/gold serif theme, redesigned 2026-09-28; tap cover/title → `/read/{id}` web reader with reading-progress strip on card), tabs ทั้งหมด/หน้าเยอะ, `<dialog>` settings modal, client-side pagination (60/page), go-to-top button |
 | Auth | nginx sidecar basic auth (not in-app) |
 
 ## DB Schema
@@ -106,7 +106,8 @@ ink-reader/
 ├── opds.py              — Atom/OPDS XML feed builder (stdlib xml.etree)
 ├── scheduler.py         — APScheduler jobs: scrape / expiry / backup
 ├── sqlite_backup.py     — verbatim copy of torrentwatch/sqlite_backup.py
-├── static/index.html    — curation dashboard (modern dark UI, vanilla JS)
+├── static/index.html    — curation dashboard (black–cream UI, vanilla JS)
+├── static/reader.html   — mobile web reader: vertical scroll, auto-hide bars, resume via localStorage `ink-pos-<id>`
 ├── Dockerfile
 ├── docker-compose.yml
 ├── nginx/nginx.conf     — basic-auth reverse proxy → ink-reader:8000
@@ -135,10 +136,20 @@ Dashboard/OPDS credentials are nginx-only: vault
 | `/api/titles?status=&source=` | GET | List titles, optional filters |
 | `/api/titles/{id}/delete` | POST | Purge files + tombstone |
 | `/api/settings` | GET/PUT | Runtime settings (`retention_days`, `min_pages`) |
+| `/api/titles/{id}/pages` | GET | Page count for the in-browser reader |
+| `/read/{id}` | GET | Mobile web reader (vertical scroll, resumes last page via localStorage) |
+| `/read/{id}/{n}` | GET | Page `n` (1-based) streamed straight out of the CBZ, cached 7 days |
 | `/api/status` | GET | Stats + per-source counts + last scrape |
 | `/opds` · `/opds/new` · `/opds/long` | GET | OPDS feeds (`long` = pages ≥ `min_pages`) |
 
 ## Gaps / Known Risk
+
+- `db.last_scrape()` returns `run_at` pre-formatted (`"14 Jul 12:59"`) for the
+  homepage widget — dashboard must show it verbatim; `new Date()` on it =
+  "Invalid Date" (fixed 2026-09-28).
+- `tests/test_db.py::test_scrape_log` fails since that pre-format change
+  (asserts raw ISO) — pre-existing, not yet fixed.
+- Reading position is per-browser localStorage, not synced across devices.
 
 - `_scrape_source` dedups slugs across listing pages (2026-07-13) — required
   because `DoujintSource.listing_url()` ignores `page` (site has no listing

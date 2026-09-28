@@ -77,6 +77,9 @@ Dashboard/OPDS auth is **not** an app env var — it lives in the nginx
 | `/api/scrape` | POST | Trigger a scrape cycle now (background thread, all sources) |
 | `/api/status` | GET | Stats + per-source counts/sizes + last scrape result |
 | `/api/settings` | GET/PUT | Runtime settings (`retention_days`, `min_pages`) |
+| `/api/titles/{id}/pages` | GET | Page count for the in-browser reader |
+| `/read/{id}` | GET | Mobile web reader (vertical scroll, resumes last page via localStorage) |
+| `/read/{id}/{n}` | GET | Page `n` (1-based) streamed straight out of the CBZ, cached 7 days |
 | `/files/{id}.cbz` | GET | Download the CBZ |
 | `/covers/{id}.jpg` | GET | Cover thumbnail |
 

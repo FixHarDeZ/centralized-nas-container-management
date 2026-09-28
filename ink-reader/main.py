@@ -1,5 +1,6 @@
 import os
 import threading
+import zipfile
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
@@ -88,6 +89,45 @@ def get_cbz(tid: int):
         raise HTTPException(404)
     return _file_response(db.cbz_path(tid), "application/vnd.comicbook+zip",
                           filename=f"{row['title']}.cbz")
+
+
+IMAGE_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+               ".webp": "image/webp", ".gif": "image/gif", ".avif": "image/avif"}
+
+
+def _cbz_pages(tid: int) -> tuple[str, list[str]]:
+    """Image members of a title's CBZ in reading order. 404 when title or file is gone."""
+    path = db.cbz_path(tid)
+    if not db.get_title(tid) or not os.path.exists(path):
+        raise HTTPException(404)
+    with zipfile.ZipFile(path) as z:
+        names = [n for n in z.namelist()
+                 if os.path.splitext(n)[1].lower() in IMAGE_TYPES]
+    return path, sorted(names)
+
+
+@app.get("/api/titles/{tid}/pages")
+def api_pages(tid: int):
+    _, names = _cbz_pages(tid)
+    return {"id": tid, "title": db.get_title(tid)["title"], "count": len(names)}
+
+
+@app.get("/read/{tid}")
+def reader(tid: int):
+    return FileResponse(os.path.join(STATIC_DIR, "reader.html"))
+
+
+@app.get("/read/{tid}/{n}")
+def read_page(tid: int, n: int):
+    path, names = _cbz_pages(tid)
+    if not 1 <= n <= len(names):
+        raise HTTPException(404)
+    name = names[n - 1]
+    with zipfile.ZipFile(path) as z:
+        data = z.read(name)
+    # CBZ content never changes under a given id; let the phone cache it.
+    return Response(data, media_type=IMAGE_TYPES[os.path.splitext(name)[1].lower()],
+                    headers={"Cache-Control": "private, max-age=604800"})
 
 
 @app.get("/covers/{tid}.jpg")

@@ -102,3 +102,43 @@ def test_status_source_stats(client):
     r = client.get("/api/status")
     sources = r.json()["sources"]
     assert sources["doujinth"]["count"] == 1
+
+
+def _seed_real_cbz():
+    import zipfile
+    tid = db.add_title("r1", "Readable", "", 3, 100, "u")
+    with zipfile.ZipFile(db.cbz_path(tid), "w") as z:
+        # out of order + a non-image entry: reader must sort and skip it
+        z.writestr("002.png", b"p2")
+        z.writestr("001.jpg", b"p1")
+        z.writestr("ComicInfo.xml", b"<x/>")
+        z.writestr("003.webp", b"p3")
+    return tid
+
+
+def test_reader_pages_list(client):
+    tid = _seed_real_cbz()
+    r = client.get(f"/api/titles/{tid}/pages")
+    assert r.status_code == 200
+    assert r.json() == {"id": tid, "title": "Readable", "count": 3}
+    assert client.get("/api/titles/999/pages").status_code == 404
+
+
+def test_reader_page_image(client):
+    tid = _seed_real_cbz()
+    r = client.get(f"/read/{tid}/1")
+    assert r.content == b"p1" and r.headers["content-type"] == "image/jpeg"
+    r = client.get(f"/read/{tid}/2")
+    assert r.content == b"p2" and r.headers["content-type"] == "image/png"
+    assert "max-age" in r.headers["cache-control"]
+    assert client.get(f"/read/{tid}/3").headers["content-type"] == "image/webp"
+    assert client.get(f"/read/{tid}/0").status_code == 404
+    assert client.get(f"/read/{tid}/4").status_code == 404
+    assert client.get("/read/999/1").status_code == 404
+
+
+def test_reader_page_html(client):
+    tid = _seed_real_cbz()
+    r = client.get(f"/read/{tid}")
+    assert r.status_code == 200
+    assert "text/html" in r.headers["content-type"]
