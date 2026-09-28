@@ -242,7 +242,8 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
   `MIMO_CATALOG_HOURS` (6) in the poll loop (spawned), filters `-asr`/`-tts*`,
   natural-sorts newest first → `/data/mimo_models.json`; dashboard reads it
   (`model_choice.choices()`, falls back to `CHOICES`). Endpoint listed 28/09:
-  mimo-v2.5, v2.5-pro, v2.6-flash, v2.6-pro (+ speech models).
+  mimo-v2.5, v2.5-pro, v2.6-flash, v2.6-pro (+ speech models). Deployed 7b6b21b. Bot still on
+  v2.5-pro until picked; **v2.6 untested** (timeouts/effort tuned on v2.5).
 - **The bot starts Topics itself (28/08), on a schedule the dashboard edits
   (08/09).** `auto_slots()` owes the newest passed hour **per Locale** from
   `/config/schedule.json` — hours, the pick deadline and an on/off switch, one

@@ -1866,3 +1866,8 @@ install` จะสำเร็จ. ต้องสร้าง venv ใต้ re
   `wait_for` 30 วิ) → กรอง asr/tts → เรียง natural ใหม่สุดก่อน → `/data/mimo_models.json`.
   dashboard อ่าน `:ro` (ไม่ต้องมีคีย์ ADR 0007 คงเดิม), โชว์เวลาที่ดึงล่าสุด. ดึงพัง = เก็บลิสต์เดิม.
 - เทสต์ +3 → 234 passed / 8 failed (baseline).
+- **สถานะปิดงาน 28/09:** commit `7b6b21b` pushed + deploy แล้ว. ยืนยันบน NAS: `/data/mimo_models.json`
+  = v2.6-flash, v2.6-pro, v2.5, v2.5-pro (ดึง 12:06:57), dashboard `/settings` มี v2.6-pro.
+  บอทยังใช้ `mimo-v2.5-pro` (ยังไม่มีใครเลือกใน dropdown).
+- **ค้าง:** ยังไม่ได้ลอง v2.6 จริง — `reasoning_effort=low`/budget 600 วิ วัดบน v2.5; ควรลอง 1 คลิปมือ
+  ก่อนปล่อยรอบอัตโนมัติ. ไม่ได้เปิดผ่าน nginx จากเบราว์เซอร์.
