@@ -248,93 +248,158 @@ async def check_vanished(rows: list[dict], settings: dict | None = None) -> int:
         return 0
     settings = settings or {}
     present = {r["site_id"] for r in rows if r["site_id"]}
-    tasks = _UNASKED  # fetched once, and only if something actually clears
+    tasks = _UNASKED  # fetched once, and only if something actually needs DS
     done = 0
     for snap in db.hr_seen_vanished(present):
         site_id = snap["site_id"]
-        if not hr.was_cleared(snap, _CLEAR_TOLERANCE_H):
-            db.hr_seen_forget(site_id)
-            print(
-                f"[hr_fix] {site_id} หายจากหน้า myhr แต่ครั้งสุดท้ายยังขาด "
-                f"{_fmt(snap['remaining_h'])} ชม. ({snap['state']}) — ไม่ถือว่าครบ"
-            )
-            continue
-
         fix = db.hr_fix_get(site_id)
+        # myhr.php shows the current name; DS holds the one from download time, and an
+        # uploader can rename a row in between. Match on every name we know.
+        names = db.hr_title_variants(site_id, snap["title"], fix["title"] if fix else "")
+        seed_line = f"⏳ seed {_fmt(snap['seeded_h'])}/{_fmt(snap['target_h'])} ชม. แล้วหลุดจากหน้า myhr"
+        if not hr.was_cleared(snap, _CLEAR_TOLERANCE_H):
+            # bearbit drops rows that still read 10-12h short (seen 13-15/09 on three
+            # auto-fixed files, DS then showed 320h+ seeded), and the snapshot alone
+            # cannot tell. DS's own seed clock can. A `hit` row stays abandoned.
+            seed_h = None
+            if snap["state"] != "hit" and dsm.configured():
+                if tasks is _UNASKED:
+                    tasks = await ds_tasks()
+                seed_h = _ds_seed_h(tasks, names)
+            target = snap["target_h"] or _ORPHAN_TARGET_H
+            if seed_h is None:
+                db.hr_seen_forget(site_id)
+                print(
+                    f"[hr_fix] {site_id} หายจากหน้า myhr แต่ครั้งสุดท้ายยังขาด "
+                    f"{_fmt(snap['remaining_h'])} ชม. ({snap['state']}) — ไม่ถือว่าครบ"
+                )
+                continue
+            if seed_h < target:
+                # Still seeding on DS — keep the snapshot and ask DS again next round,
+                # otherwise the file is lost the moment it finishes.
+                print(f"[hr_fix] {site_id} หายจากหน้า myhr, DS seed {_fmt(seed_h)}/{_fmt(target)} ชม. — รอรอบหน้า")
+                continue
+            seed_line = f"⏳ Download Station seed แล้ว {_fmt(seed_h)} ชม. (หลุดจากหน้า myhr)"
+
         # "cleared" stays retriable: the row only survives in hr_seen when a previous
         # round marked it cleared but could not send the prompt.
         if fix and fix["status"] not in _PRE_CLEAR + ("cleared",):
             db.hr_seen_forget(site_id)
             continue
         title = snap["title"] or (fix["title"] if fix else site_id)
-        # myhr.php shows the current name; DS holds the one from download time, and an
-        # uploader can rename a row in between. Match on every name we know.
-        names = db.hr_title_variants(site_id, snap["title"], fix["title"] if fix else "")
-        told_cleared = bool(fix and fix["status"] in ("fixed", "stalled"))
-        if told_cleared:
-            # The user pressed a button for this one, so close the loop on it.
-            body = (
-                f"✅ พ้น Hit & Run แล้ว\n\n"
-                f"🎬 {title[:80]}\n"
-                f"⏳ seed {_fmt(snap['seeded_h'])}/{_fmt(snap['target_h'])} ชม."
-                f" แล้วหลุดจากหน้า myhr"
-            )
-            if config.LINE_ACCESS_TOKEN and config.LINE_USER_ID:
-                await line_notify.notify_hr(body)
-            if config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID:
-                await telegram_notify.notify_hr(body)
-        if fix:
-            # Always write a note: the default blank wipes the old one, and the history
-            # page then shows a row with no reason at all.
-            db.hr_fix_set_status(site_id, "cleared", "seed ครบ หลุดจากหน้า myhr แล้ว")
-        else:
-            db.hr_fix_add_cleared(site_id, title)
-        if hr_delete.enabled(settings):
-            if tasks is _UNASKED:
-                tasks = await ds_tasks()
-            if tasks is None:
-                # DS could not be asked. Deciding now would either send a prompt that
-                # dead-ends at del_failed (terminal — the file is then lost for good)
-                # or write off a file that is really there. Keep the snapshot instead.
-                db.hr_fix_set_status(site_id, "cleared", "ถาม Download Station ไม่ได้ — รอรอบหน้า")
-                print(f"[hr_fix] {site_id} ถาม Download Station ไม่ได้ — เก็บ snapshot ไว้รอบหน้า")
-                continue
-            if dsm.find_task(tasks, names, [db.torrent_filename(n) for n in names]) is None:
-                if not names:
-                    # No real title to match on, so a miss proves nothing. Writing the
-                    # file off here would lose it exactly the way check_cleared did.
-                    db.hr_fix_set_status(site_id, "cleared", "ไม่มีชื่อเรื่องให้เทียบกับ DS — รอรอบหน้า")
-                    print(f"[hr_fix] {site_id} ไม่มีชื่อเรื่องให้เทียบกับ DS — เก็บ snapshot ไว้รอบหน้า")
-                    continue
-                # Downloaded outside this NAS (phone, another client), so there is no
-                # task and no payload of ours to remove — tell the user to do it there.
-                # Delete-only: hr.fix_candidates reads the same "no client" signal as
-                # its auto-fix trigger.
-                db.hr_fix_set_status(site_id, "cleared", "ไม่มี task ใน Download Station — แจ้งให้ลบที่ client อื่น")
-                if config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID:
-                    # An auto-fixed row was already told it cleared a few lines up; only
-                    # the "not ours to delete" half is news to it.
-                    head = "" if told_cleared else f"✅ seed ครบ พ้น Hit & Run แล้ว\n\n🎬 {title[:80]}\n"
-                    await telegram_notify.notify_hr(
-                        f"{head}"
-                        f"📱 ไม่มี task ใน Download Station — โหลดจาก client อื่น (เช่นมือถือ)\n"
-                        f"ลบจาก client นั้นได้เลย"
-                    )
-                db.hr_seen_forget(site_id)
-                print(f"[hr_fix] {site_id} ไม่มี task ใน DS (โหลดจากที่อื่น) — แจ้งให้ลบเอง")
-                done += 1
-                continue
-            if not await hr_delete.prompt_delete(site_id, title):
-                # Telegram refused the send. Keep the snapshot so the next round asks
-                # again — dropping it here would lose the file the way check_cleared did.
-                print(f"[hr_fix] {site_id} ส่งคำถามลบไม่สำเร็จ — เก็บ snapshot ไว้ลองใหม่รอบหน้า")
-                continue
-        db.hr_seen_forget(site_id)
-        done += 1
+        if hr_delete.enabled(settings) and tasks is _UNASKED:
+            tasks = await ds_tasks()
+        if await _close_cleared(site_id, title, names, fix, seed_line, settings, tasks):
+            db.hr_seen_forget(site_id)
+            done += 1
+    done += await _sweep_orphans(present, settings, tasks)
     db.hr_seen_snapshot(rows)
     if done:
         print(f"[hr_fix] {done} file(s) cleared H&R by dropping off the page")
     return done
+
+
+# Target to hold an orphan to: its snapshot (and so its own target) is gone, and
+# 48h is the largest bearbit target seen.
+_ORPHAN_TARGET_H = 48.0
+
+
+def _ds_seed_h(tasks: list[dict] | None, names: list[str]) -> float | None:
+    """Hours DS has seeded the matching task, None when there is no evidence."""
+    if not tasks or not names:
+        return None
+    task = dsm.find_task(tasks, names, [db.torrent_filename(n) for n in names])
+    elapsed = (((task or {}).get("additional") or {}).get("detail") or {}).get("seedelapsed")
+    return elapsed / 3600 if isinstance(elapsed, (int, float)) else None
+
+
+async def _sweep_orphans(present: set[str], settings: dict, tasks) -> int:
+    """Close auto-fixed rows whose snapshot was already forgotten.
+
+    Before DS seed time counted as proof, a fixed row that vanished short was
+    forgotten and sat at `fixed` forever — never offered for deletion. `cleared`
+    rides along so an orphan whose prompt failed to send gets asked again. Only a DS
+    task seeded past the target counts; everything else stays silent (most of
+    these tasks are long gone, and a notice per row would flood the chat).
+    """
+    if not hr_delete.enabled(settings):
+        return 0
+    seen = {s["site_id"] for s in db.hr_seen_vanished(set())}
+    orphans = [
+        f for st in ("fixed", "stalled", "cleared") for f in db.hr_fix_by_status(st)
+        if f["site_id"] not in present and f["site_id"] not in seen
+    ]
+    if not orphans:
+        return 0
+    if tasks is _UNASKED:
+        tasks = await ds_tasks()
+    done = 0
+    for fix in orphans:
+        site_id = fix["site_id"]
+        names = db.hr_title_variants(site_id, fix["title"])
+        seed_h = _ds_seed_h(tasks, names)
+        if seed_h is None or seed_h < _ORPHAN_TARGET_H:
+            continue
+        seed_line = f"⏳ Download Station seed แล้ว {_fmt(seed_h)} ชม. (หลุดจากหน้า myhr)"
+        if await _close_cleared(site_id, fix["title"], names, fix, seed_line, settings, tasks):
+            done += 1
+    return done
+
+
+async def _close_cleared(site_id, title, names, fix, seed_line, settings, tasks) -> bool:
+    """Mark a row cleared and offer deletion. False = keep it to retry next round."""
+    told_cleared = bool(fix and fix["status"] in ("fixed", "stalled"))
+    if told_cleared:
+        # The user pressed a button for this one, so close the loop on it.
+        body = f"✅ พ้น Hit & Run แล้ว\n\n🎬 {title[:80]}\n{seed_line}"
+        if config.LINE_ACCESS_TOKEN and config.LINE_USER_ID:
+            await line_notify.notify_hr(body)
+        if config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID:
+            await telegram_notify.notify_hr(body)
+    if fix:
+        # Always write a note: the default blank wipes the old one, and the history
+        # page then shows a row with no reason at all.
+        db.hr_fix_set_status(site_id, "cleared", "seed ครบ หลุดจากหน้า myhr แล้ว")
+    else:
+        db.hr_fix_add_cleared(site_id, title)
+    if not hr_delete.enabled(settings):
+        return True
+    if tasks is None or tasks is _UNASKED:
+        # DS could not be asked. Deciding now would either send a prompt that
+        # dead-ends at del_failed (terminal — the file is then lost for good)
+        # or write off a file that is really there. Keep the snapshot instead.
+        db.hr_fix_set_status(site_id, "cleared", "ถาม Download Station ไม่ได้ — รอรอบหน้า")
+        print(f"[hr_fix] {site_id} ถาม Download Station ไม่ได้ — เก็บ snapshot ไว้รอบหน้า")
+        return False
+    if dsm.find_task(tasks, names, [db.torrent_filename(n) for n in names]) is None:
+        if not names:
+            # No real title to match on, so a miss proves nothing. Writing the
+            # file off here would lose it exactly the way check_cleared did.
+            db.hr_fix_set_status(site_id, "cleared", "ไม่มีชื่อเรื่องให้เทียบกับ DS — รอรอบหน้า")
+            print(f"[hr_fix] {site_id} ไม่มีชื่อเรื่องให้เทียบกับ DS — เก็บ snapshot ไว้รอบหน้า")
+            return False
+        # Downloaded outside this NAS (phone, another client), so there is no
+        # task and no payload of ours to remove — tell the user to do it there.
+        # Delete-only: hr.fix_candidates reads the same "no client" signal as
+        # its auto-fix trigger.
+        db.hr_fix_set_status(site_id, "cleared", "ไม่มี task ใน Download Station — แจ้งให้ลบที่ client อื่น")
+        if config.TELEGRAM_BOT_TOKEN and config.TELEGRAM_CHAT_ID:
+            # An auto-fixed row was already told it cleared a few lines up; only
+            # the "not ours to delete" half is news to it.
+            head = "" if told_cleared else f"✅ seed ครบ พ้น Hit & Run แล้ว\n\n🎬 {title[:80]}\n"
+            await telegram_notify.notify_hr(
+                f"{head}"
+                f"📱 ไม่มี task ใน Download Station — โหลดจาก client อื่น (เช่นมือถือ)\n"
+                f"ลบจาก client นั้นได้เลย"
+            )
+        print(f"[hr_fix] {site_id} ไม่มี task ใน DS (โหลดจากที่อื่น) — แจ้งให้ลบเอง")
+        return True
+    if not await hr_delete.prompt_delete(site_id, title):
+        # Telegram refused the send. Keep the snapshot so the next round asks
+        # again — dropping it here would lose the file the way check_cleared did.
+        print(f"[hr_fix] {site_id} ส่งคำถามลบไม่สำเร็จ — เก็บ snapshot ไว้ลองใหม่รอบหน้า")
+        return False
+    return True
 
 
 async def _handle_callback(cb: dict):
@@ -562,6 +627,42 @@ if __name__ == "__main__":
         await check_cleared([_row("20", 10.0)], {})
         assert db.hr_fix_get("20")["status"] == "wedged"
         assert len(_notices) == _before_n + 1 and "ค้างใน Download Station" in _notices[-1]
+
+        # vanished while myhr still read short: DS's own seed clock decides
+        db.hr_seen_forget("10")  # the blank-title row above would count in every round
+        dsm.configured = lambda: True
+        _seeded = lambda sid, h: {  # noqa: E731
+            "id": f"s{sid}", "title": "x",
+            "additional": {"detail": {"uri": f"หนัง {sid}.torrent", "seedelapsed": int(h * 3600)}},
+        }
+        _ds = [_seeded("30", 300), _seeded("31", 5), _seeded("32", 300)]
+        db.hr_fix_add_pending("30", "หนัง 30", 5)
+        db.hr_fix_set_status("30", "fixed", "x.torrent")
+        db.hr_seen_snapshot([_row("30", 12.0), _row("31", 12.0), _row("32", 12.0, "hit")])
+        _before = len(_prompts)
+        assert await check_vanished([_row("3", 0.0)], {}) == 1
+        assert db.hr_fix_get("30")["status"] == "del_asked"  # long seeded on DS
+        assert "Download Station seed" in _notices[-1]
+        assert db.hr_fix_get("31") is None  # still short on DS...
+        assert "31" in [s["site_id"] for s in db.hr_seen_vanished({"3"})]  # ...so kept
+        assert db.hr_fix_get("32") is None  # hit stays abandoned
+        _ds = [_seeded("31", 60)]
+        assert await check_vanished([_row("3", 0.0)], {}) == 1
+        assert db.hr_fix_get("31")["status"] == "del_asked"
+        assert len(_prompts) == _before + 2
+
+        # orphan: fixed row whose snapshot was already forgotten
+        for sid in ("40", "41", "42"):
+            db.hr_fix_add_pending(sid, f"หนัง {sid}", 5)
+            db.hr_fix_set_status(sid, "fixed", "x.torrent")
+        _ds = [_seeded("40", 300), _seeded("41", 10)]  # 42: task long gone
+        _before_n = len(_notices)
+        assert await check_vanished([_row("3", 0.0)], {}) == 1
+        assert db.hr_fix_get("40")["status"] == "del_asked"
+        assert db.hr_fix_get("41")["status"] == "fixed"  # not proven yet
+        assert db.hr_fix_get("42")["status"] == "fixed"  # silent, no "client อื่น" flood
+        assert len(_notices) == _before_n + 1
+        assert await check_vanished([_row("3", 0.0)], {}) == 0  # not asked twice
 
         print(f"hr_fix self-check OK: {len(_prompts)} prompt(s), {len(_notices)} notice(s)")
 
