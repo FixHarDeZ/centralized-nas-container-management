@@ -1011,4 +1011,4 @@ Verify บน NAS: `_record` ทดสอบทั้งเส้นสำเร
 ### 2026-09-28 H&R: ไฟล์พ้นแล้วไม่ถูกถามลบ
 อาการ: หลวงพ่อโชติ ตัวเต็ม / น้อง Una รับบท… seed นานแล้วแต่ไม่มีปุ่มลบ. สาเหตุ: หลัง auto-fix แถวหายจาก myhr ตอน snapshot ยังขาด 12.0/10.5 ชม. → `was_cleared` False → forget → `hr_fixes` ค้าง `fixed` ถาวร. DS จริง: โชติ 360 ชม., Una 321 ชม., CAWD-016 321, กระเทยเยส 322, DASD-742 154 (MIAA-269 10 ชม. ยังไม่ครบ). 
 แก้ `hr_fix.py`: DS `seedelapsed` เป็นหลักฐานสำรองใน `check_vanished` (สั้นยังเก็บ snapshot), `_sweep_orphans()` กวาดแถวค้างที่ DS ≥48 ชม. (ไม่มี task = เงียบ), refactor ท่อนปิดเป็น `_close_cleared()`. self-check เพิ่ม 2 บล็อก ผ่าน (`uv run --python 3.12 --with-requirements requirements.txt python hr_fix.py`). 
-Deploy `-s torrentwatch -y` แล้ว force `check_hr` → 5 แถวเป็น `del_asked` ส่งปุ่ม Telegram แล้ว. ยังไม่ commit.
+Deploy `-s torrentwatch -y` แล้ว force `check_hr` → 5 แถวเป็น `del_asked` ส่งปุ่ม Telegram แล้ว. Commit+push `6c4a608` (main). งานค้าง: รอ user กดปุ่มลบใน Telegram 5 เรื่อง; MIAA-269 (2461145) จะถูกถามเองเมื่อ DS seed ≥48 ชม.
