@@ -224,3 +224,9 @@ data. Also update the Kuma webhook URL to include `?secret=…` if it doesn't.
 ### Release preparation
 - User authorized commit, push and deployment of the readability fix. Full stack suite passed: 60 tests; scoped diff check passed.
 - Deploy scope is ops-bot only; unrelated dirty ai-deck/hermes-agent changes are excluded. Selective tar+SSH upload followed by repository deploy.sh --restart-only -s ops-bot. Deployment outcome will be recorded after verification.
+
+### Deployment verified
+- Committed readability changes as `fbb8032` and pushed main to origin. Uploaded only committed ops-bot files via tar+SSH; preserved NAS env, auth file and data volume. No unrelated stack files uploaded/restarted.
+- Saved previous deployment source/config (no env secrets) to NAS `/tmp/ops-bot-before-1790570015.tgz`; rebuilt/restarted with `./scripts/deploy.sh --restart-only -s ops-bot -y`.
+- Production verification through nginx: authenticated `/dashboard`, `/dashboard/settings` and CSS all HTTP 200; unauthenticated dashboard HTTP 401. Dashboard references CSS v=20260928; served SHA-256 `2cdbe5ac0e21670981385871104b3a343768eb9dc9bdafc66f95f6d60cf71d11` matches local file. Both ops-bot and ops-bot-nginx running.
+- No real diagnostic/Telegram notification triggered for testing. Full stack test suite: 60 passed. Deployment complete; follow-up documentation commit records actual result.
