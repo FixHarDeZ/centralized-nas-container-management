@@ -13,10 +13,11 @@
       const frame = document.createElement('iframe');
       frame.style = 'width:390px;height:844px';
       const setup = `
-        window.posts = []; window.calls = []; window.streams = []; window.sockets = [];
+        window.authStatus = 'signed_out'; window.posts = []; window.calls = []; window.streams = []; window.sockets = [];
         window.fetch = async (path, options) => {
           if (options?.method === 'POST') { window.posts.push(String(path)); return {ok:true,text:async()=>''}; }
           window.calls.push(String(path));
+          if (String(path).includes('api/auth')) return {ok:true,json:async()=>({status:window.authStatus})};
           if (String(path) === 'token') return new Promise(resolve => window.releaseToken = () => resolve({ok:true,json:async()=>({token:''})}));
           if (/chat\\/options|api\\/status|api\\/auth/.test(path)) return new Promise(() => {});
           return {ok:true,json:async()=>({sessions:[],items:[],busy:false,session_id:'',spent:0})};
@@ -44,7 +45,22 @@
       check(doc.getElementById('status-text').textContent === 'reconnecting', provider + ': stream error shown');
       win.streams[0]?.onopen?.({});
       check(doc.getElementById('status-text').textContent === 'live', provider + ': stream recovery shown');
-      doc.getElementById('agent-start').click();
+      const login = doc.getElementById('agent-login');
+      const name = provider === 'claude' ? 'Claude' : 'Codex';
+      check(!login.hidden && !login.disabled && login.textContent === 'Sign in to ' + name, provider + ': signed-out login visible');
+      win.authStatus = 'signed_in';
+      win.dispatchEvent(new win.Event('focus'));
+      await delay(10);
+      check(login.disabled && login.textContent === '✓ Signed in to ' + name, provider + ': signed-in status');
+      win.authStatus = 'unknown';
+      win.dispatchEvent(new win.Event('focus'));
+      await delay(10);
+      check(!login.disabled && login.textContent === 'Check ' + name + ' sign-in', provider + ': unknown is retryable');
+      win.authStatus = 'signed_out';
+      login.click();
+      await delay(10);
+      check(win.posts.length === 0, provider + ': unknown click checks without login');
+      login.click();
       check(win.posts.length === 0, provider + ': start waits for terminal shell');
       check(win.calls.filter(path => path === 'token').length === 1, provider + ': terminal connects on demand');
       doc.getElementById('view-chat').click();
@@ -58,7 +74,7 @@
       check(win.posts.length === 0, provider + ': socket handshake is not shell readiness');
       win.sockets[0].onmessage({data:new win.TextEncoder().encode('0ready').buffer});
       await delay(10);
-      check(win.posts.length === 1, provider + ': start proceeds after shell output');
+      check(win.posts.length === 1 && win.posts[0].includes('api/login') && win.posts[0].includes('provider=' + provider), provider + ': login proceeds for selected provider after shell output');
       doc.getElementById('view-chat').click();
       win.sockets[0].readyState = 3;
       win.sockets[0].onclose();

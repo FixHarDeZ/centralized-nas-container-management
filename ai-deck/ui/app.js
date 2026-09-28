@@ -1647,10 +1647,12 @@
     location.assign(url);
   });
   const loginButton = document.getElementById('agent-login');
-  loginButton.hidden = provider !== 'codex';
+  const supportsLogin = provider === 'codex' || provider === 'claude';
+  loginButton.hidden = !supportsLogin;
+  loginButton.textContent = 'Checking ' + providerName + ' sign-in…';
   let authStatus = 'unknown', authPending = false;
   async function refreshAuth() {
-    if (provider !== 'codex' || authPending || document.hidden) return;
+    if (!supportsLogin || authPending || document.hidden) return;
     authPending = true;
     loginButton.disabled = true;
     try {
@@ -1662,8 +1664,8 @@
     finally {
       authPending = false;
       loginButton.disabled = authStatus === 'signed_in';
-      loginButton.textContent = authStatus === 'signed_in' ? '✓ Signed in to Codex'
-        : authStatus === 'signed_out' ? 'Sign in to Codex' : 'Check Codex sign-in';
+      loginButton.textContent = authStatus === 'signed_in' ? '✓ Signed in to ' + providerName
+        : authStatus === 'signed_out' ? 'Sign in to ' + providerName : 'Check ' + providerName + ' sign-in';
       loginButton.title = authStatus === 'unknown' ? 'Could not check sign-in. Click to retry.' : '';
       loginButton.classList.toggle('signed-in', authStatus === 'signed_in');
     }

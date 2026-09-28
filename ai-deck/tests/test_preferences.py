@@ -109,3 +109,46 @@ def test_claude_process_arguments_preserve_resume(monkeypatch, tmp_path):
     finally:
         with agent.lock:
             agent.stop_child()
+
+
+@pytest.mark.parametrize('code,output,expected', [
+    (0, '{"loggedIn":true,"email":"SECRET"}', 'signed_in'),
+    (1, '{"loggedIn":false}', 'signed_out'),
+    (0, '{"loggedIn":false}', 'signed_out'),
+    (1, 'SECRET failure', 'unknown'),
+    (0, '{}', 'unknown'),
+    (0, '[]', 'unknown'),
+    (0, '{"loggedIn":"true"}', 'unknown'),
+    (2, '{"loggedIn":true}', 'unknown'),
+])
+def test_claude_auth_status_is_explicit_and_redacted(monkeypatch, api, code, output, expected):
+    monkeypatch.setenv('CLAUDE_CODE_OAUTH_TOKEN', 'SECRET')
+    def run(args, **kwargs):
+        assert args == ['claude', 'auth', 'status', '--json']
+        assert 'CLAUDE_CODE_OAUTH_TOKEN' not in kwargs['env']
+        assert kwargs['stdin'] == subprocess.DEVNULL
+        assert kwargs['timeout'] <= 10
+        return SimpleNamespace(returncode=code, stdout=output, stderr='SECRET')
+    monkeypatch.setattr(subprocess, 'run', run)
+    status, body = api(upload.Handler, 'GET', '/api/auth?provider=claude')
+    assert status == 200
+    assert json.loads(body) == {'status': expected}
+    assert 'SECRET' not in body
+
+
+def test_claude_auth_timeout_is_unknown(monkeypatch, api):
+    def run(*args, **kwargs):
+        raise subprocess.TimeoutExpired('claude', 5)
+    monkeypatch.setattr(subprocess, 'run', run)
+    status, body = api(upload.Handler, 'GET', '/api/auth?provider=claude')
+    assert status == 200
+    assert json.loads(body) == {'status': 'unknown'}
+
+
+def test_claude_login_uses_existing_terminal_guard(monkeypatch, api):
+    calls = []
+    monkeypatch.setattr(upload, 'type_into_pane', lambda line, target: (calls.append(line) or 409, 'busy: claude'))
+    status, _ = api(upload.Handler, 'POST', '/api/login?provider=claude')
+    assert status == 409
+    assert calls == ['claude auth login']
+    assert api(upload.Handler, 'POST', '/api/login?provider=mimo')[0] == 404

@@ -1,3 +1,11 @@
+## 2026-09-28 — Claude Chat sign-in button
+
+- Added Claude to the existing Chat authentication button: signed in, signed out, and unknown/retry states. MiMo intentionally unchanged per user (API key, no sign-in button).
+- `GET /api/auth?provider=claude` reads `claude auth status --json` with the same environment as Chat (legacy setup-token cleared), closed stdin and a 5-second timeout. Only explicit boolean login state is returned; diagnostics/account details are never exposed. Failed/malformed checks remain unknown.
+- `POST /api/login?provider=claude` starts `claude auth login` through the existing idle-terminal guard. UI waits for terminal readiness; user completes the displayed login flow. Existing 30-second/focus/visibility refresh updates the button. Document and coding worker homes remain separate.
+- Verification: new API and Chromium regressions failed before implementation; final full ai-deck suite 239 passed. JavaScript syntax and git diff checks passed. Existing non-failing HTTP connection-reset diagnostic appeared. No live account login or NAS test performed.
+- README updated. Delivery: local changes only, no commit/push/deploy. Remaining: deploy and verify real Claude login on NAS. Unrelated hermes-agent compose edit preserved.
+
 ## 2026-09-24 — Chat provider reconnect status
 
 - User confirmed deploying the preceding Claude model/quota fix; current source baseline is `efcb809`. The new issue was prolonged `reconnecting` when switching Chat providers, especially Claude → Codex.

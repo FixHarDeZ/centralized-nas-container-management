@@ -392,8 +392,8 @@ class Handler(BaseHTTPRequestHandler):
         if provider is None:
             return
         path = self.path.split("?", 1)[0]
-        if path == "/api/auth" and provider == "codex":
-            self._json(agent_options.auth_status())
+        if path == "/api/auth" and provider in ("claude", "codex"):
+            self._json(agent_options.auth_status(provider))
         elif path == "/api/status":
             force = parse_qs(urlparse(self.path).query).get("refresh") == ["1"]
             if provider == "mimo":
@@ -438,8 +438,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/new":
             command = ('cd -- ' + shlex.quote(workspace_path) + ' && ' if workspace_path else '') + provider
             code, message = type_into_pane(command, self._desk())
-        elif path == "/api/login" and provider == "codex":
-            code, message = type_into_pane("codex login --device-auth", self._desk())
+        elif path == "/api/login" and provider in ("claude", "codex"):
+            command = "claude auth login" if provider == "claude" else "codex login --device-auth"
+            code, message = type_into_pane(command, self._desk())
         elif path == "/api/quit":
             code, message = quit_pane(self._desk())
         elif path == "/api/resume":

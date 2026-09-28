@@ -8,7 +8,7 @@ import subprocess
 import threading
 import time
 
-from claude_metadata import read as claude_read
+from claude_metadata import read as claude_read, environment as claude_environment
 import mimo_backend
 
 EFFORTS = ('none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra')
@@ -19,7 +19,21 @@ _claude_cached = (float('-inf'), [])
 _cached = (float('-inf'), [])
 
 
-def auth_status():
+def auth_status(provider='codex'):
+    if provider == 'claude':
+        try:
+            result = subprocess.run(['claude', 'auth', 'status', '--json'],
+                                    capture_output=True, text=True, timeout=5,
+                                    stdin=subprocess.DEVNULL, env=claude_environment())
+            data = json.loads(result.stdout)
+            if isinstance(data, dict):
+                if result.returncode == 0 and data.get('loggedIn') is True:
+                    return {'status': 'signed_in'}
+                if result.returncode in (0, 1) and data.get('loggedIn') is False:
+                    return {'status': 'signed_out'}
+        except (OSError, subprocess.TimeoutExpired, ValueError):
+            pass
+        return {'status': 'unknown'}
     try:
         result = subprocess.run(['codex', 'login', 'status'], capture_output=True,
                                 text=True, timeout=5)

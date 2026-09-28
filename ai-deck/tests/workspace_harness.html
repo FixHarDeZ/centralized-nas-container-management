@@ -36,7 +36,7 @@ window.addEventListener('load', () => setTimeout(async () => {
     const desktop = desktopFrame.contentDocument;
     const mobile = document.getElementById('mobile').contentDocument;
     check(!desktop.getElementById('agent-login').hidden && !desktop.getElementById('agent-login').disabled, 'Signed-out Codex login offered');
-    check(mobile.getElementById('agent-login').hidden, 'Claude has no Codex login');
+    check(!mobile.getElementById('agent-login').hidden && mobile.getElementById('agent-login').textContent === 'Sign in to Claude', 'Signed-out Claude login offered');
     const signedIn = document.getElementById('signed-in').contentDocument.getElementById('agent-login');
     check(signedIn.disabled && signedIn.textContent.includes('Signed in to Codex'), 'Signed-in Codex cannot launch duplicate login');
     const unknown = document.getElementById('unknown').contentDocument.getElementById('agent-login');
