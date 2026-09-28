@@ -1,3 +1,9 @@
+## 2026-09-29 — Default model label fix delivered / closed
+
+- Fix commit `13b1f88` is pushed. Deployed latest main `156fc66b447cc86385ba50ec9186ca780ece4270` through runner job `d3396700693d42d89be2514bdc4d0280` (succeeded); intervening changes did not modify ai-deck.
+- Independent health returned ready with the exact deployed revision; running container's agent_options.py SHA-256 matches tested source. Live `/chat/options?provider=claude` labels: `Default (Opus 5.5)`, `Opus 5.5`, `Fable 5.1`, `Sonnet 5`, `Haiku 4.5`. No duplicated Default wrapper. Fallback `Default (recommended)` covered by regression.
+- Fresh metadata/preferences suite: 29 passed. Diff check passed. No model turn or login initiated. Both stack memory files updated; no implementation/deployment work remains. This closing memory commit is documentation only.
+
 ## 2026-09-28 — Default model label duplication
 
 - Fixed screenshot-reported `Default (Default (recommended))`: CLI displayName was wrapped a second time when resolvedModel was absent. Preserve the CLI label in that case (fallback `Default`); keep `Default (Sonnet 5)` when a resolved version is available. Model IDs and effort choices unchanged.
