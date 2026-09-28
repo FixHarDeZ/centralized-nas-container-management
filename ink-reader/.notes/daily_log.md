@@ -345,3 +345,8 @@ Added 2 new scraper sources and multi-page listing support.
   "เรื่องที่ชอบ N", heart in reader top bar. Card footer wraps at iPhone width.
 - Liked titles still expire (kept feature stays removed).
 - Tests: 56 pass / 1 pre-existing fail (`test_scrape_log`). Browser-verified locally.
+- Commit `cc2bb51` pushed to main, deployed; verified on NAS: `liked` column
+  migrated on live DB, `stats.liked` present, `/opds` lists `/opds/liked` (200).
+- **Session closed 2026-09-28.** Pending: none for ink-reader. Open ideas:
+  liked titles exempt from expiry (not done — user not asked yet);
+  `test_scrape_log` pre-existing failure still unfixed.
