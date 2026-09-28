@@ -3509,3 +3509,25 @@ def test_an_ordinary_topic_without_results_is_still_written(monkeypatch):
 def test_review_message_carries_the_sources():
     text = main.format_script(a_script(), research.sources_line(FOUND))
     assert "📎 https://example.com/a" in text
+
+
+def test_render_keeps_the_script_on_screen(monkeypatch):
+    """The 🗣 lines are what the human copies into /say after hearing the clip."""
+    edits = []
+
+    class FakeBot:
+        async def edit(self, message_id, text, **kw):
+            edits.append(text)
+
+    async def boom(*a, **kw):
+        raise RuntimeError("stop after the edit")
+
+    script = a_script()
+    script["cards"][0]["spoken"] = "เคอเบอร์เนทีส"
+    monkeypatch.setattr(main, "_bot", lambda client: FakeBot())
+    monkeypatch.setattr(main, "say", _nothing)
+    monkeypatch.setattr(main.render, "build", boom)
+    monkeypatch.setattr(main.manifest, "update", lambda *a, **kw: None)
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+    asyncio.run(main.do_render(None, {"mode": "review", "script": script, "message_id": 5}))
+    assert "🗣 เคอเบอร์เนทีส" in edits[0] and "กำลัง render" in edits[0]

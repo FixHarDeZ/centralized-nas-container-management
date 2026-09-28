@@ -1881,3 +1881,7 @@ install` จะสำเร็จ. ต้องสร้าง venv ใต้ re
 - ผล: 245 passed / 8 failed baseline Raqm; root 63 passed; Tavily จาก Mac 1.9 วิ
 - Deploy แล้ว: บน NAS `research.configured()=True`, ยิงค้นจากคอนเทนเนอร์ได้ลิงก์จริง
 - ค้าง: ดูผลจริง ~10 คลิปว่าตัวเลขถูกตีกลับบ่อยจนเปลือง attempt ไหม; key เป็น `tvly-dev` (ถูกแปะในแชท — ควร rotate แล้ว `sops set` ใหม่)
+
+### ต่อ: สคริปต์ไม่หายตอนกด render
+- เดิม `do_render()` edit ข้อความสคริปต์ทับเป็น "📝 ชื่อ — กำลัง render" → หลังคลิปออกไม่มีบรรทัด 🗣 ให้ก๊อปไป `/say`
+- ตอนนี้ edit เป็นสคริปต์เต็ม (+📎) ไม่มีปุ่ม footer = "🎬 กำลัง render — /say … แล้ว /redo" (`format_script(footer=)`), เทสต์ +1 → 246 passed / 8 baseline. รอบอัตโนมัติไม่เกี่ยว (ไม่มี message_id อยู่แล้ว สคริปต์ส่งแยกไม่ถูกทับ)

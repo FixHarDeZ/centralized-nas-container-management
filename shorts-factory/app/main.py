@@ -325,7 +325,8 @@ async def close_prompt(client: httpx.AsyncClient, message_id: int | None, note: 
 
 # --- presentation ------------------------------------------------------------
 
-def format_script(script: dict, sources: str = "") -> str:
+def format_script(script: dict, sources: str = "",
+                  footer: str = "พิมพ์บอกได้เลยว่าอยากแก้ตรงไหน") -> str:
     parts = [f"📝 {script['title']}", ""]
     for i, card in enumerate(script["cards"], 1):
         label = "hook" if i == 1 else f"card {i}"
@@ -340,7 +341,7 @@ def format_script(script: dict, sources: str = "") -> str:
     parts += ["", " ".join(script["hashtags"])]
     if sources:
         parts += ["", sources]
-    parts += ["", "พิมพ์บอกได้เลยว่าอยากแก้ตรงไหน"]
+    parts += ["", footer]
     return "\n".join(parts)[:4096]
 
 
@@ -648,7 +649,11 @@ async def make_script(client: httpx.AsyncClient, state: dict, topic: str,
 async def do_render(client: httpx.AsyncClient, state: dict,
                     supplied: dict[int, Path] | None = None) -> None:
     script = state["script"]
-    await close_prompt(client, state.get("message_id"), f"📝 {script['title']} — กำลัง render")
+    # The Script stays on screen with only its buttons gone: once the clip is
+    # out, the 🗣 lines are what the human copies into /say to fix a word.
+    await close_prompt(client, state.get("message_id"), format_script(
+        script, research.sources_line(state.get("research")),
+        footer="🎬 กำลัง render — เสียงเพี้ยนคำไหน /say <ผิด> = <ถูก> แล้ว /redo"))
     state.update(mode="rendering", message_id=None)
     save_state(state)
 
