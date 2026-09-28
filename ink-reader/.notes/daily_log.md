@@ -365,3 +365,5 @@ Added 2 new scraper sources and multi-page listing support.
 - Commit `cab7736` pushed to main, deployed; verified in container: new
   `expired_ids` filter + "เก็บถาวร" label present, `expired_ids()` runs (0 due).
   Not browser-tested on phone yet (confirm dialog path).
+- **Session closed 2026-09-29.** Pending: phone check of unlike confirm dialog
+  (OK→delete, Cancel→fresh window). `test_scrape_log` pre-existing fail still unfixed.

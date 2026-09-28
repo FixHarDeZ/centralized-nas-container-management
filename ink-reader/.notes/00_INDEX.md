@@ -1,6 +1,6 @@
 # ink-reader — Project Index (Memory Blueprint)
 
-> อัปเดตล่าสุด: 2026-09-28 (web reader, black–cream redesign, like + `/opds/liked`)
+> อัปเดตล่าสุด: 2026-09-29 (liked titles exempt from expiry, unlike → confirm delete; deployed cab7736)
 > ใช้ไฟล์นี้เป็น cold-start memory ก่อนเริ่มงานทุกครั้ง
 
 ---
