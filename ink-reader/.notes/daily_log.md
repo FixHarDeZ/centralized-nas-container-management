@@ -362,3 +362,6 @@ Added 2 new scraper sources and multi-page listing support.
 - Tests +2 (`test_liked_titles_never_expire`, `test_unlike_gives_fresh_expiry_window`);
   suite 58 pass / 1 pre-existing fail (`test_scrape_log`). Local root `.venv`
   lacks deps — used scratch uv venv py3.12 from requirements.txt.
+- Commit `cab7736` pushed to main, deployed; verified in container: new
+  `expired_ids` filter + "เก็บถาวร" label present, `expired_ids()` runs (0 due).
+  Not browser-tested on phone yet (confirm dialog path).
