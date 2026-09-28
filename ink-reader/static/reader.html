@@ -170,12 +170,17 @@ function setLiked(on) {
 $("like").addEventListener("click", async (e) => {
   e.stopPropagation();
   const on = !$("like").classList.contains("on");
+  const purge = !on && confirm("เอาออกจากเรื่องที่ชอบแล้ว — ลบทิ้งจาก NAS ทันทีเลยไหม?\n(ยกเลิก = เก็บไว้ นับวันหมดอายุใหม่)");
   setLiked(on);
   const r = await fetch(`/api/titles/${tid}/like`, {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ liked: on }),
   });
   if (!r.ok) setLiked(!on);
+  else if (purge) {
+    await fetch(`/api/titles/${tid}/delete`, { method: "POST" });
+    location.href = "/";
+  }
 });
 
 function setCurrent(n) {

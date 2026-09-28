@@ -137,7 +137,7 @@ Dashboard/OPDS credentials are nginx-only: vault
 | `/api/titles?status=&source=` | GET | List titles, optional filters |
 | `/api/titles/{id}/delete` | POST | Purge files + tombstone |
 | `/api/settings` | GET/PUT | Runtime settings (`retention_days`, `min_pages`) |
-| `/api/titles/{id}/like` | POST | `{"liked": bool}` — toggle like; liked titles appear in tab "เรื่องที่ชอบ" + `/opds/liked` |
+| `/api/titles/{id}/like` | POST | `{"liked": bool}` — toggle like; liked titles appear in tab "เรื่องที่ชอบ" + `/opds/liked`, **exempt from expiry**; unlike resets `expires_at` to a fresh window (UI asks to delete immediately) |
 | `/api/titles/{id}/pages` | GET | Page count for the in-browser reader |
 | `/read/{id}` | GET | Mobile web reader (vertical scroll, resumes last page via localStorage) |
 | `/read/{id}/{n}` | GET | Page `n` (1-based) streamed straight out of the CBZ, cached 7 days |
@@ -152,7 +152,7 @@ Dashboard/OPDS credentials are nginx-only: vault
 - `tests/test_db.py::test_scrape_log` fails since that pre-format change
   (asserts raw ISO) — pre-existing, not yet fixed.
 - Reading position is per-browser localStorage, not synced across devices.
-- Liked titles **still expire** after `retention_days` like any other (like ≠ old `kept`).
+- Liked titles are **exempt from expiry** (2026-09-29). Unlike → UI confirm "ลบทันที?"; Cancel resets `expires_at` = now + `retention_days`.
 
 - `_scrape_source` dedups slugs across listing pages (2026-07-13) — required
   because `DoujintSource.listing_url()` ignores `page` (site has no listing

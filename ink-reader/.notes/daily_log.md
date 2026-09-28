@@ -350,3 +350,15 @@ Added 2 new scraper sources and multi-page listing support.
 - **Session closed 2026-09-28.** Pending: none for ink-reader. Open ideas:
   liked titles exempt from expiry (not done — user not asked yet);
   `test_scrape_log` pre-existing failure still unfixed.
+
+## 2026-09-29 — Liked titles exempt from expiry + unlike confirm-delete
+
+- `db.expired_ids()` skips `liked=1` → liked titles never auto-expire.
+- `db.set_liked(False)` resets `expires_at` = now + `retention_days` (old
+  expiry usually already passed → 04:00 job would purge right after unlike).
+- UI (card + reader heart): unliking asks `confirm` "ลบทิ้งจาก NAS ทันทีเลยไหม?"
+  — OK → unlike then `POST /delete` (reader returns to `/`); Cancel → keep,
+  fresh window. Liked cards show "เก็บถาวร" instead of days-left.
+- Tests +2 (`test_liked_titles_never_expire`, `test_unlike_gives_fresh_expiry_window`);
+  suite 58 pass / 1 pre-existing fail (`test_scrape_log`). Local root `.venv`
+  lacks deps — used scratch uv venv py3.12 from requirements.txt.

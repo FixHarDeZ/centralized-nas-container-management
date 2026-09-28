@@ -168,3 +168,21 @@ def test_init_db_migrates_kept_to_new(data_dir):
     row = db.get_title(tid)
     assert row["status"] == "new"
     assert row["expires_at"] is not None
+
+
+def test_liked_titles_never_expire(data_dir):
+    tid = _add("loved")
+    with db._connect() as conn:
+        conn.execute("UPDATE titles SET expires_at='2000-01-01T00:00:00+07:00' WHERE id=?", (tid,))
+    db.set_liked(tid, True)
+    assert db.expired_ids() == []
+
+
+def test_unlike_gives_fresh_expiry_window(data_dir):
+    tid = _add("was-loved")
+    with db._connect() as conn:
+        conn.execute("UPDATE titles SET expires_at='2000-01-01T00:00:00+07:00' WHERE id=?", (tid,))
+    db.set_liked(tid, True)
+    db.set_liked(tid, False)
+    assert db.expired_ids() == []
+    assert db.get_title(tid)["expires_at"] > db.now_iso()

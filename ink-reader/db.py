@@ -164,11 +164,15 @@ def known_slugs() -> set[str]:
         return {r["slug"] for r in conn.execute("SELECT slug FROM titles")}
 
 
-def add_title(slug, title, tags, pages, file_size, source_url, source="doujinth") -> int:
-    expires = (
+def _fresh_expiry() -> str:
+    return (
         datetime.now(ZoneInfo(config.TZ))
         + timedelta(days=get_settings()["retention_days"])
     ).isoformat(timespec="seconds")
+
+
+def add_title(slug, title, tags, pages, file_size, source_url, source="doujinth") -> int:
+    expires = _fresh_expiry()
     with _connect() as conn:
         cur = conn.execute(
             "INSERT INTO titles (slug, title, tags, pages, file_size, source_url,"
@@ -201,8 +205,20 @@ def list_titles(status: str | None = None, source: str | None = None) -> list[di
 
 
 def set_liked(tid: int, liked: bool) -> bool:
+    """Liked titles never expire. Unliking restarts the retention window —
+    the old expires_at has usually passed, so the 04:00 job would otherwise
+    purge a title the user just chose to keep."""
     with _connect() as conn:
-        cur = conn.execute("UPDATE titles SET liked=? WHERE id=?", (int(liked), tid))
+        if liked:
+            cur = conn.execute("UPDATE titles SET liked=1 WHERE id=?", (tid,))
+        else:
+            cur = conn.execute(
+                "UPDATE titles SET liked=0, expires_at=?"
+                " WHERE id=? AND status != 'deleted'",
+                (_fresh_expiry(), tid),
+            )
+            if not cur.rowcount:
+                cur = conn.execute("UPDATE titles SET liked=0 WHERE id=?", (tid,))
         return cur.rowcount > 0
 
 
@@ -225,7 +241,7 @@ def purge_title(tid: int) -> bool:
 def expired_ids() -> list[int]:
     with _connect() as conn:
         rows = conn.execute(
-            "SELECT id FROM titles WHERE status='new' AND expires_at < ?",
+            "SELECT id FROM titles WHERE status='new' AND liked = 0 AND expires_at < ?",
             (now_iso(),),
         )
         return [r["id"] for r in rows]

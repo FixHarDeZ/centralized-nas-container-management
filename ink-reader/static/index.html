@@ -322,7 +322,7 @@ function cardHTML(t) {
     <div class="body">
       <a class="title" href="/read/${t.id}">${esc(t.title)}</a>
       <div class="sub">
-        <span class="exp${dl !== null && dl <= 3 ? " soon" : ""}">อีก ${dl} วัน</span>
+        <span class="exp${!t.liked && dl !== null && dl <= 3 ? " soon" : ""}">${t.liked ? "เก็บถาวร" : `อีก ${dl} วัน`}</span>
         <span>· ${fmtSize(t.file_size)}</span>
         <div class="actions">
           <button class="like${t.liked ? " on" : ""}" data-id="${t.id}" title="ชอบ" aria-label="ชอบ" aria-pressed="${!!t.liked}">${ICON_HEART}</button>
@@ -372,6 +372,8 @@ $("grid").addEventListener("click", async (e) => {
   const like = e.target.closest("button.like");
   if (like) {
     const on = !like.classList.contains("on");
+    // Liked titles are exempt from expiry, so unliking is the moment to ask.
+    const purge = !on && confirm("เอาออกจากเรื่องที่ชอบแล้ว — ลบทิ้งจาก NAS ทันทีเลยไหม?\n(ยกเลิก = เก็บไว้ นับวันหมดอายุใหม่)");
     like.classList.toggle("on", on);
     like.setAttribute("aria-pressed", on);
     const r = await fetch(`/api/titles/${like.dataset.id}/like`, {
@@ -379,6 +381,16 @@ $("grid").addEventListener("click", async (e) => {
       body: JSON.stringify({ liked: on }),
     });
     if (!r.ok) like.classList.toggle("on", !on);
+    else if (purge) {
+      await fetch(`/api/titles/${like.dataset.id}/delete`, { method: "POST" });
+      load();
+      return;
+    }
+    if (r.ok) {
+      const exp = like.closest(".sub").querySelector(".exp");
+      exp.classList.remove("soon");
+      exp.textContent = on ? "เก็บถาวร" : `อีก ${settings.retention_days} วัน`;
+    }
     if (filter === "liked") load(); else loadStats();
     return;
   }
