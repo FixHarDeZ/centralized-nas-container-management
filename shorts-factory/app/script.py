@@ -10,7 +10,7 @@ import time
 
 from openai import AsyncOpenAI
 
-from app import locales, mimo, render
+from app import locales, mimo, model_choice, render
 
 logger = logging.getLogger(__name__)
 
@@ -228,8 +228,8 @@ MIN_ATTEMPT = 90.0
 # A stall is a window, not a request. It is now `ScriptStalled` and a cooldown
 # in main.make_script(), and the smaller model is used only where it earns
 # its place: a retry with just the tail of the budget left.
-FALLBACK_MODEL = mimo.fallback_model()
-PRIMARY_MODEL = mimo.model()
+# Which two models: app/model_choice.py (dashboard /settings, env otherwise),
+# looked up per call so an edit reaches the bot without a restart.
 
 
 # The prompt a human pastes into Google Flow is short and is written while
@@ -265,7 +265,7 @@ async def _say(client: AsyncOpenAI, messages: list[dict], temperature: float,
     """
     try:
         return await mimo.complete(client, messages, within=budget,
-                                   model_name=model or PRIMARY_MODEL,
+                                   model_name=model or model_choice.primary(),
                                    temperature=temperature)
     except mimo.Stalled as stalled:
         raise asyncio.TimeoutError(str(stalled)) from stalled
@@ -592,7 +592,7 @@ async def generate(
         # on the same prompt) and hedges back to the pro. Fixing JSON to match
         # a schema it has already been shown is not work that needs the pro
         # model; finishing inside the leftovers is.
-        model = PRIMARY_MODEL if attempt == 0 else FALLBACK_MODEL
+        model = model_choice.primary() if attempt == 0 else model_choice.fallback()
         attempt += 1
         try:
             raw = await _say(client, messages, temperature=0.8, budget=left,

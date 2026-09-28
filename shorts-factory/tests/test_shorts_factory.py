@@ -114,7 +114,7 @@ def test_a_hung_request_gives_up_on_the_budget():
 
     with pytest.raises(asyncio.TimeoutError):
         asyncio.run(script_gen._say(client, [], 0.8, budget=0.3))
-    assert calls == [script_gen.PRIMARY_MODEL], "exactly one request"
+    assert calls == [script_gen.model_choice.primary()], "exactly one request"
 
 
 def fake_client(replies):
@@ -1585,7 +1585,7 @@ def test_the_schema_retry_leads_with_the_smaller_model(monkeypatch):
     monkeypatch.setattr(script_gen, "_client", lambda: client)
 
     assert asyncio.run(script_gen.generate("หัวข้อ"))["title"] == "t"
-    assert client.asked == [script_gen.PRIMARY_MODEL, script_gen.FALLBACK_MODEL]
+    assert client.asked == [script_gen.model_choice.primary(), script_gen.model_choice.fallback()]
 
 
 def test_an_unparseable_reply_does_not_pollute_the_retry(monkeypatch):

@@ -334,4 +334,4 @@ Added 2 new scraper sources and multi-page listing support.
   pre-existing — confirmed via stash).
 - Verified locally: seeded library, headless screenshots, Chrome check of
   resume (page 10 restored at top) + card progress 22%.
-- **Not committed / not deployed yet.**
+- Commit `7c435d4` pushed to main, deployed; verified in container: `/api/titles/2724/pages` count=23, `/read/2724/1` image/jpeg 202 KB, `/read/2724` 200.
