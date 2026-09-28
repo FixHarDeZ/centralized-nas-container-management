@@ -604,6 +604,9 @@ def test_a_bare_url_is_turned_away_before_reaching_the_model(monkeypatch):
     "TH-AI Passport คืออะไร ต่างจาก Digital ID ยังไง",
     "วอลเลย์บอลไทยเล่นสไตล์ไหน ต่างจากทีมตัวสูงยังไง",
     "iPhone 18 Pro Max ราคาคาดการณ์เท่าไหร่",
+    "ทำไมคลิปเบื้องหลังการถ่ายทำของ MV ถึงดังไม่แพ้ตัว MV เอง",
+    "วิธีชนะใจลูกค้าในวันแรก",
+    "แพ้อาหารทะเลเกิดจากอะไร",
 ])
 def test_ordinary_topics_still_get_through(topic):
     assert not main.result_shaped(topic)

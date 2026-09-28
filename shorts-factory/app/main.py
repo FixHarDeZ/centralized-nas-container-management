@@ -450,7 +450,9 @@ def trend_origin(state: dict, topic: str) -> dict | None:
 # news and sport before suggesting anything; this is the same rule for Topics
 # the human types.
 RESULT_TOPIC = re.compile(
-    r"ชนะ|แพ้|ผลการแข่ง|ผลบอล|สกอร์|ตกรอบ|เข้ารอบ|คว้าแชมป์|ได้แชมป์|"
+    # ชนะ/แพ้ bare also sit inside idioms that say nothing about a result
+    # ("ไม่แพ้ตัว MV", "ชนะใจ", "แพ้อาหาร") and turned those Topics away.
+    r"(?<!ไม่)(?:ชนะ|แพ้)(?!ใจ|ทาง|ภัย|อาหาร|ยา|ฝุ่น|กุ้ง|นม)|ผลการแข่ง|ผลบอล|สกอร์|ตกรอบ|เข้ารอบ|คว้าแชมป์|ได้แชมป์|"
     r"ประกาศผล|เมื่อคืน|\d\s*[-:]\s*\d|"
     # The same trap in English, for Topics sent with /en. One regex rather
     # than one per Locale: these words do not collide across the two, and a
