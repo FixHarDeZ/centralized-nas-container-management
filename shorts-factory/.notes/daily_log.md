@@ -1858,4 +1858,4 @@ install` จะสำเร็จ. ต้องสร้าง venv ใต้ re
 - เทสต์: +3 (dashboard save/reject ทั้งก้อน, บอทเห็นค่าใหม่ไม่ restart). ผล 231 passed,
   8 failed = baseline Raqm/font บน Mac เดิม. root tests 63 passed.
 - ⚠️ commit `2b5f1e3` (docs(ink-reader), session อื่น) ลาก `app/script.py` + test 2 บรรทัด
-  ของงานนี้ติดไปด้วย — ส่วนที่เหลือยังไม่ commit. **ยังไม่ deploy.**
+  ของงานนี้ติดไปด้วย — ส่วนที่เหลือ commit `55c5ea5` pushed. **Deploy แล้ว 28/09**: บอทอ่าน model = mimo-v2.5-pro/mimo-v2.5 (env default), dashboard /settings มี dropdown.

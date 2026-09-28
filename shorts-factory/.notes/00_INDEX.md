@@ -237,7 +237,7 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
   `/config/models.json`, read on every `script._say()` call (Script, trends
   suggestions, Flow prompt, storyboard) — no restart. Same single `POST
   /settings` route, both files validated before either is written (ADR 0009
-  amendment). `app/mimo.py` untouched (vendored). **Not deployed yet.**
+  amendment). `app/mimo.py` untouched (vendored). Deployed 28/09 (55c5ea5).
 - **The bot starts Topics itself (28/08), on a schedule the dashboard edits
   (08/09).** `auto_slots()` owes the newest passed hour **per Locale** from
   `/config/schedule.json` — hours, the pick deadline and an on/off switch, one
