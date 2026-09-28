@@ -2,6 +2,8 @@ import json
 import os
 import sys
 
+import pytest
+
 import agent_options
 import usage_status
 
@@ -109,3 +111,19 @@ def test_native_failure_preserves_old_observation(monkeypatch, tmp_path):
     assert data['five_hour']['pct'] == 17
     assert data['status'] == 'unavailable'
     assert 'SECRET' not in json.dumps(data)
+
+
+@pytest.mark.parametrize('display,resolved,expected', [
+    ('Default (recommended)', '', 'Default (recommended)'),
+    ('Default', None, 'Default'),
+    ('', '', 'Default'),
+    ('Default (recommended)', 'claude-sonnet-5', 'Default (Sonnet 5)'),
+])
+def test_default_model_label_is_not_wrapped_twice(monkeypatch, display, resolved, expected):
+    monkeypatch.setattr(agent_options, 'claude_read', lambda method: {'models': [
+        {'value': 'default', 'displayName': display, 'resolvedModel': resolved,
+         'supportedEffortLevels': ['low', 'high']},
+    ]})
+    assert agent_options.catalog('claude')['models'][0] == {
+        'id': '', 'label': expected, 'efforts': ['low', 'high'],
+    }

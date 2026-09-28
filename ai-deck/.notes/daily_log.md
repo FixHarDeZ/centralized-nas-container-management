@@ -698,3 +698,8 @@ User requested commit + push. Delivered AI Deck rename/features/quota fixes and 
 - Runner job `81aa0a25b89d467b8e16ef420df31d68` succeeded deploying `fbb8032b36165d16e81c55f3cbd91d0839406e81`, restarting ai-deck via its configured profile. Independent `/health` returned ready with that exact revision. Deployed `agent_options.py`, `upload.py`, `ui/app.js`, and `ui/index.html` SHA-256 matched local tested files.
 - Live document worker `GET /api/auth?provider=claude` returned `signed_out`; user can now click Sign in to Claude and complete authentication in Terminal. No login was initiated on the user's behalf. MiMo unchanged. Tests remain 239 passed from implementation verification.
 - This delivery-memory update is documentation only; deployed runtime remains `fbb8032`. No remaining implementation/deployment work; user authentication is the remaining account action. Unrelated working-tree edits preserved.
+
+## 2026-09-28 — Default model label duplication
+
+- Fixed screenshot-reported `Default (Default (recommended))`: CLI displayName was wrapped a second time when resolvedModel was absent. Preserve the CLI label in that case (fallback `Default`); keep `Default (Sonnet 5)` when a resolved version is available. Model IDs and effort choices unchanged.
+- Regression reproduced before fix (3 failed, 1 passed); metadata/preferences suite now 29 passed, diff check clean. Follow-up to the authorized Claude rollout; preparing commit/push/deploy.

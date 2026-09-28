@@ -1,3 +1,8 @@
+## 2026-09-28 — Default model label duplication
+
+- Fixed screenshot-reported `Default (Default (recommended))`: CLI displayName was wrapped a second time when resolvedModel was absent. Preserve the CLI label in that case (fallback `Default`); keep `Default (Sonnet 5)` when a resolved version is available. Model IDs and effort choices unchanged.
+- Regression reproduced before fix (3 failed, 1 passed); metadata/preferences suite now 29 passed, diff check clean. Follow-up to the authorized Claude rollout; preparing commit/push/deploy.
+
 ## 2026-09-28 — Claude sign-in deployed
 
 - User authorized commit, push and deployment. Feature commit `bb38a2a` pushed to main; another task advanced main to `fbb8032` (ops-bot only, ai-deck unchanged). First runner job correctly rejected the stale tip before deployment.

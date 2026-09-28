@@ -148,9 +148,11 @@ def _claude_models():
             resolved = item.get('resolvedModel', '')
             match = re.fullmatch(r'claude-([a-z]+)-(\d+(?:-\d+)*?)(?:-\d{8})?', resolved) if isinstance(resolved, str) else None
             label = (match[1].title() + ' ' + match[2].replace('-', '.')) if match else str(item.get('displayName') or model)
+            if model == 'default':
+                label = f'Default ({label})' if match else str(item.get('displayName') or 'Default')
             levels = item.get('supportedEffortLevels', [])
             models.append({'id': '' if model == 'default' else model,
-                           'label': f'Default ({label})' if model == 'default' else label,
+                           'label': label,
                            'efforts': [e for e in levels if e in EFFORTS] if isinstance(levels, list) else []})
         if not models:
             # Preserve usable aliases if the installed CLI cannot answer metadata.
