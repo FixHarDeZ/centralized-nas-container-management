@@ -127,3 +127,6 @@ Implementation commit `1950b77` (`enhance ops-bot`) fast-forward merged into `ma
 - Verified 60 tests, independent review and browser save/reload/reset/error flow plus desktop 1440px/mobile 390px checks. No live provider analysis or NAS deployment tested. Provider/account must support selected ID + function calling + low reasoning; saving only validates syntax.
 - Follow-ups prioritized in README: persistent recovery/lifecycle, durable job state/restart recovery, re-analysis/version comparison, recurring incident grouping.
  See daily_log.md for findings.
+
+## Readability update — 2026-09-28
+Local CSS/template follow-up: main body and controls 16px, secondary text minimum 14px (including mobile), stronger muted-text contrast, larger touch targets, wrapping fixes. Heading scale unchanged. CSS URL version 20260928. Desktop 1440px/mobile 390px checked across overview/settings/detail; no mobile horizontal overflow. Release authorized; 60 tests passed. Commit/push and selective ops-bot deployment in progress; outcome recorded below after verification.

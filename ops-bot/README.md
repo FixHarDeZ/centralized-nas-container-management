@@ -220,6 +220,8 @@ sends a Telegram notification and does not update incident status in SQLite.
 Search matches service/container text literally; severity filtering uses the
 latest analysis, with 25 incidents per page. Details show evidence, suggested
 fixes, model provenance, token usage, collapsible diagnostic logs and actions.
+Body text and controls use 16px; secondary labels and metadata use at least 14px
+on desktop and mobile, with larger touch targets and higher-contrast muted text.
 Older reports without model provenance display “ไม่ได้บันทึกไว้”.
 
 In **AI Settings** (`/dashboard/settings`):

@@ -214,3 +214,13 @@ data. Also update the Kuma webhook URL to include `?secret=…` if it doesn't.
 - Fetched origin; main and origin/main matched before integration. Fast-forward merged `codex/ops-bot-dashboard` into main without conflicts.
 - Re-ran the complete ops-bot suite on main: 60 passed. Pushed implementation to origin/main successfully (`732ac9f..1950b77`).
 - Updated stack index and this log in a follow-up documentation commit. No NAS deployment performed: user explicitly takes ownership of deployment.
+
+## 2026-09-28 — Improve dashboard readability
+- User reported all non-heading text too small. Raised primary body/controls/table summaries to 16px and secondary labels/metadata/log text to at least 14px across responsive breakpoints; retained heading scale. Increased muted-text contrast and primary control heights to 44px.
+- Enabled wrapping for model strip/pagination and constrained mobile table cells to avoid overflow; CSS cache version advanced to 20260928.
+- Verified computed font sizes and desktop 1440px visual layout; overview/settings/incident detail all fit 390px without horizontal overflow; inspected mobile incident screenshot. CSS/template-only change, no new automated tests needed. git diff --check passed.
+- Local changes only, not committed/pushed/deployed. Existing unrelated ai-deck/hermes-agent working changes untouched. User still owns deployment.
+
+### Release preparation
+- User authorized commit, push and deployment of the readability fix. Full stack suite passed: 60 tests; scoped diff check passed.
+- Deploy scope is ops-bot only; unrelated dirty ai-deck/hermes-agent changes are excluded. Selective tar+SSH upload followed by repository deploy.sh --restart-only -s ops-bot. Deployment outcome will be recorded after verification.
