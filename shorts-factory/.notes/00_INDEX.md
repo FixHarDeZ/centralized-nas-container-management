@@ -231,6 +231,13 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
   = `pick:<suggested_at>:<index>` เทียบ timestamp กันกดปุ่มของลิสต์เก่า). **หัวข้อไม่ล็อก DevOps/AI แล้ว** (ADR 0004 ท้ายไฟล์) —
   `category` เป็นมิติที่บันทึกไว้อ่านแบบสังเกตการณ์ ไม่ใช่ variant ที่สุ่ม.
   **ยังไม่ลง**: recommender (ขั้น 6 รอ Gate)
+- **mimo model chosen in the dashboard (28/09).** `/settings` has a primary +
+  fallback dropdown (closed list `app/model_choice.CHOICES` = `mimo-v2.5-pro`,
+  `mimo-v2.5`; empty = bot env `MIMO_MODEL`/`MIMO_FALLBACK_MODEL`), stored in
+  `/config/models.json`, read on every `script._say()` call (Script, trends
+  suggestions, Flow prompt, storyboard) — no restart. Same single `POST
+  /settings` route, both files validated before either is written (ADR 0009
+  amendment). `app/mimo.py` untouched (vendored). **Not deployed yet.**
 - **The bot starts Topics itself (28/08), on a schedule the dashboard edits
   (08/09).** `auto_slots()` owes the newest passed hour **per Locale** from
   `/config/schedule.json` — hours, the pick deadline and an on/off switch, one

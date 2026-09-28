@@ -68,8 +68,8 @@ def config_dir(tmp_path, monkeypatch):
 @pytest.fixture()
 def client(data_dir, config_dir):
     """A client whose modules were imported *after* DATA_DIR was set."""
-    from app import history, manifest, schedule
-    for module in (manifest, history, schedule):
+    from app import history, manifest, model_choice, schedule
+    for module in (manifest, history, schedule, model_choice):
         importlib.reload(module)
     from app import dashboard
     importlib.reload(dashboard)
@@ -242,3 +242,32 @@ def test_now_page_still_shows_a_key_it_does_not_know_about(client, data_dir):
     (data_dir / "state.json").write_text(json.dumps(
         {"mode": "idle", "a_key_invented_tomorrow": "xyzzy"}), encoding="utf-8")
     assert "xyzzy" in client.get("/now").text
+
+
+def test_the_mimo_model_is_chosen_on_the_settings_page(client, config_dir):
+    from app import model_choice
+    body = client.get("/settings").text
+    assert 'name="model_primary"' in body and "mimo-v2.5-pro" in body
+
+    reply = client.post("/settings", data={
+        "th_enabled": "on", "th_hours": "8", "th_minutes": "15",
+        "en_hours": "20", "en_minutes": "15",
+        "model_primary": "mimo-v2.5", "model_fallback": "",
+    })
+    assert reply.status_code == 200
+    assert json.loads((config_dir / "models.json").read_text()) == {
+        "primary": "mimo-v2.5", "fallback": ""}
+    assert model_choice.primary() == "mimo-v2.5"
+
+
+def test_an_unknown_model_stores_nothing(client, config_dir):
+    """The dashboard has no API key to ask whether a name exists — a typo would
+    break unattended rounds — and a bad model must not half-save the schedule."""
+    reply = client.post("/settings", data={
+        "th_enabled": "on", "th_hours": "9", "th_minutes": "15",
+        "en_hours": "20", "en_minutes": "15",
+        "model_primary": "gpt-4o",
+    })
+    assert reply.status_code == 400
+    assert not (config_dir / "models.json").exists()
+    assert not (config_dir / "schedule.json").exists()

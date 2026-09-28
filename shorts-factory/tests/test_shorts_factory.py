@@ -3358,3 +3358,22 @@ def test_dropping_a_stale_review_frees_the_schedule(monkeypatch, tmp_path):
     # to_idle() does not touch the storyboard wait, which holds its own copy of
     # everything it needs.
     assert state["clip_wait"] == {"message_id": 2339}
+
+
+def test_the_dashboard_model_reaches_the_bot_without_a_restart(tmp_path, monkeypatch):
+    import importlib
+    from app import model_choice
+    monkeypatch.setenv("CONFIG_DIR", str(tmp_path))
+    monkeypatch.setenv("MIMO_MODEL", "env-model")
+    importlib.reload(model_choice)
+    try:
+        client, calls = hanging_client([0, 0, 0])
+        asyncio.run(script_gen._say(client, [], 0.8, budget=1))
+        model_choice.save({"primary": "mimo-v2.5"})
+        asyncio.run(script_gen._say(client, [], 0.8, budget=1))
+        (tmp_path / "models.json").write_text("{ not json", encoding="utf-8")
+        asyncio.run(script_gen._say(client, [], 0.8, budget=1))
+        assert calls == ["env-model", "mimo-v2.5", "env-model"]
+    finally:
+        monkeypatch.undo()
+        importlib.reload(model_choice)

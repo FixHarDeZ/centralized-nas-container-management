@@ -78,3 +78,15 @@ would leave one `suggested` list in state with the other round's buttons still
 on screen — a 💡 button that writes about something the human never saw, now
 reachable since two Locales can be scheduled for the same hour. The other
 Locale keeps its slot owed and goes out on a later tick.
+
+## Amendment 2026-09-28: the mimo model
+
+The same route now also writes `/config/models.json` — which mimo model the bot
+writes with (primary, and the fallback used for the Script retry). Same volume,
+same single `POST /settings`, same whole-request validation (both files are
+checked before either is written), so the boundary above is unchanged: the
+dashboard still reaches nothing under `/data` and holds no key. The value is a
+closed list rather than free text because without a key the dashboard cannot
+ask the endpoint whether a name exists, and a typo would surface only as a
+failed unattended round. An absent or unreadable file falls back to the bot's
+`MIMO_MODEL` / `MIMO_FALLBACK_MODEL`, exactly as before.

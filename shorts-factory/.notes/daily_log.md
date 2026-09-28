@@ -1843,3 +1843,19 @@ install` จะสำเร็จ. ต้องสร้าง venv ใต้ re
 ไฟล์ที่แก้รอบนี้: `app/state.py`, `app/main.py`, `tests/test_shorts_factory.py`, `README.md`.
 แยกจากของค้างเซสชันก่อนที่ยังไม่ commit: `app/youtube.py` (+1 บรรทัด `containsSyntheticMedia`)
 — คนละเหตุผล คนละคอมมิต ห้ามรวม.
+
+
+## 2026-09-28 — เลือก model ของ mimo จาก dashboard
+
+- ใหม่ `app/model_choice.py`: `/config/models.json` `{primary, fallback}` ลิสต์ปิด
+  (`mimo-v2.5-pro`, `mimo-v2.5`) ว่าง = env เดิม, ไฟล์พัง = log warning แล้วใช้ env.
+- `app/script.py`: ลบค่าคงที่ `PRIMARY_MODEL`/`FALLBACK_MODEL` ที่แช่ตอน import →
+  เรียก `model_choice.primary()/fallback()` ทุกคำขอ (ไม่งั้นแก้แล้วต้อง restart).
+  `mimo.py` ไม่แตะ (vendored จาก shared).
+- `dashboard.py` + `settings.html`: dropdown 2 ช่องในฟอร์ม `/settings` เดิม (route
+  เขียนยังมีอันเดียว เทสต์ WRITING_ROUTES ผ่าน), validate schedule+models ก่อนเขียน.
+- เอกสาร: README, ADR 0009 amendment, root CLAUDE.md แถว shorts.
+- เทสต์: +3 (dashboard save/reject ทั้งก้อน, บอทเห็นค่าใหม่ไม่ restart). ผล 231 passed,
+  8 failed = baseline Raqm/font บน Mac เดิม. root tests 63 passed.
+- ⚠️ commit `2b5f1e3` (docs(ink-reader), session อื่น) ลาก `app/script.py` + test 2 บรรทัด
+  ของงานนี้ติดไปด้วย — ส่วนที่เหลือยังไม่ commit. **ยังไม่ deploy.**

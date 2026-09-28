@@ -37,6 +37,33 @@
     </tbody>
   </table>
   </div>
+
+  <h2>Model ของ mimo</h2>
+  <p class="muted">
+    ใช้ตอนเขียนสคริปต์ เสนอหัวข้อ /trends, Flow prompt และ storyboard —
+    ตัวสำรองใช้เฉพาะตอนเขียนสคริปต์ใหม่ด้วยเวลาที่เหลือหลังรอบแรกไม่ผ่าน.
+    "ค่าตั้งต้นของบอท" = ตาม env ของคอนเทนเนอร์บอท (<code>MIMO_MODEL</code> /
+    <code>MIMO_FALLBACK_MODEL</code>). มีผลกับคำขอถัดไป ไม่ต้อง restart
+  </p>
+  <div class="rows">
+  <table>
+    <tbody>
+    {% for role, label in [("primary", "ตัวหลัก"), ("fallback", "ตัวสำรอง")] %}
+    <tr>
+      <th data-label="บทบาท">{{ label }}</th>
+      <td data-label="model">
+        <select name="model_{{ role }}">
+          <option value="" {% if not models[role] %}selected{% endif %}>ค่าตั้งต้นของบอท</option>
+          {% for name in model_choices %}
+          <option value="{{ name }}" {% if models[role] == name %}selected{% endif %}>{{ name }}</option>
+          {% endfor %}
+        </select>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
   <p><button type="submit">บันทึก</button></p>
 </form>
 
@@ -55,8 +82,8 @@
 </div>
 
 <p class="muted">
-  หน้านี้เป็นที่เดียวใน dashboard ที่เขียนอะไรได้ และเขียนได้แค่ไฟล์ตารางเวลา
-  (<code>/config/schedule.json</code>) — manifest, state และประวัติทั้งหมดยัง mount
+  หน้านี้เป็นที่เดียวใน dashboard ที่เขียนอะไรได้ และเขียนได้แค่ไฟล์ตั้งค่าใน <code>/config</code>
+  (<code>schedule.json</code> ตารางเวลา, <code>models.json</code> model ของ mimo) — manifest, state และประวัติทั้งหมดยัง mount
   แบบ read-only เหมือนเดิม ดู docs/adr/0009
 </p>
 {% endblock %}

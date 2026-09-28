@@ -535,6 +535,16 @@ with nobody reviewing them. `TRENDS_HOURS` and `AUTO_PICK_MINUTES` remain the
 defaults for a container that has never been given a schedule, so an untouched
 deployment behaves exactly as it did before this existed.
 
+The same `/settings` page picks the mimo model: a primary (every Script,
+the /trends suggestions, the Flow prompt, storyboards) and a fallback (only the
+Script retry that runs on what is left of the shared budget). It is a closed
+list (`app/model_choice.CHOICES`), not free text — the dashboard holds no API
+key to check a name, and a typo would break unattended rounds. Stored in
+`/config/models.json`; "bot default" (empty) means `MIMO_MODEL` /
+`MIMO_FALLBACK_MODEL` from the bot's env as before. Read on every call, so an
+edit reaches the next request without a restart. Both files are validated
+before either is written.
+
 Nothing about this reaches YouTube. Uploading is still a button under the
 finished clip — outward-facing, irreversible, and the one step ADR 0001 keeps
 in a human's hands.
@@ -698,7 +708,7 @@ make secrets                    # render .env from vault + manifest
 | :--- | :--- | :--- |
 | `TRENDS_HOURS` | `8,12,17` | Thai's default hours, until a schedule is saved in the dashboard |
 | `AUTO_PICK_MINUTES` | `15` | default wait before the list picks itself, same |
-| `CONFIG_DIR` | `/config` | where `schedule.json` lives; the dashboard's only writable mount |
+| `CONFIG_DIR` | `/config` | where `schedule.json` and `models.json` live; the dashboard's only writable mount |
 | `FLOW_PARK_HOURS` | `24` | how long a clip waits for footage you generate in Flow |
 | `FLOW_PROMPT_TIMEOUT_SECONDS` | `180` | cap on writing one Flow Prompt |
 | `STORYBOARD_TIMEOUT_SECONDS` | `300` | cap on planning one storyboard |

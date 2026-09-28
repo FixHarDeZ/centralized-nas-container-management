@@ -18,7 +18,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app import analytics, experiment, history, locales, manifest, schedule
+from app import analytics, experiment, history, locales, manifest, model_choice, schedule
 
 HERE = Path(__file__).parent
 DATA = Path(os.environ.get("DATA_DIR", "/data"))
@@ -219,8 +219,8 @@ def now(request: Request):
 
 # --- the one writing route (docs/adr/0009) -----------------------------------
 
-def _settings_page(request: Request, stored: dict, saved: bool = False,
-                   error: str = "", status: int = 200):
+def _settings_page(request: Request, stored: dict, models: dict,
+                   saved: bool = False, error: str = "", status: int = 200):
     return TEMPLATES.TemplateResponse(request, "settings.html", {
         "rows": [{
             "code": code,
@@ -232,6 +232,8 @@ def _settings_page(request: Request, stored: dict, saved: bool = False,
         "stamps": schedule.stamps(_state()),
         "min_minutes": schedule.MIN_PICK_MINUTES,
         "max_minutes": schedule.MAX_PICK_MINUTES,
+        "models": models,
+        "model_choices": model_choice.CHOICES,
         "saved": saved,
         "error": error,
         "gate": None,
@@ -240,12 +242,13 @@ def _settings_page(request: Request, stored: dict, saved: bool = False,
 
 @app.get("/settings", response_class=HTMLResponse)
 def settings_form(request: Request):
-    return _settings_page(request, schedule.settings())
+    return _settings_page(request, schedule.settings(), model_choice.stored())
 
 
 @app.post("/settings", response_class=HTMLResponse)
 async def settings_save(request: Request):
-    """Rewrite `/config/schedule.json`. The only non-GET route in this app.
+    """Rewrite `/config/schedule.json` and `/config/models.json`. The only
+    non-GET route in this app.
 
     Everything the form sends is untrusted text off a LAN page behind one basic
     auth, so nothing is coerced generously: `schedule.validate()` rejects the
@@ -261,13 +264,19 @@ async def settings_save(request: Request):
             "hours": [h for h in raw.split(",") if h],
             "auto_pick_minutes": form.get(f"{code}_minutes", "15"),
         }
+    models = {role: str(form.get(f"model_{role}", "")) for role in model_choice.ROLES}
     try:
+        # Both checked before either is written: one bad field stores nothing.
+        schedule.validate(payload)
+        model_choice.validate(models)
         stored = schedule.save(payload)
+        chosen = model_choice.save(models)
     except ValueError as exc:
         # Show what they typed back, not what is on disk: a rejected form that
         # redraws itself from storage silently discards the edit.
-        return _settings_page(request, schedule.settings(), error=str(exc), status=400)
-    return _settings_page(request, stored, saved=True)
+        return _settings_page(request, schedule.settings(), model_choice.stored(),
+                              error=str(exc), status=400)
+    return _settings_page(request, stored, chosen, saved=True)
 
 
 def main() -> None:
