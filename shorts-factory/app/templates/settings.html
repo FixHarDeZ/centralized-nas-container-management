@@ -43,7 +43,9 @@
     ใช้ตอนเขียนสคริปต์ เสนอหัวข้อ /trends, Flow prompt และ storyboard —
     ตัวสำรองใช้เฉพาะตอนเขียนสคริปต์ใหม่ด้วยเวลาที่เหลือหลังรอบแรกไม่ผ่าน.
     "ค่าตั้งต้นของบอท" = ตาม env ของคอนเทนเนอร์บอท (<code>MIMO_MODEL</code> /
-    <code>MIMO_FALLBACK_MODEL</code>). มีผลกับคำขอถัดไป ไม่ต้อง restart
+    <code>MIMO_FALLBACK_MODEL</code>). มีผลกับคำขอถัดไป ไม่ต้อง restart.
+    รายชื่อ model บอทดึงจาก mimo เองทุก 6 ชม. เรียงใหม่สุดก่อน
+    {% if catalog_at %}(ล่าสุด {{ catalog_at }}){% else %}(ยังไม่เคยดึง — ใช้ลิสต์ตั้งต้น){% endif %}
   </p>
   <div class="rows">
   <table>

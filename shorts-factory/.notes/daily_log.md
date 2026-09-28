@@ -1859,3 +1859,10 @@ install` จะสำเร็จ. ต้องสร้าง venv ใต้ re
   8 failed = baseline Raqm/font บน Mac เดิม. root tests 63 passed.
 - ⚠️ commit `2b5f1e3` (docs(ink-reader), session อื่น) ลาก `app/script.py` + test 2 บรรทัด
   ของงานนี้ติดไปด้วย — ส่วนที่เหลือ commit `55c5ea5` pushed. **Deploy แล้ว 28/09**: บอทอ่าน model = mimo-v2.5-pro/mimo-v2.5 (env default), dashboard /settings มี dropdown.
+
+### ต่อ: ลิสต์ model อัปเดตเอง
+- ปัญหา: dropdown ฟิก `CHOICES` → ไม่เห็น mimo-v2.6-pro/v2.6-flash ที่ endpoint มีแล้ว.
+- บอท (มีคีย์) ดึง `GET /models` ตอน start + ทุก 6 ชม. ใน poll loop (`spawn`, ครอบ
+  `wait_for` 30 วิ) → กรอง asr/tts → เรียง natural ใหม่สุดก่อน → `/data/mimo_models.json`.
+  dashboard อ่าน `:ro` (ไม่ต้องมีคีย์ ADR 0007 คงเดิม), โชว์เวลาที่ดึงล่าสุด. ดึงพัง = เก็บลิสต์เดิม.
+- เทสต์ +3 → 234 passed / 8 failed (baseline).

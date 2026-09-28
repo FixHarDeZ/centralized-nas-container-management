@@ -538,8 +538,13 @@ deployment behaves exactly as it did before this existed.
 The same `/settings` page picks the mimo model: a primary (every Script,
 the /trends suggestions, the Flow prompt, storyboards) and a fallback (only the
 Script retry that runs on what is left of the shared budget). It is a closed
-list (`app/model_choice.CHOICES`), not free text — the dashboard holds no API
-key to check a name, and a typo would break unattended rounds. Stored in
+list, not free text — the dashboard holds no API key to check a name, and a
+typo would break unattended rounds. The list is live: the bot pulls mimo's
+`GET /models` at startup and every `MIMO_CATALOG_HOURS` (default 6), drops the
+speech models (`-asr`, `-tts*`), sorts newest version first and writes
+`/data/mimo_models.json`, which the dashboard reads `:ro`. New releases show up
+without a deploy; a failed fetch keeps the previous list, and no list at all
+falls back to `app/model_choice.CHOICES`. Stored in
 `/config/models.json`; "bot default" (empty) means `MIMO_MODEL` /
 `MIMO_FALLBACK_MODEL` from the bot's env as before. Read on every call, so an
 edit reaches the next request without a restart. Both files are validated

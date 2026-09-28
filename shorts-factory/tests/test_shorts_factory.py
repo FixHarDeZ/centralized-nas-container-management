@@ -3377,3 +3377,43 @@ def test_the_dashboard_model_reaches_the_bot_without_a_restart(tmp_path, monkeyp
     finally:
         monkeypatch.undo()
         importlib.reload(model_choice)
+
+
+def test_the_model_catalog_keeps_chat_models_newest_first():
+    from app import model_choice
+    listed = ["mimo-v2.5", "mimo-v2.5-asr", "mimo-v2.5-pro", "mimo-v2.5-tts",
+              "mimo-v2.5-tts-voiceclone", "mimo-v2.6-flash", "mimo-v2.6-pro", "mimo-v2.10"]
+    got = model_choice.chat_models(listed)
+    assert not [n for n in got if "tts" in n or "asr" in n]
+    assert got[0] == "mimo-v2.10", "natural order: v2.10 is newer than v2.6"
+    assert got.index("mimo-v2.6-pro") < got.index("mimo-v2.5-pro")
+
+
+def test_a_failed_catalog_fetch_keeps_the_old_list(tmp_path, monkeypatch):
+    import types
+    import importlib
+    from app import model_choice
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
+    importlib.reload(model_choice)
+    try:
+        class Models:
+            def __init__(self, ids, boom=False):
+                self.ids, self.boom = ids, boom
+
+            async def list(self):
+                if self.boom:
+                    raise RuntimeError("endpoint down")
+                return types.SimpleNamespace(
+                    data=[types.SimpleNamespace(id=i) for i in self.ids])
+
+        api = types.SimpleNamespace(models=Models(["mimo-v2.6-pro", "mimo-v2.5-tts"]))
+        monkeypatch.setattr(model_choice.mimo, "client", lambda: api)
+        assert asyncio.run(model_choice.refresh()) == ["mimo-v2.6-pro"]
+        assert model_choice.choices() == ("mimo-v2.6-pro",)
+
+        api.models = Models([], boom=True)
+        assert asyncio.run(model_choice.refresh()) == []
+        assert model_choice.choices() == ("mimo-v2.6-pro",)
+    finally:
+        monkeypatch.undo()
+        importlib.reload(model_choice)

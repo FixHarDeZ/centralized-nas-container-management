@@ -271,3 +271,22 @@ def test_an_unknown_model_stores_nothing(client, config_dir):
     assert reply.status_code == 400
     assert not (config_dir / "models.json").exists()
     assert not (config_dir / "schedule.json").exists()
+
+
+def test_the_model_dropdown_follows_the_catalog_the_bot_fetched(client, data_dir, config_dir):
+    """The dashboard has no key; the list it offers is whatever the bot last
+    pulled from `/models` into /data — so a new mimo release shows up unasked."""
+    (data_dir / "mimo_models.json").write_text(json.dumps({
+        "fetched_at": "2026-09-28T12:00:00",
+        "models": ["mimo-v2.6-pro", "mimo-v2.6-flash", "mimo-v2.5-pro"],
+    }), encoding="utf-8")
+    body = client.get("/settings").text
+    assert "mimo-v2.6-pro" in body and "2026-09-28T12:00:00" in body
+
+    reply = client.post("/settings", data={
+        "th_enabled": "on", "th_hours": "8", "th_minutes": "15",
+        "en_hours": "20", "en_minutes": "15",
+        "model_primary": "mimo-v2.6-pro",
+    })
+    assert reply.status_code == 200
+    assert json.loads((config_dir / "models.json").read_text())["primary"] == "mimo-v2.6-pro"

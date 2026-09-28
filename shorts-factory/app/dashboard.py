@@ -18,7 +18,8 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app import analytics, experiment, history, locales, manifest, model_choice, schedule
+from app import (analytics, experiment, history, locales, manifest, model_choice,
+                 schedule)
 
 HERE = Path(__file__).parent
 DATA = Path(os.environ.get("DATA_DIR", "/data"))
@@ -233,7 +234,8 @@ def _settings_page(request: Request, stored: dict, models: dict,
         "min_minutes": schedule.MIN_PICK_MINUTES,
         "max_minutes": schedule.MAX_PICK_MINUTES,
         "models": models,
-        "model_choices": model_choice.CHOICES,
+        "model_choices": model_choice.choices(),
+        "catalog_at": model_choice.catalog().get("fetched_at"),
         "saved": saved,
         "error": error,
         "gate": None,

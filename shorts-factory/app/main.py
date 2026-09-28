@@ -16,9 +16,9 @@ from pathlib import Path
 
 import httpx
 
-from app import (analytics, backfill, experiment, history, locales, manifest, render,
-                 retention, schedule, script as script_gen, snapshots, storyboard, telegram, trends,
-                 youtube)
+from app import (analytics, backfill, experiment, history, locales, manifest, model_choice,
+                 render, retention, schedule, script as script_gen, snapshots, storyboard, telegram,
+                 trends, youtube)
 from app import state as st
 # Re-exported: the tests and the dashboard reach these through `main`.
 from app.state import (BUSY_MODES, CLIP_WAIT_LIFETIME, PARK_LIFETIME,  # noqa: F401
@@ -1928,6 +1928,10 @@ async def main() -> None:
             # thread: getUpdates already wakes every 30s. See app/snapshots.py.
             if snapshots.due(state):
                 await take_snapshots(client, state)
+            # The dashboard's model dropdown is this list; it has no key to
+            # fetch it itself. Off the loop so a slow endpoint never stalls polling.
+            if model_choice.refresh_due():
+                spawn(model_choice.refresh(), "model_catalog")
             owed = auto_slots(state)
             # One round at a time, and only from a standing start. Two rounds
             # in flight would overwrite each other's `suggested` list and the

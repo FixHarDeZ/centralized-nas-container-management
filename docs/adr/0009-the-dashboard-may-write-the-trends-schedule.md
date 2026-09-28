@@ -90,3 +90,7 @@ closed list rather than free text because without a key the dashboard cannot
 ask the endpoint whether a name exists, and a typo would surface only as a
 failed unattended round. An absent or unreadable file falls back to the bot's
 `MIMO_MODEL` / `MIMO_FALLBACK_MODEL`, exactly as before.
+
+The list itself is fetched by the bot (which holds the key) from `GET /models`
+into `/data/mimo_models.json`; the dashboard only reads it through its existing
+`/data:ro` mount, so no key and no new write path reach the dashboard.
