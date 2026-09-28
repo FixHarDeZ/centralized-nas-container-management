@@ -68,7 +68,7 @@ def test_file_and_cover(client):
 
 def test_opds_routes(client):
     _seed()
-    for path in ("/opds", "/opds/new", "/opds/long"):
+    for path in ("/opds", "/opds/new", "/opds/long", "/opds/liked"):
         r = client.get(path)
         assert r.status_code == 200
         assert r.headers["content-type"].startswith("application/atom+xml")
@@ -120,7 +120,7 @@ def test_reader_pages_list(client):
     tid = _seed_real_cbz()
     r = client.get(f"/api/titles/{tid}/pages")
     assert r.status_code == 200
-    assert r.json() == {"id": tid, "title": "Readable", "count": 3}
+    assert r.json() == {"id": tid, "title": "Readable", "count": 3, "liked": False}
     assert client.get("/api/titles/999/pages").status_code == 404
 
 
@@ -142,3 +142,19 @@ def test_reader_page_html(client):
     r = client.get(f"/read/{tid}")
     assert r.status_code == 200
     assert "text/html" in r.headers["content-type"]
+
+
+def test_like_toggle_and_filter(client):
+    tid = _seed()
+    other = db.add_title("s2", "Other", "", 1, 50, "u")
+    assert db.get_title(tid)["liked"] == 0
+    r = client.post(f"/api/titles/{tid}/like", json={"liked": True})
+    assert r.json() == {"id": tid, "liked": True}
+    assert db.get_title(tid)["liked"] == 1
+    feed = client.get("/opds/liked").content
+    assert f"/files/{tid}.cbz".encode() in feed
+    assert f"/files/{other}.cbz".encode() not in feed
+    assert client.get("/api/status").json()["stats"]["liked"]["count"] == 1
+    client.post(f"/api/titles/{tid}/like", json={"liked": False})
+    assert db.get_title(tid)["liked"] == 0
+    assert client.post("/api/titles/999/like", json={"liked": True}).status_code == 404

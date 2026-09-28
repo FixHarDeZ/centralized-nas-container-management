@@ -10,7 +10,7 @@ def test_root_feed(data_dir):
     root = ET.fromstring(opds.root_feed())
     hrefs = [l.get("href") for e in root.findall(f"{ATOM}entry")
              for l in e.findall(f"{ATOM}link")]
-    assert hrefs == ["/opds/new", "/opds/long"]
+    assert hrefs == ["/opds/new", "/opds/long", "/opds/liked"]
 
 
 def test_root_feed_absolute_urls(data_dir):
@@ -18,7 +18,7 @@ def test_root_feed_absolute_urls(data_dir):
     hrefs = [l.get("href") for e in root.findall(f"{ATOM}entry")
              for l in e.findall(f"{ATOM}link")]
     assert hrefs == ["http://192.168.1.100:5068/opds/new",
-                     "http://192.168.1.100:5068/opds/long"]
+                     "http://192.168.1.100:5068/opds/long", "http://192.168.1.100:5068/opds/liked"]
 
 
 def test_titles_feed(data_dir):

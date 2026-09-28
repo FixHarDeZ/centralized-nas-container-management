@@ -48,6 +48,14 @@ def api_delete(tid: int):
     return {"ok": True}
 
 
+@app.post("/api/titles/{tid}/like")
+def api_like(tid: int, payload: dict):
+    liked = bool(payload.get("liked"))
+    if not db.set_liked(tid, liked):
+        raise HTTPException(404)
+    return {"id": tid, "liked": liked}
+
+
 @app.post("/api/scrape")
 def api_scrape():
     threading.Thread(target=scraper.scrape_cycle, daemon=True).start()
@@ -109,7 +117,9 @@ def _cbz_pages(tid: int) -> tuple[str, list[str]]:
 @app.get("/api/titles/{tid}/pages")
 def api_pages(tid: int):
     _, names = _cbz_pages(tid)
-    return {"id": tid, "title": db.get_title(tid)["title"], "count": len(names)}
+    row = db.get_title(tid)
+    return {"id": tid, "title": row["title"], "count": len(names),
+            "liked": bool(row["liked"])}
 
 
 @app.get("/read/{tid}")
@@ -149,7 +159,7 @@ def opds_root(request: Request):
 
 @app.get("/opds/{section}")
 def opds_titles(section: str, request: Request):
-    if section not in ("new", "long"):
+    if section not in opds.SECTION_NAMES:
         raise HTTPException(404)
     return Response(opds.titles_feed(section, _opds_base_url(request)),
                     media_type="application/atom+xml")

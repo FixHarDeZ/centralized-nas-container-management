@@ -335,3 +335,13 @@ Added 2 new scraper sources and multi-page listing support.
 - Verified locally: seeded library, headless screenshots, Chrome check of
   resume (page 10 restored at top) + card progress 22%.
 - Commit `7c435d4` pushed to main, deployed; verified in container: `/api/titles/2724/pages` count=23, `/read/2724/1` image/jpeg 202 KB, `/read/2724` 200.
+
+## 2026-09-28 (2) — Like + "เรื่องที่ชอบ" category
+
+- `titles.liked` column (ALTER migration), `db.set_liked()`, `stats()["liked"]`.
+- `POST /api/titles/{id}/like {"liked": bool}`; `/api/titles/{id}/pages` returns `liked`.
+- OPDS `/opds/liked` "เรื่องที่ชอบ" (root feed lists it) → Meebook/KOReader.
+- UI: heart on each card (optimistic toggle, rollback on error), tab
+  "เรื่องที่ชอบ N", heart in reader top bar. Card footer wraps at iPhone width.
+- Liked titles still expire (kept feature stays removed).
+- Tests: 56 pass / 1 pre-existing fail (`test_scrape_log`). Browser-verified locally.

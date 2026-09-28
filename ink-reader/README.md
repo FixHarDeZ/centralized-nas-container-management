@@ -77,6 +77,7 @@ Dashboard/OPDS auth is **not** an app env var — it lives in the nginx
 | `/api/scrape` | POST | Trigger a scrape cycle now (background thread, all sources) |
 | `/api/status` | GET | Stats + per-source counts/sizes + last scrape result |
 | `/api/settings` | GET/PUT | Runtime settings (`retention_days`, `min_pages`) |
+| `/api/titles/{id}/like` | POST | `{"liked": bool}` — toggle like; liked titles appear in tab "เรื่องที่ชอบ" + `/opds/liked` |
 | `/api/titles/{id}/pages` | GET | Page count for the in-browser reader |
 | `/read/{id}` | GET | Mobile web reader (vertical scroll, resumes last page via localStorage) |
 | `/read/{id}/{n}` | GET | Page `n` (1-based) streamed straight out of the CBZ, cached 7 days |
@@ -90,6 +91,7 @@ Dashboard/OPDS auth is **not** an app env var — it lives in the nginx
 | `/opds` | Root navigation feed ("ใหม่ล่าสุด" / "หน้าเยอะ") |
 | `/opds/new` | Acquisition feed, all live titles, newest first |
 | `/opds/long` | Acquisition feed, titles with `pages >= min_pages` setting |
+| `/opds/liked` | Acquisition feed, titles liked on the dashboard/reader |
 
 All routes are unauthenticated inside the app — the nginx sidecar owns basic
 auth for everything on port 5068.

@@ -128,11 +128,11 @@
     overflow: hidden; min-height: 2.9em;
   }
   .card .sub {
-    display: flex; align-items: center; gap: 0.35rem;
+    display: flex; align-items: center; gap: 0 0.35rem; flex-wrap: wrap;
     font-size: 0.7rem; color: var(--text-dim); white-space: nowrap;
   }
   .card .exp.soon { color: var(--red); }
-  .actions { display: flex; gap: 0.15rem; margin-left: auto; }
+  .actions { display: flex; gap: 0.15rem; margin-left: auto; margin-right: -6px; }
   .actions > * {
     width: 32px; height: 32px; border-radius: 50%; border: none;
     background: transparent; color: var(--text-dim); cursor: pointer;
@@ -142,6 +142,9 @@
   .actions svg { width: 16px; height: 16px; }
   .dl-btn:hover, .dl-btn:active { color: var(--accent); background: var(--accent-soft); }
   .del:hover, .del:active { color: var(--red); background: var(--red-soft); }
+  .like:hover, .like:active { color: var(--accent); background: var(--accent-soft); }
+  .like.on { color: var(--accent); }
+  .like.on svg { fill: currentColor; }
 
   .empty {
     grid-column: 1 / -1; text-align: center; padding: 5rem 1rem;
@@ -218,6 +221,7 @@
   <div class="tabs">
     <button class="tab active" data-f="all">ทั้งหมด</button>
     <button class="tab" data-f="long" id="tab-long">หน้าเยอะ</button>
+    <button class="tab" data-f="liked" id="tab-liked">เรื่องที่ชอบ</button>
   </div>
   <div class="stats-row" id="stats"></div>
 </header>
@@ -280,6 +284,7 @@ function renderStats(stats, sources, last) {
     if (last.error) html += `<span style="color:var(--red)">⚠ ${esc(last.error)}</span>`;
   }
   $("stats").innerHTML = html;
+  $("tab-liked").textContent = `เรื่องที่ชอบ ${stats?.liked?.count || 0}`;
 }
 
 async function loadStats() {
@@ -292,6 +297,7 @@ async function loadSettings() {
   $("tab-long").textContent = `หน้าเยอะ ${settings.min_pages}+`;
 }
 
+const ICON_HEART = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z"/></svg>';
 const ICON_DL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 20h14"/></svg>';
 const ICON_DEL = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6m4-6v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>';
 
@@ -319,6 +325,7 @@ function cardHTML(t) {
         <span class="exp${dl !== null && dl <= 3 ? " soon" : ""}">อีก ${dl} วัน</span>
         <span>· ${fmtSize(t.file_size)}</span>
         <div class="actions">
+          <button class="like${t.liked ? " on" : ""}" data-id="${t.id}" title="ชอบ" aria-label="ชอบ" aria-pressed="${!!t.liked}">${ICON_HEART}</button>
           <a class="dl-btn" href="/files/${t.id}.cbz" download title="ดาวน์โหลด CBZ" aria-label="ดาวน์โหลด">${ICON_DL}</a>
           <button class="del" data-id="${t.id}" title="ลบ" aria-label="ลบ">${ICON_DEL}</button>
         </div>
@@ -330,6 +337,7 @@ async function load() {
   const data = await (await fetch("/api/titles?status=new")).json();
   let all = data.titles || [];
   if (filter === "long") all = all.filter(t => (t.pages || 0) >= settings.min_pages);
+  if (filter === "liked") all = all.filter(t => t.liked);
 
   const grid = $("grid");
   grid.innerHTML = "";
@@ -361,6 +369,19 @@ function renderPager(totalPages) {
 }
 
 $("grid").addEventListener("click", async (e) => {
+  const like = e.target.closest("button.like");
+  if (like) {
+    const on = !like.classList.contains("on");
+    like.classList.toggle("on", on);
+    like.setAttribute("aria-pressed", on);
+    const r = await fetch(`/api/titles/${like.dataset.id}/like`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ liked: on }),
+    });
+    if (!r.ok) like.classList.toggle("on", !on);
+    if (filter === "liked") load(); else loadStats();
+    return;
+  }
   const btn = e.target.closest("button.del");
   if (!btn) return;
   if (!confirm("ลบเรื่องนี้ทิ้งถาวร?")) return;

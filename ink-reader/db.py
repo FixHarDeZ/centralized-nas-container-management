@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS titles (
   source_url TEXT DEFAULT '',
   source TEXT DEFAULT 'doujinth',
   downloaded_at TEXT NOT NULL,
-  expires_at TEXT
+  expires_at TEXT,
+  liked INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS scrape_log (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -111,6 +112,10 @@ def init_db():
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} TEXT DEFAULT '{default}'")
             except sqlite3.OperationalError:
                 pass  # column already exists
+        try:
+            conn.execute("ALTER TABLE titles ADD COLUMN liked INTEGER NOT NULL DEFAULT 0")
+        except sqlite3.OperationalError:
+            pass
         # Migration: prefix existing slugs that lack source prefix.
         # Old doujin-th slugs were bare numeric IDs (e.g. "111").
         # New format is "doujinth-111". Delete old rows where the
@@ -195,6 +200,12 @@ def list_titles(status: str | None = None, source: str | None = None) -> list[di
         return [dict(r) for r in conn.execute(q, args)]
 
 
+def set_liked(tid: int, liked: bool) -> bool:
+    with _connect() as conn:
+        cur = conn.execute("UPDATE titles SET liked=? WHERE id=?", (int(liked), tid))
+        return cur.rowcount > 0
+
+
 def purge_title(tid: int) -> bool:
     """Delete files from disk and tombstone the row."""
     for p in (cbz_path(tid), cover_path(tid)):
@@ -258,6 +269,11 @@ def stats() -> dict:
             (min_pages,),
         ).fetchone()
         out["long"] = {"count": long_row["count"], "size": 0}
+        liked_row = conn.execute(
+            "SELECT COUNT(*) AS count FROM titles"
+            " WHERE status != 'deleted' AND liked = 1"
+        ).fetchone()
+        out["liked"] = {"count": liked_row["count"], "size": 0}
         return out
 
 

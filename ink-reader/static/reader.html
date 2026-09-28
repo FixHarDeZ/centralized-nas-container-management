@@ -52,6 +52,15 @@
     letter-spacing: 0.01em; line-height: 1.3;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
+  .top h1 { flex: 1; min-width: 0; }
+  .like {
+    width: 38px; height: 38px; flex: none; display: grid; place-items: center;
+    border-radius: 50%; border: 1px solid var(--line); background: none;
+    color: var(--dim); cursor: pointer;
+  }
+  .like svg { width: 18px; height: 18px; }
+  .like.on { color: var(--gold); border-color: var(--gold); }
+  .like.on svg { fill: currentColor; }
   .track { flex: 1; height: 2px; background: var(--line); border-radius: 2px; overflow: hidden; }
   .fill { height: 100%; width: 0; background: var(--gold); transition: width 0.2s; }
 
@@ -80,6 +89,7 @@
 <div class="bar top">
   <a class="back" href="/" aria-label="กลับ">‹</a>
   <h1 id="title">…</h1>
+  <button class="like" id="like" aria-label="ชอบ" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10Z"/></svg></button>
 </div>
 <main id="pages"></main>
 <div class="bar bottom">
@@ -104,6 +114,7 @@ async function init() {
   total = info.count;
   document.title = info.title;
   $("title").textContent = info.title;
+  setLiked(info.liked);
 
   const main = $("pages");
   const seen = new IntersectionObserver(entries => {
@@ -150,6 +161,22 @@ async function init() {
     first.complete ? shape() : first.addEventListener("load", shape, { once: true });
   }
 }
+
+function setLiked(on) {
+  $("like").classList.toggle("on", on);
+  $("like").setAttribute("aria-pressed", on);
+}
+
+$("like").addEventListener("click", async (e) => {
+  e.stopPropagation();
+  const on = !$("like").classList.contains("on");
+  setLiked(on);
+  const r = await fetch(`/api/titles/${tid}/like`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ liked: on }),
+  });
+  if (!r.ok) setLiked(!on);
+});
 
 function setCurrent(n) {
   current = n;

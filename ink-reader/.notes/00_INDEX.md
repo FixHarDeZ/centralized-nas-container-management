@@ -1,6 +1,6 @@
 # ink-reader — Project Index (Memory Blueprint)
 
-> อัปเดตล่าสุด: 2026-09-28 (web reader `/read/{id}`, black–cream redesign)
+> อัปเดตล่าสุด: 2026-09-28 (web reader, black–cream redesign, like + `/opds/liked`)
 > ใช้ไฟล์นี้เป็น cold-start memory ก่อนเริ่มงานทุกครั้ง
 
 ---
@@ -54,7 +54,8 @@ CREATE TABLE titles (
   source_url TEXT,
   source TEXT DEFAULT 'doujinth',   -- doujinth | hentaithai | mikudoujin
   downloaded_at TEXT NOT NULL,
-  expires_at TEXT                   -- NULL when deleted
+  expires_at TEXT,                  -- NULL when deleted
+  liked INTEGER NOT NULL DEFAULT 0  -- 2026-09-28, ALTER migration in init_db
 );
 CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 ```
@@ -136,11 +137,12 @@ Dashboard/OPDS credentials are nginx-only: vault
 | `/api/titles?status=&source=` | GET | List titles, optional filters |
 | `/api/titles/{id}/delete` | POST | Purge files + tombstone |
 | `/api/settings` | GET/PUT | Runtime settings (`retention_days`, `min_pages`) |
+| `/api/titles/{id}/like` | POST | `{"liked": bool}` — toggle like; liked titles appear in tab "เรื่องที่ชอบ" + `/opds/liked` |
 | `/api/titles/{id}/pages` | GET | Page count for the in-browser reader |
 | `/read/{id}` | GET | Mobile web reader (vertical scroll, resumes last page via localStorage) |
 | `/read/{id}/{n}` | GET | Page `n` (1-based) streamed straight out of the CBZ, cached 7 days |
 | `/api/status` | GET | Stats + per-source counts + last scrape |
-| `/opds` · `/opds/new` · `/opds/long` | GET | OPDS feeds (`long` = pages ≥ `min_pages`) |
+| `/opds` · `/opds/new` · `/opds/long` · `/opds/liked` | GET | OPDS feeds (`long` = pages ≥ `min_pages`, `liked` = liked=1) |
 
 ## Gaps / Known Risk
 
@@ -150,6 +152,7 @@ Dashboard/OPDS credentials are nginx-only: vault
 - `tests/test_db.py::test_scrape_log` fails since that pre-format change
   (asserts raw ISO) — pre-existing, not yet fixed.
 - Reading position is per-browser localStorage, not synced across devices.
+- Liked titles **still expire** after `retention_days` like any other (like ≠ old `kept`).
 
 - `_scrape_source` dedups slugs across listing pages (2026-07-13) — required
   because `DoujintSource.listing_url()` ignores `page` (site has no listing

@@ -22,7 +22,7 @@ def _entry(feed: Element, entry_id: str, title: str, updated: str) -> Element:
     return entry
 
 
-SECTION_NAMES = {"new": "ใหม่ล่าสุด", "long": "หน้าเยอะ"}
+SECTION_NAMES = {"new": "ใหม่ล่าสุด", "long": "หน้าเยอะ", "liked": "เรื่องที่ชอบ"}
 
 
 def root_feed(base_url: str = "") -> bytes:
@@ -41,6 +41,8 @@ def titles_feed(section: str, base_url: str = "") -> bytes:
     if section == "long":
         min_pages = db.get_settings()["min_pages"]
         rows = [r for r in rows if (r["pages"] or 0) >= min_pages]
+    elif section == "liked":
+        rows = [r for r in rows if r["liked"]]
     for row in rows:
         entry = _entry(feed, f"ink-reader:title:{row['id']}", row["title"],
                        row["downloaded_at"])
