@@ -1885,3 +1885,4 @@ install` จะสำเร็จ. ต้องสร้าง venv ใต้ re
 ### ต่อ: สคริปต์ไม่หายตอนกด render
 - เดิม `do_render()` edit ข้อความสคริปต์ทับเป็น "📝 ชื่อ — กำลัง render" → หลังคลิปออกไม่มีบรรทัด 🗣 ให้ก๊อปไป `/say`
 - ตอนนี้ edit เป็นสคริปต์เต็ม (+📎) ไม่มีปุ่ม footer = "🎬 กำลัง render — /say … แล้ว /redo" (`format_script(footer=)`), เทสต์ +1 → 246 passed / 8 baseline. รอบอัตโนมัติไม่เกี่ยว (ไม่มี message_id อยู่แล้ว สคริปต์ส่งแยกไม่ถูกทับ)
+- **สถานะปิดงาน 28/09:** commits 3e1bb32, 5f69462, 55c0df7, 7cf52c2 pushed (main = 7cf52c2) + deploy แล้วทั้งหมด. ค้าง: rotate Tavily key (ถูกแปะในแชท) → `sops set` + `make secrets` + deploy; ดูผล research ~10 คลิป (ตีกลับตัวเลขบ่อยไหม); ยังไม่ได้ทดสอบ render/research ผ่าน Telegram จริง

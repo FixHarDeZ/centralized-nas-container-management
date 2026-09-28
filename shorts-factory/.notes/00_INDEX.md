@@ -114,6 +114,10 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
   numbers absent from the sheet; review shows 📎 3 links; revisions reuse
   `state["research"]`; Manifest field `research`, outcome `no_sources`.
   Vault `stacks.shorts_factory.tavily_api_key` (dev key, free 1k/month).
+  Pending: rotate that key (was pasted in chat).
+- **Render keeps the Script on screen** (2026-09-28): `do_render()` edits the
+  review message to the full Script minus buttons (`format_script(footer=)`),
+  so 🗣 lines stay copyable for `/say` + `/redo`.
 - **A bare URL is not a Topic.** Telegram's rich link preview is not included
   in `message.text`; the bot receives only the URL, while mimo has no browser
   and commonly answers prose instead of Script JSON. `make_script()` rejects
