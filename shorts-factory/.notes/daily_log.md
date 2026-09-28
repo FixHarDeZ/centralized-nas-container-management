@@ -1871,3 +1871,13 @@ install` จะสำเร็จ. ต้องสร้าง venv ใต้ re
   บอทยังใช้ `mimo-v2.5-pro` (ยังไม่มีใครเลือกใน dropdown).
 - **ค้าง:** ยังไม่ได้ลอง v2.6 จริง — `reasoning_effort=low`/budget 600 วิ วัดบน v2.5; ควรลอง 1 คลิปมือ
   ก่อนปล่อยรอบอัตโนมัติ. ไม่ได้เปิดผ่าน nginx จากเบราว์เซอร์.
+
+## 2026-09-28 ค้นเว็บก่อนเขียนสคริปต์ (Tavily) + แก้ด่านผลแข่งจับผิด
+- ต้นเหตุ: หัวข้อ "…ดังไม่แพ้ตัว MV…" โดน `RESULT_TOPIC` ปฏิเสธเพราะคำ `แพ้` เปล่าๆ ข้อความ "(ไม่ได้ต่อเน็ต)" เป็นข้อความตายตัวของบอท ไม่ใช่ LLM ตอบ
+- Phase 0 (3e1bb32): regex `(?<!ไม่)(?:ชนะ|แพ้)(?!ใจ|ทาง|ภัย|อาหาร|ยา|ฝุ่น|กุ้ง|นม)` + เทสต์ idiom ผ่าน/ผลแข่งยังโดน
+- Phase 1+2 (5f69462, ADR 0014): `app/research.py` ยิง Tavily ด้วยหัวข้อตรงๆ (ไม่ให้ mimo คิด query — แพงเวลา 30-90 วิ) ≤5 ผล/3k ตัวอักษร → system message ใน `generate(facts=)`; `validate(facts=)` ตีกลับตัวเลข ≥2 หลักที่ไม่อยู่ใน sheet; รีวิวโชว์ 📎 3 ลิงก์ (unquote); แก้สคริปต์ใช้ sheet เดิม; manifest เก็บ `research`. หัวข้อผลแข่ง: ค้นเจอ = เขียน, ไม่เจอ = ปฏิเสธ (manifest `outcome=no_sources`), รอบอัตโนมัติ/ไม่มีคีย์ = ปฏิเสธก่อนค้น, `!` ข้ามได้เหมือนเดิม
+- `generate()` ได้ `facts=` เฉพาะตอนมี sheet (เทสต์เก่า fake ไม่รับ kwarg นี้)
+- Vault: `stacks.shorts_factory.tavily_api_key` (sops set) → manifest `TAVILY_API_KEY` → make secrets
+- ผล: 245 passed / 8 failed baseline Raqm; root 63 passed; Tavily จาก Mac 1.9 วิ
+- Deploy แล้ว: บน NAS `research.configured()=True`, ยิงค้นจากคอนเทนเนอร์ได้ลิงก์จริง
+- ค้าง: ดูผลจริง ~10 คลิปว่าตัวเลขถูกตีกลับบ่อยจนเปลือง attempt ไหม; key เป็น `tvly-dev` (ถูกแปะในแชท — ควร rotate แล้ว `sops set` ใหม่)

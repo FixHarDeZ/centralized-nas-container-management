@@ -105,6 +105,15 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
   result — it writes the same generic essay and invents figures (six
   volleyball clips, 2026-08-29..31, two published with made-up numbers).
   A leading `!` skips the check; revisions are never checked.
+  **Since 2026-09-28 (ADR 0014)** they are written when web research finds
+  sources, refused otherwise / in auto-pick / without `TAVILY_API_KEY`; bare
+  ชนะ/แพ้ no longer match (idioms ไม่แพ้/ชนะใจ were refused by mistake).
+- **Web research** (`app/research.py`, deployed 2026-09-28): every fresh Topic
+  → Tavily (topic as typed, ≤5 results, ≤3k chars, 20s wait_for, best effort)
+  → Fact sheet system message; `validate(facts=)` refuses ≥2-digit narration
+  numbers absent from the sheet; review shows 📎 3 links; revisions reuse
+  `state["research"]`; Manifest field `research`, outcome `no_sources`.
+  Vault `stacks.shorts_factory.tavily_api_key` (dev key, free 1k/month).
 - **A bare URL is not a Topic.** Telegram's rich link preview is not included
   in `message.text`; the bot receives only the URL, while mimo has no browser
   and commonly answers prose instead of Script JSON. `make_script()` rejects
