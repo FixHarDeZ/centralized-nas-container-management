@@ -14,6 +14,18 @@ It does not upload to YouTube, and it has no web interface — no port, no
 nginx, no dashboard. See `docs/adr/0001` and `docs/adr/0002` at the repo root
 for why.
 
+## Web research before writing
+
+Every fresh Topic is searched on Tavily first (`app/research.py`, ~2s) and up
+to five results go to the model as a Fact sheet. Numbers of two digits or more
+in the narration must appear in that sheet or the Script is sent back; the
+review message ends with 📎 source links to check from the phone. No
+`TAVILY_API_KEY`, a timeout or an error = written without research, as before.
+
+Result-shaped Topics (scores, who won — `RESULT_TOPIC`) are written only when
+the search finds something, refused otherwise, and always refused in the
+unattended auto-pick. `!` still skips that check. See `docs/adr/0014`.
+
 ## Waiting for the model
 
 Writing a script takes minutes, and how many depends on how long the model

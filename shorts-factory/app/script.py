@@ -10,7 +10,7 @@ import time
 
 from openai import AsyncOpenAI
 
-from app import locales, mimo, model_choice, render
+from app import locales, mimo, model_choice, render, research
 
 logger = logging.getLogger(__name__)
 
@@ -336,7 +336,7 @@ def _rewrap(lines: list[str], spec: dict) -> list[str]:
     return out
 
 
-def validate(script: dict, locale: str = locales.DEFAULT) -> dict:
+def validate(script: dict, locale: str = locales.DEFAULT, facts: str = "") -> dict:
     """Reject a Script the renderer would mangle. Raises ScriptError.
 
     Messages stay in Thai even for an English Script: they are read by the
@@ -419,6 +419,15 @@ def validate(script: dict, locale: str = locales.DEFAULT) -> dict:
             )
         if not str(card.get("query", "")).strip():
             problems.append(f"card {i}: ไม่มี query สำหรับหา footage")
+        if facts:
+            # With a Fact sheet in hand a number is either cited or invented,
+            # and the invented ones are what reached YouTube before.
+            made_up = research.unsourced_numbers(str(card.get("narration", "")), facts)
+            if made_up:
+                problems.append(
+                    f"card {i}: ตัวเลข {made_up[:3]} ไม่มีในข้อมูลอ้างอิง "
+                    "ใช้เฉพาะตัวเลขจากข้อมูลอ้างอิง หรือเขียนใหม่โดยไม่ใส่ตัวเลข"
+                )
 
     if problems:
         raise ScriptError(" | ".join(problems))
@@ -466,6 +475,22 @@ SIBLING_NOTES = {
         "Cover the same angle and the same facts, but **write it natively in "
         "English — do not translate**. Line lengths, the hook and the rhythm "
         "follow this language's own rules:\n"
+    ),
+}
+
+
+FACTS_NOTES = {
+    "th": (
+        "ข้อมูลอ้างอิงจากการค้นเว็บ (ข้างล่าง) ใช้เป็นแหล่งข้อเท็จจริงของคลิปนี้ "
+        "**ตัวเลข ปี สถิติ ผลลัพธ์ ใช้ได้เฉพาะที่มีในข้อมูลนี้เท่านั้น** "
+        "ห้ามแต่งเพิ่ม ถ้าข้อมูลไม่พอให้เล่าโดยไม่ใส่ตัวเลข "
+        "ข้อมูลอาจเป็นภาษาอื่น ให้เขียนสคริปต์เป็นภาษาของคลิปตามปกติ:\n"
+    ),
+    "en": (
+        "Web search results for this clip (below) are its source of facts. "
+        "**Numbers, years, statistics and results may come only from this "
+        "material** — never invent one; if it is not there, tell it without "
+        "numbers. Write the Script in the clip's language as usual:\n"
     ),
 }
 
@@ -541,6 +566,7 @@ async def generate(
     style: str = "",
     locale: str = locales.DEFAULT,
     sibling: dict | None = None,
+    facts: str = "",
 ) -> dict:
     """Write a Script for `topic`, optionally revising `previous` per `feedback`.
 
@@ -562,6 +588,8 @@ async def generate(
         messages.append({"role": "system", "content": _sibling_note(sibling, locale)})
     if style:
         messages.append({"role": "system", "content": style})
+    if facts:
+        messages.append({"role": "system", "content": FACTS_NOTES.get(locale, FACTS_NOTES["th"]) + facts})
     label = "หัวข้อ" if locale == "th" else "Topic"
     messages.append({"role": "user", "content": f"{label}: {topic}"})
     if previous is not None:
@@ -641,7 +669,7 @@ async def generate(
             )
             continue
         try:
-            return validate(parsed, locale)
+            return validate(parsed, locale, facts)
         except ScriptError as exc:
             excerpt = raw[:300]
             logger.warning(

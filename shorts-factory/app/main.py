@@ -17,6 +17,7 @@ from pathlib import Path
 import httpx
 
 from app import (analytics, backfill, experiment, history, locales, manifest, model_choice,
+                 research,
                  render, retention, schedule, script as script_gen, snapshots, storyboard, telegram,
                  trends, youtube)
 from app import state as st
@@ -324,7 +325,7 @@ async def close_prompt(client: httpx.AsyncClient, message_id: int | None, note: 
 
 # --- presentation ------------------------------------------------------------
 
-def format_script(script: dict) -> str:
+def format_script(script: dict, sources: str = "") -> str:
     parts = [f"📝 {script['title']}", ""]
     for i, card in enumerate(script["cards"], 1):
         label = "hook" if i == 1 else f"card {i}"
@@ -336,7 +337,10 @@ def format_script(script: dict) -> str:
             parts.append(f"   🗣 {card['spoken']}")
         if (card.get("code") or "").strip():
             parts.append(f"   ```{card['code'].strip()}```")
-    parts += ["", " ".join(script["hashtags"]), "", "พิมพ์บอกได้เลยว่าอยากแก้ตรงไหน"]
+    parts += ["", " ".join(script["hashtags"])]
+    if sources:
+        parts += ["", sources]
+    parts += ["", "พิมพ์บอกได้เลยว่าอยากแก้ตรงไหน"]
     return "\n".join(parts)[:4096]
 
 
@@ -443,7 +447,9 @@ def trend_origin(state: dict, topic: str) -> dict | None:
 
 
 # A Topic that hinges on what actually happened: a score, a result, who won.
-# The model has no source for any of it — no web access, and the prompt sends
+# Such a Topic is written only from web search results (app/research.py) and
+# refused when there are none; unattended rounds refuse it outright. Before
+# research existed the model had no source for any of it and the prompt sent
 # it to "ความรู้ทั่วไปที่ตรวจสอบได้" instead. Measured on six volleyball clips
 # (2026-08-29..31): every one came back with the same skeleton, two of them
 # reached YouTube carrying numbers the model made up. `/trends` already drops
@@ -465,6 +471,15 @@ BARE_URL = re.compile(r"https?://\S+\Z", re.IGNORECASE)
 FORCE_PREFIX = "!"
 
 
+RESULT_REFUSAL = (
+    "หัวข้อนี้ต้องรู้ว่าเกิดอะไรขึ้นจริง แต่บอทไม่รู้ผลแข่ง/ผลประกาศ "
+    "(ค้นเว็บไม่ได้หรือเป็นรอบอัตโนมัติ) เขียนไปก็ได้แต่ความรู้ทั่วไปโครงเดิม แถมมีสิทธิ์แต่งตัวเลขเอง\n\n"
+    "ลองเปลี่ยนเป็นมุมที่อธิบายได้โดยไม่ต้องอ้างผล เช่น "
+    "“วอลเลย์บอลไทยเล่นสไตล์ไหน ต่างจากทีมตัวสูงยังไง”\n"
+    f"ถ้ายืนยันว่าจะทำ ใส่ {FORCE_PREFIX} นำหน้าหัวข้อ"
+)
+
+
 def result_shaped(topic: str) -> bool:
     return bool(RESULT_TOPIC.search(topic))
 
@@ -476,6 +491,7 @@ async def make_script(client: httpx.AsyncClient, state: dict, topic: str,
                       pair_id: str | None = None,
                       supplied: dict[int, Path] | None = None) -> None:
     previous = state.get("script") if feedback else None
+    needs_facts = False
     # A revision belongs to the Clip already open, and that Clip's Locale is
     # not up for renegotiation halfway through.
     locale = state.get("locale", locales.DEFAULT) if previous is not None else (
@@ -491,18 +507,15 @@ async def make_script(client: httpx.AsyncClient, state: dict, topic: str,
                 "พิมพ์หัวข้อหรือพาดหัวที่อยากทำเป็นคลิปมาด้วย แล้วค่อยแปะลิงก์อ้างอิงต่อท้ายได้"
             ))
             return
-        if topic.startswith(FORCE_PREFIX):
+        forced = topic.startswith(FORCE_PREFIX)
+        if forced:
             topic = topic[len(FORCE_PREFIX):].strip()
-        elif result_shaped(topic):
-            await say(client, (
-                "หัวข้อนี้ต้องรู้ว่าเกิดอะไรขึ้นจริง แต่บอทไม่รู้ผลแข่ง/ผลประกาศ "
-                "(ไม่ได้ต่อเน็ต) เขียนไปก็ได้แต่ความรู้ทั่วไปโครงเดิม แถมมีสิทธิ์แต่งตัวเลขเอง\n\n"
-                "ลองเปลี่ยนเป็นมุมที่อธิบายได้โดยไม่ต้องอ้างผล เช่น "
-                "“วอลเลย์บอลไทยเล่นสไตล์ไหน ต่างจากทีมตัวสูงยังไง”\n"
-                f"ถ้ายืนยันว่าจะทำ ใส่ {FORCE_PREFIX} นำหน้าหัวข้อ"
-            ))
+        elif result_shaped(topic) and (auto or not research.configured()):
+            await say(client, RESULT_REFUSAL)
             return
+        needs_facts = not forced and result_shaped(topic)
     # Every way a Topic can start routes through here, and any of them means a
+
     # pending automatic pick is no longer wanted.
     state.pop("auto_pick", None)
     # A revision belongs to the Manifest already open for this Topic; only a
@@ -540,6 +553,22 @@ async def make_script(client: httpx.AsyncClient, state: dict, topic: str,
     save_state(state)
     await say(client, "🤔 กำลังเขียนสคริปต์... (ระหว่างนี้ใช้คำสั่งอื่นได้)")
 
+    # A revision keeps the Fact sheet its Script was written from: searching
+    # again could hand the model different numbers mid-edit.
+    if previous is None:
+        found = await research.research(topic, locale)
+        state["research"] = found
+        if found:
+            manifest.update(state.get("clip_id"), research=found)
+        elif needs_facts:
+            manifest.update(state.get("clip_id"), outcome="no_sources")
+            st.to_idle(state)
+            state.pop("pair", None)
+            save_state(state)
+            await say(client, RESULT_REFUSAL)
+            return
+    facts = research.fact_sheet(state.get("research"))
+
     async def write() -> dict:
         """One Script, asked for again once if mimo went quiet on everyone.
 
@@ -564,6 +593,9 @@ async def make_script(client: httpx.AsyncClient, state: dict, topic: str,
                     style=state.get("style", ""),
                     locale=locale,
                     sibling=sibling,
+                    # Only when there is one, so a Script written without
+                    # research calls generate() exactly as it always did.
+                    **({"facts": facts} if facts else {}),
                 )
             except script_gen.ScriptStalled:
                 if final:
@@ -600,7 +632,7 @@ async def make_script(client: httpx.AsyncClient, state: dict, topic: str,
     # An unattended Script gets no review keyboard and no tracked message id:
     # nobody is going to press anything, and do_render() would overwrite the
     # message with "กำลัง render", erasing the only copy of what it rendered.
-    sent = await say(client, format_script(script),
+    sent = await say(client, format_script(script, research.sources_line(state.get("research"))),
                      **({} if auto else {"reply_markup": REVIEW_KEYBOARD}))
     st.to_review(
         state, topic=topic, script=script,

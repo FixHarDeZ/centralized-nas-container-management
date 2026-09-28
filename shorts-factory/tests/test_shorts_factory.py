@@ -3420,3 +3420,92 @@ def test_a_failed_catalog_fetch_keeps_the_old_list(tmp_path, monkeypatch):
     finally:
         monkeypatch.undo()
         importlib.reload(model_choice)
+
+
+# --- web research (app/research.py) ------------------------------------------
+
+from app import research  # noqa: E402
+
+FOUND = {"query": "q", "results": [
+    {"title": "ข่าว", "url": "https://example.com/a",
+     "content": "ไทยชนะจีน 3-2 เซต ผู้ชม 12,500 คน ในปี 2026"},
+]}
+
+
+def test_numbers_must_come_from_the_fact_sheet():
+    sheet = research.fact_sheet(FOUND)
+    assert research.unsourced_numbers("ผู้ชม 12500 คน ปี 2026", sheet) == []
+    assert research.unsourced_numbers("มี 3 ข้อ", sheet) == []  # structure
+    assert research.unsourced_numbers("ราคา 1,299 บาท", sheet) == ["1,299"]
+
+
+def test_validate_refuses_an_invented_number_only_when_there_are_facts():
+    script = a_script()
+    script["cards"][1]["narration"] = "คนดูกว่า 40000 คน"
+    assert script_gen.validate(script)  # no facts: nothing to check against
+    with pytest.raises(script_gen.ScriptError, match="40000"):
+        script_gen.validate(script, facts=research.fact_sheet(FOUND))
+
+
+def test_research_is_skipped_without_a_key(monkeypatch):
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    assert asyncio.run(research.research("อะไรก็ได้")) is None
+
+
+def _writing(monkeypatch, found, key=True):
+    sent, seen = [], {}
+
+    async def fake_say(client, text, **kw):
+        sent.append(text)
+
+    async def fake_research(topic, locale="th"):
+        seen["searched"] = topic
+        return found
+
+    async def fake_generate(topic, **kw):
+        seen["facts"] = kw.get("facts", "")
+        raise RuntimeError("stop — research is what is under test")
+
+    if key:
+        monkeypatch.setenv("TAVILY_API_KEY", "k")
+    else:
+        monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+    monkeypatch.setattr(main, "say", fake_say)
+    monkeypatch.setattr(main.research, "research", fake_research)
+    monkeypatch.setattr(main.script_gen, "generate", fake_generate)
+    monkeypatch.setattr(main.manifest, "start", lambda topic, locale="th": "test-id")
+    monkeypatch.setattr(main.manifest, "update", lambda *a, **kw: None)
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+    return sent, seen
+
+
+def test_a_result_topic_is_written_from_search_results(monkeypatch):
+    sent, seen = _writing(monkeypatch, FOUND)
+    asyncio.run(main.make_script(None, {"mode": "idle"}, "ไทยชนะจีน 3-2"))
+    assert "12,500" in seen["facts"]
+
+
+def test_a_result_topic_with_nothing_found_is_refused(monkeypatch):
+    sent, seen = _writing(monkeypatch, None)
+    state = {"mode": "idle"}
+    asyncio.run(main.make_script(None, state, "ไทยชนะจีน 3-2"))
+    assert "facts" not in seen
+    assert "ไม่รู้ผลแข่ง" in sent[-1]
+    assert state["mode"] == "idle"
+
+
+def test_an_unattended_result_topic_is_refused_before_searching(monkeypatch):
+    sent, seen = _writing(monkeypatch, FOUND)
+    asyncio.run(main.make_script(None, {"mode": "idle"}, "ไทยชนะจีน 3-2", auto=True))
+    assert "searched" not in seen and "ไม่รู้ผลแข่ง" in sent[-1]
+
+
+def test_an_ordinary_topic_without_results_is_still_written(monkeypatch):
+    sent, seen = _writing(monkeypatch, None)
+    asyncio.run(main.make_script(None, {"mode": "idle"}, "Docker คืออะไร"))
+    assert seen["searched"] == "Docker คืออะไร" and seen["facts"] == ""
+
+
+def test_review_message_carries_the_sources():
+    text = main.format_script(a_script(), research.sources_line(FOUND))
+    assert "📎 https://example.com/a" in text
