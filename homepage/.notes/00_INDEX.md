@@ -22,6 +22,7 @@ Basic auth ใช้ `.htpasswd` file mount (APR1 hash) — ไม่ใช้ A
 | `nginx/nginx.conf` | basic auth + proxy_pass ไปที่ homepage:3000 |
 | `nginx/.htpasswd` | APR1 password hash (ไม่ commit, ต้องสร้างก่อน deploy) |
 | `config/` | homepage configuration YAML files |
+| `config/custom.css` | CSS อ่านง่ายบน background: การ์ดทึบ slate 72%, title ขาว+เงา, description slate-300 — ใช้ class `service-card`/`service-block`/`information-widget`/`service-description` |
 | `images/` | รูป background (`background.jpg`) — mount เป็น `/app/public/images` อ้างใน settings ว่า `/images/background.jpg` |
 
 ---
@@ -64,3 +65,4 @@ Basic auth ผ่าน nginx:
 - **2026-06-07** — ลบ glances sidecar ออกจาก stack + widgets.yaml ทั้งหมด
 - **2026-05-24** — ย้ายกลับ basic auth; ลบ Authelia forward-auth + auth_net dependency ทั้งหมด
 - **2026-05-23** — migrate ไป Authelia forward-auth (auth stack session)
+- **2026-09-29** — readability: bg blur md/brightness 45/saturate 80, cardBlur xl + `config/custom.css` — deploy + commit + push แล้ว

@@ -230,3 +230,9 @@ curl -s -H "Host: <LAN_IP>:3000" "http://$IP:3000/api/services/proxy?group=<grou
 - เพิ่มรูปวิวภูเขา+ทะเลหมอก (Unsplash, 2560px, ~530KB) ที่ `homepage/images/background.jpg`
 - `docker-compose.yml`: mount `./images:/app/public/images:ro`; `config/settings.yaml`: `background` (blur sm, brightness 60) + `cardBlur: md`
 - สถานะ: ยังไม่ commit / ยังไม่ deploy (ต้อง `./scripts/deploy.sh` แล้ว recreate homepage เพราะเพิ่ม volume)
+
+## 2026-09-29 Readability redesign (หลังใส่ background)
+- ตัวหนังสือบนรูปอ่านยาก → `settings.yaml`: blur sm→md, brightness 60→45, saturate 100→80, cardBlur md→xl
+- เพิ่ม `config/custom.css` (homepage โหลดอัตโนมัติจาก /app/config): การ์ด/stat block ทึบขึ้น (slate-900 72%), title ขาว+text-shadow, description slate-300 opacity 1 (เดิม ink-reader/Portainer จางเกือบมองไม่เห็น)
+- ยืนยัน class ที่ใช้ (`service-card`, `service-block`, `information-widget`, `service-description` ฯลฯ) มีใน build ของ container จริง
+- Deploy แล้ว (`deploy.sh -s homepage -y`) commit + push แล้ว

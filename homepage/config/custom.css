@@ -1,0 +1,41 @@
+/* Readability over the background image (settings.yaml background/cardBlur). */
+
+/* Cards, widget boxes, search: darker glass so text has a solid backdrop */
+.service-card,
+.information-widget,
+#information-widgets > div > div,
+.bookmark-text {
+  background-color: rgba(15, 23, 42, 0.72) !important;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+/* Stat blocks inside widgets */
+.service-block {
+  background-color: rgba(2, 6, 23, 0.55) !important;
+}
+
+/* Titles: bright + subtle shadow */
+.service-name,
+.service-title,
+.bookmark-name,
+.service-group-name,
+h2 {
+  color: #f8fafc !important;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+  font-weight: 600;
+}
+
+/* Descriptions were near-invisible (ink-reader/Portainer) */
+.service-description,
+.bookmark-description {
+  color: #cbd5e1 !important;
+  opacity: 1 !important;
+}
+
+/* Stat values and labels */
+.service-block div,
+.information-widget,
+.information-widget span {
+  color: #e2e8f0 !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+}

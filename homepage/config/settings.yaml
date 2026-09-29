@@ -11,11 +11,11 @@ theme: dark    # ธีมมืดเพื่อความ modern
 # รูป: Unsplash (Zermatt sunrise) — ไฟล์อยู่ homepage/images/ mount เป็น /app/public/images
 background:
   image: /images/background.jpg
-  blur: sm          # เบลอเล็กน้อยให้ตัวอักษรอ่านง่าย
-  saturate: 100
-  brightness: 60    # หรี่ลงให้การ์ดเด่น
+  blur: md          # เบลอพอให้รายละเอียดรูปไม่แย่งตัวอักษร
+  saturate: 80
+  brightness: 45    # หรี่ลงให้การ์ด/ตัวอักษรเด่น
   opacity: 100
-cardBlur: md        # การ์ดโปร่งแบบกระจกฝ้า
+cardBlur: xl        # กระจกฝ้าหนา + custom.css ทำให้การ์ดทึบขึ้น
 
 # ─── Layout ───────────────────────────────────────────────────────────────────
 layout:
