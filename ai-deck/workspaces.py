@@ -108,9 +108,7 @@ class WorkspaceStore:
             self._prepare_owner(owner)
             workspace_id = uuid.uuid4().hex
             workspace_path = self.root / "worktrees" / owner / workspace_id
-            cache = self.root / "repositories" / owner / (
-                hashlib.sha256(url.encode("utf-8")).hexdigest() + ".git"
-            )
+            cache = self._cache_path(owner, url)
             try:
                 if not cache.exists():
                     self._git("clone", "--bare", os.fspath(clone_url), os.fspath(cache))
@@ -193,6 +191,54 @@ class WorkspaceStore:
             "diff": diff,
         })
         return result
+
+    def delete(self, owner, workspace_id, force=False):
+        """Remove a task worktree, its desk/<id> branch, metadata and uploads.
+
+        Refuses (409) while the task has uncommitted files or commits that no
+        remote-tracking branch contains, unless force is set. A squash-merged
+        branch whose GitHub copy was deleted looks unpushed, hence force.
+        """
+        with self._lock:
+            record = self.get(owner, workspace_id)
+            path = record["path"]
+            if not force:
+                try:
+                    changes = self._git(
+                        "-C", path, "status", "--porcelain", "--untracked-files=all"
+                    )
+                    unpushed = self._git(
+                        "-C", path, "rev-list", "--count", "HEAD", "--not", "--remotes"
+                    ).strip()
+                except WorkspaceError:
+                    raise WorkspaceError("Unable to inspect workspace", 500)
+                if changes.strip():
+                    raise WorkspaceError("Task has uncommitted changes", 409)
+                if unpushed != "0":
+                    raise WorkspaceError(
+                        "Task has %s commit(s) not pushed to GitHub" % unpushed, 409
+                    )
+            cache = self._cache_path(owner, record["url"])
+            if not self._safe_existing_directory(cache):
+                raise WorkspaceError("Invalid workspace storage", 400)
+            try:
+                self._git("-C", os.fspath(cache), "worktree", "remove", "--force", path)
+            except WorkspaceError:
+                raise WorkspaceError("Unable to remove workspace", 500)
+            try:
+                self._git("-C", os.fspath(cache), "branch", "-D", record["branch"])
+            except WorkspaceError:
+                pass  # Worktree is gone; a leftover branch only costs a ref.
+            (self.root / "metadata" / owner / (workspace_id + ".json")).unlink()
+            attachments = self.root / "attachments" / owner / workspace_id
+            if self._safe_existing_directory(attachments):
+                shutil.rmtree(attachments)
+            return {"id": workspace_id, "deleted": True}
+
+    def _cache_path(self, owner, url):
+        return self.root / "repositories" / owner / (
+            hashlib.sha256(url.encode("utf-8")).hexdigest() + ".git"
+        )
 
     def _valid_owner(self, owner):
         if not isinstance(owner, str) or not _OWNER.fullmatch(owner):

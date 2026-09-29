@@ -140,6 +140,39 @@
     } catch (error) { statusText.textContent = error.message; }
   }
   document.getElementById('project-refresh').addEventListener('click', refreshStatus);
+  // First tap arms, second deletes. The server refuses (409) while work is
+  // uncommitted or unpushed; the button then re-arms as "Delete anyway".
+  const deleteButton = document.getElementById('project-delete');
+  let deleteArmed = false, deleteForce = false, deleteTimer = null;
+  function resetDelete() {
+    deleteArmed = deleteForce = false;
+    deleteButton.classList.remove('armed');
+    deleteButton.textContent = 'Delete task';
+  }
+  function armDelete(text) {
+    deleteArmed = true;
+    deleteButton.classList.add('armed');
+    deleteButton.textContent = text;
+    clearTimeout(deleteTimer);
+    deleteTimer = setTimeout(resetDelete, 6000);
+  }
+  deleteButton.addEventListener('click', async () => {
+    if (!deleteArmed) { armDelete('Tap again to delete this task'); return; }
+    clearTimeout(deleteTimer);
+    deleteButton.disabled = true;
+    try {
+      const response = await fetch('code/projects?workspace=' + encodeURIComponent(workspace) + (deleteForce ? '&force=1' : ''), {method: 'DELETE'});
+      if (response.status === 409) {
+        statusText.textContent = (await response.text()).trim().slice(0, 300);
+        deleteForce = true;
+        armDelete('Delete anyway (work is lost)');
+        return;
+      }
+      if (!response.ok) throw new Error((await response.text()).trim().slice(0, 300) || 'Delete failed');
+      navigate('');
+    } catch (error) { statusText.textContent = error.message; resetDelete(); }
+    finally { deleteButton.disabled = false; }
+  });
   document.querySelectorAll('[data-code-prompt]').forEach(button => button.addEventListener('click', () => {
     const input = document.getElementById('chat-input');
     if (input.value.trim()) {

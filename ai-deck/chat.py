@@ -814,6 +814,10 @@ class Handler(BaseHTTPRequestHandler):
         except OSError:
             self._reply(503, 'Attachment storage is unavailable')
 
+    def do_DELETE(self):
+        if not workspace_api.handle(self):
+            self._reply(404, 'Not found')
+
     def do_POST(self):
         if deploy_bridge.handle(self) or workspace_api.handle(self):
             return

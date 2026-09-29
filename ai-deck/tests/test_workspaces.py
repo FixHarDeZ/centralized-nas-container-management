@@ -274,3 +274,54 @@ def test_github_repositories_api_failure_is_502():
     with pytest.raises(WorkspaceError) as caught:
         github_repositories(run)
     assert caught.value.status == 502
+
+
+def test_delete_removes_worktree_branch_metadata_and_attachments(store):
+    keep = store.create("alice", "https://github.com/example/project.git")
+    made = store.create("alice", "https://github.com/example/project.git")
+    attachments = store.root / "attachments" / "alice" / made["id"]
+    attachments.mkdir(parents=True)
+    (attachments / "a.png").write_bytes(b"x")
+
+    assert store.delete("alice", made["id"]) == {"id": made["id"], "deleted": True}
+    assert not Path(made["path"]).exists()
+    assert not attachments.exists()
+    assert [item["id"] for item in store.list("alice")] == [keep["id"]]
+    branches = git("branch", "--list", "desk/*", cwd=keep["path"])
+    assert made["branch"] not in branches and keep["branch"] in branches
+    with pytest.raises(WorkspaceError) as caught:
+        store.get("alice", made["id"])
+    assert caught.value.status == 404
+
+
+def test_delete_refuses_uncommitted_work_unless_forced(store):
+    made = store.create("alice", "https://github.com/example/project.git")
+    Path(made["path"], "new.txt").write_text("draft\n", encoding="utf-8")
+    with pytest.raises(WorkspaceError) as caught:
+        store.delete("alice", made["id"])
+    assert caught.value.status == 409
+    assert Path(made["path"], "new.txt").exists()
+    store.delete("alice", made["id"], force=True)
+    assert not Path(made["path"]).exists()
+
+
+def test_delete_refuses_unpushed_commits_until_pushed(store):
+    made = store.create("alice", "https://github.com/example/project.git")
+    path = made["path"]
+    Path(path, "work.txt").write_text("done\n", encoding="utf-8")
+    git("add", "work.txt", cwd=path)
+    git("-c", "user.name=t", "-c", "user.email=t@example.invalid", "commit", "-m", "work", cwd=path)
+    with pytest.raises(WorkspaceError) as caught:
+        store.delete("alice", made["id"])
+    assert caught.value.status == 409 and "1 commit" in caught.value.message
+    git("push", "origin", "HEAD", cwd=path)
+    store.delete("alice", made["id"])
+    assert store.list("alice") == []
+
+
+def test_delete_is_owner_scoped(store):
+    made = store.create("alice", "https://github.com/example/project.git")
+    with pytest.raises(WorkspaceError) as caught:
+        store.delete("bob", made["id"])
+    assert caught.value.status == 404
+    assert Path(made["path"]).exists()

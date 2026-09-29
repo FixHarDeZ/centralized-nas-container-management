@@ -60,6 +60,10 @@ def handle(handler):
                 handler._reply(400, 'Expected a GitHub URL and optional base branch')
                 return True
             result = store().create(owner, body.get('url', ''), body.get('branch', ''))
+        elif path == '/projects' and handler.command == 'DELETE':
+            item = workspace(handler)
+            force = parse_qs(urlparse(handler.path).query).get('force', [''])[0] == '1'
+            result = store().delete(owner, item['id'], force=force)
         elif path == '/projects/repositories' and handler.command == 'GET':
             from workspaces import github_repositories
             result = github_repositories()

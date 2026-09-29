@@ -94,6 +94,7 @@ profile นี้ deploy เฉพาะ stack **ai-deck** การแก้ `s
 ## 7. ทำงานต่อและข้อจำกัดรุ่นแรก
 
 - เปิด task เดิมเพื่อแก้ต่อ หรือสร้าง task ใหม่จาก `main` สำหรับงานใหม่
+- task ที่ merge แล้ว ลบได้ที่ **Projects → Current task → Delete task** (กด 2 ครั้ง) ลบ worktree + branch `desk/<id>` + ไฟล์แนบ ถ้ามีไฟล์ค้างหรือ commit ที่ยังไม่ push ระบบจะไม่ยอมลบ และเปลี่ยนปุ่มเป็น **Delete anyway** (กรณี squash merge แล้วลบ branch บน GitHub ไปแล้วจะเข้าเคสนี้ ต้องกด Delete anyway) branch ฝั่ง GitHub ต้องลบเอง
 - Mac ต้องเปิดเครื่อง ตื่นอยู่ มีเครือข่าย และ user login เพื่อให้ LaunchAgents ทำงาน ถ้า Mac offline งาน deploy จะไม่สำเร็จ
 - การ commit/push ทำผ่าน AI/terminal และ GitHub credentials ส่วน deploy ทำผ่าน profile บน Mac แยกกัน
 - Test/runtime ที่ต้องใช้ Docker daemon ยังรันใน coding worker ไม่ได้ เพราะไม่มี Docker socket

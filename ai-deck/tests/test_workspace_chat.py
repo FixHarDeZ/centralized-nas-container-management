@@ -109,3 +109,33 @@ def test_terminal_starts_in_authorized_workspace(tmp_path, monkeypatch):
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_delete_route_passes_workspace_and_force(monkeypatch):
+    monkeypatch.setenv('CODE_WORKER', '1')
+    calls = []
+    class Store:
+        def get(self, owner, ident):
+            return {'id': ident, 'path': '/workspaces/' + ident}
+        def delete(self, owner, ident, force=False):
+            calls.append((owner, ident, force))
+            return {'id': ident, 'deleted': True}
+    monkeypatch.setattr(chat.workspace_api, 'store', lambda: Store())
+    server = ThreadingHTTPServer(('127.0.0.1', 0), chat.Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        for query in ('', '&force=1'):
+            req = urllib.request.Request('http://127.0.0.1:%s/projects?workspace=%s%s' % (server.server_port, 'a'*32, query),
+                                         headers={'X-Desk-User': 'alice'}, method='DELETE')
+            with urllib.request.urlopen(req, timeout=2) as response:
+                assert json.loads(response.read())['deleted'] is True
+        req = urllib.request.Request('http://127.0.0.1:%s/chat/new' % server.server_port, method='DELETE')
+        try:
+            urllib.request.urlopen(req, timeout=2)
+            assert False, 'only /projects accepts DELETE'
+        except urllib.error.HTTPError as exc:
+            assert exc.code == 404
+    finally:
+        server.shutdown()
+        server.server_close()
+    assert calls == [('alice', 'a'*32, False), ('alice', 'a'*32, True)]

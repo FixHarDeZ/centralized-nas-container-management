@@ -1,3 +1,11 @@
+## 2026-09-29 — Delete task button for coding workspaces (local)
+
+- User asked how to remove finished coding tasks; no delete existed (only manual worktree/branch/metadata cleanup in Terminal).
+- Added `WorkspaceStore.delete(owner, id, force)`, `DELETE /projects?workspace=<id>[&force=1]` in `workspace_api.handle`, `chat.Handler.do_DELETE`, and a two-tap **Delete task** button in Projects → Current task. Refuses with 409 on uncommitted files or commits not on any remote-tracking ref; UI then offers **Delete anyway**. Success navigates back to Documents. Removes worktree, `desk/<id>` branch, metadata and chat attachments; keeps repository cache, GitHub branch and chat transcripts.
+- Refactored cache path hashing into `_cache_path()` (shared by create/delete).
+- Verification: 5 new tests (store delete/dirty/unpushed→push/owner scope, HTTP route + force flag); full `ai-deck/tests` 276 passed. Button not visually checked in a browser.
+- README coding steps + `docs/CODING_WALKTHROUGH.md` updated. No commit, push or deploy.
+
 ## 2026-09-23 — Terminal bottom row clipping fixed locally
 
 - Reproduced in real Chromium: at 1697×833 and 14px font the terminal screen extended 8px below its container. FitAddon treats the parent computed height/width as usable content, but global border-box included terminal padding.

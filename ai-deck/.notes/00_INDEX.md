@@ -68,6 +68,7 @@
 ## 2026-09-23 — GitHub repo dropdown (uncommitted, not deployed)
 
 - Projects dialog มี select `#project-repo` เหนือ Repository URL: list จาก `GET /code/projects/repositories` → `workspaces.github_repositories()` (`gh auth token` เช็ค login, `gh api --paginate user/repos?sort=pushed`, กรองเฉพาะ URL ที่ `create()` รับ, cap 500). ไม่ได้ login = `signed_in:false` + dropdown ซ่อน; gh fail = 502 UI เงียบ พิมพ์ URL เองได้ตามเดิม.
+- **Delete task** (Current task, กด 2 ครั้ง) → `DELETE /code/projects?workspace=<id>[&force=1]` → `WorkspaceStore.delete()`: `worktree remove --force` + `branch -D desk/<id>` + ลบ metadata + `/workspaces/attachments/<owner>/<id>`. ไม่ force = 409 ถ้ามีไฟล์ค้าง (`status --porcelain`) หรือ commit ที่ไม่มี remote-tracking ref ไหนมี (`rev-list HEAD --not --remotes`) แล้ว UI เปลี่ยนเป็น **Delete anyway**. squash merge + ลบ branch บน GitHub = ดูเหมือน unpushed ต้อง force. ไม่แตะ cache `repositories/` และ branch บน GitHub. chat transcript ของ workspace ไม่ถูกลบ. `chat.py` มี `do_DELETE` แล้ว (เฉพาะ `/projects`).
 - gh login เป็นของ coding worker home เดียว → ทุก desk user เห็น list เดียวกัน.
 - Tests: ai-deck 207 passed (+3). **ยังไม่ verify จริง**: container `ai-deck-code` ไม่รันบน NAS (dialog โชว์ "Coding service is unavailable") — ต้อง deploy พร้อม `coding` profile ก่อน.
 - ค้าง: commit + deploy + ทดสอบ dropdown บน NAS หลัง `gh auth login`.
