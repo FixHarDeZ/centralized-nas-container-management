@@ -278,6 +278,8 @@ make secrets && ./scripts/deploy.sh -s <stack> -y
 
 ## Setting Up on a New Machine
 
+> Full checklist (age key, SSH, GitHub, venv, deploy check): [NEW_MACHINE.md](NEW_MACHINE.md)
+
 ### Prerequisites
 
 ```bash
