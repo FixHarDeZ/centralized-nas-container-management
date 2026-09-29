@@ -1,3 +1,11 @@
+## 2026-09-29 — Coding attachments deployed / closed
+
+- User authorized commit, push, deployment and closure. Feature commit `f54ac72cb7cec1e501b940902055aff4c9b339e3` pushed to main. Runner job `327465ec11ed4f3b90b47f4292cd73fb` succeeded through profile `nas-ai-deck`; independent `/health` returned ready with that exact revision.
+- Verified production SHA-256 matches for `ui/index.html`, `ui/app.js`, `ui/attachments.js`, `ui/style.css`, plus `chat.py` and `chat_attachments.py` in both document and coding containers. Actual coding container name is `ai-deck-ai-deck-code-1` (Compose service is `ai-deck-code`).
+- Authenticated live PNG upload into an existing owned repository workspace succeeded through nginx. Verified the saved bytes inside the coding container, then removed exactly that test file and its generated upload directory. No model turn, login, or Git change inside the coding workspace was initiated.
+- Validation: prior full suite 271 passed; fresh pre-commit attachment/UI/packaging suite 38 passed, diff check clean. Disposable Linux/nginx smoke and nginx configuration checks passed in implementation verification.
+- Closed: picker, drag/drop and image paste are deployed; user can refresh Coding Chat and use the paperclip or Cmd+V/Ctrl+V. README and both stack memory files updated. This closing record is documentation only; runtime remains `f54ac72`. No implementation/deployment work remains in the requested scope.
+
 ## 2026-09-29 — Coding chat file and clipboard attachments (local)
 
 - Implemented the user-approved fix: Coding Chat has a paperclip picker, file drop and clipboard-image paste, image thumbnails, removable pending items, uploading/ready/error states and upload retry. Maximum 10 files per message, 20 MiB each; attachment-only messages are supported. HTTP/network send failures preserve text and files; failed model-turn retry includes original attachment IDs. New-chat transport failure also preserves pending files.
