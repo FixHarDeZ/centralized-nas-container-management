@@ -7,6 +7,16 @@ description: Synology DS925+ Home Lab
 color: slate  # เทาน้ำเงินเข้มโมเดิร์น (zinc/neutral ก็เข้มได้)
 theme: dark    # ธีมมืดเพื่อความ modern
 
+# ─── Background ───────────────────────────────────────────────────────────────
+# รูป: Unsplash (Zermatt sunrise) — ไฟล์อยู่ homepage/images/ mount เป็น /app/public/images
+background:
+  image: /images/background.jpg
+  blur: sm          # เบลอเล็กน้อยให้ตัวอักษรอ่านง่าย
+  saturate: 100
+  brightness: 60    # หรี่ลงให้การ์ดเด่น
+  opacity: 100
+cardBlur: md        # การ์ดโปร่งแบบกระจกฝ้า
+
 # ─── Layout ───────────────────────────────────────────────────────────────────
 layout:
   📥 Downloads & Monitoring:

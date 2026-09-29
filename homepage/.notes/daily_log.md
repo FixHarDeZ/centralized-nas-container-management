@@ -225,3 +225,8 @@ curl -s -H "Host: <LAN_IP>:3000" "http://$IP:3000/api/services/proxy?group=<grou
 การ์ด `Synology DSM (Remote)` (widget `diskstation`) ตอบ 403 ทั้งแบบมีและไม่มี `endpoint` (`Unmapped proxy request.` / `Unsupported service endpoint` — ลองชื่อ endpoint ที่เดาได้ 7 แบบไม่ตรงสักอัน) → **วิธี verify ด้านบนใช้ได้กับ customapi เท่านั้น ไม่ใช่ widget มี type เฉพาะ** และ **ยังไม่ได้ยืนยันว่าการ์ด DSM ใช้งานได้หรือไม่ในรอบนี้** (ยืนยันตรงๆ ต้องอ่าน `HOMEPAGE_VAR_NAS_PASSWORD` มายิง DSM เอง — ไม่ทำ) ให้ดูด้วยตาบนหน้า dashboard
 
 **ผลหลัง deploy + restart:** Jellyfin (LAN)/(DDNS) = 200 (`MovieCount 109 / SeriesCount 62 / EpisodeCount 1919`), Public IP = 200, Plex ทั้งสองการ์ด = 200 ไม่กระทบ, log ไม่มี error ใหม่หลัง restart
+
+## 2026-09-29 — Background image
+- เพิ่มรูปวิวภูเขา+ทะเลหมอก (Unsplash, 2560px, ~530KB) ที่ `homepage/images/background.jpg`
+- `docker-compose.yml`: mount `./images:/app/public/images:ro`; `config/settings.yaml`: `background` (blur sm, brightness 60) + `cardBlur: md`
+- สถานะ: ยังไม่ commit / ยังไม่ deploy (ต้อง `./scripts/deploy.sh` แล้ว recreate homepage เพราะเพิ่ม volume)

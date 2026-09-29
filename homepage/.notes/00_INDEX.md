@@ -22,6 +22,7 @@ Basic auth ใช้ `.htpasswd` file mount (APR1 hash) — ไม่ใช้ A
 | `nginx/nginx.conf` | basic auth + proxy_pass ไปที่ homepage:3000 |
 | `nginx/.htpasswd` | APR1 password hash (ไม่ commit, ต้องสร้างก่อน deploy) |
 | `config/` | homepage configuration YAML files |
+| `images/` | รูป background (`background.jpg`) — mount เป็น `/app/public/images` อ้างใน settings ว่า `/images/background.jpg` |
 
 ---
 
@@ -56,6 +57,7 @@ Basic auth ผ่าน nginx:
 
 ## Change Log
 
+- **2026-09-29** — เพิ่ม background รูปวิวภูเขา/ทะเลหมอก (`settings.yaml` `background` + `cardBlur`, volume `./images`) — ยังไม่ deploy
 - **2026-09-15** — เพิ่มการ์ด Public IP (customapi → `ipinfo.io/json`, ยิงฝั่ง server = IP ของ NAS) + ซ่อม Jellyfin widget ที่พังเพราะ Jellyfin 12 ตัด `/emby` และเลิกรับ `api_key=` query → เปลี่ยนเป็น customapi + header `Authorization: MediaBrowser Token=...`
 - **2026-07-26** — เพิ่ม tile ops-bot (AI Incident Response Bot, port 5070/15070) — href ต้องมี `/dashboard` (app ไม่มี route ที่ `/`), ไม่ใส่ ping/widget เพราะอยู่หลัง basic auth (401 = ขึ้นเป็น down)
 - **2026-07-07** — เพิ่ม ink-reader widget (Doujin Library, port 5068/15068)
