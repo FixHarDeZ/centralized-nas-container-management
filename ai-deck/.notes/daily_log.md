@@ -6,6 +6,7 @@
 - Verification: 5 new tests (store delete/dirty/unpushed→push/owner scope, HTTP route + force flag); full `ai-deck/tests` 276 passed. Button not visually checked in a browser.
 - README coding steps + `docs/CODING_WALKTHROUGH.md` updated.
 - Committed `1ddfb22`, pushed main, `deploy.sh -y -s ai-deck` OK. Verified in containers: `def delete` in coding worker `workspaces.py`, `project-delete` in nginx `index.html`; all 3 containers Up. Button not yet exercised on a real task — first use by user. Closed.
+- Notes commit first pushed with a Claude co-author trailer (against user rule); user amended + force-pushed → `c8dcf18`. Other clones of main need `git pull --rebase`.
 
 ## 2026-09-23 — Terminal bottom row clipping fixed locally
 
