@@ -1,10 +1,11 @@
-## 2026-09-29 — Delete task button for coding workspaces (local)
+## 2026-09-29 — Delete task button for coding workspaces (deployed)
 
 - User asked how to remove finished coding tasks; no delete existed (only manual worktree/branch/metadata cleanup in Terminal).
 - Added `WorkspaceStore.delete(owner, id, force)`, `DELETE /projects?workspace=<id>[&force=1]` in `workspace_api.handle`, `chat.Handler.do_DELETE`, and a two-tap **Delete task** button in Projects → Current task. Refuses with 409 on uncommitted files or commits not on any remote-tracking ref; UI then offers **Delete anyway**. Success navigates back to Documents. Removes worktree, `desk/<id>` branch, metadata and chat attachments; keeps repository cache, GitHub branch and chat transcripts.
 - Refactored cache path hashing into `_cache_path()` (shared by create/delete).
 - Verification: 5 new tests (store delete/dirty/unpushed→push/owner scope, HTTP route + force flag); full `ai-deck/tests` 276 passed. Button not visually checked in a browser.
-- README coding steps + `docs/CODING_WALKTHROUGH.md` updated. No commit, push or deploy.
+- README coding steps + `docs/CODING_WALKTHROUGH.md` updated.
+- Committed `1ddfb22`, pushed main, `deploy.sh -y -s ai-deck` OK. Verified in containers: `def delete` in coding worker `workspaces.py`, `project-delete` in nginx `index.html`; all 3 containers Up. Button not yet exercised on a real task — first use by user. Closed.
 
 ## 2026-09-23 — Terminal bottom row clipping fixed locally
 
