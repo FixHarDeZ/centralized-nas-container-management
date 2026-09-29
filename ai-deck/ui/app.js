@@ -1086,6 +1086,9 @@
   const chatForm = document.getElementById('chat-form');
   const chatInput = document.getElementById('chat-input');
   const chatNote = document.getElementById('chat-note');
+  const attachments = window.DeskAttachments({enabled: workspace.coding && !!workspace.id, url: deskURL, note});
+  let sendingChat = false;
+  let lastAttachments = [];
   const chatState = document.getElementById('chat-state');
   const viewTermBtn = document.getElementById('view-term');
   const viewChatBtn = document.getElementById('view-chat');
@@ -1290,12 +1293,14 @@
     const box = add(el('div', 'bubble them err'));
     box.appendChild(el('div', null, text || 'ทำงานไม่สำเร็จ'));
     if (reason) box.appendChild(el('div', 'err-why', reason));
-    if (!lastSent) return;
+    if (!lastSent && !lastAttachments.length) return;
+    const retryText = lastSent, retryFiles = lastAttachments;
     const again = el('button', 'retry', 'ลองใหม่');
     again.type = 'button';
     again.addEventListener('click', function () {
+      if (!attachments.restore(retryFiles)) return;
       again.disabled = true;
-      chatInput.value = lastSent;
+      chatInput.value = retryText;
       sizeInput();
       sendChat();
     });
@@ -1369,6 +1374,9 @@
     if (ev.t === 'resync') { resync(ev); loadQuota(); return; }
     if (ev.t === 'busy') { setChatBusy(ev.on); return; }
     if (ev.t === 'reset') {
+      attachments.clear();
+      lastAttachments = [];
+      lastSent = '';
       // The stream is the single place a reset is acted on, so a resume
       // repaints once — whichever page asked for it, and any other that has
       // the view open. Painting in the caller too would double the history.
@@ -1467,32 +1475,47 @@
   }
 
   async function sendChat() {
+    if (sendingChat) return;
     if (workspace.coding && !workspace.id) { note('Choose or create a coding project first.'); return; }
-    await optionsReady;
-    const text = chatInput.value.trim();
-    if (!text) return;
-    const first = chatLog.querySelector('.chat-empty');
-    if (first) first.remove();
-    add(el('div', 'bubble me', text));
-    lastSent = text;          // kept so a failure can offer it back
-    chatInput.value = '';
-    dropDraft();
-    sizeInput();
-    note('');
-    setChatBusy(true);            // optimistic: the stream confirms it
+    sendingChat = true;
     try {
-      const r = await chatPost('chat/send', {
-        text: text, model: modelSelect.value, effort: effortSelect.value,
-      });
-      if (!r.ok) { setChatBusy(false); note(r.text || 'ส่งไม่สำเร็จ'); }
-    } catch (_) {
-      setChatBusy(false);
-      note('ต่อเดสก์ไม่ได้');
+      await optionsReady;
+      if (!attachments.ready()) return;
+      const text = chatInput.value.trim();
+      const files = attachments.snapshot();
+      if (!text && !files.length) return;
+      const first = chatLog.querySelector('.chat-empty');
+      if (first) first.remove();
+      const bubble = add(el('div', 'bubble me', text + (files.length ? '\n\n📎 ' + files.map(f => f.name).join(', ') : '')));
+      lastSent = text;
+      lastAttachments = files;
+      note('');
+      attachments.lock(true);
+      setChatBusy(true);
+      try {
+        const body = {text, model: modelSelect.value, effort: effortSelect.value};
+        if (files.length) body.attachments = files.map(f => f.id);
+        const r = await chatPost('chat/send', body);
+        if (!r.ok) {
+          bubble.remove(); setChatBusy(false); note(r.text || 'ส่งไม่สำเร็จ');
+          return;
+        }
+        attachments.clear();
+        // Preserve anything the user began typing while the request was pending.
+        if (chatInput.value.trim() === text) { chatInput.value = ''; dropDraft(); }
+        sizeInput();
+      } catch (_) {
+        bubble.remove(); setChatBusy(false); note('ต่อเดสก์ไม่ได้ — ข้อความและไฟล์ยังอยู่ ลองส่งอีกครั้ง');
+      }
+    } finally {
+      attachments.lock(false);
+      sendingChat = false;
     }
   }
 
   chatForm.addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (sendingChat) return;
     if (chatBusy) {
       try { await chatPost('chat/stop'); } catch (_) { /* the stream will say */ }
       return;
@@ -1501,13 +1524,17 @@
   });
 
   document.getElementById('chat-new').addEventListener('click', async () => {
+    if (sendingChat) return;
     // Chat is one agent shared by both desks, so this can land mid-answer —
     // the desk refuses then, and clearing the log anyway would hide a turn
     // that is still running (possibly someone else's).
     try {
       const r = await chatPost('chat/new', {});
       if (!r.ok) { note(r.text || 'ยังตอบอยู่'); return; }
-    } catch (_) { /* nothing to undo */ }
+    } catch (_) { note('ต่อเดสก์ไม่ได้ — ลองเปิดแชทใหม่อีกครั้ง'); return; }
+    attachments.clear();
+    lastAttachments = [];
+    lastSent = '';
     clearLog();
     spent = 0;
     paintSpent();

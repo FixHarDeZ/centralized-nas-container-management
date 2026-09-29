@@ -29,7 +29,7 @@ def test_worker_entrypoint_does_not_copy_document_rules():
 
 def test_optional_nginx_coding_routes_resolve_lazily():
     source = (ROOT / 'nginx/nginx.conf').read_text()
-    assert 'location /code/chat/' in source
+    assert 'location ^~ /code/chat/' in source
     assert 'location /code/projects' in source
     assert 'proxy_set_header X-Desk-User $remote_user;' in source
     assert 'set $coding_chat ai-deck-code:7683;' in source

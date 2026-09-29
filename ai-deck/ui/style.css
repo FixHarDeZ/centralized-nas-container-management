@@ -429,7 +429,7 @@ body.kb-open .chat-jump { bottom: 68px; }
 
 .chat-form {
   flex: 0 0 auto;
-  display: flex; align-items: flex-end; gap: 8px;
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px;
   padding: 8px 10px calc(8px + var(--safe-bottom));
   border-top: 1px solid var(--line);
   background: var(--panel-glass);
@@ -725,3 +725,18 @@ textarea:focus-visible,
   .typing i { opacity: 0.55; }
   .chat-send:active { transform: none; }
 }
+
+/* Coding chat uploads share the composer width at both phone and desktop sizes. */
+.chat-attachments { flex: 0 0 100%; display: flex; flex-wrap: wrap; gap: 6px; max-height: 160px; overflow-y: auto; }
+.chat-attachments[hidden], .chat-attach[hidden] { display: none; }
+.chat-attachment { display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; padding: 6px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.chat-attachment img { width: 40px; height: 40px; object-fit: cover; border-radius: 5px; }
+.attachment-label { min-width: 0; }
+.attachment-label strong, .attachment-label small { display: block; overflow-wrap: anywhere; }
+.attachment-label strong { font-size: 12px; }
+.attachment-label small { font-size: 11px; color: var(--muted); }
+.chat-attachment button { flex-shrink: 0; min-width: 32px; min-height: 32px; border: 0; border-radius: 6px; background: var(--btn); color: var(--fg); cursor: pointer; }
+.chat-attach { flex: 0 0 42px; height: 42px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: var(--radius); background: var(--btn); color: var(--fg); cursor: pointer; }
+.chat-attach svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.chat-attach:disabled, .chat-attachment button:disabled { opacity: .5; cursor: default; }
+.chat-form.attachment-drop { outline: 2px dashed var(--accent); outline-offset: -4px; }

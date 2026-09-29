@@ -170,6 +170,11 @@
     </button>
     <div id="chat-note" class="chat-note" hidden></div>
     <form id="chat-form" class="chat-form">
+      <div id="chat-attachments" class="chat-attachments" aria-label="Attached files" aria-live="polite" hidden></div>
+      <input type="file" id="chat-files" multiple hidden>
+      <button id="chat-attach" type="button" class="chat-attach" aria-label="Attach files" title="Attach files (up to 10 files, 20 MiB each)" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 12 7-7a3 3 0 0 1 4 4L9 19a5 5 0 0 1-7-7L12 2M6 14l8-8"/></svg>
+      </button>
       <textarea aria-label="Message your agent" id="chat-input" rows="1" placeholder="พิมพ์ข้อความ…"
                 enterkeyhint="send" autocomplete="off" autocapitalize="sentences"></textarea>
       <button id="chat-send" type="submit" class="chat-send" aria-label="Send">
@@ -278,6 +283,7 @@
   <script src="stream.js"></script>
   <script src="starters.js"></script>
   <script src="workspaces.js"></script>
+  <script src="attachments.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

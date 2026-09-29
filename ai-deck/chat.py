@@ -41,6 +41,7 @@ import mimo_backend
 import agent_options
 import claude_metadata
 import usage_status
+import chat_attachments
 import workspace_api
 import deploy_bridge
 import json
@@ -796,6 +797,23 @@ class Handler(BaseHTTPRequestHandler):
             self._reply(400, "bad json")
             return None
 
+    def do_PUT(self):
+        self.close_connection = True
+        if not urlparse(self.path).path.startswith('/chat/attachments/'):
+            self._reply(404, 'Not found')
+            return
+        from workspaces import WorkspaceError
+        try:
+            self._json_body(json.dumps(chat_attachments.receive(self), ensure_ascii=False))
+        except WorkspaceError as exc:
+            self._reply(exc.status, exc.message)
+        except (ValueError, UnicodeError):
+            self._reply(400, 'Invalid attachment filename')
+        except TimeoutError:
+            self._reply(408, 'Upload timed out; try again')
+        except OSError:
+            self._reply(503, 'Attachment storage is unavailable')
+
     def do_POST(self):
         if deploy_bridge.handle(self) or workspace_api.handle(self):
             return
@@ -808,8 +826,23 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/chat/send":
             text = body.get("text")
-            if not isinstance(text, str) or not text.strip():
-                self._reply(400, "text must be a nonempty string")
+            if not isinstance(text, str):
+                self._reply(400, "text must be a string")
+                return
+            from workspaces import WorkspaceError
+            try:
+                text = chat_attachments.append_prompt(self, text.strip(), body.get('attachments', []))
+            except WorkspaceError as exc:
+                self._reply(exc.status, exc.message)
+                return
+            except FileNotFoundError:
+                self._reply(404, 'Attachment not found in this workspace')
+                return
+            except (OSError, ValueError):
+                self._reply(503, 'Attachment storage is unavailable')
+                return
+            if not text:
+                self._reply(400, "text or attachments required")
                 return
             model, effort = body.get("model", agent.model), body.get("effort", agent.effort)
             if not agent_options.validate(self.provider, model, effort):

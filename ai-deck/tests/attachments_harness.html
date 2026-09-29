@@ -1,0 +1,125 @@
+<!doctype html><meta charset="utf-8"><title>Chat attachments</title>
+<pre id="result">pending</pre>
+<script>
+const failures = [];
+const check = (ok, msg) => { if (!ok) failures.push(msg); };
+const pause = () => new Promise(r => setTimeout(r, 100));
+(async () => {
+  try {
+    const frame = document.createElement('iframe');
+    frame.style = 'width:390px;height:844px';
+    const workspace = 'a'.repeat(32);
+    await new Promise(resolve => {
+      frame.onload = () => setTimeout(resolve, 100);
+      frame.src = '../ui/?demo=1&chat=1&welcome=1&workspace=' + workspace;
+      document.body.append(frame);
+    });
+    const win = frame.contentWindow, doc = frame.contentDocument;
+    const picker = doc.getElementById('chat-files');
+    const attach = doc.getElementById('chat-attach');
+    check(attach && !attach.hidden, 'coding chat exposes attach button');
+    if (!picker || !attach) throw Error('Attachment controls missing');
+    const list = doc.getElementById('chat-attachments');
+    const form = doc.getElementById('chat-form'), input = doc.getElementById('chat-input');
+    const calls = [];
+    let uploadId = 0, rejectUpload = false, rejectSend = false, networkFailure = false, releaseUpload;
+    win.fetch = async (path, options = {}) => {
+      calls.push({path, options});
+      if (options.method === 'PUT') {
+        if (releaseUpload) await new Promise(resolve => { releaseUpload = resolve; });
+        if (rejectUpload) return {ok:false, status:413, text:async () => 'Maximum file size is 20 MiB'};
+        const name = decodeURIComponent(path.split('?')[0].split('/').pop());
+        return {ok:true, json:async () => ({id:String(++uploadId).padStart(32, '0') + '/' + name, name, size:options.body.size})};
+      }
+      if (networkFailure) throw Error('offline');
+      return {ok:!rejectSend, text:async () => rejectSend ? 'Agent unavailable' : 'ok', json:async () => ({})};
+    };
+    const choose = files => {
+      const data = new win.DataTransfer(); files.forEach(f => data.items.add(f));
+      picker.files = data.files;
+      picker.dispatchEvent(new win.Event('change', {bubbles:true}));
+    };
+    const file = (name, type='text/plain') => new win.File(['hello'], name, {type});
+    choose([file('notes.txt')]); await pause();
+    check(list.textContent.includes('notes.txt'), 'picker shows ready file');
+    const upload = calls.find(c => c.options.method === 'PUT');
+    check(upload.path.includes('code/chat/attachments/notes.txt') && upload.path.includes('workspace=' + workspace), 'uploads target selected workspace');
+    const data = new win.DataTransfer(); data.items.add(file('clipboard.png', 'image/png'));
+    const paste = new win.ClipboardEvent('paste', {clipboardData:data, bubbles:true, cancelable:true});
+    input.dispatchEvent(paste); await pause();
+    check(paste.defaultPrevented && list.querySelector('img'), 'clipboard image uploads with preview');
+    const textData = new win.DataTransfer(); textData.setData('text/plain', 'normal text');
+    const textPaste = new win.ClipboardEvent('paste', {clipboardData:textData, bubbles:true, cancelable:true});
+    input.dispatchEvent(textPaste);
+    check(!textPaste.defaultPrevented, 'text paste remains native');
+    const dropped = new win.DataTransfer(); dropped.items.add(file('drop.pdf', 'application/pdf'));
+    form.dispatchEvent(new win.DragEvent('drop', {dataTransfer:dropped, bubbles:true, cancelable:true})); await pause();
+    check(list.textContent.includes('drop.pdf'), 'drop adds file');
+    list.querySelector('[aria-label="Remove drop.pdf"]').click();
+    check(!list.textContent.includes('drop.pdf'), 'remove excludes pending file');
+    input.value = 'Explain the image'; rejectSend = true;
+    form.requestSubmit(); await pause();
+    check(input.value === 'Explain the image' && list.textContent.includes('clipboard.png'), 'HTTP failure preserves draft and attachments');
+    check(doc.getElementById('chat-note').textContent.includes('Agent unavailable'), 'send failure shown');
+    rejectSend = false; networkFailure = true;
+    form.requestSubmit(); await pause();
+    check(input.value === 'Explain the image' && list.textContent.includes('clipboard.png'), 'network failure preserves draft and attachments');
+    networkFailure = false;
+    form.requestSubmit(); await pause();
+    const sends = calls.filter(c => c.path.includes('chat/send'));
+    const sent = JSON.parse(sends.at(-1).options.body);
+    check(sent.attachments.length === 2 && sent.text === 'Explain the image', 'send includes exactly selected references');
+    check(list.hidden && input.value === '', 'accepted send clears pending queue');
+    win._chat.feed({t:'turn', status:'error', text:'Model failed'});
+    doc.querySelector('.retry').click(); await pause();
+    const retried = JSON.parse(calls.filter(c => c.path.includes('chat/send')).at(-1).options.body);
+    check(JSON.stringify(retried.attachments) === JSON.stringify(sent.attachments), 'failed model turn retry retains attachment references');
+    win._chat.feed({t:'busy', on:false});
+    choose([file('only.txt')]); await pause(); form.requestSubmit(); await pause();
+    check(JSON.parse(calls.filter(c => c.path.includes('chat/send')).at(-1).options.body).text === '', 'attachment-only message can send');
+    win._chat.feed({t:'busy', on:false});
+    rejectUpload = true;
+    choose([file('failed.txt')]); await pause();
+    const count = calls.filter(c => c.path.includes('chat/send')).length;
+    form.requestSubmit(); await pause();
+    check(calls.filter(c => c.path.includes('chat/send')).length === count, 'failed upload blocks submission');
+    check(list.textContent.includes('Maximum file size'), 'upload error is visible');
+    rejectUpload = false;
+    list.querySelector('[aria-label="Retry failed.txt"]').click(); await pause();
+    check(list.textContent.includes('Ready'), 'upload can retry');
+    list.querySelector('[aria-label="Remove failed.txt"]').click();
+    releaseUpload = true;
+    choose([file('slow.txt')]); await pause(); form.requestSubmit(); await pause();
+    check(calls.filter(c => c.path.includes('chat/send')).length === count, 'inflight upload blocks submission');
+    releaseUpload(); releaseUpload = null; await pause();
+    const phone = form.getBoundingClientRect();
+    check(phone.left >= 0 && phone.right <= 390 && doc.documentElement.scrollWidth <= 390, 'composer fits phone');
+    frame.style.width = '1280px'; await pause();
+    check(form.getBoundingClientRect().right <= 1280, 'composer fits desktop');
+    networkFailure = true;
+    doc.getElementById('chat-new').click(); await pause();
+    check(!list.hidden, 'failed new-chat request preserves pending files');
+    networkFailure = false;
+    doc.getElementById('chat-new').click(); await pause();
+    check(list.hidden, 'new chat clears pending attachments');
+    const before = calls.length;
+    choose([new win.File([new Uint8Array(20 * 1024 * 1024 + 1)], 'huge.bin')]); await pause();
+    check(calls.length === before && doc.getElementById('chat-note').textContent.includes('20 MiB'), 'oversized file blocked before upload');
+    choose(Array.from({length:11}, (_, i) => file('file' + i + '.txt'))); await pause();
+    check(list.querySelectorAll('.chat-attachment').length === 10, 'queue limited to ten files');
+    check(doc.getElementById('chat-note').textContent.includes('10'), 'file count limit explained');
+    doc.getElementById('chat-new').click(); await pause();
+    releaseUpload = true;
+    choose([file('cancelled.txt')]); await pause();
+    list.querySelector('[aria-label="Remove cancelled.txt"]').click();
+    releaseUpload(); releaseUpload = null; await pause();
+    check(list.hidden, 'late upload completion cannot restore removed file');
+    await new Promise(resolve => {
+      frame.onload = () => setTimeout(resolve, 100);
+      frame.src = '../ui/?demo=1&chat=1&welcome=1';
+    });
+    check(frame.contentDocument.getElementById('chat-attach').hidden, 'document chat does not expose coding uploader');
+  } catch (error) { failures.push(String(error)); }
+  document.getElementById('result').textContent = JSON.stringify({failures});
+})();
+</script>

@@ -1,3 +1,18 @@
+## 2026-09-29 — Coding chat file and clipboard attachments (local)
+
+- Implemented the user-approved fix: Coding Chat has a paperclip picker, file drop and clipboard-image paste, image thumbnails, removable pending items, uploading/ready/error states and upload retry. Maximum 10 files per message, 20 MiB each; attachment-only messages are supported. HTTP/network send failures preserve text and files; failed model-turn retry includes original attachment IDs. New-chat transport failure also preserves pending files.
+- New `chat_attachments.py` receives streamed `PUT /chat/attachments/<name>` uploads and validates attachment IDs for `/chat/send`. Each operation resolves the authenticated workspace. Flat UTF-8 filenames and descriptor-based no-follow directory traversal reject path/symlink escapes. Incomplete uploads are removed; same-name uploads get separate random directories. Provider prompts include validated absolute paths for native file/image tools.
+- Storage: `/workspaces/attachments/<owner>/<workspace>/<upload-id>/<filename>` in persistent code-workspaces, outside Git worktrees. Upload never stages/commits files. Removing a pending chip does not delete the stored file; pending lists are page-local and clear on refresh/provider/workspace/new-chat changes. Documents uploader remains unchanged. Retention/file-browser/native inline image protocol are outside this change.
+- nginx coding-chat route uses `^~` to keep .png and other extensions out of the static route, a 20m body limit, streaming uploads and the existing authenticated owner header. Dockerfile packages the new module. README and `docs/CHAT_ATTACHMENTS.md` describe usage and limits.
+- Verification: initial 21 API regressions failed before implementation; Chromium attachment regression failed before controls existed. Final full ai-deck suite: 271 passed (existing HTTP-test connection-reset diagnostics, no test failures). JS/Python syntax and git diff checks passed. Actual nginx:alpine config validation passed. Disposable Docker nginx → Linux Python handler smoke passed with PNG, Thai/space/percent/#/? filenames, persisted bytes, validated agent prompt paths and client owner-header overwrite. Disposable smoke containers/network removed. No real model turn or production probe was performed.
+- Delivery authorized by user: commit, push, deploy and close. Fresh attachment/UI/packaging suite: 38 passed; diff check passed. Preparing feature commit; deployment and final closing record follow after live verification. Prior full suite: 271 passed.
+
+## 2026-09-29 — Coding chat attachments investigation
+
+- User reported inability to attach local files or clipboard images in GitHub coding Chat. Source confirms composer sends only text/model/effort; no image paste or attachment handling. Coding mode explicitly hides Files; existing uploader targets document /work/in, not the selected Git worktree.
+- Current workaround: place a file in the actual coding worktree via Terminal (for example download from a trusted accessible URL), then reference its path in Chat. Documents uploads are not shared with coding. Local clipboard/file attachment needs a workspace-scoped upload endpoint and composer picker/drop/paste support; terminal clipboard limitation does not prevent implementing browser Chat upload.
+- Investigation only: no runtime code changes, tests, commit, push or deployment. Proposed attachment feature remains unimplemented; production was not probed in this session.
+
 ## 2026-09-29 — Default model label fix delivered / closed
 
 - Fix commit `13b1f88` is pushed. Deployed latest main `156fc66b447cc86385ba50ec9186ca780ece4270` through runner job `d3396700693d42d89be2514bdc4d0280` (succeeded); intervening changes did not modify ai-deck.

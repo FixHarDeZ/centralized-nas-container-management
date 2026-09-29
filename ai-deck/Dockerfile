@@ -113,7 +113,7 @@ COPY --chmod=0644 mimo_backend.py /opt/ai-deck/mimo_backend.py
 COPY --chmod=0644 agent_options.py claude_metadata.py /opt/ai-deck/
 COPY --chmod=0644 usage_status.py /opt/ai-deck/usage_status.py
 COPY --chmod=0644 chat.py /opt/ai-deck/chat.py
-COPY --chmod=0644 workspace_api.py workspaces.py deploy_bridge.py coding_terminal.py /opt/ai-deck/
+COPY --chmod=0644 workspace_api.py workspaces.py chat_attachments.py deploy_bridge.py coding_terminal.py /opt/ai-deck/
 # `ask <question>` — one-shot questions on the OpenAI wire, stdlib only. The
 # name is `ask` and not `mimo` because MiMoCode's own binary is `mimo`.
 # In the image, not the home volume: docker seeds a named volume once, so a
