@@ -243,4 +243,4 @@ data. Also update the Kuma webhook URL to include `?secret=…` if it doesn't.
 - marker 2 บรรทัด: epoch + ชื่อ stack คั่น comma (ไฟล์บรรทัดเดียวแบบเก่ายังอ่านได้)
 - `maintenance.transition()` ใน watcher ทุก 30 วิ: เปิด → `🚀 เริ่ม deploy: <stacks> พัก alert ถึง HH:MM`, หด tail ไม่แจ้งซ้ำ, ปิด → `✅ deploy เสร็จ` + ล่มชั่วคราวกลับมาเอง / ⚠️ ยังล่ม กำลังวินิจฉัย / ไม่มี alert
 - deploy ops-bot เอง: process ใหม่เจอ window ที่เปิดอยู่ → แจ้ง 🚀 (process เก่าไม่ทันแจ้ง) ไม่ซ้ำ
-- เทสต์ 72 passed (+5). Commit+push+deploy 30/09 11:28; marker บน NAS มี 2 บรรทัด (epoch, `ops-bot`), container ไม่มี error. ยังไม่ได้ยืนยันด้วยตาว่าข้อความ 🚀/✅ เข้า Telegram (send_message ไม่ log ตอนสำเร็จ)
+- เทสต์ 72 passed (+5). Commit+push+deploy 30/09 11:28; marker บน NAS มี 2 บรรทัด (epoch, `ops-bot`), container ไม่มี error. ผู้ใช้ยืนยันข้อความ 🚀/✅ เข้า Telegram จริงแล้ว. ปิดงาน ไม่มีงานค้าง
