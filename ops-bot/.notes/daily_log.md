@@ -236,4 +236,4 @@ data. Also update the Kuma webhook URL to include `?secret=…` if it doesn't.
 - ทำ: `scripts/deploy.sh` เขียน epoch deadline ลง `<NAS>/ops-bot/maintenance/until` ก่อน restart (+45 นาที) แล้วหด เหลือ +5 นาที หลัง stack สุดท้ายขึ้น. ops-bot อ่านไฟล์ผ่าน bind `./maintenance:/app/maintenance:ro` (ไม่ใช้ SSH เพราะ SSH หลุดตอน deploy พอดี)
 - `app/maintenance.py`: DOWN ในหน้าต่าง = hold (ไม่ record debounce), UP ของตัวที่ hold = เงียบ, หมดหน้าต่างแล้วยังไม่ขึ้น = watcher ทุก 30 วิ เรียก `handle_incident` ตามปกติ (deploy ทำพังต้องยังรายงาน — Kuma ไม่ส่ง DOWN ซ้ำเอง)
 - ข้อจำกัด: held อยู่ใน memory — deploy ops-bot เองแล้ว held ก่อน restart หาย
-- เทสต์ 67 passed (+7 `tests/test_maintenance.py`). ยังไม่ commit / ยังไม่ deploy
+- เทสต์ 67 passed (+7 `tests/test_maintenance.py`). Commit `853e081` push origin/main แล้ว. Deploy 30/09 (`deploy.sh -s ops-bot -y`) — ตรวจในคอนเทนเนอร์: อ่าน `/app/maintenance/until` ได้, `maintenance.active()` = True (tail 5 นาที), ทั้งสอง container Up
