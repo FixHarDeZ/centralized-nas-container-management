@@ -322,8 +322,9 @@ fi
 MAINT_FILE="${NAS_TARGET_PATH}/ops-bot/maintenance/until"
 MAINT_BUILD_SECONDS=2700
 MAINT_TAIL_SECONDS=300
+# Line 1 = deadline, line 2 = stacks, which ops-bot names in its Telegram notice.
 set_maintenance() {
-  echo $(( $(date +%s) + $1 )) | ssh $SSH_OPTS "${SSH_DEST}" \
+  printf '%s\n%s\n' "$(( $(date +%s) + $1 ))" "$(IFS=,; echo "${STACKS_TO_RESTART[*]}")" | ssh $SSH_OPTS "${SSH_DEST}" \
     "mkdir -p '$(dirname "${MAINT_FILE}")' && cat > '${MAINT_FILE}.tmp' && mv '${MAINT_FILE}.tmp' '${MAINT_FILE}'" \
     || warn "Could not write ops-bot maintenance window — expect alerts"
 }

@@ -238,3 +238,9 @@ data. Also update the Kuma webhook URL to include `?secret=…` if it doesn't.
 - ข้อจำกัด: held อยู่ใน memory — deploy ops-bot เองแล้ว held ก่อน restart หาย
 - เทสต์ 67 passed (+7 `tests/test_maintenance.py`). Commit `853e081` push origin/main แล้ว. Deploy 30/09 (`deploy.sh -s ops-bot -y`) — ตรวจในคอนเทนเนอร์: อ่าน `/app/maintenance/until` ได้, `maintenance.active()` = True (tail 5 นาที), ทั้งสอง container Up
 - ปิดงาน 30/09: งานค้าง = ยังไม่เห็นเคสจริง (Kuma DOWN ระหว่าง deploy) — deploy stack อื่นครั้งถัดไปแล้วเช็คว่า Telegram เงียบ. git clean, main = origin/main
+
+## 2026-09-30 (ต่อ) — แจ้ง Telegram ตอนเริ่ม/จบ deploy
+- marker 2 บรรทัด: epoch + ชื่อ stack คั่น comma (ไฟล์บรรทัดเดียวแบบเก่ายังอ่านได้)
+- `maintenance.transition()` ใน watcher ทุก 30 วิ: เปิด → `🚀 เริ่ม deploy: <stacks> พัก alert ถึง HH:MM`, หด tail ไม่แจ้งซ้ำ, ปิด → `✅ deploy เสร็จ` + ล่มชั่วคราวกลับมาเอง / ⚠️ ยังล่ม กำลังวินิจฉัย / ไม่มี alert
+- deploy ops-bot เอง: process ใหม่เจอ window ที่เปิดอยู่ → แจ้ง 🚀 (process เก่าไม่ทันแจ้ง) ไม่ซ้ำ
+- เทสต์ 72 passed (+5)

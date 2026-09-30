@@ -8,7 +8,12 @@ busiest and SSH has been seen dropping ("SSH session not active").
 DOWN alerts inside the window are held, not dropped: a recovery clears them,
 and whatever is still down once the window closes gets the normal diagnosis.
 A deploy that breaks a service must still be reported, and Kuma only notifies
-on state change, so it will not re-send the DOWN by itself."""
+on state change, so it will not re-send the DOWN by itself.
+
+The marker is two lines: epoch deadline, then comma-separated stack names.
+The watcher announces the window opening and closing in Telegram. deploy.sh
+rewrites the deadline to a short tail after the last stack is up; that is the
+same window, not a new one, so it is not announced again."""
 from __future__ import annotations
 
 import asyncio
@@ -22,16 +27,26 @@ logger = logging.getLogger(__name__)
 
 # service_name -> (container_name, alert_message)
 _held: dict[str, tuple[str, str]] = {}
+# held DOWNs that came back UP inside the window, for the closing notice
+_recovered: list[str] = []
+_open_stacks: Optional[list[str]] = None  # None = no window announced
 _task: Optional[asyncio.Task] = None
 
 
-def active(now: Optional[float] = None) -> bool:
+def read() -> Optional[tuple[float, list[str]]]:
     try:
         with open(get_config().maintenance_file) as f:
-            until = float(f.read().strip())
-    except (OSError, ValueError):
-        return False
-    return (now if now is not None else time.time()) < until
+            lines = f.read().splitlines()
+        until = float(lines[0].strip())
+    except (OSError, ValueError, IndexError):
+        return None
+    stacks = [s for s in (lines[1].split(",") if len(lines) > 1 else []) if s.strip()]
+    return until, [s.strip() for s in stacks]
+
+
+def active(now: Optional[float] = None) -> bool:
+    marker = read()
+    return marker is not None and (now if now is not None else time.time()) < marker[0]
 
 
 def hold(service_name: str, container_name: str, alert_message: str) -> None:
@@ -42,7 +57,10 @@ def hold(service_name: str, container_name: str, alert_message: str) -> None:
 def release(service_name: str) -> bool:
     """Recovery during the window. True = the DOWN was held, so the recovery
     message is noise too."""
-    return _held.pop(service_name, None) is not None
+    if _held.pop(service_name, None) is None:
+        return False
+    _recovered.append(service_name)
+    return True
 
 
 def take_expired() -> list[tuple[str, str, str]]:
@@ -54,9 +72,45 @@ def take_expired() -> list[tuple[str, str, str]]:
     return out
 
 
-async def _watch(handle_incident) -> None:
+def _hhmm(epoch: float) -> str:
+    return time.strftime("%H:%M", time.localtime(epoch))
+
+
+def transition() -> Optional[str]:
+    """Telegram notice when the window opens or closes, else None. Call before
+    take_expired() so the closing notice still sees what is held."""
+    global _open_stacks
+    marker = read()
+    is_open = marker is not None and time.time() < marker[0]
+    if is_open and _open_stacks is None:
+        _open_stacks = marker[1]
+        _recovered.clear()
+        names = ", ".join(_open_stacks) or "ไม่ระบุ stack"
+        return f"🚀 เริ่ม deploy: {names}\nพัก alert ถึง {_hhmm(marker[0])}"
+    if not is_open and _open_stacks is not None:
+        names = ", ".join(_open_stacks) or "ไม่ระบุ stack"
+        _open_stacks = None
+        lines = [f"✅ deploy เสร็จ: {names}"]
+        if _recovered:
+            lines.append(f"ล่มชั่วคราวแล้วกลับมาเอง: {', '.join(_recovered)}")
+        if _held:
+            lines.append(f"⚠️ ยังล่มอยู่ กำลังวินิจฉัย: {', '.join(_held)}")
+        elif not _recovered:
+            lines.append("ไม่มี alert ระหว่าง deploy")
+        _recovered.clear()
+        return "\n".join(lines)
+    return None
+
+
+async def _watch(handle_incident, notify) -> None:
     while True:
         await asyncio.sleep(30)
+        note = transition()
+        if note:
+            try:
+                await notify(note)
+            except Exception:
+                logger.exception("Deploy window notice failed")
         for name, container, msg in take_expired():
             logger.info(f"Deploy window closed, {name} still down — diagnosing")
             try:
@@ -68,9 +122,9 @@ async def _watch(handle_incident) -> None:
                 logger.exception(f"Held incident for {name} failed")
 
 
-def start(handle_incident) -> None:
+def start(handle_incident, notify) -> None:
     global _task
-    _task = asyncio.create_task(_watch(handle_incident))
+    _task = asyncio.create_task(_watch(handle_incident, notify))
 
 
 async def stop() -> None:
