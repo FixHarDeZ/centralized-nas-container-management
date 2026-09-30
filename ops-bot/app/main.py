@@ -9,13 +9,17 @@ from app.db import init_db, close_db
 from app.webhook import router as webhook_router
 from app.dashboard import router as dashboard_router
 from app.commands import start_telegram_polling, stop_telegram_polling
+from app.orchestrator import handle_incident
+from app import maintenance
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
     await start_telegram_polling()
+    maintenance.start(handle_incident)
     yield
+    await maintenance.stop()
     await stop_telegram_polling()
     await close_db()
 

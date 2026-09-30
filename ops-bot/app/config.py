@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     # Watchtower
     watchtower_grace_minutes: int = 5
 
+    # Deploy window marker written by scripts/deploy.sh (epoch seconds)
+    maintenance_file: str = "/app/maintenance/until"
+
     # Webhook security
     kuma_webhook_secret: str = ""
 

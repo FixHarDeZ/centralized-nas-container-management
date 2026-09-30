@@ -9,6 +9,7 @@ from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 from pydantic import BaseModel
 
+from app import maintenance
 from app.config import get_config
 from app.orchestrator import handle_incident, handle_recovery
 from app.telegram_bot import get_telegram_bot
@@ -139,6 +140,8 @@ async def uptime_kuma_webhook(
     # Handle recovery (status=1, UP)
     if status == 1:
         logger.info(f"Recovery detected for {service_name}")
+        if maintenance.release(service_name):
+            return {"status": "maintenance", "service": service_name}
         background_tasks.add_task(handle_recovery, service_name=service_name)
         # Clear debounce on recovery
         _last_alert.pop(service_name, None)
@@ -147,6 +150,12 @@ async def uptime_kuma_webhook(
     # Handle DOWN (status=0)
     if status != 0:
         return {"status": "ignored", "reason": f"unknown status: {status}"}
+
+    # Held before debounce: recording a deploy-caused alert would debounce a
+    # real one that follows the window
+    if maintenance.active():
+        maintenance.hold(service_name, get_container_name(service_name), data.heartbeat.msg)
+        return {"status": "maintenance", "service": service_name}
 
     # Debounce check
     if _is_debounced(service_name):

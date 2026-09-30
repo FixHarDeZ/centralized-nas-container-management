@@ -11,6 +11,8 @@ services:
     volumes:
       - ops_bot_data:/app/data
       - ${HOST_SSH_KEY_PATH}:/app/data/ssh/id_ed25519:ro
+      # scripts/deploy.sh writes the deploy-window deadline here
+      - ./maintenance:/app/maintenance:ro
     labels:
       - "com.centurylinklabs.watchtower.enable=false"
 

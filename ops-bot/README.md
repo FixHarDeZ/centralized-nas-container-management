@@ -16,6 +16,7 @@ AI-powered incident response bot. Receives alerts from Uptime Kuma, auto-diagnos
 - **Telegram**: InlineKeyboard for log inspection
 - **Commands**: `/status`, `/diagnose <service>`, `/logs <service> [lines]`
 - **Watchtower**: Grace period 5 min after image updates (skip alerts during update)
+- **Deploy window**: `scripts/deploy.sh` writes an epoch deadline to `maintenance/until` (bind-mounted `/app/maintenance`, read locally — no SSH). DOWN alerts inside the window are held; recovery clears them silently; anything still down after the window gets the normal diagnosis. Window = 45 min while restarting, narrowed to 5 min after the last stack is up
 - **Debounce**: 15 min cooldown between repeated alerts for the same service
 - **Dashboard**: responsive overview, search by service/container, severity filters, and paginated incident history
 - **AI Settings**: `/dashboard/settings` changes the analysis model without a restart; persistent override with reset to environment default

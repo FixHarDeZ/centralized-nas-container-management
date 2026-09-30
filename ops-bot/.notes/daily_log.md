@@ -230,3 +230,10 @@ data. Also update the Kuma webhook URL to include `?secret=…` if it doesn't.
 - Saved previous deployment source/config (no env secrets) to NAS `/tmp/ops-bot-before-1790570015.tgz`; rebuilt/restarted with `./scripts/deploy.sh --restart-only -s ops-bot -y`.
 - Production verification through nginx: authenticated `/dashboard`, `/dashboard/settings` and CSS all HTTP 200; unauthenticated dashboard HTTP 401. Dashboard references CSS v=20260928; served SHA-256 `2cdbe5ac0e21670981385871104b3a343768eb9dc9bdafc66f95f6d60cf71d11` matches local file. Both ops-bot and ops-bot-nginx running.
 - No real diagnostic/Telegram notification triggered for testing. Full stack test suite: 60 passed. Deployment complete; follow-up documentation commit records actual result.
+
+## 2026-09-30 — Deploy window (ไม่วินิจฉัยตอนเรา deploy เอง)
+- ปัญหา: deploy.sh down/up stack → Kuma ยิง DOWN → ops-bot วินิจฉัยฟรี (เคส AI Desk + NAS Container Monitor 11:05 SSH หลุดระหว่าง build)
+- ทำ: `scripts/deploy.sh` เขียน epoch deadline ลง `<NAS>/ops-bot/maintenance/until` ก่อน restart (+45 นาที) แล้วหด เหลือ +5 นาที หลัง stack สุดท้ายขึ้น. ops-bot อ่านไฟล์ผ่าน bind `./maintenance:/app/maintenance:ro` (ไม่ใช้ SSH เพราะ SSH หลุดตอน deploy พอดี)
+- `app/maintenance.py`: DOWN ในหน้าต่าง = hold (ไม่ record debounce), UP ของตัวที่ hold = เงียบ, หมดหน้าต่างแล้วยังไม่ขึ้น = watcher ทุก 30 วิ เรียก `handle_incident` ตามปกติ (deploy ทำพังต้องยังรายงาน — Kuma ไม่ส่ง DOWN ซ้ำเอง)
+- ข้อจำกัด: held อยู่ใน memory — deploy ops-bot เองแล้ว held ก่อน restart หาย
+- เทสต์ 67 passed (+7 `tests/test_maintenance.py`). ยังไม่ commit / ยังไม่ deploy

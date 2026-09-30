@@ -314,7 +314,22 @@ if [[ ${#STACKS_TO_RESTART[@]} -eq 0 ]]; then
   exit 0
 fi
 
+# Tell ops-bot the restarts below are ours: it holds Uptime Kuma DOWN alerts
+# until this epoch deadline, then diagnoses only what is still down. Written
+# with the Mac's clock (both sides NTP). A generous window up front covers slow
+# builds; it is narrowed to a tail after the last stack comes up. A deploy that
+# dies midway just leaves the long window to expire on its own.
+MAINT_FILE="${NAS_TARGET_PATH}/ops-bot/maintenance/until"
+MAINT_BUILD_SECONDS=2700
+MAINT_TAIL_SECONDS=300
+set_maintenance() {
+  echo $(( $(date +%s) + $1 )) | ssh $SSH_OPTS "${SSH_DEST}" \
+    "mkdir -p '$(dirname "${MAINT_FILE}")' && cat > '${MAINT_FILE}.tmp' && mv '${MAINT_FILE}.tmp' '${MAINT_FILE}'" \
+    || warn "Could not write ops-bot maintenance window — expect alerts"
+}
+
 echo ""
+set_maintenance "${MAINT_BUILD_SECONDS}"
 log "Restarting: ${STACKS_TO_RESTART[*]}"
 
 for stack in "${STACKS_TO_RESTART[@]}"; do
@@ -341,6 +356,7 @@ for stack in "${STACKS_TO_RESTART[@]}"; do
       up -d --build 2>&1\"" </dev/null
   ok "$stack restarted"
 done
+set_maintenance "${MAINT_TAIL_SECONDS}"
 
 echo ""
 ok "All done ($(elapsed))"
