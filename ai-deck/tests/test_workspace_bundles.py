@@ -134,6 +134,13 @@ def test_identity_is_per_task(store, mac, tmp_path):
     ).stdout.strip() == ""
 
 
+def test_email_alone_still_lets_the_task_commit(store, mac, tmp_path):
+    made = store.import_bundle(
+        "alice", "app", bundle(mac, tmp_path, "a.bundle"), email="me@work.example"
+    )
+    assert git("config", "--worktree", "user.name", cwd=made["path"]) == "me"
+
+
 def test_invalid_email_rejected(store, mac, tmp_path):
     with pytest.raises(WorkspaceError):
         store.import_bundle(

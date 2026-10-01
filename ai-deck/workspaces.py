@@ -179,6 +179,9 @@ class WorkspaceStore:
                     if created and self._safe_existing_directory(cache):
                         shutil.rmtree(cache)
                     raise
+                if email and not name:
+                    # The worker has no global user.name; email alone = git refuses to commit.
+                    name = email.split("@", 1)[0]
                 identity = {"user.name": name, "user.email": email}
                 record = self._start_task(
                     owner, workspace_id, cache, url, base_branch,

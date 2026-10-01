@@ -7,7 +7,8 @@
 - UI: Projects → GitHub | Local bundle toggle; bundle task shows Download changes (409 dirty → "Download commits only") / Upload update, hides push + deploy tab; credential-name warnings shown after navigation via sessionStorage.
 - `scripts/desk-sync` up/down/status: Keychain password → temp netrc; state `.git/desk-sync`. macOS bash 3.2 traps hit: `$var…` (UTF-8 after var name) and empty `"${args[@]}"` under `set -u`.
 - Review fixes: first import bundles `--branches HEAD` (base follows checked-out branch); export writes a uuid temp file (concurrent downloads), name only in Content-Disposition; `desk-sync down` refuses to overwrite local commits on `desk/<id>` and fast-forwards if checked out.
-- Tests: new `test_workspace_bundles.py`, `test_desk_sync.py` (real handler behind fake nginx), `bundle_harness.html`; full ai-deck suite passed; bundle store tests pass on bookworm git 2.39; nginx -t passed; root suite 63 passed. Not committed, not deployed, no NAS round trip yet.
+- Tests: new `test_workspace_bundles.py`, `test_desk_sync.py` (real handler behind fake nginx), `bundle_harness.html`; full ai-deck suite passed; bundle store tests pass on bookworm git 2.39; nginx -t passed; root suite 63 passed. Initially uncommitted.
+- **Deployed** `f9acdc0` + name fix. Live smoke via DSM RP `:15072`: git.git 304 MB full bundle import in 39 s (no 90 s timeout / RP limit hit); desk commit → `desk-sync down` fetched it. Found + fixed: email without name → worker has no global user.name → commit refused; name now defaults to email local part. Smoke task, its 300 MB repo cache and temp files removed. Note: deleting a task keeps the `local:<slug>` repo cache (by design, same as GitHub).
 
 ## 2026-09-29 — Delete task button for coding workspaces (deployed)
 
