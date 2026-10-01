@@ -53,6 +53,8 @@ Enable the optional service with `docker compose --profile coding up -d --build`
 
 ### Local bundle (repositories the worker cannot reach)
 
+Step-by-step setup (Thai): [Local bundle setup](docs/LOCAL_BUNDLE_SETUP.md).
+
 For Git hosts only your computer can reach (company VPN), carry the repository as a `git bundle`. History and commits travel intact; the computer stays the only machine that talks to the real remote, and merging stays manual there.
 
 - **Web:** Projects → **Local bundle**: choose a file from `git bundle create app.bundle --branches HEAD` (HEAD picks the default base branch), a project name (`[a-z0-9._-]`, same name = same cached repository), optional base branch and commit author (set per task with `git config --worktree`, so work commits do not use the worker's personal identity). On a bundle task, **Download changes** returns only the task's commits (`base_sha..desk/<id>`); uncommitted files give 409 and the button re-arms as **Download commits only**. **Upload update** fetches a later bundle into `origin/*` without touching the worktree; ask the agent to rebase. Push and Deploy are hidden for bundle tasks.
