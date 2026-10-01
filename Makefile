@@ -39,8 +39,15 @@ sync-shared:    ## Copy each shared/*.py over its existing vendored copies (disc
 desk-skills:    ## Vendor the workstation skills named in ai-deck/skills.list into ai-deck/skills (ARGS=-n to only report)
 	@$(PY) scripts/desk_skills.py $(ARGS)
 
-desk-latest:    ## Bump ai-deck's pinned Claude Code / MiMoCode / skills to upstream latest (ARGS=-n to only report)
+DESK_PINS = ai-deck/Dockerfile ai-deck/docker-compose.yml
+
+desk-latest:    ## Bump ai-deck's pins, deploy ai-deck, commit + push the pins (ARGS=-n to only report)
 	@$(PY) scripts/desk_latest.py $(ARGS)
+	@case " $(ARGS) " in *" -n "*|*" --dry-run "*) exit 0;; esac; \
+	if git diff --quiet -- $(DESK_PINS); then echo "No pin changes — skip deploy/commit."; exit 0; fi; \
+	./scripts/deploy.sh -s ai-deck -y && \
+	git commit -m "chore(ai-deck): bump pinned versions to upstream latest" -- $(DESK_PINS) && \
+	git push
 
 test:           ## Run repo-level pytest suite
 	@$(PY) -m pytest tests/ -v
