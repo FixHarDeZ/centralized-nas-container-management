@@ -1,3 +1,14 @@
+## 2026-10-01 — Local bundle sync (local; not committed/deployed)
+
+- User wanted to develop VPN-only repositories (Mac can clone, NAS cannot) through ai-deck, like the document in/out flow. Chose git bundle + `scripts/desk-sync`. Spec/plan: `docs/superpowers/specs|plans/2026-10-01-local-bundle-sync*.md`.
+- `WorkspaceStore.import_bundle/update_bundle/export_bundle`; GitHub `create()` now shares `_start_task()`. Bundle records add `source: bundle`, `url: local:<slug>`, `base_sha`; `_read` accepts exactly that extra key set. Bundle refs land in `refs/remotes/origin/*` so status/delete/rebase work unchanged. Verify first; non-branch refs rejected; upload deleted always; missing prerequisites → 409 "send a full bundle".
+- **Gotcha:** per-task author uses `extensions.worktreeConfig`; on a *bare* cache, `core.bare=true` in shared config then applies to every worktree (`fatal: this operation must be run in a work tree`). `_enable_worktree_config` moves `core.bare` into the cache's `config.worktree`. Also `git bundle verify -q` hides the prerequisite message — run without `-q`, and pass absolute paths (with `-C` relative paths resolve against the cache).
+- API: `PUT /projects/bundle?slug=|workspace=` (stream, 300 MiB, 201/200), `GET /projects/export?workspace=[&force=1]` (file deleted after send); `chat.Handler.do_PUT` tries `workspace_api.handle` first; `_json_body` gained a status. nginx `^~ /code/projects/bundle` (300m, no request buffering) + `/export` (no buffering). `GET /projects` items default `source: github`.
+- UI: Projects → GitHub | Local bundle toggle; bundle task shows Download changes (409 dirty → "Download commits only") / Upload update, hides push + deploy tab; credential-name warnings shown after navigation via sessionStorage.
+- `scripts/desk-sync` up/down/status: Keychain password → temp netrc; state `.git/desk-sync`. macOS bash 3.2 traps hit: `$var…` (UTF-8 after var name) and empty `"${args[@]}"` under `set -u`.
+- Review fixes: first import bundles `--branches HEAD` (base follows checked-out branch); export writes a uuid temp file (concurrent downloads), name only in Content-Disposition; `desk-sync down` refuses to overwrite local commits on `desk/<id>` and fast-forwards if checked out.
+- Tests: new `test_workspace_bundles.py`, `test_desk_sync.py` (real handler behind fake nginx), `bundle_harness.html`; full ai-deck suite passed; bundle store tests pass on bookworm git 2.39; nginx -t passed; root suite 63 passed. Not committed, not deployed, no NAS round trip yet.
+
 ## 2026-09-29 — Coding attachments deployed / closed
 
 - User authorized commit, push, deployment and closure. Feature commit `f54ac72cb7cec1e501b940902055aff4c9b339e3` pushed to main. Runner job `327465ec11ed4f3b90b47f4292cd73fb` succeeded through profile `nas-ai-deck`; independent `/health` returned ready with that exact revision.
@@ -226,6 +237,9 @@ Changing a skill means a rebuild, but a cheap one — the `COPY` sits after apt/
 
 | File | Role |
 |---|---|
+| `workspaces.py` bundle methods / `workspace_api.py` `_bundle_route` | Local bundle: `import_bundle`/`update_bundle`/`export_bundle`; `PUT /projects/bundle`, `GET /projects/export` |
+| `../scripts/desk-sync` | Mac CLI up/down/status (Keychain password, state `.git/desk-sync`) |
+| `tests/test_workspace_bundles.py`, `tests/test_desk_sync.py`, `tests/bundle_harness.html` | bundle store/API, desk-sync end-to-end behind fake nginx, browser UI |
 | `Dockerfile` | image; pins CLAUDE_VERSION / SKILLS_REF / TTYD_VERSION(+sha256) / **MIMO_CODE_VERSION (only here — compose does not pass it)** / RTK_VERSION(+sha256); build-time asserts soffice/claude/pptxgenjs/python libs. Bump with `make desk-latest` from the repo root |
 | `entrypoint.sh` | mkdir in/out, symlink skills into home volume, copy `work/CLAUDE.md`, merge `claude-settings.json` hooks into `~/.claude/settings.json`, append prompt to `~/.bashrc`, spawn one ttyd per `DESK_USERS` entry (first one exec'd as PID 1) |
 | `chat.py` | the chat view's backend: SSE + POST, drives a second Claude Code over stream-json (ADR 0013); `CHAT_COMMAND`/`CHAT_CWD`/`CHAT_PORT` make it runnable outside the container |
@@ -256,6 +270,8 @@ Changing a skill means a rebuild, but a cheap one — the `COPY` sits after apt/
 
 ## Gotchas
 
+- **Bare cache + `extensions.worktreeConfig`:** `core.bare=true` in the shared config then applies to every task worktree (`must be run in a work tree`). `_enable_worktree_config` moves it into the cache's `config.worktree`. Verified on bookworm git 2.39 and Apple git 2.50.
+- **Bundles:** `git bundle verify -q` hides the "lacks these prerequisite commits" text (needed for 409); `-C <cache>` makes relative bundle paths resolve against the cache. First import needs `HEAD` in the bundle (`--branches HEAD`) or the base falls back to main/master.
 - **Do not `compose up` before the DSM shared folder `claude-work` exists** — docker creates a plain root dir at the bind path and DSM then refuses to create a share of that name.
 - **Verified in this container (2026-09-15):** a tmux pane forced to `-x 47`, an isolated `HOME` with a dumping `statusLine`, and the child saw `COLUMNS=47`/`LINES=30`. The stdin JSON has no width field at all (`context_window cost cwd effort exceeds_200k_tokens fast_mode model output_style scratchpad_dir session_id thinking transcript_path version workspace`), so `COLUMNS` is the only route. Probing needs `hasCompletedOnboarding`, `bypassPermissionsModeAccepted` and a trusted project in `$HOME/.claude.json` or claude exits at a prompt before rendering anything.
 - **`tput cols`/`stty` see nothing from a status-line script** — Claude Code captures the output instead of attaching a terminal — but it exports `COLUMNS` (and `LINES`) before each run ([docs](https://code.claude.com/docs/en/statusline)). That is the only way to size rows, and it must be read per render: the first cut pinned `STATUSLINE_BAR_W=0` in compose for the phone and the bars then vanished on a laptop too.
@@ -287,6 +303,7 @@ Changing a skill means a rebuild, but a cheap one — the `COPY` sits after apt/
 
 ## Verification status
 
+- [x] Local bundle (2026-10-01): ai-deck suite 304+ passed, bundle store tests pass on bookworm git, nginx -t ok, root suite 63 passed. [ ] NAS round trip with a large real repo (90 s `_GIT_TIMEOUT`, DSM RP body/timeout on :15072 untested).
 - [x] `make check` exit 0, `make secrets` wrote `.env`, `.htpasswd` generated
 - [x] `docker compose config` valid; `nginx -t` only fails on upstream DNS outside compose
 - [x] UI mockup screenshots: `screenshots/ai-deck-{phone,files,desktop}.png`

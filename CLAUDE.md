@@ -64,7 +64,7 @@ Guidance for Claude Code (claude.ai/code) on project rules, architecture, and de
 
 ## AI Deck coding and deployment
 
-For coding workspace, Git, session/terminal routing, or deployment runner changes, read `ai-deck/README.md` (Coding projects) and `ai-deck/docs/CODING_DEPLOY.md`. The optional `coding` Compose profile owns separate `code-home`/`code-workspaces` volumes. Production deployment runs on the Mac through an authenticated TLS runner; credentials use `stacks.ai_desk.deploy_runner.*` and never enter the coding worker. Preserve the existing document home/share during rollout. Runner profiles execute only the configured remote branch tip and require a matching revision health check. Stack memory stays in `ai-deck/.notes/`.
+For coding workspace, Git, session/terminal routing, or deployment runner changes, read `ai-deck/README.md` (Coding projects) and `ai-deck/docs/CODING_DEPLOY.md`. The optional `coding` Compose profile owns separate `code-home`/`code-workspaces` volumes. Production deployment runs on the Mac through an authenticated TLS runner; credentials use `stacks.ai_desk.deploy_runner.*` and never enter the coding worker. Preserve the existing document home/share during rollout. Runner profiles execute only the configured remote branch tip and require a matching revision health check. Stack memory stays in `ai-deck/.notes/`. **Local bundle** (repos behind a VPN): Projects → Local bundle or `scripts/desk-sync up/down` carry `git bundle`s in/out (`PUT /code/projects/bundle`, `GET /code/projects/export`); bundle tasks have no remote, so push/deploy are hidden and merging happens on the Mac.
 
 ## 🚀 Release & Security Process
 

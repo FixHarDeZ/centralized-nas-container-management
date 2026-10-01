@@ -1,0 +1,192 @@
+#!/usr/bin/env bash
+# desk-sync — carry a local Git repository to the AI Deck coding worker and
+# bring the agent's commits back, using git bundles over the desk's HTTPS.
+#
+# For repositories the NAS cannot reach (VPN-only Git hosts). The Mac stays
+# the only machine that talks to the real remote; review + merge stay manual.
+#
+#   desk-sync up [--slug S] [--branch B] [--name N] [--email E] [--full] [--new]
+#   desk-sync down [--force] [FILE.bundle]
+#   desk-sync status
+#
+# Config: ~/.config/desk-sync/config (override with DESK_SYNC_CONFIG)
+#   DESK_URL=https://<desk-host>:15072
+#   DESK_USER=<basic auth user>
+#   DESK_CURL_OPTS="--cacert /path/ca.pem"   # optional
+# Password lives in the macOS Keychain, never in the file:
+#   security add-generic-password -s desk-sync -a <DESK_USER> -w
+set -euo pipefail
+
+die() { printf 'desk-sync: %s\n' "$*" >&2; exit 1; }
+say() { printf '%s\n' "$*"; }
+
+usage() { sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+
+CONFIG=${DESK_SYNC_CONFIG:-$HOME/.config/desk-sync/config}
+[ -f "$CONFIG" ] || die "missing $CONFIG (needs DESK_URL and DESK_USER)"
+# shellcheck disable=SC1090
+. "$CONFIG"
+: "${DESK_URL:?DESK_URL not set in $CONFIG}"
+: "${DESK_USER:?DESK_USER not set in $CONFIG}"
+DESK_URL=${DESK_URL%/}
+
+GIT_DIR=$(git rev-parse --absolute-git-dir 2>/dev/null) || die "not inside a Git repository"
+TOP=$(git rev-parse --show-toplevel)
+STATE="$GIT_DIR/desk-sync"
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/desk-sync.XXXXXX")
+trap 'rm -rf "$WORK"' EXIT
+
+state() { [ -f "$STATE" ] && sed -n "s/^$1=//p" "$STATE" | tail -1 || true; }
+save_state() {  # slug workspace last_sent
+  printf 'slug=%s\nworkspace=%s\nlast_sent=%s\n' "$1" "$2" "$3" > "$STATE.tmp"
+  mv "$STATE.tmp" "$STATE"
+}
+tips() { git for-each-ref --format='%(objectname)' refs/heads | sort -u | tr '\n' ' '; }
+
+netrc() {
+  local host password
+  host=${DESK_URL#*://}; host=${host%%/*}; host=${host%%:*}
+  password=$(security find-generic-password -s desk-sync -a "$DESK_USER" -w 2>/dev/null) \
+    || die "no Keychain item: security add-generic-password -s desk-sync -a $DESK_USER -w"
+  (umask 077; printf 'machine %s login %s password %s\n' "$host" "$DESK_USER" "$password" > "$WORK/netrc")
+}
+
+# request METHOD PATH [UPLOAD_FILE] -> body in $WORK/body, echoes HTTP status
+request() {
+  local method=$1 path=$2 upload=${3:-}
+  local args=(-X "$method")
+  # macOS bash 3.2 + set -u treats an empty "${args[@]}" as unbound.
+  [ -n "$upload" ] && args+=(-T "$upload")
+  # shellcheck disable=SC2086
+  curl -sS --netrc-file "$WORK/netrc" ${DESK_CURL_OPTS:-} "${args[@]}" \
+    -o "$WORK/body" -w '%{http_code}' "$DESK_URL/code/$path"
+}
+body() { head -c 400 "$WORK/body"; echo; }
+
+dirty_note() {
+  if [ -n "$(git -C "$TOP" status --porcelain)" ]; then
+    say "note: uncommitted changes stay here — bundles carry commits only"
+  fi
+}
+
+urlencode() { local LC_ALL=C s=$1 out='' c i; for ((i = 0; i < ${#s}; i++)); do
+  c=${s:i:1}; case $c in [a-zA-Z0-9._~-]) out+=$c ;; *) out+=$(printf '%%%02X' "'$c") ;; esac
+done; printf '%s' "$out"; }
+
+cmd_up() {
+  local slug='' branch='' name='' email='' full=0 new=0
+  while [ $# -gt 0 ]; do case $1 in
+    --slug) slug=$2; shift 2 ;; --branch) branch=$2; shift 2 ;;
+    --name) name=$2; shift 2 ;; --email) email=$2; shift 2 ;;
+    --full) full=1; shift ;; --new) new=1; shift ;;
+    -h|--help) usage ;; *) die "unknown option $1" ;;
+  esac; done
+  dirty_note
+  local workspace last_sent
+  workspace=$(state workspace); last_sent=$(state last_sent)
+  [ -n "$slug" ] || slug=$(state slug)
+  [ -n "$slug" ] || slug=$(basename "$TOP" | tr 'A-Z' 'a-z' | tr -c 'a-z0-9._\n-' '-' | cut -c1-64)
+  netrc
+  local file="$WORK/up.bundle" status
+  if [ -z "$workspace" ] || [ "$new" = 1 ]; then
+    # HEAD tells the desk which branch to start from (else main/master).
+    git bundle create -q "$file" --branches HEAD
+    local query="slug=$(urlencode "$slug")"
+    [ -n "$branch" ] && query+="&branch=$(urlencode "$branch")"
+    [ -n "$name" ] && query+="&name=$(urlencode "$name")"
+    [ -n "$email" ] && query+="&email=$(urlencode "$email")"
+    say "uploading $(du -h "$file" | cut -f1 | tr -d ' ') full bundle as '$slug'…"
+    status=$(request PUT "projects/bundle?$query" "$file")
+    [ "$status" = 201 ] || die "import failed ($status): $(body)"
+    workspace=$(grep -o '"id": *"[0-9a-f]\{32\}"' "$WORK/body" | grep -o '[0-9a-f]\{32\}')
+    [ -n "$workspace" ] || die "unexpected reply: $(body)"
+    save_state "$slug" "$workspace" "$(tips)"
+    say "task $workspace started (branch desk/$workspace)"
+    if grep -q '"warnings"' "$WORK/body"; then
+      say "warning: files that may hold credentials were uploaded:"
+      tr ',' '\n' < "$WORK/body" | sed -n '/"warnings"/,$p' | grep -o '"[^"]*"' | grep -v warnings | sed 's/^/  /'
+    fi
+    return
+  fi
+  if [ "$full" = 1 ] || [ -z "$last_sent" ]; then
+    git bundle create -q "$file" --branches
+  else
+    # shellcheck disable=SC2086
+    if [ "$(git rev-list --count --branches --not $last_sent)" = 0 ]; then
+      say "nothing new since last upload"; return
+    fi
+    # shellcheck disable=SC2086
+    git bundle create -q "$file" --branches --not $last_sent
+  fi
+  say "uploading $(du -h "$file" | cut -f1 | tr -d ' ') update to task ${workspace}…"
+  status=$(request PUT "projects/bundle?workspace=$workspace" "$file")
+  case $status in
+    200) save_state "$slug" "$workspace" "$(tips)"
+         say "updated; ask the agent to rebase desk/$workspace onto origin/<branch> if needed" ;;
+    409) die "desk is missing earlier commits: run 'desk-sync up --full'" ;;
+    404) die "task $workspace is gone on the desk: run 'desk-sync up --new'" ;;
+    *)   die "update failed ($status): $(body)" ;;
+  esac
+}
+
+cmd_down() {
+  local force=0 file=''
+  while [ $# -gt 0 ]; do case $1 in
+    --force) force=1; shift ;; -h|--help) usage ;;
+    -*) die "unknown option $1" ;; *) file=$1; shift ;;
+  esac; done
+  local workspace
+  workspace=$(state workspace)
+  if [ -z "$file" ]; then
+    [ -n "$workspace" ] || die "no task yet: run 'desk-sync up' first"
+    netrc
+    local query="workspace=$workspace" status
+    [ "$force" = 1 ] && query+="&force=1"
+    status=$(request GET "projects/export?$query")
+    case $status in
+      200) file="$WORK/down.bundle"; mv "$WORK/body" "$file" ;;
+      409) die "$(body | tr -d '\n') $( [ "$force" = 0 ] && grep -q uncommitted "$WORK/body" && echo '(use --force for commits only)')" ;;
+      *)   die "download failed ($status): $(body)" ;;
+    esac
+  fi
+  git bundle verify -q "$file" >/dev/null 2>&1 || die "not a valid bundle for this repository: $file"
+  local ref
+  ref=$(git bundle list-heads "$file" | awk '$2 ~ /^refs\/heads\/desk\// {print $2; exit}')
+  [ -n "$ref" ] || die "bundle has no desk/<task> branch"
+  local branch=${ref#refs/heads/} tip local_tip
+  git fetch -q "$file" "$ref"
+  tip=$(git rev-parse FETCH_HEAD)
+  if local_tip=$(git rev-parse -q --verify "$ref"); then
+    # Never drop commits made on this branch here.
+    git merge-base --is-ancestor "$local_tip" "$tip" \
+      || die "local $branch has commits the desk does not; rename it first (git branch -m $branch $branch-local)"
+  fi
+  if [ "$(git symbolic-ref -q HEAD || true)" = "$ref" ]; then
+    [ -z "$(git status --porcelain --untracked-files=no)" ] || die "$branch is checked out with uncommitted changes"
+    git merge -q --ff-only "$tip"
+  else
+    git update-ref "$ref" "$tip"
+  fi
+  say "fetched $branch"
+  git --no-pager log --oneline "HEAD..$branch" || true
+  git --no-pager diff --stat "HEAD...$branch" || true
+  say "review, then: git merge $branch   (or: git rebase / cherry-pick)"
+}
+
+cmd_status() {
+  [ -f "$STATE" ] || { say "not linked to a desk task (run 'desk-sync up')"; return; }
+  local last_sent
+  last_sent=$(state last_sent)
+  say "desk:      $DESK_URL"
+  say "project:   $(state slug)"
+  say "task:      $(state workspace)"
+  # shellcheck disable=SC2086
+  say "unsent:    $(git rev-list --count --branches --not $last_sent) commit(s)"
+}
+
+[ $# -gt 0 ] || usage 1
+command=$1; shift
+case $command in
+  up) cmd_up "$@" ;; down) cmd_down "$@" ;; status) cmd_status "$@" ;;
+  -h|--help|help) usage ;; *) usage 1 ;;
+esac

@@ -624,9 +624,9 @@ class Handler(BaseHTTPRequestHandler):
     # Keep-alive, so the SSE response can stream without a Content-Length.
     protocol_version = "HTTP/1.1"
 
-    def _json_body(self, body: str):
+    def _json_body(self, body: str, status: int = 200):
         data = body.encode()
-        self.send_response(200)
+        self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(data)))
         self.send_header("Cache-Control", "no-store")
@@ -799,6 +799,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_PUT(self):
         self.close_connection = True
+        if workspace_api.handle(self):
+            return
         if not urlparse(self.path).path.startswith('/chat/attachments/'):
             self._reply(404, 'Not found')
             return

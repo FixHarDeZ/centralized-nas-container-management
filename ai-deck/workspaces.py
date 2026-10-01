@@ -1,6 +1,7 @@
 """Persistent, owner-scoped Git workspaces."""
 
 import datetime
+import fnmatch
 import hashlib
 import json
 import os
@@ -21,6 +22,16 @@ _DIFF_LIMIT = 64 * 1024
 _OUTPUT_LIMIT = 64 * 1024
 _GIT_TIMEOUT = 90
 _REPO_LIMIT = 500
+_SLUG = re.compile(r"^[a-z0-9._-]{1,64}$")
+_IDENTITY = re.compile(r"^[^\x00-\x1f<>]{0,128}$")
+_RECORD_KEYS = {"id", "owner", "url", "branch", "path", "created"}
+_BUNDLE_KEYS = _RECORD_KEYS | {"source", "base_sha"}
+# Basenames that usually hold credentials; import warns, never blocks.
+_SECRET_NAMES = (
+    ".env", ".env.*", "*.pem", "*.key", "*.p12", "*.pfx", "id_rsa*",
+    "id_ed25519*", "id_ecdsa*", "credentials*", "*secret*", ".npmrc", ".netrc",
+)
+_WARNING_LIMIT = 50
 
 
 def github_repositories(run=subprocess.run):
@@ -127,22 +138,126 @@ class WorkspaceStore:
                     "+refs/heads/*:refs/remotes/origin/*",
                 )
                 base_branch = branch or self._remote_default_branch(cache)
-                base_ref = "refs/remotes/origin/" + base_branch
-                self._git(
-                    "-C", os.fspath(cache), "show-ref", "--verify", "--quiet", base_ref
-                )
-                work_branch = "desk/" + workspace_id
-                self._git(
-                    "-C", os.fspath(cache), "worktree", "add", "-b", work_branch,
-                    os.fspath(workspace_path), base_ref,
-                )
             except WorkspaceError:
                 self._cleanup_failed_create(cache, workspace_path)
                 raise
             except Exception:
                 self._cleanup_failed_create(cache, workspace_path)
                 raise WorkspaceError("Unable to create workspace", 502)
+            return self._start_task(owner, workspace_id, cache, url, base_branch)
 
+    def import_bundle(self, owner, slug, bundle_path, branch="", name="", email=""):
+        """Start a task from a git bundle carried in from a machine Git can't reach.
+
+        Bundle branches land under refs/remotes/origin/* so status, rebase and
+        delete work as for GitHub tasks. Re-importing a slug fetches into the
+        same cache. The bundle file is always removed.
+        """
+        try:
+            owner = self._valid_owner(owner)
+            slug = self._valid_slug(slug)
+            branch = self._valid_branch(branch)
+            name = self._valid_identity(name)
+            email = self._valid_identity(email)
+            url = "local:" + slug
+            with self._lock:
+                self._prepare_owner(owner)
+                workspace_id = uuid.uuid4().hex
+                workspace_path = self.root / "worktrees" / owner / workspace_id
+                cache = self._cache_path(owner, url)
+                created = not cache.exists()
+                if created:
+                    self._git("init", "--bare", "-q", os.fspath(cache))
+                elif not self._safe_existing_directory(cache):
+                    raise WorkspaceError("Invalid workspace storage", 400)
+                try:
+                    heads, head = self._fetch_bundle(cache, bundle_path)
+                    base_branch = branch or self._bundle_default_branch(heads, head)
+                    if base_branch not in heads:
+                        raise WorkspaceError("Branch is not in the bundle", 400)
+                except Exception:
+                    if created and self._safe_existing_directory(cache):
+                        shutil.rmtree(cache)
+                    raise
+                identity = {"user.name": name, "user.email": email}
+                record = self._start_task(
+                    owner, workspace_id, cache, url, base_branch,
+                    extra={"source": "bundle"}, identity=identity,
+                )
+                record = dict(record)
+                warnings = self._secret_warnings(record["path"], record["base_sha"])
+                if warnings:
+                    record["warnings"] = warnings
+                return record
+        finally:
+            try:
+                os.unlink(bundle_path)
+            except OSError:
+                pass
+
+    def update_bundle(self, owner, workspace_id, bundle_path):
+        """Fetch a later (usually incremental) bundle into a task's cache."""
+        try:
+            with self._lock:
+                record = self._bundle_record(owner, workspace_id)
+                cache = self._cache_path(record["owner"], record["url"])
+                if not self._safe_existing_directory(cache):
+                    raise WorkspaceError("Invalid workspace storage", 400)
+                heads, _ = self._fetch_bundle(cache, bundle_path)
+                return {"id": workspace_id, "updated": sorted(heads)}
+        finally:
+            try:
+                os.unlink(bundle_path)
+            except OSError:
+                pass
+
+    def export_bundle(self, owner, workspace_id, force=False):
+        """Bundle the task's own commits (base_sha..desk/<id>); returns (path, filename)."""
+        with self._lock:
+            record = self._bundle_record(owner, workspace_id)
+            path = record["path"]
+            try:
+                changes = self._git(
+                    "-C", path, "status", "--porcelain", "--untracked-files=all"
+                )
+                count = self._git(
+                    "-C", path, "rev-list", "--count",
+                    record["base_sha"] + ".." + record["branch"],
+                ).strip()
+            except WorkspaceError:
+                raise WorkspaceError("Unable to inspect workspace", 500)
+            if count == "0":
+                raise WorkspaceError("Nothing to export: commit the changes first", 409)
+            if changes.strip() and not force:
+                raise WorkspaceError(
+                    "Task has uncommitted changes; export carries commits only", 409
+                )
+            directory = self.root / "exports" / record["owner"]
+            self._make_safe_directory(directory.parent)
+            self._make_safe_directory(directory)
+            # Unique on disk: two downloads of one task must not share a file
+            # the first one deletes. The readable name is only for the client.
+            target = directory / (uuid.uuid4().hex + ".bundle")
+            self._git(
+                "-C", path, "bundle", "create", "-q", os.fspath(target),
+                record["base_sha"] + ".." + record["branch"],
+            )
+            name = "desk-%s-%s.bundle" % (record["url"][len("local:"):], workspace_id[:8])
+            return os.fspath(target), name
+
+    def _start_task(self, owner, workspace_id, cache, url, base_branch,
+                    extra=None, identity=None):
+        workspace_path = self.root / "worktrees" / owner / workspace_id
+        try:
+            base_ref = "refs/remotes/origin/" + base_branch
+            self._git(
+                "-C", os.fspath(cache), "show-ref", "--verify", "--quiet", base_ref
+            )
+            work_branch = "desk/" + workspace_id
+            self._git(
+                "-C", os.fspath(cache), "worktree", "add", "-q", "-b", work_branch,
+                os.fspath(workspace_path), base_ref,
+            )
             record = {
                 "id": workspace_id,
                 "owner": owner,
@@ -153,12 +268,117 @@ class WorkspaceStore:
                     datetime.timezone.utc
                 ).isoformat().replace("+00:00", "Z"),
             }
-            try:
-                self._write(record)
-            except Exception:
-                self._cleanup_failed_create(cache, workspace_path)
-                raise WorkspaceError("Unable to save workspace", 500)
-            return record
+            if extra:
+                record.update(extra)
+                record["base_sha"] = self._git(
+                    "-C", os.fspath(workspace_path), "rev-parse", "HEAD"
+                ).strip()
+            if identity and any(identity.values()):
+                # Per-worktree config: tasks sharing one cache keep their own author.
+                self._enable_worktree_config(cache)
+                for key, value in identity.items():
+                    if value:
+                        self._git(
+                            "-C", os.fspath(workspace_path), "config", "--worktree",
+                            key, value,
+                        )
+        except WorkspaceError:
+            self._cleanup_failed_create(cache, workspace_path)
+            raise
+        except Exception:
+            self._cleanup_failed_create(cache, workspace_path)
+            raise WorkspaceError("Unable to create workspace", 502)
+        try:
+            self._write(record)
+        except Exception:
+            self._cleanup_failed_create(cache, workspace_path)
+            raise WorkspaceError("Unable to save workspace", 500)
+        return record
+
+    def _enable_worktree_config(self, cache):
+        # With worktreeConfig on, core.bare in the shared config would apply to
+        # every worktree ("must be run in a work tree"); git-worktree(1) says
+        # to move it into the main worktree's own config.worktree.
+        cache = os.fspath(cache)
+        if self._git("-C", cache, "config", "--default", "", "extensions.worktreeConfig") == "true":
+            return
+        self._git("-C", cache, "config", "extensions.worktreeConfig", "true")
+        self._git("-C", cache, "config", "--worktree", "core.bare", "true")
+        self._git("-C", cache, "config", "--unset", "core.bare")
+
+    def _bundle_record(self, owner, workspace_id):
+        record = self.get(owner, workspace_id)
+        if record.get("source") != "bundle":
+            raise WorkspaceError("Task was not imported from a bundle", 400)
+        return record
+
+    def _fetch_bundle(self, cache, bundle_path):
+        """Verify then fetch a bundle; returns ({branch: sha}, HEAD sha or None)."""
+        bundle_path = os.path.abspath(os.fspath(bundle_path))
+        try:
+            verify = subprocess.run(
+                ["git", "-C", os.fspath(cache), "bundle", "verify", bundle_path],
+                stdin=subprocess.DEVNULL, capture_output=True, timeout=_GIT_TIMEOUT,
+                check=False, env=dict(os.environ, GIT_TERMINAL_PROMPT="0"),
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            raise WorkspaceError("Git operation failed", 502)
+        if verify.returncode:
+            if b"prerequisite" in verify.stderr:
+                raise WorkspaceError(
+                    "Bundle builds on commits this project does not have; "
+                    "send a full bundle", 409,
+                )
+            raise WorkspaceError("Not a valid git bundle", 400)
+        listing = self._git("-C", os.fspath(cache), "bundle", "list-heads", bundle_path)
+        heads = {}
+        for line in listing.splitlines():
+            fields = line.split()
+            if len(fields) != 2:
+                raise WorkspaceError("Not a valid git bundle", 400)
+            sha, ref = fields
+            if ref == "HEAD":
+                heads.setdefault("HEAD", sha)
+            elif ref.startswith("refs/heads/"):
+                heads[self._valid_branch(ref[len("refs/heads/"):])] = sha
+            else:
+                raise WorkspaceError("Bundle may only contain branches", 400)
+        if set(heads) <= {"HEAD"}:
+            raise WorkspaceError("Bundle contains no branches", 400)
+        self._git(
+            "-C", os.fspath(cache), "fetch", "-q", bundle_path,
+            "+refs/heads/*:refs/remotes/origin/*",
+        )
+        head = heads.pop("HEAD", None)
+        return heads, head
+
+    def _bundle_default_branch(self, branches, head):
+        for preferred in ("main", "master"):
+            if preferred in branches and (head is None or branches[preferred] == head):
+                return preferred
+        for name in sorted(branches):
+            if branches[name] == head:
+                return name
+        for preferred in ("main", "master"):
+            if preferred in branches:
+                return preferred
+        return sorted(branches)[0]
+
+    def _secret_warnings(self, path, sha):
+        try:
+            names = self._git(
+                "-C", path, "ls-tree", "-r", "--name-only", sha, limit=4 * 1024 * 1024
+            )
+        except WorkspaceError:
+            return []
+        found = []
+        for name in names.splitlines():
+            base = name.rsplit("/", 1)[-1].lower()
+            if any(fnmatch.fnmatchcase(base, pattern) for pattern in _SECRET_NAMES):
+                found.append(name)
+                if len(found) >= _WARNING_LIMIT:
+                    break
+        return found
 
     def get(self, owner, workspace_id):
         owner = self._valid_owner(owner)
@@ -244,6 +464,18 @@ class WorkspaceStore:
         if not isinstance(owner, str) or not _OWNER.fullmatch(owner):
             raise WorkspaceError("Invalid workspace owner", 400)
         return owner
+
+    def _valid_slug(self, slug):
+        if not isinstance(slug, str) or not _SLUG.fullmatch(slug) or slug in (".", ".."):
+            raise WorkspaceError("Invalid project name", 400)
+        return slug
+
+    def _valid_identity(self, value):
+        if value is None:
+            return ""
+        if not isinstance(value, str) or not _IDENTITY.fullmatch(value):
+            raise WorkspaceError("Invalid commit identity", 400)
+        return value.strip()
 
     def _valid_url(self, url):
         if not isinstance(url, str):
@@ -339,7 +571,10 @@ class WorkspaceStore:
         }
         if any(record.get(key) != value for key, value in expected.items()):
             raise WorkspaceError("Workspace not found", 404)
-        if set(record) != {"id", "owner", "url", "branch", "path", "created"}:
+        if set(record) != _RECORD_KEYS and not (
+            set(record) == _BUNDLE_KEYS and record.get("source") == "bundle"
+            and record.get("url", "").startswith("local:")
+        ):
             raise WorkspaceError("Workspace not found", 404)
         if not self._safe_existing_directory(expected_path):
             raise WorkspaceError("Workspace not found", 404)

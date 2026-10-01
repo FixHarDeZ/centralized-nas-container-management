@@ -91,3 +91,18 @@
   #project-dialog .project-form-bottom { grid-template-columns:1fr; }
   #project-dialog .project-terminal-row { align-items:flex-start; flex-direction:column; }
 }
+/* Local bundle: repositories the worker cannot reach. */
+#project-dialog .project-source { display:inline-flex; gap:0; margin-top:14px; border:1px solid var(--line-strong); border-radius:8px; overflow:hidden; }
+#project-dialog .project-source button { border:0; border-radius:0; background:transparent; color:var(--muted); font-size:11px; font-weight:600; padding:6px 12px; }
+#project-dialog .project-source button[aria-pressed="true"] { background:var(--accent); color:var(--accent-ink); }
+#project-dialog #bundle-file { padding:8px 11px; height:auto; }
+#project-dialog .project-author { margin-top:6px; font-size:12px; color:var(--muted); }
+#project-dialog .project-author summary { cursor:pointer; }
+#project-dialog .project-author summary span { font-size:11px; margin-left:5px; }
+#project-dialog .project-author label { margin-top:8px; color:var(--fg); }
+#project-dialog .project-author input { margin-top:5px; }
+#project-dialog .project-bundle-actions { margin-top:12px; }
+#project-dialog .project-bundle-actions .project-hint { margin:0 0 8px; }
+#project-dialog .project-file-button { display:inline-flex; align-items:center; font-size:11px; font-weight:500; padding:6px 9px; border:1px solid var(--line-strong); border-radius:8px; cursor:pointer; }
+#project-dialog .project-file-button input { position:absolute; width:1px; height:1px; opacity:0; pointer-events:none; }
+#project-dialog .project-file-button:focus-within { outline:2px solid var(--accent); outline-offset:3px; }

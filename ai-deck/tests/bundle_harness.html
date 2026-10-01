@@ -1,0 +1,97 @@
+<!doctype html><meta charset="utf-8"><title>Local bundle checks</title>
+<pre id="result">pending</pre>
+<script>
+const failures = [];
+const check = (ok, message) => { if (!ok) failures.push(message); };
+const pause = () => new Promise(resolve => setTimeout(resolve, 150));
+function open(query) {
+  const frame = document.createElement('iframe');
+  frame.style = 'width:390px;height:844px';
+  return new Promise(resolve => {
+    frame.onload = () => setTimeout(() => resolve(frame), 100);
+    frame.src = '../ui/?demo=1&chat=1&welcome=1&coding=1' + query;
+    document.body.append(frame);
+  });
+}
+(async () => {
+  try {
+    const id = 'a'.repeat(32);
+    // GitHub task: push + deploy stay, bundle actions hidden.
+    let frame = await open('&workspace=' + id), doc = frame.contentDocument, win = frame.contentWindow;
+    check(doc.getElementById('bundle-actions').hidden, 'github task has no bundle actions');
+    check(!doc.getElementById('project-push').hidden, 'github task keeps push');
+    check(!doc.getElementById('deploy-tab').hidden, 'github task keeps deploy');
+
+    // Bundle task: download/upload visible, push + deploy hidden.
+    frame = await open('&source=bundle&workspace=' + id); doc = frame.contentDocument; win = frame.contentWindow;
+    const calls = [];
+    let exportStatus = 409;
+    win.fetch = async (path, options = {}) => {
+      calls.push({path, options});
+      if (path.startsWith('code/projects/export')) {
+        if (exportStatus === 409 && !path.includes('force=1')) {
+          return {ok:false, status:409, text:async () => 'Task has uncommitted changes; export carries commits only', headers:new Headers()};
+        }
+        return {ok:true, status:200, blob:async () => new Blob(['b']),
+          headers:new Headers({'Content-Disposition':'attachment; filename="desk-demo-app-aaaaaaaa.bundle"'})};
+      }
+      if (path.startsWith('code/projects/bundle')) {
+        return {ok:true, status:200, text:async () => JSON.stringify({id, updated:['main']})};
+      }
+      return {ok:true, json:async () => ({branch:'desk/' + id, head:'c'.repeat(40), changes:'', diff:''})};
+    };
+    let saved = '';
+    win.HTMLAnchorElement.prototype.click = function () { saved = this.download; };
+    doc.getElementById('project-manage').click(); await pause();
+    check(!doc.getElementById('bundle-actions').hidden, 'bundle task shows download/upload');
+    check(doc.getElementById('project-push').hidden, 'bundle task hides push');
+    check(doc.getElementById('deploy-tab').hidden, 'bundle task hides deploy');
+    check(doc.getElementById('project-select').selectedOptions[0].textContent.startsWith('demo-app (local)'), 'local label');
+    const download = doc.getElementById('bundle-download');
+    download.click(); await pause();
+    check(download.textContent === 'Download commits only', 'dirty export arms commits-only');
+    check(doc.getElementById('project-status').textContent.includes('uncommitted'), 'dirty reason shown');
+    download.click(); await pause();
+    check(calls.some(c => c.path.includes('export') && c.path.includes('force=1')), 'second tap forces');
+    check(saved === 'desk-demo-app-aaaaaaaa.bundle', 'download keeps server filename');
+    check(doc.getElementById('project-status').textContent.includes('desk-sync down'), 'download explains next step');
+    check(download.textContent === 'Download changes', 'button resets after download');
+    const rect = doc.getElementById('project-dialog').getBoundingClientRect();
+    check(rect.right <= 390 && doc.documentElement.scrollWidth <= 390, 'fits phone');
+
+    // New task: source toggle + import request.
+    frame = await open(''); doc = frame.contentDocument; win = frame.contentWindow;
+    const puts = [];
+    win.fetch = async (path, options = {}) => {
+      if (path.startsWith('code/projects/bundle')) {
+        puts.push({path, options});
+        return {ok:true, status:201, text:async () => JSON.stringify({id, warnings:['.env']})};
+      }
+      return {ok:true, json:async () => ({items:[]})};
+    };
+    doc.getElementById('project-manage').click(); await pause();
+    check(!doc.getElementById('project-form').hidden && doc.getElementById('bundle-form').hidden, 'github form first');
+    doc.getElementById('source-bundle').click();
+    check(doc.getElementById('project-form').hidden && !doc.getElementById('bundle-form').hidden, 'bundle form toggles');
+    check(doc.getElementById('source-bundle').getAttribute('aria-pressed') === 'true', 'toggle state exposed');
+    const transfer = new DataTransfer();
+    transfer.items.add(new File(['x'], 'app.bundle'));
+    doc.getElementById('bundle-file').files = transfer.files;
+    doc.getElementById('bundle-slug').value = 'app';
+    doc.getElementById('bundle-email').value = 'me@work.example';
+    let navigated = false;
+    win.addEventListener('desk:save-draft', () => { navigated = true; });
+    doc.getElementById('bundle-form').requestSubmit(); await pause();
+    check(puts.length === 1 && puts[0].options.method === 'PUT', 'bundle uploaded with PUT');
+    check(puts[0] && puts[0].path.includes('slug=app') && puts[0].path.includes('email=me%40work.example'), 'query carries slug + email');
+    check(navigated, 'opens new task');
+    for (let i = 0; i < 30; i++) {
+      const next = frame.contentDocument.getElementById('project-message');
+      if (frame.contentWindow.location.search.includes('workspace=') && next && next.textContent) break;
+      await pause();
+    }
+    check(frame.contentDocument.getElementById('project-message').textContent.includes('.env'), 'credential warning shown on the new task');
+  } catch (error) { failures.push(String(error)); }
+  document.getElementById('result').textContent = JSON.stringify({failures});
+})();
+</script>

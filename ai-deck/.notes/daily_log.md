@@ -1,3 +1,14 @@
+## 2026-10-01 — Local bundle sync (local; not committed/deployed)
+
+- User wanted to develop VPN-only repositories (Mac can clone, NAS cannot) through ai-deck, like the document in/out flow. Chose git bundle + `scripts/desk-sync`. Spec/plan: `docs/superpowers/specs|plans/2026-10-01-local-bundle-sync*.md`.
+- `WorkspaceStore.import_bundle/update_bundle/export_bundle`; GitHub `create()` now shares `_start_task()`. Bundle records add `source: bundle`, `url: local:<slug>`, `base_sha`; `_read` accepts exactly that extra key set. Bundle refs land in `refs/remotes/origin/*` so status/delete/rebase work unchanged. Verify first; non-branch refs rejected; upload deleted always; missing prerequisites → 409 "send a full bundle".
+- **Gotcha:** per-task author uses `extensions.worktreeConfig`; on a *bare* cache, `core.bare=true` in shared config then applies to every worktree (`fatal: this operation must be run in a work tree`). `_enable_worktree_config` moves `core.bare` into the cache's `config.worktree`. Also `git bundle verify -q` hides the prerequisite message — run without `-q`, and pass absolute paths (with `-C` relative paths resolve against the cache).
+- API: `PUT /projects/bundle?slug=|workspace=` (stream, 300 MiB, 201/200), `GET /projects/export?workspace=[&force=1]` (file deleted after send); `chat.Handler.do_PUT` tries `workspace_api.handle` first; `_json_body` gained a status. nginx `^~ /code/projects/bundle` (300m, no request buffering) + `/export` (no buffering). `GET /projects` items default `source: github`.
+- UI: Projects → GitHub | Local bundle toggle; bundle task shows Download changes (409 dirty → "Download commits only") / Upload update, hides push + deploy tab; credential-name warnings shown after navigation via sessionStorage.
+- `scripts/desk-sync` up/down/status: Keychain password → temp netrc; state `.git/desk-sync`. macOS bash 3.2 traps hit: `$var…` (UTF-8 after var name) and empty `"${args[@]}"` under `set -u`.
+- Review fixes: first import bundles `--branches HEAD` (base follows checked-out branch); export writes a uuid temp file (concurrent downloads), name only in Content-Disposition; `desk-sync down` refuses to overwrite local commits on `desk/<id>` and fast-forwards if checked out.
+- Tests: new `test_workspace_bundles.py`, `test_desk_sync.py` (real handler behind fake nginx), `bundle_harness.html`; full ai-deck suite passed; bundle store tests pass on bookworm git 2.39; nginx -t passed; root suite 63 passed. Not committed, not deployed, no NAS round trip yet.
+
 ## 2026-09-29 — Delete task button for coding workspaces (deployed)
 
 - User asked how to remove finished coding tasks; no delete existed (only manual worktree/branch/metadata cleanup in Terminal).

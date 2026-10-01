@@ -107,15 +107,41 @@
           <pre id="project-status"></pre>
           <div class="project-actions">
             <button type="button" data-code-prompt="Read this repository’s instructions, inspect the changes, run the appropriate tests and report the results.">Test changes</button>
-            <button type="button" data-code-prompt="Review the diff and test results, then commit the intended changes and push this task branch. Exclude credentials and unrelated changes. Report the commit SHA and remote branch.">Commit &amp; push…</button>
+            <button id="project-push" type="button" data-code-prompt="Review the diff and test results, then commit the intended changes and push this task branch. Exclude credentials and unrelated changes. Report the commit SHA and remote branch.">Commit &amp; push…</button>
           </div>
-          <details class="project-diff-wrap"><summary>View tracked diff</summary><pre id="project-diff"></pre></details>
+          <div id="bundle-actions" class="project-bundle-actions" hidden>
+            <p class="project-hint">Local project: no remote here. Commit, then download the changes and run <code>desk-sync down</code> on your computer.</p>
+            <div class="project-actions">
+              <button id="bundle-download" type="button" class="project-primary">Download changes</button>
+              <label class="project-file-button">Upload update<input id="bundle-update" type="file" accept=".bundle"></label>
+            </div>
+          </div>
+                    <details class="project-diff-wrap"><summary>View tracked diff</summary><pre id="project-diff"></pre></details>
           <button id="project-delete" type="button" class="project-delete">Delete task</button>
         </section>
         <details id="project-connect" class="project-connect" open>
           <summary>Connect a repository <span>New task</span></summary>
           <div class="project-connect-body">
-            <p class="project-hint">Start from GitHub. Each task gets its own branch.</p>
+            <div class="project-source" role="group" aria-label="Repository source">
+              <button id="source-github" type="button" aria-pressed="true">GitHub</button>
+              <button id="source-bundle" type="button" aria-pressed="false">Local bundle</button>
+            </div>
+            <p id="project-source-hint" class="project-hint">Start from GitHub. Each task gets its own branch.</p>
+            <form id="bundle-form" hidden>
+              <label for="bundle-file">Bundle file</label>
+              <input id="bundle-file" type="file" accept=".bundle" required>
+              <label for="bundle-slug">Project name <span>Same name updates an existing local project</span></label>
+              <input id="bundle-slug" list="bundle-slugs" required pattern="[a-z0-9._\-]{1,64}" placeholder="my-app" autocomplete="off" spellcheck="false">
+              <datalist id="bundle-slugs"></datalist>
+              <details class="project-author"><summary>Commit author <span>Optional</span></summary>
+                <label for="bundle-name">Name</label><input id="bundle-name" autocomplete="off" spellcheck="false">
+                <label for="bundle-email">Email</label><input id="bundle-email" type="email" autocomplete="off" spellcheck="false">
+              </details>
+              <div class="project-form-bottom">
+                <label for="bundle-base">Base branch <span>Optional</span><input id="bundle-base" placeholder="Bundle default" autocomplete="off" spellcheck="false"></label>
+                <button id="bundle-create" class="project-primary" type="submit">Upload &amp; start task <span aria-hidden="true">↗</span></button>
+              </div>
+            </form>
             <form id="project-form">
               <div id="project-repo-wrap" hidden><label for="project-repo">Your repositories</label><select id="project-repo"><option value="">Choose a repository…</option></select></div>
             <label for="project-url">Repository URL</label>

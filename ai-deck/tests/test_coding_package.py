@@ -46,3 +46,13 @@ def test_coding_terminal_preserves_authenticated_owner_on_default_port():
     entrypoint = (ROOT / 'coding-entrypoint.sh').read_text()
     assert 'coding_terminal.py "$user"' not in entrypoint
     assert 'coding_terminal.py "$primary_user"' not in entrypoint
+
+
+def test_bundle_routes_stream_large_bodies_with_owner_header():
+    source = (ROOT / 'nginx/nginx.conf').read_text()
+    for route in ('location ^~ /code/projects/bundle {', 'location ^~ /code/projects/export {'):
+        block = source.split(route, 1)[1].split('}', 1)[0]
+        assert 'proxy_set_header X-Desk-User $remote_user;' in block
+    upload = source.split('location ^~ /code/projects/bundle {', 1)[1].split('}', 1)[0]
+    assert 'client_max_body_size 300m;' in upload
+    assert 'proxy_request_buffering off;' in upload

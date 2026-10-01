@@ -101,3 +101,16 @@ profile นี้ deploy เฉพาะ stack **ai-deck** การแก้ `s
 - หาก deploy failed ให้ดู log และตรวจสภาพ NAS ก่อน retry โดยเฉพาะกรณี Mac หลับหรือถูกปิดระหว่าง deploy
 
 รายละเอียดติดตั้งและแก้ปัญหา runner/tunnel: [CODING_DEPLOY.md](CODING_DEPLOY.md)
+
+## Local repository round trip (VPN-only Git host)
+
+```bash
+# on the computer, inside the repository
+desk-sync up --email me@work.example     # first time: imports, prints task id
+# … work in Coding Chat; ask the agent to commit …
+desk-sync down                           # fetches desk/<id>, shows log + diffstat
+git merge desk/<id> && git push          # push from the computer as usual
+git commit … ; desk-sync up              # later: sends only new commits
+```
+
+Without the script: `git bundle create app.bundle --branches HEAD` → Projects → Local bundle; **Download changes** → `git fetch desk-app-xxxx.bundle desk/<id>:desk/<id>`.

@@ -65,10 +65,15 @@
     }
     return response.json();
   }
-  function label(item) { return item.url.replace('https://github.com/', '').replace(/\.git$/, '') + ' · ' + item.branch; }
+  const isBundle = item => item && item.source === 'bundle';
+  function label(item) {
+    if (isBundle(item)) return item.url.slice('local:'.length) + ' (local) · ' + item.branch;
+    return item.url.replace('https://github.com/', '').replace(/\.git$/, '') + ' · ' + item.branch;
+  }
   async function load() {
     try {
-      projects = demo ? (workspace ? [{id: workspace, url: 'https://github.com/example/project', branch: 'desk/' + workspace, path: '/workspaces/tasks/demo/' + workspace}] : []) : (await request('code/projects')).items;
+      const demoBundle = params.get('source') === 'bundle';
+      projects = demo ? (workspace ? [{id: workspace, url: demoBundle ? 'local:demo-app' : 'https://github.com/example/project', source: demoBundle ? 'bundle' : 'github', branch: 'desk/' + workspace, path: '/workspaces/tasks/demo/' + workspace}] : []) : (await request('code/projects')).items;
       select.replaceChildren(new Option('Documents', ''));
       projects.forEach(item => select.add(new Option(label(item), item.id)));
       current = projects.find(item => item.id === workspace);
@@ -79,6 +84,16 @@
       select.value = workspace;
       details.hidden = !current;
       document.getElementById('project-connect').open = !current;
+      showBundleTask(isBundle(current));
+      const slugs = document.getElementById('bundle-slugs');
+      slugs.replaceChildren(...[...new Set(projects.filter(isBundle).map(item => item.url.slice(6)))].map(slug => new Option(slug)));
+      try {
+        const pending = JSON.parse(sessionStorage.getItem('ai-deck.bundle-warnings') || 'null');
+        if (pending && pending.id === workspace) {
+          message.textContent = 'Imported. Files that may hold credentials: ' + pending.warnings.join(', ');
+        }
+        sessionStorage.removeItem('ai-deck.bundle-warnings');
+      } catch (_) {}
     } catch (error) {
       message.textContent = error.message;
       if (workspace) {
@@ -128,6 +143,94 @@
       navigate(item.id);
     } catch (error) { message.textContent = error.message; }
     finally { button.disabled = false; }
+  });
+  // Local bundle: repositories the worker cannot reach (behind a VPN).
+  // The browser carries git bundles both ways; desk-sync does it from a shell.
+  const githubForm = form, bundleForm = document.getElementById('bundle-form');
+  const sourceHint = document.getElementById('project-source-hint');
+  function showSource(bundle) {
+    document.getElementById('source-github').setAttribute('aria-pressed', String(!bundle));
+    document.getElementById('source-bundle').setAttribute('aria-pressed', String(bundle));
+    githubForm.hidden = bundle;
+    bundleForm.hidden = !bundle;
+    sourceHint.textContent = bundle
+      ? 'Upload a git bundle from your computer (or run desk-sync up). Each task gets its own branch.'
+      : 'Start from GitHub. Each task gets its own branch.';
+  }
+  document.getElementById('source-github').addEventListener('click', () => showSource(false));
+  document.getElementById('source-bundle').addEventListener('click', () => showSource(true));
+  function showBundleTask(bundle) {
+    document.getElementById('bundle-actions').hidden = !bundle;
+    document.getElementById('project-push').hidden = bundle;
+    document.getElementById('deploy-tab').hidden = bundle;
+  }
+  function megabytes(bytes) { return (bytes / 1048576).toFixed(1) + ' MB'; }
+  async function putBundle(query, file) {
+    const response = await fetch('code/projects/bundle?' + query, {method: 'PUT', body: file});
+    const text = (await response.text()).trim();
+    if (!response.ok) throw new Error(text && !text.startsWith('<') ? text.slice(0, 300) : 'Upload failed (' + response.status + ')');
+    return JSON.parse(text);
+  }
+  bundleForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    const file = document.getElementById('bundle-file').files[0];
+    if (!file) return;
+    const button = document.getElementById('bundle-create');
+    button.disabled = true;
+    message.textContent = 'Uploading ' + megabytes(file.size) + ' and preparing a new task branch…';
+    const query = new URLSearchParams({slug: document.getElementById('bundle-slug').value.trim()});
+    for (const [key, id] of [['branch', 'bundle-base'], ['name', 'bundle-name'], ['email', 'bundle-email']]) {
+      const value = document.getElementById(id).value.trim();
+      if (value) query.set(key, value);
+    }
+    try {
+      const item = await putBundle(query.toString(), file);
+      if (item.warnings && item.warnings.length) {
+        try { sessionStorage.setItem('ai-deck.bundle-warnings', JSON.stringify({id: item.id, warnings: item.warnings})); } catch (_) {}
+      }
+      navigate(item.id);
+    } catch (error) { message.textContent = error.message; }
+    finally { button.disabled = false; }
+  });
+  document.getElementById('bundle-update').addEventListener('change', async event => {
+    const file = event.target.files[0];
+    if (!file) return;
+    statusText.textContent = 'Uploading update (' + megabytes(file.size) + ')…';
+    try {
+      const data = await putBundle('workspace=' + encodeURIComponent(workspace), file);
+      statusText.textContent = 'Updated origin/' + data.updated.join(', origin/') + '. Ask the agent to rebase onto it if needed.';
+    } catch (error) { statusText.textContent = error.message; }
+    event.target.value = '';
+  });
+  // 409 with uncommitted files arms "Download commits only" (force=1).
+  const downloadButton = document.getElementById('bundle-download');
+  let downloadForce = false;
+  downloadButton.addEventListener('click', async () => {
+    downloadButton.disabled = true;
+    try {
+      const response = await fetch('code/projects/export?workspace=' + encodeURIComponent(workspace) + (downloadForce ? '&force=1' : ''), {cache: 'no-store'});
+      if (!response.ok) {
+        const text = (await response.text()).trim().slice(0, 300);
+        if (response.status === 409 && text.includes('uncommitted') && !downloadForce) {
+          downloadForce = true;
+          downloadButton.textContent = 'Download commits only';
+        }
+        throw new Error(text || 'Download failed');
+      }
+      const disposition = response.headers.get('Content-Disposition') || '';
+      const name = (disposition.match(/filename="([^"]+)"/) || [])[1] || 'changes.bundle';
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(await response.blob());
+      link.download = name;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(link.href), 60000);
+      statusText.textContent = 'Downloaded ' + name + '. On your computer: desk-sync down ' + name;
+      downloadForce = false;
+      downloadButton.textContent = 'Download changes';
+    } catch (error) { statusText.textContent = error.message; }
+    finally { downloadButton.disabled = false; }
   });
   async function refreshStatus() {
     statusText.textContent = 'Reading Git status…';
