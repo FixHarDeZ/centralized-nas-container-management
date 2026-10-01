@@ -742,3 +742,9 @@ User requested commit + push. Delivered AI Deck rename/features/quota fixes and 
 - Authenticated live PNG upload into an existing owned repository workspace succeeded through nginx. Verified the saved bytes inside the coding container, then removed exactly that test file and its generated upload directory. No model turn, login, or Git change inside the coding workspace was initiated.
 - Validation: prior full suite 271 passed; fresh pre-commit attachment/UI/packaging suite 38 passed, diff check clean. Disposable Linux/nginx smoke and nginx configuration checks passed in implementation verification.
 - Closed: picker, drag/drop and image paste are deployed; user can refresh Coding Chat and use the paperclip or Cmd+V/Ctrl+V. README and both stack memory files updated. This closing record is documentation only; runtime remains `f54ac72`. No implementation/deployment work remains in the requested scope.
+
+## 2026-10-01 — desk-latest auto deploy/commit/push
+
+- Makefile `desk-latest`: after rewriting pins, if `ai-deck/Dockerfile`/`docker-compose.yml` differ → `./scripts/deploy.sh -s ai-deck -y` && commit only those two files && `git push`. `ARGS=-n` or no diff = skip. Makefile commit `3239bd0` pushed.
+- Ran it: Claude Code 2.1.285→2.1.286, Codex 0.159.2→0.159.3. Deploy rebuilt+restarted `ai-deck`, `ai-deck-nginx`, `ai-deck-ai-deck-code-1` (194s, no errors). Pin commit `17ba5e3` pushed to main.
+- Not verified beyond deploy.sh output (no in-container version check). No pending work.
