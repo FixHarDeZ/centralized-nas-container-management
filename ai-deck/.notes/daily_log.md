@@ -1,3 +1,10 @@
+## 2026-10-02 — Local bundle sync closed
+
+- Delivered: `f9acdc0` (feature) + `161588a` (email-only author fix) pushed to main and deployed with `scripts/deploy.sh -s ai-deck -y`; containers verified running new code + nginx routes. Live round trip through `:15072` passed (304 MB bundle, 39 s). Smoke task, cache and temp files removed.
+- Docs: Thai user guide `docs/LOCAL_BUNDLE_SETUP.md` (setup, daily use, web-only path, troubleshooting) linked from README; `cc27dbd` pushed (docs only, no deploy).
+- Answered user question: company IT may see usage via endpoint agents/DLP, full-tunnel VPN, or TLS inspection; NAS side only household coding users + model providers see the code.
+- No open work. Working tree clean before this memory commit.
+
 ## 2026-10-01 — Local bundle sync (local; not committed/deployed)
 
 - User wanted to develop VPN-only repositories (Mac can clone, NAS cannot) through ai-deck, like the document in/out flow. Chose git bundle + `scripts/desk-sync`. Spec/plan: `docs/superpowers/specs|plans/2026-10-01-local-bundle-sync*.md`.
