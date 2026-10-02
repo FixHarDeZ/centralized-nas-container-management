@@ -767,3 +767,8 @@ User requested commit + push. Delivered AI Deck rename/features/quota fixes and 
 - Makefile `desk-latest`: after rewriting pins, if `ai-deck/Dockerfile`/`docker-compose.yml` differ → `./scripts/deploy.sh -s ai-deck -y` && commit only those two files && `git push`. `ARGS=-n` or no diff = skip. Makefile commit `3239bd0` pushed.
 - Ran it: Claude Code 2.1.285→2.1.286, Codex 0.159.2→0.159.3. Deploy rebuilt+restarted `ai-deck`, `ai-deck-nginx`, `ai-deck-ai-deck-code-1` (194s, no errors). Pin commit `17ba5e3` pushed to main.
 - Not verified beyond deploy.sh output (no in-container version check). No pending work.
+
+## 2026-10-02 — Agent dropdown shows CLI versions (local)
+
+- `agent_options.versions()` probes `claude/codex/mimo --version` once per process (pinned in image), extracts first `x.y.z`, omits failed CLIs. `/chat/options` now returns `versions`; `ui/app.js` relabels Agent dropdown e.g. `Claude 2.1.287`, `Codex 0.159.2`, `MiMo 0.1.15`.
+- Test `test_options_report_installed_cli_versions` added. Full ai-deck suite 308 passed. Not committed/deployed yet.

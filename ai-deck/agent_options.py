@@ -16,6 +16,11 @@ MODEL_ID = re.compile(r'[a-zA-Z0-9][a-zA-Z0-9._:/-]{0,127}(?:\[1m\])?\Z')
 _lock = threading.Lock()
 _claude_lock = threading.Lock()
 _claude_cached = (float('-inf'), [])
+_versions = {}
+_versions_lock = threading.Lock()
+VERSION = re.compile(r'\d+\.\d+\.\d+[0-9A-Za-z.+-]*')
+# CLI binaries are pinned in the image, so one probe per process is enough.
+VERSION_COMMANDS = {'claude': 'claude', 'codex': 'codex', 'mimo': 'mimo'}
 _cached = (float('-inf'), [])
 
 
@@ -164,6 +169,22 @@ def _claude_models():
             models.insert(0, {'id': '', 'label': 'Default', 'efforts': []})
         _claude_cached = (time.monotonic(), models)
         return models
+
+
+def versions():
+    """Installed CLI versions by provider; missing or broken CLIs are omitted."""
+    with _versions_lock:
+        for provider, command in VERSION_COMMANDS.items():
+            if provider in _versions:
+                continue
+            try:
+                result = subprocess.run([command, '--version'], capture_output=True, text=True,
+                                        timeout=5, stdin=subprocess.DEVNULL)
+                match = VERSION.search(result.stdout) if result.returncode == 0 else None
+            except (OSError, subprocess.SubprocessError):
+                match = None
+            _versions[provider] = match[0] if match else None
+        return {name: value for name, value in _versions.items() if value}
 
 
 def catalog(provider):

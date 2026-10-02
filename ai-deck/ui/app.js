@@ -1730,6 +1730,11 @@
       ] } : await response.json();
       if (optionsLoaded) wanted = { model: modelSelect.value, effort: effortSelect.value };
       modelOptions = data.models;
+      // Show which CLI build each agent runs, e.g. "Claude 2.1.287".
+      for (const option of providerSelect.options) {
+        const version = (data.versions || {})[option.value];
+        option.textContent = PROVIDERS[option.value] + (version ? ' ' + version : '');
+      }
       modelSelect.replaceChildren(...modelOptions.map((item) => new Option(item.label, item.id)));
       modelSelect.value = modelOptions.some((item) => item.id === wanted.model) ? wanted.model : '';
       paintEfforts(wanted.effort);

@@ -677,7 +677,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         path = self.path.split("?", 1)[0]
         if path == "/chat/options":
-            self._json_body(json.dumps(agent_options.catalog(self.provider)))
+            self._json_body(json.dumps({**agent_options.catalog(self.provider),
+                                        'versions': agent_options.versions()}))
             return
         elif path == "/chat/sessions":
             items = (codex_backend.sessions(agent.cwd) if self.provider == 'codex'

@@ -152,3 +152,16 @@ def test_claude_login_uses_existing_terminal_guard(monkeypatch, api):
     assert status == 409
     assert calls == ['claude auth login']
     assert api(upload.Handler, 'POST', '/api/login?provider=mimo')[0] == 404
+
+
+def test_options_report_installed_cli_versions(monkeypatch, api):
+    import agent_options
+    import subprocess
+    outputs = {'claude': '2.1.287 (Claude Code)\n', 'codex': 'codex-cli 0.159.2\n', 'mimo': ''}
+    monkeypatch.setattr(agent_options, '_versions', {})
+    monkeypatch.setattr(agent_options, 'catalog', lambda provider: {'models': []})
+    monkeypatch.setattr(agent_options.subprocess, 'run', lambda args, **kw: subprocess.CompletedProcess(
+        args, 0 if outputs[args[0]] else 1, outputs[args[0]], ''))
+    status, body = api(chat.Handler, 'GET', '/chat/options?provider=claude')
+    assert status == 200
+    assert json.loads(body)['versions'] == {'claude': '2.1.287', 'codex': '0.159.2'}
