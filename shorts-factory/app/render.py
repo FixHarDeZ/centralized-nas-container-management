@@ -145,6 +145,9 @@ SILENCE_FLOOR = "-32dB"
 
 CLAUSE_DASH = re.compile(r"\s+[-‐-―]\s+")
 WORD_DASH = re.compile(r"[-‐-―]")
+# A space between Thai words, other than the one in front of ๆ, and not one
+# that already follows a comma.
+THAI_SPACE = re.compile(r"(?<!,) +(?!ๆ)")
 
 
 def _speakable(narration: str, locale: str = locales.DEFAULT) -> str:
@@ -154,13 +157,22 @@ def _speakable(narration: str, locale: str = locales.DEFAULT) -> str:
     out as "เอฟ", a second of silence, then "สามสิบห้า". A dash with spaces
     around it stands between clauses, so it becomes the comma the voice pauses
     on for 0.12-0.53s; one inside a word is dropped so the name is said whole.
+
+    The Thai voice does not pause on a space; it pauses where its own phrasing
+    model guesses, which lands a word late: "ที่สูงชันมาก ด้านในมีลม" came out
+    "...มากด้าน", 0.34s of silence, "ในมีลม" (measured 2026-10-02, the same
+    on every run, at +0% too). Invisible joiners are stripped before synthesis
+    and change nothing. A comma is honoured, so every space between Thai
+    phrases becomes one — the pauses then land where the Script put them, at a
+    cost of ~6% more length (58.5s -> 62.3s on that Clip).
     """
     text = narration.replace(".", ",")
+    thai = locales.get(locale)["spoken_script"] == "thai"
     # A hyphen inside a Thai word is noise once transliterated, but inside an
     # English one it joins two real words ("state-of-the-art"), so there it
     # becomes a space rather than nothing.
-    glue = "" if locales.get(locale)["spoken_script"] == "thai" else " "
-    return WORD_DASH.sub(glue, CLAUSE_DASH.sub(", ", text)).strip()
+    text = WORD_DASH.sub("" if thai else " ", CLAUSE_DASH.sub(", ", text)).strip()
+    return THAI_SPACE.sub(", ", text) if thai else text
 
 
 SAY_PATH = Path(os.environ.get("DATA_DIR", "/data")) / "say.json"
@@ -200,11 +212,13 @@ def _tts_text(card: dict, locale: str = locales.DEFAULT) -> str:
     sides of its boundary check see the same string; substituting later would
     make every Card look misaligned and drop the Clip to per-Card speech.
     Longest key first, so an entry cannot be half-eaten by a shorter one.
+    Applied before `_speakable`, which turns Thai spaces into commas, so a
+    key written with a space still matches.
     """
-    text = _speakable(card.get("spoken") or card["narration"], locale)
+    text = card.get("spoken") or card["narration"]
     for wrong, right in sorted(say_as().items(), key=lambda kv: -len(kv[0])):
         text = text.replace(wrong, right)
-    return text
+    return _speakable(text, locale)
 
 
 # The synthesis endpoint fails whole calls at random: a socket that closes

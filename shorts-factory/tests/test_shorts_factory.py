@@ -486,9 +486,9 @@ def test_a_dead_endpoint_falls_back_to_speaking_card_by_card(monkeypatch, tmp_pa
 def test_the_voice_reads_the_transliteration_and_the_screen_keeps_the_english():
     card = {"narration": "ปัญหาคือ Docker เขียน log ไม่หยุด",
             "spoken": "ปัญหาคือ ด็อกเกอร์ เขียน ล็อก ไม่หยุด"}
-    assert render._tts_text(card) == "ปัญหาคือ ด็อกเกอร์ เขียน ล็อก ไม่หยุด"
+    assert render._tts_text(card) == "ปัญหาคือ, ด็อกเกอร์, เขียน, ล็อก, ไม่หยุด"
     # a Script written before `spoken` existed still renders
-    assert render._tts_text({"narration": "มีแต่ narration"}) == "มีแต่ narration"
+    assert render._tts_text({"narration": "มีแต่ narration"}) == "มีแต่, narration"
 
 
 def test_a_pronunciation_override_does_not_break_card_alignment(monkeypatch, tmp_path):
@@ -1451,9 +1451,17 @@ def test_internal_full_stop_would_split_a_card():
 
 def test_a_hyphen_is_read_as_a_pause_so_it_is_dropped():
     # "เอฟ-สามสิบห้า" came out as "เอฟ", a second of silence, then "สามสิบห้า".
-    assert render._speakable("เอฟ-สามสิบห้า บินเร็ว") == "เอฟสามสิบห้า บินเร็ว"
+    assert render._speakable("เอฟ-สามสิบห้า บินเร็ว") == "เอฟสามสิบห้า, บินเร็ว"
     # A spaced dash separates clauses; it keeps a breath, as a comma.
     assert render._speakable("อันนี้ — สำคัญมาก") == "อันนี้, สำคัญมาก"
+
+
+def test_a_thai_space_becomes_a_comma_so_the_pause_lands_on_it():
+    # The voice ignores the space and breaks a word late: "มาก ด้าน|ใน".
+    assert render._speakable("ที่สูงชันมาก ด้านในมีลม") == "ที่สูงชันมาก, ด้านในมีลม"
+    # ๆ keeps its space; an existing comma is not doubled.
+    assert render._speakable("มองดี ๆ แล้ว, ค่อยตอบ") == "มองดี ๆ, แล้ว, ค่อยตอบ"
+    assert render._speakable("Jack Reacher wanders", "en") == "Jack Reacher wanders"
 
 
 def test_a_tapped_suggestion_only_counts_for_the_list_it_came_from():
