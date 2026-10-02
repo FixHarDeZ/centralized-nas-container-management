@@ -95,7 +95,7 @@ def test_round_trip(desk, mac):
     assert git("rev-parse", "origin/main", cwd=task["path"]) == git("rev-parse", "HEAD", cwd=mac)
 
     down = sync(desk, mac, "down", ok=False)
-    assert down.returncode != 0 and "Nothing to export" in down.stderr
+    assert down.returncode == 3 and "nothing to bring back" in down.stdout
 
     (Path(task["path"]) / "agent.txt").write_text("agent\n")
     git("add", ".", cwd=task["path"])
@@ -138,3 +138,38 @@ def test_bad_password_and_unlinked(desk, mac, tmp_path):
 
 def WorkspaceStore_list():
     return workspace_api.store().list("alice")
+
+
+def test_group_up_down(desk, tmp_path):
+    repos = []
+    for name in ("pipeline", "library"):
+        repo = tmp_path / name
+        repo.mkdir()
+        git("init", "-q", "-b", "main", cwd=repo)
+        git("config", "user.name", "Mac", cwd=repo)
+        git("config", "user.email", "mac@example.invalid", cwd=repo)
+        (repo / "a.txt").write_text(name + "\n")
+        git("add", ".", cwd=repo)
+        git("commit", "-q", "-m", name, cwd=repo)
+        repos.append(repo)
+    # Group commands run from outside any repository.
+    out = sync(desk, tmp_path, "group", "up", "jenkins", *map(str, repos),
+               "--email", "me@work.example").stdout
+    assert "group 'jenkins' created" in out
+    items = WorkspaceStore_list()
+    group = next(item for item in items if item["source"] == "group")
+    library = next(item for item in items if item["url"] == "local:library")
+    assert library["path"] == str(Path(group["path"]) / "library")
+
+    (Path(library["path"]) / "shared.groovy").write_text("x\n")
+    git("add", ".", cwd=library["path"])
+    git("commit", "-q", "-m", "library change", cwd=library["path"])
+
+    # Second up reuses the saved repos and the existing group.
+    out = sync(desk, tmp_path, "group", "up", "jenkins").stdout
+    assert "created" not in out and out.count("nothing new") == 2
+
+    down = sync(desk, tmp_path, "group", "down", "jenkins")
+    assert "nothing to bring back" in down.stdout and "library change" in down.stdout
+    assert git("log", "-1", "--format=%s", "desk/" + library["id"], cwd=repos[1]) == "library change"
+    assert "unsent" in sync(desk, tmp_path, "group", "status", "jenkins").stdout

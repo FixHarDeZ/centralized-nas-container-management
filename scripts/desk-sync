@@ -8,6 +8,12 @@
 #   desk-sync up [--slug S] [--branch B] [--name N] [--email E] [--full] [--new]
 #   desk-sync down [--force] [FILE.bundle]
 #   desk-sync status
+#   desk-sync group up NAME DIR DIR... [--email E] [--name N]
+#   desk-sync group down|status NAME [--force]
+#
+# A group puts several local tasks side by side in one desk chat (e.g. a
+# Jenkins pipeline repo + its shared library). Each repo still has its own
+# task and branch; group down runs down in every repo.
 #
 # Config: ~/.config/desk-sync/config (override with DESK_SYNC_CONFIG)
 #   DESK_URL=https://<desk-host>:15072
@@ -20,7 +26,7 @@ set -euo pipefail
 die() { printf 'desk-sync: %s\n' "$*" >&2; exit 1; }
 say() { printf '%s\n' "$*"; }
 
-usage() { sed -n '2,19p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 
 CONFIG=${DESK_SYNC_CONFIG:-$HOME/.config/desk-sync/config}
 [ -f "$CONFIG" ] || die "missing $CONFIG (needs DESK_URL and DESK_USER)"
@@ -30,9 +36,15 @@ CONFIG=${DESK_SYNC_CONFIG:-$HOME/.config/desk-sync/config}
 : "${DESK_USER:?DESK_USER not set in $CONFIG}"
 DESK_URL=${DESK_URL%/}
 
-GIT_DIR=$(git rev-parse --absolute-git-dir 2>/dev/null) || die "not inside a Git repository"
-TOP=$(git rev-parse --show-toplevel)
-STATE="$GIT_DIR/desk-sync"
+# Group commands re-run this script inside each repo; $0 may be relative.
+SELF=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
+GROUPS_DIR=${DESK_SYNC_GROUPS:-$(dirname "$CONFIG")/groups}
+# Repo commands need a repository; group commands run from anywhere.
+in_repo() {
+  GIT_DIR=$(git rev-parse --absolute-git-dir 2>/dev/null) || die "not inside a Git repository"
+  TOP=$(git rev-parse --show-toplevel)
+  STATE="$GIT_DIR/desk-sync"
+}
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/desk-sync.XXXXXX")
 trap 'rm -rf "$WORK"' EXIT
 
@@ -145,7 +157,10 @@ cmd_down() {
     status=$(request GET "projects/export?$query")
     case $status in
       200) file="$WORK/down.bundle"; mv "$WORK/body" "$file" ;;
-      409) die "$(body | tr -d '\n') $( [ "$force" = 0 ] && grep -q uncommitted "$WORK/body" && echo '(use --force for commits only)')" ;;
+      409) if grep -q 'Nothing to export' "$WORK/body"; then
+             say "nothing to bring back (agent has not committed here)"; exit 3
+           fi
+           die "$(body | tr -d '\n') $( [ "$force" = 0 ] && grep -q uncommitted "$WORK/body" && echo '(use --force for commits only)')" ;;
       *)   die "download failed ($status): $(body)" ;;
     esac
   fi
@@ -184,9 +199,79 @@ cmd_status() {
   say "unsent:    $(git rev-list --count --branches --not $last_sent) commit(s)"
 }
 
+group_file() {
+  case $1 in ''|*[!a-z0-9._-]*) die "group name must be lowercase letters, digits, . _ -" ;; esac
+  printf '%s/%s' "$GROUPS_DIR" "$1"
+}
+group_dirs() { sed -n 's/^dir=//p' "$1"; }
+
+cmd_group() {
+  local action=${1:-} name=${2:-}
+  [ -n "$action" ] && [ -n "$name" ] || usage 1
+  shift 2
+  local file; file=$(group_file "$name")
+  case $action in
+    up)
+      local passthrough=() dirs=() dir
+      while [ $# -gt 0 ]; do case $1 in
+        --email|--name) passthrough+=("$1" "$2"); shift 2 ;;
+        -*) die "unknown option $1" ;; *) dirs+=("$1"); shift ;;
+      esac; done
+      if [ ${#dirs[@]} -eq 0 ]; then
+        [ -f "$file" ] || die "new group: give the repo directories (desk-sync group up $name DIR DIR...)"
+        while IFS= read -r dir; do dirs+=("$dir"); done < <(group_dirs "$file")
+      fi
+      [ ${#dirs[@]} -ge 2 ] || die "a group needs at least two repositories"
+      local ids=() resolved=()
+      for dir in "${dirs[@]}"; do
+        dir=$(cd "$dir" 2>/dev/null && git rev-parse --show-toplevel) || die "not a Git repository: $dir"
+        say "== $(basename "$dir")"
+        (cd "$dir" && "$SELF" up ${passthrough[@]+"${passthrough[@]}"}) || die "upload failed in $dir"
+        ids+=("$(cd "$dir" && sed -n 's/^workspace=//p' "$(git rev-parse --absolute-git-dir)/desk-sync" | tail -1)")
+        resolved+=("$dir")
+      done
+      local group=''
+      [ -f "$file" ] && group=$(sed -n 's/^group=//p' "$file")
+      if [ -z "$group" ]; then
+        netrc
+        local members='' id status
+        for id in "${ids[@]}"; do members+="${members:+,}\"$id\""; done
+        status=$(curl -sS --netrc-file "$WORK/netrc" ${DESK_CURL_OPTS:-} -X POST \
+          -H 'Content-Type: application/json' \
+          --data "{\"name\":\"$name\",\"members\":[$members]}" \
+          -o "$WORK/body" -w '%{http_code}' "$DESK_URL/code/projects/group")
+        [ "$status" = 201 ] || die "grouping failed ($status): $(body)"
+        group=$(grep -o '"id": *"[0-9a-f]\{32\}"' "$WORK/body" | head -1 | grep -o '[0-9a-f]\{32\}')
+        [ -n "$group" ] || die "unexpected reply: $(body)"
+        say "group '$name' created: open '$name (group: …)' in the desk Projects list"
+      fi
+      mkdir -p "$GROUPS_DIR"
+      { printf 'group=%s\n' "$group"; printf 'dir=%s\n' "${resolved[@]}"; } > "$file.tmp"
+      mv "$file.tmp" "$file"
+      ;;
+    down|status)
+      [ -f "$file" ] || die "no group '$name' (run 'desk-sync group up $name DIR DIR...')"
+      local failed=0 dir code
+      while IFS= read -r dir; do
+        say "== $(basename "$dir")"
+        code=0
+        (cd "$dir" && "$SELF" "$action" "$@") || code=$?
+        # 3 = nothing committed in this repo: normal when only some changed.
+        [ "$code" = 0 ] || [ "$code" = 3 ] || failed=$((failed + 1))
+      done < <(group_dirs "$file")
+      [ "$failed" = 0 ] || die "$failed repository(s) failed; see above"
+      ;;
+    *) usage 1 ;;
+  esac
+}
+
 [ $# -gt 0 ] || usage 1
 command=$1; shift
 case $command in
+  up|down|status) in_repo ;;
+esac
+case $command in
   up) cmd_up "$@" ;; down) cmd_down "$@" ;; status) cmd_status "$@" ;;
+  group) cmd_group "$@" ;;
   -h|--help|help) usage ;; *) usage 1 ;;
 esac

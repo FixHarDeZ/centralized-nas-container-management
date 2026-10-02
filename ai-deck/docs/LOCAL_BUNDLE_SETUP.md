@@ -89,6 +89,42 @@ desk-sync status      # โปรเจกต์ไหน task ไหน มี 
 
 ---
 
+## ทำหลาย repo พร้อมกัน (Task กลุ่ม)
+
+คู่มือทีละขั้น: [TASK_GROUP_GUIDE.md](TASK_GROUP_GUIDE.md)
+
+เช่น repo หนึ่งเก็บ Jenkins pipeline อีก repo เก็บ Jenkins shared library แล้วต้องแก้ไปด้วยกัน
+
+```bash
+desk-sync group up jenkins ~/work/jenkins-pipeline ~/work/jenkins-library --email <อีเมลงาน>
+```
+
+- แต่ละ repo ยังได้ task กับ branch `desk/<id>` ของตัวเองเหมือนเดิม (repo ที่เคย `up` แล้วใช้ task เดิม)
+- desk ย้ายทั้งสอง repo มาอยู่เป็นโฟลเดอร์พี่น้องกันในโฟลเดอร์เดียว:
+  `jenkins/jenkins-pipeline/` กับ `jenkins/jenkins-library/` พร้อมไฟล์ `CLAUDE.md`/`AGENTS.md` บอก AI ว่ามีกี่ repo และต้อง commit แยกกัน
+- หน้า desk → เลือก `jenkins (group: …)` → คุยใน Chat ทีเดียว AI เห็นและแก้ได้ทุก repo
+- บอก AI ให้ **commit ในแต่ละ repo** (โฟลเดอร์กลุ่มเองไม่ใช่ git repo)
+
+ดึงงานกลับทุก repo ในคำสั่งเดียว / ส่ง commit ใหม่ขึ้นไปทุก repo:
+
+```bash
+desk-sync group down jenkins       # รัน down ในทุก repo
+desk-sync group up jenkins         # ครั้งต่อไปไม่ต้องใส่ path แล้ว จำไว้ที่ ~/.config/desk-sync/groups/jenkins
+desk-sync group status jenkins
+```
+
+จากนั้น merge/push ทีละ repo บน Mac เหมือนเดิม
+
+ทำผ่านหน้าเว็บก็ได้: **Projects → Local bundle → Group local tasks** ติ๊ก task ตั้งแต่ 2 อันขึ้นไป (ต่างโปรเจกต์กัน สูงสุด 8) แล้วกด **Group tasks**
+
+- ปุ่ม **Ungroup** ในกลุ่ม = ย้าย repo กลับเป็น task เดี่ยว **ไม่ลบงาน** (commit/ไฟล์ที่ยังไม่ commit อยู่ครบ)
+  ถ้า AI ทิ้งไฟล์ไว้ที่โฟลเดอร์กลุ่มเอง (นอก repo) จะถูกถามก่อน กดซ้ำ = ลบไฟล์พวกนั้นทิ้ง
+- `group down` repo ที่ AI ไม่ได้ commit อะไรจะขึ้นว่า `nothing to bring back` แล้วข้ามไป ไม่นับเป็น error
+- ลบ task ของ repo ไหนทิ้ง กลุ่มจะเหลือ repo ที่เหลือ
+- Chat history ที่คุยใน task เดี่ยวก่อนรวมกลุ่ม จะไม่ตามมาในแชทของกลุ่ม (แชทผูกกับโฟลเดอร์)
+
+---
+
 ## ไม่อยากใช้สคริปต์ (ทำผ่านหน้าเว็บ)
 
 1. บน Mac: `git bundle create app.bundle --branches HEAD`
@@ -112,6 +148,8 @@ desk-sync status      # โปรเจกต์ไหน task ไหน มี 
 | `Nothing to export` | AI ยังไม่ได้ commit — สั่งให้ commit ก่อน |
 | `local desk/<id> has commits the desk does not` | branch ในเครื่องมี commit ของคุณเอง: `git branch -m desk/<id> desk/<id>-local` แล้ว `down` ใหม่ |
 | อัปโหลดใหญ่เกิน | จำกัด 300 MB ต่อครั้ง |
+| `Task is already in a group` | task นั้นอยู่กลุ่มอื่นแล้ว: Ungroup กลุ่มเดิมก่อน |
+| `Grouped tasks must come from different projects` | ติ๊ก task ของโปรเจกต์เดียวกันสองอัน |
 
 ## รู้ไว้
 

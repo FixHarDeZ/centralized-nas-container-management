@@ -166,6 +166,19 @@ def handle(handler):
                 handler._reply(400, 'Expected a GitHub URL and optional base branch')
                 return True
             result = store().create(owner, body.get('url', ''), body.get('branch', ''))
+        elif path == '/projects/group' and handler.command == 'POST':
+            if handler.headers.get('Content-Type', '').split(';')[0] != 'application/json':
+                handler._reply(415, 'Use application/json')
+                return True
+            body = handler._body(4096)
+            if body is None:
+                return True
+            if set(body) - {'name', 'members'}:
+                handler._reply(400, 'Expected a group name and member task IDs')
+                return True
+            handler._json_body(json.dumps(store().create_group(
+                owner, body.get('name', ''), body.get('members')), ensure_ascii=False), 201)
+            return True
         elif path == '/projects' and handler.command == 'DELETE':
             item = workspace(handler)
             force = parse_qs(urlparse(handler.path).query).get('force', [''])[0] == '1'

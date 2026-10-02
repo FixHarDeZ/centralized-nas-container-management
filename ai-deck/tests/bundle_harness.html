@@ -91,6 +91,35 @@ function open(query) {
       await pause();
     }
     check(frame.contentDocument.getElementById('project-message').textContent.includes('.env'), 'credential warning shown on the new task');
+
+    // Group: no push/deploy/bundle sync of its own; delete = ungroup; per-repo status.
+    frame = await open('&source=group&workspace=' + id); doc = frame.contentDocument; win = frame.contentWindow;
+    win.fetch = async () => ({ok:true, json:async () => ({repositories:[
+      {id:'1'.repeat(32), slug:'pipeline', branch:'desk/1', changes:'', commits:0},
+      {id:'2'.repeat(32), slug:'library', branch:'desk/2', changes:' M a.groovy', commits:2}]})});
+    doc.getElementById('project-manage').click(); await pause();
+    check(doc.getElementById('project-select').selectedOptions[0].textContent === 'jenkins (group: pipeline, library)', 'group label lists members');
+    check(doc.getElementById('bundle-actions').hidden, 'group has no bundle actions');
+    check(doc.getElementById('project-push').hidden && doc.getElementById('deploy-tab').hidden, 'group hides push + deploy');
+    check(doc.getElementById('project-delete').textContent === 'Ungroup (keeps tasks)', 'delete is ungroup');
+    check(doc.getElementById('project-status').textContent.includes('library/  desk/2  2 commit(s)'), 'per-repo status');
+    check([...doc.getElementById('project-select').options].some(o => o.textContent.startsWith('library (in group)')), 'member marked in group');
+
+    // Group form: offered with 2+ ungrouped local tasks, posts name + members.
+    frame = await open('&source=group'); doc = frame.contentDocument; win = frame.contentWindow;
+    const posts = [];
+    win.fetch = async (path, options = {}) => {
+      if (path === 'code/projects/group') { posts.push(JSON.parse(options.body)); return {ok:true, json:async () => ({id})}; }
+      return {ok:true, json:async () => ({items:[]})};
+    };
+    doc.getElementById('project-manage').click(); await pause();
+    doc.getElementById('source-bundle').click();
+    check(!doc.getElementById('group-form').hidden, 'group form shown');
+    doc.querySelectorAll('#group-members input').forEach(box => { box.checked = true; });
+    doc.getElementById('group-name').value = 'jenkins';
+    doc.getElementById('group-form').requestSubmit(); await pause();
+    check(posts.length === 1 && posts[0].name === 'jenkins' && posts[0].members.length === 2, 'group request');
+    check(doc.documentElement.scrollWidth <= 390, 'group form fits phone');
   } catch (error) { failures.push(String(error)); }
   document.getElementById('result').textContent = JSON.stringify({failures});
 })();

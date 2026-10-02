@@ -613,9 +613,22 @@ def agent_for(user, provider, workspace_id="", cwd=None):
         return AGENT
     key = (user, provider, workspace_id)
     with AGENTS_LOCK:
-        if key not in AGENTS:
-            AGENTS[key] = PROVIDERS.get(provider, Agent)(cwd=cwd)
-        return AGENTS[key]
+        agent = AGENTS.get(key)
+        if agent is not None and cwd and agent.cwd != cwd:
+            # Grouping/ungrouping moves the task's worktree; an agent spawned
+            # in the old directory would resume against a path that is gone.
+            with agent.lock:
+                if agent.busy:
+                    raise TaskMoved()
+                agent.stop_child()
+            agent = None
+        if agent is None:
+            agent = AGENTS[key] = PROVIDERS.get(provider, Agent)(cwd=cwd)
+        return agent
+
+
+class TaskMoved(Exception):
+    """The task's directory moved while its agent was mid-turn."""
 
 
 
@@ -660,6 +673,9 @@ class Handler(BaseHTTPRequestHandler):
                 return agent_for(owner, provider, item['id'], item['path'])
             except WorkspaceError as exc:
                 self._reply(exc.status, exc.message)
+                return None
+            except TaskMoved:
+                self._reply(409, "This task moved (grouped or ungrouped); wait for the current turn to finish")
                 return None
             except OSError:
                 self._reply(503, "Workspace storage is unavailable")

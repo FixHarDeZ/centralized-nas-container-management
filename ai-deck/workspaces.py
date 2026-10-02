@@ -26,6 +26,21 @@ _SLUG = re.compile(r"^[a-z0-9._-]{1,64}$")
 _IDENTITY = re.compile(r"^[^\x00-\x1f<>]{0,128}$")
 _RECORD_KEYS = {"id", "owner", "url", "branch", "path", "created"}
 _BUNDLE_KEYS = _RECORD_KEYS | {"source", "base_sha"}
+_MEMBER_KEYS = _BUNDLE_KEYS | {"group"}
+# A group is a plain directory holding member worktrees side by side, so one
+# chat can edit several repos. No branch: the group itself is not a repo.
+_GROUP_KEYS = {"id", "owner", "url", "path", "created", "source", "members"}
+_GROUP_LIMIT = 8
+_GROUP_NOTE = """# Task group
+
+This directory is not a Git repository. It holds {count} repositories side by side:
+
+{listing}
+
+- Work inside each repository directory; run git there, never here.
+- Commit in each repository separately. Only committed work goes back to the Mac.
+- Do not push; there is no remote here. The owner merges and pushes from the Mac.
+"""
 # Basenames that usually hold credentials; import warns, never blocks.
 _SECRET_NAMES = (
     ".env", ".env.*", "*.pem", "*.key", "*.p12", "*.pfx", "id_rsa*",
@@ -391,6 +406,11 @@ class WorkspaceStore:
 
     def status(self, owner, workspace_id):
         record = self.get(owner, workspace_id)
+        if record.get("source") == "group":
+            result = dict(record)
+            result["repositories"] = [self._member_status(owner, member)
+                                      for member in record["members"]]
+            return result
         path = record["path"]
         try:
             head = self._git("-C", path, "rev-parse", "HEAD").strip()
@@ -424,6 +444,8 @@ class WorkspaceStore:
         """
         with self._lock:
             record = self.get(owner, workspace_id)
+            if record.get("source") == "group":
+                return self._delete_group(record, force)
             path = record["path"]
             if not force:
                 try:
@@ -456,7 +478,146 @@ class WorkspaceStore:
             attachments = self.root / "attachments" / owner / workspace_id
             if self._safe_existing_directory(attachments):
                 shutil.rmtree(attachments)
+            if record.get("group"):
+                self._drop_member(owner, record["group"], workspace_id)
             return {"id": workspace_id, "deleted": True}
+
+    def create_group(self, owner, name, members):
+        """Move existing bundle tasks side by side under one group directory.
+
+        Members stay ordinary bundle tasks (update/export/delete per repo);
+        only their worktree path changes. Chat and terminal open the group
+        directory. Real directories, not symlinks: ripgrep (Claude Code's
+        Grep/Glob) does not descend into symlinked directories.
+        """
+        owner = self._valid_owner(owner)
+        name = self._valid_slug(name)
+        if (not isinstance(members, list) or len(members) < 2
+                or len(members) > _GROUP_LIMIT or len(set(members)) != len(members)):
+            raise WorkspaceError(
+                "A group needs 2-%d different tasks" % _GROUP_LIMIT, 400)
+        with self._lock:
+            records = [self.get(owner, member) for member in members]
+            slugs = []
+            for record in records:
+                if record.get("source") != "bundle":
+                    raise WorkspaceError("Only local bundle tasks can be grouped", 400)
+                if record.get("group"):
+                    raise WorkspaceError("Task is already in a group", 409)
+                slugs.append(record["url"][len("local:"):])
+            if len(set(slugs)) != len(slugs):
+                raise WorkspaceError("Grouped tasks must come from different projects", 400)
+            self._prepare_owner(owner)
+            group_id = uuid.uuid4().hex
+            group_path = self.root / "worktrees" / owner / group_id
+            group_path.mkdir()
+            moved = []
+            try:
+                for record, slug in zip(records, slugs):
+                    self._move_member(owner, record, group_path / slug, group=group_id)
+                    moved.append(record)
+                listing = "\n".join("- `%s/` — branch `%s`" % (slug, record["branch"])
+                                     for record, slug in zip(records, slugs))
+                note = _GROUP_NOTE.format(count=len(records), listing=listing)
+                for filename in ("CLAUDE.md", "AGENTS.md"):
+                    (group_path / filename).write_text(note, encoding="utf-8")
+                group = {
+                    "id": group_id,
+                    "owner": owner,
+                    "url": "group:" + name,
+                    "path": os.fspath(group_path),
+                    "created": datetime.datetime.now(
+                        datetime.timezone.utc
+                    ).isoformat().replace("+00:00", "Z"),
+                    "source": "group",
+                    "members": list(members),
+                }
+                self._write(group)
+            except Exception as exc:
+                for record in reversed(moved):
+                    try:
+                        self._move_member(owner, dict(record, group=group_id),
+                                          self.root / "worktrees" / owner / record["id"])
+                    except Exception:
+                        pass
+                shutil.rmtree(group_path, ignore_errors=True)
+                if isinstance(exc, WorkspaceError):
+                    raise
+                raise WorkspaceError("Unable to create group", 500)
+            return group
+
+    def _move_member(self, owner, record, target, group=None):
+        """git worktree move, then rewrite the record; undo the move on failure."""
+        cache = self._cache_path(owner, record["url"])
+        if not self._safe_existing_directory(cache):
+            raise WorkspaceError("Invalid workspace storage", 400)
+        source = record["path"]
+        self._git("-C", os.fspath(cache), "worktree", "move", source, os.fspath(target))
+        updated = {key: value for key, value in record.items() if key != "group"}
+        updated["path"] = os.fspath(target)
+        if group:
+            updated["group"] = group
+        try:
+            self._write(updated)
+        except Exception:
+            self._git("-C", os.fspath(cache), "worktree", "move", os.fspath(target), source)
+            raise
+        return updated
+
+    def _delete_group(self, record, force=False):
+        """Ungroup: move members back to their own paths; never deletes them.
+
+        Only the notes we wrote are removed. Anything else at the group root
+        (an agent's scratch file) refuses with 409 unless force is set.
+        """
+        owner = record["owner"]
+        group_path = Path(record["path"])
+        members = []
+        for member in record["members"]:
+            try:
+                item = self.get(owner, member)
+            except WorkspaceError:
+                continue  # Deleted while grouped; nothing to move back.
+            if item.get("group") == record["id"]:
+                members.append(item)
+        if self._safe_existing_directory(group_path):
+            keep = {"CLAUDE.md", "AGENTS.md"} | {
+                Path(item["path"]).name for item in members}
+            leftover = sorted(entry.name for entry in group_path.iterdir()
+                              if entry.name not in keep)
+            if leftover and not force:
+                raise WorkspaceError(
+                    "Group folder still holds: %s" % ", ".join(leftover[:10]), 409)
+        for item in members:
+            self._move_member(owner, item, self.root / "worktrees" / owner / item["id"])
+        if self._safe_existing_directory(group_path):
+            shutil.rmtree(group_path)
+        (self.root / "metadata" / owner / (record["id"] + ".json")).unlink()
+        attachments = self.root / "attachments" / owner / record["id"]
+        if self._safe_existing_directory(attachments):
+            shutil.rmtree(attachments)
+        return {"id": record["id"], "deleted": True}
+
+    def _drop_member(self, owner, group_id, member):
+        try:
+            group = self.get(owner, group_id)
+        except WorkspaceError:
+            return
+        group["members"] = [item for item in group["members"] if item != member]
+        self._write(group)
+
+    def _member_status(self, owner, member):
+        try:
+            record = self.get(owner, member)
+            path = record["path"]
+            changes = self._git("-C", path, "status", "--short", "--untracked-files=all")
+            ahead = self._git("-C", path, "rev-list", "--count",
+                              record["base_sha"] + ".." + record["branch"]).strip()
+        except WorkspaceError:
+            return {"id": member, "missing": True}
+        return {"id": member, "slug": record["url"][len("local:"):],
+                "branch": record["branch"], "changes": changes,
+                "commits": int(ahead or 0)}
 
     def _cache_path(self, owner, url):
         return self.root / "repositories" / owner / (
@@ -566,7 +727,16 @@ class WorkspaceStore:
             record = json.loads(metadata.read_text(encoding="utf-8"))
         except (OSError, ValueError, TypeError, json.JSONDecodeError):
             raise WorkspaceError("Workspace not found", 404)
-        expected_path = self.root / "worktrees" / owner / workspace_id
+        group = record.get("group") if isinstance(record, dict) else None
+        if record.get("source") == "bundle" and isinstance(group, str):
+            if not _WORKSPACE_ID.fullmatch(group):
+                raise WorkspaceError("Workspace not found", 404)
+            slug = record.get("url", "")[len("local:"):]
+            if not _SLUG.fullmatch(slug) or slug in (".", ".."):
+                raise WorkspaceError("Workspace not found", 404)
+            expected_path = self.root / "worktrees" / owner / group / slug
+        else:
+            expected_path = self.root / "worktrees" / owner / workspace_id
         expected = {
             "id": workspace_id,
             "owner": owner,
@@ -574,10 +744,15 @@ class WorkspaceStore:
         }
         if any(record.get(key) != value for key, value in expected.items()):
             raise WorkspaceError("Workspace not found", 404)
-        if set(record) != _RECORD_KEYS and not (
-            set(record) == _BUNDLE_KEYS and record.get("source") == "bundle"
-            and record.get("url", "").startswith("local:")
-        ):
+        keys = set(record)
+        bundle = (keys in (_BUNDLE_KEYS, _MEMBER_KEYS) and record.get("source") == "bundle"
+                  and record.get("url", "").startswith("local:"))
+        grouped = (keys == _GROUP_KEYS and record.get("source") == "group"
+                   and record.get("url", "").startswith("group:")
+                   and isinstance(record.get("members"), list)
+                   and all(isinstance(m, str) and _WORKSPACE_ID.fullmatch(m)
+                           for m in record["members"]))
+        if keys != _RECORD_KEYS and not bundle and not grouped:
             raise WorkspaceError("Workspace not found", 404)
         if not self._safe_existing_directory(expected_path):
             raise WorkspaceError("Workspace not found", 404)

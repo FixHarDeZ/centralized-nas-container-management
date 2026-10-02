@@ -740,3 +740,8 @@ textarea:focus-visible,
 .chat-attach svg { width: 21px; height: 21px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .chat-attach:disabled, .chat-attachment button:disabled { opacity: .5; cursor: default; }
 .chat-form.attachment-drop { outline: 2px dashed var(--accent); outline-offset: -4px; }
+
+/* Group local tasks: one checkbox row per ungrouped bundle task. */
+#group-form { margin-top: 14px; }
+.group-members { display: grid; gap: 6px; margin: 6px 0 10px; }
+.group-members label { display: flex; align-items: center; gap: 8px; font-weight: 400; }

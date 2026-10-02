@@ -65,15 +65,24 @@
     }
     return response.json();
   }
+  const deleteButton = document.getElementById('project-delete');
+  let deleteLabel = 'Delete task';
   const isBundle = item => item && item.source === 'bundle';
+  const isGroup = item => item && item.source === 'group';
+  const slugOf = id => (projects.find(item => item.id === id)?.url || '').slice('local:'.length);
   function label(item) {
+    if (isGroup(item)) return item.url.slice('group:'.length) + ' (group: ' + item.members.map(slugOf).filter(Boolean).join(', ') + ')';
+    if (isBundle(item) && item.group) return item.url.slice('local:'.length) + ' (in group) · ' + item.branch;
     if (isBundle(item)) return item.url.slice('local:'.length) + ' (local) · ' + item.branch;
     return item.url.replace('https://github.com/', '').replace(/\.git$/, '') + ' · ' + item.branch;
   }
   async function load() {
     try {
       const demoBundle = params.get('source') === 'bundle';
-      projects = demo ? (workspace ? [{id: workspace, url: demoBundle ? 'local:demo-app' : 'https://github.com/example/project', source: demoBundle ? 'bundle' : 'github', branch: 'desk/' + workspace, path: '/workspaces/tasks/demo/' + workspace}] : []) : (await request('code/projects')).items;
+      const demoMembers = ['1', '2'].map(n => ({id: n.repeat(32), url: 'local:' + (n === '1' ? 'pipeline' : 'library'), source: 'bundle', branch: 'desk/' + n.repeat(32), path: '/workspaces/tasks/demo/' + n}));
+      projects = demo && params.get('source') === 'group' ? [...demoMembers.map(item => workspace ? {...item, group: workspace} : item),
+        ...(workspace ? [{id: workspace, url: 'group:jenkins', source: 'group', members: demoMembers.map(item => item.id), path: '/workspaces/tasks/demo/' + workspace}] : [])]
+        : demo ? (workspace ? [{id: workspace, url: demoBundle ? 'local:demo-app' : 'https://github.com/example/project', source: demoBundle ? 'bundle' : 'github', branch: 'desk/' + workspace, path: '/workspaces/tasks/demo/' + workspace}] : []) : (await request('code/projects')).items;
       select.replaceChildren(new Option('Documents', ''));
       projects.forEach(item => select.add(new Option(label(item), item.id)));
       current = projects.find(item => item.id === workspace);
@@ -84,7 +93,8 @@
       select.value = workspace;
       details.hidden = !current;
       document.getElementById('project-connect').open = !current;
-      showBundleTask(isBundle(current));
+      showBundleTask(isBundle(current), isGroup(current));
+      paintGroupChoices();
       const slugs = document.getElementById('bundle-slugs');
       slugs.replaceChildren(...[...new Set(projects.filter(isBundle).map(item => item.url.slice(6)))].map(slug => new Option(slug)));
       try {
@@ -153,17 +163,45 @@
     document.getElementById('source-bundle').setAttribute('aria-pressed', String(bundle));
     githubForm.hidden = bundle;
     bundleForm.hidden = !bundle;
+    groupForm.hidden = !bundle || groupChoices().length < 2;
     sourceHint.textContent = bundle
       ? 'Upload a git bundle from your computer (or run desk-sync up). Each task gets its own branch.'
       : 'Start from GitHub. Each task gets its own branch.';
   }
   document.getElementById('source-github').addEventListener('click', () => showSource(false));
   document.getElementById('source-bundle').addEventListener('click', () => showSource(true));
-  function showBundleTask(bundle) {
+  function showBundleTask(bundle, group) {
     document.getElementById('bundle-actions').hidden = !bundle;
-    document.getElementById('project-push').hidden = bundle;
-    document.getElementById('deploy-tab').hidden = bundle;
+    // A group is not a repo: no push, deploy or bundle sync of its own.
+    document.getElementById('project-push').hidden = bundle || group;
+    document.getElementById('deploy-tab').hidden = bundle || group;
+    if (group) deleteButton.textContent = deleteLabel = 'Ungroup (keeps tasks)';
   }
+  const groupForm = document.getElementById('group-form');
+  const groupChoices = () => projects.filter(item => isBundle(item) && !item.group);
+  function paintGroupChoices() {
+    groupForm.hidden = bundleForm.hidden || groupChoices().length < 2;
+    document.getElementById('group-members').replaceChildren(...groupChoices().map(item => {
+      const row = document.createElement('label');
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.value = item.id;
+      row.append(box, ' ' + label(item));
+      return row;
+    }));
+  }
+  groupForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    const members = [...groupForm.querySelectorAll('input[type=checkbox]:checked')].map(box => box.value);
+    if (members.length < 2) { message.textContent = 'Choose at least two tasks from different projects.'; return; }
+    const button = document.getElementById('group-create');
+    button.disabled = true;
+    try {
+      const item = await request('code/projects/group', {name: document.getElementById('group-name').value.trim(), members});
+      navigate(item.id);
+    } catch (error) { message.textContent = error.message; }
+    finally { button.disabled = false; }
+  });
   function megabytes(bytes) { return (bytes / 1048576).toFixed(1) + ' MB'; }
   async function putBundle(query, file) {
     const response = await fetch('code/projects/bundle?' + query, {method: 'PUT', body: file});
@@ -236,6 +274,14 @@
     statusText.textContent = 'Reading Git status…';
     try {
       const data = await request('code/projects/status?workspace=' + encodeURIComponent(workspace));
+      if (data.repositories) {
+        statusText.textContent = [current?.path, ...data.repositories.map(repo => repo.missing
+          ? repo.id.slice(0, 8) + ': task is gone'
+          : repo.slug + '/  ' + repo.branch + '  ' + repo.commits + ' commit(s) to send'
+            + (repo.changes ? '\n' + repo.changes : '  clean'))].filter(Boolean).join('\n');
+        diff.textContent = 'Open each repository task to download its changes, or run desk-sync group down on your computer.';
+        return;
+      }
       statusText.textContent = [data.branch, data.head, current?.path,
         typeof data.changes === 'string' ? data.changes || 'Working tree clean' : JSON.stringify(data.changes)].filter(Boolean).join('\n');
       diff.textContent = data.diff || 'No tracked diff. New files appear in Git status above.';
@@ -245,12 +291,11 @@
   document.getElementById('project-refresh').addEventListener('click', refreshStatus);
   // First tap arms, second deletes. The server refuses (409) while work is
   // uncommitted or unpushed; the button then re-arms as "Delete anyway".
-  const deleteButton = document.getElementById('project-delete');
   let deleteArmed = false, deleteForce = false, deleteTimer = null;
   function resetDelete() {
     deleteArmed = deleteForce = false;
     deleteButton.classList.remove('armed');
-    deleteButton.textContent = 'Delete task';
+    deleteButton.textContent = deleteLabel;
   }
   function armDelete(text) {
     deleteArmed = true;
@@ -260,7 +305,7 @@
     deleteTimer = setTimeout(resetDelete, 6000);
   }
   deleteButton.addEventListener('click', async () => {
-    if (!deleteArmed) { armDelete('Tap again to delete this task'); return; }
+    if (!deleteArmed) { armDelete(isGroup(current) ? 'Tap again to ungroup' : 'Tap again to delete this task'); return; }
     clearTimeout(deleteTimer);
     deleteButton.disabled = true;
     try {
@@ -268,7 +313,7 @@
       if (response.status === 409) {
         statusText.textContent = (await response.text()).trim().slice(0, 300);
         deleteForce = true;
-        armDelete('Delete anyway (work is lost)');
+        armDelete(isGroup(current) ? 'Ungroup and delete those files' : 'Delete anyway (work is lost)');
         return;
       }
       if (!response.ok) throw new Error((await response.text()).trim().slice(0, 300) || 'Delete failed');

@@ -142,6 +142,14 @@
                 <button id="bundle-create" class="project-primary" type="submit">Upload &amp; start task <span aria-hidden="true">↗</span></button>
               </div>
             </form>
+            <form id="group-form" hidden>
+              <label>Group local tasks <span>One chat edits them side by side; each repo still commits and syncs on its own</span></label>
+              <div id="group-members" class="group-members"></div>
+              <div class="project-form-bottom">
+                <label for="group-name">Group name<input id="group-name" required pattern="[a-z0-9._\-]{1,64}" placeholder="jenkins" autocomplete="off" spellcheck="false"></label>
+                <button id="group-create" class="project-primary" type="submit">Group tasks <span aria-hidden="true">↗</span></button>
+              </div>
+            </form>
             <form id="project-form">
               <div id="project-repo-wrap" hidden><label for="project-repo">Your repositories</label><select id="project-repo"><option value="">Choose a repository…</option></select></div>
             <label for="project-url">Repository URL</label>
