@@ -772,3 +772,4 @@ User requested commit + push. Delivered AI Deck rename/features/quota fixes and 
 
 - `agent_options.versions()` probes `claude/codex/mimo --version` once per process (pinned in image), extracts first `x.y.z`, omits failed CLIs. `/chat/options` now returns `versions`; `ui/app.js` relabels Agent dropdown e.g. `Claude 2.1.287`, `Codex 0.159.2`, `MiMo 0.1.15`.
 - Test `test_options_report_installed_cli_versions` added. Full ai-deck suite 308 passed. Commit `2f61adf` pushed; deployed via `deploy.sh -s ai-deck -y` (56s). In-container `versions()` = claude 2.1.287, codex 0.160.0, mimo 0.1.15. Browser dropdown not visually checked.
+- Closed 2026-10-02: feature live. Note: Dockerfile pins CLAUDE_VERSION=2.1.272 but container runs 2.1.287 (drift from pin; not investigated). No pending work.
