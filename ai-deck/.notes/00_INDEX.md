@@ -1,4 +1,4 @@
-## 2026-10-02 — Local bundle task groups (local; not committed/deployed)
+## 2026-10-02 — Local bundle task groups (deployed 9146e5a; guide docs/TASK_GROUP_GUIDE.md)
 
 - Several bundle tasks in one chat: members `git worktree move`d to `worktrees/<owner>/<group-id>/<slug>/` (real dirs — ripgrep skips symlinked dirs). Member record +`group`; group record `source=group`/`url=group:<name>`/`members`, no `branch`, cwd for chat/terminal, holds CLAUDE.md+AGENTS.md. `POST /projects/group`; group status per repo; delete group = ungroup (never deletes work); member delete drops from group. `desk-sync group up|down|status NAME`, state `~/.config/desk-sync/groups/<name>`. UI: Local bundle → Group local tasks. Chat history from before grouping stays with old cwd.
 
