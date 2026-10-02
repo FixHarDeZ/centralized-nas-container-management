@@ -1894,4 +1894,4 @@ install` จะสำเร็จ. ต้องสร้าง venv ใต้ re
 `_tts_text()` แทน say.json **ก่อน** `_speakable` แล้ว (key มี space ยัง match).
 เทสต์: 248 pass, 8 fail = baseline Raqm/font บน Mac. commit + deploy แล้ว (grep THAI_SPACE ในคอนเทนเนอร์ยืนยัน).
 ค้าง: ฟังคลิปจริงรอบถัดไป ถ้า pause ถี่ไปจนเหมือนอ่านทีละท่อน → ทางเลือกคือให้ prompt เว้นวรรคน้อยลง (เฉพาะจุดหายใจจริง).
-- **สถานะปิดงาน 02/10:** commits ff07168 (fix) + b45d67f (notes) อยู่บน main local ยังไม่ push. deploy แล้ว. ค้าง: ฟังคลิปจริงรอบถัดไป, push.
+- **สถานะปิดงาน 02/10:** commits ff07168 (fix) + b45d67f (notes) pushed + deploy แล้ว. ค้าง: ฟังคลิปจริงรอบถัดไป.

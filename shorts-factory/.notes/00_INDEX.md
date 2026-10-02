@@ -84,7 +84,7 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
   **Thai spaces become `", "` (2026-10-02):** the Thai voice ignores spaces and
   puts its own phrase break a word late ("มาก ด้าน|ใน" 0.34s); commas are
   honoured. ~6% longer audio. say.json overrides apply before this step.
-  Deployed 02/10 (ff07168, not pushed); not yet heard on a real Clip.
+  Deployed + pushed 02/10 (ff07168); not yet heard on a real Clip.
   **The rule is mirrored for English (2026-09-07):** Thai `spoken` still
   forbids Latin, but an English clip's `spoken` forbids Thai instead, and
   `render._speakable()` joins words with a space for English — Thai has no
