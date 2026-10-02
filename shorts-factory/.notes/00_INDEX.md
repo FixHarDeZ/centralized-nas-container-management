@@ -81,6 +81,9 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
   edge-tts reads. `validate()` rejects any Latin character in `spoken`, and
   `render._speakable()` strips hyphens/dashes before synthesis — the voice reads
   one as a ~1s pause ("เอฟ-35" became "เอฟ" … "35"), so model names are said whole.
+  **Thai spaces become `", "` (2026-10-02):** the Thai voice ignores spaces and
+  puts its own phrase break a word late ("มาก ด้าน|ใน" 0.34s); commas are
+  honoured. ~6% longer audio. say.json overrides apply before this step.
   **The rule is mirrored for English (2026-09-07):** Thai `spoken` still
   forbids Latin, but an English clip's `spoken` forbids Thai instead, and
   `render._speakable()` joins words with a space for English — Thai has no

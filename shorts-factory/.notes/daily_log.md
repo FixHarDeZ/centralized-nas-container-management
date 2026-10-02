@@ -1886,3 +1886,11 @@ install` จะสำเร็จ. ต้องสร้าง venv ใต้ re
 - เดิม `do_render()` edit ข้อความสคริปต์ทับเป็น "📝 ชื่อ — กำลัง render" → หลังคลิปออกไม่มีบรรทัด 🗣 ให้ก๊อปไป `/say`
 - ตอนนี้ edit เป็นสคริปต์เต็ม (+📎) ไม่มีปุ่ม footer = "🎬 กำลัง render — /say … แล้ว /redo" (`format_script(footer=)`), เทสต์ +1 → 246 passed / 8 baseline. รอบอัตโนมัติไม่เกี่ยว (ไม่มี message_id อยู่แล้ว สคริปต์ส่งแยกไม่ถูกทับ)
 - **สถานะปิดงาน 28/09:** commits 3e1bb32, 5f69462, 55c0df7, 7cf52c2 pushed (main = 7cf52c2) + deploy แล้วทั้งหมด. ค้าง: rotate Tavily key (ถูกแปะในแชท) → `sops set` + `make secrets` + deploy; ดูผล research ~10 คลิป (ตีกลับตัวเลขบ่อยไหม); ยังไม่ได้ทดสอบ render/research ผ่าน Telegram จริง
+
+## 2026-10-02 เสียงวรรคผิดที่ (ด้าน|ใน) → แปลง space ไทยเป็น comma
+อาการ: "ด้านใน" อ่านเป็น "ด้าน" เงียบ แล้ว "ใน" (คลิป 20261002-073316-961 ลูกเห็บ). spoken ไม่มี space ระหว่างคำนั้น.
+วัดด้วย WordBoundary + silencedetect: `th-TH-NiwatNeural` **ไม่หยุดตรง space** แต่ใส่ phrase break เองแล้วเลื่อนไป 1 คำ (`มาก ด้าน⟨0.34⟩ใน`, `แข็งเร็ว น้ำ⟨0.28⟩จะ`, `ต้นไม้⟨0.31⟩เลย`). deterministic ทุกรอบ, rate +0% ก็เป็น, ประโยคเดี่ยวสั้นไม่เป็น (ต้องมีบริบทยาว). word joiner U+2060/ZWSP ถูกตัดทิ้ง ไม่ช่วย.
+แก้: `render._speakable()` ไทย → space ทุกตัวเป็น `", "` (ยกเว้น space หน้า ๆ และหลัง comma). comma ถูกเคารพ pause ลงตรงที่สคริปต์เว้น, ไม่มี break กลางคำ. แลก: ยาวขึ้น ~6% (58.5→62.3 วิ คลิปนั้น). SentenceBoundary 6/6, `narrate()` alignment ผ่านกับเสียงจริง.
+`_tts_text()` แทน say.json **ก่อน** `_speakable` แล้ว (key มี space ยัง match).
+เทสต์: 248 pass, 8 fail = baseline Raqm/font บน Mac. commit + deploy แล้ว (grep THAI_SPACE ในคอนเทนเนอร์ยืนยัน).
+ค้าง: ฟังคลิปจริงรอบถัดไป ถ้า pause ถี่ไปจนเหมือนอ่านทีละท่อน → ทางเลือกคือให้ prompt เว้นวรรคน้อยลง (เฉพาะจุดหายใจจริง).
