@@ -449,7 +449,9 @@ def trend_origin(state: dict, topic: str) -> dict | None:
 
 # A Topic that hinges on what actually happened: a score, a result, who won.
 # Such a Topic is written only from web search results (app/research.py) and
-# refused when there are none; unattended rounds refuse it outright. Before
+# refused when there are none. Unattended rounds search the same way: the
+# auto-pick draws from the trends list, which is full of tournament Topics, and
+# refusing them outright threw away rounds a search would have grounded. Before
 # research existed the model had no source for any of it and the prompt sent
 # it to "ความรู้ทั่วไปที่ตรวจสอบได้" instead. Measured on six volleyball clips
 # (2026-08-29..31): every one came back with the same skeleton, two of them
@@ -474,7 +476,7 @@ FORCE_PREFIX = "!"
 
 RESULT_REFUSAL = (
     "หัวข้อนี้ต้องรู้ว่าเกิดอะไรขึ้นจริง แต่บอทไม่รู้ผลแข่ง/ผลประกาศ "
-    "(ค้นเว็บไม่ได้หรือเป็นรอบอัตโนมัติ) เขียนไปก็ได้แต่ความรู้ทั่วไปโครงเดิม แถมมีสิทธิ์แต่งตัวเลขเอง\n\n"
+    "(ค้นเว็บไม่เจอแหล่งอ้างอิง) เขียนไปก็ได้แต่ความรู้ทั่วไปโครงเดิม แถมมีสิทธิ์แต่งตัวเลขเอง\n\n"
     "ลองเปลี่ยนเป็นมุมที่อธิบายได้โดยไม่ต้องอ้างผล เช่น "
     "“วอลเลย์บอลไทยเล่นสไตล์ไหน ต่างจากทีมตัวสูงยังไง”\n"
     f"ถ้ายืนยันว่าจะทำ ใส่ {FORCE_PREFIX} นำหน้าหัวข้อ"
@@ -511,7 +513,7 @@ async def make_script(client: httpx.AsyncClient, state: dict, topic: str,
         forced = topic.startswith(FORCE_PREFIX)
         if forced:
             topic = topic[len(FORCE_PREFIX):].strip()
-        elif result_shaped(topic) and (auto or not research.configured()):
+        elif result_shaped(topic) and not research.configured():
             await say(client, RESULT_REFUSAL)
             return
         needs_facts = not forced and result_shaped(topic)

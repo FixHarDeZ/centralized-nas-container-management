@@ -110,7 +110,8 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
   volleyball clips, 2026-08-29..31, two published with made-up numbers).
   A leading `!` skips the check; revisions are never checked.
   **Since 2026-09-28 (ADR 0014)** they are written when web research finds
-  sources, refused otherwise / in auto-pick / without `TAVILY_API_KEY`; bare
+  sources, refused otherwise / without `TAVILY_API_KEY`. **Since 2026-10-03
+  auto-pick searches too** (was refused outright before searching); bare
   ชนะ/แพ้ no longer match (idioms ไม่แพ้/ชนะใจ were refused by mistake).
 - **Web research** (`app/research.py`, deployed 2026-09-28): every fresh Topic
   → Tavily (topic as typed, ≤5 results, ≤3k chars, 20s wait_for, best effort)

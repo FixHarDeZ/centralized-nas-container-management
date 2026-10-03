@@ -3502,10 +3502,18 @@ def test_a_result_topic_with_nothing_found_is_refused(monkeypatch):
     assert state["mode"] == "idle"
 
 
-def test_an_unattended_result_topic_is_refused_before_searching(monkeypatch):
+def test_an_unattended_result_topic_is_searched_like_a_typed_one(monkeypatch):
     sent, seen = _writing(monkeypatch, FOUND)
     asyncio.run(main.make_script(None, {"mode": "idle"}, "ไทยชนะจีน 3-2", auto=True))
-    assert "searched" not in seen and "ไม่รู้ผลแข่ง" in sent[-1]
+    assert "12,500" in seen["facts"]
+
+
+def test_an_unattended_result_topic_with_nothing_found_is_refused(monkeypatch):
+    sent, seen = _writing(monkeypatch, None)
+    state = {"mode": "idle"}
+    asyncio.run(main.make_script(None, state, "ไทยชนะจีน 3-2", auto=True))
+    assert "facts" not in seen and "ไม่รู้ผลแข่ง" in sent[-1]
+    assert state["mode"] == "idle"
 
 
 def test_an_ordinary_topic_without_results_is_still_written(monkeypatch):
