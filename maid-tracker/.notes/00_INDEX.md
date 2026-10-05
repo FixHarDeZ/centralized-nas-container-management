@@ -2,6 +2,8 @@
 
 อัปเดตล่าสุด: 2026-10-05
 
+สถานะงาน: ปิดงาน redesign UI, เงินพิเศษ และ Payment Summary เมื่อ 2026-10-05; ฟีเจอร์และบันทึก deploy push เข้า `origin/main` แล้ว, NAS deploy ผ่านและตรวจสุขภาพระบบแล้ว. ไม่มีงานค้างในขอบเขตนี้; ข้อมูลเงินเดือนเก่าที่ไม่มี snapshot ยังคงแสดงเป็นยอดประมาณย้อนหลัง
+
 Release ล่าสุด: `64bef8c` บน `origin/main`; deploy NAS 2026-10-05 ด้วย `scripts/deploy.sh -s maid-tracker -y` แล้ว (`maid-tracker` healthy). ก่อน deploy สำรอง DB ที่ `/data/backups/maid-20261005-171442.db.gz`. Payment Summary รุ่นนี้อ่านยอดเงินเดือนเก่าที่ไม่มี snapshot เป็นค่า estimate จากข้อมูลปัจจุบันและติดป้ายใน UI.
 
 ---

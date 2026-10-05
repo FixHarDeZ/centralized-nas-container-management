@@ -1,5 +1,14 @@
 # Daily Log
 
+## 2026-10-05 — ปิดงาน maid-tracker
+
+- งานที่เสร็จ: redesign UI, บันทึกเงินพิเศษพร้อมเหตุผล และ Payment Summary รายแม่บ้านพร้อมยอดสะสม/รายการรายเดือน
+- Verification: ชุดทดสอบ 63 tests ผ่าน, ตรวจ syntax และ UI ใน local preview แล้ว; หลัง deploy ตรวจ container healthy, schema และ API ใช้งานได้
+- Commit/deploy: `64bef8c` (ฟีเจอร์) และ `996c4c5` (บันทึกผล deploy) push เข้า `origin/main`; deploy NAS สำเร็จ โดยสำรอง DB ที่ `/data/backups/maid-20261005-171442.db.gz`
+- งานค้าง: ไม่มีในขอบเขตที่ขอ; ยอดเงินเดือนเก่าซึ่งไม่มี snapshot แสดงเป็นยอดประมาณย้อนหลังตามข้อมูลปัจจุบันและติดป้ายใน UI
+
+---
+
 ## 2026-10-05 — UI redesign + เงินพิเศษ + Payment Summary
 
 - ปรับหน้าแรก, navbar, หน้ารายคน และการ์ดทางลัดเป็นโทนเขียว/พื้นอุ่น พร้อม dark theme และหน้า `#/employee/:id/history` ที่แสดงยอดสะสมและรายการจ่ายรายเดือน (เงินเดือน/รายวัน/เงินพิเศษ) มี TH/EN
