@@ -244,3 +244,20 @@ data. Also update the Kuma webhook URL to include `?secret=…` if it doesn't.
 - `maintenance.transition()` ใน watcher ทุก 30 วิ: เปิด → `🚀 เริ่ม deploy: <stacks> พัก alert ถึง HH:MM`, หด tail ไม่แจ้งซ้ำ, ปิด → `✅ deploy เสร็จ` + ล่มชั่วคราวกลับมาเอง / ⚠️ ยังล่ม กำลังวินิจฉัย / ไม่มี alert
 - deploy ops-bot เอง: process ใหม่เจอ window ที่เปิดอยู่ → แจ้ง 🚀 (process เก่าไม่ทันแจ้ง) ไม่ซ้ำ
 - เทสต์ 72 passed (+5). Commit+push+deploy 30/09 11:28; marker บน NAS มี 2 บรรทัด (epoch, `ops-bot`), container ไม่มี error. ผู้ใช้ยืนยันข้อความ 🚀/✅ เข้า Telegram จริงแล้ว. ปิดงาน ไม่มีงานค้าง
+
+## 2026-10-05 — Mesh Node หลุดบ่อย: วางแผน auto-heal (ยังไม่เขียนโค้ด)
+- ปัญหา: AiMesh node (`<MESH_NODE_IP>`) หลุด, แก้ได้ทางเดียวคือ router UI → LAN → DHCP → เพิ่ม Manually Assigned IP อะไรก็ได้ → Apply (LAN กระตุก แล้ว node กลับ). reboot/ถอดปลั๊ก node ไม่ช่วย = ปัญหาอยู่ฝั่ง router หลัก. สมมติฐาน: Apply สั่ง restart service บน router (ยังไม่ยืนยันชื่อ ต้องอ่านจาก router เอง)
+- ข้อมูลที่เจอ: router = ASUS ZenWiFi AX ที่ `<ROUTER_IP>` เปิดแค่ 80/8443 (SSH ปิด). Kuma: Mesh Node = monitor id 3 (ping, `maxretries=0`), ops-bot ผูกแค่ group id 8 "Home Network Monitor" → ~25 incident ตั้งแต่ ส.ค. ไป LLM วินิจฉัย NAS เปล่าประโยชน์ (#105 กิน 16k tokens). ประวัติ: blip หายเอง ≤~15 นาที + ล่มยาวต้องแก้มือ (36 ชม., 7, 10, 6, 3.5, 1 ชม.). Kuma heartbeat เวลาเป็น UTC. NAS user ping ไม่ได้ → ใช้ `ip neigh` (`FAILED`)
+- ทำ: สร้าง key เฉพาะ router บน NAS `~/.ssh/ops_bot_router_ed25519` (private ไม่ออกจาก NAS)
+- รอ user (ต้องทำจากบ้าน): เปิด router SSH = LAN only, ปิด password login, ใส่ public key, แจ้ง username + port
+- แผน (ยังไม่อนุมัติ): ผูก ops-bot กับ Mesh Node, ล่มต่อเนื่อง ≥20 นาทีค่อยแก้, คำสั่งตายตัวผ่าน SSH target แยก (ไม่แตะ `ALLOWED_PREFIXES`), แจ้ง Telegram ก่อน/หลัง, cooldown + เพดานต่อวัน, พัก alert ข้างเคียงช่วง LAN กระตุก, group alert ที่มีแค่ Mesh Node ไม่ส่ง LLM
+- สถานะ: ไม่มีโค้ด/commit/deploy. node ยังล่มอยู่ ณ 11:31 (ตั้งแต่ 10:49) — ขอ user อย่าเพิ่งแก้มือ เก็บสภาพพังไว้อ่าน syslog. Handoff doc อยู่ใน OS temp dir
+- ปิดงาน 05/10: notes อัปเดตแล้ว (ยังไม่ commit). งานค้าง = รอ user เปิด router SSH จากบ้าน → อ่าน syslog/หา service จริง → พิสูจน์ → ขออนุมัติ design → TDD. ไม่มี deploy
+
+## 2026-10-05 (ต่อ) — Mesh Node auto-heal: สืบ → พิสูจน์ → ทำ → deploy
+- Router SSH เปิดแล้ว (user `fixhardez`, port 22, key-only LAN). อ่าน syslog ตอนยังพัง: `eth2` Link DOWN/Up 10:48:43–10:49:41 → node ลอง wireless backhaul วน assoc/disassoc ถึง 10:50:08 แล้วเงียบ, ARP+bridge MAC ยังอยู่แต่ IP ไม่ตอบ. ไม่ใช่ DFS (149/36/8). ปุ่ม DHCP Apply = `restart_net_and_phy`
+- สั่ง `service restart_net_and_phy` มือ 15:36:17 → Kuma UP 15:37:07 (~50 วิ). ผลข้างเคียง: SSH เข้า NAS จากข้างนอก (:2222) หลุด ~4 นาที, DDNS ล่ม 1 นาที
+- User ขอ: เกิน 5 นาที auto-fix ทันที ไม่ต้อง confirm. ทำตาม spec (TDD) +30 เทสต์ → 102 passed. Vault: `stacks.ops_bot.router.{host,user}`, `stacks.ops_bot.mesh_node.host` (sops set) + sync test-vault, `make check` ผ่าน
+- Deploy จาก git worktree สะอาด (มีงาน ai-deck ของ session อื่นค้าง uncommitted ใน working tree รวม `ai-deck/nginx/nginx.conf` ที่ bind-mount — ไม่ให้ขึ้น NAS; md5 บน NAS ยังเป็นของเดิม)
+- บั๊กตอน verify: pin fingerprint ecdsa ตัวเดียว → Paramiko เลือก ed25519 โดน refuse (pin ทำงานถูก) → แก้รับหลายค่า pin ครบ 3 type, redeploy, router connect+auth จาก container ผ่าน
+- ค้าง: ผูก Kuma notification ops-bot ↔ Mesh Node, push commits, ยืนยันกับ outage จริง, user เปลี่ยนสาย backhaul
