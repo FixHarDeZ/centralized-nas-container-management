@@ -11,6 +11,8 @@ services:
     volumes:
       - ops_bot_data:/app/data
       - ${HOST_SSH_KEY_PATH}:/app/data/ssh/id_ed25519:ro
+      # Mesh Node auto-heal: key for the router only (app/router_client.py)
+      - ${HOST_ROUTER_KEY_PATH}:/app/data/ssh/router_ed25519:ro
       # scripts/deploy.sh writes the deploy-window deadline here
       - ./maintenance:/app/maintenance:ro
     labels:

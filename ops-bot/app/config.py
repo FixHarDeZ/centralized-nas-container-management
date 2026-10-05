@@ -21,6 +21,27 @@ class Settings(BaseSettings):
     ssh_key_path: str = "/app/data/ssh/id_ed25519"
     ssh_port: int = 22
 
+    # Router SSH for Mesh Node auto-heal (key-only, host key pinned,
+    # separate from the NAS client above)
+    router_ssh_host: str = ""
+    router_ssh_user: str = ""
+    router_ssh_port: int = 22
+    router_ssh_key_path: str = "/app/data/ssh/router_ed25519"
+    router_ssh_host_key_sha256: str = ""
+
+    # Mesh Node auto-heal — off unless mesh_node_host and router_ssh_host are set
+    mesh_node_host: str = ""
+    mesh_node_probe_port: int = 80
+    mesh_monitor_name: str = "Mesh Node"
+    mesh_group_name: str = "Home Network Monitor"
+    mesh_down_minutes: float = 5
+    mesh_verify_minutes: float = 5
+    mesh_quiet_minutes: float = 3
+    mesh_cooldown_minutes: float = 30
+    mesh_daily_cap: int = 3
+    mesh_max_failures: int = 2
+    mesh_state_file: str = "/app/data/mesh_heal.json"
+
     # Watchtower
     watchtower_grace_minutes: int = 5
 

@@ -10,7 +10,7 @@ from app.webhook import router as webhook_router
 from app.dashboard import router as dashboard_router
 from app.commands import start_telegram_polling, stop_telegram_polling
 from app.orchestrator import handle_incident
-from app import maintenance
+from app import maintenance, mesh_heal
 from app.telegram_bot import get_telegram_bot
 
 
@@ -19,7 +19,9 @@ async def lifespan(app: FastAPI):
     await init_db()
     await start_telegram_polling()
     maintenance.start(handle_incident, lambda text: get_telegram_bot().send_message(text))
+    mesh_heal.start()
     yield
+    await mesh_heal.stop()
     await maintenance.stop()
     await stop_telegram_polling()
     await close_db()

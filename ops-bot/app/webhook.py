@@ -9,7 +9,7 @@ from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
 from pydantic import BaseModel
 
-from app import maintenance
+from app import maintenance, mesh_heal
 from app.config import get_config
 from app.orchestrator import handle_incident, handle_recovery
 from app.telegram_bot import get_telegram_bot
@@ -136,6 +136,19 @@ async def uptime_kuma_webhook(
 
     service_name = data.monitor.name
     status = data.heartbeat.status
+
+    # Mesh Node is healed by app.mesh_heal, never diagnosed — and checked
+    # before the deploy-window hold, because the fix is what ends the outage
+    if mesh_heal.is_mesh(service_name):
+        if status == 0:
+            mesh_heal.on_down()
+        elif status == 1:
+            background_tasks.add_task(mesh_heal.on_up)
+        return {"status": "mesh_heal", "service": service_name}
+    if status == 0 and mesh_heal.skip_group_down(service_name, data.heartbeat.msg):
+        return {"status": "mesh_heal", "service": service_name}
+    if status == 1 and mesh_heal.skip_group_up(service_name):
+        return {"status": "mesh_heal", "service": service_name}
 
     # Handle recovery (status=1, UP)
     if status == 1:

@@ -13,7 +13,11 @@ on state change, so it will not re-send the DOWN by itself.
 The marker is two lines: epoch deadline, then comma-separated stack names.
 The watcher announces the window opening and closing in Telegram. deploy.sh
 rewrites the deadline to a short tail after the last stack is up; that is the
-same window, not a new one, so it is not announced again."""
+same window, not a new one, so it is not announced again.
+
+quiet() opens the same hold without a marker file, for the Mesh Node fix:
+restarting the router's LAN knocks other monitors (DDNS) over for a minute.
+It is not announced; transition() only looks at the marker."""
 from __future__ import annotations
 
 import asyncio
@@ -31,6 +35,7 @@ _held: dict[str, tuple[str, str]] = {}
 _recovered: list[str] = []
 _open_stacks: Optional[list[str]] = None  # None = no window announced
 _task: Optional[asyncio.Task] = None
+_quiet_until: float = 0.0  # epoch; in-memory hold opened by quiet()
 
 
 def read() -> Optional[tuple[float, list[str]]]:
@@ -45,8 +50,16 @@ def read() -> Optional[tuple[float, list[str]]]:
 
 
 def active(now: Optional[float] = None) -> bool:
+    now = now if now is not None else time.time()
+    if now < _quiet_until:
+        return True
     marker = read()
-    return marker is not None and (now if now is not None else time.time()) < marker[0]
+    return marker is not None and now < marker[0]
+
+
+def quiet(until: float) -> None:
+    global _quiet_until
+    _quiet_until = max(_quiet_until, until)
 
 
 def hold(service_name: str, container_name: str, alert_message: str) -> None:

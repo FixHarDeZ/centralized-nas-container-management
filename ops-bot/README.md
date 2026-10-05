@@ -17,6 +17,7 @@ AI-powered incident response bot. Receives alerts from Uptime Kuma, auto-diagnos
 - **Commands**: `/status`, `/diagnose <service>`, `/logs <service> [lines]`
 - **Watchtower**: Grace period 5 min after image updates (skip alerts during update)
 - **Deploy window**: `scripts/deploy.sh` writes an epoch deadline to `maintenance/until` (bind-mounted `/app/maintenance`, read locally — no SSH). DOWN alerts inside the window are held; recovery clears them silently; anything still down after the window gets the normal diagnosis. Window = 45 min while restarting, narrowed to 5 min after the last stack is up. Marker line 2 = stack names; ops-bot posts `🚀 เริ่ม deploy: <stacks>` when the window opens and `✅ deploy เสร็จ` when it closes (lists alerts that recovered on their own and ones still down → diagnosing). Checked every 30 s, so a notice lags up to 30 s
+- **Mesh Node auto-heal** (`app/mesh_heal.py`, `app/router_client.py`): Kuma DOWN for the AiMesh node lasting 5 min → Telegram notice, then SSH to the ASUS router and run `service restart_net_and_phy` (what the router's DHCP page Apply runs; whole home LAN blips ~1 min). No confirm button. Pre-check TCP connect to the node first (ARP/bridge state looked healthy while it was broken). Success = Kuma UP within 5 min; no UP → one retry, then 🆘 and pause until the next UP. Cooldown 30 min, at most 3 commands per rolling 24 h. Other DOWNs during the 3 min after the command are held like a deploy window. Mesh Node and a `Home Network Monitor` alert listing only Mesh Node never go to the LLM. State in `/app/data/mesh_heal.json` (survives restarts); each episode is an `incidents` row (`healed`/`gave_up`). All thresholds are `MESH_*` env settings. Off unless `MESH_NODE_HOST` and `ROUTER_SSH_HOST` are set. Spec: `docs/superpowers/specs/2026-10-05-ops-bot-mesh-heal-design.md`
 - **Debounce**: 15 min cooldown between repeated alerts for the same service
 - **Dashboard**: responsive overview, search by service/container, severity filters, and paginated incident history
 - **AI Settings**: `/dashboard/settings` changes the analysis model without a restart; persistent override with reset to environment default
@@ -204,6 +205,7 @@ Add these via `make edit-vault`, then `make secrets && ./scripts/deploy.sh -s op
 ## Security
 
 - SSH commands are whitelisted (read-only: `docker ps`, `docker logs`, `df`, `free`, etc.)
+- Router SSH is a separate client with its own key (`HOST_ROUTER_KEY_PATH`, private key stays on the NAS), key-only, host key pinned by `ROUTER_SSH_HOST_KEY_SHA256`, and one constant command. It is not on the LLM whitelist. Router side: SSH LAN only, password login off
 - Dashboard + everything except the Kuma webhook path is behind nginx basic auth
   (`nginx/.htpasswd`); the app itself is never published on the host
 - `/webhook/uptime-kuma` is exempt from basic auth and guarded by
