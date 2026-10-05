@@ -262,7 +262,13 @@ async def tick(now: Optional[float] = None) -> None:
         await _fix(state, now)  # retry belongs to this outage: no cooldown
         return
 
-    if state["paused"] or state["down_since"] is None:
+    if state["paused"]:
+        # The UP that ends a pause can be lost (Kuma doesn't retry a 502 while
+        # ops-bot restarts); without this the next outage is never handled
+        if await probe():
+            await on_up(now)
+        return
+    if state["down_since"] is None:
         return
     if now - state["down_since"] < cfg.mesh_down_minutes * 60:
         return

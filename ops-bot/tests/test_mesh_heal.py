@@ -222,3 +222,19 @@ def test_group_message_only_mesh():
     assert not mesh_heal.only_mesh_down("Child monitors down: Mesh Node, DDNS fixhardez.synology.me")
     assert not mesh_heal.only_mesh_down("Child monitors down: DDNS fixhardez.synology.me")
     assert not mesh_heal.only_mesh_down("")
+
+
+@pytest.mark.asyncio
+async def test_pause_clears_when_node_answers_without_up(env):
+    probe, restart, said = env
+    mesh_heal.on_down(T0)
+    for t in (5, 10.1, 15.2):
+        await mesh_heal.tick(T0 + t * MIN)
+    assert mesh_heal._load()["paused"]
+    probe.return_value = True  # UP lost while ops-bot was restarting
+    await mesh_heal.tick(T0 + 30 * MIN)
+    assert not mesh_heal._load()["paused"]
+    probe.return_value = False
+    mesh_heal.on_down(T0 + 60 * MIN)  # next outage is handled again
+    await mesh_heal.tick(T0 + 65 * MIN)
+    assert restart.call_count == 3
