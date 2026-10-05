@@ -261,3 +261,4 @@ data. Also update the Kuma webhook URL to include `?secret=…` if it doesn't.
 - Deploy จาก git worktree สะอาด (มีงาน ai-deck ของ session อื่นค้าง uncommitted ใน working tree รวม `ai-deck/nginx/nginx.conf` ที่ bind-mount — ไม่ให้ขึ้น NAS; md5 บน NAS ยังเป็นของเดิม)
 - บั๊กตอน verify: pin fingerprint ecdsa ตัวเดียว → Paramiko เลือก ed25519 โดน refuse (pin ทำงานถูก) → แก้รับหลายค่า pin ครบ 3 type, redeploy, router connect+auth จาก container ผ่าน
 - ค้าง: ผูก Kuma notification ops-bot ↔ Mesh Node, push commits, ยืนยันกับ outage จริง, user เปลี่ยนสาย backhaul
+- เพิ่ม: pause ค้างถ้าพลาด UP ตอน ops-bot restart → ตอน paused probe ทุก tick เจอ node ตอบ = resume (`2b28186`, 103 passed). Redeploy จาก worktree สะอาด. Smoke test ใน container: POST Mesh Node DOWN → state `down_since` ถูกตั้ง, UP → เคลียร์, ไม่มี incident ใหม่/ไม่มี Telegram. ไม่มี IP จริงใน diff
