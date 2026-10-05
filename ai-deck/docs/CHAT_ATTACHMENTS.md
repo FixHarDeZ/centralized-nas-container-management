@@ -4,6 +4,8 @@ Approved scope: picker, file drop and clipboard-image paste in the selected GitH
 
 Files live in the coding volume at `attachments/<owner>/<workspace>/<random-id>/<filename>`, outside Git worktrees. Each upload and submitted reference resolves the authenticated workspace; the client never supplies an absolute path. Filenames are flat, bounded and free of control characters; directory traversal and symlinks are rejected. Stream at most 20 MiB per file, up to 10 attachments per message, publish only complete uploads. Agent prompts carry validated local paths so Claude/Codex can read images or files with their tools. No new provider protocol or external service.
 
+The page sends `PUT /chat/attachments/<name without last extension>` with the extension in `X-Upload-Ext` (e.g. `.png`) and the body as `application/octet-stream`; `chat_attachments.receive` joins the raw segment and header, unquotes once, and stores the real filename, so the user only ever sees real names. Header shape is `.` + 1–15 chars with no dot, slash, backslash or control character, otherwise 400; no header = the URL name as-is. `ui/attachments.js` `DeskUploadTarget()` is the one splitter, shared with the Documents drawer upload.
+
 Removing a chip removes it from the pending message, not from disk. Uploaded files remain in the persistent coding volume for conversation references; no automatic Git staging or deletion. Pending attachments remain in the current page only; refreshing clears the pending list. A separate file browser, Documents attachments and retention management are outside this change.
 
 ## Implementation plan

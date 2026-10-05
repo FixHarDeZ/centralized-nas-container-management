@@ -614,7 +614,11 @@
   function putFile(file) {
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
-      xhr.open('PUT', 'upload/in/' + encodeURIComponent(file.name));
+      const target = window.DeskUploadTarget(file.name);
+      xhr.open('PUT', 'upload/in/' + target.path);
+      for (const [k, v] of Object.entries(target.headers)) xhr.setRequestHeader(k, v);
+      // Otherwise the browser labels the body from file.type (image/png …).
+      xhr.setRequestHeader('Content-Type', 'application/octet-stream');
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) setProgress(file.name, e.loaded / e.total);
       };
@@ -650,7 +654,8 @@
   async function removeFile(name) {
     if (DEMO) return;
     try {
-      await fetch('upload/' + dir + '/' + encodeURIComponent(name), { method: 'DELETE' });
+      const target = window.DeskUploadTarget(name);
+      await fetch('upload/' + dir + '/' + target.path, { method: 'DELETE', headers: target.headers });
     } catch (_) { /* listing refresh shows the truth */ }
     loadFiles();
   }

@@ -200,3 +200,28 @@ def test_coding_upload_is_packaged_and_bypasses_static_file_regex():
     assert 'client_max_body_size 20m;' in block
     assert 'proxy_set_header X-Desk-User $remote_user;' in block
     assert 'proxy_request_buffering off;' in block
+
+
+def test_extension_header_is_put_back(api):
+    code, body = api[0]('/chat/attachments/' + quote('รูป', safe=''), b'img',
+                        headers={'X-Upload-Ext': '.png'})
+    assert code == 200, body
+    item = json.loads(body)
+    assert item['name'] == 'รูป.png' and item['id'].endswith('/รูป.png')
+    assert [p.read_bytes() for p in (api[2] / 'attachments').rglob('รูป.png')] == [b'img']
+    code, body = api[0]('/chat/send', json.dumps({'text': '', 'attachments': [item['id']]}).encode(), 'POST')
+    assert code == 200, body
+    assert 'รูป.png' in api[1].calls[0]
+
+
+@pytest.mark.parametrize('ext', ['png', '.a/b', '.%2Fx', '.tar.gz', '..', '.%0Ax', '.', '.abcdefghijklmnop'])
+def test_bad_extension_header_is_rejected(api, ext):
+    code, _ = api[0]('/chat/attachments/photo', b'img', headers={'X-Upload-Ext': ext})
+    assert code == 400
+    assert not list((api[2] / 'attachments').rglob('photo*'))
+
+
+def test_double_encoded_extension_stays_literal(api):
+    code, body = api[0]('/chat/attachments/photo', b'img', headers={'X-Upload-Ext': '.%252F'})
+    assert code == 200, body
+    assert json.loads(body)['name'] == 'photo.%2F'

@@ -28,7 +28,8 @@ const pause = () => new Promise(r => setTimeout(r, 100));
       if (options.method === 'PUT') {
         if (releaseUpload) await new Promise(resolve => { releaseUpload = resolve; });
         if (rejectUpload) return {ok:false, status:413, text:async () => 'Maximum file size is 20 MiB'};
-        const name = decodeURIComponent(path.split('?')[0].split('/').pop());
+        const ext = options.headers['X-Upload-Ext'];
+        const name = decodeURIComponent(path.split('?')[0].split('/').pop()) + (ext ? decodeURIComponent(ext) : '');
         return {ok:true, json:async () => ({id:String(++uploadId).padStart(32, '0') + '/' + name, name, size:options.body.size})};
       }
       if (networkFailure) throw Error('offline');
@@ -43,7 +44,8 @@ const pause = () => new Promise(r => setTimeout(r, 100));
     choose([file('notes.txt')]); await pause();
     check(list.textContent.includes('notes.txt'), 'picker shows ready file');
     const upload = calls.find(c => c.options.method === 'PUT');
-    check(upload.path.includes('code/chat/attachments/notes.txt') && upload.path.includes('workspace=' + workspace), 'uploads target selected workspace');
+    check(upload.path.includes('code/chat/attachments/notes?') && upload.path.includes('workspace=' + workspace), 'uploads target selected workspace');
+    check(upload.options.headers['X-Upload-Ext'] === '.txt' && upload.options.headers['Content-Type'] === 'application/octet-stream', 'extension travels in a header, not the URL');
     const data = new win.DataTransfer(); data.items.add(file('clipboard.png', 'image/png'));
     const paste = new win.ClipboardEvent('paste', {clipboardData:data, bubbles:true, cancelable:true});
     input.dispatchEvent(paste); await pause();

@@ -1,6 +1,21 @@
 /* Browser file objects stay here; the chat request carries only server-issued IDs. */
 (function () {
   'use strict';
+  // The extension travels in X-Upload-Ext, not the URL; upload.py and
+  // chat_attachments.py put it back, so the file lands under its real name
+  // and nothing in between can route or filter on it. Same shape rule as
+  // their EXT; anything else (no dot, leading dot, odd extension) goes as
+  // the whole name. Shared with the drawer in app.js.
+  window.DeskUploadTarget = function (name) {
+    const dot = name.lastIndexOf('.');
+    if (dot <= 0 || !/^\.[^./\\\x00-\x1f\x7f]{1,15}$/.test(name.slice(dot))) {
+      return {path: encodeURIComponent(name), headers: {}};
+    }
+    return {
+      path: encodeURIComponent(name.slice(0, dot)),
+      headers: {'X-Upload-Ext': encodeURIComponent(name.slice(dot))},
+    };
+  };
   window.DeskAttachments = function ({enabled, url, note}) {
     const button = document.getElementById('chat-attach');
     const picker = document.getElementById('chat-files');
@@ -52,9 +67,10 @@
     async function upload(item) {
       item.error = ''; item.controller = new AbortController(); render();
       try {
-        const response = await fetch(url('chat/attachments/' + encodeURIComponent(item.name)), {
+        const target = window.DeskUploadTarget(item.name);
+        const response = await fetch(url('chat/attachments/' + target.path), {
           method: 'PUT', body: item.file, signal: item.controller.signal,
-          headers: {'Content-Type': 'application/octet-stream'},
+          headers: {...target.headers, 'Content-Type': 'application/octet-stream'},
         });
         if (!response.ok) {
           // Proxy errors may be HTML; do not put a proxy page in a file chip.

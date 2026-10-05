@@ -107,6 +107,7 @@ def target_for(user: str) -> str:
 DIRS = {"in": os.path.join(WORK_DIR, "in"), "out": os.path.join(WORK_DIR, "out")}
 
 SAFE = re.compile(r"^[^/\\\x00]{1,200}$")
+EXT = re.compile(r"^\.[^./\\\x00-\x1f\x7f]{1,15}$")  # X-Upload-Ext, already unquoted
 UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 # What counts as "the pane is free". Anything else — node (Claude Code or
@@ -362,7 +363,16 @@ class Handler(BaseHTTPRequestHandler):
             return None, None
         if parts[3] == "":
             return folder, None
-        name = safe_name(parts[3])
+        # The page sends the name without its extension and the extension in
+        # X-Upload-Ext, so nothing between the browser and here can route or
+        # filter on it (nginx's static-asset regex ends in png/js/css/svg).
+        # Joined raw and unquoted once by safe_name — validating the pieces
+        # separately would decode twice and turn %252F into a separator.
+        ext = self.headers.get("X-Upload-Ext")
+        if ext is not None and not (ext.startswith(".") and EXT.match(unquote(ext))):
+            self._reply(400, "bad extension")
+            return None, None
+        name = safe_name(parts[3] + (ext or ""))
         if not name:
             self._reply(400, "bad name")
             return None, None

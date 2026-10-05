@@ -16,6 +16,7 @@ MAX_BYTES = 20 * 1024 * 1024
 MAX_FILES = 10
 _ID = re.compile(r'^[0-9a-f]{32}$')
 _OWNER = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$')
+_EXT = re.compile(r'^\.[^./\\\x00-\x1f\x7f]{1,15}$')  # X-Upload-Ext, same rule as upload.py
 
 
 def filename(name):
@@ -68,7 +69,12 @@ def receive(handler):
         raise WorkspaceError('Coding attachments are not enabled', 404)
     root, parts = scope(handler)
     raw = urlparse(handler.path).path.removeprefix('/chat/attachments/')
-    name = filename(unquote(raw, errors='strict'))
+    # The page sends the extension in X-Upload-Ext (see attachments.js).
+    # Joined raw and unquoted once, so %252F stays literal and never a separator.
+    ext = handler.headers.get('X-Upload-Ext')
+    if ext is not None and not (ext.startswith('.') and _EXT.fullmatch(unquote(ext, errors='strict'))):
+        raise WorkspaceError('Invalid file extension', 400)
+    name = filename(unquote(raw + (ext or ''), errors='strict'))
     if handler.headers.get('Transfer-Encoding'):
         raise WorkspaceError('Content-Length required', 400)
     try:

@@ -93,7 +93,8 @@ phone ──HTTPS :15072 (DSM RP)──▶ ai-deck-nginx :5072
 
 - **`upload.py`** — stdlib HTTP server in the desk container (port 7682, only nginx can reach it). Files, for the drawer:
   - `PUT /upload/in/<name>` streams the body into `/work/in/<name>` via a unique hidden temporary file + atomic rename after the entire body arrives, so Claude never reads a half-written source. `out/` refuses uploads (403).
-  - `DELETE /upload/<dir>/<name>` removes one file from `in/` or `out/`.
+  - The drawer strips the last extension off `<name>` and sends it in an `X-Upload-Ext` header, body as `application/octet-stream` (e.g. `PUT /upload/in/photo` + `X-Upload-Ext: .png`); upload.py joins them back, so the file lands as `photo.png` and the user never sees the split. Header shape is `.` + 1–15 chars with no dot, slash, backslash or control character, otherwise 400; no header = the URL name as-is (an old cached page still works). nginx's `/upload/` is `^~` because a plain prefix loses to the static-asset regex — before that, PUT/DELETE of `in/*.png|js|css|svg` was answered 405 by nginx's static root.
+  - `DELETE /upload/<dir>/<name>` removes one file from `in/` or `out/` (same `X-Upload-Ext` split).
   - `DELETE /upload/<dir>/` clears the folder — top-level plain files only, so subdirectories and Synology's `@eaDir` survive.
 
   Only `in` and `out` are routable, names are one flat segment (no `..`, slashes, or dot-files), and the raw path is split before unquoting so an encoded separator is rejected here rather than becoming a directory step. Size cap is nginx's `client_max_body_size 300m` on `/upload/` (DSM's reverse proxy has its own too).
