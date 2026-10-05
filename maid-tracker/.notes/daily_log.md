@@ -1,5 +1,15 @@
 # Daily Log
 
+## 2026-10-05 — UI redesign + เงินพิเศษ + Payment Summary
+
+- ปรับหน้าแรก, navbar, หน้ารายคน และการ์ดทางลัดเป็นโทนเขียว/พื้นอุ่น พร้อม dark theme และหน้า `#/employee/:id/history` ที่แสดงยอดสะสมและรายการจ่ายรายเดือน (เงินเดือน/รายวัน/เงินพิเศษ) มี TH/EN
+- เพิ่มตาราง `special_payments` และ API ดู/เพิ่ม/แก้/ลบ; บังคับวันที่ถูกต้อง ยอดบวก เหตุผลไม่ว่าง; UI ใส่วันที่ จำนวนเงิน เหตุผล และผู้จ่ายได้ เงินพิเศษไม่กระทบสูตรเงินเดือนหรือวันลา และไม่ส่ง LINE
+- เพิ่ม `salary_payments.amount` เพื่อ snapshot ยอดสุทธิเมื่อ mark paid (ทั้ง UI และ LINE webhook); unmark ล้าง snapshot. รายการเก่า `amount=NULL` คำนวณย้อนหลังจากข้อมูลปัจจุบันและแสดง `estimated` ชัดเจนในหน้า Summary
+- Verification: `pytest -q` ใน `maid-tracker/` ผ่าน 63 tests (รวมเคส migrate DB เก่า); `node --check static/app.js`, Python AST parse, `git diff --check` ผ่าน; ตรวจหน้าแรก/หน้ารายคน/Payment Summary จริงผ่าน Chrome local preview และลองเพิ่ม/แก้ไขเงินพิเศษใน DB ตัวอย่างแล้วยอดรวมเปลี่ยนตาม
+- Commit/deploy: feature commit `64bef8c` push เข้า `origin/main` แล้ว; สร้าง backup ก่อน deploy ที่ `/data/backups/maid-20261005-171442.db.gz`; `./scripts/deploy.sh -s maid-tracker -y` สำเร็จ. ตรวจหลัง deploy: `maid-tracker` healthy, nginx running, schema มี `salary_payments.amount` และ `special_payments`, API รายชื่อ (3 คน) และ payment-history (3 เดือนของรายการที่ตรวจ) ตอบได้. ค้าง: ยอดเงินเดือนเก่าที่ไม่มี amount snapshot อาจต่างจากยอดที่จ่ายจริง หากเงินเดือนหรือเงื่อนไขในอดีตเคยเปลี่ยน; UI แสดงป้ายประมาณย้อนหลัง
+
+---
+
 ## 2026-07-13 — จ่ายค้างทั้งหมดทีเดียว + noti ยินดีผ่านโปร + refactor + UI polish
 
 **4 งาน:**

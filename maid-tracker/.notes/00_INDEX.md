@@ -1,6 +1,8 @@
 # maid-tracker — Index (Memory File)
 
-อัปเดตล่าสุด: 2026-07-13
+อัปเดตล่าสุด: 2026-10-05
+
+Release ล่าสุด: `64bef8c` บน `origin/main`; deploy NAS 2026-10-05 ด้วย `scripts/deploy.sh -s maid-tracker -y` แล้ว (`maid-tracker` healthy). ก่อน deploy สำรอง DB ที่ `/data/backups/maid-20261005-171442.db.gz`. Payment Summary รุ่นนี้อ่านยอดเงินเดือนเก่าที่ไม่มี snapshot เป็นค่า estimate จากข้อมูลปัจจุบันและติดป้ายใน UI.
 
 ---
 
@@ -81,7 +83,8 @@ salary_payments (
   paid_at TEXT,                -- NULL = not yet paid
   leave_deduction_days REAL DEFAULT 0,
   slip_path TEXT,              -- ไฟล์ slip โอนเงิน (NULL = ไม่มี)
-  paid_by TEXT                 -- ผู้จ่ายงวดนี้ (ฟิก/ปุ๊ก) NULL = ยังไม่จ่าย
+  paid_by TEXT,                -- ผู้จ่ายงวดนี้ (ฟิก/ปุ๊ก) NULL = ยังไม่จ่าย
+  amount REAL                  -- snapshot ยอดสุทธิตอน mark paid; NULL ในรายการเก่า
 )
 
 daily_payments (                -- จ่ายรายวันช่วง probation (per work day)
@@ -91,6 +94,11 @@ daily_payments (                -- จ่ายรายวันช่วง pr
   slip_path TEXT,
   paid_by TEXT,                -- ผู้จ่ายวันนี้ (ฟิก/ปุ๊ก)
   UNIQUE(employee_id, work_date)
+)
+
+special_payments (              -- เงินพิเศษ ไม่เกี่ยวกับเงินเดือน/วันลา
+  id, employee_id, paid_on TEXT, amount REAL,
+  reason TEXT, paid_by TEXT, created_at TEXT
 )
 
 employee_documents (            -- รูปบัตร/passport/เอกสารอื่น (หลายรูป/คน)
@@ -241,6 +249,9 @@ final = base_salary_last_month + (cumulative_balance × daily_rate)
 | GET | `/api/employees/{id}/overall` | ภาพรวมทั้งหมด |
 | GET | `/api/employees/{id}/leave-balance` | ยอดวันหยุดสะสม (monthly mode) |
 | GET | `/api/employees/{id}/payments?year=&month=` | ข้อมูลจ่ายเงิน |
+| GET | `/api/employees/{id}/payment-history` | ยอดจ่ายจริงรวมและรายเดือน: salary + daily + special; salary เก่า `amount=NULL` คำนวณย้อนหลังพร้อม `estimated=true` |
+| GET/POST | `/api/employees/{id}/special-payments` | ดู/เพิ่มเงินพิเศษ (วันที่ จำนวนเงิน เหตุผล ผู้จ่าย) |
+| PUT/DELETE | `/api/employees/{id}/special-payments/{payment_id}` | แก้ไข/ลบเงินพิเศษ |
 | POST | `/api/employees/{id}/payments/{period}/toggle?year=&month=&paid_by=` | บันทึก/ยกเลิกจ่าย (`paid_by`=ผู้จ่าย ฟิก/ปุ๊ก, clear ตอน unmark) |
 | POST | `/api/employees/{id}/pass-probation` | ผ่านโปร (body `pass_date` เท่านั้น) → set `monthly_start_date` = วันที่ 1 ของเดือนถัดไป (หรือ pass_date ถ้าเป็นวันที่ 1) + `first_month_leave_days=monthly_leave_days`; ยังคง `employment_status='probation'` จนกว่า anchor มาถึง (ดู `_promote_pending`). **ส่ง LINE แสดงความยินดี** (`notify_pass_probation`): ไทย + บล็อกภาษาแม่บ้าน (`i18n.pass_probation_block`, dict แยก `_PASS_PROBATION` เพราะมี sub-line รอบจ่าย/วันหยุด) แจ้งวันเริ่มเงินเดือน, เงินเดือน, รอบจ่าย, วันหยุด + tail "ยังจ่ายรายวันถึงสิ้นเดือน" เมื่อกดกลางเดือน |
 | DELETE | `/api/employees/{id}/pass-probation` | ยกเลิกผ่านโปร (กลับ probation) |
@@ -274,6 +285,7 @@ final = base_salary_last_month + (cumulative_balance × daily_rate)
 | `#/employee/:id/leaves?y=&m=` | ปฏิทิน + รายการลา |
 | `#/employee/:id/summary?y=&m=` | สรุปรายเดือน |
 | `#/employee/:id/payments?y=&m=` | จ่ายเงินเดือน |
+| `#/employee/:id/history` | สรุปยอดจ่ายตลอดการจ้าง + ฟอร์มเงินพิเศษ |
 | `#/employee/:id/attendance?y=&m=` | ปฏิทิน standalone |
 | `#/reminders` | แจ้งเตือนงานประจำ |
 
