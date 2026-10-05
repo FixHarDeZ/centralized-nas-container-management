@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import io
 import json
+import math
 import os
 import secrets
 import sqlite3
@@ -384,6 +385,10 @@ def init_db():
         c.execute("ALTER TABLE salary_payments ADD COLUMN paid_by TEXT")
     except Exception:
         pass
+    try:
+        c.execute("ALTER TABLE salary_payments ADD COLUMN amount REAL")
+    except sqlite3.OperationalError:
+        pass
     # New tables
     c.executescript("""
         CREATE TABLE IF NOT EXISTS daily_payments (
@@ -404,6 +409,18 @@ def init_db():
             uploaded_at TEXT NOT NULL,
             FOREIGN KEY(employee_id) REFERENCES employees(id)
         );
+        CREATE TABLE IF NOT EXISTS special_payments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            employee_id INTEGER NOT NULL,
+            paid_on TEXT NOT NULL,
+            amount REAL NOT NULL CHECK(amount > 0),
+            reason TEXT NOT NULL,
+            paid_by TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY(employee_id) REFERENCES employees(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_special_payments_employee_date
+            ON special_payments(employee_id, paid_on);
     """)
     # Payer on daily payments + custom label on 'other' documents (post-CREATE).
     try:
@@ -620,6 +637,31 @@ class ReminderCreate(BaseModel):
     send_time: str = "07:00"
 
 
+class SpecialPaymentInput(BaseModel):
+    paid_on: str
+    amount: float
+    reason: str
+    paid_by: str | None = None
+
+
+def _validate_special_payment(payment: SpecialPaymentInput) -> tuple[str, float, str, str | None]:
+    try:
+        paid_on = date.fromisoformat(payment.paid_on).isoformat()
+    except ValueError:
+        raise HTTPException(400, "Invalid payment date") from None
+    if len(payment.paid_on) != 10 or paid_on != payment.paid_on:
+        raise HTTPException(400, "Invalid payment date")
+    if not math.isfinite(payment.amount) or payment.amount <= 0 or round(payment.amount, 2) <= 0:
+        raise HTTPException(400, "Amount must be greater than zero")
+    reason = payment.reason.strip()
+    if not reason or len(reason) > 200:
+        raise HTTPException(400, "Reason must be 1-200 characters")
+    payer = (payment.paid_by or "").strip() or None
+    if payer and len(payer) > 40:
+        raise HTTPException(400, "Payer must be at most 40 characters")
+    return paid_on, round(payment.amount, 2), reason, payer
+
+
 # ---------- Employee endpoints ----------
 
 
@@ -817,6 +859,7 @@ def delete_employee(emp_id: int):
     conn.execute("DELETE FROM attendance WHERE employee_id=?", (emp_id,))
     conn.execute("DELETE FROM salary_payments WHERE employee_id=?", (emp_id,))
     conn.execute("DELETE FROM daily_payments WHERE employee_id=?", (emp_id,))
+    conn.execute("DELETE FROM special_payments WHERE employee_id=?", (emp_id,))
     conn.execute("DELETE FROM employee_documents WHERE employee_id=?", (emp_id,))
     conn.execute("DELETE FROM employees WHERE id=?", (emp_id,))
     conn.commit()
@@ -1162,12 +1205,13 @@ def get_payments(emp_id: int, year: int, month: int):
 
     # Paid status for this month
     paid_rows = conn.execute(
-        "SELECT period, paid_at, slip_path, paid_by FROM salary_payments WHERE employee_id=? AND year=? AND month=?",
+        "SELECT period, paid_at, slip_path, paid_by, amount FROM salary_payments WHERE employee_id=? AND year=? AND month=?",
         (emp_id, year, month),
     ).fetchall()
     paid_map = {r["period"]: r["paid_at"] for r in paid_rows}
     slip_map = {r["period"]: r["slip_path"] for r in paid_rows}
     payer_map = {r["period"]: r["paid_by"] for r in paid_rows}
+    amount_map = {r["period"]: r["amount"] for r in paid_rows}
     conn.close()
 
     schedule = emp.get("payment_schedule") or "biweekly"
@@ -1180,7 +1224,7 @@ def get_payments(emp_id: int, year: int, month: int):
             {
                 "period": 1,
                 "due_date": mid_day.isoformat(),
-                "amount": p1_amount,
+                "amount": amount_map.get(1) if paid_map.get(1) and amount_map.get(1) is not None else p1_amount,
                 "leave_deduction_days": 0.0,
                 "deduction_amount": 0.0,
                 "paid": bool(paid_map.get(1)),
@@ -1203,7 +1247,7 @@ def get_payments(emp_id: int, year: int, month: int):
             {
                 "period": 2,
                 "due_date": period2_due.isoformat(),
-                "amount": p2_amount,
+                "amount": amount_map.get(2) if paid_map.get(2) and amount_map.get(2) is not None else p2_amount,
                 "leave_deduction_days": round(p2_ded_days, 2),
                 "deduction_amount": round(p2_ded_amount, 2),
                 "paid": bool(paid_map.get(2)),
@@ -1353,7 +1397,7 @@ def toggle_payment(emp_id: int, period: int, year: int, month: int, paid_by: str
     payer = (paid_by or "").strip()[:40] or None
     if existing and existing["paid_at"]:
         conn.execute(
-            "UPDATE salary_payments SET paid_at=NULL, leave_deduction_days=0, paid_by=NULL "
+            "UPDATE salary_payments SET paid_at=NULL, leave_deduction_days=0, paid_by=NULL, amount=NULL "
             "WHERE employee_id=? AND year=? AND month=? AND period=?",
             (emp_id, year, month, period),
         )
@@ -1361,11 +1405,12 @@ def toggle_payment(emp_id: int, period: int, year: int, month: int, paid_by: str
     else:
         now = datetime.now().strftime("%Y-%m-%d %H:%M")
         conn.execute(
-            "INSERT INTO salary_payments (employee_id, year, month, period, paid_at, leave_deduction_days, paid_by) "
-            "VALUES (?,?,?,?,?,?,?) "
+            "INSERT INTO salary_payments (employee_id, year, month, period, paid_at, leave_deduction_days, paid_by, amount) "
+            "VALUES (?,?,?,?,?,?,?,?) "
             "ON CONFLICT(employee_id, year, month, period) DO UPDATE SET "
-            "paid_at=excluded.paid_at, leave_deduction_days=excluded.leave_deduction_days, paid_by=excluded.paid_by",
-            (emp_id, year, month, period, now, round(toggle_deduction_days, 2), payer),
+            "paid_at=excluded.paid_at, leave_deduction_days=excluded.leave_deduction_days, "
+            "paid_by=excluded.paid_by, amount=excluded.amount",
+            (emp_id, year, month, period, now, round(toggle_deduction_days, 2), payer, round(amount, 2)),
         )
         paid_at = now
 
@@ -1391,6 +1436,127 @@ def toggle_payment(emp_id: int, period: int, year: int, month: int, paid_by: str
         )
 
     return {"paid": bool(paid_at), "paid_at": paid_at}
+
+
+@app.get("/api/employees/{emp_id}/special-payments")
+def list_special_payments(emp_id: int):
+    conn = get_db()
+    _fetch_emp(conn, emp_id)
+    rows = conn.execute(
+        "SELECT id, paid_on, amount, reason, paid_by FROM special_payments "
+        "WHERE employee_id=? ORDER BY paid_on DESC, id DESC", (emp_id,),
+    ).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+@app.post("/api/employees/{emp_id}/special-payments", status_code=201)
+def create_special_payment(emp_id: int, payment: SpecialPaymentInput):
+    values = _validate_special_payment(payment)
+    conn = get_db()
+    _fetch_emp(conn, emp_id)
+    cursor = conn.execute(
+        "INSERT INTO special_payments (employee_id, paid_on, amount, reason, paid_by) "
+        "VALUES (?,?,?,?,?)", (emp_id, *values),
+    )
+    conn.commit()
+    new_id = cursor.lastrowid
+    conn.close()
+    return {"id": new_id}
+
+
+@app.put("/api/employees/{emp_id}/special-payments/{payment_id}")
+def update_special_payment(emp_id: int, payment_id: int, payment: SpecialPaymentInput):
+    values = _validate_special_payment(payment)
+    conn = get_db()
+    _fetch_emp(conn, emp_id)
+    cursor = conn.execute(
+        "UPDATE special_payments SET paid_on=?, amount=?, reason=?, paid_by=? "
+        "WHERE id=? AND employee_id=?", (*values, payment_id, emp_id),
+    )
+    if not cursor.rowcount:
+        conn.close()
+        raise HTTPException(404, "Special payment not found")
+    conn.commit()
+    conn.close()
+    return {"id": payment_id}
+
+
+@app.delete("/api/employees/{emp_id}/special-payments/{payment_id}")
+def delete_special_payment(emp_id: int, payment_id: int):
+    conn = get_db()
+    _fetch_emp(conn, emp_id)
+    cursor = conn.execute(
+        "DELETE FROM special_payments WHERE id=? AND employee_id=?", (payment_id, emp_id),
+    )
+    if not cursor.rowcount:
+        conn.close()
+        raise HTTPException(404, "Special payment not found")
+    conn.commit()
+    conn.close()
+    return {"message": "deleted"}
+
+
+@app.get("/api/employees/{emp_id}/payment-history")
+def get_payment_history(emp_id: int):
+    """Paid-only ledger grouped by the salary/work month or special payment date."""
+    conn = get_db()
+    emp = _fetch_emp(conn, emp_id)
+    salary_rows = conn.execute(
+        "SELECT year, month, period, paid_at, paid_by, amount FROM salary_payments "
+        "WHERE employee_id=? AND paid_at IS NOT NULL ORDER BY year DESC, month DESC, period DESC",
+        (emp_id,),
+    ).fetchall()
+    daily_rows = conn.execute(
+        "SELECT work_date, amount, paid_at, paid_by FROM daily_payments "
+        "WHERE employee_id=? AND paid_at IS NOT NULL ORDER BY work_date DESC", (emp_id,),
+    ).fetchall()
+    special_rows = conn.execute(
+        "SELECT id, paid_on, amount, reason, paid_by FROM special_payments "
+        "WHERE employee_id=? ORDER BY paid_on DESC, id DESC", (emp_id,),
+    ).fetchall()
+    conn.close()
+
+    months: dict[tuple[int, int], dict] = {}
+    totals = {"salary": 0.0, "daily": 0.0, "special": 0.0, "all": 0.0}
+
+    def add(year: int, month: int, item: dict):
+        key = (year, month)
+        group = months.setdefault(key, {
+            "year": year, "month": month,
+            "salary": 0.0, "daily": 0.0, "special": 0.0, "total": 0.0,
+            "items": [],
+        })
+        amount = item["amount"]
+        kind = item["type"]
+        group[kind] = round(group[kind] + amount, 2)
+        group["total"] = round(group["total"] + amount, 2)
+        group["items"].append(item)
+        totals[kind] = round(totals[kind] + amount, 2)
+        totals["all"] = round(totals["all"] + amount, 2)
+
+    for row in salary_rows:
+        estimated = row["amount"] is None
+        amount = (_compute_period_amount(emp, row["year"], row["month"], row["period"])[0]
+                  if estimated else row["amount"])
+        add(row["year"], row["month"], {
+            "type": "salary", "period": row["period"], "amount": round(amount, 2),
+            "paid_at": row["paid_at"], "paid_by": row["paid_by"], "estimated": estimated,
+        })
+    for row in daily_rows:
+        day = date.fromisoformat(row["work_date"])
+        add(day.year, day.month, {
+            "type": "daily", "work_date": row["work_date"], "amount": round(row["amount"], 2),
+            "paid_at": row["paid_at"], "paid_by": row["paid_by"],
+        })
+    for row in special_rows:
+        day = date.fromisoformat(row["paid_on"])
+        add(day.year, day.month, {
+            "type": "special", "id": row["id"], "paid_on": row["paid_on"],
+            "amount": round(row["amount"], 2), "reason": row["reason"],
+            "paid_by": row["paid_by"],
+        })
+    return {"totals": totals, "months": [months[key] for key in sorted(months, reverse=True)]}
 
 
 @app.get("/api/employees/{emp_id}/daily-payments")
@@ -2315,26 +2481,23 @@ async def line_webhook(request: Request):
                     )
                     continue
 
+                amount, ded_days, ded_amount = _compute_period_amount(
+                    emp, today.year, today.month, period,
+                )
+
                 if existing:
                     conn.execute(
-                        "UPDATE salary_payments SET paid_at=? "
+                        "UPDATE salary_payments SET paid_at=?, amount=? "
                         "WHERE employee_id=? AND year=? AND month=? AND period=?",
-                        (paid_at, emp["id"], today.year, today.month, period),
+                        (paid_at, round(amount, 2), emp["id"], today.year, today.month, period),
                     )
                 else:
                     conn.execute(
-                        "INSERT INTO salary_payments (employee_id, year, month, period, paid_at) "
-                        "VALUES (?,?,?,?,?)",
-                        (emp["id"], today.year, today.month, period, paid_at),
+                        "INSERT INTO salary_payments (employee_id, year, month, period, paid_at, amount) "
+                        "VALUES (?,?,?,?,?,?)",
+                        (emp["id"], today.year, today.month, period, paid_at, round(amount, 2)),
                     )
                 conn.commit()
-
-                amount, ded_days, ded_amount = _compute_period_amount(
-                    emp,
-                    today.year,
-                    today.month,
-                    period,
-                )
                 # Save deduction info alongside the payment record
                 conn.execute(
                     "UPDATE salary_payments SET leave_deduction_days=? "

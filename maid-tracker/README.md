@@ -4,8 +4,6 @@
 
 Household staff attendance & salary tracking system — Single-Page Application running on Docker.
 
-![Maid Tracker](../screenshots/maid-tracker.png)
-
 **Local URL:** `http://<NAS_IP>:5055` (via nginx sidecar with Authelia forward-auth — direct container access no longer available)
 **External URL:** `https://<NAS_HOST>:15055` (via Synology Reverse Proxy)
 
@@ -61,6 +59,12 @@ TLS is terminated by Synology Reverse Proxy — the nginx sidecar handles Authel
 - **Period 2 shows a deduction breakdown** when leave exceeds the max carry limit (biweekly only)
 - Mark paid / unmark with timestamp
 - Alert showing pending unpaid periods
+
+### 🎁 Extra Payments & Lifetime Payment Summary
+- Open **Payment Summary** from a staff profile or salary payment page (`#/employee/:id/history`) to see the total actually marked paid, split into salary, daily wages, and extra payments.
+- Each month shows its total and individual salary periods with payment dates, daily wages, and extra payments with their dates and reasons. Salary and daily wages are grouped by the month they belong to; extra payments are grouped by their entered payment date.
+- Add, edit, or delete an extra payment with a date, amount, reason, and optional payer. These entries do not affect salary or leave calculations and do not send a LINE notification.
+- Newly paid salary periods store an amount snapshot. Older paid periods did not store the amount, so the summary recalculates those rows from current employee details and labels them as estimates.
 
 ### 🧪 Probation Mode *(daily pay for new staff)*
 - Start a new employee in **probation** (`employment_status='probation'`) — pay is **daily** at a fixed `probation_daily_rate` set at creation
@@ -486,6 +490,12 @@ reminders (
 - กดบันทึกว่าจ่ายแล้ว / ยกเลิก พร้อมแสดงเวลาที่จ่าย
 - แสดง alert แจ้งรอบที่ยังค้างจ่าย — ถ้าค้างมากกว่า 1 รอบ มีปุ่ม **"จ่ายทุกรอบที่ค้าง"** กดครั้งเดียวจ่ายครบทุกรอบ (เลือกผู้จ่ายได้)
 - **จ่ายค้างรายวันทั้งหมด** (ช่วงทดลองงาน): ปุ่ม "จ่ายค้างทั้งหมด" ท้ายรายการจ่ายรายวัน — `POST /api/employees/{id}/daily-payments/pay-all?paid_by=` จ่ายทุกวันที่ค้างทั้งช่วงโปร (รวมเดือนก่อนหน้า, ข้ามวันขาด/วันที่จ่ายแล้ว) + แจ้ง LINE สรุปจำนวนวันและยอดรวมครั้งเดียว
+
+### 🎁 เงินพิเศษและสรุปยอดจ่ายตลอดการจ้าง
+- เข้า **สรุปการจ่ายเงิน** จากหน้าแม่บ้านหรือหน้าจ่ายเงินเดือน (`#/employee/:id/history`) เพื่อดูยอดที่บันทึกว่าจ่ายแล้วทั้งหมด แยกเงินเดือน ค่าจ้างรายวัน และเงินพิเศษ
+- แสดงยอดรวมแต่ละเดือน พร้อมงวดเงินเดือนและวันที่จ่าย ค่าจ้างรายวัน และเงินพิเศษพร้อมวันที่และเหตุผล โดยเงินเดือน/รายวันจัดตามเดือนของงวดหรือวันที่ทำงาน ส่วนเงินพิเศษจัดตามวันที่กรอกว่าให้
+- เพิ่ม แก้ไข หรือลบเงินพิเศษได้ กรอกวันที่ จำนวนเงิน เหตุผล และผู้จ่าย (ไม่บังคับ) รายการนี้ไม่เปลี่ยนการคำนวณเงินเดือน/วันลา และไม่ส่ง LINE
+- การจ่ายเงินเดือนใหม่เก็บยอด ณ วันที่กดจ่ายไว้ ส่วนรายการเก่าที่ไม่มีข้อมูลยอดจริงจะคำนวณจากข้อมูลแม่บ้านปัจจุบันและติดป้ายว่าเป็นยอดประมาณย้อนหลัง
 
 ### 🧪 โหมดทดลองงาน (จ่ายรายวัน)
 - แม่บ้านใหม่เริ่มที่ `employment_status='probation'` — จ่ายรายวันตามอัตรา `probation_daily_rate`; ลา/ชดเชย/วันหยุดปิดหมดระหว่างโปร

@@ -12,6 +12,7 @@
 const TRANSLATIONS = {
   th: {
     appTitle: "ระบบบันทึกการทำงานแม่บ้าน",
+    navOverview: "ภาพรวม", navReminders: "การแจ้งเตือน",
     langBtn: "EN",
     months: ["","มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน",
              "กรกฎาคม","สิงหาคม","กันยายน","ตุลาคม","พฤศจิกายน","ธันวาคม"],
@@ -30,6 +31,18 @@ const TRANSLATIONS = {
     emptyList: "ยังไม่มีแม่บ้านในระบบ กดปุ่มด้านบนเพื่อเพิ่ม",
     resignedBadge: "ลาออกแล้ว", labelStarted: "เริ่มงาน:", labelResigned: "ลาออก:",
     labelSalary: "เงินเดือน",
+    historyTitle: "สรุปการจ่ายเงิน", historyEyebrow: "PAYMENT OVERVIEW",
+    historySubtitle: "ยอดที่จ่ายจริงตลอดการจ้าง แยกตามเดือนและประเภทเงิน",
+    historyTotal: "จ่ายทั้งหมด", historySalary: "เงินเดือน", historyDaily: "ค่าจ้างรายวัน",
+    historySpecial: "เงินพิเศษ", historyMonthTotal: "รวมเดือนนี้",
+    historyEmpty: "ยังไม่มีประวัติการจ่ายเงิน", historyPeriod: (n) => `เงินเดือนรอบ ${n}`,
+    historyDailyDate: "ค่าจ้างวันที่", historyPaidAt: "จ่ายเมื่อ",
+    historyLegacyEstimate: "ยอดคำนวณย้อนหลังจากข้อมูลปัจจุบัน",
+    specialAdd: "บันทึกเงินพิเศษ", specialEdit: "แก้ไขเงินพิเศษ",
+    specialReason: "เหตุผล", specialReasonHint: "เช่น โบนัส เงินปีใหม่ หรือเงินช่วยเหลือ",
+    specialAmount: "จำนวนเงิน", specialDate: "วันที่ให้", specialSave: "บันทึกเงินพิเศษ",
+    specialUpdate: "บันทึกการแก้ไข", specialDelete: "ลบรายการ",
+    specialDeleteConfirm: "ลบรายการเงินพิเศษนี้?", specialSaved: "บันทึกเงินพิเศษแล้ว",
     // Employee form
     formTitleNew: "เพิ่มแม่บ้านใหม่", formTitleEdit: "แก้ไขข้อมูลแม่บ้าน",
     fieldName: "ชื่อ", fieldAge: "อายุ", fieldBirthDate: "วันเกิด", fieldNationality: "สัญชาติ",
@@ -219,6 +232,7 @@ const TRANSLATIONS = {
   },
   en: {
     appTitle: "Household Staff Tracker",
+    navOverview: "Overview", navReminders: "Reminders",
     langBtn: "TH",
     months: ["","January","February","March","April","May","June",
              "July","August","September","October","November","December"],
@@ -237,6 +251,18 @@ const TRANSLATIONS = {
     emptyList: "No staff in the system. Click above to add.",
     resignedBadge: "Resigned", labelStarted: "Started:", labelResigned: "Resigned:",
     labelSalary: "Salary",
+    historyTitle: "Payment summary", historyEyebrow: "PAYMENT OVERVIEW",
+    historySubtitle: "All payments made, grouped by month and payment type",
+    historyTotal: "Total paid", historySalary: "Salary", historyDaily: "Daily wages",
+    historySpecial: "Extra payments", historyMonthTotal: "Month total",
+    historyEmpty: "No payment history yet", historyPeriod: (n) => `Salary period ${n}`,
+    historyDailyDate: "Daily wage for", historyPaidAt: "Paid on",
+    historyLegacyEstimate: "Recalculated from current details; original amount was not recorded",
+    specialAdd: "Add extra payment", specialEdit: "Edit extra payment",
+    specialReason: "Reason", specialReasonHint: "e.g. bonus, New Year gift, support",
+    specialAmount: "Amount", specialDate: "Date paid", specialSave: "Save extra payment",
+    specialUpdate: "Save changes", specialDelete: "Delete entry",
+    specialDeleteConfirm: "Delete this extra payment?", specialSaved: "Extra payment saved",
     // Employee form
     formTitleNew: "Add New Staff", formTitleEdit: "Edit Staff Info",
     fieldName: "Full Name", fieldAge: "Age", fieldBirthDate: "Date of Birth", fieldNationality: "Nationality",
@@ -460,11 +486,17 @@ function dayLabel(status, halfDay, isProbation) {
 function switchLang() {
   currentLang = currentLang === "th" ? "en" : "th";
   localStorage.setItem("maidTrackerLang", currentLang);
-  document.getElementById("langToggle").textContent = t("langBtn");
-  const brand = document.getElementById("navBrand");
-  if (brand) brand.innerHTML = `<i class="bi bi-house-heart-fill me-2"></i>${t("appTitle")}`;
-  document.title = t("appTitle");
+  applyChromeLanguage();
   render();
+}
+
+function applyChromeLanguage() {
+  document.getElementById("langToggle").textContent = t("langBtn");
+  const brandText = document.getElementById("brandText");
+  if (brandText) brandText.textContent = t("appTitle");
+  document.getElementById("navOverview").textContent = t("navOverview");
+  document.getElementById("navReminders").textContent = t("navReminders");
+  document.title = t("appTitle");
 }
 
 // ─── Root ────────────────────────────────────────────────────
@@ -552,6 +584,7 @@ function parseRoute() {
     if (parts[2] === "summary") return { view: "summary", id: +parts[1] };
     if (parts[2] === "leaves") return { view: "leaves", id: +parts[1] };
     if (parts[2] === "payments") return { view: "payments", id: +parts[1] };
+    if (parts[2] === "history") return { view: "history", id: +parts[1] };
     return { view: "employee-detail", id: +parts[1] };
   }
   return { view: "list" };
@@ -573,6 +606,7 @@ async function render() {
       case "summary":        await viewSummary(route.id); break;
       case "leaves":         await viewLeaveLog(route.id); break;
       case "payments":       await viewPayments(route.id); break;
+      case "history":        await viewPaymentHistory(route.id); break;
       default:               await viewList();
     }
     // Re-trigger the entrance animation on route change only (in-view refreshes
@@ -580,6 +614,9 @@ async function render() {
     ROOT.classList.remove("view-enter");
     void ROOT.offsetWidth;
     ROOT.classList.add("view-enter");
+    document.querySelectorAll("[data-nav]").forEach(el => {
+      el.classList.toggle("is-active", el.dataset.nav === (route.view === "reminders" ? "reminders" : "home"));
+    });
   } catch (e) {
     ROOT.innerHTML = `<div class="alert alert-danger mt-4">${t("errGeneral")}${e.message}</div>`;
   }
@@ -641,11 +678,24 @@ async function viewList() {
       }).join("");
 
   ROOT.innerHTML = `
-    <div class="page-header">
-      <h4 class="page-title"><i class="bi bi-people-fill"></i>${t("listTitle")}</h4>
-      <button class="btn btn-primary px-4" style="border-radius:10px;font-weight:600" onclick="navigate('/employee/new')">
-        <i class="bi bi-plus-lg me-1"></i>${t("addBtn")}
-      </button>
+    <section class="dashboard-hero mb-4">
+      <div class="dashboard-hero-copy">
+        <span class="eyebrow">HOUSEHOLD / PEOPLE</span>
+        <h1>${t("listTitle")}</h1>
+        <p>${currentLang === "th" ? "ดูแลข้อมูลการทำงานและการจ่ายเงินของแม่บ้านในที่เดียว" : "Attendance and payments, all in one place."}</p>
+        <button class="btn btn-light hero-add" onclick="navigate('/employee/new')">
+          <i class="bi bi-plus-lg me-2"></i>${t("addBtn")}
+        </button>
+      </div>
+      <div class="hero-metric">
+        <span>${currentLang === "th" ? "กำลังทำงาน" : "Active staff"}</span>
+        <strong>${employees.filter(e => !e.end_date).length}</strong>
+        <small>${currentLang === "th" ? `จากทั้งหมด ${employees.length} คน` : `of ${employees.length} total`}</small>
+      </div>
+    </section>
+    <div class="section-heading mb-3">
+      <div><span class="eyebrow">TEAM DIRECTORY</span><h2>${t("listTitle")}</h2></div>
+      <span class="section-count">${employees.length}</span>
     </div>
     <div class="row g-3">${cards}</div>`;
 }
@@ -1293,6 +1343,13 @@ async function viewEmployeeDetail(id) {
           <i class="bi bi-cash-coin action-btn-icon" style="color:var(--success)"></i>
           <span class="action-btn-label">${isProb ? t("btnDailyPay") : t("btnPayment")}</span>
           <span class="action-btn-sub">${monthLabel}</span>
+        </button>
+      </div>
+      <div class="col-6 col-md-3">
+        <button class="action-btn history-action" onclick="navigate('/employee/${id}/history')">
+          <i class="bi bi-clock-history action-btn-icon"></i>
+          <span class="action-btn-label">${t("historyTitle")}</span>
+          <span class="action-btn-sub">${currentLang === "th" ? "ตลอดการจ้าง" : "All time"}</span>
         </button>
       </div>
     </div>`;
@@ -2150,6 +2207,12 @@ async function viewPayments(id) {
           ${emp.bank_account_name ? `<span class="text-muted">(${escHtml(emp.bank_account_name)})</span>` : ""}</span>
       </div>` : ""}
 
+    <div class="payment-history-link mb-3">
+      <div><i class="bi bi-pie-chart-fill me-2"></i><strong>${t("historyTitle")}</strong>
+        <span class="text-muted small ms-2">${t("historySubtitle")}</span></div>
+      <button class="btn btn-sm btn-outline-primary" onclick="navigate('/employee/${id}/history')">${t("historyTitle")} <i class="bi bi-arrow-right ms-1"></i></button>
+    </div>
+
     ${dailySection}
 
     ${allPaid ? `<div class="alert alert-success d-flex align-items-center gap-2 mb-3"><i class="bi bi-check-circle-fill fs-5"></i> ${t("alertAllPaid")}</div>` : ""}
@@ -2171,6 +2234,163 @@ async function viewPayments(id) {
       <i class="bi bi-info-circle me-1"></i>
       ${t("paymentNote")}
     </div>`;
+}
+
+// ─── View: Lifetime payment history and extra payments ──────
+
+let _specialPayments = [];
+
+async function viewPaymentHistory(id) {
+  const [emp, history] = await Promise.all([
+    api.get(`/api/employees/${id}`),
+    api.get(`/api/employees/${id}/payment-history`),
+  ]);
+  _specialPayments = history.months.flatMap(m => m.items.filter(item => item.type === "special"));
+  const today = new Date();
+  const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  const money = amount => `${fmtMoney(amount)} ${t("baht")}`;
+  const legacyCount = history.months.flatMap(m => m.items).filter(item => item.estimated).length;
+
+  function itemRow(item) {
+    const special = item.type === "special";
+    const icon = special ? "bi-gift" : item.type === "daily" ? "bi-sun" : "bi-calendar-check";
+    const label = special ? escHtml(item.reason)
+      : item.type === "daily" ? `${t("historyDailyDate")} ${formatDate(item.work_date)}`
+      : t("historyPeriod", item.period);
+    const dateLabel = special ? formatDate(item.paid_on) : `${t("historyPaidAt")} ${formatDate(item.paid_at)}`;
+    return `<div class="ledger-row">
+      <span class="ledger-icon ${item.type}"><i class="bi ${icon}"></i></span>
+      <div class="ledger-description">
+        <strong>${label}</strong>
+        <small>${dateLabel}${item.paid_by ? ` · ${t("payerByLabel", escHtml(item.paid_by))}` : ""}</small>
+        ${item.estimated ? `<span class="legacy-note">${t("historyLegacyEstimate")}</span>` : ""}
+      </div>
+      <div class="ledger-amount">${money(item.amount)}</div>
+      ${special ? `<div class="ledger-actions">
+        <button class="icon-action" type="button" title="${t("edit")}" onclick="editSpecialPayment(${item.id})"><i class="bi bi-pencil"></i></button>
+        <button class="icon-action danger" type="button" title="${t("specialDelete")}" onclick="deleteSpecialPayment(${id}, ${item.id})"><i class="bi bi-trash"></i></button>
+      </div>` : ""}
+    </div>`;
+  }
+
+  const monthCards = history.months.length ? history.months.map((m, index) => `
+    <details class="history-month" ${index < 3 ? "open" : ""}>
+      <summary>
+        <span class="history-month-title"><i class="bi bi-calendar3"></i>${t("months")[m.month]} ${m.year + t("yearOffset")}</span>
+        <span class="history-month-meta">${t("historyMonthTotal")} <strong>${money(m.total)}</strong><i class="bi bi-chevron-down"></i></span>
+      </summary>
+      <div class="history-month-breakdown">
+        <span>${t("historySalary")} <strong>${money(m.salary)}</strong></span>
+        <span>${t("historyDaily")} <strong>${money(m.daily)}</strong></span>
+        <span>${t("historySpecial")} <strong>${money(m.special)}</strong></span>
+      </div>
+      <div>${m.items.map(itemRow).join("")}</div>
+    </details>`).join("") : `<div class="empty-ledger"><i class="bi bi-wallet2"></i><p>${t("historyEmpty")}</p></div>`;
+
+  ROOT.innerHTML = `
+    <div class="page-breadcrumb mb-3"><a href="#/" onclick="navigate('/')">${t("home")}</a>
+      <i class="bi bi-chevron-right"></i><a href="#/employee/${id}" onclick="navigate('/employee/${id}')">${escHtml(emp.name)}</a>
+      <i class="bi bi-chevron-right"></i>${t("historyTitle")}</div>
+    <section class="history-hero mb-4">
+      <div><span class="eyebrow">${t("historyEyebrow")}</span>
+        <h1>${t("historyTitle")}</h1><p>${t("historySubtitle")}</p>
+        <span class="history-person"><i class="bi bi-person-circle me-2"></i>${escHtml(emp.name)}</span>
+      </div>
+      <div class="history-grand-total"><span>${t("historyTotal")}</span>
+        <strong>฿${fmtMoney(history.totals.all)}</strong></div>
+    </section>
+    <section class="history-stats mb-4" aria-label="${t("historyTitle")}">
+      <div><span class="stat-dot salary"></span><small>${t("historySalary")}</small><strong>฿${fmtMoney(history.totals.salary)}</strong></div>
+      <div><span class="stat-dot daily"></span><small>${t("historyDaily")}</small><strong>฿${fmtMoney(history.totals.daily)}</strong></div>
+      <div><span class="stat-dot special"></span><small>${t("historySpecial")}</small><strong>฿${fmtMoney(history.totals.special)}</strong></div>
+    </section>
+    ${legacyCount ? `<div class="legacy-banner mb-4"><i class="bi bi-info-circle"></i>${t("historyLegacyEstimate")} (${legacyCount})</div>` : ""}
+    <div class="history-layout">
+      <section class="history-list">
+        <div class="section-heading mb-3"><div><span class="eyebrow">PAYMENT TIMELINE</span><h2>${t("historyTitle")}</h2></div>
+          <span class="section-count">${history.months.length}</span></div>
+        ${monthCards}
+      </section>
+      <aside class="special-panel" id="specialPanel">
+        <span class="special-panel-icon"><i class="bi bi-gift"></i></span>
+        <span class="eyebrow">EXTRA PAYMENT</span>
+        <h2 id="specialFormTitle">${t("specialAdd")}</h2>
+        <p>${t("specialReasonHint")}</p>
+        <form id="specialForm" onsubmit="saveSpecialPayment(event, ${id})">
+          <input type="hidden" id="specialId" value="">
+          <label class="form-label" for="specialReason">${t("specialReason")}</label>
+          <input class="form-control mb-3" id="specialReason" maxlength="200" required placeholder="${t("specialReasonHint")}">
+          <div class="row g-3 mb-3">
+            <div class="col-6"><label class="form-label" for="specialAmount">${t("specialAmount")} (${t("baht")})</label>
+              <input class="form-control" id="specialAmount" type="number" min="0.01" step="0.01" inputmode="decimal" required></div>
+            <div class="col-6"><label class="form-label" for="specialDate">${t("specialDate")}</label>
+              <input class="form-control" id="specialDate" type="date" value="${todayString}" required></div>
+          </div>
+          <label class="form-label" for="specialPayer">${t("payerLabel")}</label>
+          <select class="form-select mb-4" id="specialPayer"><option value="">${t("payerNone")}</option>
+            ${PAYERS.map(p => `<option value="${escHtml(p)}">${escHtml(p)}</option>`).join("")}</select>
+          <div class="d-grid gap-2"><button class="btn btn-primary" id="specialSubmit" type="submit"><i class="bi bi-plus-lg me-1"></i>${t("specialSave")}</button>
+            <button class="btn btn-outline-secondary d-none" type="button" id="specialCancel" onclick="cancelSpecialEdit()">${t("cancel")}</button></div>
+        </form>
+      </aside>
+    </div>`;
+}
+
+async function saveSpecialPayment(event, empId) {
+  event.preventDefault();
+  const form = document.getElementById("specialForm");
+  if (!form.reportValidity()) return;
+  const sid = document.getElementById("specialId").value;
+  const payload = {
+    reason: document.getElementById("specialReason").value.trim(),
+    amount: Number(document.getElementById("specialAmount").value),
+    paid_on: document.getElementById("specialDate").value,
+    paid_by: document.getElementById("specialPayer").value || null,
+  };
+  const button = document.getElementById("specialSubmit");
+  button.disabled = true;
+  try {
+    const path = `/api/employees/${empId}/special-payments`;
+    if (sid) await api.put(`${path}/${sid}`, payload);
+    else await api.post(path, payload);
+    await viewPaymentHistory(empId);
+  } catch (err) {
+    alert(t("errSave") + err.message);
+    button.disabled = false;
+  }
+}
+
+function editSpecialPayment(sid) {
+  const item = _specialPayments.find(x => x.id === sid);
+  if (!item) return;
+  document.getElementById("specialId").value = sid;
+  document.getElementById("specialReason").value = item.reason;
+  document.getElementById("specialAmount").value = item.amount;
+  document.getElementById("specialDate").value = item.paid_on;
+  document.getElementById("specialPayer").value = item.paid_by || "";
+  document.getElementById("specialFormTitle").textContent = t("specialEdit");
+  document.getElementById("specialSubmit").innerHTML = `<i class="bi bi-check-lg me-1"></i>${t("specialUpdate")}`;
+  document.getElementById("specialCancel").classList.remove("d-none");
+  document.getElementById("specialPanel").scrollIntoView({behavior: "smooth", block: "start"});
+  document.getElementById("specialReason").focus({preventScroll: true});
+}
+
+function cancelSpecialEdit() {
+  document.getElementById("specialForm").reset();
+  document.getElementById("specialId").value = "";
+  document.getElementById("specialFormTitle").textContent = t("specialAdd");
+  document.getElementById("specialSubmit").innerHTML = `<i class="bi bi-plus-lg me-1"></i>${t("specialSave")}`;
+  document.getElementById("specialCancel").classList.add("d-none");
+}
+
+async function deleteSpecialPayment(empId, sid) {
+  if (!confirm(t("specialDeleteConfirm"))) return;
+  try {
+    await api.del(`/api/employees/${empId}/special-payments/${sid}`);
+    await viewPaymentHistory(empId);
+  } catch (err) {
+    alert(t("errDelete") + err.message);
+  }
 }
 
 function shiftPayments(id, year, month, delta) {
@@ -2716,7 +2936,7 @@ function fmtDuration(totalDays) {
 
 function formatDate(isoStr) {
   if (!isoStr) return "—";
-  const [y, m, d] = isoStr.split("-");
+  const [y, m, d] = isoStr.slice(0, 10).split("-");
   return `${+d} ${t("months")[+m]} ${+y + t("yearOffset")}`;
 }
 
@@ -2759,8 +2979,11 @@ window.toggleReminder  = toggleReminder;
 window.testReminder    = testReminder;
 window.deleteReminder  = deleteReminder;
 window.editReminder    = editReminder;
+window.saveSpecialPayment = saveSpecialPayment;
+window.editSpecialPayment = editSpecialPayment;
+window.cancelSpecialEdit = cancelSpecialEdit;
+window.deleteSpecialPayment = deleteSpecialPayment;
 
 // ─── Boot ────────────────────────────────────────────────────
-document.title = t("appTitle");
-document.getElementById("langToggle").textContent = t("langBtn");
+applyChromeLanguage();
 render();
