@@ -39,14 +39,16 @@ def fingerprint(key: paramiko.PKey) -> str:
 
 class PinnedFingerprint(paramiko.MissingHostKeyPolicy):
     """No known_hosts file in the container: every connect lands here, and
-    only the pinned fingerprint gets through."""
+    only a pinned fingerprint gets through. Comma-separated, one per host key
+    type: Paramiko negotiates ed25519 where OpenSSH picked ecdsa, so pinning
+    only what `ssh-keygen -lF` shows refuses the router."""
 
     def __init__(self, expected: str):
-        self.expected = expected
+        self.expected = {fp.strip() for fp in expected.split(",") if fp.strip()}
 
     def missing_host_key(self, client, hostname, key):
         got = fingerprint(key)
-        if not self.expected or got != self.expected:
+        if got not in self.expected:
             raise paramiko.SSHException(f"router host key mismatch: {got}")
 
 

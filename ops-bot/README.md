@@ -205,7 +205,7 @@ Add these via `make edit-vault`, then `make secrets && ./scripts/deploy.sh -s op
 ## Security
 
 - SSH commands are whitelisted (read-only: `docker ps`, `docker logs`, `df`, `free`, etc.)
-- Router SSH is a separate client with its own key (`HOST_ROUTER_KEY_PATH`, private key stays on the NAS), key-only, host key pinned by `ROUTER_SSH_HOST_KEY_SHA256`, and one constant command. It is not on the LLM whitelist. Router side: SSH LAN only, password login off
+- Router SSH is a separate client with its own key (`HOST_ROUTER_KEY_PATH`, private key stays on the NAS), key-only, host key pinned by `ROUTER_SSH_HOST_KEY_SHA256` (comma-separated, one per key type), and one constant command. It is not on the LLM whitelist. Router side: SSH LAN only, password login off
 - Dashboard + everything except the Kuma webhook path is behind nginx basic auth
   (`nginx/.htpasswd`); the app itself is never published on the host
 - `/webhook/uptime-kuma` is exempt from basic auth and guarded by

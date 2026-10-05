@@ -43,6 +43,11 @@ def test_pinned_policy_rejects_other_key():
         PinnedFingerprint("SHA256:nope").missing_host_key(MagicMock(), "h", _server_key())
 
 
+def test_pinned_policy_accepts_any_listed_key():
+    key = _server_key()
+    PinnedFingerprint(f"SHA256:other, {fingerprint(key)}").missing_host_key(MagicMock(), "h", key)
+
+
 def test_pinned_policy_rejects_when_unpinned():
     with pytest.raises(paramiko.SSHException):
         PinnedFingerprint("").missing_host_key(MagicMock(), "h", _server_key())
