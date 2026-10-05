@@ -1,4 +1,4 @@
-## 2026-10-05 — Drawer + chat paperclip upload: extension in header (committed + pushed; NOT deployed — user deploys in a downtime window)
+## 2026-10-05 — Drawer + chat paperclip upload: extension in header (commit `de45cb8` pushed; NOT deployed — user deploys in a downtime window)
 
 - User asked: strip extension before upload to `in/`, restore on server, invisible to the user. `ui/app.js` `uploadTarget()` → PUT/DELETE `upload/in/<stem>` + `X-Upload-Ext: <.ext>`; `upload.py` `_route()` validates `EXT` (`.` + 1–15, no dot/slash/backslash/control), joins raw then `safe_name` once (no double decode). No header = old behaviour.
 - Found real bug on the way: `location /upload/` (plain prefix) loses to `~* \.(js|css|svg|png|webmanifest)$` → PUT/DELETE of those into `in/` = 405 from nginx static. Proven with nginx:alpine before/after. Fixed `location ^~ /upload/`. Prod nginx log since last restart had no 405 (only 247 lines) — not proof either way.
