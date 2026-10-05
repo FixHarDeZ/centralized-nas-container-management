@@ -140,4 +140,5 @@ Local CSS/template follow-up: main body and controls 16px, secondary text minimu
 - ต้นเหตุ: สาย backhaul ที่ router `eth2` flap → node ค้างครึ่งทาง. หลักฐาน NAS `~/router-evidence-2026-10-05/`. ประวัติ Kuma: 129 outage, 23 ครั้ง >5 นาที.
 - Spec `docs/superpowers/specs/2026-10-05-ops-bot-mesh-heal-design.md`. Commits `90b8752`, `8bb53c6`, `2b28186` (pushed 05/10). Deployed 05/10, verified in-container: router connect+auth ok, probe ok (ฝั่ง healthy), webhook DOWN→UP smoke test ok. Paused + node ตอบ = resume เอง (กัน UP หาย).
 - Kuma: ผูก notification `ops-bot` (id 3) ↔ monitor Mesh Node (id 3) แล้ว 05/10 16:11 ผ่าน sqlite (stop Kuma 11 วิ, backup `/volume2/docker/uptime-kuma/kuma.db.bak-20261005-meshheal`).
+- Gap: uvicorn access log พิมพ์ `?secret=` ของ Kuma webhook ใน `docker logs` (มีมาก่อน ยังไม่แก้).
 - **ค้าง**: ยืนยัน probe ฝั่งพังกับ outage จริงรอบหน้า; เปลี่ยนสาย/พอร์ต backhaul (user).
