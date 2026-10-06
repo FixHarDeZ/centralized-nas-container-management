@@ -7,8 +7,8 @@ services:
     build:
       context: .
       args:
-        CLAUDE_VERSION: "2.1.289"
-        SKILLS_REF: "8a1541c4a3ffa5a20a5a91de0dcf3f0bab1d1ef4"
+        CLAUDE_VERSION: "2.1.291"
+        SKILLS_REF: "683bc88e56f3e09ba94f7055977f3d3aa499f202"
     container_name: ai-deck
     restart: unless-stopped
     # gid 100 (users) is what the share's Synology ACL grants — see Dockerfile.
@@ -51,8 +51,8 @@ services:
       context: .
       target: coding
       args:
-        CLAUDE_VERSION: "2.1.289"
-        SKILLS_REF: "8a1541c4a3ffa5a20a5a91de0dcf3f0bab1d1ef4"
+        CLAUDE_VERSION: "2.1.291"
+        SKILLS_REF: "683bc88e56f3e09ba94f7055977f3d3aa499f202"
     restart: unless-stopped
     user: "1000:100"
     init: true
