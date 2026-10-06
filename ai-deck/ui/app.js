@@ -127,6 +127,81 @@
   // OSC 52 handler below was checked this way). Never exposed on the live page.
   if (DEMO) window.term = term;
 
+  // xterm's links depend on mouse events; terminal touch gestures suppress
+  // those on phones. Offer the OAuth URL as native browser controls instead.
+  const claudeLoginHelp = document.getElementById('claude-login-help');
+  const claudeLoginOpen = document.getElementById('claude-login-open');
+  const claudeLoginURL = document.getElementById('claude-login-url');
+  const claudeLoginStatus = document.getElementById('claude-login-status');
+  let previousClaudeLoginURL = '';
+
+  function clearClaudeLogin() {
+    const wasVisible = !claudeLoginHelp.hidden;
+    previousClaudeLoginURL = claudeLoginURL.value || previousClaudeLoginURL;
+    claudeLoginHelp.hidden = true;
+    claudeLoginOpen.removeAttribute('href');
+    claudeLoginURL.value = '';
+    claudeLoginStatus.textContent = '';
+    if (wasVisible) requestAnimationFrame(refit);
+  }
+
+  function findClaudeLoginURL(text) {
+    let found = '';
+    for (const match of text.matchAll(/https:\/\/[^\s]+/g)) {
+      try {
+        const url = new URL(match[0]);
+        const endpoint = url.hostname + url.pathname;
+        if (url.username || url.password || url.port) continue;
+        if (!['claude.com/ai/oauth/authorize', 'claude.ai/oauth/authorize',
+          'console.anthropic.com/oauth/authorize', 'platform.claude.com/oauth/authorize'].includes(endpoint)) continue;
+        if (url.searchParams.has('client_id') && url.searchParams.has('state') && url.searchParams.has('code_challenge')) {
+          found = match[0];
+        }
+      } catch (_) { /* not a URL */ }
+    }
+    return found;
+  }
+
+  term.onWriteParsed(() => {
+    if (provider !== 'claude' || authStatus === 'signed_in') return;
+    const buffer = term.buffer.active;
+    const cursorRow = buffer.baseY + buffer.cursorY;
+    let line = '', found = '';
+    // Reassemble soft-wrapped lines AFTER ANSI parsing. Only completed
+    // logical lines count, so a websocket chunk cannot offer half a URL.
+    for (let row = Math.max(0, cursorRow - 160); row <= cursorRow; row++) {
+      const part = buffer.getLine(row);
+      if (!part) continue;
+      if (!part.isWrapped) {
+        found = findClaudeLoginURL(line) || found;
+        line = '';
+      }
+      line += part.translateToString(false);
+    }
+    if (!found || found === previousClaudeLoginURL || found === claudeLoginURL.value) return;
+    claudeLoginOpen.href = found;
+    claudeLoginURL.value = found;
+    claudeLoginStatus.textContent = '';
+    claudeLoginHelp.hidden = false;
+    requestAnimationFrame(refit);
+  });
+
+  document.getElementById('claude-login-copy').addEventListener('click', async () => {
+    const text = claudeLoginURL.value;
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      claudeLoginStatus.textContent = 'Link copied.';
+    } catch (_) {
+      claudeLoginURL.focus();
+      claudeLoginURL.select();
+      claudeLoginURL.setSelectionRange(0, text.length);
+      let copied = false;
+      try { copied = document.execCommand('copy'); } catch (_) {}
+      claudeLoginStatus.textContent = copied ? 'Link copied.' : 'Link selected. Touch and hold to copy.';
+    }
+  });
+
   function refit() {
     fit.fit();
     sendResize();
@@ -203,6 +278,8 @@
         setState('connected', 'live');
         reconnectDelay = 1000;
         socket.send(encoder.encode(JSON.stringify({ AuthToken: token, columns: term.cols, rows: term.rows })));
+        clearClaudeLogin();
+        previousClaudeLoginURL = '';
         term.reset();
         if (!IS_MOBILE && !chatOn) term.focus();
       };
@@ -222,7 +299,7 @@
           default: break;
         }
       };
-      socket.onclose = () => { terminalReady = false; setState('reconnecting', 'reconnecting'); scheduleReconnect(); };
+      socket.onclose = () => { terminalReady = false; clearClaudeLogin(); setState('reconnecting', 'reconnecting'); scheduleReconnect(); };
       socket.onerror = () => {};
     } catch (_) {
       scheduleReconnect();
@@ -1692,6 +1769,7 @@
       const data = DEMO ? { status: PARAMS.get('auth') || 'signed_out' }
         : response.ok ? await response.json() : { status: 'unknown' };
       authStatus = data.status;
+      if (authStatus === 'signed_in') clearClaudeLogin();
     } catch (_) { authStatus = 'unknown'; }
     finally {
       authPending = false;
@@ -1761,13 +1839,19 @@
   setInterval(refreshAuth, 30000);
   async function openAgent(path, button) {
     button.disabled = true;
+    const loginURLBefore = claudeLoginURL.value;
     try {
       if (!DEMO) {
         setView('terminal');
         await waitForTerminal();
       }
       const result = DEMO ? { ok: true } : await post(path);
-      if (result.ok) setView('terminal');
+      if (result.ok) {
+        // A refused login leaves the current flow usable. A fast new URL
+        // may arrive before the POST response; keep that replacement too.
+        if (path === 'api/login' && claudeLoginURL.value === loginURLBefore) clearClaudeLogin();
+        setView('terminal');
+      }
       else { setView('chat'); note(result.text.startsWith('busy:') ? 'Terminal is busy. Quit the current program first.' : result.text); }
     } catch (_) { setView('chat'); note('Could not connect to your desk. Please try again.'); }
     finally {

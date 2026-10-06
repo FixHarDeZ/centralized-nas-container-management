@@ -12,14 +12,20 @@ import pytest
 from .test_stream_render import find_chrome
 
 
-@pytest.mark.parametrize('harness', ['attachments_harness.html', 'connection_harness.html', 'workspace_harness.html', 'quota_harness.html', 'starter_prompts_harness.html', 'coding_harness.html', 'terminal_layout_harness.html', 'bundle_harness.html'])
+class BrowserServer(http.server.ThreadingHTTPServer):
+    # Frames request styles, scripts and fonts concurrently. The stdlib's
+    # five-connection backlog can drop assets under headless virtual time.
+    request_queue_size = 64
+
+
+@pytest.mark.parametrize('harness', ['attachments_harness.html', 'connection_harness.html', 'workspace_harness.html', 'quota_harness.html', 'starter_prompts_harness.html', 'coding_harness.html', 'terminal_layout_harness.html', 'bundle_harness.html', 'claude_login_harness.html'])
 def test_workspace_controls_and_mobile_layout(tmp_path, harness):
     chrome = find_chrome()
     if not chrome:
         pytest.skip("Chrome/Chromium unavailable")
     root = Path(__file__).resolve().parents[1]
     handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(root))
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    server = BrowserServer(("127.0.0.1", 0), handler)
     threading.Thread(target=server.serve_forever, daemon=True).start()
     try:
         base = f"http://127.0.0.1:{server.server_port}"

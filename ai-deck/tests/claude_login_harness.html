@@ -1,0 +1,176 @@
+<!doctype html><meta charset="utf-8"><title>Claude mobile sign-in checks</title>
+<pre id="result">pending</pre>
+<script>
+(async () => {
+  const failures = [];
+  const check = (value, label) => { if (!value) failures.push(label); };
+  const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+  const url = 'https://claude.com/ai/oauth/authorize?code=true&client_id=fixture&response_type=code'
+    + '&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2Fcode%2Fcallback'
+    + '&scope=org%3Acreate_api_key+user%3Aprofile+user%3Ainference+user%3Asessions'
+    + '&code_challenge=' + 'fixture'.repeat(20) + '&code_challenge_method=S256&state=fixture%2Bstate';
+  try {
+    let page = await (await fetch('../ui/index.html')).text();
+    // Inline the actual scripts in order: srcdoc + virtual-time loading can
+    // otherwise abort a slow vendor request while the next script executes.
+    const scripts = [];
+    for (const match of page.matchAll(/<script src="([^"]+)"><\/script>/g)) scripts.push({
+      tag: match[0], code: await (await fetch('../ui/' + match[1])).text(),
+    });
+    for (const script of scripts) page = page.replace(script.tag, () => '<script>'
+      + (script.tag.includes('app.js') ? 'const RealTerminal = Terminal; window.Terminal = class extends RealTerminal {constructor(options) {super(options); window.testTerminal = this;}};\n' : '')
+      + script.code.replaceAll('</' + 'script', '<\\/' + 'script') + '</' + 'script>');
+    // Real isolated tmux output at 43 columns, including alternate screen
+    // entry and a reattach redraw; all OAuth values are synthetic fixtures.
+    const tmux = await (await fetch('fixtures/claude_login_tmux.json')).json();
+    for (const width of [390, 1280]) {
+      localStorage.setItem('ai-desk.provider', 'claude');
+      localStorage.setItem('claude-desk.view', 'terminal');
+      const frame = document.createElement('iframe');
+      frame.style = `width:${width}px;height:844px`;
+      const setup = `
+        ${width === 390 ? "Object.defineProperty(navigator, 'userAgent', {value:'Mozilla/5.0 (Linux; Android 15) Chrome/140.0 Mobile'});" : ''}
+        window.errors = []; window.addEventListener('error', e => window.errors.push(e.message));
+        window.loginStatus = 'signed_out'; window.posts = []; window.copied = []; window.rejectLogin = false;
+        Object.defineProperty(navigator, 'clipboard', {configurable:true,value:{writeText:async text=>window.copied.push(text)}});
+        window.fetch = async (path, options) => {
+          if (options?.method === 'POST') { window.posts.push(String(path)); return {ok:!window.rejectLogin,text:async()=>window.rejectLogin?'busy:claude':''}; }
+          if (String(path).includes('api/auth')) return {ok:true,json:async()=>({status:window.loginStatus})};
+          if (String(path).includes('chat/options')) return {ok:true,json:async()=>({models:[]})};
+          return {ok:true,json:async()=>({token:'',sessions:[],items:[],busy:false})};
+        };
+        window.EventSource = class {close() {}};
+        window.WebSocket = class {
+          static OPEN=1; static CONNECTING=0;
+          constructor() { window.testSocket=this; this.readyState=0;
+            setTimeout(()=>{this.readyState=1; this.onopen(); window.output('ready\\r\\n');},20); }
+          send() {} close() {}
+        };
+        window.output = text => window.testSocket.onmessage({data:new TextEncoder().encode('0'+text).buffer});
+      `;
+      const loaded = new Promise(resolve => frame.onload = resolve);
+      frame.srcdoc = page.replace('<head>', '<head><base href="' + new URL('../ui/', location.href) + '"><script>' + setup + '<\/script>');
+      document.body.append(frame);
+      await loaded;
+      const doc = frame.contentDocument, win = frame.contentWindow;
+      await delay(120);
+      await doc.fonts.ready;
+      check(win.testSocket?.readyState === 1, width + ': app initialized: ' + JSON.stringify(win.errors));
+      if (win.testSocket?.readyState !== 1) { frame.remove(); continue; }
+      // Headless virtual time stops native rAF after the first frame.
+      win.requestAnimationFrame = fn => setTimeout(()=>fn(performance.now()),16);
+      const panel = doc.getElementById('claude-login-help');
+      check(!!panel, width + ': sign-in controls exist outside xterm');
+      if (!panel) { frame.remove(); continue; }
+      check(panel.hidden, width + ': no sign-in link before terminal output');
+      doc.getElementById('agent-login').click();
+      await delay(50);
+      check(win.posts.some(path => path.includes('api/login')), width + ': existing login starts');
+      win.output('If the browser did not open, visit: https://example.com/oauth/authorize?state=bad\r\n');
+      win.output(url.replace('claude.com/', 'claude.com.evil.example/') + '\r\n');
+      win.output(url.replace('https://', 'https://someone@') + '\r\n');
+      await delay(50);
+      check(panel.hidden, width + ': unrelated URLs ignored');
+      win.output('If the browser did not open, visit: \x1b[34m' + url.slice(0, 220));
+      await delay(50);
+      check(panel.hidden, width + ': partial URL is never offered');
+      win.output(url.slice(220, 350));
+      win.output(url.slice(350) + '\x1b[0m\r\nPaste code here if prompted > ');
+      await delay(180);
+      await doc.fonts.ready;
+      win.dispatchEvent(new win.Event('resize'));
+      await delay(80);
+      check(!panel.hidden, width + ': complete wrapped URL offered');
+      const link = doc.getElementById('claude-login-open'), field = doc.getElementById('claude-login-url');
+      check(link.href === url, width + ': normal anchor preserves entire OAuth URL');
+      check(link.target === '_blank' && link.rel.includes('noopener'), width + ': opens a separate tab');
+      check(!doc.getElementById('terminal').contains(link), width + ': anchor outside touch interception');
+      const touch = new win.PointerEvent('pointerdown', {pointerType:'touch', bubbles:true, cancelable:true});
+      link.dispatchEvent(touch);
+      check(!touch.defaultPrevented, width + ': native sign-in link accepts touch');
+      check(field.readOnly && field.value === url, width + ': URL selectable without xterm selection');
+      check(link.getBoundingClientRect().height >= 44, width + ': touch target');
+      check(doc.documentElement.scrollWidth <= width, width + ': no mobile horizontal overflow');
+      const screen = doc.querySelector('.xterm-screen').getBoundingClientRect();
+      check(screen.bottom <= doc.getElementById('terminal').getBoundingClientRect().bottom + 1,
+        width + ': terminal fits with sign-in controls visible');
+      doc.getElementById('claude-login-copy').click();
+      await delay(30);
+      check(win.copied.at(-1) === url, width + ': copy includes all query parameters');
+      win.navigator.clipboard.writeText = async () => {throw new Error('denied');};
+      doc.execCommand = () => false;
+      doc.getElementById('claude-login-copy').click();
+      await delay(30);
+      check(doc.activeElement === field && field.selectionStart === 0 && field.selectionEnd === url.length,
+        width + ': denied clipboard leaves full URL selected for manual copy');
+      check(doc.getElementById('claude-login-status').textContent.includes('selected'), width + ': manual copy guidance');
+      win.output('\r\n' + url.replace('state=fixture%2Bstate', 'state=second') + '\r\nPaste code here if prompted > ');
+      await delay(150);
+      check(link.href.endsWith('state=second'), width + ': new login replaces previous link');
+      doc.getElementById('view-chat').click();
+      check(win.getComputedStyle(panel).display === 'none', width + ': panel does not crowd Chat');
+      win.rejectLogin = true;
+      doc.getElementById('agent-login').click();
+      await delay(60);
+      check(!panel.hidden && link.href.endsWith('state=second'), width + ': busy login preserves the pending sign-in link');
+      win.rejectLogin = false;
+      doc.getElementById('view-term').click();
+      win.loginStatus = 'signed_in';
+      win.dispatchEvent(new win.Event('focus'));
+      await delay(50);
+      check(panel.hidden && !field.value && !link.hasAttribute('href'), width + ': success clears sign-in link');
+      win.output('\r\nmore output\r\n');
+      await delay(80);
+      check(panel.hidden, width + ': old scrollback cannot restore completed sign-in');
+      win.loginStatus = 'signed_out';
+      win.dispatchEvent(new win.Event('focus'));
+      await delay(50);
+      win.output('\r\n' + url.replace('state=fixture%2Bstate', 'state=third') + '\r\nPaste code here if prompted > ');
+      await delay(100);
+      check(!panel.hidden, width + ': subsequent sign-in is offered');
+      win.testSocket.readyState = 3;
+      win.testSocket.onclose();
+      check(panel.hidden && !field.value, width + ': disconnect clears link');
+      win.testSocket.readyState = 1;
+      win.testSocket.onopen();
+      win.output(url.replace('state=fixture%2Bstate', 'state=third') + '\r\nPaste code here if prompted > ');
+      await delay(100);
+      check(!panel.hidden && link.href.endsWith('state=third'), width + ': reconnect restores pending terminal sign-in');
+      doc.getElementById('agent-login').click();
+      await delay(50);
+      win.output('\r\nStarting new sign-in\r\n');
+      await delay(50);
+      check(panel.hidden, width + ': a new login cannot reuse the old link from scrollback');
+      win.output(url.replace('state=fixture%2Bstate', 'state=fourth') + '\r\nPaste code here if prompted > ');
+      await delay(100);
+      check(!panel.hidden && link.href.endsWith('state=fourth'), width + ': fresh link follows a new login');
+      Object.defineProperty(win.navigator, 'clipboard', {value:undefined});
+      doc.getElementById('claude-login-copy').click();
+      await delay(30);
+      check(doc.activeElement === field && field.selectionEnd === field.value.length,
+        width + ': browsers without Clipboard API still offer manual copy');
+      // Replay at the actual captured PTY dimensions. A tmux redraw clears
+      // all 36 rows; replaying it into fewer rows would scroll away the URL.
+      win.requestAnimationFrame = () => 0;
+      win.testTerminal.resize(43, 36);
+      win.testSocket.onopen();
+      win.output(tmux.initial);
+      await delay(150);
+      check(!panel.hidden && field.value === tmux.url, width + ': real tmux alternate-screen login output');
+      win.testSocket.onclose();
+      win.testSocket.onopen();
+      win.output(tmux.redraw);
+      await delay(150);
+      check(!panel.hidden && field.value === tmux.url, width + ': real tmux reattach redraw restores link');
+      win.testSocket.onopen();
+      win.testTerminal.resize(43, 5);
+      win.output('\x1b[?1049hIf the browser did not open, visit: ' + url + '\r\nPaste code here if prompted > ');
+      await delay(100);
+      check(win.testTerminal.buffer.active.type === 'alternate', width + ': short screen uses real alternate buffer');
+      check(!panel.hidden && field.value === url, width + ': complete URL survives scrolling off a short alternate screen');
+      frame.remove();
+    }
+  } catch (error) { failures.push(String(error)); }
+  document.getElementById('result').textContent = JSON.stringify({failures});
+})();
+</script>

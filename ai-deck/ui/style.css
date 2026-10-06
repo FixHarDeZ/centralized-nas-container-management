@@ -275,6 +275,48 @@ body.chat-view #toolbar-btn { display: none; }
 #terminal .xterm-viewport { background: transparent !important; }
 #terminal .xterm-viewport::-webkit-scrollbar { width: 0; }
 
+/* Native links and selectable text sit outside terminal touch handling. */
+.claude-login-help {
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 10px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+.claude-login-help[hidden], body.chat-view .claude-login-help { display: none; }
+.claude-login-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.claude-login-actions strong { flex: 1 1 220px; font-size: 13px; }
+.claude-login-actions a, .claude-login-actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--btn);
+  color: var(--accent);
+  font: 600 13px var(--ui);
+  text-decoration: none;
+  cursor: pointer;
+}
+#claude-login-url {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--fg);
+  font: 12px var(--mono);
+  -webkit-user-select: text;
+  user-select: text;
+}
+.claude-login-help p { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+#claude-login-status { color: var(--fg); }
+
 /* ── Chat ───────────────────────────────────────────── */
 /* The reason this view exists: a terminal wraps hard at COLUMNS, which on a
    phone is about 40 columns of Thai. Bubbles reflow. Everything here is

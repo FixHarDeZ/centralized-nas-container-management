@@ -178,6 +178,16 @@
     </div>
   </dialog>
 
+  <section id="claude-login-help" class="claude-login-help" aria-label="Claude sign-in" hidden>
+    <div class="claude-login-actions">
+      <strong>Continue signing in to Claude</strong>
+      <a id="claude-login-open" target="_blank" rel="noopener noreferrer">Open Claude sign-in ↗</a>
+      <button id="claude-login-copy" type="button">Copy link</button>
+    </div>
+    <input id="claude-login-url" type="text" readonly aria-label="Claude sign-in link" autocomplete="off" spellcheck="false">
+    <p>After signing in, return here and paste the code in Terminal if prompted. <span id="claude-login-status" role="status"></span></p>
+  </section>
+
   <main id="terminal"></main>
 
   <section id="chat" hidden>

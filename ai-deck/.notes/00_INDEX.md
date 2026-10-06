@@ -1,3 +1,11 @@
+## 2026-10-06 — Mobile Claude sign-in link (local; NOT committed/deployed)
+
+- User requested an Android Chrome fix and explicitly deferred deployment because ai-desk is in use. `ui/index.html` / `app.js` / `style.css` now offer native **Open Claude sign-in**, **Copy link**, and a readonly selectable URL above Terminal. Clipboard denial/missing API falls back to selecting the full link, with manual-copy guidance.
+- Extract only allowlisted Claude OAuth authorization URLs from completed logical xterm lines after ANSI parsing; join soft wraps, including tmux's alternate screen. Partial websocket chunks cannot expose a truncated URL. No new backend endpoint or account action.
+- Successful auth clears the URL; socket reconnect restores it from the pending terminal redraw. A refused login retry keeps the active link. An accepted replacement clears the old link while preserving a new URL that arrived before the POST response. No OAuth URL is saved to browser storage.
+- Verification: full ai-deck suite **342 passed**; all 9 Chromium UI harnesses passed. Regression uses the real client at 390px with Android UA and 1280px; covers copy/selection, native touch target, wrapping/chunks, auth success, busy retry, reconnect, a short alternate screen, and synthetic OAuth fixtures captured from isolated tmux initial/reattach output. JavaScript syntax and diff checks passed; independent review approved. No physical Android or real-account login performed.
+- Delivery: user authorized commit + push to `main` on 2026-10-06 and will deploy personally; Git delivery is being prepared. Fresh pre-commit UI/preferences suite: **29 passed**; local `main` matches fetched `origin/main`. No production probe, restart, or deployment. Pending: user deployment and real Android login smoke. Prior `de45cb8` upload change remains recorded below as undeployed.
+
 ## 2026-10-05 — Drawer + chat paperclip upload: extension in header (commit `de45cb8` pushed; NOT deployed — user deploys in a downtime window)
 
 - User asked: strip extension before upload to `in/`, restore on server, invisible to the user. `ui/app.js` `uploadTarget()` → PUT/DELETE `upload/in/<stem>` + `X-Upload-Ext: <.ext>`; `upload.py` `_route()` validates `EXT` (`.` + 1–15, no dot/slash/backslash/control), joins raw then `safe_name` once (no double decode). No header = old behaviour.
