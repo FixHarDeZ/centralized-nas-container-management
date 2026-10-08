@@ -1,5 +1,37 @@
 # Daily Log — news-feed
 
+## 2026-10-08 — Modern Editorial dashboard implementation
+
+- ผู้ใช้อนุมัติแบบและให้ลงมือ; ทำงานบน branch `codex/news-feed-modern-dashboard`
+- ปรับทั้ง 6 หน้า: sidebar slate/teal, พื้นสว่าง, SVG icons, system Thai fonts, responsive navigation (mobile ≤760px), grouped settings, table scroll และ leaderboard grid; เปิด News Timeline เป็นหน้าแรกทุกอุปกรณ์
+- แยก `app/static/dashboard.css` และ `dashboard-utils.js`; ไม่มี framework/dependency/backend schema/API/port/secrets เปลี่ยน
+- News: preview สรุปไทย 2 บรรทัด + native details/summary, source/search/status/sort, ระบุ latest-100 scope, escape ข้อมูลข่าวและยอมรับเฉพาะ http/https links
+- Overview: aggregate ข่าว/แหล่งที่มีข่าว 24h, รอบ digest ถัดไปตาม Asia/Bangkok พร้อมวันที่, watchlist count และสถานะ fetch/digest; partial failures แสดง unknown/Retry ไม่เป็นศูนย์ปลอม
+- ทุกแท็บมี loading/error/retry; Save Config disabled จนโหลดสำเร็จ; บันทึก digest buffer=0 ได้; Test Digest มี confirmation ที่ระบุ LINE/Telegram; chart fallback เมื่อ CDN โหลดไม่ได้
+- แก้ตาม review: stale async loader responses เขียนทับ state ไม่ได้, overview refresh ระหว่าง pending ถูก coalesce และ invalidate batch เก่า, คง source filter แม้ไม่มี source นั้นใน latest100, config refresh ระหว่าง Save รอ POST จบและ coalesce เป็น reload เดียว; ปุ่ม Save ปิดจน reload สำเร็จ รวมกรณี POST/reload ล้มเหลว
+- Verification: **133 pytest passed** (มี deprecation warnings เดิมจาก Python 3.14/dependencies), **22 Node tests passed** รวม timezone `America/New_York`; regression tests เห็น fail ก่อนแก้; JS syntax และ `git diff --check` ผ่าน
+- Static verification: 103 unique HTML IDs, ครบทั้ง 67 original hooks, labels/default section/CSS structure ผ่าน; FastAPI TestClient เสิร์ฟ `/`, `/dashboard.css`, `/dashboard-utils.js`, `/app.js` → 200 และ MIME ถูกต้อง โดยไม่เปิด scheduler lifespan
+- Local mock preview: `http://127.0.0.1:8874` ผ่าน disposable `/private/tmp/news-feed-preview.py`; ทุกข้อมูล/การเขียนเป็น in-memory fixture ไม่เรียก production feed หรือส่ง notification จริง
+- Final code review ไม่พบ actionable findings ค้าง; reviewer ตรวจ async fixes และ probes สำหรับ failed refresh/duplicate Save ผ่าน
+- **ข้อจำกัด/งานค้าง:** browser tool ปฏิเสธเปิด local preview เพราะ permission denied; รอคำตอบ async authorization. ยังไม่ได้ตรวจหน้าตา desktop/tablet/mobile, overflow และ interactions ด้วย browser จริง
+- อัปเดต README/design/plan/index แล้ว; เสนอรอบถัดไป bookmark/อ่านแล้ว, pagination, model comparison และ benchmark source ที่อัปเดตได้
+- ผู้ใช้สั่งต่อให้จบ รวม commit, push, deploy และ merge main; final review ผ่านและเตรียม release แยกเฉพาะ stack นี้
+- สถานะขณะบันทึกก่อน release: implementation อยู่ใน working tree; **ยังไม่ commit / push / PR / deploy**. Production ยังใช้ UI เดิม. ไม่แตะ changes ของ stack อื่นที่เกิดขึ้นระหว่างงาน; ดู release record ด้านบนเมื่อดำเนินการแล้ว
+
+---
+
+## 2026-10-08 — เริ่มงาน modern dashboard redesign (design draft)
+
+- อ่าน shared instructions, stack memory, README, dashboard HTML/JS และ API ที่เกี่ยวข้องแล้ว
+- พบ desktop เปิด Source Health ก่อนข่าว, ไม่มี loading/error/retry สำหรับ timeline, rendering ข่าวยัง escape ไม่ครบ และ Intelligence ใช้คะแนน reference ฝังใน JS
+- เขียน design draft ที่ `docs/superpowers/specs/2026-10-08-news-feed-dashboard-design.md`: แนะนำ Modern Editorial, ข่าวเป็นหน้าแรก, sidebar, summary tiles, quick filters และ responsive UI ครบ 6 หน้า
+- เสนอ enhancement รอบถัดไป: bookmark/อ่านแล้ว, pagination, model comparison, benchmark source ที่อัปเดตได้ และสถานะ RSS/summarizer จริง
+- Verification: ตรวจ scope กับโค้ด/API และ memory; ยังไม่มี code change จึงยังไม่รัน tests/browser verification
+- งานค้าง: ผู้ใช้เลือก/อนุมัติทิศทางตาม brainstorming skill แล้วเขียน implementation plan และปรับ dashboard
+- สถานะจริง: design draft เท่านั้น; **ยังไม่ commit / ยังไม่ deploy**
+
+---
+
 ## 2026-06-30 — Docker healthcheck + CI test coverage
 - **Healthcheck** เพิ่มใน `docker-compose.yml` (service `news-feed`): stdlib urllib ยิง `GET http://localhost:8000/` (StaticFiles `html=True` → index) `interval 30s / timeout 10s / retries 3 / start_period 30s`. Hung uvicorn → Docker auto-restart. Deploy + verified `(healthy)` บน NAS.
 - **CI:** project เพิ่ม `.github/workflows/tests.yml` — รัน `pytest tests/` ของ stack นี้ (133 tests) ทุก PR ที่แตะ `*.py`/`requirements.txt`. เดิมไม่เคยรันใน CI.

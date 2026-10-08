@@ -1,12 +1,33 @@
 let allNews = [];
 let _sentIds = new Set();
 let _newsSortNewest = true;
+let _newsStatus = 'all';
+let _sentIdsAvailable = true;
+let _newsRequest = 0;
+let _currentTab = 'news-timeline';
+let _digestTimes = null;
+let _overviewPromise = null;
+let _overviewVersion = 0;
+let _drawerOpener;
 let allPrices = [];
 let _shownPrices = [];
 let _priceZoneFilter = '';
 let _freeModels = [];
 let _lbPrices = [];
-let _watchlist = new Set(JSON.parse(localStorage.getItem('nf_watchlist') || '[]'));
+const UI = window.NewsFeedUI;
+let _watchlist = new Set();
+try { _watchlist = new Set(UI.readWatchlist(localStorage.getItem('nf_watchlist'))); } catch (_) {}
+
+function cacheWatchlist() {
+  try { localStorage.setItem('nf_watchlist', JSON.stringify([..._watchlist])); } catch (_) {}
+}
+
+function updateWatchlistCount() {
+  for (const id of ['stat-watchlist', 'activity-watchlist']) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = id === 'activity-watchlist' ? `ติดตาม ${_watchlist.size.toLocaleString('th-TH')} โมเดลใน Watchlist` : _watchlist.size.toLocaleString('th-TH');
+  }
+}
 
 async function _syncWatchlistFromServer() {
   try {
@@ -14,22 +35,28 @@ async function _syncWatchlistFromServer() {
     const serverIds = data.model_ids || [];
     if (serverIds.length > 0) {
       _watchlist = new Set(serverIds);
-      localStorage.setItem('nf_watchlist', JSON.stringify(serverIds));
+      cacheWatchlist();
     } else {
       const localIds = [..._watchlist];
       if (localIds.length > 0) {
-        await fetch('/api/watchlist', {
+        const response = await fetch('/api/watchlist', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({model_ids: localIds}),
         });
+        if (!response.ok) throw new Error(response.status);
       }
     }
     renderLeaderboard();
     renderPriceWatchlist();
-  } catch (_) {}
+    const hint = document.getElementById('watchlist-sync-status');
+    if (hint) { hint.textContent = 'ซิงก์ข้ามอุปกรณ์แล้ว'; hint.dataset.state = 'synced'; }
+  } catch (_) {
+    const hint = document.getElementById('watchlist-sync-status');
+    if (hint) { hint.textContent = 'ใช้รายการในเครื่องนี้ · ซิงก์ไม่ได้'; hint.dataset.state = 'error'; }
+  }
+  updateWatchlistCount();
 }
-_syncWatchlistFromServer();
 let _customSources = []; // [{key, name, url}]
 let _priceCharts = {}; // idx → Chart instance
 
@@ -110,9 +137,7 @@ function freeExpiryStatus(expires_at) {
 }
 
 function escapeHtml(s) {
-  const d = document.createElement('div');
-  d.textContent = String(s ?? '');
-  return d.innerHTML;
+  return UI.escapeText(s);
 }
 
 function escapeAttr(s) {
@@ -150,21 +175,31 @@ function _priceHtml(p) {
 
 function toggleLbCard(id) {
   const c = document.getElementById(id);
-  if (c) c.classList.toggle('collapsed');
+  if (c) {
+    c.classList.toggle('collapsed');
+    c.querySelector('.lb-head')?.setAttribute('aria-expanded', String(!c.classList.contains('collapsed')));
+  }
 }
 
 function jumpToCard(id) {
   const el = document.getElementById(id);
   if (!el) return;
   el.classList.remove('collapsed');
+  el.querySelector('.lb-head')?.setAttribute('aria-expanded', 'true');
   el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function toggleBookmark(modelId) {
   if (_watchlist.has(modelId)) _watchlist.delete(modelId);
   else _watchlist.add(modelId);
-  localStorage.setItem('nf_watchlist', JSON.stringify([..._watchlist]));
-  fetch(`/api/watchlist/${encodeURIComponent(modelId)}`, {method: 'PATCH'}).catch(() => {});
+  cacheWatchlist();
+  updateWatchlistCount();
+  fetch(`/api/watchlist/${encodeURIComponent(modelId)}`, {method: 'PATCH'})
+    .then(response => { if (!response.ok) throw new Error(response.status); })
+    .catch(() => {
+      const hint = document.getElementById('watchlist-sync-status');
+      if (hint) { hint.textContent = 'บันทึกในเครื่องแล้ว · ซิงก์ไม่ได้'; hint.dataset.state = 'error'; }
+    });
   // Update star buttons in price table in-place (not re-rendered by renderLeaderboard)
   document.querySelectorAll('#price-table .star-btn').forEach(btn => {
     if (btn.dataset.model === modelId) {
@@ -192,91 +227,290 @@ function setZoneFilter(zone) {
 }
 
 async function api(path) {
-  const r = await fetch(path);
-  if (!r.ok) throw new Error(r.status);
-  return r.json();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  try {
+    const r = await fetch(path, { signal: controller.signal });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return await r.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+const PAGE_META = {
+  'news-timeline': ['YOUR DAILY SIGNAL', 'ข่าวล่าสุด', 'เรื่องที่น่ารู้ในโลก AI และเทคโนโลยี พร้อมสรุปภาษาไทย'],
+  'price-tracker': ['MODEL EXPLORER', 'ราคาโมเดล AI', 'ค้นหา เปรียบเทียบราคา และติดตามโมเดลที่คุณสนใจ'],
+  'ai-leaderboard': ['MODEL DISCOVERY', 'สำรวจโมเดล', 'โมเดลยอดนิยม ราคาคุ้มค่า และตัวเลือกที่ใช้งานฟรี'],
+  'digest-history': ['YOUR BRIEFINGS', 'ประวัติ Digest', 'ย้อนดูข่าวที่ส่งให้คุณทาง LINE และ Telegram'],
+  'source-health': ['FEED ACTIVITY', 'แหล่งข่าว', 'ดูความเคลื่อนไหวของแต่ละแหล่งในช่วง 24 ชั่วโมง'],
+  'schedule-config': ['WORKSPACE SETTINGS', 'ตั้งค่าระบบ', 'จัดเวลาส่งข่าว เลือกแหล่งข่าว และตั้งค่าโมเดลสรุป'],
+};
+
+const _tabRequests = {};
+let _configSaving = false;
+let _configSaveDone = null;
+let _configReloadPromise = null;
+function sectionFeedback(id, message = '', retry = false) {
+  const section = document.getElementById(id);
+  let el = document.getElementById(`feedback-${id}`);
+  if (!el) {
+    el = document.createElement('div');
+    el.id = `feedback-${id}`;
+    el.className = 'section-feedback';
+    el.setAttribute('role', 'status');
+    section.prepend(el);
+  }
+  el.hidden = !message;
+  el.classList.toggle('error-state', retry);
+  el.replaceChildren();
+  if (message) {
+    const text = document.createElement('span');
+    text.textContent = message;
+    el.append(text);
+    if (retry) {
+      const button = document.createElement('button');
+      button.className = 'btn btn-sm';
+      button.textContent = 'ลองอีกครั้ง';
+      button.onclick = () => loadTab(id, true);
+      el.append(button);
+    }
+  }
+}
+
+async function loadTab(id, force = false) {
+  if (id === 'schedule-config' && _configSaving) {
+    // Reload once after the POST settles; never populate the form from pre-save data.
+    if (!_configReloadPromise) {
+      _configReloadPromise = _configSaveDone.then(() => loadTab(id, true))
+        .finally(() => { _configReloadPromise = null; });
+    }
+    return _configReloadPromise;
+  }
+  const loaders = {
+    'news-timeline': loadNews, 'price-tracker': loadPrices, 'ai-leaderboard': loadLeaderboard,
+    'digest-history': loadDigestHistory, 'source-health': loadSourceHealth, 'schedule-config': loadScheduleConfig,
+  };
+  if (id === 'source-health' && _sourceHealthLoaded && !force) return;
+  const request = (_tabRequests[id] || 0) + 1;
+  _tabRequests[id] = request;
+  const isCurrent = () => _tabRequests[id] === request;
+  sectionFeedback(id, 'กำลังโหลดข้อมูล…');
+  document.getElementById(id).setAttribute('aria-busy', 'true');
+  const saveButton = document.getElementById('save-config-btn');
+  if (id === 'schedule-config' && saveButton) saveButton.disabled = true;
+  try {
+    await loaders[id](isCurrent);
+    if (_tabRequests[id] === request) sectionFeedback(id);
+    if (id === 'schedule-config' && saveButton && _tabRequests[id] === request) saveButton.disabled = _configSaving;
+  } catch (error) {
+    if (_tabRequests[id] === request) {
+      sectionFeedback(id, 'โหลดข้อมูลไม่สำเร็จ กรุณาลองอีกครั้ง', true);
+      if (id === 'news-timeline' && !allNews.length) {
+        document.getElementById('news-list').innerHTML = '<div class="empty-state"><strong>ยังโหลดข่าวไม่ได้</strong><p>ใช้ปุ่มลองอีกครั้งด้านบนเพื่อเชื่อมต่อใหม่</p></div>';
+      }
+    }
+    console.error(`load ${id}:`, error);
+  } finally {
+    if (_tabRequests[id] === request) document.getElementById(id).setAttribute('aria-busy', 'false');
+  }
 }
 
 function showTab(id) {
-  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
-  const tabs = ['source-health','news-timeline','price-tracker','ai-leaderboard','digest-history','schedule-config'];
-  document.querySelectorAll('nav button')[tabs.indexOf(id)].classList.add('active');
-  // sync mobile bottom nav
-  const mobTabMap = { 'news-timeline': 'mob-news', 'ai-leaderboard': 'mob-board', 'price-tracker': 'mob-prices' };
-  document.querySelectorAll('.mob-nav-item').forEach(b => b.classList.remove('active'));
-  const mobBtn = document.getElementById(mobTabMap[id]);
-  if (mobBtn) mobBtn.classList.add('active');
-  if (id === 'source-health') { if (!_sourceHealthLoaded) loadSourceHealth(); }
-  if (id === 'news-timeline') loadNews();
-  if (id === 'price-tracker') loadPrices();
-  if (id === 'ai-leaderboard') loadLeaderboard();
-  if (id === 'digest-history') loadDigestHistory();
-  if (id === 'schedule-config') loadScheduleConfig();
+  if (!PAGE_META[id]) return;
+  _currentTab = id;
+  document.querySelectorAll('.section').forEach(section => section.classList.toggle('active', section.id === id));
+  document.querySelectorAll('[data-tab]').forEach(button => {
+    button.classList.toggle('active', button.dataset.tab === id);
+    if (button.dataset.tab === id) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
+  });
+  const more = document.getElementById('mob-more');
+  if (more) more.classList.toggle('active', !['news-timeline', 'price-tracker', 'ai-leaderboard'].includes(id));
+  const [eyebrow, title, description] = PAGE_META[id];
+  document.getElementById('page-eyebrow').textContent = eyebrow;
+  document.getElementById('page-title').textContent = title;
+  document.getElementById('page-description').textContent = description;
+  document.title = `${title} · News Feed`;
+  loadTab(id);
+}
+
+function refreshCurrentTab() {
+  loadTab(_currentTab, true);
+  loadOverview();
 }
 
 function openMobileDrawer() {
-  document.getElementById('mobile-drawer-overlay').classList.add('open');
+  _drawerOpener = document.activeElement;
+  const overlay = document.getElementById('mobile-drawer-overlay');
+  overlay.classList.add('open');
+  overlay.setAttribute('aria-hidden', 'false');
+  document.getElementById('mob-more')?.setAttribute('aria-expanded', 'true');
+  document.body.style.overflow = 'hidden';
+  overlay.querySelector('button')?.focus();
 }
 
 function closeMobileDrawer() {
-  document.getElementById('mobile-drawer-overlay').classList.remove('open');
+  const overlay = document.getElementById('mobile-drawer-overlay');
+  if (!overlay.classList.contains('open')) return;
+  overlay.classList.remove('open');
+  overlay.setAttribute('aria-hidden', 'true');
+  document.getElementById('mob-more')?.setAttribute('aria-expanded', 'false');
+  document.body.style.overflow = '';
+  _drawerOpener?.focus();
+}
+
+function formatBangkok(value, options = {}) {
+  const date = new Date(value);
+  if (!value || !Number.isFinite(date.getTime())) return 'ยังไม่มีข้อมูล';
+  return date.toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', ...options });
+}
+
+function renderNextDigest() {
+  const next = _digestTimes === null ? null : UI.nextDigest(_digestTimes);
+  document.getElementById('stat-next-digest').textContent = _digestTimes === null ? '—' : next ? next.toLocaleTimeString('th-TH', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit' }) : 'ไม่ได้ตั้ง';
+  document.getElementById('stat-next-note').textContent = next ? `${next.toLocaleDateString('th-TH', { timeZone: 'Asia/Bangkok', day: 'numeric', month: 'short' })} · เวลาไทย` : 'เวลาประเทศไทย';
+  document.getElementById('activity-next').textContent = _digestTimes === null ? 'โหลดตารางส่งไม่ได้' : next ? `${formatBangkok(next)} น. · เวลาไทย` : 'ยังไม่ได้ตั้งเวลาส่ง';
+}
+
+function renderHealth(health) {
+  const badge = document.getElementById('health-badge');
+  badge.textContent = health.status === 'ok' ? 'เชื่อมต่อแล้ว' : 'ตรวจสอบสถานะ';
+  badge.dataset.state = health.status === 'ok' ? 'online' : 'error';
+  const last = health.last_fetch ? formatBangkok(health.last_fetch) : 'ยังไม่เคยดึงข่าว';
+  document.getElementById('footer-info').textContent = `ดึงข่าวล่าสุด ${last}`;
+  document.getElementById('activity-fetch').textContent = last;
 }
 
 async function loadHealth() {
-  try {
-    const h = await api('/api/health');
-    const badge = document.getElementById('health-badge');
-    badge.textContent = `${h.article_count} articles`;
-    document.getElementById('footer-info').textContent =
-      `Last fetch: ${h.last_fetch ? new Date(h.last_fetch).toLocaleString('th-TH') : 'never'}`;
-  } catch(e) { document.getElementById('health-badge').textContent = 'error'; }
+  try { renderHealth(await api('/api/health')); }
+  catch (_) {
+    document.getElementById('health-badge').textContent = 'เชื่อมต่อไม่ได้';
+    document.getElementById('health-badge').dataset.state = 'error';
+    document.getElementById('activity-fetch').textContent = 'โหลดสถานะไม่ได้';
+    document.getElementById('footer-info').textContent = 'โหลดสถานะไม่ได้';
+  }
+}
+
+function loadOverview() {
+  ++_overviewVersion;
+  if (_overviewPromise) return _overviewPromise;
+  const status = document.getElementById('overview-status');
+  status.textContent = 'กำลังอัปเดตภาพรวม…';
+  document.getElementById('overview-retry').hidden = true;
+  _overviewPromise = (async () => {
+    try {
+      let version;
+      do {
+        version = _overviewVersion;
+        const results = await Promise.allSettled([
+          api('/api/health'), api('/api/news/sources?hours=24'), api('/api/schedule'), api('/api/digest/history'),
+        ]);
+        // A refresh requested during this batch invalidates it and queues a new batch.
+        if (version !== _overviewVersion) continue;
+        const [health, sources, schedule, history] = results;
+        if (health.status === 'fulfilled') renderHealth(health.value);
+        else {
+          document.getElementById('health-badge').textContent = 'เชื่อมต่อไม่ได้';
+          document.getElementById('health-badge').dataset.state = 'error';
+          document.getElementById('activity-fetch').textContent = 'โหลดสถานะไม่ได้';
+          document.getElementById('footer-info').textContent = 'โหลดสถานะไม่ได้';
+        }
+        if (sources.status === 'fulfilled') {
+          document.getElementById('stat-articles').textContent = sources.value.reduce((sum, source) => sum + source.count, 0).toLocaleString('th-TH');
+          document.getElementById('stat-sources').textContent = sources.value.filter(source => source.count > 0).length.toLocaleString('th-TH');
+        } else {
+          document.getElementById('stat-articles').textContent = '—';
+          document.getElementById('stat-sources').textContent = '—';
+        }
+        _digestTimes = schedule.status === 'fulfilled' ? schedule.value.digest_times || [] : null;
+        renderNextDigest();
+        document.getElementById('activity-digest').textContent = history.status === 'fulfilled'
+          ? history.value.length ? formatBangkok(history.value[0].sent_at) : 'ยังไม่มีประวัติการส่ง'
+          : 'โหลดประวัติไม่ได้';
+        updateWatchlistCount();
+        const failed = results.filter(result => result.status === 'rejected').length;
+        status.textContent = failed ? `ข้อมูลบางส่วนโหลดไม่ได้ (${failed}/4) · ลองอัปเดตอีกครั้ง` : 'ข้อมูล 24 ชั่วโมงล่าสุด · เวลาไทย (GMT+7)';
+        document.getElementById('overview-retry').hidden = !failed;
+      } while (version !== _overviewVersion);
+    } finally {
+      _overviewPromise = null;
+    }
+  })();
+  return _overviewPromise;
 }
 
 let sourceChart;
 let _sourceHealthLoaded = false;
 
-async function loadSourceHealth() {
-  try {
+async function loadSourceHealth(isCurrent = () => true) {
     const sources = await api('/api/news/sources?hours=24');
-    const labels = sources.map(s => s.source);
+    if (!isCurrent()) return;
+    const labels = sources.map(s => sourceName(s.source));
     const data = sources.map(s => s.count);
     if (sourceChart) sourceChart.destroy();
-    sourceChart = new Chart(document.getElementById('sourceChart'), {
+    const canvas = document.getElementById('sourceChart');
+    canvas.hidden = typeof Chart === 'undefined' || !sources.length;
+    if (typeof Chart !== 'undefined' && sources.length) sourceChart = new Chart(canvas, {
       type: 'bar',
-      data: { labels, datasets: [{ label: 'Articles', data, backgroundColor: '#3b82f6' }] },
-      options: { plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#94a3b8' } }, y: { ticks: { color: '#94a3b8' } } } },
+      data: { labels, datasets: [{ label: 'ข่าวใน 24h', data, backgroundColor: '#158579', borderRadius: 5, maxBarThickness: 42 }] },
+      options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: '#65766f' } }, y: { beginAtZero: true, ticks: { color: '#65766f', precision: 0 }, grid: { color: '#edf0ee' } } } },
     });
+    let chartHint = document.getElementById('source-chart-hint');
+    if (!chartHint) { chartHint = document.createElement('p'); chartHint.id = 'source-chart-hint'; canvas.after(chartHint); }
+    chartHint.hidden = typeof Chart !== 'undefined' && sources.length > 0;
+    chartHint.textContent = !sources.length ? 'ยังไม่มีข่าวในช่วง 24 ชั่วโมงล่าสุด' : 'กราฟโหลดไม่ได้ · ดูจำนวนข่าวของแต่ละแหล่งด้านล่าง';
     const statusEl = document.getElementById('source-status-list');
-    statusEl.innerHTML = '<h2>Source Status</h2>' + (sources.length
+    statusEl.innerHTML = '<h2>ความเคลื่อนไหวใน 24 ชั่วโมง</h2><p class="section-note">จำนวนข่าวที่ดึงมาได้ ไม่ใช่ผลตรวจการเชื่อมต่อ RSS</p>' + (sources.length
       ? sources.map(s =>
-          `<div style="padding:.35rem 0"><span class="dot green"></span>${s.source} <small style="color:#64748b">(${s.count} articles in last 24h)</small></div>`
+          `<div class="source-status-row"><span>${escapeHtml(sourceName(s.source))}</span><strong>${s.count} <small>ข่าว</small></strong></div>`
         ).join('')
       : '<p style="color:#64748b;padding:.5rem 0;font-size:.85rem">No articles fetched yet</p>'
     );
     _sourceHealthLoaded = true;
-  } catch(e) { console.error('loadSourceHealth error:', e); }
 }
 
 function refreshSourceHealth() {
   _sourceHealthLoaded = false;
-  loadSourceHealth();
+  loadTab('source-health', true);
 }
 
-async function loadNews() {
+async function loadNews(isCurrent = () => true) {
+  const request = ++_newsRequest;
+  if (!allNews.length) document.getElementById('news-list').innerHTML = '<div class="loading-state" aria-label="กำลังโหลดข่าว">' + '<div class="skeleton"></div>'.repeat(3) + '</div>';
+  let sentAvailable = true;
   const [articles, sentData] = await Promise.all([
     api('/api/news?limit=100'),
-    api('/api/news/sent-ids').catch(() => ({ sent_ids: [] })),
+    api('/api/news/sent-ids').catch(() => { sentAvailable = false; return { sent_ids: [] }; }),
   ]);
+  if (request !== _newsRequest || !isCurrent()) return;
   allNews = articles;
+  _sentIdsAvailable = sentAvailable;
   _sentIds = new Set(sentData.sent_ids);
   const sel = document.getElementById('news-source-filter');
+  const selectedSource = sel.value;
   const sources = [...new Set(allNews.map(a=>a.source))];
-  sel.innerHTML = '<option value="">All sources</option>' + sources.map(s=>`<option value="${s}">${s}</option>`).join('');
-  _newsSortNewest = true;
+  if (selectedSource && !sources.includes(selectedSource)) sources.push(selectedSource);
+  sel.innerHTML = '<option value="">ทุกแหล่งข่าว</option>' + sources.map(s=>`<option value="${escapeAttr(s)}">${escapeHtml(sourceName(s))}</option>`).join('');
+  sel.value = selectedSource;
+  const sentFilter = document.querySelector('[data-news-status="sent"]');
+  if (sentFilter) sentFilter.disabled = !_sentIdsAvailable;
   _updateSortBtn();
-  renderNews(allNews);
+  filterNews();
+}
+
+function sourceName(source) {
+  return SOURCE_META[source]?.name || source;
+}
+
+function setNewsStatus(status) {
+  if (!['all', 'summarized', 'sent'].includes(status)) return;
+  _newsStatus = status;
+  document.querySelectorAll('[data-news-status]').forEach(button => {
+    button.classList.toggle('active', button.dataset.newsStatus === status);
+    button.setAttribute('aria-pressed', String(button.dataset.newsStatus === status));
+  });
+  filterNews();
 }
 
 function _sortedNews(articles) {
@@ -291,7 +525,7 @@ function _sortedNews(articles) {
 
 function _updateSortBtn() {
   const btn = document.getElementById('news-sort-btn');
-  if (btn) btn.textContent = _newsSortNewest ? '🕐 Newest first' : '🕐 Oldest first';
+  if (btn) btn.textContent = _newsSortNewest ? '↓ ใหม่ล่าสุด' : '↑ เก่าสุดก่อน';
 }
 
 function toggleNewsSort() {
@@ -301,41 +535,61 @@ function toggleNewsSort() {
 }
 
 function _digestBadge(a) {
+  if (!_sentIdsAvailable) return '<span class="digest-badge badge-expired">โหลดสถานะส่งไม่ได้</span>';
   if (_sentIds.has(a.id)) return '<span class="digest-badge badge-sent">ส่งแล้ว</span>';
   if (!a.summary_th) return '';
   // 36h is the outer bound of the adaptive digest window. Beyond that, an article
   // very likely missed its slot and won't be picked up.
   const inWindow = new Date(a.fetched_at) >= new Date(Date.now() - 36 * 60 * 60 * 1000);
-  if (inWindow) return '<span class="digest-badge badge-pending">รอส่ง</span>';
-  return '<span class="digest-badge badge-expired">พ้น window</span>';
+  if (inWindow) return '<span class="digest-badge badge-pending">ยังไม่ส่ง</span>';
+  return '<span class="digest-badge badge-expired">เกิน 36 ชม.</span>';
 }
 
 function renderNews(articles) {
   const sorted = _sortedNews(articles);
   const el = document.getElementById('news-list');
-  if (!sorted.length) { el.innerHTML = '<h2>News Timeline</h2><p style="color:#64748b;padding:.5rem 0">No articles</p>'; return; }
-  el.innerHTML = '<h2>News Timeline</h2>' + sorted.map(a => `
-    <div class="article-card" onclick="this.classList.toggle('open')">
-      <div class="article-title">${a.title}</div>
-      <div class="article-meta">${_digestBadge(a)}<span class="source-badge">${a.source}</span>${new Date(a.published).toLocaleString('th-TH')}</div>
-      <div class="article-summary">${a.summary_th || '<em>Summarizing…</em>'}</div>
-      <div style="margin-top:.25rem"><a href="${a.url}" target="_blank" style="color:#3b82f6;font-size:.75rem" onclick="event.stopPropagation()">อ่านต่อ ↗</a></div>
-    </div>`).join('');
+  const openIds = new Set([...el.querySelectorAll('details[open]')].map(article => article.dataset.articleId));
+  if (!sorted.length) {
+    el.innerHTML = `<div class="empty-state"><span class="empty-icon">⌕</span><strong>${allNews.length ? 'ไม่พบข่าวที่ตรงกับตัวกรอง' : 'ยังไม่มีข่าวในฟีด'}</strong><p>${allNews.length ? 'ลองเปลี่ยนคำค้น แหล่งข่าว หรือสถานะข่าว' : 'ข่าวใหม่จะปรากฏที่นี่หลังระบบดึงข้อมูล หรือกดดึงข่าวทันที'}</p></div>`;
+    return;
+  }
+  el.innerHTML = sorted.map(article => {
+    const url = UI.safeArticleUrl(article.url);
+    const summary = article.summary_th?.trim() || 'ยังไม่มีสรุปภาษาไทย';
+    return `<details class="article-card" data-article-id="${escapeAttr(article.id)}" ${openIds.has(article.id) ? 'open' : ''}>
+      <summary class="article-toggle">
+        <div class="article-meta"><span class="source-badge">${escapeHtml(sourceName(article.source))}</span><time>${escapeHtml(formatBangkok(article.published))}</time>${_digestBadge(article)}</div>
+        <h3 class="article-title">${escapeHtml(article.title)}</h3>
+        <p class="article-preview">${escapeHtml(summary)}</p>
+        <span class="article-toggle-label">อ่านสรุป <span aria-hidden="true">↗</span></span>
+      </summary>
+      <div class="article-summary">${escapeHtml(summary)}</div>
+      ${url ? `<a class="article-link" href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer">อ่านจากต้นฉบับ <span aria-hidden="true">↗</span></a>` : '<span class="article-link">ไม่มีลิงก์ต้นฉบับที่ใช้งานได้</span>'}
+    </details>`;
+  }).join('');
 }
 
 function filterNews() {
-  const q = document.getElementById('news-search').value.toLowerCase();
-  const src = document.getElementById('news-source-filter').value;
-  renderNews(allNews.filter(a =>
-    (!src || a.source === src) &&
-    (!q || a.title.toLowerCase().includes(q) || (a.summary_th||'').toLowerCase().includes(q))
-  ));
+  const filtered = UI.filterArticles(allNews, {
+    query: document.getElementById('news-search').value,
+    source: document.getElementById('news-source-filter').value,
+    status: _newsStatus,
+  }, _sentIds);
+  document.getElementById('news-results').textContent = _newsStatus === 'sent' && !_sentIdsAvailable
+    ? 'โหลดประวัติส่งไม่ได้ · ลองอัปเดตอีกครั้ง'
+    : `${filtered.length} จาก ${allNews.length} ข่าว · ค้นหาใน 100 ข่าวล่าสุด`;
+  if (_newsStatus === 'sent' && !_sentIdsAvailable) {
+    document.getElementById('news-list').innerHTML = '<div class="empty-state"><strong>ยังตรวจสอบสถานะส่งไม่ได้</strong><p>ลองกดอัปเดตใหม่ หรือเลือกดูข่าวทั้งหมด</p></div>';
+    return;
+  }
+  renderNews(filtered);
 }
 
 function togglePriceExpand(idx) {
   const row = document.getElementById(`price-expand-${idx}`);
   if (!row) return;
   row.classList.toggle('open');
+  document.getElementById(`price-row-${idx}`)?.setAttribute('aria-expanded', String(row.classList.contains('open')));
   if (row.classList.contains('open') && !_priceCharts[idx]) {
     const model = _shownPrices[idx];
     if (model) _loadPriceChart(idx, model.model_id);
@@ -359,6 +613,10 @@ async function _loadPriceChart(idx, modelId) {
       wrap.innerHTML = '<p style="color:#22c55e;font-size:.74rem;margin:.2rem 0">FREE — ไม่มีประวัติราคา</p>';
       return;
     }
+    if (typeof Chart === 'undefined') {
+      wrap.innerHTML = '<p class="section-note">กราฟโหลดไม่ได้ กรุณารีเฟรชหน้าเพื่อลองโหลดอีกครั้ง</p>';
+      return;
+    }
     _priceCharts[idx] = new Chart(canvas, {
       type: 'line',
       data: {
@@ -366,8 +624,8 @@ async function _loadPriceChart(idx, modelId) {
         datasets: [{
           label: 'Combined $/1M',
           data: combined,
-          borderColor: '#3b82f6',
-          backgroundColor: 'rgba(59,130,246,.08)',
+          borderColor: '#158579',
+          backgroundColor: 'rgba(21,133,121,.08)',
           fill: true,
           tension: 0.3,
           pointRadius: combined.length <= 7 ? 3 : 1,
@@ -395,22 +653,26 @@ function renderPriceTable(prices) {
   _priceCharts = {};
   _shownPrices = prices;
   const tbody = document.querySelector('#price-table tbody');
+  if (!prices.length) {
+    tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><strong>ไม่พบโมเดล</strong><p>ลองเปลี่ยนคำค้นหาหรือตัวกรอง</p></div></td></tr>';
+    return;
+  }
   tbody.innerHTML = prices.map((p, i) => {
     const z = getZone(p.model_id);
     const ctx = p.context_length ? p.context_length.toLocaleString() + ' tokens' : '–';
     const updated = p.updated_at ? new Date(p.updated_at).toLocaleString('th-TH') : '–';
-    return `<tr onclick="togglePriceExpand(${i})">
+    return `<tr id="price-row-${i}" tabindex="0" aria-expanded="false" aria-controls="price-expand-${i}" onclick="if(!event.target.closest('button,a,input'))togglePriceExpand(${i})" onkeydown="if(event.target===this && (event.key==='Enter' || event.key===' ')){event.preventDefault();togglePriceExpand(${i})}">
     <td style="padding:.4rem .3rem;width:2rem;text-align:center">${_starBtn(p.model_id)}</td>
     <td>
-      ${escapeHtml(p.name)} <span class="zone-badge">${z.flag} ${z.label}</span>
+      <span class="price-model-name">${escapeHtml(p.name)}</span> <span class="zone-badge">${z.flag} ${z.label}</span>
       <span class="price-cell-provider">${escapeHtml(p.provider)}</span>
     </td>
     <td><span class="model-id">${escapeHtml(p.model_id)}</span> <button class="copy-btn" data-idx="${i}" title="Copy model ID">📋</button></td>
     <td>${escapeHtml(p.provider)}</td>
-    <td>$${(p.prompt_price||0).toFixed(3)}</td>
-    <td>$${(p.complete_price||0).toFixed(3)}</td>
+    <td class="price-value">$${(p.prompt_price||0).toFixed(3)}</td>
+    <td class="price-value">$${(p.complete_price||0).toFixed(3)}</td>
     <td>${p.context_length ? p.context_length.toLocaleString() : '–'}</td>
-    <td>${p.updated_at ? new Date(p.updated_at).toLocaleString('th-TH') : '–'}</td>
+    <td>${p.updated_at ? formatBangkok(p.updated_at) : '–'}</td>
   </tr>
   <tr class="price-expand-row" id="price-expand-${i}">
     <td colspan="8">
@@ -427,7 +689,7 @@ function renderPriceTable(prices) {
   }).join('');
 }
 
-async function loadPrices() {
+async function loadPrices(isCurrent = () => true) {
   const provider = document.getElementById('price-provider-filter').value;
   const sort = document.getElementById('price-sort').value;
   const params = new URLSearchParams({ sort });
@@ -436,21 +698,20 @@ async function loadPrices() {
     api('/api/prices?' + params),
     api('/api/prices/updated'),
   ]);
+  if (!isCurrent()) return;
   allPrices = prices.filter(p => (p.prompt_price||0) >= 0 && (p.complete_price||0) >= 0);
-  const searchEl = document.getElementById('price-search');
-  if (searchEl) searchEl.value = '';
   const updatedEl = document.getElementById('price-updated');
   if (updatedData.updated_at) {
-    updatedEl.textContent = `🕐 Last updated: ${new Date(updatedData.updated_at).toLocaleString('th-TH')}`;
+    updatedEl.textContent = `อัปเดตราคาล่าสุด ${formatBangkok(updatedData.updated_at)} · USD ต่อ 1 ล้าน tokens`;
   } else {
     updatedEl.textContent = '🕐 Not yet updated';
   }
   if (document.getElementById('price-provider-filter').options.length <= 1) {
     const providers = [...new Set(allPrices.map(p=>p.provider))];
     const sel = document.getElementById('price-provider-filter');
-    sel.innerHTML = '<option value="">All providers</option>' + providers.map(p=>`<option value="${p}">${p}</option>`).join('');
+    sel.innerHTML = '<option value="">ทุกผู้ให้บริการ</option>' + providers.map(p=>`<option value="${escapeAttr(p)}">${escapeHtml(p)}</option>`).join('');
   }
-  renderPriceTable(allPrices);
+  filterPrices();
   renderPriceWatchlist();
 }
 
@@ -473,11 +734,12 @@ function filterPrices() {
   renderPriceTable(filtered);
 }
 
-async function loadLeaderboard() {
+async function loadLeaderboard(isCurrent = () => true) {
   const [prices, updatedData] = await Promise.all([
     api('/api/prices?sort=combined_asc'),
     api('/api/prices/updated'),
   ]);
+  if (!isCurrent()) return;
   _lbPrices = prices;
   const updatedEl = document.getElementById('leaderboard-updated');
   updatedEl.textContent = updatedData.updated_at
@@ -494,7 +756,7 @@ function renderLeaderboard() {
   const paidPositive = validPrices.filter(p => _combined(p) > 0);
   const popular = validPrices.filter(p => _isPopular(p.model_id));
 
-  // Watchlist (bookmarked models, persisted in localStorage)
+  // Watchlist (server-synced with a local cache/fallback)
   const watch = validPrices.filter(p => _watchlist.has(p.model_id));
   document.getElementById('lb-watchlist-count').textContent = watch.length ? `(${watch.length})` : '';
   document.getElementById('leaderboard-watchlist').innerHTML = watch.length
@@ -579,19 +841,20 @@ function renderLeaderboard() {
     : '<p style="color:#64748b;font-size:.85rem">No paid models available</p>';
 }
 
-async function loadDigestHistory() {
+async function loadDigestHistory(isCurrent = () => true) {
   const history = await api('/api/digest/history');
+  if (!isCurrent()) return;
   const el = document.getElementById('digest-list');
-  if (!history.length) { el.innerHTML = '<p style="color:#64748b">No digests sent yet</p>'; return; }
+  if (!history.length) { el.innerHTML = '<div class="empty-state"><strong>ยังไม่มีประวัติ Digest</strong><p>ข่าวที่ระบบส่งให้คุณจะปรากฏที่นี่</p></div>'; return; }
   el.innerHTML = history.map(d => `
-    <div class="digest-entry" onclick="this.classList.toggle('open')">
-      <span>${new Date(d.sent_at).toLocaleString('th-TH')}</span>
-      <span style="color:#64748b;font-size:.75rem;margin-left:.5rem">${d.channels} · ${d.article_ids.length} articles</span>
-      <div class="digest-detail">${d.article_ids.map(id=>`<div style="font-size:.8rem;color:#94a3b8">• ${id}</div>`).join('')}</div>
-    </div>`).join('');
+    <details class="digest-entry">
+      <summary><span class="digest-date">${escapeHtml(formatBangkok(d.sent_at))}</span><span class="digest-info">${escapeHtml(Array.isArray(d.channels) ? d.channels.join(' · ') : d.channels)} · ${d.article_ids.length} ข่าว</span><span class="digest-caret" aria-hidden="true">⌄</span></summary>
+      <div class="digest-detail">${d.article_ids.map(id=>`<div class="model-id">${escapeHtml(id)}</div>`).join('')}</div>
+    </details>`).join('');
 }
 
 async function testDigest() {
+  if (!confirm('ส่ง Test Digest ไปยัง LINE / Telegram ที่ตั้งไว้ตอนนี้?')) return;
   const btn = document.getElementById('test-digest-btn');
   const statusEl = document.getElementById('test-digest-status');
   btn.disabled = true;
@@ -609,13 +872,15 @@ async function testDigest() {
       statusEl.textContent = `⚠ ไม่มีบทความใหม่ (window: ${data.window_computed_hours}h, candidates: ${data.candidates_in_window}, sent already: ${data.already_sent_ids})`;
       statusEl.style.color = 'var(--warn)';
     }
-    loadDigestHistory();
+    loadTab('digest-history', true);
+    loadOverview();
+    loadNews().catch(() => {});
   } catch(e) {
     statusEl.textContent = `✗ Error: ${e.message}`;
     statusEl.style.color = 'var(--danger)';
   } finally {
     btn.disabled = false;
-    btn.textContent = '📤 ส่ง Test Digest';
+    btn.textContent = 'ส่ง Test Digest · LINE / Telegram';
   }
 }
 
@@ -737,8 +1002,9 @@ const SOURCE_META = {
   android_authority: { name: 'Android Authority',   desc: 'Android ecosystem, Google, Samsung, mid-range phones' },
 };
 
-async function loadScheduleConfig() {
+async function loadScheduleConfig(isCurrent = () => true) {
   const cfg = await api('/api/schedule');
+  if (!isCurrent()) return;
   _renderDigestTimeInputs(cfg.digest_times || ['07:00', '12:00', '18:00']);
   const allSources = Object.keys(SOURCE_META);
   document.getElementById('source-toggles').innerHTML = allSources.map(s => {
@@ -764,6 +1030,13 @@ async function loadScheduleConfig() {
 }
 
 async function saveSchedule() {
+  const button = document.getElementById('save-config-btn');
+  if (_configSaving || button?.disabled) return;
+  _configSaving = true;
+  let finishSave;
+  _configSaveDone = new Promise(resolve => { finishSave = resolve; });
+  const configRequest = _tabRequests['schedule-config'];
+  if (button) button.disabled = true;
   const times = [...document.querySelectorAll('.digest-time-input')].map(i=>i.value).filter(Boolean);
   const sources = [
     ...[...document.querySelectorAll('#source-toggles input[type=checkbox]:checked')].map(i => i.value),
@@ -773,18 +1046,28 @@ async function saveSchedule() {
   const model = document.getElementById('cfg-model').value;
   const retention = parseInt(document.getElementById('cfg-retention').value, 10) || 30;
   const fallback = _readFallbackChain().filter(fb => fb.model.trim());
+  const buffer = parseFloat(document.getElementById('cfg-window-buffer').value);
   try {
     const r = await fetch('/api/schedule', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ digest_times: times, enabled_sources: sources, summarizer_provider: provider, summarizer_model: model, retention_days: retention, summarizer_fallback: fallback, custom_sources: _customSources, digest_window_buffer_hours: parseFloat(document.getElementById('cfg-window-buffer').value) || 1.0, digest_size_base: parseInt(document.getElementById('cfg-size-base').value, 10) || 5, digest_size_max: parseInt(document.getElementById('cfg-size-max').value, 10) || 10, digest_max_per_source: parseInt(document.getElementById('cfg-max-per-source').value, 10) || 2 }),
+      body: JSON.stringify({ digest_times: times, enabled_sources: sources, summarizer_provider: provider, summarizer_model: model, retention_days: retention, summarizer_fallback: fallback, custom_sources: _customSources, digest_window_buffer_hours: Number.isFinite(buffer) ? buffer : 1.0, digest_size_base: parseInt(document.getElementById('cfg-size-base').value, 10) || 5, digest_size_max: parseInt(document.getElementById('cfg-size-max').value, 10) || 10, digest_max_per_source: parseInt(document.getElementById('cfg-max-per-source').value, 10) || 2 }),
     });
     if (!r.ok) throw new Error(r.status);
+    _digestTimes = times;
+    renderNextDigest();
+    loadOverview();
     document.getElementById('save-status').textContent = '✓ Saved';
     document.getElementById('save-status').style.color = '#22c55e';
   } catch(e) {
     document.getElementById('save-status').textContent = '✗ Save failed';
     document.getElementById('save-status').style.color = '#ef4444';
+  } finally {
+    _configSaving = false;
+    finishSave();
+    _configSaveDone = null;
+    if (_configReloadPromise) await _configReloadPromise;
+    else if (button && _tabRequests['schedule-config'] === configRequest) button.disabled = false;
   }
   setTimeout(()=>document.getElementById('save-status').textContent='', 3000);
 }
@@ -803,9 +1086,9 @@ async function fetchNow() {
     if (!r.ok) throw new Error(data.detail || r.status);
     statusEl.textContent = `✓ ดึงข่าวใหม่ ${data.new_articles} รายการ`;
     statusEl.style.color = 'var(--success)';
-    loadNews();
-    loadHealth();
-    refreshSourceHealth();
+    loadTab('news-timeline', true);
+    loadOverview();
+    _sourceHealthLoaded = false;
   } catch (e) {
     statusEl.textContent = `✗ Error: ${e.message}`;
     statusEl.style.color = 'var(--danger)';
@@ -826,7 +1109,10 @@ async function clearAllNews() {
     if (!r.ok) throw new Error(data.detail || r.status);
     statusEl.textContent = `✓ ลบแล้ว ${data.deleted} ข่าว`;
     statusEl.style.color = 'var(--success)';
-    loadHealth();
+    loadOverview();
+    allNews = [];
+    _sourceHealthLoaded = false;
+    loadTab('news-timeline', true);
   } catch (e) {
     statusEl.textContent = `✗ Error: ${e.message}`;
     statusEl.style.color = 'var(--danger)';
@@ -907,14 +1193,29 @@ document.addEventListener('click', e => {
         body: JSON.stringify({ expires_at: expiryValue || null }),
       });
       if (!r.ok) throw new Error(r.status);
-      loadLeaderboard();
+      loadTab('ai-leaderboard', true);
     } catch (err) {
       console.error('Failed to update expiry:', err);
     }
   });
 });
 
-// Init
-loadHealth();
-loadSourceHealth();
-if (window.matchMedia('(max-width:640px)').matches) showTab('news-timeline');
+// Keep keyboard focus inside the mobile dialog and return it to the opener.
+document.addEventListener('keydown', event => {
+  const overlay = document.getElementById('mobile-drawer-overlay');
+  if (!overlay.classList.contains('open')) return;
+  if (event.key === 'Escape') { closeMobileDrawer(); return; }
+  if (event.key !== 'Tab') return;
+  const buttons = [...overlay.querySelectorAll('button:not([disabled])')];
+  const first = buttons[0];
+  const last = buttons[buttons.length - 1];
+  if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+  else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+});
+window.matchMedia('(min-width:761px)').addEventListener('change', event => { if (event.matches) closeMobileDrawer(); });
+
+// Init: the same reading-first view on every device.
+showTab('news-timeline');
+loadOverview();
+_syncWatchlistFromServer();
+setInterval(renderNextDigest, 60000);
