@@ -1,5 +1,15 @@
 # Daily Log — news-feed
 
+## 2026-10-08 — ยืนยันปิดงาน dashboard ตามคำสั่งผู้ใช้
+
+- Dashboard modern ครบ 6 หน้า deploy production แล้ว: implementation `77e5481`, release `56354a5`, เอกสารผลตรวจ `eef1611` รวมเข้า main ที่ `b437d5c` และ push สำเร็จ
+- ตรวจ Git ก่อนบันทึกปิดงาน: checkout `main` ตรงกับ `origin/main` ที่ `8b55c6a`; บันทึก branch cleanup/handoff ล่าสุดคงไว้
+- ผลตรวจจากรอบ release: **133 backend + 22 frontend tests ผ่าน**, final code review ผ่าน; NAS app healthy, API/static assets 200 พร้อม hash ตรง release และ Nginx basic auth 401
+- อัปเดตและตรวจทั้ง `daily_log.md` และ `00_INDEX.md`; รอบนี้เปลี่ยนเฉพาะ memory ไม่มี app change, ไม่รัน tests ซ้ำ และไม่ deploy ใหม่
+- งานค้างคงเดิม: ยังไม่ได้ตรวจ visual/interaction ใน browser จริงเพราะเครื่องมือถูกปฏิเสธสิทธิ์; enhancement รอบถัดไป bookmark/อ่านแล้ว, pagination และ model comparison
+
+---
+
 ## 2026-10-08 — Modern dashboard release / ปิดงาน
 
 - ผู้ใช้สั่ง commit, push, merge main และ deploy; ดำเนินการครบตาม scope news-feed
@@ -9,7 +19,7 @@
 - Deploy บน NAS `/volume2/docker/news-feed` ผ่านสำเนาชั่วคราวของ `scripts/deploy.sh -s news-feed -y` จาก exact Git archive ของ `56354a5`: payload/ownership จำกัด news-feed, exclude `.env.deploy` และ scripts, upload `.env` ของ news-feed ตาม workflow เดิม ไม่ upload source/secrets ของ stack อื่น
 - Build/restart สำเร็จใน 6s; `news-feed` **running healthy**, `news-feed-nginx` running; data volume/config เดิมคงอยู่
 - Post-deploy read-only checks: health/news/source-counts/schedule API → 200; `/`, `/dashboard.css`, `/dashboard-utils.js`, `/app.js` → 200, MIME ถูกต้อง และ SHA-256 ตรงกับ release ทั้ง 4 ไฟล์; Nginx unauthenticated request → 401
-- สถานะจริง: dashboard ใหม่ deploy production แล้ว, implementation commit/push/merge main สำเร็จ; ไม่มี PR ที่สร้างในงานนี้. Memory/index และ design/plan อัปเดตผล release เพื่อ commit/push ปิดงาน
+- สถานะจริง: dashboard ใหม่ deploy production แล้ว, implementation commit/push/merge main สำเร็จ; ไม่มี PR ที่สร้างในงานนี้. Memory/index และ design/plan commit `eef1611` และ merge/push main ที่ `b437d5c` แล้ว
 - ข้อจำกัดคงเหลือ: browser tool ปฏิเสธสิทธิ์ preview; **ยังไม่ยืนยัน rendering/overflow/interactions บน desktop/tablet/mobile ด้วย browser จริง**. ไม่พยายาม bypass การปฏิเสธ. Local mock preview `http://127.0.0.1:8874` สำหรับตรวจด้วยข้อมูลจำลอง
 - Enhance รอบถัดไป: bookmark/อ่านแล้ว, pagination เกิน latest100, model comparison และ benchmark/source health ที่อัปเดตจริง
 

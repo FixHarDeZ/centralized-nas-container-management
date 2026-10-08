@@ -4,6 +4,11 @@
 **Port:** 5064 (external) → Nginx :80 → news-feed :8000 (internal)  
 **Status:** Running healthy ✅ — modern dashboard deployed (2026-10-08)
 
+> **2026-10-08 — ปิดงาน dashboard:** release และเอกสารอยู่ main แล้ว (`b437d5c`).
+> ผลตรวจรอบ release: 133 backend + 22 frontend tests และ final review ผ่าน; NAS healthy/API/assets verified.
+> รอบปิดงานอัปเดตและตรวจ memory ทั้งสองไฟล์ ไม่มี app change หรือ deploy ใหม่.
+> Browser visual/interaction ยังไม่ยืนยันเพราะถูกปฏิเสธสิทธิ์; enhancement อยู่ใน daily log.
+
 > **2026-10-08 — Git cleanup ปิดงานแล้ว:** ผู้ใช้สั่งให้เหลือ main ทั้ง local/GitHub.
 > Checkout หลักอยู่ main แล้ว; `codex/news-feed-modern-dashboard` ลบทั้งสองฝั่ง.
 > งาน dashboard release อยู่ main `b437d5c`; commit `bb2ca52` มี tree เดียวกัน.
