@@ -1980,3 +1980,17 @@ install` จะสำเร็จ. ต้องสร้าง venv ใต้ re
   ห้าม commit diff ซ้ำโดยไม่เทียบ main. Config secret ที่ copy เป็น gitignored ทั้งหมด.
 - **สถานะ:** commit + merge main + push + deploy สำเร็จ. ค้างเฉพาะผู้ใช้เลือก Topic
   จริงแล้วฟังคลิปจาก Telegram; ยังไม่ได้สร้าง Topic/ส่งข้อความทดสอบเข้าบอทจริง.
+
+### ปิดงานตามคำสั่ง “จบงาน” — 2026-10-08
+
+- เสร็จ: checklist คำออกเสียงแยกหลังเขียน/แก้ Script พร้อมคำอ่าน, Card, เหตุผล,
+  รวมคำซ้ำ และ fallback ตรวจคำอังกฤษที่ตกหล่น; ฟีเจอร์ commit `eb474e5` อยู่ main.
+- สถานะจริง: merge main + push + deploy สำเร็จ; commit บันทึก release `aea0937`
+  อยู่ main/origin แล้ว. ตรวจ checkout release ก่อนปิดงาน: clean, HEAD = origin/main.
+- ผลตรวจ: production image ผ่านทั้ง 284 tests (283 offline + TTS จริง 1),
+  shared-sync 5 pass, pronunciation 29 pass, ไม่มี Ruff finding ใหม่.
+  ซอร์สใน container ตรง release; dashboard health ok และทั้ง 3 containers running.
+- อัปเดต `.notes/00_INDEX.md` และ log นี้สำหรับปิด session; เปลี่ยนเฉพาะ memory
+  จึงไม่ต้อง deploy ซ้ำ. เก็บงาน news-feed ใน checkout ร่วมไว้ตามเดิม.
+- งานพัฒนาหรือ deployment ไม่มีค้าง. การฟังคลิปจริงผ่าน Telegram รอผู้ใช้เลือก
+  Topic ครั้งถัดไป; รายการนี้สรุปจากข้อความ ไม่ได้ยืนยันคุณภาพเสียงจริง.

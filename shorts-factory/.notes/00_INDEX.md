@@ -1,5 +1,12 @@
 # shorts-factory — Index
 
+**ปิดงาน 2026-10-08 ตามคำสั่งผู้ใช้.** ฟีเจอร์ `eb474e5` และบันทึกผล release
+`aea0937` อยู่ main/origin แล้ว; production deploy และตรวจครบ 284 tests ผ่าน.
+อัปเดต memory ทั้ง index/daily log สำหรับปิด session. ไม่มีงาน implementation หรือ
+deployment ค้าง; ผู้ใช้ยังต้องฟังคำในคลิปจริงตาม checklist เมื่อเลือก Topic ครั้งถัดไป.
+การปิดงานแก้เฉพาะ memory จึงไม่ต้อง deploy ซ้ำ. ใช้ main worktree แยกด้านล่าง;
+รักษางาน news-feed และสำเนา diff ใน checkout ร่วมตามเดิม.
+
 **2026-10-08 — Pronunciation checklist (commit `eb474e5`, main pushed + deploy แล้ว).** หลังเขียนหรือแก้
 Script ส่งข้อความ 🎧 แยก: คำ + คำอ่านจาก Script + Card (เริ่ม 1) + จุดที่ควรฟัง.
 `app/pronunciation.py` ตรวจ optional per-Card `pronunciation_checks` จากคำตอบโมเดลเดิม
