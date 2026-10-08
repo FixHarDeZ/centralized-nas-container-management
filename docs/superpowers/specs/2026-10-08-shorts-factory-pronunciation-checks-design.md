@@ -2,7 +2,7 @@
 
 Date: 2026-10-08 (Asia/Bangkok)
 Stack: `shorts-factory/`
-Status: approved by the user on 2026-10-08; implemented and locally verified, not deployed.
+Status: approved, implemented, merged into main and deployed on 2026-10-08 (`eb474e5`).
 
 ## User outcome
 
@@ -138,7 +138,9 @@ Pillow/edge-tts เข้ามาในโมดูลนี้
 อ่านคำแนะนำ repo, stack memory และ flow Script/Telegram/TTS แล้ว
 ตรวจ spec เรื่อง scope, backward compatibility, การไม่เดาคำอ่าน และ
 เพดานข้อความ Telegram แล้ว; ผู้ใช้อนุมัติแบบและให้ลงมือทำต่อเมื่อ 2026-10-08
-Implementation และ code review เสร็จแล้ว. เทสต์ใหม่ 28 ข้อผ่าน; ทั้งชุด 276 pass
-และ 8 fail เป็นข้อจำกัด Raqm/font บน Mac เดิม. Shared-sync 5 pass; Ruff
-ไม่มี finding ใหม่. อัปเดต memory ทั้งสองไฟล์แล้ว. ยังไม่ commit/push/deploy
-หรือทดสอบการเขียน Script/ส่งรายการจริงผ่าน Telegram
+Implementation และ code review เสร็จแล้ว. Commit `eb474e5` เข้า main/push/deploy
+ตามคำสั่งผู้ใช้. NAS image ใหม่ผ่านเทสต์ครบ 284 ข้อ (283 แบบปิด network + TTS
+จริงอีก 1 ข้อ), shared-sync 5 pass; Ruff ไม่มี finding ใหม่. Source hashes ใน
+container ตรง release, TH/EN prompt/checklist smoke/Raqm/health ผ่าน, 3 services
+running ไม่มี restart/error. อัปเดต memory ทั้งสองไฟล์แล้ว. ยังไม่ได้สร้าง Topic
+หรือส่งรายการทดสอบจริงเข้า Telegram; ผู้ใช้เลือกเรื่องใหม่แล้วลองฟังคลิปได้

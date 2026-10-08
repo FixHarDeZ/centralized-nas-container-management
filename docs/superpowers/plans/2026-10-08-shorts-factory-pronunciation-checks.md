@@ -16,7 +16,7 @@
 - Show Script wording and note `/say` overrides; no audio correctness claims.
 - Checklist send failures cannot block review/auto-render; do not catch cancellation.
 - Shared vendored `mimo.py`/`telegram.py` remain managed by `make sync-shared`.
-- No deployment or publication is requested in this session. Keep commit/deploy status accurate in both stack memory files.
+- User subsequently authorized commit, merge main, push and deploy on 2026-10-08. Keep actual delivery status in both stack memory files; YouTube publication remains a separate human action.
 
 ## Task 1: Validated checklist extraction and presentation
 
@@ -84,8 +84,10 @@ Files: update `shorts-factory/README.md`, `shorts-factory/.notes/daily_log.md`, 
 
 Spec coverage checked: metadata, both Locales, duplicate readings, fallback, failure tolerance, message limits, old Scripts, revisions/auto-run and stack memory are assigned above. Dashboard, audio preview/timestamps and automatic pronunciation edits are outside this change.
 
-Execution complete on 2026-10-08. All steps implemented and verified; 28 new tests pass,
-full suite 276 passed / 8 existing Mac Raqm/font failures, shared-sync 5 passed.
-Ruff new files clean and no introduced findings in existing files. Code review findings
-resolved (number-leading abbreviations and C++/C#), and auto rendering claims its busy
-mode before awaiting checklist delivery. No commit, push or deploy was performed.
+Execution and release complete on 2026-10-08. Commit `eb474e5` fast-forwarded into
+main and pushed; deployed through `scripts/deploy.sh -s shorts-factory -y` from a clean
+managed worktree. All 284 tests passed in the deployed NAS image (283 network-free
+plus the single real TTS check); shared-sync 5 passed. Source hashes, prompt/checklist
+smoke, Raqm and dashboard health verified; three services running with zero restarts
+or logged errors. Ruff new files clean with no introduced findings in existing files.
+Code review findings resolved; both stack memory files updated with actual delivery.

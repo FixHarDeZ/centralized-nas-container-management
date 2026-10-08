@@ -1948,3 +1948,35 @@ install` จะสำเร็จ. ต้องสร้าง venv ใต้ re
   Topic ที่มีตัวย่อ/คำทับศัพท์หลัง deploy (ต้องเช็กซอร์สใน container ตาม memory เดิม).
 - **สถานะตามจริง:** ฟีเจอร์อยู่ local working tree; **ยังไม่ commit, push หรือ deploy**.
   ไม่แตะงาน news-feed ที่แก้อยู่พร้อมกัน และไม่ได้ส่งข้อความไป Telegram จริง.
+
+### ต่อ: commit → merge main → push → deploy เสร็จ 2026-10-08
+
+- ผู้ใช้สั่ง `commit push deploy merge เข้า main` และให้ทำต่อจนจบ. Checkout ร่วม
+  อยู่ `codex/news-feed-modern-dashboard` ซึ่งมีงาน news-feed ค้าง → สร้าง managed
+  worktree แยก `~/.codex/worktrees/shorts-pronunciation-release/centralized-nas-container-management`
+  จาก main แล้ว copy เฉพาะ 10 ไฟล์ของงานนี้ พร้อม config deploy ที่ gitignored.
+- ครั้งแรก automatic approval review หยุดก่อน stage เพราะ usage limit ของ reviewer;
+  ไม่ได้รันคำสั่ง. หลังผู้ใช้ให้ทำต่อ stage/commit ผ่านระบบอนุมัติเดิมสำเร็จ.
+- Commit **`eb474e5`** `feat(shorts-factory): add pronunciation review checklist`
+  รวม code/tests/README/spec/plan/memory 10 ไฟล์ ไม่มี co-author trailer และไม่มี secret.
+  merge fast-forward เข้า **main** แล้ว push origin/main สำเร็จ.
+- ยืนยัน fresh tests ใน release worktree: pronunciation **29 pass** + shared-sync
+  **5 pass**, `git diff --check` ผ่าน. ก่อน deploy บอท mode=idle.
+- Deploy จาก main checkout สะอาดด้วย `./scripts/deploy.sh -s shorts-factory -y`
+  สำเร็จ (24s). Script upload repository main/config ตาม flow เดิมและ restart
+  เฉพาะ stack shorts-factory: bot/dashboard/nginx. ไม่ deploy โค้ด news-feed
+  ที่ยังไม่ commit จาก checkout ร่วม.
+- ยืนยัน **ใน container**: SHA-256 ของ `/app/app/{main,script,pronunciation}.py`
+  ตรง release source; prompts TH/EN มี pronunciation_checks; checklist smoke
+  เก็บ CPU/2FA/C++ ได้; Raqm=True. Dashboard `/healthz` = ok.
+  3 containers running, restart counts=0, ไม่มี traceback/error ใน log หลัง restart.
+- ทดสอบ image ที่ deploy แล้วใน disposable container แยกจาก live data:
+  **283 pass / 1 deselected** เมื่อปิด network และรัน TTS จริงที่แยกไว้ด้วย network
+  **1 pass / 283 deselected** → **ทั้ง 284 ข้อผ่าน**. Starlette/anyio warning เดิม
+  1 ข้อในแต่ละ run; ปัญหา Raqm/font บน Mac ทั้ง 8 ข้อไม่เกิดบน NAS.
+- อัปเดต index/log/spec/plan ตามผล release; code commit อยู่ main/GitHub และ
+  production ใช้ฟีเจอร์ใหม่แล้ว. สำเนา source diff ใน checkout news-feed เดิมเก็บไว้
+  เพื่อไม่แก้ branch ของงานที่ทำพร้อมกัน; main ที่ worktree แยกมี commit นี้แล้ว
+  ห้าม commit diff ซ้ำโดยไม่เทียบ main. Config secret ที่ copy เป็น gitignored ทั้งหมด.
+- **สถานะ:** commit + merge main + push + deploy สำเร็จ. ค้างเฉพาะผู้ใช้เลือก Topic
+  จริงแล้วฟังคลิปจาก Telegram; ยังไม่ได้สร้าง Topic/ส่งข้อความทดสอบเข้าบอทจริง.
