@@ -17,7 +17,7 @@ from pathlib import Path
 import httpx
 
 from app import (analytics, backfill, experiment, history, locales, manifest, model_choice,
-                 research,
+                 pronunciation, research,
                  render, retention, schedule, script as script_gen, snapshots, storyboard, telegram,
                  trends, youtube)
 from app import state as st
@@ -213,6 +213,8 @@ HELP = """🎬 shorts-factory
 
 /say <คำที่อ่านผิด> = <คำที่อยากให้อ่าน> — แก้เสียงอ่านคำนั้นถาวร
    ดูคำที่บอทจะอ่านได้จากบรรทัด 🗣 ใต้สคริปต์ ก๊อปคำที่ผิดมาวางได้เลย
+   หลังเขียน/แก้สคริปต์ บอทส่ง 🎧 รายการคำที่ควรลองฟัง พร้อม card และคำอ่าน
+   รายการคัดจากข้อความ ยังไม่ได้ตรวจเสียงจริง; /say อาจแทนที่คำตอน render
    เช่น /say ทีเอไอ = ไทย  ·  ดูรายการทั้งหมด: /say  ·  ลบ: /say ทีเอไอ =
    ใช้ตอนเสียงอ่านชื่อผิด หรืออ่านคำที่สะกดถูกแล้วแต่ออกเสียงเพี้ยน
 
@@ -349,6 +351,15 @@ def metadata_text(script: dict) -> str:
     return (
         f"{script['title']}\n\n{script['description']}\n\n{' '.join(script['hashtags'])}\n"
     )
+
+
+async def send_pronunciation_checks(client: httpx.AsyncClient,
+                                    script: dict, locale: str) -> None:
+    """Separate from the review message/id; a lost checklist cannot lose a Clip."""
+    try:
+        await say(client, pronunciation.format_checks(script, locale))
+    except Exception:
+        logger.exception("ส่งรายการคำที่ควรฟังตรวจไม่สำเร็จ")
 
 
 def slugify(title: str) -> str:
@@ -628,9 +639,12 @@ async def make_script(client: httpx.AsyncClient, state: dict, topic: str,
             st.to_idle(state)
             state.pop("pair", None)
         save_state(state)
+        if previous is not None:
+            await send_pronunciation_checks(client, previous, locale)
         await say(client, f"เขียนสคริปต์ไม่สำเร็จ: {exc}")
         return
 
+    pronunciation.normalize(script)
     manifest.add_script(state.get("clip_id"), script)
     # An unattended Script gets no review keyboard and no tracked message id:
     # nobody is going to press anything, and do_render() would overwrite the
@@ -641,7 +655,13 @@ async def make_script(client: httpx.AsyncClient, state: dict, topic: str,
         state, topic=topic, script=script,
         message_id=None if auto else (sent or {}).get("message_id"),
     )
+    if auto:
+        # The poll loop can run while the checklist is being delivered. An
+        # unattended Clip has no review buttons; keep it busy so a typed
+        # revision or /redo cannot take its state before do_render starts.
+        state["mode"] = "rendering"
     save_state(state)
+    await send_pronunciation_checks(client, script, locale)
     if auto:
         # Inside the success path on purpose: a generate failure returns above
         # with no Script in state, and rendering that is a KeyError.

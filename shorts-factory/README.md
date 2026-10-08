@@ -289,6 +289,28 @@ The script shown for review prints a 🗣 line wherever `spoken` differs from
 a clip that is synthesised after it, so `/redo` re-renders the last script with
 the fix and without a rewrite; a clip already on YouTube is not replaced.
 
+After every new or revised script, a separate **🎧 คำที่ควรลองฟัง** message
+lists its acronyms, transliterations, proper names and model names, with the
+script's reading, Card numbers (starting at 1) and what to listen for. Repeated
+words with the same reading share an entry; different readings stay visible.
+The writer includes optional per-Card `pronunciation_checks` in the same model
+response. `app/pronunciation.py` checks each term/reading against that Card's
+actual narration/spoken text, ignores bad metadata and collects missing Latin
+terms locally. Thai loanwords already spelled in Thai come from the writer's
+metadata. English fallback collects initialisms and model names rather than
+every ordinary word.
+
+When a reading has no verified metadata, the checklist quotes the Card's
+spoken sentence for you to locate the word instead of guessing a reading.
+It is a list derived from the script, **not an audio check**; `/say` overrides
+may replace the displayed script wording during render. Listen to those words
+in the finished clip, then use `/say` and `/redo` if needed. A script with no
+candidates still asks you to listen before uploading. Revisions refresh the
+list, including restoring the previous list when a revision fails; unattended
+rounds send it too. It stays in the chat after the review buttons are retired,
+is chunked independently of the script, and a delivery failure does not block
+rendering. Scripts saved before this metadata existed remain compatible.
+
 Thai has no final /s/ at all — ส ษ ศ ซ in a coda are all said /t/ — so "พาส"
 is read "พาด" by the rules, not by a fault in the voice, and no correct
 spelling will fix it. The way out is an override that either keeps the English

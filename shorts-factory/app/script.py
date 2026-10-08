@@ -10,7 +10,7 @@ import time
 
 from openai import AsyncOpenAI
 
-from app import locales, mimo, model_choice, render, research
+from app import locales, mimo, model_choice, pronunciation, render, research
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +63,13 @@ SYSTEM_PROMPT_TH = f"""คุณเป็นคนเขียนสคริป
   **ห้ามมีขีดกลาง (-) ใน spoken** เครื่องอ่านจะหยุดเงียบตรงขีด ชื่อรุ่นให้เขียนติดกัน
   เช่น F-35 → เอฟสามสิบห้า, GPT-4 → จีพีทีโฟร์
   คำสั่ง/แฟลกที่ทับศัพท์แล้วงง (เช่น --log-opt) ให้เลี่ยงไปพูดเป็นคำอธิบายแทน
+- pronunciation_checks = รายการคำที่คนควรลองฟังเสียงเป็นพิเศษใน card นี้
+  เก็บตัวย่ออังกฤษ คำทับศัพท์ (รวมที่ narration เขียนเป็นไทยแล้ว) ชื่อเฉพาะ และชื่อรุ่น
+  แต่ละรายการมี term = คำ/วลีที่คัดตรงจาก narration, spoken = คำอ่านที่คัดตรงจาก spoken
+  ต้องมีข้อความทั้งสองอยู่จริงใน card นี้ ไม่แต่งคำอ่านใหม่หรือแนะนำการแก้เสียง
+  kind = acronym, loanword, proper_name หรือ model_name; ถ้าไม่พบให้เป็น []
+  เช่น CPU → {{"term": "CPU", "spoken": "ซีพียู", "kind": "acronym"}}
+  ชื่อหลายคำเก็บเป็นวลีเดียว ไม่ดึงคำจาก query/code/hashtags ที่ไม่ได้พูด
 - code = บล็อกโค้ด/คำสั่งสั้นๆ ไม่เกิน 4 บรรทัด ใส่เฉพาะ card ที่มีคำสั่งจริงให้ดู ถ้าไม่มีให้เป็น null
 - query = **คำค้นภาษาอังกฤษ 2-4 คำ** สำหรับหาคลิป stock footage มาเป็นพื้นหลังของ card นั้น
   ต้องเป็นสิ่งที่**ถ่ายเป็นวิดีโอได้จริง** เช่น "server room racks", "developer typing keyboard",
@@ -74,7 +81,7 @@ SYSTEM_PROMPT_TH = f"""คุณเป็นคนเขียนสคริป
 ตอบเป็น JSON อย่างเดียว ห้ามมีข้อความอื่นนอก JSON:
 {{"title": "...", "description": "...", "hashtags": ["#..."], "category": "...",
   "cards": [{{"lines": ["..."], "code": null, "query": "...",
-             "narration": "...", "spoken": "..."}}]}}"""
+             "narration": "...", "spoken": "...", "pronunciation_checks": []}}]}}"""
 
 
 TRENDS_PROMPT_TH = """คุณเป็นคนเลือกหัวข้อคลิป YouTube Shorts ภาษาไทย
@@ -143,6 +150,15 @@ Rules:
   initialisms with spaces so they are read letter by letter (CPU -> C P U).
   **No hyphens in spoken** — the voice pauses on them. GPT-4 -> GPT four.
   If nothing needs respelling, repeat narration verbatim.
+- pronunciation_checks = words the human should listen to carefully in this
+  card: initialisms/acronyms, proper names, model names, and unusual words with
+  ambiguous pronunciation. Do not flag every ordinary English word.
+  Each entry has term = an exact substring copied from narration, spoken =
+  its exact reading copied from spoken, and kind = acronym, loanword,
+  proper_name or model_name. Both strings must occur in this card's text.
+  Example: CPU -> {{"term": "CPU", "spoken": "C P U", "kind": "acronym"}}.
+  Preserve multiword names as one phrase; never invent readings, propose voice
+  fixes, or include unsaid text from query/code/hashtags. No candidates = [].
 - code = a short command or code block, at most 4 lines, only on a card that
   really shows one. Otherwise null.
 - query = **2-4 English words** to search stock footage for that card's
@@ -158,7 +174,7 @@ Rules:
 Answer with JSON only, nothing outside the JSON:
 {{"title": "...", "description": "...", "hashtags": ["#..."], "category": "...",
   "cards": [{{"lines": ["..."], "code": null, "query": "...",
-             "narration": "...", "spoken": "..."}}]}}"""
+             "narration": "...", "spoken": "...", "pronunciation_checks": []}}]}}"""
 
 
 TRENDS_PROMPT_EN = """You pick topics for English-language YouTube Shorts aimed at a US audience.
@@ -431,7 +447,7 @@ def validate(script: dict, locale: str = locales.DEFAULT, facts: str = "") -> di
 
     if problems:
         raise ScriptError(" | ".join(problems))
-    return script
+    return pronunciation.normalize(script)
 
 
 def _parse(raw: str) -> dict:

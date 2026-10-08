@@ -3547,3 +3547,161 @@ def test_render_keeps_the_script_on_screen(monkeypatch):
     monkeypatch.setattr(main, "save_state", lambda state: None)
     asyncio.run(main.do_render(None, {"mode": "review", "script": script, "message_id": 5}))
     assert "🗣 เคอเบอร์เนทีส" in edits[0] and "กำลัง render" in edits[0]
+
+
+def _pronunciation_pipeline(monkeypatch, tmp_path):
+    """Replace model/network boundaries; exercise the real Script state flow."""
+    sent = []
+    monkeypatch.setattr(manifest, "DIR", tmp_path / "clips")
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+    monkeypatch.setattr(main, "close_prompt", _nothing)
+    monkeypatch.setattr(history, "recent_titles", lambda locale=None: [])
+
+    async def no_winners(**kwargs):
+        return []
+
+    async def no_research(*args):
+        return None
+
+    async def fake_say(client, text, **kwargs):
+        sent.append((text, kwargs))
+        return {"message_id": len(sent)}
+
+    monkeypatch.setattr(analytics, "winning_examples", no_winners)
+    monkeypatch.setattr(main.research, "research", no_research)
+    monkeypatch.setattr(main, "say", fake_say)
+    return sent
+
+
+def _pronunciation_script(term="CPU", reading="ซีพียู"):
+    draft = a_script()
+    draft["cards"][0].update(
+        narration=f"ลองตรวจ {term}", spoken=f"ลองตรวจ{reading}",
+        pronunciation_checks=[
+            {"term": term, "spoken": reading, "kind": "acronym"},
+            {"term": "invented", "spoken": "คำที่ไม่มี", "kind": "loanword"},
+        ],
+    )
+    return draft
+
+
+@pytest.mark.parametrize("locale", ["th", "en"])
+def test_pronunciation_checklist_follows_script_and_preserves_review_id(monkeypatch, tmp_path, locale):
+    sent = _pronunciation_pipeline(monkeypatch, tmp_path)
+
+    async def generate(*args, **kwargs):
+        return _pronunciation_script(reading="C P U" if locale == "en" else "ซีพียู")
+
+    monkeypatch.setattr(script_gen, "generate", generate)
+    state = {}
+    asyncio.run(main.make_script(None, state, "หัวข้อ", locale=locale))
+    assert sent[-1][0].startswith("🎧") and "CPU →" in sent[-1][0]
+    assert not sent[-1][1], "the checklist has no review keyboard"
+    assert sent[-2][1]["reply_markup"] == main.REVIEW_KEYBOARD
+    assert state["message_id"] == 2 and state["mode"] == "review"
+    assert state["locale"] == locale
+    saved = manifest.load(state["clip_id"])["scripts"][-1]["script"]
+    assert len(saved["cards"][0]["pronunciation_checks"]) == 1
+    if locale == "en":
+        assert "CPU → C P U" in sent[-1][0]
+
+
+def test_pronunciation_checklist_tracks_successful_and_failed_revisions(monkeypatch, tmp_path):
+    sent = _pronunciation_pipeline(monkeypatch, tmp_path)
+    drafts = [_pronunciation_script(), _pronunciation_script("GPU", "จีพียู")]
+
+    async def generate(*args, **kwargs):
+        if not drafts:
+            raise script_gen.ScriptError("revision failed")
+        return drafts.pop(0)
+
+    monkeypatch.setattr(script_gen, "generate", generate)
+    state = {}
+    asyncio.run(main.make_script(None, state, "หัวข้อ"))
+    asyncio.run(main.make_script(None, state, "หัวข้อ", feedback="แก้ใหม่"))
+    assert "GPU → จีพียู" in sent[-1][0] and "CPU" not in sent[-1][0]
+    asyncio.run(main.make_script(None, state, "หัวข้อ", feedback="แก้อีก"))
+    checklists = [text for text, _ in sent if text.startswith("🎧")]
+    assert "GPU → จีพียู" in checklists[-1] and "CPU" not in checklists[-1]
+    assert state["mode"] == "review" and state["script"]["cards"][0]["narration"].endswith("GPU")
+    assert len(manifest.load(state["clip_id"])["scripts"]) == 2
+
+
+@pytest.mark.parametrize("delivery_fails", [False, True])
+def test_pronunciation_checklist_does_not_block_unattended_render(monkeypatch, tmp_path, delivery_fails):
+    sent = _pronunciation_pipeline(monkeypatch, tmp_path)
+    send = main.say
+    seen = []
+    state = {}
+
+    async def generate(*args, **kwargs):
+        return _pronunciation_script()
+
+    async def fake_say(client, text, **kwargs):
+        if text.startswith("🎧"):
+            seen.append(state["mode"])
+            if delivery_fails:
+                seen.append("checklist failed")
+                raise RuntimeError("Telegram unavailable")
+        return await send(client, text, **kwargs)
+
+    async def render_script(client, state, **kwargs):
+        seen.append("render")
+        assert state["script"]["cards"][0]["narration"].endswith("CPU")
+        assert state["message_id"] is None
+
+    monkeypatch.setattr(script_gen, "generate", generate)
+    monkeypatch.setattr(main, "say", fake_say)
+    monkeypatch.setattr(main, "do_render", render_script)
+    asyncio.run(main.make_script(None, state, "หัวข้อ", auto=True))
+    assert seen[0] == "rendering", "keep auto Clips busy while delivery awaits; review would allow a concurrent revision"
+    assert seen[-1] == "render"
+    assert all("reply_markup" not in kwargs for _, kwargs in sent)
+    if delivery_fails:
+        assert seen == ["rendering", "checklist failed", "render"]
+    else:
+        assert sent[-1][0].startswith("🎧")
+
+
+@pytest.mark.parametrize("long_context", [False, True])
+def test_pronunciation_long_checklist_is_delivered_in_chunks_without_loss(long_context):
+    import httpx
+    from app import pronunciation
+
+    draft = _pronunciation_script()
+    draft["cards"] = [
+        {"narration": f"Model{i}", "spoken": f"รุ่นที่{i}"} for i in range(100)
+    ]
+    if long_context:
+        draft["cards"][0]["spoken"] = "คำอ่าน" * 1000 + "ท้ายข้อความ"
+    payloads = []
+
+    def receive(request):
+        payloads.append(json.loads(request.content))
+        return httpx.Response(200, json={"ok": True, "result": {"message_id": len(payloads)}})
+
+    async def send():
+        assert hasattr(main, "send_pronunciation_checks"), "checklist delivery is missing"
+        async with httpx.AsyncClient(transport=httpx.MockTransport(receive)) as client:
+            await main.send_pronunciation_checks(client, draft, "th")
+
+    asyncio.run(send())
+    assert len(payloads) > 1 and all(len(p["text"]) <= 4096 for p in payloads)
+    assert "".join(p["text"] for p in payloads).replace("\n", "") == pronunciation.format_checks(draft).replace("\n", "")
+    if long_context:
+        assert "ท้ายข้อความ" in "".join(p["text"] for p in payloads)
+    assert all("reply_markup" not in p for p in payloads)
+
+
+@pytest.mark.parametrize("locale", ["th", "en"])
+def test_pronunciation_metadata_is_requested_in_the_script_call(locale):
+    prompt = script_gen.system_prompt(locale)
+    assert "pronunciation_checks" in prompt and '"term"' in prompt and '"kind"' in prompt
+
+
+def test_pronunciation_invalid_optional_metadata_does_not_reject_a_valid_script():
+    draft = _pronunciation_script()
+    cleaned = script_gen.validate(draft)
+    assert cleaned["cards"][0]["pronunciation_checks"] == [
+        {"term": "CPU", "spoken": "ซีพียู", "kind": "acronym"},
+    ]

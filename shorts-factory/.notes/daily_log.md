@@ -1901,3 +1901,50 @@ install` จะสำเร็จ. ต้องสร้าง venv ใต้ re
 แก้: `make_script()` ตัด `auto or` ออก — รอบอัตโนมัติผ่าน research เหมือนกดเอง, ค้นไม่เจอยังปฏิเสธตามเดิม (`outcome=no_sources`). ข้อความปฏิเสธเปลี่ยนเป็น "ค้นเว็บไม่เจอแหล่งอ้างอิง". เทสต์ unattended แยกเป็น 2 (ค้นเจอ=เขียนจาก facts / ไม่เจอ=ปฏิเสธ).
 เทสต์: 248 pass, 8 fail = baseline. commit b7abaf7 pushed + deploy แล้ว (grep ในคอนเทนเนอร์ยืนยัน). ค้าง: ดูรอบอัตโนมัติถัดไปที่สุ่มได้หัวข้อทรงผลแข่ง.
 - **สถานะปิดงาน 03/10:** b7abaf7 + dab2230 pushed, deploy แล้ว. ค้าง: ดูรอบอัตโนมัติถัดไปที่สุ่มได้หัวข้อทรงผลแข่ง.
+
+## 2026-10-08 — สรุปคำที่ควรฟังตรวจหลังเขียน Script
+
+- ผู้ใช้ขอรายการตัวย่ออังกฤษ/คำทับศัพท์ที่ควรลองฟังเป็นพิเศษ และอนุมัติแบบส่ง
+  checklist แยกหลัง Script ในแชทนี้แล้ว. Spec/plan อยู่ที่
+  `docs/superpowers/specs/2026-10-08-shorts-factory-pronunciation-checks-design.md` และ
+  `docs/superpowers/plans/2026-10-08-shorts-factory-pronunciation-checks.md`.
+- ใหม่ `app/pronunciation.py` (stdlib): ตรวจ optional metadata ของแต่ละ Card
+  (`term`, `spoken`, `kind`) ต้องมีคำใน narration/คำอ่านใน spoken จริง. ข้อมูลพัง
+  ข้ามได้ ไม่เสีย model retry หรือ reject Script ที่ดี. คัดคำทับศัพท์ไทยจาก model
+  metadata และมี Latin fallback สำหรับข้อมูลเก่า/ตกหล่น. ไม่ดึง query/code/hashtags
+  ที่ไม่ได้พูด. ไม่เดาคำอ่าน; ถ้าไม่มีคู่ใช้ spoken ของ Card เป็นบริบทให้คนหา.
+- รวมคำซ้ำและ Card ที่พบ (เริ่มที่ 1); คำเดียวกันคนละคำอ่านแสดงแยก. เรียง
+  ตัวย่อ/ชื่อรุ่นก่อนชื่อเฉพาะและคำทับศัพท์. รองรับไทย/อังกฤษ; EN fallback ไม่เตือน
+  ทุกคำธรรมดา. ครอบคลุมตัวย่อมีจุด, `2FA`, `3D`, `4K`, `GPT-4`, `F-35`,
+  `C++`, `C#`, `C++17` และชื่อหลายคำ.
+- `script.py` ขอ metadata ในคำตอบ Script เดิมทั้ง TH/EN ไม่เพิ่ม model call;
+  sanitize ใน validate. `main.py` normalize ก่อนเก็บ Manifest และส่ง 🎧 แยก
+  หลังรีวิว Script สำเร็จ/แก้สำเร็จ/คืน Script เก่าเมื่อแก้พัง/auto-pick.
+  Metadata อยู่ใน Script → state/Manifest เก็บตามเดิม ไม่เพิ่ม DB/dependency.
+- ไม่แตะ review keyboard/message id; ข้อความรายการไม่หายตอน render ปลดปุ่ม.
+  ใช้ `say()` แบ่งข้อความ; formatter wrap บรรทัด >4096 ก่อนส่งเพราะ transport เดิม
+  ตัดหางบรรทัดยาว. ไม่แก้ shared vendored สำเนา. ส่งพัง log แล้ว render ต่อได้.
+  Auto set mode=rendering ก่อน await ส่ง checklist กันคนพิมพ์แก้หรือ `/redo`
+  ซ้อนระหว่างส่ง; manual ยัง review ตามเดิม.
+- รายงานระบุว่าเป็นคำจากข้อความ ยังไม่ได้ตรวจเสียงจริง และ `/say` override
+  อาจเปลี่ยนคำอ่านตอน render. รายการว่างไม่อ้างว่าเสียงผ่าน. README และ `/help`
+  อธิบายใช้ฟังคลิปแล้ว `/say` + `/redo`; ไม่เพิ่ม preview/timestamps/dashboard
+  หรือ automatic pronunciation fix.
+- ตรวจแบบ test-first: เทสต์ใหม่รวม 28 ข้อผ่าน. ชุด pronunciation ที่เลือกด้วย
+  `-k pronunciation` = **29 passed** (รวมเทสต์เก่า 1 ข้อ). Regression ครอบคลุม
+  invalid/invented metadata, dedup/different readings, fallback ทั้ง Locale,
+  fresh/revision success+failure/auto, review id/ปุ่ม, send failure, auto busy
+  และข้อความ/bรรทัดยาวส่งครบผ่าน HTTP MockTransport ของ transport จริง.
+- ก่อนแก้ทั้งชุด **247 pass / 9 fail** ใน sandbox: 8 Raqm/font baseline + 1
+  TTS DNS/network. TTS test เดิม rerun นอก sandbox = **1 pass**. หลังแก้รัน
+  ทั้งชุดพร้อม network = **276 pass / 8 fail** (Raqm/font baseline เดิม),
+  Starlette/anyio deprecation warning เดิม 1 ข้อ. ไม่มี failure ใหม่จากฟีเจอร์.
+- `tests/test_shared_sync.py`: **5 pass**. Ruff ไฟล์ใหม่ 2 ไฟล์ผ่าน; เทียบกับ HEAD
+  สำหรับ main/script/test เดิม = findings 3/3/16 เท่าเดิม ไม่มีเพิ่ม. `git diff --check`
+  ผ่านก่อนบันทึก memory และตรวจอีกครั้งหลังบันทึก. Code reviewer พบ fallback
+  ตัวเลขนำหน้าและ suffix C++/C# → แก้+เทสต์แล้ว; re-review **ไม่มี finding ค้าง**.
+- Docker local ไม่มี daemon/socket จึงไม่ได้รัน Linux/Raqm suite ใน image และ
+  ยังไม่ได้ลอง Script/คลิปจริงผ่าน Telegram. ค้าง: commit/deploy และ smoke test
+  Topic ที่มีตัวย่อ/คำทับศัพท์หลัง deploy (ต้องเช็กซอร์สใน container ตาม memory เดิม).
+- **สถานะตามจริง:** ฟีเจอร์อยู่ local working tree; **ยังไม่ commit, push หรือ deploy**.
+  ไม่แตะงาน news-feed ที่แก้อยู่พร้อมกัน และไม่ได้ส่งข้อความไป Telegram จริง.

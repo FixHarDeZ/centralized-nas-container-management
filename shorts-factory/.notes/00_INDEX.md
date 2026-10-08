@@ -1,5 +1,21 @@
 # shorts-factory — Index
 
+**2026-10-08 — Pronunciation checklist (local, ยังไม่ commit/deploy).** หลังเขียนหรือแก้
+Script ส่งข้อความ 🎧 แยก: คำ + คำอ่านจาก Script + Card (เริ่ม 1) + จุดที่ควรฟัง.
+`app/pronunciation.py` ตรวจ optional per-Card `pronunciation_checks` จากคำตอบโมเดลเดิม
+(`term`, `spoken`, `kind` = acronym/loanword/proper_name/model_name), ข้าม metadata
+ผิดรูป/คำที่ไม่มีจริง ไม่ทำให้ Script valid ถูก reject. รวมคำซ้ำ+Card แต่คำอ่านต่างกัน
+แสดงแยก; fallback ไทยเก็บละตินรวม `2FA/3D/4K/C++/C#/GPT-4`/ชื่อหลายคำ,
+อังกฤษเน้นตัวย่อ/ชื่อรุ่น/ชื่อมีสัญลักษณ์ ไม่เตือนทุกคำ. ไม่มีคู่คำอ่าน = ยก `spoken`
+ของ Card ให้ตรวจ ไม่เดา. ยังไม่ได้ฟังเสียงจริงและ `/say` อาจแทนที่ตอน render.
+Metadata normalize ก่อนเก็บใน state/Manifest; Scripts เก่าใช้ fallback ได้. ส่งรายการผ่าน
+`say()` ไม่แตะ review id/ปุ่ม; wrap บรรทัด >4096 เฉพาะการแสดงผล กัน transport ตัดหาง.
+ส่งพังไม่ขวาง render; auto Claim `rendering` ก่อน await ส่ง กัน typed revision `/redo` ซ้อน.
+ผลตรวจ: 28 เทสต์ใหม่ผ่าน; ทั้งชุด 276 pass / 8 fail = baseline Raqm/font บน Mac,
+TTS จริงผ่านเมื่อเปิด network; shared-sync 5 pass; Ruff ไฟล์ใหม่ผ่าน/ไม่มี finding ใหม่
+ในไฟล์เดิม; code review ไม่มีประเด็นค้าง. ค้าง: commit/deploy และลอง Topic จริงผ่าน Telegram
+แล้วฟังคลิป. Spec/plan ที่ `docs/superpowers/{specs,plans}/2026-10-08-shorts-factory-pronunciation-checks*`.
+
 **2026-09-21 (2):** **deploy แล้ว** (`deploy.sh -s shorts-factory -y`) — คำถามตัวละครไม่เคยขึ้นบนบอทจริงเพราะ image build 2026-09-14 ซอร์สใหม่นอนอยู่บน volume เฉยๆ (`grep SBCHAR_CB` ในคอนเทนเนอร์ = 0 ขณะที่บน `/volume2/docker/...` = 5) **เช็คในคอนเทนเนอร์เสมอ ไม่ใช่บน volume**. เพิ่ม: หัวข้อที่คนพิมพ์เองเข้า brief ของ storyboard แล้ว (`for_script(topic=)` → `_brief_from_script(script, topic)` กำกับว่าห้ามเปลี่ยนจำนวนฉาก) เดิมตกหายเพราะ Script เก็บแค่ title/cards → โหมด 🤖 แต่งคนใหม่ทุกครั้ง. commit + push แล้ว — ดู daily_log 21/09.
 
 **2026-09-21:** 📋/`/storyboard` ถามตัวละครก่อนยิงโมเดล (🤖/✍️/🚫, `state['storyboard_wait']`) และรับคลิปที่ประกอบเสร็จกลับทาง reply (`state['clip_wait']` → uploads + ปุ่มอัปเดิม).
