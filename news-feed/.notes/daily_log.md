@@ -1,5 +1,20 @@
 # Daily Log — news-feed
 
+## 2026-10-08 — Modern dashboard release / ปิดงาน
+
+- ผู้ใช้สั่ง commit, push, merge main และ deploy; ดำเนินการครบตาม scope news-feed
+- Implementation commit: `77e5481` (`feat(news-feed): redesign dashboard for modern daily reading`), push branch `codex/news-feed-modern-dashboard` แล้ว
+- Merge กับ main ล่าสุดผ่าน clean managed worktree; release commit `56354a5` push ขึ้น `origin/main` สำเร็จ โดยรักษางาน shorts-factory ที่มี concurrent commits ไว้และไม่ force push
+- รันตรวจบน merged checkout: **133 pytest passed + 22 Node tests passed**, final code review ไม่มี actionable findings ค้าง; JS syntax และ scoped diff checks ผ่าน
+- Deploy บน NAS `/volume2/docker/news-feed` ผ่านสำเนาชั่วคราวของ `scripts/deploy.sh -s news-feed -y` จาก exact Git archive ของ `56354a5`: payload/ownership จำกัด news-feed, exclude `.env.deploy` และ scripts, upload `.env` ของ news-feed ตาม workflow เดิม ไม่ upload source/secrets ของ stack อื่น
+- Build/restart สำเร็จใน 6s; `news-feed` **running healthy**, `news-feed-nginx` running; data volume/config เดิมคงอยู่
+- Post-deploy read-only checks: health/news/source-counts/schedule API → 200; `/`, `/dashboard.css`, `/dashboard-utils.js`, `/app.js` → 200, MIME ถูกต้อง และ SHA-256 ตรงกับ release ทั้ง 4 ไฟล์; Nginx unauthenticated request → 401
+- สถานะจริง: dashboard ใหม่ deploy production แล้ว, implementation commit/push/merge main สำเร็จ; ไม่มี PR ที่สร้างในงานนี้. Memory/index และ design/plan อัปเดตผล release เพื่อ commit/push ปิดงาน
+- ข้อจำกัดคงเหลือ: browser tool ปฏิเสธสิทธิ์ preview; **ยังไม่ยืนยัน rendering/overflow/interactions บน desktop/tablet/mobile ด้วย browser จริง**. ไม่พยายาม bypass การปฏิเสธ. Local mock preview `http://127.0.0.1:8874` สำหรับตรวจด้วยข้อมูลจำลอง
+- Enhance รอบถัดไป: bookmark/อ่านแล้ว, pagination เกิน latest100, model comparison และ benchmark/source health ที่อัปเดตจริง
+
+---
+
 ## 2026-10-08 — Modern Editorial dashboard implementation
 
 - ผู้ใช้อนุมัติแบบและให้ลงมือ; ทำงานบน branch `codex/news-feed-modern-dashboard`

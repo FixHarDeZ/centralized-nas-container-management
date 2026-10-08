@@ -50,7 +50,7 @@ Files: `news-feed/README.md`, `news-feed/.notes/daily_log.md`, `news-feed/.notes
 - [ ] Use browser UI to inspect desktop/tablet/mobile layouts, all tabs, filter preservation, details, copy/star/history, config loading and error/retry. Do not click real production notification actions.
 - [x] Review the final diff for scope, safety, responsiveness and regressions; fix actionable findings and rerun covering checks.
 - [x] Update README, stack memory and plan with actual evidence and remaining limitations; record release status as it happens.
-- [ ] Open local preview in Codex, deliver link and summary with useful future enhancement suggestions.
+- [x] Deliver the local mock preview link, enhancement suggestions and the recorded browser access limitation; opening the browser was denied.
 
 ## Progress
 
@@ -60,4 +60,6 @@ Files: `news-feed/README.md`, `news-feed/.notes/daily_log.md`, `news-feed/.notes
 - Production StaticFiles verified with TestClient: HTML/CSS/2 JS assets return 200 with correct MIME types; no scheduler lifespan or external services invoked.
 - Browser permission denied at `http://127.0.0.1:8874`; asynchronous authorization question pending. No browser workaround attempted. Visual/runtime browser verification is still open.
 - Final code review passed with no remaining actionable findings; two additional ordering probes cover failed refresh and duplicate Save protection.
-- User subsequently authorized commit, push, merge main and deployment. Release verification is in progress. Release uses an isolated checkout/payload to preserve unrelated work in the shared workspace.
+- User subsequently authorized commit, push, merge main and deployment. Implementation commit `77e5481` pushed; main release `56354a5` merged/pushed and deployed using an isolated checkout/payload to preserve unrelated work in the shared workspace.
+- Post-merge checks: 133 pytest + 22 Node tests pass. NAS deploy completed in 6s; app running healthy and nginx running. Read-only health/news/sources/schedule APIs return 200. HTML/CSS/2 JS assets return 200 with matching release SHA-256 and MIME types; unauthenticated nginx request returns 401.
+- Stack daily log/index and design updated with actual release evidence. Browser visual verification remains the explicit open item because access was denied.
