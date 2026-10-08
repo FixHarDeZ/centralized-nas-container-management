@@ -106,4 +106,6 @@ Desktop
 
 ผู้ใช้อนุมัติแบบและ implementation แล้ว: ปรับครบ 6 หน้า พร้อม overview, filters, error/retry, safe rendering และ async guards. ตรวจผ่าน 133 pytest + 22 Node tests, JavaScript syntax, static hooks และ FastAPI static asset routing.
 
-Browser preview ถูกปฏิเสธสิทธิ์ จึงยังไม่ยืนยันหน้าตาและ interactions ใน browser จริง. ผู้ใช้สั่งต่อให้ commit/push/merge main/deploy แล้ว; สถานะ release จริงบันทึกใน `news-feed/.notes/daily_log.md` และ `00_INDEX.md`.
+Implementation commit `77e5481` push แล้ว; merge main release `56354a5` และ deploy เฉพาะ news-feed บน NAS สำเร็จ. Post-deploy app healthy, API/assets 200 และ SHA-256 ของทั้ง 4 static assets ตรง release; Nginx basic auth ยังคง 401 เมื่อไม่มี credentials.
+
+Browser preview ถูกปฏิเสธสิทธิ์ จึงยังไม่ยืนยันหน้าตาและ interactions ใน browser จริง. สถานะ release และข้อจำกัดบันทึกใน `news-feed/.notes/daily_log.md` และ `00_INDEX.md`.

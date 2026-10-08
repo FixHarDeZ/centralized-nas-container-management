@@ -2,13 +2,13 @@
 
 **สร้าง:** 2026-05-23  
 **Port:** 5064 (external) → Nginx :80 → news-feed :8000 (internal)  
-**Status:** Running ✅ (2026-05-25)
+**Status:** Running healthy ✅ — modern dashboard deployed (2026-10-08)
 
-> **2026-10-08 — Modern Editorial dashboard:** ผู้ใช้อนุมัติและ implementation แล้ว
-> บน `codex/news-feed-modern-dashboard`; source/css/JS อยู่ใน working tree (ยังไม่ commit/deploy).
-> 133 pytest + 22 Node tests ผ่าน; static hooks/assets ผ่าน. Browser preview ถูกปฏิเสธสิทธิ์
-> จึงยังไม่ยืนยัน desktop/mobile visual verification; รอ authorization. Final code review ผ่าน ไม่มี findings ค้าง.
-> ผู้ใช้สั่ง commit/push/merge main/deploy แล้ว; กำลังเตรียม release เฉพาะ stack นี้.
+> **2026-10-08 — Modern Editorial dashboard:** commit `77e5481`, push branch แล้ว;
+> merge main + push release `56354a5` และ deploy เฉพาะ news-feed บน NAS สำเร็จ.
+> 133 pytest + 22 Node tests ผ่านบน merged checkout; final code review ผ่าน ไม่มี findings ค้าง.
+> `news-feed` healthy; APIs/assets → 200, SHA-256 ของ HTML/CSS/2 JS ตรง release; Nginx auth → 401.
+> Browser preview ถูกปฏิเสธสิทธิ์ จึงยังไม่ยืนยัน desktop/tablet/mobile visual/interactions.
 > ดู design/plan ใน `docs/superpowers/{specs,plans}/2026-10-08-news-feed-dashboard*` และ daily_log.
 
 > **2026-06-24 — Notifier:** transport LINE/Telegram ย้ายไป shared module `shared/notify.py`
@@ -141,7 +141,7 @@ Two-container stack:
 
 | วันที่ | เรื่อง |
 |--------|--------|
-| 2026-10-08 | Modern Editorial UI ครบ 6 หน้า + overview/filters/error handling/safety/async guards/deferred settings reload; 133 pytest + 22 Node ผ่าน; เตรียม release ตามคำสั่งผู้ใช้, browser verification รอสิทธิ์ |
+| 2026-10-08 | Modern Editorial UI ครบ 6 หน้า + overview/filters/error handling/safety/async guards/deferred settings reload; commit `77e5481`, merge main release `56354a5`, deploy healthy; 133 pytest + 22 Node ผ่าน; browser visual verification ถูกปฏิเสธสิทธิ์ |
 | 2026-05-23 | สร้าง stack ทั้งหมด (14 tasks), 41 tests ผ่าน |
 | 2026-05-24 | Fix deploy: `COPY --chown=app:app`, `chown 1000:1000 /data`, Dockerfile `RUN mkdir /data` |
 | 2026-05-24 | Optimize fetcher: RSS summary แทน full-body fetch, limit 10/source, `POST /api/fetch/trigger`, immediate fetch on start |
