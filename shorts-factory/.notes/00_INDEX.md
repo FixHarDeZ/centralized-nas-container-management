@@ -1,11 +1,17 @@
 # shorts-factory — Index
 
+**Git cleanup 2026-10-08:** checkout หลักกลับมาอยู่ `main`; local และ GitHub เหลือ
+branch `main` เท่านั้นตามคำสั่งผู้ใช้ (ลบ 17 local + 1 remote). Release worktree เดิม
+archive ผ่าน Codex แล้ว จึงไม่มี worktree อื่นล็อก `main`. สำรอง Git refs/history
+ก่อนลบและตรวจ bundle ผ่าน: `.git/branch-cleanup-backups/20261008T095910Z/branches.bundle`
+พร้อม `manifest.json` ในโฟลเดอร์เดียวกัน (local เท่านั้น). Commit ของ branch ที่ยัง
+ไม่อยู่ main เก็บใน backup; cleanup ไม่เปลี่ยนโค้ด production และไม่ deploy ซ้ำ.
+
 **ปิดงาน 2026-10-08 ตามคำสั่งผู้ใช้.** ฟีเจอร์ `eb474e5` และบันทึกผล release
 `aea0937` อยู่ main/origin แล้ว; production deploy และตรวจครบ 284 tests ผ่าน.
 อัปเดต memory ทั้ง index/daily log สำหรับปิด session. ไม่มีงาน implementation หรือ
 deployment ค้าง; ผู้ใช้ยังต้องฟังคำในคลิปจริงตาม checklist เมื่อเลือก Topic ครั้งถัดไป.
-การปิดงานแก้เฉพาะ memory จึงไม่ต้อง deploy ซ้ำ. ใช้ main worktree แยกด้านล่าง;
-รักษางาน news-feed และสำเนา diff ใน checkout ร่วมตามเดิม.
+การปิดงานแก้เฉพาะ memory จึงไม่ต้อง deploy ซ้ำ. สถานะ checkout ล่าสุดดู Git cleanup ด้านบน.
 
 **2026-10-08 — Pronunciation checklist (commit `eb474e5`, main pushed + deploy แล้ว).** หลังเขียนหรือแก้
 Script ส่งข้อความ 🎧 แยก: คำ + คำอ่านจาก Script + Card (เริ่ม 1) + จุดที่ควรฟัง.
@@ -24,8 +30,9 @@ code review ไม่มีประเด็นค้าง. Deploy ผ่า�
 ใน worktree แยก ตรวจ SHA-256 ของ main/script/pronunciation ใน container ตรงซอร์ส,
 prompt TH/EN + checklist smoke + Raqm ผ่าน, dashboard health ok, 3 containers running,
 restart=0 และไม่มี error/traceback. ค้าง: เลือก Topic จริงผ่าน Telegram แล้วฟังคลิป.
-Main checkout สำหรับ release อยู่ที่ `~/.codex/worktrees/shorts-pronunciation-release/centralized-nas-container-management`;
-checkout ร่วมยังอยู่ branch news-feed และสำเนา diff shorts เดิมถูกเก็บไว้ ห้าม commit ซ้ำโดยไม่เทียบ main.
+Main checkout ล่าสุดอยู่ที่ `/Users/peerawat.ujaiyen/MyCode/centralized-nas-container-management`;
+release worktree `~/.codex/worktrees/shorts-pronunciation-release/centralized-nas-container-management`
+archive แล้ว. งาน shorts/news-feed release อยู่ main; branch งานเดิมลบตามคำสั่งผู้ใช้.
 Spec/plan ที่ `docs/superpowers/{specs,plans}/2026-10-08-shorts-factory-pronunciation-checks*`.
 
 **2026-09-21 (2):** **deploy แล้ว** (`deploy.sh -s shorts-factory -y`) — คำถามตัวละครไม่เคยขึ้นบนบอทจริงเพราะ image build 2026-09-14 ซอร์สใหม่นอนอยู่บน volume เฉยๆ (`grep SBCHAR_CB` ในคอนเทนเนอร์ = 0 ขณะที่บน `/volume2/docker/...` = 5) **เช็คในคอนเทนเนอร์เสมอ ไม่ใช่บน volume**. เพิ่ม: หัวข้อที่คนพิมพ์เองเข้า brief ของ storyboard แล้ว (`for_script(topic=)` → `_brief_from_script(script, topic)` กำกับว่าห้ามเปลี่ยนจำนวนฉาก) เดิมตกหายเพราะ Script เก็บแค่ title/cards → โหมด 🤖 แต่งคนใหม่ทุกครั้ง. commit + push แล้ว — ดู daily_log 21/09.

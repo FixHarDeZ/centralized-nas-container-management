@@ -807,3 +807,19 @@ Stack พร้อม deploy — รอ user เติมค่าใน `.env` 
 
 ### Tests
 49/49 passed ✅
+
+## 2026-10-08 — คืน main ให้ checkout หลักและล้าง branches
+
+- ผู้ใช้ขอลบทุก branch ให้เหลือ main ทั้ง local/GitHub และแก้ switch main ไม่ได้.
+  สาเหตุ main ถูก checkout ใน managed shorts release worktree; ปลดเป็น detached
+  แล้ว switch checkout หลักเข้า main และ archive worktree ผ่าน Codex สำเร็จ.
+- Checkout หลัก clean ก่อนสลับ. `bb2ca52` บน news-feed branch มี tree ตรงกับ
+  main `b437d5c` ที่มี dashboard release แล้ว จึงไม่ต้อง merge โค้ดซ้ำ.
+- สำรอง Git refs/history ครบก่อนลบด้วย verified bundle:
+  `.git/branch-cleanup-backups/20261008T095910Z/branches.bundle` กับ `manifest.json`
+  ในโฟลเดอร์เดียวกัน. Branch commits ที่ยังไม่อยู่ main ยังเรียกคืนได้จาก backup local.
+- ลบ 17 local branches และ 1 remote branch รวม `codex/news-feed-modern-dashboard`
+  ทั้งสองฝั่ง. ตรวจแล้ว local/origin เหลือ main, main ตรง origin/main และเหลือ
+  checkout หลักเพียง worktree เดียว. Config ignored ใน release มีสำเนาตรงต้นฉบับครบ.
+- อัปเดต index/log ทั้ง news-feed และ shorts-factory ตามสถานะ checkout ใหม่.
+  งานรอบนี้เปลี่ยนเฉพาะ refs/checkout/memory; app และ deployment คงสถานะ release เดิม.

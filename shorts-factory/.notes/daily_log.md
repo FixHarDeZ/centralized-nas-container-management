@@ -1994,3 +1994,21 @@ install` จะสำเร็จ. ต้องสร้าง venv ใต้ re
   จึงไม่ต้อง deploy ซ้ำ. เก็บงาน news-feed ใน checkout ร่วมไว้ตามเดิม.
 - งานพัฒนาหรือ deployment ไม่มีค้าง. การฟังคลิปจริงผ่าน Telegram รอผู้ใช้เลือก
   Topic ครั้งถัดไป; รายการนี้สรุปจากข้อความ ไม่ได้ยืนยันคุณภาพเสียงจริง.
+
+### ต่อ: คืน main ให้ terminal และล้าง branches — 2026-10-08
+
+- ผู้ใช้ switch main ไม่ได้ เพราะ main ถูก checkout ใน managed release worktree;
+  Git ไม่อนุญาตให้ checkout branch เดียวกันในสอง worktrees พร้อมกัน.
+- ตรวจ checkout หลัก/release ว่า clean; config ignored ทั้ง 29 ไฟล์ตรงกับ checkout
+  หลัก ไม่มี ignored file อื่นที่ต้องเก็บ. ปลด release เป็น detached HEAD, switch
+  checkout หลักเข้า main แล้ว archive release worktree ด้วย Codex native tool สำเร็จ.
+- สำรองทุก refs/history ก่อนลบด้วย Git bundle และตรวจ `git bundle verify` ผ่าน:
+  `.git/branch-cleanup-backups/20261008T095910Z/branches.bundle` (28,874,947 bytes)
+  กับ manifest รายชื่อ refs/hash ในโฟลเดอร์เดียวกัน. Backup อยู่ local ใน .git.
+- ลบ 17 branches local และ 1 branch remote (`codex/news-feed-modern-dashboard`)
+  ตามคำสั่งผู้ใช้; remote delete มี lease ตรวจ hash กันลบ commit ที่เปลี่ยนระหว่างทำ.
+  Branch ที่มี commit ไม่อยู่ main ยังเรียกคืนจาก bundle ได้. Commit `bb2ca52`
+  บน branch news-feed มี tree ตรง main `b437d5c`; ไม่ต้อง merge โค้ดซ้ำ.
+- ผลตรวจหลังลบ: local + origin เหลือ main เท่านั้น, worktree list เหลือ checkout
+  หลักเดียว และ main ตรง origin/main. ฟีเจอร์ shorts ยังอยู่ main/deploy ตามเดิม.
+- การรอบนี้เปลี่ยน Git refs/checkout และ memory เท่านั้น; ไม่แก้ app ไม่ deploy ซ้ำ.

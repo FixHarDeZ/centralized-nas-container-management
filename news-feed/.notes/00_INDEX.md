@@ -4,6 +4,13 @@
 **Port:** 5064 (external) → Nginx :80 → news-feed :8000 (internal)  
 **Status:** Running healthy ✅ — modern dashboard deployed (2026-10-08)
 
+> **2026-10-08 — Git cleanup:** ผู้ใช้สั่งให้เหลือ main ทั้ง local/GitHub.
+> Checkout หลักอยู่ main แล้ว; `codex/news-feed-modern-dashboard` ลบทั้งสองฝั่ง.
+> งาน dashboard release อยู่ main `b437d5c`; commit `bb2ca52` มี tree เดียวกัน.
+> สำรอง branches ก่อนลบที่ `.git/branch-cleanup-backups/20261008T095910Z/branches.bundle`
+> พร้อม manifest (local เท่านั้น); managed shorts release worktree archive แล้ว.
+> ไม่มีการเปลี่ยน app หรือ deploy ใหม่จาก cleanup นี้.
+
 > **2026-10-08 — Modern Editorial dashboard:** commit `77e5481`, push branch แล้ว;
 > merge main + push release `56354a5` และ deploy เฉพาะ news-feed บน NAS สำเร็จ.
 > 133 pytest + 22 Node tests ผ่านบน merged checkout; final code review ผ่าน ไม่มี findings ค้าง.
