@@ -22,6 +22,46 @@ AI & IT news feed bot with Thai summaries. Fetches RSS from 7 sources, summarise
 
 `http://<NAS_HOST>:5064` — Nginx basic auth in front of the dashboard and API. After login, you can access Source Health, News Timeline, AI Price Tracker, Leaderboard, Digest History, Schedule Config.
 
+The dashboard opens on the Thai news feed on every device. The Modern Editorial
+layout uses a sidebar on desktop and bottom navigation with a More drawer on
+mobile. All six sections share the same visual system.
+
+- Overview: articles and sources with activity in the last 24 hours, next digest
+  in Bangkok time, and the synced model watchlist. Source activity counts are
+  not RSS connection health checks. Unavailable data displays a retry state.
+- News: two-line Thai summary previews, expandable full summaries, source/search/
+  status filters, and newest/oldest sorting. Refresh preserves the filters. Search
+  applies to the latest **100** loaded articles; the 24-hour overview is an aggregate
+  across the database. “ยังไม่ส่ง” is an observed delivery state, not a guarantee
+  that a particular article will be selected for the next digest.
+- Models: provider/region filters, copyable model IDs, synced watchlists, expandable
+  price history, and categorized model lists. Top Hit and Intelligence use static
+  reference data stored in the app; they are not live benchmark rankings.
+- Settings: grouped delivery/source/summarizer/retention controls. Saving is disabled
+  until configuration loads successfully and throughout a pending save. Refreshes
+  during a save coalesce into one fresh reload after the save settles. Test Digest asks for confirmation and
+  sends to the configured LINE/Telegram destinations.
+
+The visual system lives in `app/static/dashboard.css`; pure date/filter/escaping
+helpers are in `dashboard-utils.js`. No frontend build step is required.
+
+## Verification
+
+From `news-feed/`:
+
+```bash
+pytest tests/ -q
+node --test tests/dashboard.test.cjs
+node --check app/static/app.js
+node --check app/static/dashboard-utils.js
+```
+
+The Node tests use the built-in runner and no extra packages. They cover Bangkok
+date rollover, safe article rendering, combined filters, refresh preservation,
+partial API failures, stale response protection, deferred settings refreshes,
+configuration save gating, and a zero-hour digest buffer.
+They do not verify browser layout; check desktop/tablet/mobile views separately.
+
 ## Switch LLM Model
 
 Via dashboard → Schedule Config → set Provider + Model → Save.

@@ -4,6 +4,13 @@
 **Port:** 5064 (external) → Nginx :80 → news-feed :8000 (internal)  
 **Status:** Running ✅ (2026-05-25)
 
+> **2026-10-08 — Modern Editorial dashboard:** ผู้ใช้อนุมัติและ implementation แล้ว
+> บน `codex/news-feed-modern-dashboard`; source/css/JS อยู่ใน working tree (ยังไม่ commit/deploy).
+> 133 pytest + 22 Node tests ผ่าน; static hooks/assets ผ่าน. Browser preview ถูกปฏิเสธสิทธิ์
+> จึงยังไม่ยืนยัน desktop/mobile visual verification; รอ authorization. Final code review ผ่าน ไม่มี findings ค้าง.
+> ผู้ใช้สั่ง commit/push/merge main/deploy แล้ว; กำลังเตรียม release เฉพาะ stack นี้.
+> ดู design/plan ใน `docs/superpowers/{specs,plans}/2026-10-08-news-feed-dashboard*` และ daily_log.
+
 > **2026-06-24 — Notifier:** transport LINE/Telegram ย้ายไป shared module `shared/notify.py`
 > (vendored = `app/notify.py`). `app/notifier.py` เหลือ formatter + `_notifier().send()`;
 > creds อ่านจาก env เดิม (`LINE_CHANNEL_ACCESS_TOKEN`/`LINE_USER_ID`/`NEWS_FEED_TELEGRAM_BOT_TOKEN`/`TELEGRAM_CHAT_ID`).
@@ -35,8 +42,11 @@ Two-container stack:
 | `app/notifier.py` | LINE + Telegram push |
 | `app/scheduler.py` | BackgroundScheduler setup, jobs เป็น closures |
 | `app/main.py` | FastAPI lifespan, router registration, StaticFiles mount |
-| `app/static/index.html` | Dashboard shell, 6 tabs, mobile bottom nav + drawer HTML, responsive CSS (`@media max-width:640px`) |
-| `app/static/app.js` | All 6 sections logic, Chart.js, `mobSwitchTab`, `openMobileDrawer`, `closeMobileDrawer`, `togglePriceExpand` |
+| `app/static/index.html` | Modern Editorial shell, 6 sections, default News Timeline, sidebar + mobile bottom nav/drawer |
+| `app/static/dashboard.css` | Shared visual tokens, article previews, table/grid/settings styles; responsive 1120/900/760/420 breakpoints |
+| `app/static/dashboard-utils.js` | Pure helpers: Bangkok next digest, text escaping/URL safety, article filters, cached watchlist parsing; browser + CommonJS |
+| `app/static/app.js` | API/UI state, Chart.js, generation-guarded tab loads, coalesced overview, native news/digest details, drawer keyboard/focus, price/watchlist/config logic |
+| `tests/dashboard.test.cjs` | Node built-in behavior/regression tests via pure helpers + minimal DOM seam; no extra dependencies, no layout verification |
 
 ---
 
@@ -110,13 +120,16 @@ Two-container stack:
 - **Source Health 422**: `/api/news` มี `le=100` แต่ frontend เคยขอ `limit=500` → 422 → silent error → blank chart. Fix: เพิ่ม `/api/news/sources` endpoint ที่ใช้ aggregate SQL แทน
 - **Basic Auth sidecar**: dashboard/API public access ต้องผ่าน `news-feed-nginx`; ไฟล์ `nginx/.htpasswd` เป็น secret, gitignored, ต้องสร้างบนเครื่อง deploy/NAS เอง
 - **`retention_days` backward-compat**: `schedule.json` เก่าไม่มี key นี้ — consumer ทุกตัวใช้ `.get("retention_days", 30)` จึงไม่ต้องลบ `schedule.json`; ค่าจะถูกเขียนลงไฟล์เมื่อกด Save Config ครั้งแรก
-- **Watchlist เป็น client-side**: เก็บใน `localStorage['nf_watchlist']` (array ของ model_id) — per-browser ไม่ sync ข้าม device, ไม่มี backend state. Watchlist card ปรากฏทั้งใน Leaderboard tab (`#lb-watchlist`) และ Price Tracker tab (`#pt-watchlist-card`) — ทั้งสองใช้ `_watchlist` Set เดียวกัน
+- **Watchlist sync กับ server**: `watchlist` table + `GET/POST /api/watchlist` และ `PATCH /api/watchlist/{model_id}`; `localStorage['nf_watchlist']` เป็น cache/fallback และ migrate ขึ้น server เมื่อ server ว่าง. ทุก card ใช้ `_watchlist` Set เดียวกัน; toggle optimistic และแสดง sync error ใน overview เมื่อ server failure. Invalid/blocked localStorage ไม่ทำให้ dashboard crash
 - **Leaderboard render split**: `loadLeaderboard()` fetch → set `_lbPrices` → `renderLeaderboard()`; bookmark/collapse เรียก `renderLeaderboard()` ตรงๆ ไม่ re-fetch
 - **`POST /api/fetch/now` อาจนาน**: fetch + summarize หลาย source > 60s → nginx ตั้ง `proxy_read_timeout 300s` กัน 504 (server ทำงานต่อแม้ client timeout)
 - **Summarizer fail silent** (เกิด 2 ครั้งแล้ว: 2026-05-29 OpenRouter free rate-limit, 2026-06-03 Mimo 401 invalid key): summarize() raise → fetcher log `logger.error("summarize failed ...")` แต่ article insert ไปแล้วเลย NULL ค้าง. ตรวจสอบด้วย `POST /api/digest/test` ดู `available_12h`; ถ้า = 0 ทั้งที่ timeline มีข่าว → summarizer fail. **สิ่งแรกที่ต้องเช็ค**: `schedule.json` ระบุ provider/model อะไร (override .env) แล้ว curl test ตรง. Re-summarize backlog ด้วย `docker exec python` SELECT WHERE summary_th IS NULL → loop summarize(title,"") → UPDATE (body ไม่เก็บใน DB ใช้ title อย่างเดียวพอ)
 - **Reasoning models กิน token เยอะ**: Mimo v2.5 (และโมเดล reasoning ทั่วไป) ใช้ `reasoning_content` ก่อน generate `content` — ถ้า `max_tokens` ต่ำจะได้ `finish_reason=length` กับ `content=""` (empty). `_summarize_mimo` ใช้ 1500 + timeout 60s. ถ้าจะเพิ่ม reasoning provider อื่น ต้องตั้งสูงพอด้วย. **บั๊กเงียบที่ยังเหลือ**: fetcher.py และ models.update_article_summary ไม่ check empty string → article จะมี `summary_th=""` (ไม่ใช่ NULL) หลุดเข้า digest เป็นรายการเปล่า; ขณะนี้ใช้งานไม่กระทบเพราะ max_tokens=1500 พอแล้ว
 - **Container env stale หลังอัปเดต vault**: `deploy.sh` upload `.env` ใหม่ แต่ถ้าไม่ recreate compose container ก็ยังถือ env ที่โหลดตอน start เดิม → key ใหม่ไม่มีผล. Fix: `docker compose up -d` (recreate ที่ไม่ใช่ restart) หรือ deploy ใหม่
-- **Mobile bottom nav**: แสดงเฉพาะ `@media (max-width:640px)` — desktop nav ซ่อนใน media query. `showTab()` sync active state ผ่าน `mobTabMap` (3 primary tabs เท่านั้น; drawer tabs ไม่มี bottom nav button)
+- **Mobile bottom nav**: แสดงเมื่อ `max-width:760px`; sidebar ซ่อน. `showTab()` sync `[data-tab]`/`aria-current` โดยไม่อิงลำดับปุ่ม; 3 primary tabs + More สำหรับ drawer tabs. Drawer trap Tab, Escape/overlay ปิด, คืน focus และปิดเมื่อ resize กลับ desktop
+- **Dashboard async guards**: `loadTab()` ส่ง freshness callback ให้ทุก loader ตรวจหลัง awaits ก่อน mutate DOM/state; config load/save guards ป้องกัน stale form และเปิด Save หลัง latest load failure. `loadOverview()` ใช้ shared Promise + versioned loop; ห้ามเปลี่ยนกลับเป็น early-return แล้วทิ้ง post-save refresh
+- **News scope/filter**: latest100 search/status/source/sort คงอยู่ข้าม refresh (เก็บ option source ที่ไม่อยู่ในหน้าใหม่ด้วย); summary tiles อ่าน aggregate24h จาก `/api/news/sources`. Sent-ID API failure = unknown status ไม่ใช่ unsent; source counts ไม่ใช่ RSS connection health
+- **Benchmark reference**: Top Hit/Intelligence ใช้ static data ฝังใน JS; UI ระบุไม่ใช่อันดับสด. ข่าวใช้ escaped text + http/https URL allowlist; native details รองรับ keyboard
 - **Price table expand row**: `togglePriceExpand(idx)` ใช้ `_shownPrices[idx]` (ไม่ใช่ `allPrices`) — copy button ต้อง `e.stopPropagation()` เพื่อกัน row expand ขึ้นมาพร้อมกัน
 - **Provider badge บน mobile**: `.price-cell-provider` span inject ใน `renderPriceTable()` มี `display:none` ใน base CSS, `display:block` ใน media query เท่านั้น — col 3 (Provider) ซ่อนบน mobile แต่ยังอยู่ใน DOM
 - **Adaptive digest window**: `_compute_digest_window(now, digest_times, buffer)` ใน `app/scheduler.py` คำนวณ lookback จาก gap ระหว่าง digest ticks (clamp 4–36h). ห้าม hardcode 12h ที่ฝั่ง consumer ใหม่ — อ่านจาก helper เสมอ. Frontend `_digestBadge` ใช้ 36h outer bound (heuristic, ไม่ใช่ค่า window จริง).
@@ -128,6 +141,7 @@ Two-container stack:
 
 | วันที่ | เรื่อง |
 |--------|--------|
+| 2026-10-08 | Modern Editorial UI ครบ 6 หน้า + overview/filters/error handling/safety/async guards/deferred settings reload; 133 pytest + 22 Node ผ่าน; เตรียม release ตามคำสั่งผู้ใช้, browser verification รอสิทธิ์ |
 | 2026-05-23 | สร้าง stack ทั้งหมด (14 tasks), 41 tests ผ่าน |
 | 2026-05-24 | Fix deploy: `COPY --chown=app:app`, `chown 1000:1000 /data`, Dockerfile `RUN mkdir /data` |
 | 2026-05-24 | Optimize fetcher: RSS summary แทน full-body fetch, limit 10/source, `POST /api/fetch/trigger`, immediate fetch on start |

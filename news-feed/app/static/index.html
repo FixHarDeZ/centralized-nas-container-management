@@ -1,811 +1,156 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>News Feed Dashboard</title>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<style>
-  /* ---------- Design tokens ---------- */
-  :root {
-    --bg:           #f6f7f9;
-    --bg-tint:      #eef0f4;
-    --surface:      #ffffff;
-    --surface-2:    #fafbfc;
-    --border:       #e5e7eb;
-    --border-soft:  #eef0f3;
-    --text:         #0f172a;
-    --text-2:       #475569;
-    --text-3:       #64748b;
-    --muted:        #94a3b8;
-    --primary:      #4f46e5;
-    --primary-600:  #4338ca;
-    --primary-50:   #eef2ff;
-    --primary-100:  #e0e7ff;
-    --primary-700:  #3730a3;
-    --success:      #16a34a;
-    --success-50:   #ecfdf5;
-    --success-700:  #15803d;
-    --danger:       #dc2626;
-    --danger-50:    #fef2f2;
-    --danger-700:   #b91c1c;
-    --warn:         #d97706;
-    --warn-50:      #fffbeb;
-    --warn-700:     #b45309;
-    --shadow-sm:    0 1px 2px rgba(15,23,42,.04);
-    --shadow:       0 1px 3px rgba(15,23,42,.06), 0 1px 2px rgba(15,23,42,.04);
-    --shadow-lg:    0 10px 30px -12px rgba(15,23,42,.12), 0 4px 10px -6px rgba(15,23,42,.06);
-    --radius:       .75rem;
-    --radius-sm:    .5rem;
-    --radius-pill:  999px;
-  }
-
-  *{box-sizing:border-box;margin:0;padding:0}
-  html,body{height:100%}
-  body{
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,"Helvetica Neue",Arial,sans-serif;
-    background:var(--bg);
-    color:var(--text);
-    min-height:100vh;
-    -webkit-font-smoothing:antialiased;
-    -moz-osx-font-smoothing:grayscale;
-    font-feature-settings:"cv11","ss01","ss03";
-    letter-spacing:-0.005em;
-  }
-
-  /* ---------- Header ---------- */
-  header{
-    background:var(--surface);
-    padding:.9rem 1.5rem;
-    display:flex;
-    align-items:center;
-    gap:1rem;
-    border-bottom:1px solid var(--border-soft);
-    position:sticky;top:0;z-index:20;
-    backdrop-filter:saturate(150%) blur(8px);
-  }
-  header h1{
-    font-size:1.05rem;font-weight:650;letter-spacing:-0.02em;color:var(--text);
-    display:flex;align-items:center;gap:.55rem;
-  }
-  .badge{
-    background:var(--primary-50);
-    color:var(--primary-700);
-    border:1px solid var(--primary-100);
-    border-radius:var(--radius-pill);
-    padding:.2rem .65rem;
-    font-size:.72rem;
-    font-weight:600;
-    letter-spacing:0;
-  }
-  #footer-info{color:var(--text-3);font-size:.78rem;margin-left:auto}
-
-  /* ---------- Nav ---------- */
-  nav{
-    display:flex;gap:.2rem;
-    padding:.6rem 1.5rem;
-    background:var(--surface);
-    border-bottom:1px solid var(--border-soft);
-    flex-wrap:wrap;
-    position:sticky;top:54px;z-index:19;
-  }
-  nav button{
-    background:transparent;border:none;
-    color:var(--text-2);
-    padding:.5rem .9rem;
-    border-radius:var(--radius-sm);
-    cursor:pointer;
-    font-size:.85rem;font-weight:550;
-    transition:background .15s ease, color .15s ease, transform .05s ease;
-  }
-  nav button:hover{ background:var(--bg-tint); color:var(--text); }
-  nav button:active{ transform:translateY(1px); }
-  nav button.active{
-    background:var(--primary);
-    color:#fff;
-    box-shadow:0 1px 2px rgba(79,70,229,.25);
-  }
-  nav button.active:hover{ background:var(--primary-600); color:#fff; }
-
-  /* ---------- Layout ---------- */
-  main{padding:1.75rem 1.5rem 3rem;max-width:1200px;margin:0 auto}
-  .section{display:none}
-  .section.active{display:block;animation:fadeIn .25s ease-out}
-  @keyframes fadeIn{ from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:none} }
-
-  /* ---------- Cards ---------- */
-  .card{
-    background:var(--surface);
-    border:1px solid var(--border-soft);
-    border-radius:var(--radius);
-    padding:1.25rem 1.35rem;
-    margin-bottom:1rem;
-    box-shadow:var(--shadow-sm);
-    transition:box-shadow .2s ease, border-color .2s ease;
-  }
-  .card:hover{ box-shadow:var(--shadow); }
-  .card h2{
-    font-size:.82rem;
-    font-weight:650;
-    letter-spacing:.04em;
-    text-transform:uppercase;
-    margin-bottom:.9rem;
-    color:var(--text-3);
-  }
-  .card h2 small{ text-transform:none; letter-spacing:0; font-weight:500; }
-
-  /* ---------- Dots ---------- */
-  .dot{display:inline-block;width:.5rem;height:.5rem;border-radius:50%;margin-right:.45rem;vertical-align:middle}
-  .dot.green{background:var(--success);box-shadow:0 0 0 3px rgba(22,163,74,.12)}
-  .dot.red{background:var(--danger);box-shadow:0 0 0 3px rgba(220,38,38,.12)}
-
-  /* ---------- Tables ---------- */
-  table{width:100%;border-collapse:collapse;font-size:.85rem}
-  th,td{text-align:left;padding:.7rem .85rem;border-bottom:1px solid var(--border-soft)}
-  th{
-    color:var(--text-3);font-weight:600;
-    text-transform:uppercase;font-size:.7rem;letter-spacing:.05em;
-    background:var(--surface-2);
-    border-bottom:1px solid var(--border);
-  }
-  th:first-child{border-top-left-radius:.5rem}
-  th:last-child{border-top-right-radius:.5rem}
-  tbody tr{transition:background .12s ease}
-  tbody tr:hover{ background:var(--surface-2); }
-  tbody tr:last-child td{border-bottom:none}
-
-  /* ---------- Article cards ---------- */
-  .article-card{
-    border-bottom:1px solid var(--border-soft);
-    padding:.9rem .25rem;
-    cursor:pointer;
-    transition:background .12s ease;
-    border-radius:.4rem;
-    margin:0 -.25rem;
-  }
-  .article-card:hover{ background:var(--surface-2); padding-left:.55rem; padding-right:.55rem; margin:0 -.55rem; }
-  .article-card:last-child{border-bottom:none}
-  .article-title{font-weight:600;margin-bottom:.3rem;color:var(--text);font-size:.95rem;letter-spacing:-0.01em}
-  .article-meta{font-size:.74rem;color:var(--text-3);margin-bottom:.25rem;display:flex;align-items:center;gap:.25rem;flex-wrap:wrap}
-  .article-summary{font-size:.88rem;color:var(--text-2);display:none;margin-top:.55rem;line-height:1.6}
-  .article-card.open{ background:var(--primary-50); padding-left:.85rem; padding-right:.85rem; margin:.25rem -.55rem; border-radius:.55rem; }
-  .article-card.open .article-summary{display:block}
-  .article-card.open .article-title{color:var(--primary-700)}
-
-  /* ---------- Digest status badges ---------- */
-  .digest-badge{
-    border-radius:.35rem;
-    padding:.1rem .4rem;
-    font-size:.68rem;
-    font-weight:600;
-    margin-right:.3rem;
-  }
-  .badge-sent{ background:#dcfce7;color:#15803d;border:1px solid #bbf7d0; }
-  .badge-pending{ background:#fef9c3;color:#854d0e;border:1px solid #fde68a; }
-  .badge-expired{ background:var(--surface-2);color:var(--text-3);border:1px solid var(--border); }
-
-  /* ---------- Source / zone badges ---------- */
-  .source-badge{
-    background:var(--primary-50);
-    color:var(--primary-700);
-    border:1px solid var(--primary-100);
-    border-radius:.35rem;
-    padding:.12rem .45rem;
-    font-size:.7rem;
-    font-weight:600;
-    margin-right:.4rem;
-  }
-  .zone-badge{
-    display:inline-block;font-size:.68rem;
-    background:var(--bg-tint);
-    color:var(--text-2);
-    border:1px solid var(--border);
-    border-radius:.35rem;
-    padding:.08rem .4rem;
-    margin-left:.4rem;
-    vertical-align:middle;
-    font-weight:550;
-  }
-
-  /* ---------- Inputs ---------- */
-  input[type=text],input[type=time],input[type=date],select{
-    background:var(--surface);
-    border:1px solid var(--border);
-    color:var(--text);
-    padding:.5rem .7rem;
-    border-radius:var(--radius-sm);
-    font-size:.85rem;
-    font-family:inherit;
-    transition:border-color .15s ease, box-shadow .15s ease;
-    outline:none;
-  }
-  input[type=text]:hover,input[type=time]:hover,input[type=date]:hover,select:hover{
-    border-color:#cbd5e1;
-  }
-  input[type=text]:focus,input[type=time]:focus,input[type=date]:focus,select:focus{
-    border-color:var(--primary);
-    box-shadow:0 0 0 3px rgba(79,70,229,.15);
-  }
-  select{ cursor:pointer; padding-right:1.8rem;
-    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M3 4.5L6 7.5L9 4.5' stroke='%2364748b' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round' fill='none'/></svg>");
-    background-repeat:no-repeat;background-position:right .55rem center;
-    -webkit-appearance:none;appearance:none;
-  }
-  input[type=checkbox]{ accent-color:var(--primary); width:1rem;height:1rem;vertical-align:-2px;margin-right:.3rem; }
-  label{ color:var(--text-2); font-size:.85rem; }
-
-  /* ---------- Buttons ---------- */
-  button.btn{
-    background:var(--primary);color:#fff;border:none;
-    padding:.55rem 1.05rem;border-radius:var(--radius-sm);
-    cursor:pointer;font-size:.85rem;font-weight:600;
-    box-shadow:0 1px 2px rgba(79,70,229,.25);
-    transition:background .15s ease, transform .05s ease, box-shadow .15s ease;
-    font-family:inherit;
-  }
-  button.btn:hover{background:var(--primary-600); box-shadow:0 2px 6px rgba(79,70,229,.3);}
-  button.btn:active{transform:translateY(1px)}
-  button.btn-sm{padding:.3rem .7rem;font-size:.75rem}
-
-  /* ---------- Ranking rows ---------- */
-  .rank-row{
-    display:flex;align-items:center;gap:.85rem;
-    padding:.65rem .25rem;
-    border-bottom:1px solid var(--border-soft);
-    border-radius:.4rem;
-    margin:0 -.25rem;
-    transition:background .12s ease;
-  }
-  .rank-row:hover{ background:var(--surface-2); padding-left:.55rem; padding-right:.55rem; margin:0 -.55rem; }
-  .rank-row:last-child{border-bottom:none}
-  .rank-num{
-    color:var(--muted);width:1.5rem;flex-shrink:0;font-size:.8rem;font-weight:600;
-    font-variant-numeric:tabular-nums;
-  }
-  .rank-name{flex:1;font-size:.88rem;color:var(--text);line-height:1.4}
-  .rank-name small{color:var(--text-3)!important;font-size:.72rem}
-  .rank-price{
-    color:var(--success);font-size:.82rem;font-weight:600;
-    font-variant-numeric:tabular-nums;
-    white-space:nowrap;
-  }
-
-  /* ---------- Digest entries ---------- */
-  .digest-entry{
-    padding:.7rem .25rem;
-    border-bottom:1px solid var(--border-soft);
-    cursor:pointer;font-size:.88rem;
-    border-radius:.4rem;
-    margin:0 -.25rem;
-    transition:background .12s ease;
-  }
-  .digest-entry:hover{ background:var(--surface-2); padding-left:.55rem; padding-right:.55rem; margin:0 -.55rem; }
-  .digest-entry:last-child{border-bottom:none}
-  .digest-detail{
-    display:none;
-    padding:.7rem .85rem;
-    background:var(--bg-tint);
-    border-radius:var(--radius-sm);
-    margin-top:.5rem;
-    border:1px solid var(--border-soft);
-  }
-  .digest-entry.open{ background:var(--primary-50); padding-left:.85rem; padding-right:.85rem; margin:.25rem -.55rem; }
-  .digest-entry.open .digest-detail{display:block;background:var(--surface);}
-
-  /* ---------- Search row ---------- */
-  .search-row{display:flex;gap:.55rem;margin-bottom:1rem;flex-wrap:wrap;align-items:center}
-  .search-row input{flex:1;min-width:200px}
-
-  /* ---------- Footer ---------- */
-  footer{text-align:center;padding:1rem;color:var(--muted);font-size:.75rem}
-
-  /* ---------- Model id mono ---------- */
-  .model-id{
-    font-family:ui-monospace,"SF Mono",Menlo,Monaco,Consolas,"Roboto Mono",monospace;
-    color:var(--text-2);font-size:.78rem;
-    background:var(--bg-tint);
-    padding:.12rem .4rem;
-    border-radius:.3rem;
-  }
-
-  /* ---------- Copy / icon buttons ---------- */
-  .copy-btn{
-    background:transparent;border:1px solid transparent;
-    cursor:pointer;font-size:.85rem;
-    padding:.18rem .4rem;
-    color:var(--text-3);
-    border-radius:.35rem;
-    transition:background .12s ease, color .12s ease, border-color .12s ease;
-    line-height:1;
-  }
-  .copy-btn:hover{ background:var(--primary-50); color:var(--primary-700); border-color:var(--primary-100); }
-
-  /* ---------- Zone filter buttons ---------- */
-  .zone-btn{
-    background:var(--surface);
-    border:1px solid var(--border);
-    color:var(--text-2);
-    padding:.32rem .75rem;
-    border-radius:var(--radius-pill);
-    cursor:pointer;
-    font-size:.78rem;font-weight:550;
-    transition:all .15s ease;
-    font-family:inherit;
-  }
-  .zone-btn.active{
-    background:var(--primary);
-    color:#fff;
-    border-color:var(--primary);
-    box-shadow:0 1px 3px rgba(79,70,229,.25);
-  }
-  .zone-btn:hover:not(.active){
-    background:var(--bg-tint);
-    color:var(--text);
-    border-color:#cbd5e1;
-  }
-
-  /* ---------- Expiry badges ---------- */
-  .expiry-badge{
-    display:inline-block;
-    border-radius:.35rem;
-    padding:.15rem .5rem;
-    font-size:.72rem;
-    font-weight:650;
-    border:1px solid transparent;
-    font-variant-numeric:tabular-nums;
-  }
-  .expiry-ok{
-    background:var(--success-50);
-    color:var(--success-700);
-    border-color:#a7f3d0;
-  }
-  .expiry-warn{
-    background:var(--warn-50);
-    color:var(--warn-700);
-    border-color:#fde68a;
-  }
-  .expiry-urgent{
-    background:var(--danger-50);
-    color:var(--danger-700);
-    border-color:#fecaca;
-    animation:pulse-red 1.4s ease-in-out infinite;
-  }
-  @keyframes pulse-red{
-    0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(220,38,38,.0)}
-    50%{opacity:.85;box-shadow:0 0 0 4px rgba(220,38,38,.08)}
-  }
-
-  /* ---------- Expiry editable input ---------- */
-  .expiry-edit-input{
-    background:var(--surface);
-    border:1px solid var(--primary);
-    color:var(--text);
-    border-radius:.35rem;
-    padding:.2rem .4rem;
-    font-size:.78rem;
-    box-shadow:0 0 0 3px rgba(79,70,229,.15);
-    font-family:inherit;
-  }
-
-  /* ---------- Leaderboard jump bar ---------- */
-  .lb-jump{
-    display:flex;gap:.4rem;flex-wrap:wrap;
-    padding:.55rem .65rem;margin-bottom:1rem;
-    background:var(--surface);
-    border:1px solid var(--border-soft);
-    border-radius:var(--radius);
-    box-shadow:var(--shadow-sm);
-    position:sticky;top:104px;z-index:15;
-  }
-  .lb-pill{
-    background:var(--surface-2);
-    border:1px solid var(--border-soft);
-    color:var(--text-2);
-    padding:.3rem .7rem;
-    border-radius:var(--radius-pill);
-    cursor:pointer;
-    font-size:.76rem;font-weight:550;
-    transition:background .12s ease, color .12s ease, border-color .12s ease;
-    font-family:inherit;white-space:nowrap;
-  }
-  .lb-pill:hover{ background:var(--primary-50); color:var(--primary-700); border-color:var(--primary-100); }
-
-  /* ---------- Collapsible leaderboard cards ---------- */
-  .lb-card{ scroll-margin-top:160px; }
-  .lb-head{ cursor:pointer; user-select:none; display:flex; align-items:center; gap:.5rem; }
-  .lb-head:hover{ color:var(--text-2); }
-  .lb-caret{ display:inline-block; transition:transform .15s ease; font-size:.7rem; color:var(--muted); }
-  .lb-card.collapsed .lb-caret{ transform:rotate(-90deg); }
-  .lb-card.collapsed .lb-body{ display:none; }
-
-  /* ---------- Watchlist star ---------- */
-  .star-btn{
-    background:transparent;border:none;cursor:pointer;
-    font-size:.95rem;line-height:1;
-    padding:.1rem .25rem;flex-shrink:0;
-    color:var(--muted);
-    transition:transform .08s ease;
-  }
-  .star-btn:hover{ transform:scale(1.2); }
-  .star-btn.on{ color:#f59e0b; }
-  .free-tag{ color:var(--success);font-weight:700; }
-
-  /* ---------- Danger zone ---------- */
-  button.btn-danger{
-    background:var(--danger);color:#fff;border:none;
-    padding:.55rem 1.05rem;border-radius:var(--radius-sm);
-    cursor:pointer;font-size:.85rem;font-weight:600;
-    box-shadow:0 1px 2px rgba(220,38,38,.25);
-    transition:background .15s ease, transform .05s ease;
-    font-family:inherit;
-  }
-  button.btn-danger:hover{ background:var(--danger-700); }
-  button.btn-danger:active{ transform:translateY(1px); }
-  .danger-card{ border-color:#fecaca!important; background:var(--danger-50); }
-
-  /* ---------- Source toggles container ---------- */
-  #source-toggles label{
-    display:inline-flex;align-items:center;
-    background:var(--surface-2);
-    border:1px solid var(--border-soft);
-    border-radius:var(--radius-pill);
-    padding:.35rem .8rem;
-    margin:.2rem .35rem .2rem 0;
-    cursor:pointer;
-    transition:background .12s ease, border-color .12s ease;
-    font-size:.82rem;
-  }
-  #source-toggles label:hover{ background:var(--bg-tint); border-color:#cbd5e1; }
-  #source-toggles input[type=checkbox]{ margin-right:.4rem; }
-
-  /* ---------- Digest times container ---------- */
-  #digest-times-inputs label{
-    display:inline-flex;align-items:center;gap:.4rem;
-    margin-right:.85rem;margin-bottom:.4rem;
-    color:var(--text-2);
-  }
-
-  /* ---------- Scrollbar (subtle) ---------- */
-  ::-webkit-scrollbar{width:10px;height:10px}
-  ::-webkit-scrollbar-track{background:transparent}
-  ::-webkit-scrollbar-thumb{background:#d4d6db;border-radius:99px;border:2px solid var(--bg)}
-  ::-webkit-scrollbar-thumb:hover{background:#9ca3af}
-
-  /* ---------- Selection ---------- */
-  ::selection{background:var(--primary-100);color:var(--primary-700)}
-
-  /* ---------- Small responsive tweaks ---------- */
-  @media (max-width:640px){
-    main{padding:1.25rem 1rem 2rem}
-    .card{padding:1rem 1rem}
-    nav{padding:.5rem 1rem}
-    header{padding:.8rem 1rem}
-    th,td{padding:.55rem .55rem}
-  }
-
-  /* ---------- Mobile bottom nav (hidden on desktop) ---------- */
-  .mobile-bottom-nav {
-    position: fixed; bottom: 0; left: 0; right: 0;
-    height: 56px;
-    background: var(--surface);
-    border-top: 1px solid var(--border);
-    z-index: 30;
-    display: none;
-    padding-bottom: env(safe-area-inset-bottom, 0);
-  }
-  .mob-nav-item {
-    flex: 1; display: flex; flex-direction: column;
-    align-items: center; justify-content: center; gap: 2px;
-    border: none; background: transparent; cursor: pointer;
-    min-height: 44px; font-family: inherit;
-    transition: background .12s;
-  }
-  .mob-nav-item .mob-nav-icon { font-size: 1.15rem; line-height: 1; }
-  .mob-nav-item .mob-nav-label { font-size: .52rem; font-weight: 600; color: var(--text-3); }
-  .mob-nav-item.active { background: var(--primary-50); }
-  .mob-nav-item.active .mob-nav-label { color: var(--primary); }
-
-  /* ---------- Mobile drawer ---------- */
-  .mobile-drawer-overlay {
-    display: none; position: fixed; inset: 0;
-    background: rgba(15,23,42,.4); z-index: 40;
-  }
-  .mobile-drawer-overlay.open { display: block; }
-  .mobile-drawer-sheet {
-    position: absolute; bottom: 0; left: 0; right: 0;
-    background: var(--surface);
-    border-radius: 1.25rem 1.25rem 0 0;
-    padding: .75rem 1rem 2rem;
-  }
-  .mobile-drawer-handle {
-    width: 36px; height: 4px;
-    background: var(--border); border-radius: 99px;
-    margin: 0 auto .75rem;
-  }
-  .mobile-drawer-item {
-    display: flex; align-items: center; gap: .75rem;
-    padding: .7rem .5rem; border-radius: .5rem;
-    font-size: .9rem; color: var(--text); font-weight: 500;
-    border: none; background: transparent; cursor: pointer;
-    width: 100%; text-align: left; font-family: inherit;
-    transition: background .12s;
-  }
-  .mobile-drawer-item:hover { background: var(--bg-tint); }
-
-  /* ---------- Price table expand row (all breakpoints, shown on demand) ---------- */
-  .price-expand-row { display: none; background: var(--surface-2); }
-  .price-expand-row.open { display: table-row; }
-  .price-expand-detail { font-size: .78rem; color: var(--text-3); padding: .1rem 0; }
-  .price-expand-detail > div { margin-bottom: .2rem; display: flex; gap: .5rem; align-items: baseline; }
-  .price-expand-detail .lbl { color: var(--muted); font-size: .72rem; width: 68px; flex-shrink: 0; }
-  .price-expand-detail code {
-    font-family: ui-monospace,"SF Mono",Menlo,Monaco,Consolas,monospace;
-    font-size: .72rem; background: var(--bg-tint);
-    padding: .1rem .35rem; border-radius: .3rem; color: var(--text-2);
-  }
-
-  /* Provider sub-label inside model cell (hidden on desktop) */
-  .price-cell-provider { display: none; font-size: .72rem; color: var(--text-3); margin-top: 1px; }
-
-  /* ========== Mobile responsive (max-width: 640px) ========== */
-  @media (max-width:640px) {
-    /* Show bottom nav, hide top nav */
-    .mobile-bottom-nav { display: flex; }
-    nav { display: none; }
-
-    /* Content doesn't hide behind bottom nav */
-    main { padding-bottom: 5rem; }
-
-    /* Header compact */
-    header { padding: .75rem 1rem; }
-
-    /* News controls: search full-width, tools row below */
-    #news-search { width: 100%; flex: none; min-width: unset; }
-    #news-source-filter,
-    #news-sort-btn,
-    #fetch-now-btn { flex: 1; min-width: 0; min-height: 44px; }
-    #fetch-now-status { width: 100%; order: 99; }
-
-    /* Price tracker: search full-width */
-    #price-search { width: 100%; flex: none; min-width: unset; }
-    #price-provider-filter,
-    #price-sort { flex: 1; min-width: 0; }
-
-    /* Price table: hide Model ID(2), Provider(3), Context(6), Updated(7) */
-    /* Remaining visible: Model(1) | Prompt/1M(4) | Completion/1M(5) */
-    #price-table th:nth-child(3), #price-table td:nth-child(3),
-    #price-table th:nth-child(4), #price-table td:nth-child(4),
-    #price-table th:nth-child(7), #price-table td:nth-child(7),
-    #price-table th:nth-child(8), #price-table td:nth-child(8) { display: none; }
-
-    /* Show provider under model name + make row tappable */
-    .price-cell-provider { display: block; }
-    #price-table tbody tr:not(.price-expand-row) { cursor: pointer; }
-
-    /* Leaderboard jump bar: horizontal scroll, no wrap */
-    .lb-jump { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; top: 52px; }
-    .lb-jump::-webkit-scrollbar { display: none; }
-    .lb-card { scroll-margin-top: 116px; }
-  }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#182d32">
+  <title>News Feed · AI &amp; IT Briefing</title>
+  <link rel="stylesheet" href="dashboard.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
-<header>
-  <h1>📰 News Feed Bot</h1>
-  <span class="badge" id="health-badge">loading…</span>
-  <span id="footer-info" style="color:#64748b;font-size:.75rem;margin-left:auto">–</span>
-</header>
-<nav>
-  <button class="active" onclick="showTab('source-health')">Source Health</button>
-  <button onclick="showTab('news-timeline')">News Timeline</button>
-  <button onclick="showTab('price-tracker')">AI Price Tracker</button>
-  <button onclick="showTab('ai-leaderboard')">Leaderboard</button>
-  <button onclick="showTab('digest-history')">Digest History</button>
-  <button onclick="showTab('schedule-config')">Schedule Config</button>
+<svg class="icon-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <symbol id="icon-news" viewBox="0 0 24 24"><path d="M5 4h14v16H5zM8 8h8M8 12h8M8 16h4"/></symbol>
+  <symbol id="icon-chart" viewBox="0 0 24 24"><path d="M4 4v16h16M8 15v-4M12 15V7M16 15v-6"/></symbol>
+  <symbol id="icon-trophy" viewBox="0 0 24 24"><path d="M8 4h8v6a4 4 0 0 1-8 0zM8 6H4v2a4 4 0 0 0 4 4M16 6h4v2a4 4 0 0 1-4 4M12 14v6M8 20h8"/></symbol>
+  <symbol id="icon-history" viewBox="0 0 24 24"><path d="M4 10a8 8 0 1 1 1 7M4 4v6h6M12 7v5l3 2"/></symbol>
+  <symbol id="icon-sources" viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="18" r="2"/><circle cx="19" cy="18" r="2"/><path d="M12 7v4M5 16v-5h14v5"/></symbol>
+  <symbol id="icon-settings" viewBox="0 0 24 24"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></symbol>
+  <symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M5 8a8 8 0 0 1 13-3l2 2M4 17l2 2a8 8 0 0 0 13-3"/></symbol>
+  <symbol id="icon-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/></symbol>
+  <symbol id="icon-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="icon-star" viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9z"/></symbol>
+  <symbol id="icon-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></symbol>
+  <symbol id="icon-bolt" viewBox="0 0 24 24"><path d="m13 3-8 11h6l-1 7 9-11h-6z"/></symbol>
+  <symbol id="icon-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+  <symbol id="icon-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
+  <symbol id="icon-send" viewBox="0 0 24 24"><path d="m21 3-7 18-4-7-7-4zM10 14 21 3"/></symbol>
+</svg>
+<a href="#dashboard-main" class="skip-link">ข้ามไปเนื้อหา</a>
+<aside class="app-sidebar" aria-label="เมนูหลัก">
+  <a class="brand" href="#" onclick="showTab('news-timeline'); return false" aria-label="News Feed หน้าข่าวล่าสุด">
+    <span class="brand-mark"><svg class="icon"><use href="#icon-news"/></svg></span>
+    <span>news<span class="brand-accent">feed</span><small>YOUR DAILY PERSPECTIVE</small></span>
+  </a>
+  <nav class="desktop-nav" aria-label="หน้าต่างๆ">
+    <span class="nav-group-label">THE BRIEFING</span>
+    <button class="nav-item active" data-tab="news-timeline" aria-current="page" onclick="showTab('news-timeline')"><svg class="icon" aria-hidden="true"><use href="#icon-news"/></svg><span>ข่าวล่าสุด</span><span class="nav-active-dot"></span></button>
+    <span class="nav-group-label">MODEL EXPLORER</span>
+    <button class="nav-item" data-tab="price-tracker" onclick="showTab('price-tracker')"><svg class="icon" aria-hidden="true"><use href="#icon-chart"/></svg><span>ราคาโมเดล</span></button>
+    <button class="nav-item" data-tab="ai-leaderboard" onclick="showTab('ai-leaderboard')"><svg class="icon" aria-hidden="true"><use href="#icon-trophy"/></svg><span>อันดับโมเดล</span></button>
+    <span class="nav-group-label">WORKSPACE</span>
+    <button class="nav-item" data-tab="digest-history" onclick="showTab('digest-history')"><svg class="icon" aria-hidden="true"><use href="#icon-history"/></svg><span>ประวัติ Digest</span></button>
+    <button class="nav-item" data-tab="source-health" onclick="showTab('source-health')"><svg class="icon" aria-hidden="true"><use href="#icon-sources"/></svg><span>แหล่งข่าว</span></button>
+    <button class="nav-item" data-tab="schedule-config" onclick="showTab('schedule-config')"><svg class="icon" aria-hidden="true"><use href="#icon-settings"/></svg><span>ตั้งค่า</span></button>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="system-caption">SYSTEM STATUS</div>
+    <span class="badge" id="health-badge" role="status">กำลังเชื่อมต่อ…</span>
+    <span id="footer-info">–</span>
+    <div class="sidebar-edition">AI &amp; IT, thoughtfully curated.<br><span>เวลาระบบ · Asia/Bangkok</span></div>
+  </div>
+</aside>
+<div class="app-workspace">
+  <div class="workspace-bar"><span class="workspace-name">NEWS FEED <span>/</span> YOUR WORKSPACE</span><span class="workspace-timezone"><svg class="icon" aria-hidden="true"><use href="#icon-clock"/></svg>Bangkok · ICT</span></div>
+  <main id="dashboard-main" tabindex="-1">
+    <header class="page-header">
+      <div><p class="eyebrow" id="page-eyebrow">THE DAILY BRIEFING</p><h1 id="page-title">ข่าวและความเคลื่อนไหว</h1><p id="page-description" class="page-description">มองทันโลก AI &amp; IT ผ่านสรุปข่าวภาษาไทย ในพื้นที่เดียว</p></div>
+      <button class="btn refresh-button" aria-label="อัปเดตข้อมูลหน้าปัจจุบัน" onclick="refreshCurrentTab()"><svg class="icon" aria-hidden="true"><use href="#icon-refresh"/></svg><span>อัปเดตข้อมูล</span></button>
+    </header>
+
+    <section id="news-timeline" class="section active" aria-label="ข่าวล่าสุด">
+      <div class="overview-grid" aria-label="ภาพรวม">
+        <div class="stat-card"><div class="stat-label">ข่าวใน 24 ชั่วโมง<svg class="icon" aria-hidden="true"><use href="#icon-news"/></svg></div><strong id="stat-articles" class="stat-value">—</strong><span class="stat-note">รวมจากทุกแหล่งข่าว</span></div>
+        <div class="stat-card"><div class="stat-label">แหล่งข่าว<svg class="icon" aria-hidden="true"><use href="#icon-sources"/></svg></div><strong id="stat-sources" class="stat-value">—</strong><span class="stat-note">มีข่าวใน 24 ชั่วโมง</span></div>
+        <div class="stat-card"><div class="stat-label">Digest ถัดไป<svg class="icon" aria-hidden="true"><use href="#icon-clock"/></svg></div><strong id="stat-next-digest" class="stat-value stat-time">—</strong><span id="stat-next-note" class="stat-note">เวลาประเทศไทย</span></div>
+        <div class="stat-card"><div class="stat-label">Watchlist<svg class="icon" aria-hidden="true"><use href="#icon-star"/></svg></div><strong id="stat-watchlist" class="stat-value">—</strong><span class="stat-note">โมเดลที่คุณติดตาม</span><span id="watchlist-sync-status" class="stat-feedback" role="status"></span></div>
+      </div>
+      <div class="overview-feedback"><span id="overview-status" role="status" aria-live="polite">กำลังโหลดภาพรวม…</span><button class="btn btn-sm" id="overview-retry" onclick="loadOverview()" hidden>ลองอีกครั้ง</button></div>
+      <div class="news-layout">
+        <div class="news-column">
+          <div class="news-toolbar card">
+            <div class="search-row">
+              <label class="search-field" for="news-search"><svg class="icon" aria-hidden="true"><use href="#icon-search"/></svg><span class="sr-only">ค้นหาข่าวล่าสุด</span><input type="search" id="news-search" placeholder="ค้นหาเรื่องที่คุณสนใจ…" oninput="filterNews()"></label>
+              <label class="sr-only" for="news-source-filter">กรองตามแหล่งข่าว</label><select id="news-source-filter" onchange="filterNews()"><option value="">ทุกแหล่งข่าว</option></select>
+            </div>
+            <div class="news-actions"><button id="news-sort-btn" class="btn btn-sm btn-quiet" onclick="toggleNewsSort()">ล่าสุดก่อน</button><button id="fetch-now-btn" class="btn btn-sm btn-primary" onclick="fetchNow()" title="ดึงข่าวตอนนี้ทันที อาจใช้เวลาสักครู่"><svg class="icon" aria-hidden="true"><use href="#icon-bolt"/></svg>ดึงข่าวตอนนี้</button><span id="fetch-now-status" role="status" aria-live="polite"></span></div>
+          </div>
+          <div class="news-list-heading"><div class="status-tabs" role="group" aria-label="กรองสถานะข่าว"><button class="status-tab active" data-news-status="all" aria-pressed="true" onclick="setNewsStatus('all')">ทั้งหมด</button><button class="status-tab" data-news-status="summarized" aria-pressed="false" onclick="setNewsStatus('summarized')">มีสรุปแล้ว</button><button class="status-tab" data-news-status="sent" aria-pressed="false" onclick="setNewsStatus('sent')">ส่งแล้ว</button></div><span id="news-results" aria-live="polite">กำลังโหลดข่าว…</span></div>
+          <div class="card news-feed-list" id="news-list" aria-live="polite"></div>
+          <p class="news-scope-note">ค้นหาและกรองจากข่าวล่าสุดสูงสุด 100 รายการ</p>
+        </div>
+        <aside class="activity-column" aria-label="ความเคลื่อนไหวของระบบ">
+          <div class="card activity-card"><div class="card-kicker">IN THE LOOP</div><h2>ความเคลื่อนไหวล่าสุด</h2><dl class="activity-list"><div><dt><span class="activity-dot"></span>ดึงข่าวล่าสุด</dt><dd id="activity-fetch">—</dd></div><div><dt><span class="activity-dot"></span>Digest ล่าสุด</dt><dd id="activity-digest">—</dd></div><div><dt><span class="activity-dot"></span>รอบส่งถัดไป</dt><dd id="activity-next">—</dd></div></dl><button class="text-button" data-tab="digest-history" onclick="showTab('digest-history')">ดูประวัติ Digest<svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg></button></div>
+          <div class="card watchlist-preview"><span class="watchlist-icon"><svg class="icon" aria-hidden="true"><use href="#icon-star"/></svg></span><h2>โมเดลที่คุณสนใจ</h2><p id="activity-watchlist">กำลังโหลด Watchlist…</p><button class="text-button" data-tab="price-tracker" onclick="showTab('price-tracker')">สำรวจราคาโมเดล<svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg></button></div>
+          <p class="activity-footnote">ข้อมูลที่มีบริบท<br>ช่วยให้ตัดสินใจได้ดีขึ้น</p>
+        </aside>
+      </div>
+    </section>
+
+    <section id="source-health" class="section" aria-label="แหล่งข่าว">
+      <div class="section-intro"><span class="card-kicker">SOURCE ACTIVITY</span><p>จำนวนข่าวที่เข้ามาใน 24 ชั่วโมง ข้อมูลนี้สะท้อนความเคลื่อนไหวของข่าว ไม่ใช่ผลตรวจสอบการเชื่อมต่อ RSS</p></div>
+      <div class="card"><div class="card-heading"><h2>ข่าวจากแต่ละแหล่ง</h2><button class="btn btn-sm" onclick="refreshSourceHealth()"><svg class="icon" aria-hidden="true"><use href="#icon-refresh"/></svg>อัปเดต</button></div><div class="source-chart-wrap"><canvas id="sourceChart" height="80" aria-label="กราฟจำนวนข่าวจากแต่ละแหล่งใน 24 ชั่วโมง" role="img"></canvas></div></div>
+      <div class="card" id="source-status-list"><h2>แหล่งข่าวที่มีรายการ</h2></div>
+    </section>
+
+    <section id="price-tracker" class="section" aria-label="ราคาโมเดล AI">
+      <div id="price-updated" class="data-updated" aria-live="polite"></div>
+      <div class="card price-toolbar"><div class="search-row"><label class="search-field" for="price-search"><svg class="icon" aria-hidden="true"><use href="#icon-search"/></svg><span class="sr-only">ค้นหาโมเดลหรือ Model ID</span><input type="search" id="price-search" placeholder="ค้นหาโมเดล หรือ Model ID…" oninput="filterPrices()"></label><label class="sr-only" for="price-provider-filter">Provider</label><select id="price-provider-filter" onchange="loadTab('price-tracker', true)"><option value="">ทุก Provider</option></select><label class="sr-only" for="price-sort">เรียงราคา</label><select id="price-sort" onchange="loadTab('price-tracker', true)"><option value="combined_asc">ราคารวม · ต่ำไปสูง</option><option value="prompt_asc">Prompt · ต่ำไปสูง</option><option value="complete_asc">Completion · ต่ำไปสูง</option><option value="prompt_desc">Prompt · สูงไปต่ำ</option></select></div><div class="zone-filters" role="group" aria-label="ภูมิภาคของ Provider"><button class="zone-btn active" data-zone="" onclick="setZoneFilter('')">ทั้งหมด</button><button class="zone-btn" data-zone="US" onclick="setZoneFilter('US')">US</button><button class="zone-btn" data-zone="CN" onclick="setZoneFilter('CN')">CN</button><button class="zone-btn" data-zone="EU" onclick="setZoneFilter('EU')">EU</button><button class="zone-btn" data-zone="Others" onclick="setZoneFilter('Others')">อื่นๆ</button></div></div>
+      <div class="card lb-card watchlist-card" id="pt-watchlist-card"><h2 class="lb-head" role="button" tabindex="0" onkeydown="if(event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleLbCard('pt-watchlist-card'); }" onclick="toggleLbCard('pt-watchlist-card')"><span class="lb-caret">▾</span><svg class="icon" aria-hidden="true"><use href="#icon-star"/></svg>My Watchlist <small id="pt-watchlist-count"></small></h2><div class="lb-body" id="pt-watchlist-body"><p class="muted">ยังไม่มีโมเดลใน Watchlist — กด ☆ ที่แถวโมเดลเพื่อเก็บ</p></div></div>
+      <div class="card table-card"><div class="table-caption"><h2>ราคาต่อ 1 ล้าน tokens</h2><span>USD · กดที่แถวเพื่อดูประวัติราคา</span></div><div class="table-scroll" tabindex="0" role="region" aria-label="ตารางราคาโมเดล เลื่อนแนวนอนเพื่อดูทุกคอลัมน์"><table id="price-table"><thead><tr><th aria-label="Watchlist"></th><th>Model</th><th>Model ID</th><th>Provider</th><th>Prompt / 1M</th><th>Completion / 1M</th><th>Context</th><th>Updated</th></tr></thead><tbody></tbody></table></div></div>
+    </section>
+
+    <section id="ai-leaderboard" class="section" aria-label="อันดับโมเดล AI">
+      <div id="leaderboard-updated" class="data-updated" aria-live="polite"></div>
+      <div class="reference-notice"><svg class="icon" aria-hidden="true"><use href="#icon-trophy"/></svg><p><strong>สำรวจโมเดลในหลายมุม</strong> Top Hit และ Intelligence เป็นข้อมูลอ้างอิงที่บันทึกไว้ในแอป ไม่ใช่ผล benchmark หรืออันดับที่อัปเดตสด</p></div>
+      <div class="leaderboard-grid">
+        <div class="lb-jump" aria-label="ข้ามไปหมวดอันดับ"><button class="lb-pill" onclick="jumpToCard('lb-watchlist')">Watchlist</button><button class="lb-pill" onclick="jumpToCard('lb-tophit')">Top Hit</button><button class="lb-pill" onclick="jumpToCard('lb-tophit-cheap')">Hit Cheapest</button><button class="lb-pill" onclick="jumpToCard('lb-tophit-free')">Hit Free</button><button class="lb-pill" onclick="jumpToCard('lb-intel')">Intelligence</button><button class="lb-pill" onclick="jumpToCard('lb-cheap')">Cheapest</button><button class="lb-pill" onclick="jumpToCard('lb-free')">Free</button><button class="lb-pill" onclick="jumpToCard('lb-exp')">Expensive</button></div>
+        <div class="card lb-card watchlist-card" id="lb-watchlist"><h2 class="lb-head" role="button" tabindex="0" onkeydown="if(event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleLbCard('lb-watchlist'); }" onclick="toggleLbCard('lb-watchlist')"><span class="lb-caret">▾</span>My Watchlist <small id="lb-watchlist-count"></small></h2><div class="lb-body" id="leaderboard-watchlist"></div></div>
+        <div class="card lb-card" id="lb-tophit"><h2 class="lb-head" role="button" tabindex="0" onkeydown="if(event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleLbCard('lb-tophit'); }" onclick="toggleLbCard('lb-tophit')"><span class="lb-caret">▾</span>Top Hit<small>โมเดลยอดนิยม · อ้างอิงในแอป</small></h2><div class="lb-body" id="leaderboard-top-hit"></div></div>
+        <div class="card lb-card" id="lb-tophit-cheap"><h2 class="lb-head" role="button" tabindex="0" onkeydown="if(event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleLbCard('lb-tophit-cheap'); }" onclick="toggleLbCard('lb-tophit-cheap')"><span class="lb-caret">▾</span>Hit Cheapest<small>โมเดลยอดนิยมที่ประหยัดที่สุด</small></h2><div class="lb-body" id="leaderboard-tophit-cheap"></div></div>
+        <div class="card lb-card" id="lb-tophit-free"><h2 class="lb-head" role="button" tabindex="0" onkeydown="if(event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleLbCard('lb-tophit-free'); }" onclick="toggleLbCard('lb-tophit-free')"><span class="lb-caret">▾</span>Hit Free<small>โมเดลยอดนิยมที่ใช้ฟรี</small></h2><div class="lb-body" id="leaderboard-tophit-free"></div></div>
+        <div class="card lb-card" id="lb-intel"><h2 class="lb-head" role="button" tabindex="0" onkeydown="if(event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleLbCard('lb-intel'); }" onclick="toggleLbCard('lb-intel')"><span class="lb-caret">▾</span>Intelligence<small>ข้อมูลอ้างอิงในแอป · ไม่อัปเดตสด</small></h2><div class="lb-body" id="leaderboard-intelligence"></div></div>
+        <div class="card lb-card" id="lb-cheap"><h2 class="lb-head" role="button" tabindex="0" onkeydown="if(event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleLbCard('lb-cheap'); }" onclick="toggleLbCard('lb-cheap')"><span class="lb-caret">▾</span>Top 10 Cheapest<small>เรียงตามราคารวม</small></h2><div class="lb-body" id="leaderboard-cheap"></div></div>
+        <div class="card lb-card" id="lb-free"><h2 class="lb-head" role="button" tabindex="0" onkeydown="if(event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleLbCard('lb-free'); }" onclick="toggleLbCard('lb-free')"><span class="lb-caret">▾</span>Free Models<small>ติดตามวันหมดอายุได้</small></h2><div class="lb-body" id="leaderboard-free"></div></div>
+        <div class="card lb-card" id="lb-exp"><h2 class="lb-head" role="button" tabindex="0" onkeydown="if(event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggleLbCard('lb-exp'); }" onclick="toggleLbCard('lb-exp')"><span class="lb-caret">▾</span>Top 5 Most Expensive<small>เรียงตามราคารวม</small></h2><div class="lb-body" id="leaderboard-expensive"></div></div>
+      </div>
+    </section>
+
+    <section id="digest-history" class="section" aria-label="ประวัติ Digest">
+      <div class="card"><div class="card-heading digest-heading"><div><span class="card-kicker">YOUR ARCHIVE</span><h2>Digest ที่ส่งแล้ว</h2><p class="muted">เปิดแต่ละรอบเพื่อดูรายการข่าวที่ส่ง</p></div><div class="digest-test-actions"><button id="test-digest-btn" class="btn" onclick="testDigest()"><svg class="icon" aria-hidden="true"><use href="#icon-send"/></svg>ส่ง Test Digest ไป LINE / Telegram</button><span id="test-digest-status" role="status" aria-live="polite"></span></div></div><div id="digest-list"></div></div>
+    </section>
+
+    <section id="schedule-config" class="section" aria-label="ตั้งค่าระบบ">
+      <div class="settings-grid">
+        <div class="card settings-card"><span class="card-kicker">01 / DELIVERY</span><h2>เวลาส่ง Digest</h2><p class="field-help">ตั้งเวลาส่งสรุปข่าวประจำวัน · Asia/Bangkok</p><div id="digest-times-inputs"></div></div>
+        <div class="card settings-card"><span class="card-kicker">02 / SOURCES</span><h2>แหล่งข่าวที่ติดตาม</h2><div id="source-toggles"></div><div class="settings-subgroup"><h3>Custom Sources</h3><div id="custom-sources-list"></div><div class="custom-source-form"><label for="new-source-name">ชื่อแหล่งข่าว<input type="text" id="new-source-name" placeholder="The Register"></label><label for="new-source-url">RSS URL<input type="url" id="new-source-url" placeholder="https://…/feed"></label><button type="button" class="btn btn-sm" onclick="addCustomSource()">+ เพิ่ม</button><span id="add-source-error" role="alert"></span></div></div></div>
+        <div class="card settings-card"><span class="card-kicker">03 / SUMMARIZER</span><h2>โมเดลสรุปข่าวหลัก</h2><div class="form-row"><label for="cfg-provider">Provider<select id="cfg-provider"><option value="anthropic">Anthropic</option><option value="openrouter">OpenRouter</option><option value="mimo">Mimo</option></select></label><label for="cfg-model">Model ID<input type="text" id="cfg-model" placeholder="ชื่อโมเดล"></label></div><div class="settings-subgroup"><h3>Fallback chain</h3><p class="field-help">เมื่อโมเดลหลักทำงานไม่สำเร็จ ระบบจะลองตามลำดับนี้ ไม่จำเป็นต้องตั้งก็ได้</p><div id="fallback-chain-inputs"></div></div></div>
+        <div class="card settings-card"><span class="card-kicker">04 / ARCHIVE</span><h2>ระยะเวลาเก็บข่าว</h2><label for="cfg-retention" class="retention-field">เก็บข่าวไว้<input type="number" id="cfg-retention" min="1" max="365">วัน</label><p class="field-help">ข่าวเก่าจะถูกลบอัตโนมัติทุกวันเวลา 03:30 น. ตามเวลาประเทศไทย</p></div>
+        <div class="card settings-card settings-wide"><span class="card-kicker">05 / DIGEST TUNING</span><h2>ปรับขนาดและช่วงเวลาของ Digest</h2><div class="form-row tuning-fields"><label for="cfg-window-buffer">Window buffer (ชั่วโมง)<input type="number" id="cfg-window-buffer" step="0.5" min="0" max="6"></label><label for="cfg-size-base">จำนวนข่าวเริ่มต้น<input type="number" id="cfg-size-base" step="1" min="1" max="20"></label><label for="cfg-size-max">จำนวนข่าวสูงสุด<input type="number" id="cfg-size-max" step="1" min="1" max="20"></label><label for="cfg-max-per-source">สูงสุดต่อแหล่งข่าว<input type="number" id="cfg-max-per-source" step="1" min="1" max="5"></label></div><p class="field-help">ช่วงค้นหาย้อนหลังปรับตามระยะห่างระหว่างรอบส่ง พร้อม buffer (4–36 ชั่วโมง) จำนวนข่าวเพิ่มได้จากค่าเริ่มต้นจนถึงค่าสูงสุด</p></div>
+      </div>
+      <div class="settings-save"><button class="btn btn-primary" id="save-config-btn" onclick="saveSchedule()" disabled>บันทึกการตั้งค่า</button><span id="save-status" role="status" aria-live="polite"></span></div>
+      <div class="card danger-card"><div><h2>ลบข่าวทั้งหมด</h2><p>เคลียร์ข่าวทั้งหมดออกจากฐานข้อมูล — ลบแล้วกู้คืนไม่ได้</p></div><div class="danger-actions"><button class="btn-danger" onclick="clearAllNews()">เคลียร์ข่าวทั้งหมด</button><span id="clear-status" role="status" aria-live="polite"></span></div></div>
+    </section>
+    <footer class="main-footer"><span>NEWS FEED</span><span>Less noise. More perspective.</span></footer>
+  </main>
+</div>
+<footer hidden id="footer-info-old">–</footer>
+<nav id="mobile-bottom-nav" class="mobile-bottom-nav" aria-label="เมนูมือถือ">
+  <button id="mob-news" class="mob-nav-item active" data-tab="news-timeline" aria-current="page" onclick="showTab('news-timeline')"><svg class="icon" aria-hidden="true"><use href="#icon-news"/></svg><span class="mob-nav-label">ข่าว</span></button>
+  <button id="mob-prices" class="mob-nav-item" data-tab="price-tracker" onclick="showTab('price-tracker')"><svg class="icon" aria-hidden="true"><use href="#icon-chart"/></svg><span class="mob-nav-label">ราคา</span></button>
+  <button id="mob-board" class="mob-nav-item" data-tab="ai-leaderboard" onclick="showTab('ai-leaderboard')"><svg class="icon" aria-hidden="true"><use href="#icon-trophy"/></svg><span class="mob-nav-label">อันดับ</span></button>
+  <button id="mob-more" class="mob-nav-item" onclick="openMobileDrawer()" aria-controls="mobile-drawer-overlay" aria-expanded="false"><svg class="icon" aria-hidden="true"><use href="#icon-more"/></svg><span class="mob-nav-label">เพิ่มเติม</span></button>
 </nav>
-<main>
-  <div id="source-health" class="section active">
-    <div class="card">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.75rem">
-        <h2 style="margin-bottom:0">Articles per source (last 24h)</h2>
-        <button class="btn btn-sm" onclick="refreshSourceHealth()">↻ Refresh</button>
-      </div>
-      <canvas id="sourceChart" height="80"></canvas>
-    </div>
-    <div class="card" id="source-status-list"><h2>Source Status</h2></div>
-  </div>
-  <div id="news-timeline" class="section">
-    <div class="search-row">
-      <input type="text" id="news-search" placeholder="Search articles…" oninput="filterNews()">
-      <select id="news-source-filter" onchange="filterNews()"><option value="">All sources</option></select>
-      <button id="news-sort-btn" class="btn btn-sm" onclick="toggleNewsSort()" style="white-space:nowrap">🕐 Newest first</button>
-      <button id="fetch-now-btn" class="btn btn-sm" onclick="fetchNow()" style="white-space:nowrap" title="ดึงข่าวตอนนี้ทันที (อาจใช้เวลาสักครู่)">⚡ Fetch Now</button>
-      <span id="fetch-now-status" style="font-size:.82rem"></span>
-    </div>
-    <div class="card" id="news-list"><h2>News Timeline</h2></div>
-  </div>
-  <div id="price-tracker" class="section">
-    <div id="price-updated" style="color:#64748b;font-size:.8rem;margin-bottom:.75rem"></div>
-    <div class="search-row">
-      <input type="text" id="price-search" placeholder="Search model or ID…" oninput="filterPrices()">
-      <select id="price-provider-filter" onchange="loadPrices()"><option value="">All providers</option></select>
-      <select id="price-sort" onchange="loadPrices()">
-        <option value="combined_asc">Combined ↑</option>
-        <option value="prompt_asc">Prompt ↑</option>
-        <option value="complete_asc">Completion ↑</option>
-        <option value="prompt_desc">Prompt ↓</option>
-      </select>
-    </div>
-    <div class="search-row" style="margin-top:-.5rem">
-      <button class="zone-btn active" data-zone="" onclick="setZoneFilter('')">All</button>
-      <button class="zone-btn" data-zone="US" onclick="setZoneFilter('US')">🇺🇸 US</button>
-      <button class="zone-btn" data-zone="CN" onclick="setZoneFilter('CN')">🇨🇳 CN</button>
-      <button class="zone-btn" data-zone="EU" onclick="setZoneFilter('EU')">🇪🇺 EU</button>
-      <button class="zone-btn" data-zone="Others" onclick="setZoneFilter('Others')">🌍 Others</button>
-    </div>
-    <div class="card lb-card" id="pt-watchlist-card">
-      <h2 class="lb-head" onclick="toggleLbCard('pt-watchlist-card')"><span class="lb-caret">▾</span>⭐ My Watchlist <small id="pt-watchlist-count" style="color:#475569;font-size:.7rem"></small></h2>
-      <div class="lb-body" id="pt-watchlist-body"><p style="color:#64748b;font-size:.85rem">ยังไม่มีโมเดลใน watchlist — กด ☆ ที่แถวโมเดลใดก็ได้เพื่อเก็บ</p></div>
-    </div>
-    <div class="card"><table id="price-table"><thead><tr><th></th><th>Model</th><th>Model ID</th><th>Provider</th><th>Prompt/1M</th><th>Completion/1M</th><th>Context</th><th>Updated</th></tr></thead><tbody></tbody></table></div>
-  </div>
-  <div id="ai-leaderboard" class="section">
-    <div id="leaderboard-updated" style="color:#64748b;font-size:.8rem;margin-bottom:.6rem"></div>
-    <div class="lb-jump">
-      <button class="lb-pill" onclick="jumpToCard('lb-watchlist')">⭐ Watchlist</button>
-      <button class="lb-pill" onclick="jumpToCard('lb-tophit')">🏆 Top Hit</button>
-      <button class="lb-pill" onclick="jumpToCard('lb-tophit-cheap')">💸 Hit Cheapest</button>
-      <button class="lb-pill" onclick="jumpToCard('lb-tophit-free')">🆓 Hit Free</button>
-      <button class="lb-pill" onclick="jumpToCard('lb-intel')">🧠 Intelligence</button>
-      <button class="lb-pill" onclick="jumpToCard('lb-cheap')">Cheapest</button>
-      <button class="lb-pill" onclick="jumpToCard('lb-free')">🆓 Free</button>
-      <button class="lb-pill" onclick="jumpToCard('lb-exp')">Expensive</button>
-    </div>
-    <div class="card lb-card" id="lb-watchlist">
-      <h2 class="lb-head" onclick="toggleLbCard('lb-watchlist')"><span class="lb-caret">▾</span>⭐ My Watchlist <small id="lb-watchlist-count" style="color:#475569;font-size:.7rem"></small></h2>
-      <div class="lb-body" id="leaderboard-watchlist"></div>
-    </div>
-    <div class="card lb-card" id="lb-tophit">
-      <h2 class="lb-head" onclick="toggleLbCard('lb-tophit')"><span class="lb-caret">▾</span>🏆 Top Hit</h2>
-      <div class="lb-body" id="leaderboard-top-hit"></div>
-    </div>
-    <div class="card lb-card" id="lb-tophit-cheap">
-      <h2 class="lb-head" onclick="toggleLbCard('lb-tophit-cheap')"><span class="lb-caret">▾</span>💸 Top Hit — Cheapest <small style="color:#475569;font-size:.7rem">(โมเดลดังที่ถูกที่สุด)</small></h2>
-      <div class="lb-body" id="leaderboard-tophit-cheap"></div>
-    </div>
-    <div class="card lb-card" id="lb-tophit-free">
-      <h2 class="lb-head" onclick="toggleLbCard('lb-tophit-free')"><span class="lb-caret">▾</span>🆓 Top Hit — Free <small style="color:#475569;font-size:.7rem">(โมเดลดังที่ฟรี)</small></h2>
-      <div class="lb-body" id="leaderboard-tophit-free"></div>
-    </div>
-    <div class="card lb-card" id="lb-intel">
-      <h2 class="lb-head" onclick="toggleLbCard('lb-intel')"><span class="lb-caret">▾</span>🧠 Top Intelligence <small style="color:#475569;font-size:.7rem">(Chatbot Arena ELO, approx.)</small></h2>
-      <div class="lb-body" id="leaderboard-intelligence"></div>
-    </div>
-    <div class="card lb-card" id="lb-cheap">
-      <h2 class="lb-head" onclick="toggleLbCard('lb-cheap')"><span class="lb-caret">▾</span>Top 10 Cheapest <small style="color:#475569;font-size:.7rem">(by combined)</small></h2>
-      <div class="lb-body" id="leaderboard-cheap"></div>
-    </div>
-    <div class="card lb-card" id="lb-free">
-      <h2 class="lb-head" onclick="toggleLbCard('lb-free')"><span class="lb-caret">▾</span>🆓 Free Models</h2>
-      <div class="lb-body" id="leaderboard-free"></div>
-    </div>
-    <div class="card lb-card" id="lb-exp">
-      <h2 class="lb-head" onclick="toggleLbCard('lb-exp')"><span class="lb-caret">▾</span>Top 5 Most Expensive</h2>
-      <div class="lb-body" id="leaderboard-expensive"></div>
-    </div>
-  </div>
-  <div id="digest-history" class="section">
-    <div class="card">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:.75rem">
-        <h2 style="margin-bottom:0">Past Digests</h2>
-        <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">
-          <button id="test-digest-btn" class="btn" onclick="testDigest()">📤 ส่ง Test Digest</button>
-          <span id="test-digest-status" style="font-size:.82rem"></span>
-        </div>
-      </div>
-      <div id="digest-list"></div>
-    </div>
-  </div>
-  <div id="schedule-config" class="section">
-    <div class="card">
-      <h2>Digest Times (Bangkok)</h2>
-      <div id="digest-times-inputs"></div>
-    </div>
-    <div class="card">
-      <h2>Enabled Sources</h2>
-      <div id="source-toggles"></div>
-      <div style="margin-top:1rem;border-top:1px solid var(--border);padding-top:.75rem">
-        <div style="font-weight:600;font-size:.88rem;margin-bottom:.4rem">Custom Sources</div>
-        <div id="custom-sources-list"></div>
-        <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:flex-end;margin-top:.5rem">
-          <label style="display:flex;flex-direction:column;gap:.2rem;font-size:.82rem">Name<input type="text" id="new-source-name" placeholder="The Register" style="width:140px"></label>
-          <label style="display:flex;flex-direction:column;gap:.2rem;font-size:.82rem">RSS URL<input type="url" id="new-source-url" placeholder="https://…/feed" style="width:240px"></label>
-          <button type="button" class="btn btn-sm" onclick="addCustomSource()" style="margin-bottom:.05rem">+ Add</button>
-          <span id="add-source-error" style="color:var(--danger);font-size:.78rem;align-self:center"></span>
-        </div>
-      </div>
-    </div>
-    <div class="card">
-      <h2>Summarizer Model (Primary)</h2>
-      <label>Provider: <select id="cfg-provider"><option value="anthropic">Anthropic</option><option value="openrouter">OpenRouter</option><option value="mimo">Mimo</option></select></label>&nbsp;
-      <label>Model: <input type="text" id="cfg-model" style="width:220px"></label>
-    </div>
-    <div class="card">
-      <h2>Summarizer Fallback Chain</h2>
-      <small style="color:#64748b;display:block;margin-bottom:.75rem">ถ้า primary fail → ลองตาม order นี้อัตโนมัติ (ไม่มีต้องตั้งก็ได้)</small>
-      <div id="fallback-chain-inputs"></div>
-    </div>
-    <div class="card">
-      <h2>News Retention</h2>
-      <label>เก็บข่าวไว้ <input type="number" id="cfg-retention" min="1" max="365" style="width:80px"> วัน</label>
-      <small style="color:#64748b;display:block;margin-top:.5rem">ข่าวที่เก่ากว่านี้จะถูกลบอัตโนมัติทุกวันเวลา 03:30 (Bangkok)</small>
-    </div>
-    <div class="card">
-      <h2>Digest Tuning</h2>
-      <div style="display:flex;gap:1rem;flex-wrap:wrap">
-        <label style="display:flex;flex-direction:column;gap:.2rem;font-size:.85rem">Window buffer (hours)
-          <input type="number" id="cfg-window-buffer" step="0.5" min="0" max="6" style="width:100px">
-        </label>
-        <label style="display:flex;flex-direction:column;gap:.2rem;font-size:.85rem">Base size
-          <input type="number" id="cfg-size-base" step="1" min="1" max="20" style="width:80px">
-        </label>
-        <label style="display:flex;flex-direction:column;gap:.2rem;font-size:.85rem">Max size
-          <input type="number" id="cfg-size-max" step="1" min="1" max="20" style="width:80px">
-        </label>
-        <label style="display:flex;flex-direction:column;gap:.2rem;font-size:.85rem">Max per source
-          <input type="number" id="cfg-max-per-source" step="1" min="1" max="5" style="width:80px">
-        </label>
-      </div>
-      <small style="color:#64748b;display:block;margin-top:.5rem">Adaptive lookback adds buffer to the gap between digest ticks (clamped 4–36h). Dynamic size grows from base up to max when many candidates exist.</small>
-    </div>
-    <br>
-    <button class="btn" onclick="saveSchedule()">Save Config</button>
-    <span id="save-status" style="margin-left:.75rem;font-size:.85rem;color:#22c55e"></span>
-    <div class="card danger-card" style="margin-top:1.5rem">
-      <h2 style="color:var(--danger-700)">⚠️ Danger Zone</h2>
-      <p style="color:var(--text-2);font-size:.85rem;margin-bottom:.75rem">เคลียร์ข่าวทั้งหมดออกจากฐานข้อมูล — ลบแล้วกู้คืนไม่ได้</p>
-      <button class="btn-danger" onclick="clearAllNews()">🗑️ เคลียร์ข่าวทั้งหมด</button>
-      <span id="clear-status" style="margin-left:.75rem;font-size:.85rem"></span>
-    </div>
-  </div>
-</main>
-<footer style="display:none" id="footer-info-old">–</footer>
-<!-- ===== Mobile Bottom Navigation ===== -->
-<div id="mobile-bottom-nav" class="mobile-bottom-nav">
-  <button id="mob-news" class="mob-nav-item active" onclick="showTab('news-timeline')">
-    <span class="mob-nav-icon">📰</span>
-    <span class="mob-nav-label">News</span>
-  </button>
-  <button id="mob-board" class="mob-nav-item" onclick="showTab('ai-leaderboard')">
-    <span class="mob-nav-icon">🏆</span>
-    <span class="mob-nav-label">Board</span>
-  </button>
-  <button id="mob-prices" class="mob-nav-item" onclick="showTab('price-tracker')">
-    <span class="mob-nav-icon">💰</span>
-    <span class="mob-nav-label">Prices</span>
-  </button>
-  <button class="mob-nav-item" onclick="openMobileDrawer()">
-    <span class="mob-nav-icon">⋯</span>
-    <span class="mob-nav-label">More</span>
-  </button>
-</div>
-
-<!-- ===== Mobile Drawer ===== -->
-<div id="mobile-drawer-overlay" class="mobile-drawer-overlay" onclick="closeMobileDrawer()">
-  <div class="mobile-drawer-sheet" onclick="event.stopPropagation()">
-    <div class="mobile-drawer-handle"></div>
-    <button class="mobile-drawer-item" onclick="showTab('digest-history'); closeMobileDrawer()">
-      <span>📋</span> Digest History
-    </button>
-    <button class="mobile-drawer-item" onclick="showTab('source-health'); closeMobileDrawer()">
-      <span>📊</span> Source Health
-    </button>
-    <button class="mobile-drawer-item" onclick="showTab('schedule-config'); closeMobileDrawer()">
-      <span>⚙️</span> Schedule Config
-    </button>
+<div id="mobile-drawer-overlay" class="mobile-drawer-overlay" onclick="closeMobileDrawer()" aria-hidden="true">
+  <div class="mobile-drawer-sheet" role="dialog" aria-modal="true" aria-labelledby="drawer-title" onclick="event.stopPropagation()" tabindex="-1">
+    <div class="mobile-drawer-handle"></div><div class="drawer-heading"><h2 id="drawer-title">Workspace</h2><button id="drawer-close" class="icon-button" onclick="closeMobileDrawer()" aria-label="ปิดเมนู"><svg class="icon" aria-hidden="true"><use href="#icon-close"/></svg></button></div>
+    <button class="mobile-drawer-item" data-tab="digest-history" onclick="showTab('digest-history'); closeMobileDrawer()"><svg class="icon" aria-hidden="true"><use href="#icon-history"/></svg>ประวัติ Digest<svg class="icon drawer-arrow" aria-hidden="true"><use href="#icon-arrow"/></svg></button>
+    <button class="mobile-drawer-item" data-tab="source-health" onclick="showTab('source-health'); closeMobileDrawer()"><svg class="icon" aria-hidden="true"><use href="#icon-sources"/></svg>แหล่งข่าว<svg class="icon drawer-arrow" aria-hidden="true"><use href="#icon-arrow"/></svg></button>
+    <button class="mobile-drawer-item" data-tab="schedule-config" onclick="showTab('schedule-config'); closeMobileDrawer()"><svg class="icon" aria-hidden="true"><use href="#icon-settings"/></svg>ตั้งค่า<svg class="icon drawer-arrow" aria-hidden="true"><use href="#icon-arrow"/></svg></button>
+    <p class="drawer-footnote">News Feed · AI &amp; IT Briefing</p>
   </div>
 </div>
-
+<script src="dashboard-utils.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
