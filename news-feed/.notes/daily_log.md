@@ -823,3 +823,12 @@ Stack พร้อม deploy — รอ user เติมค่าใน `.env` 
   checkout หลักเพียง worktree เดียว. Config ignored ใน release มีสำเนาตรงต้นฉบับครบ.
 - อัปเดต index/log ทั้ง news-feed และ shorts-factory ตามสถานะ checkout ใหม่.
   งานรอบนี้เปลี่ยนเฉพาะ refs/checkout/memory; app และ deployment คงสถานะ release เดิม.
+
+### ปิดงาน Git cleanup ตามคำสั่ง “จบงาน” — 2026-10-08
+
+- บันทึก cleanup commit `8b55c6a` push เข้า main แล้ว. ตรวจก่อนปิด: checkout
+  หลัก clean, main = origin/main และเหลือ worktree หลักเพียงแห่งเดียว.
+- Local/GitHub เหลือ main; branch news-feed เดิมลบแล้วและมี verified Git bundle
+  สำรองใน `.git/branch-cleanup-backups/20261008T095910Z/` พร้อม manifest.
+- อัปเดต index/log ทั้งสอง stack สำหรับปิดงาน. ไม่มี Git cleanup ค้าง;
+  production ใช้ dashboard release เดิม งานรอบนี้แก้ memory จึงไม่ deploy ซ้ำ.

@@ -2012,3 +2012,12 @@ install` จะสำเร็จ. ต้องสร้าง venv ใต้ re
 - ผลตรวจหลังลบ: local + origin เหลือ main เท่านั้น, worktree list เหลือ checkout
   หลักเดียว และ main ตรง origin/main. ฟีเจอร์ shorts ยังอยู่ main/deploy ตามเดิม.
 - การรอบนี้เปลี่ยน Git refs/checkout และ memory เท่านั้น; ไม่แก้ app ไม่ deploy ซ้ำ.
+
+### ปิดงาน Git cleanup ตามคำสั่ง “จบงาน” — 2026-10-08
+
+- บันทึก cleanup commit `8b55c6a` push เข้า main แล้ว. ตรวจก่อนปิด: checkout
+  หลัก clean, main = origin/main และเหลือ worktree หลักเพียงแห่งเดียว.
+- Local/GitHub เหลือ main; release worktree archive แล้ว. Backup branches และ
+  manifest คงอยู่ใน `.git/branch-cleanup-backups/20261008T095910Z/`.
+- อัปเดต index/log ทั้งสอง stack สำหรับปิดงาน. ไม่มี Git cleanup ค้าง;
+  production ใช้ release เดิม งานรอบนี้แก้ memory จึงไม่ deploy ซ้ำ.

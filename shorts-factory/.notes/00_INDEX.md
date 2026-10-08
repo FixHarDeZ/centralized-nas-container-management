@@ -1,11 +1,13 @@
 # shorts-factory — Index
 
-**Git cleanup 2026-10-08:** checkout หลักกลับมาอยู่ `main`; local และ GitHub เหลือ
+**Git cleanup 2026-10-08 — ปิดงานแล้ว:** checkout หลักกลับมาอยู่ `main`; local และ GitHub เหลือ
 branch `main` เท่านั้นตามคำสั่งผู้ใช้ (ลบ 17 local + 1 remote). Release worktree เดิม
 archive ผ่าน Codex แล้ว จึงไม่มี worktree อื่นล็อก `main`. สำรอง Git refs/history
 ก่อนลบและตรวจ bundle ผ่าน: `.git/branch-cleanup-backups/20261008T095910Z/branches.bundle`
 พร้อม `manifest.json` ในโฟลเดอร์เดียวกัน (local เท่านั้น). Commit ของ branch ที่ยัง
 ไม่อยู่ main เก็บใน backup; cleanup ไม่เปลี่ยนโค้ด production และไม่ deploy ซ้ำ.
+บันทึก cleanup `8b55c6a` push เข้า main แล้ว; ปิด session ตามคำสั่ง “จบงาน”
+โดยอัปเดต index/log ทั้ง shorts-factory และ news-feed. ไม่มีงาน Git cleanup ค้าง.
 
 **ปิดงาน 2026-10-08 ตามคำสั่งผู้ใช้.** ฟีเจอร์ `eb474e5` และบันทึกผล release
 `aea0937` อยู่ main/origin แล้ว; production deploy และตรวจครบ 284 tests ผ่าน.
