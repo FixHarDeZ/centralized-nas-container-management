@@ -6,8 +6,6 @@ the reloads below.
 """
 import importlib
 import json
-import os
-from statistics import median
 
 import pytest
 from fastapi.testclient import TestClient
@@ -217,9 +215,12 @@ def test_no_drawing_library_in_this_process():
 
 
 def test_clips_page_leads_with_the_gate_and_the_day7_figures(client):
-    body = client.get("/").text
-    assert ">1<small> / 30</small>" in body   # one clip in history.json, Gate is 30
-    assert "41.2" in body          # median day-7 retention across the list
+    reply = client.get("/")
+    thai = next(channel for channel in reply.context["channels"] if channel["code"] == "th")
+    assert thai["summary"]["published"] == 1   # history.json, not the manifest count
+    assert thai["summary"]["gate_clips"] == 30
+    assert "1/30" in reply.text
+    assert "41.2" in reply.text          # median day-7 retention for this channel
 
 
 def test_clips_rows_carry_their_outcome_for_the_filter(client):

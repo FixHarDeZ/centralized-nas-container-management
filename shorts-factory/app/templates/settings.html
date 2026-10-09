@@ -1,91 +1,20 @@
 {% extends "base.html" %}
-{% block title %}ตั้งเวลา — shorts-factory{% endblock %}
+{% block title %}ตั้งค่า — shorts-factory{% endblock %}
+{% block page_header %}<div class="page-head"><div><span class="eyebrow">MAKE ROOM FOR CREATING</span><h1>ตั้งค่าการสร้างคลิป</h1><p class="sub">กำหนดรอบ /trends ของแต่ละช่อง และโมเดลสำหรับงานเขียน</p></div><span class="badge">เวลาไทย · Asia/Bangkok</span></div>{% endblock %}
 {% block content %}
-<h1>รอบ /trends อัตโนมัติ</h1>
-
-{% if saved %}<p class="ok">บันทึกแล้ว บอทจะเห็นค่าใหม่ในรอบถัดไป (ไม่ต้อง restart)</p>{% endif %}
-{% if error %}<p class="warn">{{ error }}</p>{% endif %}
-
-<p class="muted">
-  ถึงเวลาแล้วบอทจะดู trend ของช่องนั้นเอง เสนอหัวข้อ 5 อันพร้อมปุ่ม ✋ —
-  ไม่กดอะไรเลยภายในเวลาที่ตั้งไว้ บอทจะสุ่มมา 1 อัน เขียนสคริปต์แล้ว render ให้เอง
-  (อัปขึ้น YouTube ยังต้องกดเองใน Telegram เหมือนเดิม)
-  ทีละช่อง ไม่ยิงพร้อมกัน — ตั้งเวลาชนกันได้ ช่องที่สองจะไปรอบถัดไป
-</p>
-
+{% if saved %}<div class="notice tone-success" role="status">{{ icon('check') }} บันทึกแล้ว บอทจะเห็นค่าใหม่ในรอบถัดไป ไม่ต้อง restart</div>{% endif %}
+{% if error %}<div class="notice tone-danger" role="alert"><strong>ยังบันทึกไม่ได้</strong><p>{{ error }}</p><p>ค่าที่กรอกยังอยู่ด้านล่าง กรุณาแก้ไขแล้วบันทึกอีกครั้ง</p></div>{% endif %}
 <form method="post" action="/settings">
-  <div class="rows">
-  <table>
-    <thead><tr><th>ช่อง</th><th>เปิด</th><th>เวลา (0-23 คั่นด้วยจุลภาค)</th><th>รอคนเลือก (นาที)</th></tr></thead>
-    <tbody>
-    {% for row in rows %}
-    <tr>
-      <th data-label="ช่อง">{{ row.label }} <span class="muted">{{ row.code }}</span></th>
-      <td data-label="เปิด">
-        <input type="checkbox" name="{{ row.code }}_enabled" {% if row.enabled %}checked{% endif %}>
-      </td>
-      <td data-label="เวลา">
-        <input type="text" name="{{ row.code }}_hours" value="{{ row.hours }}"
-               inputmode="numeric" placeholder="8,12,17">
-      </td>
-      <td data-label="รอคนเลือก">
-        <input type="number" name="{{ row.code }}_minutes" value="{{ row.minutes }}"
-               min="{{ min_minutes }}" max="{{ max_minutes }}">
-      </td>
-    </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  </div>
-
-  <h2>Model ของ mimo</h2>
-  <p class="muted">
-    ใช้ตอนเขียนสคริปต์ เสนอหัวข้อ /trends, Flow prompt และ storyboard —
-    ตัวสำรองใช้เฉพาะตอนเขียนสคริปต์ใหม่ด้วยเวลาที่เหลือหลังรอบแรกไม่ผ่าน.
-    "ค่าตั้งต้นของบอท" = ตาม env ของคอนเทนเนอร์บอท (<code>MIMO_MODEL</code> /
-    <code>MIMO_FALLBACK_MODEL</code>). มีผลกับคำขอถัดไป ไม่ต้อง restart.
-    รายชื่อ model บอทดึงจาก mimo เองทุก 6 ชม. เรียงใหม่สุดก่อน
-    {% if catalog_at %}(ล่าสุด {{ catalog_at }}){% else %}(ยังไม่เคยดึง — ใช้ลิสต์ตั้งต้น){% endif %}
-  </p>
-  <div class="rows">
-  <table>
-    <tbody>
-    {% for role, label in [("primary", "ตัวหลัก"), ("fallback", "ตัวสำรอง")] %}
-    <tr>
-      <th data-label="บทบาท">{{ label }}</th>
-      <td data-label="model">
-        <select name="model_{{ role }}">
-          <option value="" {% if not models[role] %}selected{% endif %}>ค่าตั้งต้นของบอท</option>
-          {% for name in model_choices %}
-          <option value="{{ name }}" {% if models[role] == name %}selected{% endif %}>{{ name }}</option>
-          {% endfor %}
-        </select>
-      </td>
-    </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  </div>
-  <p><button type="submit">บันทึก</button></p>
+<div class="section-head"><h2>รอบอัตโนมัติของแต่ละช่อง</h2>{{ icon('clock') }}</div>
+<p class="muted section-description">ถึงเวลาบอทจะเสนอหัวข้อ 5 อันใน Telegram หากไม่เลือกภายในเวลาที่กำหนดจะสุ่มหนึ่งหัวข้อ เขียนสคริปต์และเรนเดอร์ให้ การอัปโหลด YouTube ยังต้องกดยืนยันเอง</p>
+<div class="form-grid">
+{% for row in rows %}<fieldset class="card channel-settings"><legend>ช่อง{{ row.label }} <span class="badge">{{ row.code|upper }}</span></legend><label class="toggle" for="{{ row.code }}-enabled"><input id="{{ row.code }}-enabled" type="checkbox" name="{{ row.code }}_enabled"{% if row.enabled %} checked{% endif %}><span>เปิดรอบอัตโนมัติสำหรับช่องนี้</span></label><div class="field"><label for="{{ row.code }}-hours">เวลาที่ให้บอทเสนอหัวข้อ</label><input id="{{ row.code }}-hours" name="{{ row.code }}_hours" type="text" value="{{ row.hours }}" inputmode="numeric" placeholder="8,12,17" aria-describedby="{{ row.code }}-hours-hint"><small id="{{ row.code }}-hours-hint">ชั่วโมง 0-23 คั่นด้วยจุลภาค เช่น 8,12,17 = 08:00, 12:00, 17:00 เวลาไทย</small></div><div class="field"><label for="{{ row.code }}-minutes">รอคนเลือกหัวข้อ (นาที)</label><input id="{{ row.code }}-minutes" name="{{ row.code }}_minutes" type="text" value="{{ row.minutes }}" inputmode="numeric" aria-describedby="{{ row.code }}-minutes-hint"><small id="{{ row.code }}-minutes-hint">จำนวนเต็ม {{ min_minutes }}–{{ max_minutes }} นาที จากนั้นบอทจะสุ่มหัวข้อเอง</small></div></fieldset>{% endfor %}
+</div><p class="schedule-note">บอททำงานทีละช่อง ตั้งเวลาชนกันได้ ช่องที่สองจะทำในรอบถัดไป</p>
+<section class="card model-settings"><div class="card-head"><h2>โมเดลสำหรับงานเขียน</h2>{{ icon('flask') }}</div><p class="muted small">ใช้เขียนสคริปต์ เสนอหัวข้อ /trends, Flow prompt และ Storyboard ตัวสำรองใช้เมื่อการเขียนสคริปต์รอบแรกไม่ผ่าน และยังเหลือเวลา</p><div class="form-grid">
+{% for role, label in [('primary', 'โมเดลตัวหลัก'), ('fallback', 'โมเดลตัวสำรอง')] %}<div class="field"><label for="model-{{ role }}">{{ label }}</label><select id="model-{{ role }}" name="model_{{ role }}" aria-describedby="model-{{ role }}-hint"><option value=""{% if not models[role] %} selected{% endif %}>ค่าตั้งต้นของบอท</option>{% if models[role] and models[role] not in model_choices %}<option value="{{ models[role] }}" selected>{{ models[role] }} (ไม่อยู่ในรายชื่อที่ใช้ได้)</option>{% endif %}{% for name in model_choices %}<option value="{{ name }}"{% if models[role] == name %} selected{% endif %}>{{ name }}</option>{% endfor %}</select><small id="model-{{ role }}-hint">{% if role == 'primary' %}ใช้กับคำขอใหม่ของบอท{% else %}ใช้เมื่อรอบแรกไม่ผ่านภายในเวลาที่เหลือ{% endif %}</small></div>{% endfor %}
+</div><p class="schedule-note">รายชื่อโมเดลอัปเดตทุก 6 ชม. {% if catalog_at %}ล่าสุด <time datetime="{{ catalog_at }}">{{ catalog_at|datetime_display }}</time>{% else %}ยังไม่เคยดึงรายชื่อ ใช้ลิสต์ตั้งต้น{% endif %}<br>เลือกค่าตั้งต้นของบอทเพื่อใช้โมเดลที่ตั้งไว้สำหรับบอท</p></section>
+<div class="settings-actions"><button class="primary" type="submit">{{ icon('check') }} บันทึกการตั้งค่า</button><p>มีผลกับคำขอถัดไป · ไม่ต้อง restart</p></div>
 </form>
-
-<h2>รอบล่าสุดที่ยิงไปแล้ว</h2>
-<div class="rows">
-<table>
-  <thead><tr><th>ช่อง</th><th>รอบ</th></tr></thead>
-  <tbody>
-  {% for code, slot in stamps.items() %}
-  <tr><td data-label="ช่อง">{{ code }}</td><td data-label="รอบ">{{ slot }}</td></tr>
-  {% else %}
-  <tr><td class="muted">ยังไม่เคยยิงรอบอัตโนมัติ</td></tr>
-  {% endfor %}
-  </tbody>
-</table>
-</div>
-
-<p class="muted">
-  หน้านี้เป็นที่เดียวใน dashboard ที่เขียนอะไรได้ และเขียนได้แค่ไฟล์ตั้งค่าใน <code>/config</code>
-  (<code>schedule.json</code> ตารางเวลา, <code>models.json</code> model ของ mimo) — manifest, state และประวัติทั้งหมดยัง mount
-  แบบ read-only เหมือนเดิม ดู docs/adr/0009
-</p>
+<details class="card disclosure schedule-stamps"><summary>รอบล่าสุดที่ยิงไปแล้ว</summary><div class="table-scroll"><table><thead><tr><th>ช่อง</th><th>รอบที่บันทึก</th></tr></thead><tbody>{% for code, slot in stamps.items() %}<tr><td>{{ code|upper }}</td><td>{{ slot }}</td></tr>{% else %}<tr><td colspan="2" class="empty-inline">ยังไม่เคยยิงรอบอัตโนมัติ</td></tr>{% endfor %}</tbody></table></div></details>
+<p class="muted small settings-scope">การตั้งค่านี้มีผลเฉพาะตารางเวลาและโมเดล ข้อมูลคลิป สถานะ และประวัติเป็นข้อมูลอ่านอย่างเดียว</p>
 {% endblock %}

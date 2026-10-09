@@ -1,58 +1,18 @@
 {% extends "base.html" %}
+{% block title %}การทดลอง — shorts-factory{% endblock %}
+{% block page_header %}<div class="page-head"><div><span class="eyebrow">LEARN FROM YOUR CLIPS</span><h1>การทดลอง</h1><p class="sub">เปรียบเทียบวิธีเปิดคลิป · {{ factor }} · แยกผลตามช่อง</p></div><span class="badge">สถิติ Day 7</span></div>{% endblock %}
 {% block content %}
 {% for section in sections %}
-<h1>การทดลอง ({{ section.label }}): {{ factor }}</h1>
-{% if section.gate %}<p class="warn">{{ section.gate }}</p>{% endif %}
-<p class="warn">{{ section.verdict }}</p>
-
-
-<div class="kpis">
-  {% for name, data in section.arms.items() %}
-  <div class="kpi">
-    <div class="label">{{ name }}</div>
-    <div class="value">{% if data.median is none %}—{% else %}{{ "%.1f"|format(data.median) }}<small>%</small>{% endif %}</div>
-    <div class="label">{{ data.clips }} คลิป · {{ data.views }} views</div>
-  </div>
-  {% endfor %}
+<section class="experiment-section" aria-label="การทดลองช่อง{{ section.label }}"><div class="section-head"><h2>ช่อง{{ section.label }} <span class="badge">{{ section.locale|upper }}</span></h2><span class="muted small">หนึ่งปัจจัย · สุ่ม Variant ต่อคลิป</span></div>
+{% if section.gate %}<div class="notice tone-warning"><strong>เกณฑ์ข้อมูลของช่อง · Gate</strong><p>{{ section.gate }}</p></div>{% endif %}
+<div class="notice verdict{% if section.gate %} tone-warning{% else %} tone-info{% endif %}"><strong>{{ 'ยังอยู่ระหว่างเก็บข้อมูล' if section.gate else 'ข้อสรุปจากการทดลอง' }}</strong><p>{{ section.verdict }}</p></div>
+<div class="arm-grid">
+{% for name, data in section.arms.items() %}<article class="card arm"><div class="card-head"><h3>{{ arm_labels.get(name, 'สำรวจรูปแบบใหม่' if name == 'explore' else name) }}</h3><span class="badge">{{ name }}</span></div><p class="muted small">Median การรับชมเฉลี่ย · Day 7</p><div class="metric-number">{{ data.median|percent }}</div><p class="metric-note">{{ data.percents|length }} คลิปมีค่าการรับชมเฉลี่ย</p>
+{% if name != 'explore' %}<div class="arm-progress"><div><span>จำนวนคลิป</span><strong>{{ data.clips|number }} / {{ min_clips|number }}</strong></div><div class="meter"><i style="width: {{ [100, data.clips * 100 / min_clips]|min if min_clips else 0 }}%"></i></div><div><span>ยอดรับชม</span><strong>{{ data.views|number }} / {{ min_views|number }}</strong></div><div class="meter"><i style="width: {{ [100, data.views * 100 / min_views]|min if min_views else 0 }}%"></i></div></div>{% else %}<p class="schedule-note">{{ data.clips|number }} คลิป · {{ data.views|number }} views<br>แยกจากสอง Variant ที่ใช้ตัดสินการทดลอง</p>{% endif %}
+<div class="arm-footer"><span>ทิ้ง {{ data.discarded|number }}</span><span>ล้มเหลว {{ data.failed|number }}</span></div></article>{% endfor %}
 </div>
-
-<div class="rows">
-<table>
-  <thead><tr><th>arm</th><th class="num">คลิป</th><th class="num">ทิ้ง</th><th class="num">ล้มเหลว</th>
-             <th class="num">views</th><th class="num">median ดูจนจบ</th></tr></thead>
-  <tbody>
-  {% for name, data in section.arms.items() %}
-  <tr><td class="wide" data-label="arm">{{ name }}</td>
-      <td class="num" data-label="คลิป">{{ data.clips }}</td>
-      <td class="num" data-label="ทิ้ง">{{ data.discarded }}</td>
-      <td class="num" data-label="ล้มเหลว">{{ data.failed }}</td>
-      <td class="num" data-label="views">{{ data.views }}</td>
-      <td class="num" data-label="median ดูจนจบ">{% if data.median is none %}<span class="muted">—</span>{% else %}{{ "%.1f"|format(data.median) }}%{% endif %}</td></tr>
-  {% endfor %}
-  </tbody>
-</table>
-</div>
-
-<h2>ประโยคที่ต่อท้าย prompt</h2>
-<div class="grid">
-  {% for name, clause in section.clauses.items() %}
-  <div class="card"><p><strong>{{ name }}</strong></p><pre>{{ clause }}</pre></div>
-  {% endfor %}
-</div>
-
-<h2>ตามหมวด <span class="muted">(สังเกตการณ์ ไม่ใช่การทดลอง — คนเลือกหัวข้อเอง)</span></h2>
-<div class="rows">
-<table>
-  <thead><tr><th>หมวด</th><th class="num">คลิป</th><th class="num">มาจาก /trends</th><th class="num">views</th></tr></thead>
-  <tbody>
-  {% for name, data in section.categories.items() %}
-  <tr><td class="wide" data-label="หมวด">{{ name }}</td>
-      <td class="num" data-label="คลิป">{{ data.clips }}</td>
-      <td class="num" data-label="มาจาก /trends">{{ data.trend }}</td>
-      <td class="num" data-label="views">{{ data.views }}</td></tr>
-  {% endfor %}
-  </tbody>
-</table>
-</div>
+<details class="card disclosure prompt-clauses"><summary>ประโยคที่ต่อท้าย Prompt · ดูเงื่อนไขแต่ละ Variant</summary><div class="grid">{% for name, clause in section.clauses.items() %}<article><h3>{{ arm_labels.get(name, name) }} <span class="muted small">{{ name }}</span></h3><pre>{{ clause }}</pre></article>{% endfor %}</div></details>
+<section class="card categories"><div class="card-head"><h2>ผลลัพธ์ตามหมวด</h2><span class="badge">ข้อมูลสังเกตการณ์</span></div><p class="muted small">หมวดไม่ใช่การทดลอง คนเลือกหัวข้อเอง จึงใช้ข้อมูลนี้ตัดสินเหตุและผลไม่ได้</p><div class="table-scroll"><table><thead><tr><th>หมวด</th><th class="num">คลิป</th><th class="num">มาจาก /trends</th><th class="num">views · D7</th></tr></thead><tbody>{% for name, data in section.categories.items() %}<tr><td>{{ name }}</td><td class="num">{{ data.clips|number }}</td><td class="num">{{ data.trend|number }}</td><td class="num">{{ data.views|number }}</td></tr>{% else %}<tr><td colspan="4" class="empty-inline">ยังไม่มีข้อมูลหมวดของช่องนี้</td></tr>{% endfor %}</tbody></table></div></section>
+</section>
 {% endfor %}
 {% endblock %}

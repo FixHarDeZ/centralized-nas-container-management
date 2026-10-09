@@ -2021,3 +2021,76 @@ install` จะสำเร็จ. ต้องสร้าง venv ใต้ re
   manifest คงอยู่ใน `.git/branch-cleanup-backups/20261008T095910Z/`.
 - อัปเดต index/log ทั้งสอง stack สำหรับปิดงาน. ไม่มี Git cleanup ค้าง;
   production ใช้ release เดิม งานรอบนี้แก้ memory จึงไม่ deploy ซ้ำ.
+
+## 2026-10-09 — เริ่ม redesign dashboard / mockup review
+
+- ผู้ใช้ขอ dashboard modern และคำแนะนำ feature; อนุมัติ browser mockup ก่อนลงโค้ดจริง.
+- อ่าน stack memory/ADR และตรวจ templates/static/dashboard/settings/test เดิม.
+  เสนอ 3 แนว: Creator Studio (แนะนำ charcoal/amber), Clean Light, Data Ops.
+- ทำ mockup 5 หน้าใน `.superpowers/brainstorm/93903-1791514771/` (gitignored):
+  library, clip detail, experiments, recorded state, settings. ข้อมูลทั้งหมดสมมติ;
+  search/channel/status/theme/navigation ทำงานใน browser, save เป็นการจำลอง.
+  ตัวเลือกสไตล์บันทึกผ่าน visual companion. `state/server-info` เก็บ local URL;
+  screenshots desktop/mobile/light อยู่ใต้ session เดียวกัน. เปิดใน Codex browser
+  ให้ผู้ใช้รีวิวและคง tab เป็น deliverable.
+- เขียน draft design/spec ที่
+  `docs/superpowers/specs/2026-10-09-shorts-factory-modern-dashboard-design.md`.
+  ตรวจ scope/data semantics/security boundaries/missing-data handling แล้ว.
+- พบจุดปรับในโค้ดเดิม: KPI หน้าแรกรวมช่องแต่ Gate default ไทย; percent label
+  ควรเป็น average viewing percentage; Settings ไม่เก็บ invalid edits เมื่อ redraw;
+  Card index ควรเริ่ม 1 และ state file ไม่ใช่ heartbeat. รวมใน draft scope.
+- Feature ที่แนะนำรอบนี้: ค้นหา/กรอง/เลือกช่อง, metrics แยกช่อง, script copy,
+  pronunciation checklist ใน detail และ feedback ของฟอร์ม. งานต่อยอด:
+  local MP4/thumbnail preview (ต้อง mount/serve output แยก), real heartbeat/job stages,
+  distribution analysis/recommender หลังผ่าน Gate. ไม่มีการเพิ่ม write route หรือ
+  credential/PIL/edge_tts ให้ dashboard ใน proposal.
+- Baseline `PYTHONPATH=shorts-factory python3 -m pytest .../test_dashboard.py`:
+  17 pass / 5 fail เพราะ system Python ขาด python-multipart (error แจ้งตรงกัน).
+  เติมเวอร์ชันที่ requirements pin ไว้ `0.0.20` เฉพาะ target
+  `/tmp/shorts-factory-dashboard-review-deps`, rerun dashboard suite = **22 pass**.
+  ไม่แก้ requirements/application เพื่อปัญหา environment นี้.
+- Browser ตรวจ mockup navigation 5 หน้า, search RAM, สลับ TH/EN พร้อม KPI,
+  settings simulated save, light/dark; library ที่ 390/320/768px มี scrollWidth
+  เท่ากับ viewport. JS `node --check` ผ่าน; console warn/error ว่าง.
+  การตรวจเหล่านี้เป็น mockup/baseline ไม่ใช่การ verify redesign production.
+- **สถานะจริง:** production code ยังไม่ถูกแก้; spec/index/log อยู่ local และยัง
+  **ไม่ commit, push หรือ deploy**. รอผู้ใช้เลือกแนวและอนุมัติ written scope ตาม
+  brainstorming gate ก่อน implementation plan. งานยังไม่ปิด.
+- ตรวจและอัปเดตทั้ง stack index/log. ไม่แตะ dirty edit ของงาน hermes ที่มีอยู่
+  (`hermes-agent/docker-compose.yml`, `scripts/update-hermes.sh`), ไม่มี memory ที่ root `.notes/`.
+
+## 2026-10-09 — Creator Studio 01 implementation (ก่อน final review)
+
+- ผู้ใช้อนุมัติ Creator Studio และ scope ด้วย “จัด 01 ได้เลย”; ไม่ถามอนุมัติแบบซ้ำ.
+- สร้าง managed worktree `shorts-creator-studio`, branch `codex/shorts-factory-creator-studio`
+  จาก main. Design/plan commit `fc4810d`; ไม่แตะงาน Hermes ใน checkout หลัก.
+- ใช้ FastAPI/Jinja เดิม จัดครบ 5 views: sidebar/mobile nav, charcoal/amber + light,
+  metrics/Gate/schedule ต่อช่อง, library search/status/channel, decorated script title covers.
+- แก้ backend presentation ให้ TH/EN ไม่ปน, None ไม่กลายเป็น zero, unknown outcome ยัง
+  filter ได้; failure filter ใช้ชื่อรวมแต่แถวเก็บสาเหตุเฉพาะ. Clip detail มี latest/old drafts,
+  text-only pronunciation checklist, 1-based Cards, copy feedback, sanitized HTTP(S) sources.
+- Experiments คง tally/verdict/threshold เดิม และรอ channel Gate ก่อนแสดง verdict ผู้ชนะ.
+  State แสดง recorded mode/waits/raw unknown fields ไม่อ้าง live heartbeat.
+- Settings คงชื่อ field/POST route, validate ทั้ง schedule/models ก่อนเขียน; validation fail
+  เก็บค่า raw ทั้งฟอร์มรวม unknown model ที่ escape แล้ว. README dashboard ปรับให้ตรงจริง.
+- Regression tests observed red ก่อนแก้พฤติกรรม. Latest command:
+  `PYTHONPATH=/tmp/shorts-factory-dashboard-review-deps:shorts-factory python3 -m pytest
+  shorts-factory/tests/test_dashboard.py shorts-factory/tests/test_dashboard_studio.py
+  shorts-factory/tests/test_pronunciation.py -q --tb=short` → **56 passed**.
+  Root shared-sync แยกรันเพื่อเลี่ยง package `tests` ชื่อชนกัน → **5 passed**.
+- Browser actual app กับ isolated synthetic data: search+status combined, no-results/reset,
+  channel-specific KPI, copy success/clipboard content, old drafts/checklist disclosures,
+  settings rejected raw values preserved and both stored files unchanged, save success,
+  empty views, 404, light/dark และ no-JS (local CSP script-src none wrapper) ผ่าน.
+  ทั้ง 5 หน้าใน 1440/768/390/320px scrollWidth=viewport; keyboard skip link โฟกัส main
+  ได้, outline3px. เก็บ desktop/mobile/light screenshots ใน ignored `.superpowers/sdd/screenshots/`.
+  Main preview console warn/error ว่าง; no-JS wrapper มี intentional CSP messages.
+  Targeted Ruff 0.9.10 (temp dependency target) ผ่านหลังจัด imports/fixture aliases; ไม่เพิ่ม dependency ใน repo.
+- Frontend task reviewer พบ P2 target เล็ก; workerแก้ shared controls/disclosures/mobile links
+  ≥44px. Browser computed theme44/summary44/nav49.5; re-review approved. Node syntax,
+  7 Jinja template parses, denied-storage theme VM checks และ diff-check ผ่าน.
+- **สถานะจริง:** feature source/README/notes อยู่ branch นี้, final whole-branch review ยัง pending.
+  ไม่ merge, push หรือ deploy. Production ใช้ release เดิม. Local preview `127.0.0.1:8071`
+  ไม่ใช่ NAS; temporary data/config/scripts/screenshots เก็บ `.superpowers/sdd/` (ignored).
+  ยังไม่มี real MP4 preview/thumbnail/heartbeat; เสนอเป็นงานถัดไป.
+- อัปเดต index/log ใน stack เท่านั้น. No bot/credentials/compose/media route/dependency edits.

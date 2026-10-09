@@ -1,55 +1,44 @@
 {% extends "base.html" %}
+{% block title %}คลังคลิป — shorts-factory{% endblock %}
+{% block page_header %}
+<div class="page-head"><div><span class="eyebrow">YOUR CREATIVE WORKSPACE</span><h1>คลังคลิป</h1><p class="sub">จากไอเดียสู่คลิปสั้น · ติดตามงานและผลลัพธ์ของแต่ละช่อง</p></div><div class="channel-picker" data-library-controls hidden role="group" aria-label="เลือกช่อง">
+{% for channel in channels %}<button type="button" data-channel="{{ channel.code }}" aria-pressed="false">{{ channel.code|upper }} <span>· {{ channel.label }}</span></button>{% endfor %}
+</div></div>
+{% endblock %}
 {% block content %}
-<div class="kpis">
-  <div class="kpi">
-    <div class="label">อัปแล้ว (Gate {{ summary.gate_clips }})</div>
-    <div class="value">{{ summary.published }}<small> / {{ summary.gate_clips }}</small></div>
-    <div class="meter"><i style="width: {{ [100, summary.published * 100 // summary.gate_clips]|min }}%"></i></div>
-  </div>
-  <div class="kpi">
-    <div class="label">median ดูจนจบ (day 7)</div>
-    <div class="value">{% if summary.median is none %}—{% else %}{{ "%.1f"|format(summary.median) }}<small>%</small>{% endif %}</div>
-  </div>
-  <div class="kpi">
-    <div class="label">views รวม (day 7)</div>
-    <div class="value">{{ summary.views }}</div>
-  </div>
-  <div class="kpi">
-    <div class="label">คลิปในบันทึก</div>
-    <div class="value">{{ summary.total }}</div>
-    <div class="label">ทิ้งไป {{ summary.discarded }}</div>
-  </div>
+{% for channel in channels %}
+<section data-channel-panel="{{ channel.code }}" aria-label="สรุปช่อง{{ channel.label }}">
+<h2 class="channel-heading">ช่อง{{ channel.label }} <span class="badge">{{ channel.code|upper }}</span></h2>
+<div class="metrics">
+  <article class="metric"><div class="metric-top">คลิปในบันทึก {{ icon('grid') }}</div><div class="metric-number">{{ channel.summary.total|number }}<small>คลิป</small></div><p class="metric-note">เฉพาะช่อง{{ channel.label }} · รวมทุกสถานะ</p></article>
+  <article class="metric"><div class="metric-top">เผยแพร่แล้ว {{ icon('play') }}</div><div class="metric-number">{{ channel.summary.published|number }}<small>คลิป</small></div><p class="metric-note">ทิ้งสคริปต์ {{ channel.summary.discarded|number }} คลิป</p></article>
+  <article class="metric"><div class="metric-top">ยอดรับชมรวม · Day 7 {{ icon('eye') }}</div><div class="metric-number">{{ channel.summary.views|number }}</div><p class="metric-note">{{ channel.summary.measured|number }} คลิปมีสถิติ Day 7</p></article>
+  <article class="metric"><div class="metric-top">Median การรับชมเฉลี่ย · Day 7 {{ icon('flask') }}</div><div class="metric-number">{{ channel.summary.median|percent }}</div><p class="metric-note">Average viewing percentage · {{ channel.summary.measured_percents|number }} คลิป</p></article>
 </div>
-
-<div class="filters">
-  <button class="pill on" data-outcome="">ทั้งหมด</button>
-  {% for outcome in outcomes %}<button class="pill" data-outcome="{{ outcome }}">{{ outcome }}</button>{% endfor %}
+<div class="split">
+  <article class="card"><div class="card-head"><h2>เกณฑ์ข้อมูลของช่อง · Gate</h2><span class="badge tone-{% if channel.gate %}warning{% else %}success{% endif %}">{% if channel.gate %}กำลังเก็บข้อมูล{% else %}ถึงเกณฑ์ข้อมูลช่อง{% endif %}</span></div><div class="gate-body"><span class="gate-symbol">{{ icon('shield') }}</span><div class="gate-copy"><p>{{ channel.gate or 'ผ่านเกณฑ์ระดับช่องแล้ว การสรุปแต่ละ Variant ยังขึ้นอยู่กับเกณฑ์การทดลอง' }}</p><div class="meter" role="progressbar" aria-label="คลิปเผยแพร่เทียบเกณฑ์ Gate" aria-valuemin="0" aria-valuemax="{{ channel.summary.gate_clips }}" aria-valuenow="{{ [channel.summary.published, channel.summary.gate_clips]|min }}"><i style="width: {{ [100, channel.summary.published * 100 / channel.summary.gate_clips]|min if channel.summary.gate_clips else 0 }}%"></i></div><p class="gate-progress">{{ channel.summary.published|number }} / {{ channel.summary.gate_clips|number }} คลิปของช่อง{{ channel.label }}</p></div></div></article>
+  <article class="card"><div class="card-head"><h2>รอบอัตโนมัติ · {{ channel.label }}</h2><a class="link" href="/settings">ตั้งค่า {{ icon('arrow') }}</a></div><div class="schedule-row"><span class="schedule-icon">{{ icon('clock') }}</span><div><span class="badge{% if channel.schedule.enabled %} tone-success{% endif %}">{{ 'เปิดรอบอัตโนมัติ' if channel.schedule.enabled else 'ปิดรอบอัตโนมัติ' }}</span><div class="time-pills">{% for hour in channel.schedule.hours %}<span>{{ '%02d'|format(hour) }}:00</span>{% else %}<span>ยังไม่ได้ตั้งเวลา</span>{% endfor %}</div></div></div><p class="schedule-note">เวลาไทย · รอคนเลือก {{ channel.schedule.auto_pick_minutes }} นาที<br>การอัปโหลดต้องยืนยันใน Telegram</p></article>
 </div>
-
-<div class="rows">
-<table>
-  <thead>
-    <tr><th>เมื่อ</th><th>หัวข้อ</th><th>ภาษา</th><th>variant</th><th>ผล</th>
-        <th class="num">views</th><th class="num">ดูจนจบ</th></tr>
-  </thead>
-  <tbody>
+</section>
+{% endfor %}
+<div class="section-head"><h2>คลิปทั้งหมด</h2><span class="muted">ใหม่ล่าสุดก่อน</span></div>
+<section class="card library" aria-label="รายการคลิป">
+  <div class="library-controls" data-library-controls hidden>
+    <label class="search-wrap" for="search">{{ icon('search') }}<span class="sr-only">ค้นหาหัวข้อ ชื่อ หรือหมวด</span><input id="search" type="search" placeholder="ค้นหาหัวข้อ ชื่อ หรือหมวด…" autocomplete="off"></label>
+    <div class="filter-wrap"><label for="status-filter" class="sr-only">กรองสถานะ</label><select id="status-filter"><option value="">ทุกสถานะ</option>{% for status in statuses %}<option value="{{ status.key }}">{{ status.label }}</option>{% endfor %}</select><button type="button" id="reset-filters">ล้างตัวกรอง</button></div>
+  </div>
+  <div class="table-scroll"><table class="clip-table"><thead><tr><th>คลิป</th><th>สถานะ</th><th>รูปแบบ Hook</th><th class="num">รับชม · D7</th><th class="num">การรับชมเฉลี่ย · D7</th></tr></thead><tbody>
   {% for row in rows %}
-  <tr data-outcome="{{ row.outcome }}">
-    <td class="muted" data-label="เมื่อ">{{ row.created_at[:16].replace("T", " ") }}</td>
-    <td class="wide" data-label="หัวข้อ"><a href="/clip/{{ row.id }}">{{ row.topic or "(ไม่มีหัวข้อ)" }}</a></td>
-    <td data-label="ภาษา"><span class="pill">{{ row.locale }}</span></td>
-    <td data-label="variant">
-      {% if row.explore %}<span class="pill">explore</span>
-      {% elif row.variant %}<span class="pill">{{ row.variant }}</span>
-      {% else %}<span class="muted">—</span>{% endif %}
-    </td>
-    <td data-label="ผล">{{ row.outcome }}{% if row.published %} · อัปแล้ว{% endif %}</td>
-    <td class="num" data-label="views">{% if row.views is none %}<span class="muted">—</span>{% else %}{{ row.views }}{% endif %}</td>
-    <td class="num" data-label="ดูจนจบ">{% if row.percent is none %}<span class="muted">—</span>{% else %}{{ "%.1f"|format(row.percent) }}%{% endif %}</td>
+  <tr data-locale="{{ row.locale_code }}" data-status="{{ row.status.key }}" data-outcome="{{ row.outcome }}" data-search="{{ row.search }}">
+    <td><div class="clip-cell"><div class="cover {{ 'blue' if row.locale_code == 'en' else 'amber' }}" aria-hidden="true"><span>{{ row.cover }}</span></div><div><a class="clip-title" href="/clip/{{ row.id }}">{{ row.title or row.topic or '(ไม่มีหัวข้อ)' }}</a>{% if row.title and row.topic and row.title != row.topic %}<p class="clip-topic">{{ row.topic }}</p>{% endif %}<p class="clip-meta">{{ row.created_at|datetime_display }} <span>·</span> {{ row.locale }}{% if row.category %} <span>·</span> {{ row.category }}{% endif %}</p></div></div></td>
+    <td class="status-cell"><span class="badge tone-{{ row.status.tone }}"><i class="status-dot"></i>{{ row.status.label }}</span></td>
+    <td class="experiment-cell muted">{% if row.explore %}สำรวจรูปแบบใหม่ <small>explore</small>{% elif row.variant == 'shock_number' %}เปิดด้วยตัวเลข{% elif row.variant == 'question' %}เปิดด้วยคำถาม{% else %}{{ row.variant or '—' }}{% endif %}</td>
+    <td class="num" data-label="รับชม D7">{{ row.views|number }}</td><td class="num" data-label="เฉลี่ย D7">{{ row.percent|percent }}</td>
   </tr>
   {% endfor %}
-  </tbody>
-</table>
-</div>
-<p class="muted">{{ total }} คลิปในบันทึก</p>
+  </tbody></table></div>
+  {% if not rows %}<div class="empty">{{ icon('grid') }}<h3>ยังไม่มีคลิปในบันทึก</h3><p>คลิปที่สร้างผ่าน Telegram จะปรากฏที่นี่เมื่อมี Manifest</p></div>{% endif %}
+  <div class="empty" id="no-results" hidden>{{ icon('search') }}<h3>ไม่พบคลิปที่ตรงกับตัวกรอง</h3><p>ลองใช้คำค้นอื่น หรือกดล้างตัวกรอง</p></div>
+  <div class="table-foot"><span id="row-count" role="status" aria-live="polite">{{ total|number }} คลิปในบันทึก · ทุกช่อง</span><span>ปกตกแต่งจากชื่อสคริปต์</span></div>
+</section>
 {% endblock %}

@@ -1,90 +1,45 @@
 {% extends "base.html" %}
+{% block title %}{{ row.title if record else 'ไม่พบคลิป' }} — shorts-factory{% endblock %}
+{% macro script_content(script) %}
+<h3>{{ script.title or '(ไม่มีชื่อ)' }}</h3>{% if script.category %}<p class="script-category"><span class="badge">{{ script.category }}</span></p>{% endif %}
+{% for card in script.cards or [] %}<article class="script-scene"><p class="scene-label">Card {{ loop.index }}</p><p>{{ card.narration or '' }}</p>{% if card.spoken %}<p class="spoken">คำอ่าน: {{ card.spoken }}</p>{% endif %}</article>{% else %}<p class="empty-inline">ไม่มี Card ในสคริปต์นี้</p>{% endfor %}
+{% endmacro %}
+{% block page_header %}
+<a class="back" href="/">{{ icon('back') }} กลับไปคลังคลิป</a>
+{% if record %}<div class="page-head"><div><span class="eyebrow">CLIP WORKSPACE · {{ locale.code|upper }}</span><h1>{{ row.title or record.topic or '(ไม่มีหัวข้อ)' }}</h1><p class="sub">{{ record.id }} · {{ record.created_at|datetime_display }} · {{ locale.label }}</p>{% if row.title and record.topic and row.title != record.topic %}<p class="sub">หัวข้อ: {{ record.topic }}</p>{% endif %}</div><div class="head-actions"><span class="badge tone-{{ row.status.tone }}">{{ row.status.label }}</span>{% if record.video_id %}<a class="button primary" href="https://youtu.be/{{ record.video_id|urlencode }}" target="_blank" rel="noopener noreferrer">ดูบน YouTube {{ icon('arrow') }}</a>{% endif %}</div></div>{% endif %}
+{% endblock %}
 {% block content %}
-{% if not record %}
-  <p class="warn">ไม่พบคลิปนี้</p>
+{% if not record %}<div class="empty card">{{ icon('grid') }}<h1>ไม่พบคลิปนี้</h1><p>คลิปอาจไม่มีบันทึก หรือรหัสคลิปไม่ถูกต้อง</p><a href="/">กลับไปคลังคลิป</a></div>
 {% else %}
-<h1>{{ record.topic or "(ไม่มีหัวข้อ)" }}</h1>
-<p class="muted">
-  {{ record.id }} · {{ record.created_at }} · <span class="pill">{{ record.outcome }}</span>
-  {% if record.variant %} <span class="pill">{{ record.variant }}</span>{% endif %}
-  {% if record.explore %} <span class="pill">explore</span>{% endif %}
-  {% if record.video_id %} · <a href="https://youtu.be/{{ record.video_id }}">{{ record.video_id }}</a>{% endif %}
-</p>
-
-{% if day7 %}
-<div class="kpis">
-  <div class="kpi"><div class="label">views (day 7)</div><div class="value">{{ day7.views }}</div></div>
-  <div class="kpi"><div class="label">ดูจนจบ (day 7)</div>
-    <div class="value">{% if day7.percent is none %}—{% else %}{{ "%.1f"|format(day7.percent) }}<small>%</small>{% endif %}</div></div>
-  {% if record.render and record.render.duration %}
-  <div class="kpi"><div class="label">ความยาว</div>
-    <div class="value">{{ "%.0f"|format(record.render.duration) }}<small> วิ</small></div></div>
-  {% endif %}
+<div class="metrics detail-metrics">
+<article class="metric"><div class="metric-top">ยอดรับชม · Day 7 {{ icon('eye') }}</div><div class="metric-number">{{ (day7.views if day7 else none)|number }}</div><p class="metric-note">{{ 'สถิติ Day 7 ของคลิปนี้' if day7 else 'ยังไม่มีสถิติ Day 7' }}</p></article>
+<article class="metric"><div class="metric-top">การรับชมเฉลี่ย · Day 7 {{ icon('flask') }}</div><div class="metric-number">{{ (day7.percent if day7 else none)|percent }}</div><p class="metric-note">Average viewing percentage</p></article>
+<article class="metric"><div class="metric-top">ความยาว {{ icon('clock') }}</div><div class="metric-number">{% if row.duration is not none %}{{ '%.1f'|format(row.duration) }}<small>วินาที</small>{% else %}—{% endif %}</div><p class="metric-note">จากข้อมูลการเรนเดอร์</p></article>
 </div>
-{% endif %}
-
-{% if snapshots %}
-<h2>ตัวเลขรายวัน</h2>
-{% if chart %}
-<div class="card">
-  <svg viewBox="0 0 {{ chart.w }} {{ chart.h }}" width="100%" height="{{ chart.h }}"
-       role="img" aria-label="views ตามอายุคลิป สูงสุด {{ chart.top }}">
-    <polygon class="area" points="{{ chart.area }}"/>
-    <polyline class="line" points="{{ chart.line }}"/>
-    {% for d in chart.dots %}<circle class="dot" cx="{{ d.x }}" cy="{{ d.y }}" r="3"/>{% endfor %}
-  </svg>
-  <p class="muted">views ตามวัน · สูงสุด {{ chart.top }}</p>
+<div class="detail-grid">
+  <section class="card"><div class="card-head"><h2>สคริปต์ล่าสุด</h2>{% if latest %}<button class="copy-button" type="button" data-copy="latest-script" data-feedback="copy-result" hidden>{{ icon('copy') }} คัดลอกสคริปต์</button>{% endif %}</div>
+    {% if latest %}<p class="muted small">รอบที่ {{ drafts|length }} · {{ latest.at|datetime_display }}</p><div id="latest-script" class="script-copy">{{ script_content(latest.script) }}</div><p id="copy-result" class="copy-feedback" role="status" aria-live="polite"></p>{% else %}<p class="empty-inline">ยังไม่มีสคริปต์ในบันทึกนี้</p>{% endif %}
+    {% if previous_drafts %}<details class="disclosure previous-drafts"><summary>สคริปต์ก่อนหน้า ({{ previous_drafts|length }} รอบ)</summary>{% for draft in previous_drafts %}<details class="draft"><summary>รอบที่ {{ loop.index }} · {{ draft.at|datetime_display }} · {{ draft.script.title or '(ไม่มีชื่อ)' }}</summary>{{ script_content(draft.script) }}</details>{% endfor %}</details>{% endif %}
+  </section>
+  <div class="stacked">
+    <section class="card"><div class="card-head"><h2>เช็กคำอ่านก่อนเผยแพร่</h2><span class="badge tone-warning">ตรวจจากข้อความ</span></div><p class="muted small">รายการนี้ยังไม่ได้ฟังเสียงจริง คำอ่านอาจถูกแทนที่ด้วย /say ตอนเรนเดอร์ ควรฟังในคลิปก่อนอัปโหลด</p>
+      {% for check in checks %}<article class="pronunciation-item"><div class="pronunciation-head"><strong>{{ check.term }}</strong><span class="badge">{{ check.kind }}</span></div><p class="spoken">คำอ่าน: {{ check.spoken or 'ตรวจคำอ่านใน Card' }}</p><p class="muted small">Card {{ check.cards|join(', ') }}</p>{% if check.contexts %}<details class="check-context"><summary>บริบทที่ควรฟัง</summary>{% for card_number, context in check.contexts.items() %}<p><span class="scene-label">Card {{ card_number }}</span><br>{{ context }}</p>{% endfor %}</details>{% endif %}</article>{% else %}<p class="empty-inline">{{ 'ไม่พบคำที่ต้องตรวจเพิ่มจากข้อความสคริปต์ล่าสุด' if latest else 'รายการคำอ่านจะแสดงเมื่อมีสคริปต์' }}</p>{% endfor %}
+      <a class="text-link small" href="/now">ดูคำอ่านที่ตั้งไว้ด้วย /say {{ icon('arrow') }}</a>
+    </section>
+    <section class="card"><div class="card-head"><h2>ผลการรับชมตามอายุคลิป</h2><span class="badge">{{ snapshots|length }} จุด</span></div>
+      {% if chart %}<svg class="chart" viewBox="0 0 {{ chart.w }} {{ chart.h }}" role="img" aria-label="ยอดรับชมตามอายุคลิป วันที่ {{ chart.first_age }} ถึง {{ chart.last_age }} สูงสุด {{ chart.top }} views"><polygon class="area" points="{{ chart.area }}"/><polyline class="line" points="{{ chart.line }}"/>{% for d in chart.dots %}<circle class="chart-dot" cx="{{ d.x }}" cy="{{ d.y }}" r="3"/>{% endfor %}</svg><div class="chart-labels"><span>วันที่ {{ chart.first_age }}</span><span>สูงสุด {{ chart.top|number }} views</span><span>วันที่ {{ chart.last_age }}</span></div>{% else %}<p class="empty-inline">ต้องมีอย่างน้อย 2 จุดข้อมูลจึงจะแสดงกราฟได้</p>{% endif %}
+      {% if snapshots %}<details class="disclosure"><summary>ตัวเลขรายวันทั้งหมด</summary><div class="table-scroll"><table><thead><tr><th>วันที่</th><th class="num">อายุ (วัน)</th><th class="num">views</th><th class="num">การรับชมเฉลี่ย</th></tr></thead><tbody>{% for s in snapshots %}<tr><td>{{ s.date }}</td><td class="num">{{ s.age_days }}</td><td class="num">{{ s.views|number }}</td><td class="num">{{ s.percent|percent }}</td></tr>{% endfor %}</tbody></table></div></details>{% endif %}
+    </section>
+  </div>
 </div>
-{% endif %}
-<div class="rows">
-<table>
-  <thead><tr><th>วันที่</th><th class="num">อายุ (วัน)</th><th class="num">views</th><th class="num">ดูจนจบ</th></tr></thead>
-  <tbody>
-  {% for s in snapshots %}
-  <tr><td data-label="วันที่">{{ s.date }}</td>
-      <td class="num" data-label="อายุ (วัน)">{{ s.age_days }}</td>
-      <td class="num" data-label="views">{{ s.views }}</td>
-      <td class="num" data-label="ดูจนจบ">{% if s.percent is none %}—{% else %}{{ "%.1f"|format(s.percent) }}%{% endif %}</td></tr>
-  {% endfor %}
-  </tbody>
-</table>
+<div class="detail-grid supporting-grid">
+<section class="card"><div class="card-head"><h2>ข้อมูลอ้างอิงและการผลิต</h2>{{ icon('state') }}</div>
+  {% if sources %}<h3>แหล่งข้อมูล</h3><ul class="source-list">{% for source in sources %}<li><a href="{{ source.url }}" target="_blank" rel="noopener noreferrer">{{ source.title or source.url }} {{ icon('arrow') }}</a></li>{% endfor %}</ul>{% else %}<p class="muted small">ไม่มีลิงก์แหล่งข้อมูลที่บันทึกไว้</p>{% endif %}
+  {% if record.research %}<details class="disclosure"><summary>ข้อมูล Research ที่บันทึกไว้</summary><pre>{{ record.research|tojson(indent=2) }}</pre></details>{% endif %}
+  {% if record.storyboard %}<details class="disclosure"><summary>Storyboard ที่บันทึกไว้</summary><pre>{{ record.storyboard|tojson(indent=2) }}</pre></details>{% endif %}
+  {% if cards %}<details class="disclosure"><summary>การ์ดที่เรนเดอร์ ({{ cards|length }})</summary><table><thead><tr><th>Card</th><th class="num">เริ่มวินาทีที่</th></tr></thead><tbody>{% for c in cards %}<tr><td>Card {{ loop.index }}</td><td class="num">{{ '%.2f'|format(c.start or 0) }}</td></tr>{% endfor %}</tbody></table></details>{% endif %}
+</section>
+<section class="card"><div class="card-head"><h2>บันทึกคลิป</h2><span class="badge">Manifest</span></div><dl class="record-facts"><div><dt>ผลที่บันทึก</dt><dd>{{ record.outcome or '—' }}</dd></div><div><dt>Hook variant</dt><dd>{{ record.variant or '—' }}</dd></div><div><dt>สำรวจรูปแบบใหม่</dt><dd>{{ 'ใช่' if record.explore else 'ไม่ใช่' }}</dd></div></dl><details class="disclosure"><summary>Manifest ทั้งไฟล์</summary><pre>{{ record|tojson(indent=2) }}</pre></details></section>
 </div>
-{% endif %}
-
-{% if cards %}
-<h2>การ์ดที่เรนเดอร์</h2>
-<div class="rows">
-<table>
-  <thead><tr><th>#</th><th class="num">เริ่มวินาทีที่</th></tr></thead>
-  <tbody>
-  {% for c in cards %}
-  <tr><td data-label="#">{{ loop.index0 }}</td>
-      <td class="num" data-label="เริ่มวินาทีที่">{{ "%.2f"|format(c.start or 0) }}</td></tr>
-  {% endfor %}
-  </tbody>
-</table>
-</div>
-{% endif %}
-
-<h2>สคริปต์ทุกรอบ ({{ drafts|length }})</h2>
-{% for draft in drafts %}
-<div class="card">
-  <p class="muted">รอบที่ {{ loop.index }} · {{ draft.at }}</p>
-  <p><strong>{{ draft.script.title or "(ไม่มีชื่อ)" }}</strong>
-     {% if draft.script.category %}<span class="pill">{{ draft.script.category }}</span>{% endif %}</p>
-  {% for card in draft.script.cards or [] %}
-    <p>{{ card.narration or "" }}
-       {% if card.spoken and card.spoken != card.narration %}
-         <br><span class="muted">🗣 {{ card.spoken }}</span>{% endif %}</p>
-  {% endfor %}
-</div>
-{% else %}
-<p class="muted">ยังไม่มีสคริปต์ในบันทึกนี้</p>
-{% endfor %}
-
-{% if record.storyboard %}
-<h2>storyboard</h2>
-<div class="card"><pre>{{ record.storyboard | tojson(indent=1) }}</pre></div>
-{% endif %}
 {% endif %}
 {% endblock %}
