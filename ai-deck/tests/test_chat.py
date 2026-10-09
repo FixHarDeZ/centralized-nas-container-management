@@ -8,6 +8,7 @@ subscription turn on every run.
 import http.client
 import io
 import json
+import os
 import queue
 import sys
 import textwrap
@@ -320,19 +321,66 @@ def test_a_turn_is_charged_the_difference_not_the_running_total(agent):
     assert [t["total"] for t in turns] == [0.0607, 0.0701, 0.1049]
 
 
-def test_context_is_every_input_token_the_turn_paid_for(agent):
+# Measured with two tool calls in one turn: the three calls were sent 8.1k,
+# 30.8k and 30.9k, and `result.usage` came back as their sum, 69.7k. Showing
+# that as "context" would read as nearly full long before it is.
+def _assistant(model, tokens, parent=None):
+    return {"type": "assistant", "parent_tool_use_id": parent,
+            "message": {"model": model, "content": [],
+                        "usage": {"input_tokens": 2,
+                                  "cache_read_input_tokens": tokens - 82,
+                                  "cache_creation_input_tokens": 80,
+                                  "output_tokens": 5}}}
+
+
+def test_context_is_the_last_call_not_the_turn_sum(agent):
     channel = agent.subscribe()
+    agent._translate(_assistant("claude-opus-5-5", 8061))
+    agent._translate(_assistant("claude-opus-5-5", 30860))
+    # A subagent's call has its own, unrelated context.
+    agent._translate(_assistant("claude-haiku-5-5", 4000, parent="toolu_1"))
     agent._translate({"type": "result", "subtype": "success", "is_error": False,
                       "terminal_reason": "completed", "result": "",
                       "total_cost_usd": 1.0,
-                      "usage": {"input_tokens": 2, "cache_read_input_tokens": 18000,
-                                "cache_creation_input_tokens": 37,
+                      "usage": {"input_tokens": 8, "cache_read_input_tokens": 30778,
+                                "cache_creation_input_tokens": 38913,
                                 "output_tokens": 1011},
+                      "modelUsage": {
+                          "claude-haiku-5-5": {"contextWindow": 1000000},
+                          "claude-opus-5-5": {"contextWindow": 200000}},
                       "duration_ms": 12064})
     turn = channel.get(timeout=5)
-    assert turn["context"] == 18039
+    assert turn["context"] == 30860
+    assert turn["window"] == 200000
     assert turn["out"] == 1011
     assert turn["ms"] == 12064
+    snap = agent.snapshot()
+    assert (snap["context"], snap["window"]) == (30860, 200000)
+
+
+def test_a_resumed_session_is_measured_from_its_transcript(agent, monkeypatch):
+    monkeypatch.setattr(chat, "HOME", agent.cwd)
+    sid = "11111111-2222-4333-8444-555555555555"
+    folder = chat.session_directory(agent.cwd)
+    os.makedirs(folder, exist_ok=True)
+    lines = [
+        {"type": "assistant", "message": {"model": "claude-opus-5-5",
+                                          "usage": {"input_tokens": 5, "cache_read_input_tokens": 90000}}},
+        {"type": "assistant", "isSidechain": True,
+         "message": {"model": "claude-haiku-5-5", "usage": {"input_tokens": 3000}}},
+        {"type": "user", "message": {"content": "next"}},
+    ]
+    with open(os.path.join(folder, sid + ".jsonl"), "w", encoding="utf-8") as handle:
+        handle.write("x" * 10 + "\n")  # a cut first line, as after a seek
+        for line in lines:
+            handle.write(json.dumps(line) + "\n")
+    chat.WINDOWS["claude-opus-5-5"] = 200000
+    try:
+        assert chat.last_context(sid, agent.cwd) == (90005, 200000)
+    finally:
+        chat.WINDOWS.pop("claude-opus-5-5", None)
+    assert chat.last_context(sid, agent.cwd) == (90005, 0)
+    assert chat.last_context("00000000-0000-4000-8000-000000000000", agent.cwd) == (0, 0)
 
 
 def test_a_result_without_cost_does_not_invent_one(agent):
@@ -448,6 +496,26 @@ def test_a_huge_transcript_is_bounded(transcripts, monkeypatch):
         + json.dumps({"type": "user", "message": {"content": "after the wall"}}) + "\n",
         encoding="utf-8")
     assert chat.transcript("s") == []
+
+
+def test_a_tool_result_too_big_to_parse_still_finishes_its_tool(transcripts):
+    # Measured: a Read of a screenshot is one 838 KB line. Skipping it lost
+    # the finish, and the page then drew every later tool as still running.
+    image = {"type": "image", "source": {"type": "base64", "data": "A" * 200_000}}
+    write_session(transcripts, "s", [
+        {"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": "toolu_1", "name": "Read",
+             "input": {"file_path": "/work/in/556.png"}}]}},
+        {"type": "user", "message": {"role": "user", "content": [
+            {"tool_use_id": "toolu_1", "type": "tool_result", "content": [image]}]}},
+        {"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": "toolu_2", "name": "Bash", "input": {"command": "ls"}}]}},
+        {"type": "user", "message": {"content": [
+            {"tool_use_id": "toolu_2", "type": "tool_result", "content": "ok"}]}},
+        {"type": "assistant", "message": {"content": [{"type": "text", "text": "เสร็จ"}]}},
+    ])
+    assert [i["k"] for i in chat.transcript("s")] == [
+        "tool", "tool_done", "tool", "tool_done", "claude"]
 
 
 def test_a_missing_transcript_is_empty_not_an_error(transcripts):

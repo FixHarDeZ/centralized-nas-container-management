@@ -176,9 +176,14 @@ class MimoMixin:
             self.spent = 0.0
             self.partial = ""
             self.open_tools = []
-            self.emit(t="reset", session_id=resume)
+            self.context, self.window = self.context_of(resume) if resume else (0, 0)
+            self.emit(t="reset", session_id=resume, context=self.context, window=self.window)
             self.emit(t="busy", on=False)
             return 200, "ok"
+
+    def context_of(self, session_id):
+        # A saved MiMoCode session is not measured; the next turn will say.
+        return 0, 0
 
     def _read_mimo(self, proc, errors):
         context, out, failure = 0, 0, ""
@@ -229,7 +234,9 @@ class MimoMixin:
             with self.lock:
                 self.busy = False
                 self.open_tools = []
+                if context:
+                    self.context = context
                 self.emit(t="turn", status="stopped" if self._interrupted else "error" if failure else "done",
                           reason=failure, text=failure, cost=None, total=None,
-                          context=context, out=out, ms=0)
+                          context=self.context, window=self.window, out=out, ms=0)
                 self.emit(t="busy", on=False)

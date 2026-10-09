@@ -27,6 +27,36 @@
 
     function bubbles(log) { return log.querySelectorAll('.bubble.them').length; }
 
+    // A reload lands on a resync, which repaints from the transcript. Its
+    // tools used to be held like stream events and drawn after every bubble,
+    // and a second, slower read painted the whole conversation again.
+    function history(chat, log, out) {
+      const items = [
+        { k: 'you', text: 'q' },
+        { k: 'tool', name: 'Read', detail: 'a.png' }, { k: 'tool_done', ok: true },
+        { k: 'claude', text: 'answer' },
+      ];
+      let slow = null;
+      chat.history(function () {
+        // The first read is slow and lands after the log was cleared again.
+        if (!slow) return new Promise(function (resolve) { slow = function () { resolve(items); }; });
+        return Promise.resolve(items);
+      });
+      chat.feed({ t: 'resync', seq: 200, busy: false, session_id: 's1', partial: '', tools: [] });
+      setTimeout(function () {
+        chat.feed({ t: 'resync', seq: 300, busy: false, session_id: 's1', partial: '', tools: [] });
+        setTimeout(function () {
+          slow();
+          setTimeout(function () {
+            out.historyOrder = Array.from(log.querySelectorAll('.bubble, .pill')).map(function (n) {
+              return n.classList.contains('pill') ? 'pill' + (n.dataset.open ? ':open' : '') : n.textContent;
+            });
+            done(out);
+          }, 60);
+        }, 60);
+      }, 60);
+    }
+
     function run(win) {
       const chat = win._chat;
       if (!chat) { done({ error: 'no _chat: demo hook missing' }); return; }
@@ -75,11 +105,23 @@
             out.textAfterMore = log.querySelector('.bubble.them').textContent;
             out.bubblesAtEnd = bubbles(log);
 
+            // While busy something always moves: after text ends, and below
+            // a running tool, with a clock that counts.
+            chat.feed({ t: 'say_end', seq: 42 });
+            out.typingAfterText = !!log.querySelector('.typing .t-clock');
+            chat.feed({ t: 'tool', name: 'Bash', detail: 'sleep 60', seq: 43 });
+            const tail = log.querySelectorAll('.pill, .typing');
+            out.typingBelowTool = tail.length > 0 && tail[tail.length - 1].classList.contains('typing');
+            chat.feed({ t: 'tool_done', ok: true, seq: 44 });
+            chat.feed({ t: 'tool_done', ok: true, seq: 45 });
+
             // A finished tool says so with a mark, not only a colour.
             chat.feed({ t: 'tool', name: 'Write', detail: 'out/deck.pptx', seq: 50 });
             chat.feed({ t: 'tool_done', ok: true, seq: 51 });
             chat.feed({ t: 'tool', name: 'Bash', detail: 'false', seq: 52 });
             chat.feed({ t: 'tool_done', ok: false, seq: 53 });
+            // Stopped mid-tool: no result ever comes for this one.
+            chat.feed({ t: 'tool', name: 'Bash', detail: 'sleep 999', seq: 53.5 });
             const marks = Array.from(log.querySelectorAll('.pill .p-dot'))
               .map(function (dot) { return dot.textContent; });
             out.marks = marks;
@@ -87,11 +129,23 @@
             // A failure says why, and hands the message back.
             chat.feed({ t: 'turn', status: 'error', text: 'ทำงานไม่สำเร็จ',
                         reason: 'error_during_execution', seq: 54 });
+            out.openAfterTurn = log.querySelectorAll('.pill[data-open]').length;
+            out.typingAfterTurn = !!log.querySelector('.typing');
             const err = log.querySelector('.bubble.them.err');
             out.errWhy = err ? (err.querySelector('.err-why') || {}).textContent : null;
             // No message was typed in this harness, so there is nothing to
             // offer back and no button.
             out.retryWithoutAMessage = err ? log.querySelectorAll('.retry').length : -1;
+
+            // How full the conversation is stays on the bar, coloured as it
+            // nears the point of compacting.
+            const ctx = win.document.getElementById('chat-ctx');
+            chat.feed({ t: 'turn', status: 'done', text: '', context: 84000, window: 200000, seq: 60 });
+            out.ctxCalm = [ctx.textContent, ctx.className, ctx.hidden];
+            chat.feed({ t: 'turn', status: 'done', text: '', context: 170000, window: 200000, seq: 61 });
+            out.ctxHot = [ctx.textContent, ctx.className];
+            chat.feed({ t: 'turn', status: 'done', text: '', context: 30000, seq: 62 });
+            out.ctxKeepsWindow = ctx.textContent;
 
             // A half-typed message is kept: iOS evicts a backgrounded tab
             // whenever it likes, and losing a paragraph typed one-thumbed is
@@ -105,11 +159,12 @@
               // reload looks like from here — the page asks who it is talking
               // to and puts the draft for that conversation back in the box.
               box.value = '';
-              chat.feed({ t: 'reset', session_id: '', seq: 55 });
+              chat.feed({ t: 'reset', session_id: '', seq: 65 });
               setTimeout(function () {
                 out.draftRestored = box.value;
+                out.ctxAfterReset = ctx.hidden;
                 win.localStorage.removeItem('claude-desk.draft');
-                done(out);
+                history(chat, log, out);
               }, 60);
             }, 500);
           }, 60);

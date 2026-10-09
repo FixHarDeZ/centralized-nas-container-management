@@ -140,6 +140,24 @@ three turns as 0.0607 → 0.0701 → 0.1049, never decreasing — so a turn is
 charged the difference. `usage`, by contrast, is per turn. Billing each answer
 the raw total would have charged the whole session again every time.
 
+**Context chip** on the chat bar — `ctx 84k/200k · 42%`, amber from 60%, red
+from 80% (time to `/compact` or start a new chat). It stays in view while the
+log scrolls. The number is what the **latest main-thread call** was sent
+(`input + cache_read + cache_creation` of the last `assistant` message without
+a `parent_tool_use_id`), **not** `result.usage`: that one sums every call in
+the turn — measured 69.7k against 30.9k actually sent for a turn with two
+tool calls. The window comes from `result.modelUsage[<model>].contextWindow`.
+Codex reads the rollout's last `token_count` (`last_token_usage.input_tokens`
++ `model_context_window`) because `turn.completed` usage is the whole thread's
+running total. MiMo reports tokens with no window, so its chip has no
+percentage. A resumed conversation is measured from its transcript tail before
+its first turn (the window fills in after that turn).
+
+While a turn runs, something always moves: dots with a counting clock sit at
+the bottom of the log — after text ends, and under a running tool, whose dot
+also pulses. A turn that ends settles any pill still open (`–`), since a tool
+stopped mid-way never reports a result.
+
 The send button becomes a stop button while a turn is running. Stop is a control
 request rather than a signal: the child ends the turn in about half a second and
 **stays up for the next message**. An interrupt comes back as an *error* result

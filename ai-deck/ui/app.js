@@ -1075,12 +1075,25 @@
   // The agent replays nothing on --resume — it just knows the context — so
   // the earlier messages come from the transcript Claude Code wrote. Same
   // path repaints the view after a plain reload.
+  // Bumped by clearLog. A history read that comes back after the log was
+  // cleared belongs to a log that no longer exists, and painting it anyway is
+  // how a conversation came to be drawn twice (resync and the /chat/state
+  // read both paint after a reload).
+  let paintGeneration = 0;
+  let demoHistory = null;
   async function paintHistory(id) {
-    if (!id || DEMO) return;
+    // Demo has no desk to read from; the harness hands it a transcript.
+    if (!id || (DEMO && !demoHistory)) return;
     let items = [];
     try {
-      const r = await fetch(deskURL('chat/history?id=' + encodeURIComponent(id)), { cache: 'no-store' });
-      if (r.ok) items = (await r.json()).items || [];
+      const generation = paintGeneration;
+      if (DEMO) {
+        items = await demoHistory(id);
+      } else {
+        const r = await fetch(deskURL('chat/history?id=' + encodeURIComponent(id)), { cache: 'no-store' });
+        if (r.ok) items = (await r.json()).items || [];
+      }
+      if (generation !== paintGeneration) return;
     } catch (_) { return; }
     if (!items.length) return;
     chatLog.querySelector('.chat-empty')?.remove();
@@ -1090,12 +1103,16 @@
       } else if (item.k === 'claude') {
         markdown(add(el('div', 'bubble them')), item.text);
       } else if (item.k === 'tool') {
-        onChatEvent({ t: 'tool', name: item.name, detail: item.detail });
+        // Applied, not fed: these are not stream events. Through
+        // onChatEvent they were held while a resync repainted, then drawn
+        // after every bubble — the log ended on a tool, not the answer.
+        applyChatEvent({ t: 'tool', name: item.name, detail: item.detail });
       } else if (item.k === 'tool_done') {
-        onChatEvent({ t: 'tool_done', ok: item.ok });
+        applyChatEvent({ t: 'tool_done', ok: item.ok });
       }
     }
     stream.abandon();
+    if (!chatBusy) settlePills();
     follower.toBottom();
   }
 
@@ -1281,25 +1298,90 @@
     if (!bits.length) return;
     add(el('div', 'meter', bits.join(' · ')));
   }
+  // How full the conversation is, on the bar so it stays in view while the log
+  // scrolls. Measured from the latest call the agent made, not summed over the
+  // turn (see chat.py). Past 60% it warns and past 80% it is time to /compact.
+  // Without a window (MiMo, or a resumed session before its first turn) it
+  // shows the tokens alone rather than guess one.
+  let ctxTokens = 0;
+  let ctxWindow = 0;
+  function setContext(ev) {
+    if (!ev) return;
+    if (typeof ev.context === 'number') ctxTokens = ev.context;
+    if (typeof ev.window === 'number' && ev.window) ctxWindow = ev.window;
+    paintContext();
+  }
+  function clearContext() {
+    ctxTokens = 0;
+    ctxWindow = 0;
+    paintContext();
+  }
+  function paintContext() {
+    const label = document.getElementById('chat-ctx');
+    if (!label) return;
+    label.hidden = !ctxTokens;
+    label.classList.remove('warn', 'hot');
+    if (!ctxTokens) { label.textContent = ''; return; }
+    if (!ctxWindow) {
+      label.textContent = 'ctx ' + tokens(ctxTokens);
+      label.title = 'Context in use';
+      return;
+    }
+    const pct = Math.min(100, Math.round((ctxTokens / ctxWindow) * 100));
+    label.textContent = 'ctx ' + tokens(ctxTokens) + '/' + tokens(ctxWindow) + ' · ' + pct + '%';
+    if (pct >= 80) label.classList.add('hot');
+    else if (pct >= 60) label.classList.add('warn');
+    label.title = pct >= 80 ? 'Context almost full — /compact or start a new chat'
+      : 'Context in use';
+  }
   function paintSpent() {
     const label = document.getElementById('chat-spent');
     if (!label) return;
     label.textContent = spent ? money(spent) + ' this session' : '';
   }
 
+  // While a turn runs, something on screen always moves. The dots carry a
+  // clock: a long think or a slow tool can be silent for minutes, and a
+  // number that keeps counting is what tells "still working" from "the page
+  // froze" — the dots alone animate even on a page whose stream is dead.
+  // The clock starts when this page saw the turn start, so after a reload it
+  // counts from the reload.
+  let busySince = 0;
+  let typingClock = null;
+  function elapsed() {
+    const s = Math.max(0, Math.floor((Date.now() - busySince) / 1000));
+    return s < 60 ? s + 's' : Math.floor(s / 60) + 'm ' + String(s % 60).padStart(2, '0') + 's';
+  }
   function showTyping(on) {
     if (on && !typing) {
       typing = el('div', 'typing');
-      typing.innerHTML = '<i></i><i></i><i></i>';
+      typing.innerHTML = '<i></i><i></i><i></i><span class="t-clock"></span>';
+      typing.setAttribute('role', 'status');
+      typing.setAttribute('aria-label', 'Working');
+      const clock = typing.querySelector('.t-clock');
+      clock.textContent = elapsed();
+      typingClock = setInterval(() => { clock.textContent = elapsed(); }, 1000);
       follower.place(typing);
       follower.followIfPinned();
     } else if (!on && typing) {
+      clearInterval(typingClock);
+      typingClock = null;
       typing.remove();
       typing = null;
     }
   }
 
+  // A turn that ended leaves nothing running. A tool stopped mid-way never
+  // reports a result, and a pill that kept pulsing would say otherwise.
+  function settlePills() {
+    chatLog.querySelectorAll('.pill[data-open]').forEach((pill) => {
+      delete pill.dataset.open;
+      pill.classList.add('ended');
+      pill.querySelector('.p-dot').textContent = '–';
+    });
+  }
   function setChatBusy(on) {
+    if (on && !chatBusy) busySince = Date.now();
     chatBusy = on;
     document.body.classList.toggle('chat-busy', on);
     showTyping(on && !stream.active());
@@ -1363,7 +1445,10 @@
       if (node !== follower.sentinel) node.remove();   // null sentinel: removes all
     }
     stream.abandon();
+    clearInterval(typingClock);
+    typingClock = null;
     typing = null;
+    paintGeneration += 1;
     emptyState();
   }
 
@@ -1408,6 +1493,8 @@
     held = [];
     try {
       setChatBusy(!!ev.busy);
+      clearContext();
+      setContext(ev);
       loadDraft(ev.session_id);
       clearLog();
       note('');
@@ -1466,12 +1553,15 @@
       note('');
       spent = 0;
       paintSpent();
+      clearContext();
+      setContext(ev);
       loadDraft(ev.session_id);
       if (ev.session_id) paintHistory(ev.session_id);
       return;
     }
     if (ev.t === 'gone') {
       setChatBusy(false);
+      settlePills();
       // Whatever is on screen stays on screen; it is just no longer being
       // written to, and never gets its markdown pass.
       stream.abandon();
@@ -1489,12 +1579,20 @@
       stream.push(ev.text);
       return;
     }
-    if (ev.t === 'say_end') { stream.close(markdown); return; }
+    if (ev.t === 'say_end') {
+      stream.close(markdown);
+      // Text ending is not the turn ending: the agent usually goes on to
+      // think or call a tool, and that stretch used to show nothing at all.
+      showTyping(chatBusy);
+      return;
+    }
     if (ev.t === 'tool') {
-      showTyping(false);
       const first = chatLog.querySelector('.chat-empty');
       if (first) first.remove();
+      // The pill lands above the dots (add() places before them), so the
+      // clock stays at the bottom while a slow tool runs.
       addPill(ev.name, ev.detail);
+      showTyping(chatBusy && !stream.active());
       return;
     }
     if (ev.t === 'tool_done') {
@@ -1514,9 +1612,11 @@
       // error. The partial answer earns its markdown pass all the same.
       stream.close(markdown);
       setChatBusy(false);
+      settlePills();
       if (ev.status === 'stopped') note('หยุดแล้ว');
       else if (ev.status === 'error') failed(ev.text, ev.reason);
       addMeter(ev);
+      setContext(ev);
       if (typeof ev.total === 'number') spent = ev.total;
       paintSpent();
       loadQuota(true);
@@ -1535,7 +1635,10 @@
     // neither the transcript nor the bubble. Zero is behind everything, so the
     // server answers with a snapshot.
     chatStream = new EventSource(deskURL('chat/events?after=' + lastSeq));
-    chatStream.onopen = () => setState('connected', 'live', 'chat');
+    chatStream.onopen = () => {
+      setState('connected', 'live', 'chat');
+      showTyping(chatBusy && !stream.active());
+    };
     chatStream.onmessage = (e) => {
       try { onChatEvent(JSON.parse(e.data)); } catch (_) { /* ignore a bad frame */ }
     };
@@ -1620,6 +1723,7 @@
     clearLog();
     spent = 0;
     paintSpent();
+    clearContext();
   });
 
   // Enter sends, Shift+Enter is a newline — on a phone the key says "send"
@@ -1722,6 +1826,8 @@
             loadDraft(s.session_id);
             spent = s.spent || 0;
             paintSpent();
+            clearContext();
+            setContext(s);
             // Nothing is kept in memory on the server; the conversation is
             // repainted from the transcript Claude Code writes. Only when the
             // log is empty — switching views mid-answer must not duplicate it.
@@ -1915,7 +2021,7 @@
     onChatEvent({ t: 'say_start' });
     onChatEvent({ t: 'say', text: 'เสร็จแล้วครับ — 8 สไลด์ อยู่ที่ `out/2026-09-15-q3-review.pptx`\n\nสรุปที่ใส่ไว้:\n- ยอดรวม Q3 โตจาก Q2 12%\n- ภาคเหนือเป็นตัวฉุด ติดลบ 4%\n- ฟอนต์ไทยเรนเดอร์ถูกต้องทุกหน้า ตรวจจากภาพแล้ว' });
     onChatEvent({ t: 'say_end' });
-    onChatEvent({ t: 'turn', status: 'done', text: '', cost: 0.037, total: 0.11, context: 24100, out: 1180, ms: 48000 });
+    onChatEvent({ t: 'turn', status: 'done', text: '', cost: 0.037, total: 0.11, context: 124100, window: 200000, out: 1180, ms: 48000 });
   }
 
   window._term = term;
@@ -1932,6 +2038,7 @@
       seq: function () { return lastSeq; },
       renderQuota,
       loadQuota,
+      history: function (fn) { demoHistory = fn; },
     };
   }
 })();

@@ -55,6 +55,26 @@ def transcript(session_id, cwd):
     return items
 
 
+def context(session_id, cwd):
+    """(tokens, window) from the rollout's last token count.
+
+    `turn.completed` cannot say it: its usage is a running total over the
+    whole thread (19.1M input on a thread whose last call was sent 200k).
+    `last_token_usage.input_tokens` already includes the cached part.
+    """
+    path = rollout(session_id or "", cwd)
+    found = (0, 0)
+    for record in records(path) if path else ():
+        payload = record.get("payload") or {}
+        if payload.get("type") != "token_count":
+            continue
+        info = payload.get("info") or {}
+        last = info.get("last_token_usage") or {}
+        if last.get("input_tokens"):
+            found = (last["input_tokens"], info.get("model_context_window") or 0)
+    return found
+
+
 def sessions(cwd, limit=50):
     found = []
     for path in session_root().glob("**/*.jsonl"):
@@ -150,9 +170,13 @@ class CodexMixin:
             self.spent = 0.0
             self.partial = ""
             self.open_tools = []
-            self.emit(t="reset", session_id=resume)
+            self.context, self.window = self.context_of(resume) if resume else (0, 0)
+            self.emit(t="reset", session_id=resume, context=self.context, window=self.window)
             self.emit(t="busy", on=False)
             return 200, "ok"
+
+    def context_of(self, session_id):
+        return context(session_id, self.cwd)
 
     def _read_codex(self, proc, errors):
         usage, failure, tools = {}, "", set()
@@ -202,7 +226,11 @@ class CodexMixin:
             with self.lock:
                 self.busy = False
                 self.open_tools = []
+                measured = context(self.session_id, self.cwd)
+                if measured[0]:
+                    self.context, self.window = measured
                 self.emit(t="turn", status="stopped" if self._interrupted else "error" if failure else "done",
                           reason=failure, text=failure, cost=None, total=None,
-                          context=usage.get("input_tokens", 0), out=usage.get("output_tokens", 0), ms=0)
+                          context=self.context, window=self.window,
+                          out=usage.get("output_tokens", 0), ms=0)
                 self.emit(t="busy", on=False)

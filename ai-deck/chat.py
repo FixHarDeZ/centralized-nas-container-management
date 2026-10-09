@@ -168,16 +168,56 @@ def transcript(session_id: str, cwd=None) -> list:
                 if not line:
                     break
                 read += len(line)
+                if not line.endswith("\n") and len(line) == MAX_LINE:
+                    read += _skip_rest(handle, HISTORY_BUDGET - read)
+                    items.extend(_clipped(line))
+                    continue
                 try:
                     record = json.loads(line)
                 except ValueError:
-                    continue            # a line clipped at MAX_LINE lands here
+                    continue
                 if not isinstance(record, dict):
                     continue
                 items.extend(_replay(record))
     except OSError:
         return []
     return list(items)
+
+
+TOOL_RESULT_ID = re.compile(r'"tool_use_id"\s*:\s*"([^"]+)"')
+CLIPPED_USER = re.compile(r'"type"\s*:\s*"user"')
+CLIPPED_RESULT = re.compile(r'"type"\s*:\s*"tool_result"')
+CLIPPED_ERROR = re.compile(r'"is_error"\s*:\s*true')
+
+
+def _skip_rest(handle, budget: int) -> int:
+    """Read past the remainder of a clipped line; how much that was.
+
+    Stops at the budget like the reader does: a line can be megabytes.
+    """
+    skipped = 0
+    while skipped < budget:
+        chunk = handle.readline(MAX_LINE)
+        skipped += len(chunk)
+        if not chunk or chunk.endswith("\n"):
+            return skipped
+    return skipped
+
+
+def _clipped(head: str) -> list:
+    """What can still be said about a record too big to parse.
+
+    The records over the limit are tool results carrying an image — a Read of
+    a screenshot was measured at 838 KB on one line. Dropping them lost the
+    tool's finish, and since the page matches finishes to pills in order,
+    every pill after it was drawn as still running. The head of the line
+    names the tool call (`tool_use_id` precedes the content), which is all a
+    finish needs.
+    """
+    if not CLIPPED_USER.search(head) or not CLIPPED_RESULT.search(head):
+        return []
+    ok = not CLIPPED_ERROR.search(head)
+    return [{"k": "tool_done", "ok": ok} for _ in TOOL_RESULT_ID.findall(head)]
 
 
 def _replay(record: dict) -> list:
@@ -218,6 +258,54 @@ def _replay(record: dict) -> list:
     return out
 
 
+# Context windows the agent has reported, by model. A resumed conversation is
+# measured from its transcript before any turn runs, and the transcript names
+# the model but not its window.
+WINDOWS = {}
+CONTEXT_TAIL = 1 << 20  # bytes read from the end of a transcript for its size
+
+
+def message_context(usage) -> int:
+    """How much of the window one API call filled: everything it was sent."""
+    usage = usage or {}
+    return sum(
+        usage.get(k) or 0
+        for k in ("input_tokens", "cache_read_input_tokens",
+                  "cache_creation_input_tokens")
+    )
+
+
+def last_context(session_id: str, cwd=None) -> tuple:
+    """(tokens, window) of a saved conversation, from its last main-thread call.
+
+    Read from the end: the latest call is what the next one will be sent, and
+    a transcript can be megabytes. Subagent calls (`isSidechain`) have their
+    own, smaller context and say nothing about this one.
+    """
+    path = os.path.join(session_directory(cwd), session_id + ".jsonl")
+    try:
+        with open(path, "rb") as handle:
+            handle.seek(0, os.SEEK_END)
+            handle.seek(max(handle.tell() - CONTEXT_TAIL, 0))
+            lines = handle.read().decode("utf-8", "replace").splitlines()
+    except OSError:
+        return 0, 0
+    for line in reversed(lines):
+        try:
+            record = json.loads(line)
+        except ValueError:
+            continue  # the first line is usually cut by the seek
+        if not isinstance(record, dict) or record.get("type") != "assistant":
+            continue
+        if record.get("isSidechain"):
+            continue
+        message = record.get("message") or {}
+        tokens = message_context(message.get("usage"))
+        if tokens:
+            return tokens, WINDOWS.get(message.get("model") or "", 0)
+    return 0, 0
+
+
 class Agent:
     """One Claude Code child, and a fan-out of what it says.
 
@@ -244,6 +332,11 @@ class Agent:
         # Running total the agent reports, kept so each turn can be charged
         # the difference (see the result branch).
         self.spent = 0.0
+        # How full the conversation is: what the last main-thread call was
+        # sent, and the window it has to fit in (0 = not known yet).
+        self.context = 0
+        self.window = 0
+        self.main_model = ""
         # Everything said, numbered, so a page that dropped the connection can
         # ask for what it missed instead of silently losing the middle of an
         # answer. `partial` and `open_tools` are what is *not* in the
@@ -317,6 +410,8 @@ class Agent:
                 "session_id": self.session_id or "",
                 "partial": self.partial,
                 "tools": list(self.open_tools),
+                "context": self.context,
+                "window": self.window,
             }
 
     # ── lifecycle ─────────────────────────────────────────────────────────
@@ -433,15 +528,21 @@ class Agent:
             # A new session owes nothing from the old one's turn.
             self.partial = ""
             self.open_tools = []
+            self.context, self.window = self.context_of(resume) if resume else (0, 0)
             if resume:
                 # Started now rather than on the first message, so a failed
                 # --resume is reported while the sheet is still open.
                 self.start(resume=resume)
                 if not self.running():
                     return 503, "could not resume"
-        self.emit(t="reset", session_id=resume or "")
+        self.emit(t="reset", session_id=resume or "",
+                  context=self.context, window=self.window)
         self.emit(t="busy", on=False)
         return 200, "ok"
+
+    def context_of(self, session_id: str) -> tuple:
+        """(tokens, window) of a saved conversation, before it runs a turn."""
+        return last_context(session_id, self.cwd)
 
     # ── reading the child ─────────────────────────────────────────────────
     def _read(self, proc) -> None:
@@ -511,10 +612,20 @@ class Agent:
             return
 
         if kind == "assistant":
+            message = event.get("message") or {}
+            # The context is what the latest call was sent. `result.usage`
+            # cannot say it: measured as the sum over every call in the turn
+            # (two tool calls: 69.7k there against 30.9k actually sent). A
+            # subagent's calls carry a parent and have a context of their own.
+            if not event.get("parent_tool_use_id"):
+                tokens = message_context(message.get("usage"))
+                if tokens:
+                    self.context = tokens
+                    self.main_model = message.get("model") or self.main_model
             # Tool calls are taken from the finished message: the streamed form
             # is input_json_delta, a half-parsed argument object that would
             # have to be reassembled to say anything useful on a pill.
-            for block in (event.get("message") or {}).get("content") or []:
+            for block in message.get("content") or []:
                 if isinstance(block, dict) and block.get("type") == "tool_use":
                     name = block.get("name") or "tool"
                     detail = tool_detail(name, block.get("input"))
@@ -554,11 +665,19 @@ class Agent:
                 cost = max(total - self.spent, 0)
                 self.spent = total
             usage = event.get("usage") or {}
-            context = sum(
-                usage.get(k) or 0
-                for k in ("input_tokens", "cache_read_input_tokens",
-                          "cache_creation_input_tokens")
-            )
+            # The window comes per model; a turn that ran a subagent on
+            # another model lists both, and the main thread's is the one that
+            # decides when to compact.
+            models = event.get("modelUsage") or {}
+            entry = models.get(self.main_model) if isinstance(models, dict) else None
+            if not isinstance(entry, dict):
+                windows = [m.get("contextWindow") or 0 for m in models.values()
+                           if isinstance(m, dict)] if isinstance(models, dict) else []
+                entry = {"contextWindow": max(windows, default=0)}
+            if entry.get("contextWindow"):
+                self.window = entry["contextWindow"]
+                if self.main_model:
+                    WINDOWS[self.main_model] = self.window
             # An interrupt comes back as an error result, and the only thing
             # that tells it apart from a real failure is the reason: measured
             # as `aborted_tools` when a tool was running and
@@ -583,7 +702,8 @@ class Agent:
                 text="" if status == "done" else str(event.get("result") or ""),
                 cost=cost,
                 total=total,
-                context=context,
+                context=self.context,
+                window=self.window,
                 out=usage.get("output_tokens") or 0,
                 ms=event.get("duration_ms") or 0,
             )
@@ -712,6 +832,8 @@ class Handler(BaseHTTPRequestHandler):
                 # The page reloads this conversation's transcript from it.
                 "session_id": agent.session_id or "",
                 "spent": agent.spent,
+                "context": agent.context,
+                "window": agent.window,
                 "model": agent.model,
                 "effort": agent.effort,
             })

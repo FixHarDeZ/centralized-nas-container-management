@@ -195,3 +195,24 @@ def test_chat_rejects_non_message_payloads(api, body):
 @pytest.mark.parametrize("body", [[], {"id": [SID]}, {"id": SID + "\n"}, {"id": "../../escape"}])
 def test_terminal_resume_rejects_malformed_payloads(api, body):
     assert api(upload.Handler, "POST", "/api/resume?provider=codex", body)[0] == 400
+
+
+def test_context_comes_from_the_rollouts_last_call(tmp_path, monkeypatch):
+    # `turn.completed` usage is the thread's running total (19.1M input on a
+    # thread whose last call was sent 200k), so the rollout is read instead.
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path))
+    root = tmp_path / "sessions" / "2026" / "10" / "09"
+    root.mkdir(parents=True)
+    count = lambda last, window: {"type": "event_msg", "payload": {
+        "type": "token_count", "info": {
+            "total_token_usage": {"input_tokens": 19140622},
+            "last_token_usage": {"input_tokens": last, "cached_input_tokens": last - 500},
+            "model_context_window": window}}}
+    lines = [{"type": "session_meta", "payload": {"id": SID, "cwd": "/work"}},
+             count(150000, 258400), count(200546, 258400),
+             {"type": "event_msg", "payload": {"type": "token_count", "info": None}}]
+    (root / ("rollout-x-" + SID + ".jsonl")).write_text(
+        "".join(json.dumps(line) + "\n" for line in lines))
+    assert codex_backend.context(SID, "/work") == (200546, 258400)
+    assert codex_backend.context(SID, "/elsewhere") == (0, 0)
+    assert chat.CodexAgent(cwd="/work").context_of(SID) == (200546, 258400)

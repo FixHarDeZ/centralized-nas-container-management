@@ -14,6 +14,7 @@ Chrome is a workstation tool, not a container one — the suite skips when it is
 not installed rather than pretending the check ran.
 """
 
+import http.server
 import json
 import re
 import shutil
@@ -31,6 +32,11 @@ CHROMES = (
     "chromium",
     "chromium-browser",
 )
+
+
+class BrowserServer(http.server.ThreadingHTTPServer):
+    allow_reuse_address = True
+    request_queue_size = 64
 
 
 def find_chrome():
@@ -113,8 +119,6 @@ def test_the_answer_survives_all_of_that(result):
 @pytest.fixture(scope="module")
 def resync():
     import functools
-    import http.server
-    import socketserver
     import threading
 
     chrome = find_chrome()
@@ -125,8 +129,10 @@ def resync():
     handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(root))
     # Over HTTP, not file://: the harness reaches into the page it frames, and
     # Chrome gives every file:// document its own opaque origin.
-    server = socketserver.TCPServer(("127.0.0.1", 0), handler)
-    server.allow_reuse_address = True
+    # Threaded with a deep backlog, as in test_workspace_ui: the framed page
+    # fetches styles, scripts and fonts at once, and a single-threaded server
+    # with five slots dropped app.js under a loaded run ("no _chat").
+    server = BrowserServer(("127.0.0.1", 0), handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     url = "http://127.0.0.1:%d/tests/chat_resync_harness.html" % server.server_address[1]
@@ -177,9 +183,10 @@ def test_a_finished_tool_is_marked_not_just_coloured(resync):
     # holding a phone in sunlight, so a finished pill carries a mark.
     #
     # The order is the rule the page has always used: a result belongs to the
-    # oldest pill still open. The snapshot's tool was the oldest, so it takes
-    # the first result, and the one left running keeps its dot.
-    assert resync["marks"] == ["✓", "✕", ""]
+    # oldest pill still open. The snapshot's tool and the slow one finished
+    # first, then Write and the failing Bash; the one left running keeps its
+    # dot.
+    assert resync["marks"] == ["✓", "✓", "✓", "✕", ""]
 
 
 def test_a_failed_turn_says_why(resync):
@@ -194,3 +201,27 @@ def test_a_half_typed_message_is_kept(resync):
     assert resync["draft"] == "ร่างที่ยังพิมพ์ไม่จบ"
     # Saving it is only half: a reload has to put it back in the box.
     assert resync["draftRestored"] == "ร่างที่ยังพิมพ์ไม่จบ"
+
+
+def test_context_in_use_sits_on_the_bar(resync):
+    assert resync["ctxCalm"] == ["ctx 84k/200k · 42%", "chat-ctx", False]
+    assert resync["ctxHot"] == ["ctx 170k/200k · 85%", "chat-ctx hot"]
+    # A turn without a window (MiMo) does not forget the one already known.
+    assert resync["ctxKeepsWindow"] == "ctx 30k/200k · 15%"
+    # A new conversation starts empty.
+    assert resync["ctxAfterReset"] is True
+
+
+def test_a_running_turn_always_shows_it_is_working(resync):
+    # The gaps that read as a frozen page: after the text, and under a tool.
+    assert resync["typingAfterText"] is True
+    assert resync["typingBelowTool"] is True
+
+
+def test_an_ended_turn_leaves_no_tool_running(resync):
+    assert resync["openAfterTurn"] == 0
+    assert resync["typingAfterTurn"] is False
+
+
+def test_a_repainted_conversation_keeps_its_order_and_is_drawn_once(resync):
+    assert resync["historyOrder"] == ["q", "pill", "answer"]
