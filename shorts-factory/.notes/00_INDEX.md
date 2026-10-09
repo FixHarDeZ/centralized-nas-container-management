@@ -1,10 +1,13 @@
 # shorts-factory — Index
 
-**2026-10-09 — Creator Studio 01 ทำโค้ดแล้ว; รอ focused re-review/release.**
+**2026-10-09 — Creator Studio 01 ปิดงานแล้ว: main pushed + deploy สำเร็จ.**
 ผู้ใช้อนุมัติแบบและ scope ด้วย “จัด 01 ได้เลย”. ทำงานใน managed worktree
 `shorts-creator-studio`, branch `codex/shorts-factory-creator-studio`, แยกจากงาน Hermes.
 Design/plan: `docs/superpowers/{specs,plans}/2026-10-09-shorts-factory-modern-dashboard*.md`;
-design commit `fc4810d`. ซอร์สรอบนี้รวมกับ README และ stack memory ใน feature commit.
+design commit `fc4810d`, feature `d85a546`, review fixes `66d2abd`;
+merge เข้า main ที่ `565de60` และ push แล้ว. README/stack memory รวมกับซอร์สใน feature commit.
+Managed worktree archive ผ่าน Codex แล้ว; working directory และ local feature branch ลบแล้ว.
+Git เหลือ checkout หลัก; ซอร์สทั้งหมดอยู่ main.
 
 Dashboard 5 views ใช้ Creator Studio charcoal/amber + light theme, sidebar/mobile nav,
 search/status/channel filters, title covers, KPI/Gate/schedule แยก TH/EN. `_summary()`
@@ -17,15 +20,26 @@ channel Gate, ไม่แสดงผู้ชนะก่อน Gate; arm/expl
 validate ทั้งสอง payload ก่อนเขียนไฟล์. `app/dashboard_view.py` รวม presentation helpers.
 
 Verification ล่าสุด: dashboard/studio/pronunciation **64 pass**, shared-sync **5 pass**.
-Frontend task review ผ่านหลังแก้ touch targets 44px; final whole-branch review พบ P2 สองจุด แก้แล้ว รอ focused re-review.
+Frontend task review ผ่านหลังแก้ touch targets 44px; final whole-branch review พบ P2 สองจุด
+แก้แล้ว; focused re-review ที่ `66d2abd` ผ่าน ไม่มี finding ค้าง.
 Browser จริงผ่าน search+status/reset/no-results, TH/EN KPI scope, copy success/disclosures,
 form rejection (สองไฟล์ไม่เปลี่ยน)/success, empty/404, light/dark, no-JS ผ่าน CSP wrapper.
 ทั้ง 5 หน้าใน 1440/768/390/320px ไม่มี horizontal overflow; keyboard skip/focus ผ่าน.
 Targeted Ruff ผ่าน; main-preview console warn/error ว่าง (แยก intentional CSP no-JS errors).
 Local actual-app preview `http://127.0.0.1:8071/` ใช้ข้อมูลตัวอย่างแยกใน ignored
-`.superpowers/sdd/preview/`, ไม่ใช่ข้อมูล NAS. ADR 0007/0009, `/data:ro`, no credentials,
+`.superpowers/sdd/shorts-creator-studio/preview/` ใน checkout หลัก, ไม่ใช่ข้อมูล NAS.
+Screenshots/review reports และ primary design drafts เดิมเก็บใต้ directory เดียวกันก่อน archive.
+ADR 0007/0009, `/data:ro`, no credentials,
 POST/settings เดียว และไม่มี PIL/edge_tts ยังเดิม. Bot/compose/media-serving ไม่เปลี่ยน.
-**ยังไม่ merge/push/deploy.** Production ยังใช้ release เดิม. งานต่อยอด: real video
+NAS deploy เฉพาะ committed shorts-factory ด้วย tar+SSH แล้ว
+`scripts/deploy.sh --restart-only -s shorts-factory -y`; เก็บ source/image เดิมสำหรับ rollback.
+Image ใหม่ **307 pass / 1 deselected** (เว้น TTS จริง), Raqm=True. ทั้ง 3 containers running,
+restart=0, ไม่มี recent error/traceback. App source 34 ไฟล์ใน bot/dashboard ตรง main.
+GET ภายใน container ครบ 5 views + health/assets = 200; nginx guard GET 8 paths และ
+POST/settings = 401 เมื่อไม่ส่ง credentials. `/data:ro`, `/config:rw`, no credential env ผ่าน.
+Basic Auth เดิมบน NAS ต่างจาก vault ทั้ง user/password; local htpasswd ตรง NASและไฟล์ไม่เปลี่ยน.
+จึงยังไม่ได้ยืนยัน authenticated nginx 200 ด้วย credentials จาก vault; ไม่แก้บัญชีหรือรหัสผ่าน.
+ไม่มี implementation/deployment ค้าง. งานต่อยอด: real video
 preview/thumbnail และ heartbeat/job timestamps แยก proposal ก่อนเพิ่ม mount/bot fields.
 
 **Git cleanup 2026-10-08 — ปิดงานแล้ว:** checkout หลักกลับมาอยู่ `main`; local และ GitHub เหลือ

@@ -2110,3 +2110,47 @@ install` จะสำเร็จ. ต้องสร้าง venv ใต้ re
   ไม่มี horizontal overflow. ดู unavailable arm/explore กับ partial-category coverage แล้ว.
 - ซอร์ส/README/notes fix รวมใน commit รอบนี้ หลัง feature `d85a546`.
   Focused re-review ยัง pending; ไม่ merge/push/deploy.
+
+### ปิดงาน Creator Studio / main release — 2026-10-09
+
+- ผู้ใช้สั่งทำให้จบ, commit เข้า main, push, deploy และลบ worktree แล้วสั่ง “จบงาน”.
+  Focused re-review ที่ `66d2abd` ผ่าน: P2 ทั้งสองข้อแก้ครบ ไม่มี finding ใหม่.
+- Merge branch `codex/shorts-factory-creator-studio` เข้า main ด้วย merge commit
+  `565de60`, push origin/main สำเร็จ. Main เดิมมีงาน ai-deck/Hermes ที่ commit แล้ว;
+  เก็บงาน Hermes ที่ยัง dirty ทั้งสามไฟล์ไว้ตามเดิม ไม่ stage/revert/stash.
+- ก่อน merge สำรอง primary design-stage index/log/spec drafts ของงานนี้ แล้วล้าง
+  เฉพาะ drafts ของ shorts เพื่อให้ merge ได้. เก็บ ignored review reports, screenshots,
+  fixtures และ scripts ใน checkout หลัก `.superpowers/sdd/shorts-creator-studio/`.
+- ตรวจ merged main: dashboard/studio/pronunciation **64 passed in 3.73s**,
+  shared-sync **5 passed in 0.12s**, targeted Ruff, node syntax และ diff checks ผ่าน.
+  Browser preview จาก main เปิดได้และใช้ demo data/config ที่แยกจาก NAS.
+- NAS preflight bot mode=idle, 3 containers running/restart=0. Tag images เดิม
+  `shorts-factory-rollback-{bot,dashboard}:creator-studio-20261009` และ backup source
+  `/tmp/shorts-creator-studio-before.tar` แบบ root-only สำหรับ rollback.
+- Upload `git archive 565de60 shorts-factory` ผ่าน tar+SSH เฉพาะ committed stack;
+  ไม่ upload dirty Hermes, stack อื่น, mockup หรือ local fixtures. Existing `.env` และ
+  nginx/.htpasswd checksum ไม่เปลี่ยน. Build image ล่วงหน้าขณะบริการเดิมยังทำงาน.
+- Disposable image ไม่มี credentials/data mounts และปิด network: **307 passed /
+  1 deselected in 12.98s**, Raqm=True. เว้น `test_narration_is_one_take_with_a_start_per_card`
+  ซึ่งเรียก TTS จริง; รอบ UI นี้ไม่แก้ TTS/bot. Starlette/anyio deprecation warning เดิม 1 ข้อ.
+- Deploy ด้วย `scripts/deploy.sh --restart-only -s shorts-factory -y` สำเร็จ (14s),
+  maintenance window ตาม flow เดิม; restart เฉพาะ bot/dashboard/nginx ของ stack นี้.
+- ยืนยันใน live containers: app source ทั้ง **34 ไฟล์** ใน bot และ dashboard ตรง main;
+  ทั้ง 3 running/restart=0, recent error/traceback count=0. `/data:ro`, `/config:rw`,
+  ไม่มี credential env ใน dashboard. Existing secret/auth files checksum ยังเดิม.
+- GET app ภายใน live dashboard: library, existing clip detail, experiment, now,
+  settings, healthz และ CSS/JS รวม 8 paths = **200**. Nginx unauthenticated GET 8 paths
+  รวม assets/healthz/detail และ POST/settings = **401**. ไม่เขียน production settings.
+- ข้อจำกัด smoke: SSH TCP forwarding ถูก NAS policy ปิด จึงใช้ SSH-run proxy check
+  บน loopback NAS. บัญชี Basic Auth ที่ deploy เดิมไม่ตรง user/password ใน vault;
+  local htpasswd ตรง NAS และไม่เปลี่ยนจากก่อน release. จึงยังไม่ได้ยืนยัน authenticated
+  nginx 200 ด้วย vault credentials. ไม่มีการเปลี่ยน auth/credential เพื่อทดสอบ.
+  ถ้าจะจัดการความต่างนี้ ให้เป็นงาน sync บัญชีเดิมกับ vault ที่ผู้ใช้อนุมัติแยก.
+- Archive managed worktree ผ่าน Codex native tool สำเร็จ; attachment เปลี่ยนเป็น
+  archived_worktree, working directory หาย และ `git worktree list` เหลือ checkout หลัก.
+  ลบ local feature branch ด้วย `git branch -d` หลังยืนยัน merged ancestry แล้ว.
+  ซอร์สอยู่ main/GitHub; ignored artifacts เก็บไว้แล้ว. Local preview ย้ายไปรันจาก main
+  ที่ `http://127.0.0.1:8071/`, ใช้ synthetic fixtures เดิมและเก็บ tab เป็น deliverable.
+- อัปเดต stack index/log ทั้งคู่และ spec/plan สำหรับปิดงาน; ไม่มี memory ที่ root `.notes/`.
+  ไม่มี implementation/deployment ค้าง. งานแนะนำถัดไป: real MP4/thumbnail preview และ
+  heartbeat/job timestamps; pronunciation checklist ยังเป็นการตรวจจากข้อความ ไม่ได้ฟังเสียงจริง.

@@ -198,3 +198,10 @@ live-state claims. User approved Creator Studio and the written scope on
 2026-10-09. Implementation uses isolated worktree `shorts-creator-studio` on
 `codex/shorts-factory-creator-studio`; existing Hermes edits remain in the primary
 checkout. Production deployment is a separate release step.
+
+Implementation and acceptance checks completed on 2026-10-09. Final focused review
+at `66d2abd` passed with no outstanding findings. Main merge/push `565de60` and
+scoped NAS deployment completed after the user's release authorization. Managed
+worktree archived/removed and previews preserved. Exact checks, unchanged auth
+credentials, proxy smoke limitation and release status are recorded in
+`shorts-factory/.notes/00_INDEX.md` and `daily_log.md`.

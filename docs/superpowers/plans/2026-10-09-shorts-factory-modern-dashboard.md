@@ -149,11 +149,11 @@ except ValueError as exc:
 
 **Interfaces:** Local preview runs real `app.dashboard` against temporary synthetic data/config, never NAS data or credentials. Screenshots use approved CUA browser tooling.
 
-- [ ] Run full dashboard + pronunciation suites and shared-sync checks; run `node --check app/static/app.js`, targeted Ruff and `git diff --check`.
-- [ ] Start `PYTHONPATH=shorts-factory DATA_DIR=<temporary-demo-data> CONFIG_DIR=<temporary-demo-config> python3 -m uvicorn app.dashboard:app --host 127.0.0.1 --port 8071` using an available isolated dependency runtime.
-- [ ] Browser verify five real views, empty/404/error forms, theme storage resilience and keyboard focus. Check desktop1440, tablet768 and phone390/320; read DOM widths and verify fixed navigation does not hide controls.
-- [ ] Save desktop/mobile screenshots, open actual implementation preview for user, and review diff for escaping, metric semantics, write/import boundaries and unrelated-file changes.
-- [ ] Update README, approved spec/plan checkboxes and both stack notes with exact checks, remaining release steps, and actual commit/deploy status. Verify documents and status before final delivery.
+- [x] Run full dashboard + pronunciation suites and shared-sync checks; run `node --check app/static/app.js`, targeted Ruff and `git diff --check`.
+- [x] Start `PYTHONPATH=shorts-factory DATA_DIR=<temporary-demo-data> CONFIG_DIR=<temporary-demo-config> python3 -m uvicorn app.dashboard:app --host 127.0.0.1 --port 8071` using an available isolated dependency runtime.
+- [x] Browser verify five real views, empty/404/error forms, theme storage resilience and keyboard focus. Check desktop1440, tablet768 and phone390/320; read DOM widths and verify fixed navigation does not hide controls.
+- [x] Save desktop/mobile screenshots, open actual implementation preview for user, and review diff for escaping, metric semantics, write/import boundaries and unrelated-file changes.
+- [x] Update README, approved spec/plan checkboxes and both stack notes with exact checks, remaining release steps, and actual commit/deploy status. Verify documents and status before final delivery.
 
 ## Plan self-review
 
@@ -162,3 +162,16 @@ state/settings to Task 4, per-channel semantics/boundaries to Task 1, and
 verification/memory to Task 5. No bot/media/heartbeat/recommender change is included.
 Tests precede behavioral changes. Visual CSS/layout verification uses the real
 browser; no implementation-mirroring CSS tests are needed.
+
+## Delivery — 2026-10-09
+
+All five views and acceptance checks complete. Final focused review at `66d2abd`
+resolved both P2 findings with no outstanding findings. Merged/pushed main at
+`565de60`; scoped NAS deployment completed. Merged-main checks: 64 dashboard,
+studio and pronunciation tests plus five shared-sync tests. NAS image: 307 passed,
+one real TTS test deselected, Raqm available. Live app routes/assets/health passed;
+source hashes match and all three containers run without restarts or recent errors.
+Existing nginx auth guards passed; authenticated proxy smoke remains limited by
+pre-existing deployed credentials differing from vault. Credentials were unchanged.
+Managed worktree archived/removed; preview and artifacts preserved in the primary
+checkout. Final release details and follow-up scope are in stack index/daily log.
