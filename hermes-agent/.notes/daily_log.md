@@ -226,3 +226,14 @@ the Telegram connect stage.
 reads nothing and silently skips the upload while still exiting 0. The first rebuild
 was a no-op against the stale remote Dockerfile (identical image sha, all layers CACHED).
 Use `./scripts/deploy.sh -y`.
+
+## 2026-10-09 — update-hermes.sh: auto commit + push
+
+- `scripts/update-hermes.sh` after deploy: pathspec-commits only `hermes-agent/docker-compose.yml`
+  (`chore(hermes-agent): bump HERMES_REF to <tag>`) then `git push origin main`. Skips commit if HEAD already has the tag.
+- Pre-flight guards (before touching anything): branch == `main`, local not behind `origin/main`,
+  compose file has no uncommitted changes besides the `HERMES_REF` line.
+- Fixed cwd bug: paths were relative to `scripts/` (`../hermes-agent/...`, `bash deploy.sh`) — now anchored to repo root.
+- Verified: `bash -n` OK, dirty-guard passes on the pending `v0.21.6` bump. Not run end-to-end (would deploy).
+- Open: working tree still has uncommitted `HERMES_REF: v2026.9.24 -> v0.21.6` from an earlier run — not committed here.
+- Status: script + notes changes **uncommitted, not pushed, not deployed** at session end.

@@ -119,6 +119,7 @@ Tracker: `docs/superpowers/specs/2026-06-02-hermes-token-tuning-verification.md`
 
 | วันที่ | เรื่อง |
 |--------|--------|
+| 2026-10-09 | `scripts/update-hermes.sh <tag>` now commits the `HERMES_REF` bump to `main` and pushes after deploy (guards: must be on `main`, not behind origin, compose file has no non-`HERMES_REF` changes). Runs from any cwd. |
 | 2026-08-19 | Bump to `v2026.8.18`; fix exit-126 crash loop by moving the uv-managed CPython 3.11 out of `/root` via `UV_PYTHON_INSTALL_DIR=/opt/uv-python` |
 | 2026-07-02 | Fix dashboard crash loop on v2026.7.1: added `scripts/inject-dashboard-auth.sh` + `DASHBOARD_PASSWORD_HASH` env var via vault. Credentials in vault only. |
 | 2026-06-02 | Approach A token tune: session_reset.idle_minutes 1440→15, agent.max_turns →20, agent.api_max_retries →1, image_input_mode →text, memory disabled (1-week trial), compression.threshold →0.80. Spec: `docs/superpowers/specs/2026-06-02-hermes-token-tuning-design.md`. Schema: `hermes-v2026.5.16-schema.md`. |
