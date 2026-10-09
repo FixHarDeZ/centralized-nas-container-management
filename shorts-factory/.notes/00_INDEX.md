@@ -1,5 +1,33 @@
 # shorts-factory — Index
 
+**2026-10-09 — Creator Studio 01 ทำโค้ดแล้ว; รอ focused re-review/release.**
+ผู้ใช้อนุมัติแบบและ scope ด้วย “จัด 01 ได้เลย”. ทำงานใน managed worktree
+`shorts-creator-studio`, branch `codex/shorts-factory-creator-studio`, แยกจากงาน Hermes.
+Design/plan: `docs/superpowers/{specs,plans}/2026-10-09-shorts-factory-modern-dashboard*.md`;
+design commit `fc4810d`. ซอร์สรอบนี้รวมกับ README และ stack memory ใน feature commit.
+
+Dashboard 5 views ใช้ Creator Studio charcoal/amber + light theme, sidebar/mobile nav,
+search/status/channel filters, title covers, KPI/Gate/schedule แยก TH/EN. `_summary()`
+เลิกนับรวมสองช่อง; missing Day 7 ไม่แทนด้วย 0; percent ใช้ average viewing percentage.
+Clip workspace มี latest script, previous drafts, copy feedback, pronunciation checklist
+จากข้อความ, sources, render/snapshots และ SVG เดิม. Experiments ใช้ verdict เดิมหลัง
+channel Gate, ไม่แสดงผู้ชนะก่อน Gate; arm/explore/category ที่ไม่มี Day 7 views แสดง —
+พร้อม measured coverage โดยใช้ grouping/counters เดิม. State ย้ำ recorded data ไม่ใช่ heartbeat,
+งานรอสรุปสั้น; structured parked/auto_pick อยู่ใน raw disclosure, unknown fields ยังดูได้. Settings เก็บ invalid edits และ escaped invalid model,
+validate ทั้งสอง payload ก่อนเขียนไฟล์. `app/dashboard_view.py` รวม presentation helpers.
+
+Verification ล่าสุด: dashboard/studio/pronunciation **64 pass**, shared-sync **5 pass**.
+Frontend task review ผ่านหลังแก้ touch targets 44px; final whole-branch review พบ P2 สองจุด แก้แล้ว รอ focused re-review.
+Browser จริงผ่าน search+status/reset/no-results, TH/EN KPI scope, copy success/disclosures,
+form rejection (สองไฟล์ไม่เปลี่ยน)/success, empty/404, light/dark, no-JS ผ่าน CSP wrapper.
+ทั้ง 5 หน้าใน 1440/768/390/320px ไม่มี horizontal overflow; keyboard skip/focus ผ่าน.
+Targeted Ruff ผ่าน; main-preview console warn/error ว่าง (แยก intentional CSP no-JS errors).
+Local actual-app preview `http://127.0.0.1:8071/` ใช้ข้อมูลตัวอย่างแยกใน ignored
+`.superpowers/sdd/preview/`, ไม่ใช่ข้อมูล NAS. ADR 0007/0009, `/data:ro`, no credentials,
+POST/settings เดียว และไม่มี PIL/edge_tts ยังเดิม. Bot/compose/media-serving ไม่เปลี่ยน.
+**ยังไม่ merge/push/deploy.** Production ยังใช้ release เดิม. งานต่อยอด: real video
+preview/thumbnail และ heartbeat/job timestamps แยก proposal ก่อนเพิ่ม mount/bot fields.
+
 **Git cleanup 2026-10-08 — ปิดงานแล้ว:** checkout หลักกลับมาอยู่ `main`; local และ GitHub เหลือ
 branch `main` เท่านั้นตามคำสั่งผู้ใช้ (ลบ 17 local + 1 remote). Release worktree เดิม
 archive ผ่าน Codex แล้ว จึงไม่มี worktree อื่นล็อก `main`. สำรอง Git refs/history

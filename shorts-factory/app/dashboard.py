@@ -18,8 +18,17 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app import (analytics, experiment, history, locales, manifest, model_choice,
-                 schedule)
+from app import (
+    analytics,
+    experiment,
+    history,
+    locales,
+    manifest,
+    model_choice,
+    pronunciation,
+    schedule,
+)
+from app import dashboard_view as view
 
 HERE = Path(__file__).parent
 DATA = Path(os.environ.get("DATA_DIR", "/data"))
@@ -27,6 +36,10 @@ DATA = Path(os.environ.get("DATA_DIR", "/data"))
 app = FastAPI(title="shorts-factory", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
 TEMPLATES = Jinja2Templates(directory=HERE / "templates")
+TEMPLATES.env.filters.update(number=view.format_number,
+                             datetime_display=view.format_date,
+                             percent=view.format_percent)
+TEMPLATES.env.globals["arm_labels"] = view.ARM_LABELS
 
 
 @app.get("/healthz")
@@ -34,14 +47,26 @@ def healthz() -> dict:
     return {"ok": True}
 
 
-def _row(record: dict) -> dict:
+def _row(record: dict, state: dict | None = None) -> dict:
     """One Clip as the list shows it. `views`/`percent` are None until day 7."""
     snapshot = manifest.day7(record) or {}
+    locale = locales.get(record.get("locale"))
+    scripts = record.get("scripts") or []
+    script = (scripts[-1].get("script") or {}) if scripts else {}
+    title = script.get("title") or record.get("topic") or "(ไม่มีหัวข้อ)"
     return {
         "id": record.get("id", ""),
         # Which channel this Clip belongs to. Manifests older than Locales
         # carry no field and are Thai (docs/adr/0008).
-        "locale": locales.get(record.get("locale"))["label"],
+        "locale": locale["label"],
+        "locale_code": locale["code"],
+        "title": title,
+        "category": script.get("category") or "",
+        "cover": title[:3],
+        "duration": (record.get("render") or {}).get("duration"),
+        "status": view.status(record, state),
+        "search": " ".join(str(value or "") for value in
+                           (record.get("id"), record.get("topic"), title, script.get("category"))),
         "created_at": record.get("created_at", ""),
         "topic": record.get("topic", ""),
         "variant": record.get("variant"),
@@ -54,7 +79,7 @@ def _row(record: dict) -> dict:
     }
 
 
-def _summary(rows: list[dict]) -> dict:
+def _summary(rows: list[dict], locale: str = locales.DEFAULT) -> dict:
     """The four figures the list page leads with.
 
     All of them come from the day-7 snapshot rather than the latest one, for
@@ -62,29 +87,43 @@ def _summary(rows: list[dict]) -> dict:
     `state.json` is deliberately not among them — the bot writes it and the
     dashboard only reads, so a stale `mode` would read as a live one.
     """
+    rows = [r for r in rows if r["locale_code"] == locale]
     percents = [r["percent"] for r in rows if r["percent"] is not None]
+    measured = sum(r["views"] is not None for r in rows)
     return {
-        "published": len(history.video_ids()),
+        "published": len(history.video_ids(locale)),
         "gate_clips": analytics.GATE_CLIPS,
         "median": median(percents) if percents else None,
-        "views": sum(r["views"] or 0 for r in rows),
+        "views": sum(r["views"] or 0 for r in rows) if measured else None,
         "total": len(rows),
         "discarded": sum(1 for r in rows if r["outcome"] == "discarded"),
+        "measured": measured,
+        "measured_percents": len(percents),
     }
 
 
 @app.get("/", response_class=HTMLResponse)
 def clips(request: Request):
     records = manifest.load_all()
-    rows = [_row(r) for r in reversed(records)]   # load_all is chronological
+    state = _state()
+    rows = [_row(r, state) for r in reversed(records)]   # load_all is chronological
+    stored_schedule = schedule.settings()
+    channels = [{"code": code, "label": locales.get(code)["label"],
+                 "summary": _summary(rows, code), "gate": analytics.gate_note(code),
+                 "schedule": stored_schedule[code]}
+                for code in [locales.DEFAULT] + [c for c in locales.codes() if c != locales.DEFAULT]]
+    statuses = {row["status"]["key"]: dict(row["status"], label="ล้มเหลว")
+                if row["status"]["key"] == "failed" else row["status"] for row in rows}
     return TEMPLATES.TemplateResponse(request, "clips.html", {
         "rows": rows,
         "total": len(records),
         "summary": _summary(rows),
+        "channels": channels,
+        "statuses": list(statuses.values()),
         # The filter buttons are built from what is actually on the page, so a
         # new outcome the bot starts writing appears without a code change.
         "outcomes": sorted({r["outcome"] for r in rows if r["outcome"]}),
-        "gate": analytics.gate_note(),
+        "gate": None,
     })
 
 
@@ -116,6 +155,8 @@ def _chart(snapshots: list[dict]) -> dict | None:
                 f" {xy[-1][0]:.1f},{h - pad}",
         "dots": [{"x": round(x, 1), "y": round(y, 1)} for x, y in xy],
         "top": top,
+        "first_age": min(x for x, _ in points),
+        "last_age": max(x for x, _ in points),
         **CHART,
     }
 
@@ -130,15 +171,30 @@ def clip(request: Request, clip_id: str):
             request, "clip.html", {"record": None, "gate": None}, status_code=404
         )
     snapshots = record.get("snapshots") or []
+    drafts = record.get("scripts") or []
+    latest = drafts[-1] if drafts else None
+    locale = locales.get(record.get("locale"))
     return TEMPLATES.TemplateResponse(request, "clip.html", {
         "record": record,
-        "drafts": record.get("scripts") or [],
+        "drafts": drafts,
+        "latest": latest,
+        "previous_drafts": drafts[:-1],
+        "checks": pronunciation.collect(latest.get("script") or {}, locale["code"]) if latest else [],
+        "sources": view.sources(record),
+        "row": _row(record, _state()),
+        "locale": locale,
         "cards": (record.get("render") or {}).get("cards") or [],
         "snapshots": snapshots,
         "day7": manifest.day7(record),
         "chart": _chart(snapshots),
-        "gate": analytics.gate_note(),
+        "gate": analytics.gate_note(locale["code"]),
     })
+
+
+def _view_coverage(measured: dict | None) -> dict:
+    """Display availability from the canonical grouping of measured records."""
+    count = measured["clips"] if measured else 0
+    return {"measured": count, "display_views": measured["views"] if count else None}
 
 
 @app.get("/experiment", response_class=HTMLResponse)
@@ -156,21 +212,33 @@ def experiments(request: Request):
         if locale != locales.DEFAULT and not mine:
             continue
         counts = experiment.tally(mine)
+        # Reuse the Experiment's eligibility and grouping rules for coverage;
+        # its raw counters and verdict inputs remain the complete record set.
+        measured = [record for record in mine
+                    if (manifest.day7(record) or {}).get("views") is not None]
+        measured_arms = experiment.tally(measured)
+        measured_categories = experiment.by_category(measured)
+        gate = analytics.gate_note(locale)
         sections.append({
             "locale": locale,
             "label": locales.get(locale)["label"],
             "arms": {
-                name: dict(data, median=median(data["percents"]) if data["percents"] else None)
+                name: dict(data, median=median(data["percents"]) if data["percents"] else None,
+                           **_view_coverage(measured_arms[name]))
                 for name, data in counts.items()
             },
             "clauses": experiment.VARIANTS_BY_LOCALE.get(locale, experiment.VARIANTS),
-            "verdict": experiment.verdict(counts),
-            "categories": experiment.by_category(mine),
-            "gate": analytics.gate_note(locale),
+            "verdict": "ยังสรุปไม่ได้ — รอให้ช่องผ่านเกณฑ์ข้อมูลก่อน" if gate else experiment.verdict(counts),
+            "categories": {name: dict(data, **_view_coverage(measured_categories.get(name)))
+                           for name, data in experiment.by_category(mine).items()},
+            "gate": gate,
         })
     return TEMPLATES.TemplateResponse(request, "experiment.html", {
         "factor": experiment.FACTOR,
         "sections": sections,
+        "min_clips": experiment.MIN_CLIPS,
+        "min_views": experiment.MIN_VIEWS,
+        "arm_labels": view.ARM_LABELS,
     })
 
 
@@ -182,7 +250,8 @@ def _say() -> dict:
     edge-tts into the one process reachable from the LAN.
     """
     try:
-        return json.loads((DATA / "say.json").read_text(encoding="utf-8"))
+        value = json.loads((DATA / "say.json").read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else {}
     except (OSError, ValueError):
         return {}
 
@@ -190,15 +259,15 @@ def _say() -> dict:
 def _state() -> dict:
     """The bot's state.json, or an empty one. A half-written file is not fatal."""
     try:
-        return json.loads((DATA / "state.json").read_text(encoding="utf-8"))
+        value = json.loads((DATA / "state.json").read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else {}
     except (OSError, ValueError):
         return {}
 
 
-# Keys worth a card of their own. The rest still appear below verbatim: the
-# bot grows new keys often (`parked`, `last_auto_trends`), and a dashboard that
-# only rendered the ones named here would hide every one of them.
-HEADLINE = ("mode", "topic", "clip_id", "style", "parked", "auto_pick", "last_snapshot")
+# Compact scalar facts only. Structured waits have their own summaries;
+# all nested payloads and unknown keys remain in the raw-state disclosure.
+HEADLINE = ("mode", "topic", "clip_id", "style", "last_snapshot")
 
 
 @app.get("/now", response_class=HTMLResponse)
@@ -210,31 +279,42 @@ def now(request: Request):
         # `script` is the whole Script being reviewed and `suggested` a topic
         # list; both are pages of JSON that belong on /clip, not here.
         "summary": summary,
-        "headline": [(k, summary[k]) for k in HEADLINE if k in summary],
+        "headline": [(k, summary[k]) for k in HEADLINE if k in summary
+                     and (summary[k] is None or type(summary[k]) in (str, int, float, bool))],
         "rest": {k: v for k, v in summary.items() if k not in HEADLINE},
         "say": _say(),
         "uploads": list(reversed(history.load()))[:20],
-        "gate": analytics.gate_note(),
+        "mode_label": view.MODES.get(state.get("mode"), (state.get("mode") or "ยังไม่มีสถานะ", "neutral"))[0],
+        "mode_tone": view.MODES.get(state.get("mode"), ("", "neutral"))[1],
+        "waits": view.waiting_jobs(state),
+        "gate": None,
     })
 
 
 # --- the one writing route (docs/adr/0009) -----------------------------------
 
 def _settings_page(request: Request, stored: dict, models: dict,
-                   saved: bool = False, error: str = "", status: int = 200):
+                   saved: bool = False, error: str = "", status: int = 200,
+                   submitted=None):
+    rows = [{"code": code, "label": locales.get(code)["label"],
+             "enabled": spec["enabled"], "hours": ",".join(str(h) for h in spec["hours"]),
+             "minutes": spec["auto_pick_minutes"]} for code, spec in sorted(stored.items())]
+    if submitted is not None:
+        for row in rows:
+            code = row["code"]
+            row.update(enabled=bool(submitted.get(f"{code}_enabled")),
+                       hours=str(submitted.get(f"{code}_hours", "")),
+                       minutes=str(submitted.get(f"{code}_minutes", "")))
+        models = {role: str(submitted.get(f"model_{role}", "")) for role in model_choice.ROLES}
+    choices = model_choice.choices()
     return TEMPLATES.TemplateResponse(request, "settings.html", {
-        "rows": [{
-            "code": code,
-            "label": locales.get(code)["label"],
-            "enabled": spec["enabled"],
-            "hours": ",".join(str(h) for h in spec["hours"]),
-            "minutes": spec["auto_pick_minutes"],
-        } for code, spec in sorted(stored.items())],
+        "rows": rows,
         "stamps": schedule.stamps(_state()),
         "min_minutes": schedule.MIN_PICK_MINUTES,
         "max_minutes": schedule.MAX_PICK_MINUTES,
         "models": models,
-        "model_choices": model_choice.choices(),
+        "model_choices": choices,
+        "invalid_models": [name for name in models.values() if name and name not in choices],
         "catalog_at": model_choice.catalog().get("fetched_at"),
         "saved": saved,
         "error": error,
@@ -277,7 +357,7 @@ async def settings_save(request: Request):
         # Show what they typed back, not what is on disk: a rejected form that
         # redraws itself from storage silently discards the edit.
         return _settings_page(request, schedule.settings(), model_choice.stored(),
-                              error=str(exc), status=400)
+                              error=str(exc), status=400, submitted=form)
     return _settings_page(request, stored, chosen, saved=True)
 
 

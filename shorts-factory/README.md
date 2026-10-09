@@ -763,26 +763,39 @@ stack.
 
 ## Dashboard
 
-A read-only view of everything the bot has already written down, served at
+A Creator Studio view of everything the bot has already written down, served at
 `http://<NAS_HOST>:5071` behind nginx basic auth (credentials from the vault,
 see below). It runs as its own container from the same image as the bot with
-`/data` mounted `:ro`, and the app itself declares no route other than GET/HEAD
-— read-only twice over, by mount and by code (`docs/adr/0007`). It carries no
+`/data` mounted `:ro`. The sole writing route is `POST /settings`, which saves
+the schedule and model choices to `/config` after validating both payloads
+(`docs/adr/0009` amends `0007`). It carries no
 `env_file`, so the Telegram bot token and the YouTube refresh token never
 reach this LAN-facing process.
 
-Four pages:
+Five views:
 
 | Page | Answers |
 | :--- | :--- |
-| `/` | every Clip, newest first, with day-7 views/retention once available |
-| `/clip/{id}` | one Clip's full Manifest — every Script draft (including discarded ones), render detail, snapshots |
-| `/experiment` | the two hook arms, their medians, and the verdict once enough data exists |
-| `/now` | the bot's live `state.json`, its `say.json` overrides, and recent uploads |
+| `/` | a searchable Clip library, channel/status filters, per-channel Day 7 figures, Gate progress and stored schedule |
+| `/clip/{id}` | latest Script, text pronunciation checks, earlier drafts, research links, render detail and snapshots |
+| `/experiment` | hook arms and their medians per channel; a verdict once both channel and arm thresholds pass |
+| `/now` | recorded `state.json`, pending work, `say.json` overrides and recent uploads; no live heartbeat claim |
+| `/settings` | channel schedules and writing models, with saved/error feedback and rejected edits preserved |
 
-The pages lead with the day-7 figures — Gate progress, median retention, total
-views — and the clip list filters by outcome in the browser, so no route grew a
-query parameter. `/clip` draws views over age as an **inline SVG built in the
+The charcoal/amber interface has a desktop sidebar and mobile navigation.
+Library search and status filters act within the selected channel; its figures
+remain scoped to that channel. Missing measurements display as unavailable,
+and average viewing percentage is not labelled completion rate. Script title
+covers are decoration, not extracted video thumbnails. The library remains
+readable without JavaScript, with both channels shown.
+
+Experiment arms and categories show how many eligible clips have Day 7 view
+measurements. An unmeasured group stays unavailable; a measured zero stays
+zero, while the bot's original counters and verdict rules remain unchanged.
+Recorded waits use compact summaries; nested scripts and prompts stay in the
+raw-state disclosure.
+
+`/clip` draws views over age as an **inline SVG built in the
 template**: `app/retention.py` renders its PNGs with Pillow, and keeping Pillow
 out of the LAN-facing process is a property `docs/adr/0007` asserts, guarded by
 `test_no_drawing_library_in_this_process`. Theme follows the system with a

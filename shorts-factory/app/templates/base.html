@@ -1,42 +1,52 @@
+{% from "_icons.html" import icon %}
+{% set path = request.url.path %}
+{% set navigation = [("/", "grid", "คลังคลิป"), ("/experiment", "flask", "การทดลอง"), ("/now", "state", "สถานะงาน"), ("/settings", "settings", "ตั้งค่า")] %}
 <!doctype html>
 <html lang="th" data-theme="dark">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}shorts-factory{% endblock %}</title>
-  <link rel="stylesheet" href="/static/style.css">
-  <!-- Inline and before the stylesheet paints: any later and the page flashes
-       the wrong theme on every navigation. -->
+  <meta name="color-scheme" content="dark light">
+  <title>{% block title %}Creator Studio — shorts-factory{% endblock %}</title>
   <script>
-    document.documentElement.dataset.theme =
-      localStorage.getItem('theme') ||
-      (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    (() => {
+      let preference;
+      try { preference = localStorage.getItem('theme'); } catch (_) {}
+      const theme = preference === 'dark' || preference === 'light' ? preference :
+        (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+      document.documentElement.dataset.theme = theme;
+    })();
   </script>
+  <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <header>
-    <div class="bar">
-      <span class="brand">shorts-factory</span>
-      <nav>
-        <a href="/" {% if request.url.path == "/" %}aria-current="page"{% endif %}>คลิป</a>
-        <a href="/experiment" {% if request.url.path == "/experiment" %}aria-current="page"{% endif %}>การทดลอง</a>
-        <a href="/now" {% if request.url.path == "/now" %}aria-current="page"{% endif %}>สถานะตอนนี้</a>
-        <a href="/settings" {% if request.url.path == "/settings" %}aria-current="page"{% endif %}>ตั้งเวลา</a>
-      </nav>
-      <button id="theme" type="button" title="สลับธีม" aria-label="สลับธีม">◐</button>
-    </div>
-  </header>
-  <main>
-    {# The Gate warning stays on every page (docs/adr/0004) — folded to one
-       line, never hidden. #}
-    {% if gate %}
-    <details class="warn">
-      <summary>{{ gate.split("—")[0] }}</summary>
-      <p>{{ gate }}</p>
-    </details>
-    {% endif %}
-    {% block content %}{% endblock %}
-  </main>
-  <script src="/static/app.js"></script>
+<a class="skip-link" href="#main">ข้ามไปยังเนื้อหา</a>
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand" href="/" aria-label="shorts-factory หน้าแรก"><span class="brand-mark">{{ icon('play') }}</span><span>shorts<span class="accent">factory</span><small>CREATOR STUDIO</small></span></a>
+    <div><p class="nav-label">WORKSPACE</p><nav class="navigation" aria-label="เมนูหลัก">
+      {% for href, symbol, label in navigation %}
+      {% set active = path == href or (href == '/' and path.startswith('/clip/')) %}
+      <a class="nav{% if active %} active{% endif %}" href="{{ href }}"{% if active %} aria-current="page"{% endif %}>{{ icon(symbol) }}<span>{{ label }}</span></a>
+      {% endfor %}
+    </nav></div>
+    <div class="sidebar-foot">พื้นที่สำหรับไอเดีย<br>สคริปต์ และผลลัพธ์ของคุณ<div class="side-rule">{{ icon('shield') }} ข้อมูลจากบันทึกของบอท<br>สถิติแยกตามช่อง · Day 7</div></div>
+  </aside>
+  <div class="workspace">
+    <header class="topbar"><div class="crumb"><span class="crumb-brand">shorts-factory</span><span>/</span><span>{% if path.startswith('/clip/') %}รายละเอียดคลิป{% elif path == '/experiment' %}การทดลอง{% elif path == '/now' %}สถานะงาน{% elif path == '/settings' %}ตั้งค่า{% else %}คลังคลิป{% endif %}</span></div><button id="theme" type="button" class="theme-button" title="สลับธีม" aria-label="สลับธีม" hidden>{{ icon('sun') }}</button></header>
+    <main id="main" tabindex="-1">
+      {% block page_header %}{% endblock %}
+      {% if gate %}<details class="notice tone-warning"><summary>{{ icon('shield') }} {{ gate.split('—')[0] }}</summary><p>{{ gate }}</p></details>{% endif %}
+      {% block content %}{% endblock %}
+      <footer class="footer"><span>SHORTS FACTORY · CREATOR STUDIO</span><span>— หมายถึงยังไม่มีข้อมูล · สถิติอ้างอิง Day 7</span></footer>
+    </main>
+  </div>
+</div>
+<nav class="mobile-nav" aria-label="เมนูมือถือ">
+  {% for href, symbol, label in navigation %}{% set active = path == href or (href == '/' and path.startswith('/clip/')) %}
+  <a class="nav{% if active %} active{% endif %}" href="{{ href }}"{% if active %} aria-current="page"{% endif %}>{{ icon(symbol) }}<span>{{ label }}</span></a>
+  {% endfor %}
+</nav>
+<script src="/static/app.js" defer></script>
 </body>
 </html>
