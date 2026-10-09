@@ -816,3 +816,4 @@ User requested commit + push. Delivered AI Deck rename/features/quota fixes and 
 - Tests: +transcript clipped-record, +context last-call/subagent/resume, +codex rollout, +harness chip/indicator/repaint order. Fixed pre-existing resync harness flake (threaded server backlog 64). Full suite 349 passed.
 - Also found: OAuth token revoked on desk since ≥11:41 — user must sign in again.
 - Status: uncommitted, undeployed; awaiting user OK. Deploy only when desk idle.
+- Closed: user said commit+push+deploy. `b29cace` pushed; deployed 62s, all 3 containers up. Verified file SHA match (chat.py, app.js, style.css) and live transcript parse 11/11 + ctx 54k in `ai-deck`. Not checked in a real browser. User must still re-sign-in Claude.

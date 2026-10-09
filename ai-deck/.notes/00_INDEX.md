@@ -1,4 +1,4 @@
-## 2026-10-09 — Chat context chip + "looks frozen" fixes (local; NOT committed / NOT deployed)
+## 2026-10-09 — Chat context chip + "looks frozen" fixes (commit `b29cace` pushed + deployed)
 
 - **Context chip** `#chat-ctx` on chat bar: `ctx 84k/200k · 42%`, warn ≥60%, hot ≥80%. Claude = last main-thread `assistant.usage` (input+cache_read+cache_creation, skip `parent_tool_use_id`); **`result.usage` sums every call in the turn** (probe: 69.7k vs 30.9k real) — old per-turn `ctx` meter was inflated, now uses same number. Window = `result.modelUsage[main model].contextWindow` (cached in `chat.WINDOWS`). Codex: rollout `token_count.last_token_usage.input_tokens` + `model_context_window` (`turn.completed` = thread running total, 19.1M). MiMo: last step input, no window. Resume: `last_context()` reads transcript tail 1 MB (skips `isSidechain`). Carried in `turn`/`reset`/snapshot/`/chat/state` as `context`+`window`.
 - **Pills stuck as running after reload** (user screenshot 11:13 turn, transcript `c052a604…`): two bugs. (1) `transcript()` `readline(64KB)` skipped oversized records = image `tool_result` (81K/500K/838K) → finishes lost → later pills open. Now `_clipped()` recovers `tool_done` from line head (`tool_use_id` precedes content); real session 11 tools/8 done → 11/11. (2) `paintHistory` fed tools through `onChatEvent` → held during resync → all pills drawn after all bubbles (log ended on a tool, not the answer); plus `/chat/state` + resync both painted. Now `applyChatEvent` + `paintGeneration` (bumped in `clearLog`) drops stale reads. Mutation-checked: both old behaviours fail the new harness test.
@@ -6,7 +6,7 @@
 - Harness flake fixed: `chat_resync_harness` fixture used single-thread `TCPServer` backlog 5 → "no _chat" under full run (pre-existing, 6 errors on baseline). Now `BrowserServer` threaded backlog 64.
 - Verify: full suite **349 passed** (twice ≥345 earlier); screenshots light/dark + busy state checked headless.
 - ⚠️ Found on NAS: user's 3 sends 11:41–11:44 all failed `OAuth token revoked` → Claude needs re-login on desk.
-- Pending: user review → commit/push; deploy when desk idle (two `claude --print` chat children were running).
+- Delivered: `b29cace` pushed, `deploy.sh -s ai-deck -y` (62s). Live: chat.py/app.js/style.css SHA match in `ai-deck` + nginx; real session `c052a604…` parses 11 tools/11 done, ctx 54075 in-container. Browser not checked live. Pending on user: re-login Claude (OAuth revoked).
 
 ## 2026-10-06 — Mobile Claude sign-in link (commit `076884f` pushed to main; NOT deployed — user deploys)
 
