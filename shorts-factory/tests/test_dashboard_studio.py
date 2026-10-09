@@ -185,3 +185,100 @@ def test_experiment_does_not_name_a_winner_before_the_channel_gate(client, data_
     assert thai["gate"]
     assert "สรุปไม่ได้" in thai["verdict"]
     assert "🏆" not in reply.text
+
+
+def test_now_keeps_full_parked_payload_in_collapsed_raw_state(client, data_dir):
+    state = {
+        "mode": "idle", "topic": "compact-topic", "clip_id": "parked-clip",
+        "last_snapshot": "2026-10-09", "style": {"prompt": "structured-headline-sentinel"},
+        "parked": {
+            "topic": "Flow topic", "clip_id": "parked-clip",
+            "script": {"title": "parked-script-sentinel", "cards": [
+                {"narration": "full-narration-sentinel", "spoken": "เสียง"},
+            ]},
+            "style": "full-prompt-sentinel",
+            "footage": {"0": {"url": "https://example.com/footage-sentinel"}},
+        },
+        "auto_pick": {"deadline": "2026-10-09T11:00:00", "suggested": [
+            {"topic": "suggestion-payload-sentinel"},
+        ]},
+        "future_key": {"nested": "unknown-nested-sentinel"},
+    }
+    (data_dir / "state.json").write_text(json.dumps(state), encoding="utf-8")
+    reply = client.get("/now")
+    main_cards, raw_disclosure = reply.text.split('<details class="card disclosure raw-state"', 1)
+    assert not raw_disclosure.startswith(" open")
+    for marker in ("parked-script-sentinel", "full-narration-sentinel", "full-prompt-sentinel",
+                   "footage-sentinel", "suggestion-payload-sentinel", "unknown-nested-sentinel",
+                   "structured-headline-sentinel"):
+        assert marker not in main_cards
+        assert marker in raw_disclosure
+    facts = dict(reply.context["headline"])
+    assert facts["topic"] == "compact-topic"
+    assert facts["last_snapshot"] == "2026-10-09"
+    assert "parked" not in facts and "auto_pick" not in facts and "style" not in facts
+    assert any(wait["topic"] == "Flow topic" for wait in reply.context["waits"])
+    assert reply.context["state"] == state
+
+
+@pytest.mark.parametrize("variant", ["shock_number", "question", "explore"])
+@pytest.mark.parametrize("views", [None, 0])
+def test_experiment_views_distinguish_unmeasured_and_zero(client, data_dir, variant, views):
+    from app import dashboard, experiment
+    record = {
+        "id": "20261009-coverage", "created_at": "2026-10-09", "locale": "en",
+        "variant": None if variant == "explore" else variant,
+        "explore": variant == "explore", "outcome": "rendered",
+        "scripts": [{"script": {"title": "coverage", "category": "coverage-category"}}],
+        "snapshots": [] if views is None else [{"age_days": 7, "views": views, "percent": 0}],
+    }
+    (data_dir / "clips" / f"{record['id']}.json").write_text(json.dumps(record), encoding="utf-8")
+    reply = client.get("/experiment")
+    section = next(section for section in reply.context["sections"] if section["locale"] == "en")
+    arm = section["arms"][variant]
+    category = section["categories"]["coverage-category"]
+    for bucket in (arm, category):
+        assert bucket["display_views"] == views
+        assert bucket["measured"] == (0 if views is None else 1)
+        assert bucket["views"] == 0 and bucket["clips"] == 1
+    canonical = experiment.tally([record])[variant]
+    assert {key: arm[key] for key in canonical} == canonical
+    body = reply.text.split(f'aria-label="การทดลองช่อง{section["label"]}"', 1)[1]
+    expected = dashboard.view.format_number(views)
+    if variant == "explore":
+        assert f"{expected} views" in body
+    else:
+        assert f"{expected} / {dashboard.view.format_number(experiment.MIN_VIEWS)}" in body
+    assert f'<td class="num">{expected}<br>' in body
+    assert f'{0 if views is None else 1} / 1 คลิปมีสถิติยอดรับชม Day 7' in body
+
+
+def test_experiment_coverage_uses_canonical_membership_and_partial_counts(client, data_dir):
+    from app import experiment
+    records = [
+        {"variant": "question", "outcome": "rendered", "scripts": [{"script": {
+            "category": "latest-category",
+        }}], "trend": {"category": "superseded-category"},
+         "snapshots": [{"age_days": 7, "views": 11, "percent": 20}]},
+        {"variant": "question", "outcome": "discarded",
+         "trend": {"category": "latest-category"}, "snapshots": []},
+        {"variant": "question", "outcome": "generate_failed",
+         "trend": {"category": "latest-category"},
+         "snapshots": [{"age_days": 7, "views": 999, "percent": 90}]},
+    ]
+    for index, record in enumerate(records):
+        record.update(id=f"20261009-partial-{index}", created_at="2026-10-09", locale="en")
+        (data_dir / "clips" / f"{record['id']}.json").write_text(json.dumps(record), encoding="utf-8")
+    reply = client.get("/experiment")
+    section = next(section for section in reply.context["sections"] if section["locale"] == "en")
+    arm = section["arms"]["question"]
+    category = section["categories"]["latest-category"]
+    for bucket in (arm, category):
+        assert bucket["measured"] == 1 and bucket["clips"] == 2
+        assert bucket["display_views"] == bucket["views"] == 11
+    assert "superseded-category" not in section["categories"]
+    original_arm = experiment.tally(records)["question"]
+    original_category = experiment.by_category(records)["latest-category"]
+    assert {key: arm[key] for key in original_arm} == original_arm
+    assert {key: category[key] for key in original_category} == original_category
+    assert '1 / 2 คลิปมีสถิติยอดรับชม Day 7' in reply.text

@@ -2094,3 +2094,19 @@ install` จะสำเร็จ. ต้องสร้าง venv ใต้ re
   ไม่ใช่ NAS; temporary data/config/scripts/screenshots เก็บ `.superpowers/sdd/` (ignored).
   ยังไม่มี real MP4 preview/thumbnail/heartbeat; เสนอเป็นงานถัดไป.
 - อัปเดต index/log ใน stack เท่านั้น. No bot/credentials/compose/media route/dependency edits.
+
+### Creator Studio — final review fixes
+
+- Reviewer พบ Important/P2 สองจุด ไม่มี Critical: parked headline ขยาย full script/prompt,
+  และ experiment arm/explore/category แสดง0เมื่อไม่มี Day7 views.
+- แก้ presentation เท่านั้น: headline เหลือ scalar facts, full state/nested payload อยู่ใน
+  collapsed raw disclosure; measured subset ใช้ tally/by_category เดิม เพิ่ม display_views
+  และ measured coverage. Original counters/eligibility/threshold/verdict inputs ไม่เปลี่ยน.
+- เพิ่ม regressions: red7failก่อนแก้ → targeted7pass; ขยาย partial-coverage/eligibility/category
+  precedence test. Final dashboard/studio/pronunciation **64 passed in2.24s**; shared-sync5pass
+  เดิมยังเกี่ยวข้อง → รวม69. Targeted Ruff/node/7Jinja/diff checks ผ่าน.
+- Browser fixtureมี parked12Cards + long prompt/footage จริง: raw markerไม่อยู่ visible main,
+  ยังอยู่ full disclosure และเปิดแล้วเห็น; /now และ /experiment ที่320/390/768/1440px
+  ไม่มี horizontal overflow. ดู unavailable arm/explore กับ partial-category coverage แล้ว.
+- ซอร์ส/README/notes fix รวมใน commit รอบนี้ หลัง feature `d85a546`.
+  Focused re-review ยัง pending; ไม่ merge/push/deploy.

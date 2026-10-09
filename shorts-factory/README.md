@@ -789,6 +789,12 @@ and average viewing percentage is not labelled completion rate. Script title
 covers are decoration, not extracted video thumbnails. The library remains
 readable without JavaScript, with both channels shown.
 
+Experiment arms and categories show how many eligible clips have Day 7 view
+measurements. An unmeasured group stays unavailable; a measured zero stays
+zero, while the bot's original counters and verdict rules remain unchanged.
+Recorded waits use compact summaries; nested scripts and prompts stay in the
+raw-state disclosure.
+
 `/clip` draws views over age as an **inline SVG built in the
 template**: `app/retention.py` renders its PNGs with Pillow, and keeping Pillow
 out of the LAN-facing process is a property `docs/adr/0007` asserts, guarded by

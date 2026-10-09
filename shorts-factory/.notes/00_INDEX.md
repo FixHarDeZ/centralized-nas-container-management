@@ -1,6 +1,6 @@
 # shorts-factory — Index
 
-**2026-10-09 — Creator Studio 01 ทำโค้ดแล้ว; รอ final review/release.**
+**2026-10-09 — Creator Studio 01 ทำโค้ดแล้ว; รอ focused re-review/release.**
 ผู้ใช้อนุมัติแบบและ scope ด้วย “จัด 01 ได้เลย”. ทำงานใน managed worktree
 `shorts-creator-studio`, branch `codex/shorts-factory-creator-studio`, แยกจากงาน Hermes.
 Design/plan: `docs/superpowers/{specs,plans}/2026-10-09-shorts-factory-modern-dashboard*.md`;
@@ -11,12 +11,13 @@ search/status/channel filters, title covers, KPI/Gate/schedule แยก TH/EN. 
 เลิกนับรวมสองช่อง; missing Day 7 ไม่แทนด้วย 0; percent ใช้ average viewing percentage.
 Clip workspace มี latest script, previous drafts, copy feedback, pronunciation checklist
 จากข้อความ, sources, render/snapshots และ SVG เดิม. Experiments ใช้ verdict เดิมหลัง
-channel Gate, ไม่แสดงผู้ชนะก่อน Gate. State ย้ำ recorded data ไม่ใช่ heartbeat,
-งานรอและ unknown fields ยังดูได้. Settings เก็บ invalid edits และ escaped invalid model,
+channel Gate, ไม่แสดงผู้ชนะก่อน Gate; arm/explore/category ที่ไม่มี Day 7 views แสดง —
+พร้อม measured coverage โดยใช้ grouping/counters เดิม. State ย้ำ recorded data ไม่ใช่ heartbeat,
+งานรอสรุปสั้น; structured parked/auto_pick อยู่ใน raw disclosure, unknown fields ยังดูได้. Settings เก็บ invalid edits และ escaped invalid model,
 validate ทั้งสอง payload ก่อนเขียนไฟล์. `app/dashboard_view.py` รวม presentation helpers.
 
-Verification ล่าสุด: dashboard/studio/pronunciation **56 pass**, shared-sync **5 pass**.
-Frontend task review ผ่านหลังแก้ touch targets 44px; final whole-branch review ยัง pending.
+Verification ล่าสุด: dashboard/studio/pronunciation **64 pass**, shared-sync **5 pass**.
+Frontend task review ผ่านหลังแก้ touch targets 44px; final whole-branch review พบ P2 สองจุด แก้แล้ว รอ focused re-review.
 Browser จริงผ่าน search+status/reset/no-results, TH/EN KPI scope, copy success/disclosures,
 form rejection (สองไฟล์ไม่เปลี่ยน)/success, empty/404, light/dark, no-JS ผ่าน CSP wrapper.
 ทั้ง 5 หน้าใน 1440/768/390/320px ไม่มี horizontal overflow; keyboard skip/focus ผ่าน.

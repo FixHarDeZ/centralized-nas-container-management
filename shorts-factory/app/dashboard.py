@@ -191,6 +191,12 @@ def clip(request: Request, clip_id: str):
     })
 
 
+def _view_coverage(measured: dict | None) -> dict:
+    """Display availability from the canonical grouping of measured records."""
+    count = measured["clips"] if measured else 0
+    return {"measured": count, "display_views": measured["views"] if count else None}
+
+
 @app.get("/experiment", response_class=HTMLResponse)
 def experiments(request: Request):
     """One section per Locale: two audiences never share a set of counters.
@@ -206,17 +212,25 @@ def experiments(request: Request):
         if locale != locales.DEFAULT and not mine:
             continue
         counts = experiment.tally(mine)
+        # Reuse the Experiment's eligibility and grouping rules for coverage;
+        # its raw counters and verdict inputs remain the complete record set.
+        measured = [record for record in mine
+                    if (manifest.day7(record) or {}).get("views") is not None]
+        measured_arms = experiment.tally(measured)
+        measured_categories = experiment.by_category(measured)
         gate = analytics.gate_note(locale)
         sections.append({
             "locale": locale,
             "label": locales.get(locale)["label"],
             "arms": {
-                name: dict(data, median=median(data["percents"]) if data["percents"] else None)
+                name: dict(data, median=median(data["percents"]) if data["percents"] else None,
+                           **_view_coverage(measured_arms[name]))
                 for name, data in counts.items()
             },
             "clauses": experiment.VARIANTS_BY_LOCALE.get(locale, experiment.VARIANTS),
             "verdict": "ยังสรุปไม่ได้ — รอให้ช่องผ่านเกณฑ์ข้อมูลก่อน" if gate else experiment.verdict(counts),
-            "categories": experiment.by_category(mine),
+            "categories": {name: dict(data, **_view_coverage(measured_categories.get(name)))
+                           for name, data in experiment.by_category(mine).items()},
             "gate": gate,
         })
     return TEMPLATES.TemplateResponse(request, "experiment.html", {
@@ -251,10 +265,9 @@ def _state() -> dict:
         return {}
 
 
-# Keys worth a card of their own. The rest still appear below verbatim: the
-# bot grows new keys often (`parked`, `last_auto_trends`), and a dashboard that
-# only rendered the ones named here would hide every one of them.
-HEADLINE = ("mode", "topic", "clip_id", "style", "parked", "auto_pick", "last_snapshot")
+# Compact scalar facts only. Structured waits have their own summaries;
+# all nested payloads and unknown keys remain in the raw-state disclosure.
+HEADLINE = ("mode", "topic", "clip_id", "style", "last_snapshot")
 
 
 @app.get("/now", response_class=HTMLResponse)
@@ -266,7 +279,8 @@ def now(request: Request):
         # `script` is the whole Script being reviewed and `suggested` a topic
         # list; both are pages of JSON that belong on /clip, not here.
         "summary": summary,
-        "headline": [(k, summary[k]) for k in HEADLINE if k in summary],
+        "headline": [(k, summary[k]) for k in HEADLINE if k in summary
+                     and (summary[k] is None or type(summary[k]) in (str, int, float, bool))],
         "rest": {k: v for k, v in summary.items() if k not in HEADLINE},
         "say": _say(),
         "uploads": list(reversed(history.load()))[:20],
