@@ -9,6 +9,7 @@ const state = {
   filter: "all",
   showSticky: true,
   historyDate: "",
+  historyFilter: "all",
   settings: {},
   search: "",
   searchHistory: "",
@@ -254,13 +255,16 @@ async function loadHistory(date) {
     if (q.length >= 2) {
       // Global search across all dates
       const data = await api("GET", `/search?source_id=${sid}&q=${encodeURIComponent(q)}`).catch(() => ({ torrents: [] }));
-      const results = data.torrents || [];
+      const all = data.torrents || [];
+      _updateHistoryFilterCounts(all);
+      const results = state.historyFilter === "keyword" ? all.filter(t => t.keyword_match) : all;
       if (!results.length) {
         document.getElementById("list-history").innerHTML = `<div class="tw-empty"><i class="bi bi-search"></i>ไม่พบ "${escHtml(q)}"</div>`;
       } else {
         renderTorrentList("list-history", results, true);
       }
     } else {
+      _updateHistoryFilterCounts([]);
       document.getElementById("list-history").innerHTML = `<div class="tw-empty"><i class="bi bi-search"></i>เลือกวันที่ หรือพิมพ์ชื่อเพื่อค้นหาทั้งหมด</div>`;
     }
     return;
@@ -272,8 +276,35 @@ async function loadHistory(date) {
     const ql = q.toLowerCase();
     rows = rows.filter(t => t.title.toLowerCase().includes(ql));
   }
+  // Counts reflect the search, so the KW badge says how many hits the filter would leave
+  _updateHistoryFilterCounts(rows);
+  if (state.historyFilter === "keyword") {
+    rows = rows.filter(t => t.keyword_match);
+    if (!rows.length) {
+      document.getElementById("list-history").innerHTML = `<div class="tw-empty"><i class="bi bi-star"></i>ไม่มีรายการที่ตรง keyword ในวันที่ ${escHtml(date)}</div>`;
+      return;
+    }
+  }
   renderTorrentList("list-history", rows, true);
 }
+
+function _updateHistoryFilterCounts(rows) {
+  const badge = n => n > 0 ? ` <span class="tw-count">${n}</span>` : "";
+  const kw = rows.filter(t => t.keyword_match).length;
+  const btnAll = document.querySelector('#panel-history .tw-filter-btn[data-hfilter="all"]');
+  const btnKw  = document.querySelector('#panel-history .tw-filter-btn[data-hfilter="keyword"]');
+  if (btnAll) btnAll.innerHTML = `ทั้งหมด${badge(rows.length)}`;
+  if (btnKw)  btnKw.innerHTML  = `<i class="bi bi-star-fill"></i> KW${badge(kw)}`;
+}
+
+document.querySelectorAll("#panel-history .tw-filter-btn[data-hfilter]").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll("#panel-history .tw-filter-btn[data-hfilter]").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    state.historyFilter = btn.dataset.hfilter;
+    loadHistory(state.historyDate || null);
+  });
+});
 
 document.getElementById("history-date-select").addEventListener("change", e => {
   state.historyDate = e.target.value;

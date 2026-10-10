@@ -518,7 +518,8 @@ html, body {
   font-family: var(--font-body);
   cursor: pointer;
   flex: 1;
-  min-width: 0;
+  /* full date stays readable; the toolbar wraps the button groups instead */
+  min-width: 128px;
   font-weight: 600;
 }
 .tw-date-select:focus { outline: none; border-color: var(--accent); }

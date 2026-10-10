@@ -257,7 +257,7 @@ Bug fix 2026-05-20: viewno18sbx.php ใช้ text "Auto Sticky:" แทน imag
 |---|---|---|
 | `/api/sources` | GET/POST/DELETE/PATCH | Source CRUD + enable/disable/rename |
 | `/api/torrents` | GET | Today's torrents (source_id, sort, filter) |
-| `/api/history` | GET | Past day torrents (read-only) |
+| `/api/history` | GET | Past day torrents (read-only) — `keyword_match` คิดจาก keyword **ปัจจุบัน** ของ source (ไม่มีประวัติว่าวันนั้นมี keyword อะไร); ปุ่ม KW ในแท็บประวัติกรองฝั่ง client |
 | `/api/history/dates` | GET | Available dates for source |
 | `/api/search` | GET | Global text search across all dates (q, source_id, limit) |
 | `/api/keywords` | GET/POST/DELETE | Per-source keyword CRUD |
@@ -293,6 +293,7 @@ state = {
   filter: "all" | "keyword",
   showSticky: true,
   historyDate: "",
+  historyFilter: "all" | "keyword", // History tab KW filter — client-side, separate from Today's `filter`
   settings: {},
   search: "",         // text search on title (Today tab)
   searchHistory: "",  // text search in History — if no date selected, triggers global search

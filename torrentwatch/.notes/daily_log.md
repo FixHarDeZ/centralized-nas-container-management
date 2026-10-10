@@ -1012,3 +1012,13 @@ Verify บน NAS: `_record` ทดสอบทั้งเส้นสำเร
 อาการ: หลวงพ่อโชติ ตัวเต็ม / น้อง Una รับบท… seed นานแล้วแต่ไม่มีปุ่มลบ. สาเหตุ: หลัง auto-fix แถวหายจาก myhr ตอน snapshot ยังขาด 12.0/10.5 ชม. → `was_cleared` False → forget → `hr_fixes` ค้าง `fixed` ถาวร. DS จริง: โชติ 360 ชม., Una 321 ชม., CAWD-016 321, กระเทยเยส 322, DASD-742 154 (MIAA-269 10 ชม. ยังไม่ครบ). 
 แก้ `hr_fix.py`: DS `seedelapsed` เป็นหลักฐานสำรองใน `check_vanished` (สั้นยังเก็บ snapshot), `_sweep_orphans()` กวาดแถวค้างที่ DS ≥48 ชม. (ไม่มี task = เงียบ), refactor ท่อนปิดเป็น `_close_cleared()`. self-check เพิ่ม 2 บล็อก ผ่าน (`uv run --python 3.12 --with-requirements requirements.txt python hr_fix.py`). 
 Deploy `-s torrentwatch -y` แล้ว force `check_hr` → 5 แถวเป็น `del_asked` ส่งปุ่ม Telegram แล้ว. Commit+push `6c4a608` (main). งานค้าง: รอ user กดปุ่มลบใน Telegram 5 เรื่อง; MIAA-269 (2461145) จะถูกถามเองเมื่อ DS seed ≥48 ชม.
+
+### 2026-10-10 — แท็บประวัติ: ปุ่มกรอง KW ตามวันที่เลือก
+- ขอ: ย้อนดูวันเก่าแล้วอยากเห็นเฉพาะเรื่องที่ตรง keyword
+- `index.html`: เพิ่ม `.tw-filter-group` ใน toolbar ประวัติ ปุ่ม `ทั้งหมด`/`KW` ใช้ `data-hfilter` (ไม่ใช่ `data-filter`) + selector จำกัด `#panel-history` — handler ของ Today ผูก `.tw-filter-btn[data-filter]` ทั้งหน้า ถ้าใช้ attr เดียวกันกดแล้วไปเปลี่ยน `state.filter` ของ Today
+- `app.js`: `state.historyFilter`, กรอง `keyword_match` ฝั่ง client หลัง text search (badge นับหลัง search = จำนวนที่จะเหลือจริง), ใช้กับ global search (ไม่เลือกวัน) ด้วย, วันที่ไม่มีเรื่องตรง = empty state "ไม่มีรายการที่ตรง keyword ในวันที่ …". backend ไม่แตะ — `/api/history` ส่ง `keyword_match` มาอยู่แล้ว
+- **ข้อจำกัด**: match ด้วย keyword **ปัจจุบัน** ไม่ใช่ keyword ที่มีอยู่ในวันนั้น (ไม่ได้เก็บประวัติ keyword)
+- `style.css`: `.tw-date-select` เดิม `flex:1; min-width:0` พอมี 3 กลุ่มใน toolbar select โดนบีบเหลือ 89px ("2026-1…") ที่ shell 540 → `min-width:128px` ให้ปุ่มตัดบรรทัดแทน (วัด 390/360 แล้ว wrap ถูก)
+- bump `?v=20261010a` ทั้ง app.js/style.css (StaticFiles ไม่ส่ง Cache-Control มือถือแคชเอง)
+- Verify: `node --check` ผ่าน; deploy `-s torrentwatch -y` 2 รอบ, grep ในคอนเทนเนอร์เจอ `data-hfilter`/`historyFilter`/`min-width: 128px`. นับ `keyword_match` จาก DB จริงในคอนเทนเนอร์ (Lounge 10-08 = 7/244, 10-05 = 0/177) แล้วเสิร์ฟ static ใหม่ + ข้อมูลชุดนั้นผ่าน mock server บน localhost (dashboard จริงติด basic auth) ขับ Chrome: badge KW 7 / list 7 ใบทุกใบ `keyword-match`, 10-05 ขึ้น empty state, `state.filter` ของ Today ไม่ขยับ
+- สถานะ: deployed, **ยังไม่ commit**
