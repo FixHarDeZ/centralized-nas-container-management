@@ -1,6 +1,6 @@
 # TorrentWatch — Project Index (Memory Blueprint)
 
-> อัปเดตล่าสุด: 2026-06-24 (notify transport → shared Notifier)
+> อัปเดตล่าสุด: 2026-10-10 (แท็บประวัติ: ปุ่มกรอง KW) — ก่อนหน้า 2026-06-24 (notify transport → shared Notifier)
 > ใช้ไฟล์นี้เป็น cold-start memory ก่อนเริ่มงานทุกครั้ง
 
 > **2026-06-24 — Notifier:** `line_notify._push` / `telegram_notify._send` สลับ body เป็น
@@ -327,6 +327,7 @@ Bearbit block request ที่ Referer ไม่ใช่ bearbit URL:
 | ✅ File size badge — **ADDED** | badge สีตามขนาด gray/amber/red ใน torrent cards (2026-05-18) | app.js, style.css |
 | ✅ Cover image proxy — **FIXED** | `GET /api/cover/{id}` proxy ผ่าน authenticated session; onerror fallback ใน img tag | scraper.py, main.py, app.js |
 | ✅ History search — **ADDED** | search box ใน History tab; ถ้าไม่เลือกวัน + พิมพ์ query → global search ข้าม all dates | app.js, index.html |
+| ✅ History KW filter — **ADDED** | ปุ่ม `ทั้งหมด`/`KW` (`data-hfilter`, `state.historyFilter`) ใน History toolbar กรอง `keyword_match` ฝั่ง client หลัง text search ทั้งโหมดเลือกวันและ global search (2026-10-10) — ใช้ keyword **ปัจจุบัน** ไม่ใช่ของวันนั้น | app.js, index.html, style.css |
 | ✅ Global search — **ADDED** | `GET /api/search?q=TEXT&source_id=ID` LIKE search ข้าม all dates | db.py, main.py |
 | ✅ Watched/Skip — **ADDED** | `watched_status` column ใน DB; eye/x-circle buttons บน cards; badge + card dimming | db.py, main.py, app.js, style.css |
 | ✅ Configurable schedule — **ADDED** | `scrape_interval_night`/`scrape_interval_day` settings (15/20/30/60 min); selects ใน UI | db.py, scheduler.py, main.py, index.html, app.js |
@@ -337,6 +338,13 @@ Bearbit block request ที่ Referer ไม่ใช่ bearbit URL:
 ---
 
 ## Recent Changes
+
+### 2026-10-10 (History KW filter) — `3b11d64`
+
+1. **`static/index.html`** — `.tw-filter-group` ใน History toolbar ใช้ `data-hfilter` (ห้ามใช้ `data-filter` — handler ของ Today ผูกทั้งหน้า)
+2. **`static/app.js`** — `state.historyFilter` + `_updateHistoryFilterCounts()` (badge นับหลัง search), empty state ต่อวัน
+3. **`static/style.css`** — `.tw-date-select` `min-width:128px` (เดิม 0 โดนบีบเป็น "2026-1…" เมื่อ toolbar มี 3 กลุ่ม)
+4. asset `?v=20261010a`
 
 ### 2026-07-06 (Uploader on card)
 

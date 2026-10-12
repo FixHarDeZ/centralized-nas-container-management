@@ -1021,4 +1021,5 @@ Deploy `-s torrentwatch -y` แล้ว force `check_hr` → 5 แถวเป�
 - `style.css`: `.tw-date-select` เดิม `flex:1; min-width:0` พอมี 3 กลุ่มใน toolbar select โดนบีบเหลือ 89px ("2026-1…") ที่ shell 540 → `min-width:128px` ให้ปุ่มตัดบรรทัดแทน (วัด 390/360 แล้ว wrap ถูก)
 - bump `?v=20261010a` ทั้ง app.js/style.css (StaticFiles ไม่ส่ง Cache-Control มือถือแคชเอง)
 - Verify: `node --check` ผ่าน; deploy `-s torrentwatch -y` 2 รอบ, grep ในคอนเทนเนอร์เจอ `data-hfilter`/`historyFilter`/`min-width: 128px`. นับ `keyword_match` จาก DB จริงในคอนเทนเนอร์ (Lounge 10-08 = 7/244, 10-05 = 0/177) แล้วเสิร์ฟ static ใหม่ + ข้อมูลชุดนั้นผ่าน mock server บน localhost (dashboard จริงติด basic auth) ขับ Chrome: badge KW 7 / list 7 ใบทุกใบ `keyword-match`, 10-05 ขึ้น empty state, `state.filter` ของ Today ไม่ขยับ
-- สถานะ: deployed, **ยังไม่ commit**
+- สถานะ: deployed, commit+push `3b11d64` (main)
+- ปิดงาน 2026-10-10: งานค้าง = ไม่มี (ยังไม่ได้เปิด dashboard จริงหลัง basic auth ด้วยตา — verify ผ่าน mock + grep ในคอนเทนเนอร์). หากต้องการ match ตาม keyword ของวันนั้นจริง ต้องเริ่มเก็บประวัติ keyword ก่อน (ยังไม่ทำ). อัปเดต notes ชุดนี้ยังไม่ commit
