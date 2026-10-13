@@ -54,6 +54,10 @@ def _files_by_title() -> dict[str, Path]:
     # rglob, not glob: an English Clip lands in /output/en, and a Manifest
     # that is not rebuilt for it is a Clip with no numbers at all.
     for path in OUTPUT_DIR.rglob("*.txt"):
+        # Product Clips are not Shorts (docs/adr/0015): a caption whose first
+        # line matched a published title would come back as a Thai Clip.
+        if "shop" in path.relative_to(OUTPUT_DIR).parts[:1]:
+            continue
         try:
             first = path.read_text(encoding="utf-8").splitlines()[0].strip()
         except (OSError, IndexError):

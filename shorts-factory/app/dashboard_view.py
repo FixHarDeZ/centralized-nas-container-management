@@ -21,6 +21,7 @@ MODES = {
     "writing": ("กำลังเขียนสคริปต์", "info"),
     "review": ("รอรีวิวสคริปต์", "warning"),
     "rendering": ("กำลังเรนเดอร์", "info"),
+    "shop": ("ทำคลิปสินค้า (/shop)", "warning"),
 }
 ARM_LABELS = {"shock_number": "เปิดด้วยตัวเลข", "question": "เปิดด้วยคำถาม", "explore": "สำรวจหัวข้อใหม่"}
 

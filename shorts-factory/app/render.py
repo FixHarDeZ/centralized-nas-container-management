@@ -250,7 +250,8 @@ async def _with_retry(attempt, what: str):
 
 
 async def narrate(cards: list[dict], path: Path,
-                  locale: str = locales.DEFAULT) -> tuple[Path, list[float]] | None:
+                  locale: str = locales.DEFAULT,
+                  voice: str | None = None) -> tuple[Path, list[float]] | None:
     """Speak the whole Script in one breath and report where each Card starts.
 
     One synthesis call keeps the prosody continuous — speaking Card by Card
@@ -271,7 +272,7 @@ async def narrate(cards: list[dict], path: Path,
         # cannot be prepended to the next one.
         communicate = edge_tts.Communicate(
             CARD_SEPARATOR.join(narrations),
-            locales.voice(locale),
+            voice or locales.voice(locale),
             rate=os.environ.get("TTS_RATE", "+0%"),
             pitch=os.environ.get("TTS_PITCH", "+0Hz"),
         )
@@ -311,16 +312,19 @@ async def narrate(cards: list[dict], path: Path,
     return path, starts
 
 
-async def speak(text: str, path: Path, locale: str = locales.DEFAULT) -> Path:
+async def speak(text: str, path: Path, locale: str = locales.DEFAULT,
+                voice: str | None = None) -> Path:
     """Synthesise one Card's narration.
 
     Rate and pitch are configurable because edge-tts defaults read slow and
-    flat; they are the only prosody knobs the endpoint exposes.
+    flat; they are the only prosody knobs the endpoint exposes. `voice`
+    overrides the Locale's: Product Clips speak Thai in a different voice
+    (docs/adr/0015).
     """
     async def once() -> None:
         await edge_tts.Communicate(
             text,
-            locales.voice(locale),
+            voice or locales.voice(locale),
             rate=os.environ.get("TTS_RATE", "+0%"),
             pitch=os.environ.get("TTS_PITCH", "+0Hz"),
         ).save(str(path))
@@ -555,20 +559,21 @@ def tighten(audio: Path, starts: list[float], workdir: Path) -> tuple[Path, list
 
 
 async def _narration_track(cards: list[dict], workdir: Path,
-                           locale: str = locales.DEFAULT) -> tuple[Path, list[float]]:
+                           locale: str = locales.DEFAULT,
+                           voice: str | None = None) -> tuple[Path, list[float]]:
     """One audio track for the whole Script, plus the start time of each Card.
 
     Preferred: a single synthesis call, so the delivery never resets mid-clip.
     Fallback: speak each Card on its own and join them, which is choppier but
     always works.
     """
-    single = await narrate(cards, workdir / "narration.mp3", locale)
+    single = await narrate(cards, workdir / "narration.mp3", locale, voice)
     if single:
         return tighten(*single, workdir)
 
     logger.info("ใช้วิธีพูดทีละ card แทน (ขอบเขตประโยคไม่น่าเชื่อถือ)")
     parts = await asyncio.gather(
-        *(speak(_tts_text(c, locale), workdir / f"card{i:02d}.mp3", locale)
+        *(speak(_tts_text(c, locale), workdir / f"card{i:02d}.mp3", locale, voice)
           for i, c in enumerate(cards))
     )
     starts, clock = [], 0.0

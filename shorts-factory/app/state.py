@@ -27,6 +27,11 @@ logger = logging.getLogger(__name__)
 # Work that outlives one poll tick. Writing a Script takes 1-7 minutes and
 # rendering takes longer; awaiting either inline froze the whole bot.
 BUSY_MODES = {"writing", "rendering"}
+# A Product Brief open (docs/adr/0015). Not busy — it survives a restart and
+# waits on the human — but it holds the bot all the same: a Topic, a trends
+# round or a Parked Clip started now would run alongside it on one phone.
+SHOP_MODE = "shop"
+HOLDING_MODES = BUSY_MODES | {SHOP_MODE}
 
 #: What an idle bot holds: nothing about a Clip. Every return to idle applies
 #: all of these — a field left behind is the next Clip's bug.
@@ -50,6 +55,8 @@ CLIP_WAIT_LIFETIME = timedelta(hours=int(os.environ.get("STORYBOARD_CLIP_HOURS",
 # work elsewhere (generating footage, cutting a board together), this one is
 # waiting on a tap. A Script nobody has answered in this long is abandoned.
 REVIEW_LIFETIME = timedelta(hours=int(os.environ.get("REVIEW_LIFETIME_HOURS", "6")))
+# A Product Brief nobody finished is dropped on the same clock as a review.
+SHOP_LIFETIME = REVIEW_LIFETIME
 
 
 def data_dir() -> Path:
@@ -78,7 +85,10 @@ def save(state: dict) -> None:
 
 def to_idle(state: dict) -> None:
     """The only way back to idle. Does not touch `parked`, `pair`, `uploads`
-    or the auto-run bookkeeping: those outlive a Clip on purpose."""
+    or the auto-run bookkeeping: those outlive a Clip on purpose. An open
+    Product Brief does not: an idle bot holding one is a Brief nothing will
+    ever finish or expire."""
+    state.pop("shop", None)
     state.update(mode="idle", **IDLE_FIELDS)
 
 
@@ -97,8 +107,63 @@ def to_review(state: dict, **fields) -> None:
 
 def busy_note(mode: str) -> str:
     """What to tell a human who sent work while the bot is mid-job."""
+    if mode == SHOP_MODE:
+        return "🛍 มีคลิปสินค้าเปิดอยู่ ทำให้เสร็จหรือกด 🗑 ทิ้งก่อนนะ"
     job = "เขียนสคริปต์" if mode == "writing" else "render"
     return f"⏳ กำลัง{job}อยู่ รอให้เสร็จก่อนนะ"
+
+
+# --- Product Briefs (docs/adr/0015) -------------------------------------------
+# `state["shop"]` is the Brief; `phase` is collect → writing → review →
+# rendering, and the bot's `mode` is SHOP_MODE for the whole of it.
+
+def _now() -> str:
+    return datetime.now().isoformat(timespec="seconds")
+
+
+def open_shop(state: dict, shop_id: str) -> dict:
+    """Start a Brief. Callers check the bot is idle first."""
+    state.pop("auto_pick", None)
+    brief = {"id": shop_id, "phase": "collect", "photos": [], "text": "",
+             "pitch": None, "message_id": None, "touched_at": _now()}
+    state.update(mode=SHOP_MODE, shop=brief)
+    return brief
+
+
+def shop_phase(state: dict, phase: str, **fields) -> None:
+    """Move the open Brief on, and restart its clock."""
+    state["shop"].update(phase=phase, touched_at=_now(), **fields)
+
+
+def close_shop(state: dict) -> dict | None:
+    """End the Brief, however it ended. Returns what it was."""
+    brief = state.get("shop")
+    to_idle(state)
+    return brief
+
+
+def shop_expired(state: dict, now: datetime | None = None) -> bool:
+    """Whether a Brief waiting on the human has waited long enough. Never
+    while the bot itself is working on it."""
+    brief = state.get("shop") or {}
+    if state.get("mode") != SHOP_MODE or brief.get("phase") not in {"collect", "review"}:
+        return False
+    return _aged_out(brief, SHOP_LIFETIME, now, key="touched_at")
+
+
+def recover_shop(state: dict) -> bool:
+    """At startup: a Brief caught mid-job goes back to waiting on the human,
+    and a shop mode with no Brief behind it goes back to idle."""
+    if state.get("mode") != SHOP_MODE:
+        return False
+    brief = state.get("shop")
+    if not brief:
+        to_idle(state)
+        return True
+    if brief.get("phase") in {"writing", "rendering"}:
+        shop_phase(state, "review" if brief.get("pitch") else "collect", message_id=None)
+        return True
+    return False
 
 
 # --- the unattended run -------------------------------------------------------

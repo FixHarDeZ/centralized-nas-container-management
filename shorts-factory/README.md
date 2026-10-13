@@ -112,7 +112,8 @@ with the drop-offs named by card), `/trends` (what Thailand is searching for
 and watching, turned into topics), `/storyboard` (a long-form storyboard from a
 one-line brief), `/say` (fix how a word is pronounced), `/redo` (render the
 last script again, unchanged), `/en <topic>` (write and render the same clip
-in English — see [Locales](#locales)). Anything that is not a command is a
+in English — see [Locales](#locales)), `/shop` (a Product Clip — see
+[Product Clips](#product-clips-shop)). Anything that is not a command is a
 Topic — except text starting with `/`, which is answered as an unknown command
 rather than written about, because a typo used to cost minutes of model time
 and left a manifest named after it.
@@ -129,6 +130,42 @@ The same guard matches the same trap phrased in English — "beat", "final
 score", "who won", "last night" and the like — in one regex rather than one per
 Locale. `!` in front of the topic overrides it, for when the human knows
 better.
+
+## Product Clips (`/shop`)
+
+A second kind of clip, for Shopee Affiliate (docs/adr/0015): the account has
+no Open API access, so the human brings the product and the bot makes the clip.
+`/shop`, then send 1-6 photos saved from the Shopee app and the listing text —
+affiliate link, name, price, anything copied from the page — and tap ✅. mimo
+writes a **Pitch** (3-6 beats + an end card), reviewed like a Script: type to
+rewrite, 🎬 to render, 🗑 to drop. The Clip comes back with a caption ready to
+paste (link, `#ad` disclosure, hashtags). There is no upload button; posting
+to Shopee Video / Facebook / YouTube is done by hand.
+
+- **The photo is the picture.** No Pexels, no scrim: a blurred copy fills the
+  frame, the photo sits on top and moves slowly, the badge and subtitle above
+  and below it stay still. The bottom quarter is empty because every vertical
+  feed lays its own caption and buttons there.
+- **Subtitles are burned in** — Shopee Video and Facebook take no `.srt`, and
+  shopping feeds are watched muted. The model splits each beat's narration
+  into at most two lines and `shop.validate()` sends back a Pitch whose lines
+  do not join to the narration, or whose line does not fit at 54px.
+- **Female voice**, `th-TH-PremwadeeNeural` (`SHOP_TTS_VOICE`), so it does
+  not sound like the explainer channel. "ครับ" is rejected.
+- **Every number must be in the Brief**, single digits included ("5 ดาว" is a
+  claim here, not a count). Numbers in `spoken` stay digits so the check sees
+  them, and must match the narration's. The model may not write a percentage
+  at all: the discount on the end card is computed from the two prices.
+- **Not a Short.** No Manifest, no `history`, no Experiment, no dashboard.
+  Files and the record (`shop.json`: Brief, link, Pitch, render) live in
+  `/volume1/shorts/shop/<id>/`; `backfill` skips that folder. The id doubles as
+  the suggested Sub ID for a link made by hand in the affiliate web dashboard.
+- **Holds the bot.** While a Brief is open (`mode: shop`), typed text belongs
+  to it, Topics and trends rounds wait, and it expires after
+  `REVIEW_LIFETIME_HOURS` without a tap. A restart mid-write or mid-render
+  puts it back in front of the human.
+
+A real run (2026-10-13): Pitch in 46s, render in 122s, 29.6s clip, 7 segments.
 
 ## Locales
 
@@ -756,6 +793,8 @@ make secrets                    # render .env from vault + manifest
 | `TTS_VOICE_EN` | `en-US-AndrewNeural` | the English Locale's voice, used by `/en` and `/trends en` clips |
 | `TTS_ATTEMPTS` | `3` | tries per synthesis call; the endpoint drops whole calls at random (`No audio was received`) |
 | `TTS_BACKOFF_SECONDS` | `3` | wait before the next try, multiplied by the try number |
+| `SHOP_TTS_VOICE` | `th-TH-PremwadeeNeural` | voice of `/shop` Product Clips |
+| `SHOP_PITCH_TIMEOUT_SECONDS` | `MIMO_TIMEOUT_SECONDS` | cap on writing one Pitch, shared across retries |
 
 The `/volume1/shorts` shared folder must exist on the NAS before first run;
 create it in DSM (Control Panel → Shared Folder), it is not created by the

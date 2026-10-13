@@ -105,6 +105,28 @@ _Avoid_: pending clip, queued clip, draft
 The finished vertical mp4 assembled from every Card of one Script.
 _Avoid_: video, short
 
+**Product Brief**:
+What the human sends after `/shop`: photos of one product from the Shopee app
+and the listing text (affiliate link, name, price, details). The only source a
+Pitch may draw on — `docs/adr/0015`.
+_Avoid_: product, listing, input
+
+**Pitch**:
+What mimo writes from a Product Brief: three to six Beats and an end card with
+the price. Reviewed like a Script, but it is not one — no Cards, no Footage,
+no Locale.
+_Avoid_: script, ad copy
+
+**Beat**:
+One unit of a Pitch: a badge, the narration split into at most two subtitle
+lines that join back to it exactly, and which photo is on screen.
+_Avoid_: card, scene, slide
+
+**Product Clip**:
+The finished vertical mp4 rendered from a Pitch, with its caption. Posted by
+hand; never counted with Clips.
+_Avoid_: short, ad, video
+
 ## Learning vocabulary
 
 Terms for the feedback loop that reads how published Clips performed. See

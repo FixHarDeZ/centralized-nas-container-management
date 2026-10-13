@@ -5,6 +5,7 @@ No HTTP server, no scheduler — see docs/adr/0002.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import html
@@ -18,8 +19,8 @@ import httpx
 
 from app import (analytics, backfill, experiment, history, locales, manifest, model_choice,
                  pronunciation, research,
-                 render, retention, schedule, script as script_gen, snapshots, storyboard, telegram,
-                 trends, youtube)
+                 render, retention, schedule, script as script_gen, shop, shop_render, snapshots,
+                 storyboard, telegram, trends, youtube)
 from app import state as st
 # Re-exported: the tests and the dashboard reach these through `main`.
 from app.state import (BUSY_MODES, CLIP_WAIT_LIFETIME, PARK_LIFETIME,  # noqa: F401
@@ -54,6 +55,8 @@ SBCHAR_CB = "sbchar"
 PICK_CB = "pick"
 # The ✋ button under an automatic list: `cancel:<suggested_at>`.
 CANCEL_CB = "cancel"
+# Buttons on a Product Brief: `shop:<go|render|drop>:<shop id>`.
+SHOP_CB = "shop"
 # When the bot goes looking for a Topic on its own, and how long the human has
 # to pick one before it picks for them, now live per Locale in app/schedule.py:
 # the dashboard edits them and `TRENDS_HOURS`/`AUTO_PICK_MINUTES` are only the
@@ -79,6 +82,9 @@ def output_dir(locale: str | None = None) -> Path:
 # Human-generated Footage lives beside the clips on /volume1/shorts: it cost
 # Flow credits, and the workdir is wiped after every render.
 FOOTAGE_DIR = OUTPUT_DIR / "footage"
+# Product Clips and everything they came from (docs/adr/0015). Kept apart from
+# the Locale folders so nothing that walks the Shorts output picks them up.
+SHOP_DIR = OUTPUT_DIR / "shop"
 # getFile on the cloud Bot API will not serve anything larger. Telegram's own
 # video compression lands well under it; "send as file" does not.
 TELEGRAM_FILE_LIMIT = 20 * 1024 * 1024
@@ -246,6 +252,14 @@ HELP = """🎬 shorts-factory
    เปิด-ปิดต่อช่อง · ตั้งได้หลายเวลา (0-23) · ตั้งเวลารอคนเลือกต่อช่อง
    แก้แล้วมีผลรอบถัดไปเลย ไม่ต้อง restart · ฝั่งอังกฤษปิดไว้ตั้งแต่ต้น เปิดเองเมื่อพร้อม
    ยิงทีละช่อง ตั้งเวลาชนกันได้ ช่องที่สองจะไปรอบถัดไป
+
+/shop — คลิปสินค้า (Shopee affiliate) เสียงผู้หญิง ไม่ใช้ Pexels ใช้รูปสินค้าจริง
+   ส่งรูป 1-6 รูป + ข้อความ (ลิงก์ ชื่อ ราคา รายละเอียด) แล้วกด ✅
+   บอทพูดได้แค่ที่ให้มา ตัวเลขที่ไม่อยู่ในข้อความถูกตีกลับ ส่วนลด % คำนวณจากราคาให้เอง
+   รีวิวเหมือนสคริปต์ปกติ: พิมพ์แก้ได้ · 🎬 render · 🗑 ทิ้ง
+   ได้ mp4 + caption พร้อมโพสต์ (มีลิงก์ + #ad) ไฟล์อยู่ที่ /volume1/shorts/shop
+   ไม่มีปุ่มอัป — โพสต์เองใน Shopee Video / Facebook / YouTube
+   ไม่นับเข้า /stats /experiment และไม่ขึ้น dashboard
 
 /help — หน้านี้"""
 
@@ -875,7 +889,7 @@ async def render_parked(client: httpx.AsyncClient, state: dict) -> None:
     # send it from a mode read taken before its own sendMessage, so a job that
     # starts in between would leave the reply with no button and a message
     # telling the human to press one.
-    if mode in BUSY_MODES:
+    if mode in st.HOLDING_MODES:
         await say(client, st.busy_note(mode), reply_markup=PARK_KEYBOARD)
         return
     if mode == "review":
@@ -1625,7 +1639,7 @@ async def on_english(client: httpx.AsyncClient, state: dict, topic: str) -> None
         ))
         return
     mode = state.get("mode", "idle")
-    if mode in BUSY_MODES:
+    if mode in st.HOLDING_MODES:
         await say(client, st.busy_note(mode))
         return
     if mode == "review":
@@ -1644,7 +1658,7 @@ async def on_both(client: httpx.AsyncClient, state: dict, topic: str) -> None:
         ))
         return
     mode = state.get("mode", "idle")
-    if mode in BUSY_MODES:
+    if mode in st.HOLDING_MODES:
         await say(client, st.busy_note(mode))
         return
     if mode == "review":
@@ -1710,6 +1724,9 @@ async def on_text(client: httpx.AsyncClient, state: dict, text: str) -> None:
     if text.startswith("/both"):
         await on_both(client, state, text[len("/both"):].strip())
         return
+    if text.startswith("/shop"):
+        await on_shop_start(client, state, text[len("/shop"):].strip())
+        return
     # A mistyped command is not a Topic. Letting it fall through spends minutes
     # of model time and leaves a Manifest named after the typo — /stat did that
     # on 2026-08-30, /redo on 2026-08-31.
@@ -1731,7 +1748,9 @@ async def on_text(client: httpx.AsyncClient, state: dict, text: str) -> None:
         await say(client, "(คำถามตัวละครหมดอายุไปแล้ว อันนี้ถือเป็นหัวข้อใหม่นะ)")
 
     mode = state.get("mode", "idle")
-    if mode in BUSY_MODES:
+    if mode == st.SHOP_MODE:
+        await on_shop_text(client, state, text)
+    elif mode in st.HOLDING_MODES:
         await say(client, st.busy_note(mode))
     elif mode == "review":
         # A pending Script is work in progress: plain text revises it rather
@@ -1759,6 +1778,10 @@ async def on_callback(client: httpx.AsyncClient, state: dict, query: dict) -> No
         # Above the mode guard: a Parked Clip is waited on while the bot is
         # idle, so that guard would swallow the tap without a word.
         spawn(render_parked(client, state), "render_parked")
+        return
+    if data.startswith(f"{SHOP_CB}:"):
+        # Above the mode guard: a Brief is not a review.
+        await on_shop_callback(client, state, data)
         return
     if data.startswith(f"{SBCHAR_CB}:"):
         # Above the mode guard too: `/storyboard <บรีฟ>` asks this question with
@@ -1907,7 +1930,7 @@ async def on_pick(client: httpx.AsyncClient, state: dict, data: str,
         await say(client, "ลิสต์นี้เก่าแล้ว สั่ง /trends ใหม่ก่อนนะ")
         return
     mode = state.get("mode", "idle")
-    if mode in BUSY_MODES:
+    if mode in st.HOLDING_MODES:
         await say(client, st.busy_note(mode))
         return
     if mode == "review":
@@ -1930,6 +1953,290 @@ async def on_pick(client: httpx.AsyncClient, state: dict, data: str,
           "make_script")
 
 
+# --- Product Clips (docs/adr/0015) -------------------------------------------
+# Everything about a Brief lives in `state["shop"]` and moves through
+# app/state.py's shop helpers; this section only routes Telegram to them.
+
+def shop_keyboard(action_text: str, action: str, shop_id: str, drop_text: str = "🗑 ทิ้ง") -> dict:
+    """Buttons carry the Brief id: a tap on an older Brief's message must not
+    act on whichever Brief is open now."""
+    return {"inline_keyboard": [[
+        {"text": action_text, "callback_data": f"{SHOP_CB}:{action}:{shop_id}"},
+        {"text": drop_text, "callback_data": f"{SHOP_CB}:drop:{shop_id}"},
+    ]]}
+
+
+def _shop_status(brief: dict) -> str:
+    link = "✔" if shop.link_in(brief.get("text", "")) else "ยังไม่เจอ"
+    text = "✔" if brief.get("text") else "ยังไม่มี"
+    return (f"🛍 รูป {len(brief['photos'])}/{shop.MAX_PHOTOS} · ข้อความ {text} · ลิงก์ {link}\n"
+            "ส่งรูปเพิ่ม หรือพิมพ์รายละเอียดเพิ่มได้ ครบแล้วกด ✅")
+
+
+async def _shop_prompt(client: httpx.AsyncClient, state: dict) -> None:
+    """One live status message with the ✅ button; the previous one loses its
+    buttons, so an album of five photos does not leave five ✅ on screen."""
+    brief = state["shop"]
+    await retire_buttons(client, brief.get("message_id"))
+    sent = await say(client, _shop_status(brief),
+                     reply_markup=shop_keyboard("✅ ครบแล้ว เขียนสคริปต์", "go", brief["id"],
+                                                drop_text="🗑 ยกเลิก"))
+    brief["message_id"] = (sent or {}).get("message_id")
+    save_state(state)
+
+
+async def shop_resume(client: httpx.AsyncClient, state: dict) -> None:
+    """Put the open Brief's buttons back on screen — after a restart, or when
+    the human asks with /shop. Without them the only way out is the expiry."""
+    brief = state.get("shop") or {}
+    if brief.get("phase") == "review" and brief.get("pitch"):
+        await _shop_review(client, state)
+    elif brief.get("phase") == "collect":
+        await _shop_prompt(client, state)
+    else:
+        job = "เขียนสคริปต์" if brief.get("phase") == "writing" else "render"
+        await say(client, f"⏳ กำลัง{job}คลิปสินค้าอยู่ รอให้เสร็จก่อนนะ")
+
+
+async def on_shop_start(client: httpx.AsyncClient, state: dict, text: str) -> None:
+    mode = state.get("mode", "idle")
+    if mode == st.SHOP_MODE:
+        await say(client, "🛍 มีคลิปสินค้าเปิดอยู่แล้ว 👇")
+        await shop_resume(client, state)
+        return
+    if mode in st.HOLDING_MODES:
+        await say(client, st.busy_note(mode))
+        return
+    if mode == "review":
+        await say(client, "ยังมีสคริปต์ค้างรีวิวอยู่ กด 🎬 หรือ 🗑 ให้อันนั้นก่อนนะ")
+        return
+    brief = st.open_shop(state, shop.new_id())
+    if text:
+        brief["text"] = text
+    save_state(state)
+    await say(client, (
+        "🛍 คลิปสินค้า — ส่งของมาได้เลย:\n"
+        f"1. รูปสินค้า 1-{shop.MAX_PHOTOS} รูป (เซฟจากแอป Shopee ส่งเป็นอัลบั้มได้)\n"
+        "2. ข้อความ: ลิงก์ affiliate + ชื่อ + ราคา + รายละเอียดที่ก๊อปจากหน้าสินค้า\n"
+        "   ยิ่งให้ข้อมูลเยอะ สคริปต์ยิ่งมีของ — บอทพูดได้แค่ที่ให้มา ไม่แต่งเพิ่ม\n"
+        "ครบแล้วกด ✅"
+    ))
+    await _shop_prompt(client, state)
+
+
+# What Pillow in this image opens. An iPhone photo sent as a file is HEIC,
+# which passes an image/* check and then fails at render time.
+SHOP_IMAGE_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
+
+
+def _shop_media(message: dict) -> tuple[str, int, str] | None:
+    """(file_id, size, suffix) of a photo, or of an image sent as a file."""
+    if message.get("photo"):
+        biggest = message["photo"][-1]
+        return biggest["file_id"], biggest.get("file_size") or 0, ".jpg"
+    document = message.get("document") or {}
+    suffix = SHOP_IMAGE_TYPES.get(str(document.get("mime_type", "")).lower())
+    if suffix:
+        return document["file_id"], document.get("file_size") or 0, suffix
+    return None
+
+
+async def on_shop_media(client: httpx.AsyncClient, state: dict, message: dict) -> None:
+    """Reserve the photo's number now, download it off the loop.
+
+    The number is taken here, in the order Telegram delivered the updates, not
+    when the download finishes: downloads run side by side, and numbering by
+    completion would shuffle the photos the Pitch refers to by number.
+    """
+    brief = state["shop"]
+    caption = (message.get("caption") or "").strip()
+    if caption:
+        brief["text"] = f"{brief['text']}\n{caption}".strip()
+    if brief.get("phase") != "collect":
+        await say(client, "ตอนนี้รับรูปเพิ่มไม่ได้แล้ว (สคริปต์เขียนจากรูปชุดเดิม) — 🗑 ทิ้งแล้ว /shop ใหม่ถ้าจะเปลี่ยนรูป")
+        save_state(state)
+        return
+    media = _shop_media(message)
+    if media is None:
+        save_state(state)
+        await say(client, "ไฟล์นี้ใช้ไม่ได้ ส่งเป็นรูปธรรมดา (ไม่ใช่ไฟล์) หรือไฟล์ JPG/PNG/WEBP นะ")
+        return
+    file_id, size, suffix = media
+    if len(brief["photos"]) >= shop.MAX_PHOTOS:
+        save_state(state)
+        await say(client, f"ครบ {shop.MAX_PHOTOS} รูปแล้ว รูปนี้ไม่ได้ใช้")
+        return
+    if size > TELEGRAM_FILE_LIMIT:
+        save_state(state)
+        await say(client, "รูปใหญ่เกิน 20MB บอทโหลดไม่ได้ ส่งแบบรูปธรรมดา (ไม่ใช่ไฟล์)")
+        return
+    # Numbered off a counter that only goes up: a failed download leaves the
+    # list, and numbering by its length would hand the next photo a name
+    # already on disk.
+    brief["seq"] = brief.get("seq", len(brief["photos"])) + 1
+    dest = SHOP_DIR / brief["id"] / "photos" / f"p{brief['seq']:02d}{suffix}"
+    brief["photos"].append(str(dest))
+    save_state(state)
+    spawn(_fetch_shop_photo(client, state, brief["id"], file_id, dest), "shop_photo")
+
+
+async def _fetch_shop_photo(client: httpx.AsyncClient, state: dict, shop_id: str,
+                            file_id: str, dest: Path) -> None:
+    ok = await download_footage(client, file_id, dest)
+    brief = state.get("shop") or {}
+    if brief.get("id") != shop_id:
+        return
+    if not ok:
+        # Only reachable before ✅: writing refuses while any photo is missing.
+        if str(dest) in brief["photos"]:
+            brief["photos"].remove(str(dest))
+        save_state(state)
+        await say(client, "รูปหนึ่งโหลดไม่ได้ ส่งรูปนั้นใหม่อีกทีนะ")
+    await _shop_prompt(client, state)
+
+
+async def on_shop_text(client: httpx.AsyncClient, state: dict, text: str) -> None:
+    brief = state["shop"]
+    phase = brief.get("phase")
+    if phase == "collect":
+        brief["text"] = f"{brief['text']}\n{text}".strip()
+        save_state(state)
+        await _shop_prompt(client, state)
+    elif phase == "review":
+        st.shop_phase(state, "writing")
+        save_state(state)
+        spawn(shop_write(client, state, feedback=text), "shop_write")
+    else:
+        job = "เขียนสคริปต์" if phase == "writing" else "render"
+        await say(client, f"⏳ กำลัง{job}คลิปสินค้าอยู่ รอให้เสร็จก่อนนะ")
+
+
+async def on_shop_callback(client: httpx.AsyncClient, state: dict, data: str) -> None:
+    _, action, shop_id = [*data.split(":", 2), "", ""][:3]
+    brief = state.get("shop") or {}
+    if state.get("mode") != st.SHOP_MODE or brief.get("id") != shop_id:
+        await say(client, "คลิปสินค้านี้ปิดไปแล้ว เริ่มใหม่ด้วย /shop")
+        return
+    phase = brief.get("phase")
+    if action == "drop":
+        if phase in {"writing", "rendering"}:
+            await say(client, "กำลังทำงานอยู่ รอให้เสร็จก่อนแล้วค่อยทิ้งนะ")
+            return
+        st.close_shop(state)
+        save_state(state)
+        await retire_buttons(client, brief.get("message_id"))
+        await say(client, "🗑 ทิ้งคลิปสินค้าแล้ว ส่งหัวข้อหรือ /shop ใหม่ได้เลย")
+    elif action == "go" and phase == "collect":
+        photos = [Path(p) for p in brief["photos"]]
+        if not photos:
+            await say(client, "ยังไม่มีรูปเลย ส่งรูปสินค้ามาก่อนนะ")
+        elif not all(p.is_file() for p in photos):
+            await say(client, "รูปยังโหลดไม่ครบ รอแป๊บแล้วกด ✅ อีกที")
+        elif not brief.get("text"):
+            await say(client, "ยังไม่มีข้อความ พิมพ์ชื่อ ราคา ลิงก์ และรายละเอียดสินค้ามาก่อนนะ")
+        else:
+            # Claimed before anything is awaited: a second tap on ✅ while
+            # this one is still on its way would otherwise write two Pitches.
+            st.shop_phase(state, "writing")
+            save_state(state)
+            if not shop.link_in(brief["text"]):
+                await say(client, "⚠️ ไม่เจอลิงก์ในข้อความ — caption จะไม่มีลิงก์ (พิมพ์ลิงก์ตอนรีวิวได้)")
+            spawn(shop_write(client, state), "shop_write")
+    elif action == "render" and phase == "review":
+        st.shop_phase(state, "rendering")
+        save_state(state)
+        spawn(shop_render_job(client, state), "shop_render")
+
+
+async def shop_write(client: httpx.AsyncClient, state: dict, feedback: str = "") -> None:
+    brief = state["shop"]
+    previous = brief.get("pitch") if feedback else None
+    if feedback:
+        # A link typed during review belongs in the caption, not in a rewrite
+        # that could not use it anyway.
+        brief["text"] = f"{brief['text']}\n{feedback}".strip()
+    shown = brief.get("message_id")
+    st.shop_phase(state, "writing", message_id=None)
+    save_state(state)
+    await retire_buttons(client, shown)
+    await say(client, "🤔 กำลังเขียนสคริปต์สินค้า... (ระหว่างนี้ใช้คำสั่งอื่นได้)")
+    try:
+        pitch = await shop.generate(brief["text"], len(brief["photos"]), previous=previous,
+                                    feedback=feedback, recent=shop.recent_hooks(SHOP_DIR))
+    except Exception as exc:
+        logger.exception("shop pitch failed")
+        if previous is not None:
+            st.shop_phase(state, "review")
+            await say(client, f"แก้สคริปต์ไม่สำเร็จ: {exc}\nสคริปต์เดิมยังอยู่ 👇")
+            await _shop_review(client, state)
+        else:
+            st.shop_phase(state, "collect")
+            await say(client, f"เขียนสคริปต์ไม่สำเร็จ: {exc}\nเพิ่มรายละเอียดแล้วกด ✅ อีกทีได้")
+            await _shop_prompt(client, state)
+        return
+    st.shop_phase(state, "review", pitch=pitch)
+    await _shop_review(client, state)
+
+
+async def _shop_review(client: httpx.AsyncClient, state: dict) -> None:
+    brief = state["shop"]
+    sent = await say(client, shop.format_pitch(brief["pitch"]),
+                     reply_markup=shop_keyboard("🎬 render", "render", brief["id"]))
+    brief["message_id"] = (sent or {}).get("message_id")
+    save_state(state)
+
+
+async def shop_render_job(client: httpx.AsyncClient, state: dict) -> None:
+    brief = state["shop"]
+    pitch = brief["pitch"]
+    await close_prompt(client, brief.get("message_id"),
+                       shop.format_pitch(pitch).rsplit("\n", 1)[0] + "\n🎬 กำลัง render...")
+    st.shop_phase(state, "rendering", message_id=None)
+    save_state(state)
+    workdir = WORK_DIR / f"shop-{brief['id']}"
+    try:
+        clip, details = await shop_render.build(pitch, [Path(p) for p in brief["photos"]], workdir)
+        out = SHOP_DIR / brief["id"]
+        out.mkdir(parents=True, exist_ok=True)
+        final = out / f"{brief['id']}.mp4"
+        shutil.copy2(clip, final)
+        link = shop.link_in(brief["text"])
+        caption = shop.caption_text(pitch, link)
+        (out / "caption.txt").write_text(caption, encoding="utf-8")
+        (out / "shop.json").write_text(json.dumps({
+            "id": brief["id"],
+            "created_at": datetime.now().isoformat(timespec="seconds"),
+            "brief": brief["text"],
+            "link": link,
+            "photos": brief["photos"],
+            "pitch": pitch,
+            "render": details,
+        }, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as exc:
+        logger.exception("shop render failed")
+        st.shop_phase(state, "review")
+        await say(client, f"render ล้มเหลว: {exc}")
+        await _shop_review(client, state)
+        return
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+    st.close_shop(state)
+    save_state(state)
+    await send_video(client, final, pitch["title"])
+    await say(client, caption)
+    await say(client, (
+        f"✅ คลิปสินค้าเสร็จแล้ว เก็บไว้ที่ {final}\n"
+        "ข้อความข้างบนคือ caption พร้อมโพสต์ (กดค้างแล้วก๊อป)\n"
+        f"Sub ID แนะนำถ้าทำลิงก์เองในเว็บ affiliate: {brief['id']}"
+    ))
+
+
+async def drop_shop(client: httpx.AsyncClient, brief: dict) -> None:
+    await retire_buttons(client, brief.get("message_id"))
+    await say(client, "🛍 คลิปสินค้าที่เปิดค้างไว้หมดเวลาแล้ว — เริ่มใหม่ด้วย /shop "
+                      "(รูปที่ส่งมายังอยู่บน NAS)")
+
+
 def is_ours(update: dict) -> bool:
     """The only trust boundary this stack has — see docs/adr/0002."""
     return telegram.chat_of(update) == CHAT_ID
@@ -1943,6 +2250,14 @@ async def handle(client: httpx.AsyncClient, state: dict, update: dict) -> None:
         await on_callback(client, state, update["callback_query"])
         return
     message = update.get("message") or {}
+    if state.get("mode") == st.SHOP_MODE and (message.get("photo") or message.get("document")):
+        # Above the video branch: an image sent as a file is a document, and
+        # would otherwise be filed as Footage for a Parked Clip.
+        await on_shop_media(client, state, message)
+        return
+    if message.get("photo"):
+        await say(client, "ได้รูปแล้ว แต่ยังไม่ได้เปิดคลิปสินค้า — พิมพ์ /shop ก่อนแล้วค่อยส่งรูปนะ")
+        return
     if message.get("video") or message.get("document"):
         # Off the loop like every other job that touches the network: a 20MB
         # file over a slow link would otherwise freeze the bot mid-download.
@@ -1967,6 +2282,11 @@ async def main() -> None:
         # Crashed or restarted mid-job; the workdir is gone either way.
         st.to_idle(state)
         save_state(state)
+    shop_recovered = st.recover_shop(state)
+    if shop_recovered:
+        # A Brief caught mid-write or mid-render goes back to waiting on the
+        # human; the work it was doing died with the process.
+        save_state(state)
     if state.pop("trends_running", None):
         # Set for the length of a round and cleared in a `finally` that a kill
         # does not run. Left behind, it blocks every future round silently.
@@ -1984,6 +2304,9 @@ async def main() -> None:
 
     async with httpx.AsyncClient() as client:
         await say(client, "🎬 shorts-factory พร้อมแล้ว ส่งหัวข้อมาได้เลย")
+        if shop_recovered and state.get("mode") == st.SHOP_MODE:
+            await say(client, "🛍 คลิปสินค้าที่ทำค้างไว้ยังอยู่ (บอทเพิ่งรีสตาร์ท) 👇")
+            await shop_resume(client, state)
         while True:
             # The daily pull rides the poll loop rather than a scheduler
             # thread: getUpdates already wakes every 30s. See app/snapshots.py.
@@ -2022,6 +2345,10 @@ async def main() -> None:
                 st.to_idle(state)
                 save_state(state)
                 spawn(drop_review(client, stale), "drop_review")
+            if st.shop_expired(state):
+                stale = st.close_shop(state) or {}
+                save_state(state)
+                spawn(drop_shop(client, stale), "drop_shop")
             if parked_expired(state):
                 expired = state.pop("parked", None)
                 save_state(state)

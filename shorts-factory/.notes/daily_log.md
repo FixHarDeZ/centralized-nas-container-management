@@ -2154,3 +2154,28 @@ install` จะสำเร็จ. ต้องสร้าง venv ใต้ re
 - อัปเดต stack index/log ทั้งคู่และ spec/plan สำหรับปิดงาน; ไม่มี memory ที่ root `.notes/`.
   ไม่มี implementation/deployment ค้าง. งานแนะนำถัดไป: real MP4/thumbnail preview และ
   heartbeat/job timestamps; pronunciation checklist ยังเป็นการตรวจจากข้อความ ไม่ได้ฟังเสียงจริง.
+
+## 2026-10-13 — `/shop` Product Clips (ADR 0015) — ยังไม่ commit/deploy
+
+ที่มา: บัญชี Shopee Affiliate ไม่มีสิทธิ์ Open API (ดู `shopee-short/.notes/`) ผู้ใช้เลือกให้บอททำคลิปสินค้าแล้วโพสต์เอง.
+ทำ preview layout ใน container ก่อน (รูปจริง+พื้นเบลอ, ป้ายส้มบน, ซับฝังล่าง, การ์ดท้ายราคา) ผู้ใช้อนุมัติ + ขอเสียงผู้หญิง.
+
+**ทำ**
+- `docs/adr/0015-product-clips-are-a-mode-of-shorts-factory.md` + CONTEXT.md (Product Brief/Pitch/Beat/Product Clip)
+- `app/shop.py`: Pitch prompt + `validate()` (lines ต่อกัน = narration, ความกว้างวัดพิกเซลที่ 54px, ตัวเลขทุกตัวรวมหลักเดียวต้องอยู่ใน Brief ไม่นับเลขในลิงก์, spoken เก็บตัวเลขเป็นเลขอารบิกและต้องตรง narration, ห้าม %, ห้าม ครับ, ห้ามลิงก์), `generate()` retry ส่งเหตุผลกลับโมเดล budget = `mimo.budget()`, caption บังคับ `#ad`
+- `app/shop_render.py`: photo layer (Ken Burns) + text layer นิ่ง overlay, การ์ดท้ายวางตาม textbbox
+- `render.py`: `voice=` override ใน narrate/speak/_narration_track (default เดิม)
+- `state.py`: `SHOP_MODE`/`HOLDING_MODES`, open/phase/close/expired/recover; `to_idle` เคลียร์ `shop`
+- `main.py`: `/shop`, route รูป (`photo` + `document` image/*) ก่อน branch footage, เลขรูปจองตามลำดับ update (โหลดขนานไม่สลับ), ปุ่ม `shop:<go|render|drop>:<id>`, 5 จุดเช็ค busy → `HOLDING_MODES`, startup recover, loop expiry
+- `backfill.py` ข้าม `/output/shop/`
+- เทสต์ `tests/test_shop.py` 37 ข้อ
+
+**ตรวจ**
+- Image เดิม + โค้ดใหม่ mount ro, `--network none`: **345 passed / 1 deselected** (TTS จริง); root tests 63 ผ่าน; ruff clean (main.py เหลือ 3 ข้อเดิม)
+- E2E จริงใน container ชั่วคราว (env จริง ไม่แตะบอท): รอบแรก count 24 ตัวอักษรตีกลับ 2 ครั้งแล้วหมดเวลา 480s → เปลี่ยนเป็นวัดพิกเซล + budget 600; รอบสอง Pitch ผ่าน แต่ edge-tts `NoAudioReceived` หลัง retry ครบ (อาการเดิมของ endpoint); รอบสาม **Pitch 46s, render 122s, คลิป 29.6s 1080x1920** เสียง Premwadee
+- เจอบั๊กการ์ดท้าย "฿499 ลด 40%" ทับ "฿299" → วางตาม textbbox แล้ว render ตรวจทั้งมี/ไม่มีราคาเดิม ผ่าน
+
+- รีวิวรอบสองแก้ 4 จุด: กดซ้ำ ✅/🎬/พิมพ์แก้ = claim phase ก่อน spawn (เดิมเขียน/render ซ้อนได้), restart กลางงาน → ส่งปุ่มกลับให้ + `/shop` ตอนเปิดค้าง = โชว์ปุ่มอีกรอบ (เดิมติดอยู่ใน mode shop ไม่มีปุ่ม 6 ชม.), ชื่อรูปใช้ counter `seq` ไม่ใช่ len (โหลดพังแล้วชื่อชนทับไฟล์), รับไฟล์เฉพาะ jpeg/png/webp (HEIC จาก iPhone ผ่าน image/* แต่ Pillow เปิดไม่ได้) + dashboard label `shop`
+- **ยังไม่มีใครฟังเสียงจริง**: Pitch ให้ `spoken` เก็บเลขอารบิก (ต่างจาก explainer ที่ให้เขียนเป็นคำ) — ต้องฟังว่า "299 บาท" / "5.3" / "IPX5" อ่านถูก
+
+**ค้าง**: commit (stage เฉพาะไฟล์งานนี้ — tree มี hermes + nas-rails ของ session อื่น) → deploy แบบ `git archive <commit> shorts-factory` + `deploy.sh --restart-only -s shorts-factory -y` (เช็ค mode=idle ก่อน) → ผู้ใช้ลอง `/shop` จริงจากมือถือ
