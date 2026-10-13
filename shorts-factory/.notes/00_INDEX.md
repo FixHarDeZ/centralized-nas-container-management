@@ -1,6 +1,6 @@
 # shorts-factory — Index
 
-**2026-10-13 — `/shop` Product Clips (ADR 0015) เขียน+เทสต์เสร็จ ยังไม่ commit/deploy.**
+**2026-10-13 — `/shop` Product Clips (ADR 0015) commit `3c8d73b` push main แล้ว — ยังไม่ deploy (ผู้ใช้ขอทำใน DSM เองก่อน).**
 โหมดคลิปสินค้า Shopee affiliate: รูป 1-6 + ข้อความ → Pitch (mimo) → render เสียง
 `th-TH-PremwadeeNeural` รูปจริง ซับฝัง การ์ดท้ายราคา → mp4 + caption `#ad` โพสต์เอง.
 ไม่มี Manifest/history/Experiment/dashboard, ไฟล์ที่ `/volume1/shorts/shop/<id>/` + `shop.json`,
@@ -8,7 +8,7 @@ backfill ข้าม `shop/`. `mode: shop` อยู่ใน `st.HOLDING_MODES
 `REVIEW_LIFETIME_HOURS`, restart = กลับไปรอคน. Code: `app/shop.py`, `app/shop_render.py`,
 `state.py` shop helpers, `main.py` section "Product Clips". เทสต์ `tests/test_shop.py` 37 ข้อ,
 ทั้งชุด 345 pass ใน image. E2E จริง: Pitch 46s + render 122s = คลิป 29.6s.
-**ค้าง**: commit เฉพาะไฟล์งานนี้ → deploy (`git archive` + `--restart-only`) → ผู้ใช้ลองจริง.
+**ค้าง**: deploy (`git archive 3c8d73b shorts-factory` + `--restart-only -s shorts-factory -y`, เช็ค mode=idle + tag rollback) หลังผู้ใช้บอกว่าทำ DSM เสร็จ → ผู้ใช้ลองจริง + ฟังเสียงตัวเลข.
 รายละเอียด daily_log 2026-10-13.
 
 **2026-10-09 — Creator Studio 01 ปิดงานแล้ว: main pushed + deploy สำเร็จ.**

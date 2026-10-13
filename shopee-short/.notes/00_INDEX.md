@@ -10,7 +10,7 @@ Shopee Affiliate ผ่านคลิปสั้น แบ่งเป็น�
 
 - **Endpoint TH** `https://open-api.affiliate.shopee.co.th/graphql` ตอบจริง — creds ปลอมได้ `error [10020]: Invalid Credential` (12/10)
 - **ลิงก์ใน Shorts กดไม่ได้** (YouTube Help) — ทางที่กดได้: คลิปยาว, About ของช่อง, Related Video บน Shorts, Shopping tag (ต้องอยู่ใน YPP)
-- **คลิปทำด้วย `/shop` ใน shorts-factory** (ADR 0015 กลับคำเดิมที่ห้าม): ส่งรูป+ข้อความ → Pitch → mp4 + caption โพสต์เอง ดู `shorts-factory/README.md` "Product Clips" — Topic ปกติยังห้ามใช้ทำคลิปสินค้า
+- **คลิปทำด้วย `/shop` ใน shorts-factory** (ADR 0015 กลับคำเดิมที่ห้าม): ส่งรูป+ข้อความ → Pitch → mp4 + caption โพสต์เอง ดู `shorts-factory/README.md` "Product Clips" (commit `3c8d73b`, ยังไม่ deploy) — Topic ปกติยังห้ามใช้ทำคลิปสินค้า
 - **พอร์ตจองไว้ 5073/15073** (ว่างบน NAS ตรวจ 12/10). `:15067` = DSM RP entry ค้างชี้ `localhost:5067` (ของ wallpaper-scout ที่ลบไปแล้ว) ไม่มี backend — ให้ผู้ใช้ลบเองใน DSM
 - README root ไม่ตรงเครื่องจริง: `my-secretary` (`/volume2/docker/my-secretary`, ไม่อยู่ใน repo) ถือ `5057` — ยังไม่ได้แก้
 - **⚠️ `:15069` = DSM RP → dupe-sweeper `5069`** แต่ CLAUDE.md/README บอก LAN only (เหตุผลที่ยอมให้รันเป็น root + mount media read-write) ถ้า router forward 15069 = dashboard ที่ลบไฟล์ได้เปิดออกเน็ต มีแค่ basic auth กั้น — แจ้งผู้ใช้แล้ว ยังไม่ได้แตะ RP/router

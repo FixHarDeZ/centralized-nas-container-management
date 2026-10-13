@@ -24,4 +24,4 @@
 - สร้างเป็นโหมด `/shop` ใน shorts-factory (รายละเอียด/ผลทดสอบอยู่ใน `shorts-factory/.notes/daily_log.md`)
 - PLAN.md + 00_INDEX แก้บรรทัด "ห้ามใช้ shorts-factory" ให้ตรงกับ ADR 0015
 
-**ค้าง**: commit + deploy shorts-factory (รอผู้ใช้อนุญาต), ทดลองโพสต์จริงแล้วจดลง `experiment.md`, ติดต่อ Shopee ขอ Open API
+**ค้าง**: deploy shorts-factory (commit `3c8d73b` push แล้ว รอผู้ใช้ทำ DSM เสร็จ), ทดลองโพสต์จริงแล้วจดลง `experiment.md`, ติดต่อ Shopee ขอ Open API

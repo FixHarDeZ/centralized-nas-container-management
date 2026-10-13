@@ -2155,7 +2155,7 @@ install` จะสำเร็จ. ต้องสร้าง venv ใต้ re
   ไม่มี implementation/deployment ค้าง. งานแนะนำถัดไป: real MP4/thumbnail preview และ
   heartbeat/job timestamps; pronunciation checklist ยังเป็นการตรวจจากข้อความ ไม่ได้ฟังเสียงจริง.
 
-## 2026-10-13 — `/shop` Product Clips (ADR 0015) — ยังไม่ commit/deploy
+## 2026-10-13 — `/shop` Product Clips (ADR 0015) — commit `3c8d73b` pushed, ยังไม่ deploy
 
 ที่มา: บัญชี Shopee Affiliate ไม่มีสิทธิ์ Open API (ดู `shopee-short/.notes/`) ผู้ใช้เลือกให้บอททำคลิปสินค้าแล้วโพสต์เอง.
 ทำ preview layout ใน container ก่อน (รูปจริง+พื้นเบลอ, ป้ายส้มบน, ซับฝังล่าง, การ์ดท้ายราคา) ผู้ใช้อนุมัติ + ขอเสียงผู้หญิง.
@@ -2179,3 +2179,5 @@ install` จะสำเร็จ. ต้องสร้าง venv ใต้ re
 - **ยังไม่มีใครฟังเสียงจริง**: Pitch ให้ `spoken` เก็บเลขอารบิก (ต่างจาก explainer ที่ให้เขียนเป็นคำ) — ต้องฟังว่า "299 บาท" / "5.3" / "IPX5" อ่านถูก
 
 **ค้าง**: commit (stage เฉพาะไฟล์งานนี้ — tree มี hermes + nas-rails ของ session อื่น) → deploy แบบ `git archive <commit> shorts-factory` + `deploy.sh --restart-only -s shorts-factory -y` (เช็ค mode=idle ก่อน) → ผู้ใช้ลอง `/shop` จริงจากมือถือ
+
+- Commit `3c8d73b` เข้า main + push (stage เฉพาะไฟล์งานนี้; hermes/.codex/nas-rails ของ session อื่นไม่ได้รวม). **ยังไม่ deploy** — ผู้ใช้ขอไปทำใน DSM เองก่อน.
