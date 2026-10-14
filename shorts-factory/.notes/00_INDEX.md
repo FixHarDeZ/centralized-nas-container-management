@@ -1,3 +1,8 @@
+**2026-10-14 — ⚠️ บอท render ไม่ได้ (edge-tts 403) — แก้ในเครื่องแล้ว ยังไม่ถึง NAS.** Microsoft เปลี่ยน token 13/10;
+7.2.8 = 403, 7.3.1 = ผ่าน (ทดสอบแล้ว, API เดิม). `requirements.txt` → `edge-tts==7.3.1` **ยังไม่ commit**.
+คอนเทนเนอร์ยังเป็น image 09/10 (ไม่มี `/shop`). **ค้าง (ผู้ใช้เลือก)**: (1) hot-patch `docker exec -u 0 shorts-factory pip install edge-tts==7.3.1` + `docker restart`
+(ไม่พ่วง `/shop`, classifier บล็อกตอนผมยิง) หรือ (2) commit + deploy เต็ม (พ่วง `/shop` 3c8d73b). หลังแก้: `/redo` คลิปจับผิดภาพ (อยู่ใน `last_script`).
+
 # shorts-factory — Index
 
 **2026-10-13 — `/shop` Product Clips (ADR 0015) commit `3c8d73b` push main แล้ว — ยังไม่ deploy (ผู้ใช้ขอทำใน DSM เองก่อน).**
@@ -495,7 +500,11 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
   sentence renders as tofu boxes; Pillow does no font fallback.
 - **ffmpeg `drawtext` cannot render Thai** (no shaping). Not an escape hatch.
 - **Do not downgrade `edge-tts`.** 7.0.2 gets `403` from the synthesis endpoint;
-  the `Sec-MS-GEC` token scheme moves server-side. 7.2.8 works.
+  the `Sec-MS-GEC` token scheme moves server-side. **2026-10-13 it moved again**:
+  7.2.8 → `403 Invalid response status` on `wss://speech.platform.bing.com` (render
+  ล้มทั้งคลิป), 7.3.1 fixes it (`Sec-MS-GEC-Version` `1-`→`2-` + new token hash;
+  public API identical). Pin = 7.3.1. Check: clock skew first (`date -u` NAS vs
+  container), then PyPI for a release dated the day the 403 started.
 - **No `cpus:` in compose.** DSM's kernel has no CFS bandwidth control and the
   daemon refuses to create the container. `mem_limit` works fine.
 - Host RAM is under pressure (swap fully consumed; whole-box OOM on

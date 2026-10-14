@@ -2187,3 +2187,16 @@ install` จะสำเร็จ. ต้องสร้าง venv ใต้ re
 - ตรวจด้วย headless Chrome 900px ครบ (420px โดน crop เพราะ Chrome Mac clamp ~500px ไม่ใช่ layout)
 - ยืนยันกับผู้ใช้: deploy รอบนี้ **ไม่ต้องทำอะไรใน DSM** (compose/Dockerfile/requirements/secrets/nginx ไม่เปลี่ยน, `/volume1/shorts:/output` rw อยู่แล้ว)
 - **สถานะ: ยังไม่ deploy** — ผู้ใช้จะบอกเอง. ค้าง: deploy, ฟังตัวเลขในเสียง, RP `:15069`/`:15067` (ผู้ใช้ทำเองใน DSM)
+
+## 2026-10-14 — render ล้ม edge-tts 403
+
+อาการ: รอบอัตโนมัติ (จับผิดภาพ) render ล้ม `403, message='Invalid response status', url='wss://speech.platform.bing.com/...Sec-MS-GEC-Version=1-143.0.3650.75'`.
+
+- เวลา NAS/container ตรง UTC (ไม่ใช่ clock skew)
+- edge-tts 7.3.0/7.3.1 ออก 13/10 — ทดสอบบน workstation: **7.2.8 = 403, 7.3.1 = ได้เสียง** (th-TH-NiwatNeural). ต่างกันที่ `drm.py` (token hash ใหม่) + `SEC_MS_GEC_VERSION` `1-`→`2-`; `communicate.py`/`submaker.py`/`__init__` identical = ไม่ต้องแก้โค้ด
+- bump `requirements.txt` → `edge-tts==7.3.1` (**ยังไม่ commit**)
+- คอนเทนเนอร์ที่รันอยู่ = image 09/10 ยังไม่มี `/shop`, state idle. hot-patch pip ในคอนเทนเนอร์ถูก auto-mode classifier บล็อก → รอผู้ใช้เลือกทาง
+
+**ค้าง**: แก้บน NAS (hot-patch หรือ deploy เต็มที่พ่วง `/shop`), commit pin bump, deploy `/shop` เดิม
+
+**ปิดงาน 2026-10-14**: NAS ยังไม่ได้แก้ (บอทยัง render ไม่ได้), pin bump + notes ยังไม่ commit, ยังไม่ deploy. ผู้ใช้จะเลือกระหว่าง hot-patch pip ในคอนเทนเนอร์ หรือ deploy เต็มพ่วง `/shop`.
