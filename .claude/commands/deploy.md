@@ -16,7 +16,7 @@ description: Upload the project to the NAS via deploy.sh and optionally restart 
    - If there are uncommitted changes, warn the user that the working tree will be uploaded as-is (not just committed files). Ask if they want to commit first or continue.
 
 2. **Run deploy**
-   - Run `scripts/deploy.sh` interactively so the user can respond to its prompts (restart all / per-stack / skip).
+   - Ask the user which stacks to restart (comma-separated, `all`, or none), then run `scripts/deploy.sh -s <stacks> -y` (or `scripts/deploy.sh --upload-only -y` for none). Claude's shell has no TTY: without `-y` the upload prompt is skipped silently and the script still exits 0, and the nas-rails mod refuses that form.
    - SSH auth is key-based (no `sshpass` needed). If the connection fails, check that `NAS_SSH_KEY` in `.env` points to the correct private key and that the key is present in `~/.ssh/authorized_keys` on the NAS.
 
 3. **Report**

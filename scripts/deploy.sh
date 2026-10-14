@@ -332,6 +332,7 @@ set_maintenance() {
 echo ""
 set_maintenance "${MAINT_BUILD_SECONDS}"
 log "Restarting: ${STACKS_TO_RESTART[*]}"
+DEPLOYED_SHA="$( { git -C "${PROJECT_ROOT}" stash create 2>/dev/null | grep . || git -C "${PROJECT_ROOT}" rev-parse HEAD; } 2>/dev/null || true)"
 
 for stack in "${STACKS_TO_RESTART[@]}"; do
   echo ""
@@ -356,6 +357,12 @@ for stack in "${STACKS_TO_RESTART[@]}"; do
       -f '${NAS_TARGET_PATH}/${stack}/docker-compose.yml' \
       up -d --build 2>&1\"" </dev/null
   ok "$stack restarted"
+  # Local record for the nas-rails band: refs/deploy/<stack> points at what was
+  # uploaded (the worktree via `git stash create`, HEAD when clean). Restart-only
+  # re-runs what is already on the NAS, so it records nothing. Never fails a deploy.
+  if [[ "$RESTART_ONLY" == false && -n "$DEPLOYED_SHA" ]]; then
+    git -C "${PROJECT_ROOT}" update-ref "refs/deploy/${stack}" "$DEPLOYED_SHA" 2>/dev/null || true
+  fi
 done
 set_maintenance "${MAINT_TAIL_SECONDS}"
 

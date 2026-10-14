@@ -236,4 +236,4 @@ Use `./scripts/deploy.sh -y`.
 - Fixed cwd bug: paths were relative to `scripts/` (`../hermes-agent/...`, `bash deploy.sh`) — now anchored to repo root.
 - Verified: `bash -n` OK, dirty-guard passes on the pending `v0.21.6` bump. Not run end-to-end (would deploy).
 - Open: working tree still has uncommitted `HERMES_REF: v2026.9.24 -> v0.21.6` from an earlier run — not committed here.
-- Status: script + notes changes **uncommitted, not pushed, not deployed** at session end.
+- Status: committed `803c63b` + pushed to `origin/main`. Not deployed (script-only change, no container impact).

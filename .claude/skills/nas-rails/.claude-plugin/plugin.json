@@ -1,0 +1,9 @@
+{
+  "name": "nas-rails",
+  "version": "0.1.0",
+  "description": "Repo rails for centralized-nas-container-management: guards, notes/deploy/shared-drift band, commit secret scan",
+  "types": "./types.d.ts",
+  "author": {
+    "name": "PEERAWAT UJAIYEN"
+  }
+}

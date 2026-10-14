@@ -22,3 +22,7 @@ __pycache__/
 .claude/.headroom_wrap_marker.json
 .claude/.headroom_wrap_owners.json
 .claude/.headroom_wrap_settings.lock
+
+# nas-rails mod: engine-written type stubs
+.claude/skills/nas-rails/.claude-plugin/types/
+.claude/skills/nas-rails/tsconfig.json
