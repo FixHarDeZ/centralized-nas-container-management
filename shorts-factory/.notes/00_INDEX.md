@@ -9,7 +9,8 @@ backfill ข้าม `shop/`. `mode: shop` อยู่ใน `st.HOLDING_MODES
 `state.py` shop helpers, `main.py` section "Product Clips". เทสต์ `tests/test_shop.py` 37 ข้อ,
 ทั้งชุด 345 pass ใน image. E2E จริง: Pitch 46s + render 122s = คลิป 29.6s.
 **ค้าง**: deploy (`git archive 3c8d73b shorts-factory` + `--restart-only -s shorts-factory -y`, เช็ค mode=idle + tag rollback) หลังผู้ใช้บอกว่าทำ DSM เสร็จ → ผู้ใช้ลองจริง + ฟังเสียงตัวเลข.
-รายละเอียด daily_log 2026-10-13.
+รายละเอียด daily_log 2026-10-13. คู่มือผู้ใช้ `docs/shop-guide.html` (14/10). **ไม่ต้องทำอะไรใน DSM** ตอน deploy
+(compose/image/secrets ไม่เปลี่ยน).
 
 **2026-10-09 — Creator Studio 01 ปิดงานแล้ว: main pushed + deploy สำเร็จ.**
 ผู้ใช้อนุมัติแบบและ scope ด้วย “จัด 01 ได้เลย”. ทำงานใน managed worktree

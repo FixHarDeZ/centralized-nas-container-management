@@ -2181,3 +2181,9 @@ install` จะสำเร็จ. ต้องสร้าง venv ใต้ re
 **ค้าง**: commit (stage เฉพาะไฟล์งานนี้ — tree มี hermes + nas-rails ของ session อื่น) → deploy แบบ `git archive <commit> shorts-factory` + `deploy.sh --restart-only -s shorts-factory -y` (เช็ค mode=idle ก่อน) → ผู้ใช้ลอง `/shop` จริงจากมือถือ
 
 - Commit `3c8d73b` เข้า main + push (stage เฉพาะไฟล์งานนี้; hermes/.codex/nas-rails ของ session อื่นไม่ได้รวม). **ยังไม่ deploy** — ผู้ใช้ขอไปทำใน DSM เองก่อน.
+
+### 2026-10-14 — คู่มือ `/shop` + ปิดงาน
+- เขียน `shorts-factory/docs/shop-guide.html` (ไทย, ไฟล์เดียวไม่พึ่ง CDN, รูป 4 เฟรมจากคลิปทดสอบจริงฝัง base64 ~76KB, light/dark): เตรียมของในแอป Shopee → ขั้นตอนในบอท → อ่านสคริปต์ → โพสต์ที่ไหน (Shorts ลิงก์กดไม่ได้) → เหตุผลที่โดนตีกลับ → แก้ปัญหา → Sub ID. ลิงก์จาก README
+- ตรวจด้วย headless Chrome 900px ครบ (420px โดน crop เพราะ Chrome Mac clamp ~500px ไม่ใช่ layout)
+- ยืนยันกับผู้ใช้: deploy รอบนี้ **ไม่ต้องทำอะไรใน DSM** (compose/Dockerfile/requirements/secrets/nginx ไม่เปลี่ยน, `/volume1/shorts:/output` rw อยู่แล้ว)
+- **สถานะ: ยังไม่ deploy** — ผู้ใช้จะบอกเอง. ค้าง: deploy, ฟังตัวเลขในเสียง, RP `:15069`/`:15067` (ผู้ใช้ทำเองใน DSM)

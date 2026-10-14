@@ -167,6 +167,9 @@ to Shopee Video / Facebook / YouTube is done by hand.
 
 A real run (2026-10-13): Pitch in 46s, render in 122s, 29.6s clip, 7 segments.
 
+Step-by-step guide for the human (Thai, phone screenshots of the flow, where to
+post, why a Pitch gets sent back): [`docs/shop-guide.html`](docs/shop-guide.html).
+
 ## Locales
 
 A Locale is the whole bundle that changes when a Clip is written for a

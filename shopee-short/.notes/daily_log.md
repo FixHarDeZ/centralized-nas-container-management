@@ -25,3 +25,8 @@
 - PLAN.md + 00_INDEX แก้บรรทัด "ห้ามใช้ shorts-factory" ให้ตรงกับ ADR 0015
 
 **ค้าง**: deploy shorts-factory (commit `3c8d73b` push แล้ว รอผู้ใช้ทำ DSM เสร็จ), ทดลองโพสต์จริงแล้วจดลง `experiment.md`, ติดต่อ Shopee ขอ Open API
+
+## 2026-10-14 — ปิดงาน
+- คู่มือ `/shop` ที่ `shorts-factory/docs/shop-guide.html` (รวมขั้น Sub ID + จดผลลง `experiment.md`)
+- สถานะ: code อยู่ main (`3c8d73b`) ยังไม่ deploy. Phase 0: ไม่มีสิทธิ์ Open API → Phase 1 ด้วย `/shop` + custom link Sub ID
+- ค้าง (ผู้ใช้): deploy → ทำคลิปทดลอง 8-10 อัน ตั้งเกณฑ์ผ่านใน `experiment.md` ก่อนเริ่ม, ติดต่อ Shopee ขอ Open API, กรอกข้อมูลชำระเงิน/ภาษี, ⚠️ RP `:15069` dupe-sweeper

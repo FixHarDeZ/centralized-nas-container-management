@@ -15,6 +15,8 @@ Shopee Affiliate ผ่านคลิปสั้น แบ่งเป็น�
 - README root ไม่ตรงเครื่องจริง: `my-secretary` (`/volume2/docker/my-secretary`, ไม่อยู่ใน repo) ถือ `5057` — ยังไม่ได้แก้
 - **⚠️ `:15069` = DSM RP → dupe-sweeper `5069`** แต่ CLAUDE.md/README บอก LAN only (เหตุผลที่ยอมให้รันเป็น root + mount media read-write) ถ้า router forward 15069 = dashboard ที่ลบไฟล์ได้เปิดออกเน็ต มีแค่ basic auth กั้น — แจ้งผู้ใช้แล้ว ยังไม่ได้แตะ RP/router
 
+**คู่มือใช้งาน `/shop`**: `shorts-factory/docs/shop-guide.html`
+
 ## Probe
 
 `scripts/shopee_probe.py` (stdlib ล้วน รันบน workstation): `schema` / `link <url> [subId]` / `offers <keyword>` / `report [days]` อ่าน `SHOPEE_APP_ID` `SHOPEE_SECRET` จาก env ไม่ print secret. Signature = `sha256(appId + ts + body + secret)` hash ไบต์เดียวกับที่ส่ง. field ใน query มาจาก SDK ชุมชน — รัน `schema` ก่อนเสมอ field ผิดตัวเดียว query ล้มทั้งก้อน. เทสต์ `tests/test_probe.py` (6)
