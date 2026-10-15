@@ -623,3 +623,15 @@ Completed Shop API/UI/worker, motion scene import/approval/render/recovery and i
 ## 2026-10-15 - Release authorized
 
 User explicitly requested commit to main, push, and deploy. Reopening release work. Preserve prior closure entries as history; current deployment outcome will be recorded after verification. Shop public URL now resolves from vault-managed deployment configuration using the existing Creator Studio external origin. No secrets in workflow JSON.
+
+## 2026-10-15 - Main pushed and NAS deployment completed
+
+Implementation commit `baa021f` fast-forwarded into main and pushed to origin/main (HTTP/2 transport failed once; retry over HTTP/1.1 succeeded). `scripts/deploy.sh -s shorts-factory -y` completed; local deploy ref points at baa021f. Existing data volumes retained. Shop API/worker, legacy bot, dashboard, and nginx all running with restart count 0. Public HTTPS /shop returned 200 with valid authentication; anonymous /shop returned 401. From the real n8n container, Shop page, job list and automation pending all returned 200; pending queue empty.
+
+Deployment uncovered a stale gitignored nginx/.htpasswd (both username and password differed from vault). Backed up the old file locally, regenerated bcrypt from the authoritative vault dashboard credentials, verified, and redeployed through the standard script. No secrets committed. SHOP_PUBLIC_URL is vault-managed and uses the existing Creator Studio external origin.
+
+Live n8n workflow `4uYGddwteUuqsb6j` (Shop Flow Studio) imported via public API with bound encrypted httpCustomAuth credential and all timeout/retention/timezone settings preserved; activated. n8n service was not restarted. Portable workflow JSON deliberately contains no instance-specific credential ID. Generic import helper only preserves executionOrder; documented restoration of the other settings and credential binding.
+
+Release regression: 408 passed, 2 repository-wiring skips covered by 2 passing local tests, 1 live TTS deselection. Browser visual acceptance and a real Flow clip with live TTS remain untested; synthetic HTTP/worker/render/restart/download integration passed. No test Telegram messages or automatic publishing performed. Prior closed/uncommitted/inactive entries above describe earlier states and are superseded by this release entry.
+
+Scheduler verification: successful GET /shop/automation/pending requests increased from 2 to 3 while no additional smoke requests were sent, with workflow active and queue empty. Worker logs contained no traceback. Successful executions are not retained by configured policy, so an empty executions list is expected. Real Flow/video/TTS production acceptance still remains.

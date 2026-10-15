@@ -34,3 +34,7 @@ Terminal work remains discoverable until its notification is queued/running/succ
 For a local smoke test, call the same automation endpoints using test-only credentials. Never claim a live NAS/n8n activation based on local tests.
 
 Official node references: https://docs.n8n.io/integrations/builtin/credentials/httprequest/ and https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.wait/.
+
+## Import settings check
+
+The generic `scripts/n8n_import.sh` helper retains only `executionOrder`. After using it, restore `executionTimeout=240`, `saveDataSuccessExecution=none`, `saveDataErrorExecution=all`, and `timezone=Asia/Bangkok` from the workflow JSON before activation. Direct public API import can preserve these settings in its payload. Always bind the credential ID after importing the portable workflow.
