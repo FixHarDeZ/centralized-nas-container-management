@@ -694,7 +694,9 @@ async def make_script(client: httpx.AsyncClient, state: dict, topic: str,
 
 
 async def do_render(client: httpx.AsyncClient, state: dict,
-                    supplied: dict[int, Path] | None = None) -> None:
+                    supplied: dict[int, Path] | None = None,
+                    narration: tuple[Path, list[float]] | None = None,
+                    hold: frozenset[int] | set[int] = frozenset()) -> None:
     script = state["script"]
     # The Script stays on screen with only its buttons gone: once the clip is
     # out, the 🗣 lines are what the human copies into /say to fix a word.
@@ -711,6 +713,10 @@ async def do_render(client: httpx.AsyncClient, state: dict,
             clip, details = await render.build(
                 script, workdir, supplied=supplied,
                 locale=state.get("locale", locales.DEFAULT),
+                # Only a Studio render passes these, so every other path calls
+                # build() exactly as it did before Studio existed.
+                **({"narration": narration} if narration else {}),
+                **({"hold": hold} if hold else {}),
             )
         manifest.update(state.get("clip_id"), outcome="rendered", render=details)
         await deliver(client, state, script, clip)
@@ -994,19 +1000,27 @@ async def send_storyboard(client: httpx.AsyncClient, board: dict) -> int | None:
 
 
 def wait_for_clip(state: dict, message_id: int | None, script: dict,
-                  topic: str | None, locale: str) -> None:
+                  topic: str | None, locale: str) -> dict | None:
     """Remember that a finished clip may come back as a reply to `message_id`.
 
     The Script is snapshotted, not read live when the file lands: by then it
     may have been revised, discarded or rendered — the same reason a Parked
     Clip carries its own copy. One wait at a time, like Parked Clips: the human
     generating scenes in Flow is one person doing one storyboard.
+
+    Returns the Studio pack this wait replaced, already cleaned up, so the
+    caller can say so: a pack dropped in silence is Flow credits spent on a
+    clip the bot will no longer take back.
     """
     if not message_id:
         # Without the id there is nothing to match a reply against, and a
         # guessed match files a clip under the wrong Topic.
         logger.warning("ไม่ได้ message_id ของ storyboard — รับคลิปกลับไม่ได้")
-        return
+        return None
+    old = state.get("clip_wait") or {}
+    dropped = old if old.get("kind") == "studio" else None
+    if dropped:
+        drop_studio_files(dropped)
     state["clip_wait"] = {
         "message_id": message_id,
         "script": script,
@@ -1015,6 +1029,17 @@ def wait_for_clip(state: dict, message_id: int | None, script: dict,
         "created_at": datetime.now().isoformat(timespec="seconds"),
     }
     save_state(state)
+    return dropped
+
+
+async def say_dropped_pack(client: httpx.AsyncClient, dropped: dict | None) -> None:
+    """A storyboard took the one clip_wait slot from a live Studio pack."""
+    if not dropped:
+        return
+    tail = "\n(ยกเลิกภาษาอังกฤษของหัวข้อนั้นด้วย)" if dropped.get("pair") else ""
+    await say(client, "🗑 ทิ้ง Studio pack ที่ค้างอยู่แล้ว (รอคลิปได้ทีละอัน): "
+                      f"{(dropped.get('script') or {}).get('title', '')}\n"
+                      f"คลิปจาก Flow ของ pack นั้นส่งมาจะไม่รับแล้ว{tail}")
 
 
 async def ask_character(client: httpx.AsyncClient, state: dict, wait: dict) -> None:
@@ -1095,7 +1120,7 @@ async def on_storyboard(client: httpx.AsyncClient, state: dict,
     message_id = await send_storyboard(client, board)
     # The Script's own words are the clip's metadata: a Shorts storyboard is a
     # different way of shooting the Clip that was reviewed, not a different clip.
-    wait_for_clip(state, message_id, script, topic, locale)
+    await say_dropped_pack(client, wait_for_clip(state, message_id, script, topic, locale))
 
 
 async def on_long_storyboard(client: httpx.AsyncClient, state: dict, brief: str,
@@ -1122,8 +1147,8 @@ async def on_long_storyboard(client: httpx.AsyncClient, state: dict, brief: str,
     # and the description is left empty rather than filled with stage
     # directions (`storyboard.as_script`). Thai channel: a brief typed in has
     # no Locale of its own.
-    wait_for_clip(state, message_id, storyboard.as_script(board), brief,
-                  locales.DEFAULT)
+    await say_dropped_pack(client, wait_for_clip(state, message_id, storyboard.as_script(board),
+                                                 brief, locales.DEFAULT))
 
 
 # --- the clip the human assembles from a Storyboard ---------------------------
@@ -1229,6 +1254,11 @@ async def drop_review(client: httpx.AsyncClient, stale: dict) -> None:
 async def drop_clip_wait(client: httpx.AsyncClient, wait: dict) -> None:
     """The storyboard's clip never came. Said out loud, like a dropped Park."""
     title = (wait.get("script") or {}).get("title", "")
+    if wait.get("kind") == "studio":
+        tail = "\n(ยกเลิกภาษาอังกฤษของหัวข้อนี้ด้วย)" if wait.get("pair") else ""
+        await say(client, f"⌛️ เลิกรอคลิปจาก Flow ของ Studio pack นี้แล้ว: {title}\n"
+                          f"ลบ pack และ footage ที่เก็บไว้แล้ว{tail}")
+        return
     await say(client, f"⌛️ เลิกรอคลิปของ storyboard นี้แล้ว: {title}\n"
                       "ยังส่งเข้ามาได้ ถ้าสั่ง storyboard ใหม่")
 
@@ -1245,6 +1275,21 @@ def _studio_wait(state: dict, clip_id: str) -> dict | None:
     if wait.get("kind") == "studio" and wait.get("clip_id") == clip_id:
         return wait
     return None
+
+
+def drop_studio_files(wait: dict) -> None:
+    """Everything a Studio wait left on disk: pack, take, footage and inbox files.
+
+    The inbox part matters for an export held for ✂️ cut evenly: its token is no
+    longer live once the wait is gone, and nothing else would claim it.
+    """
+    if wait.get("kind") != "studio":
+        return
+    studio.discard(wait.get("clip_id") or "")
+    inbox = studio.inbox_dir()
+    for token in wait.get("versions") or {}:
+        for name in (f"{token}.mp4", f"{token}.mp4.taken"):
+            (inbox / name).unlink(missing_ok=True)
 
 
 def studio_keyboard(wait: dict) -> dict:
@@ -1324,6 +1369,12 @@ async def on_studio(client: httpx.AsyncClient, state: dict) -> None:
         save_state(state)
         await say(client, f"อัดเสียงสำหรับ Studio ไม่สำเร็จ: {exc}")
         return
+    # Read after the narration await, not at the top: a 📋 board can land
+    # while the take is being spoken and would otherwise vanish unannounced.
+    replaced = state.get("clip_wait") or {}
+    if replaced and replaced.get("kind") != "studio":
+        await say(client, "📋 เลิกรอคลิปของ storyboard เดิมแล้ว (รอคลิปได้ทีละอัน): "
+                          f"{(replaced.get('script') or {}).get('title', '')}")
     state["clip_wait"] = {
         "kind": "studio", "clip_id": clip_id, "script": script,
         "topic": state.get("topic"), "locale": locale, "spans": meta["spans"],
@@ -1402,8 +1453,8 @@ async def _publish_version(client: httpx.AsyncClient, state: dict, wait: dict,
                    for i, s in enumerate(board["scenes"])],
     }
     studio.write_pack(clip_id, pack, markdown)
-    await send_document(client, studio.root(clip_id) / "script.md",
-                        f"script.md — pack v{pack['version']}")
+    doc = await send_document(client, studio.root(clip_id) / "script.md",
+                              f"script.md — pack v{pack['version']}")
     flow_cards = ", ".join(str(c + 1) for c in pending)
     sent = await say(
         client,
@@ -1413,7 +1464,10 @@ async def _publish_version(client: httpx.AsyncClient, state: dict, wait: dict,
         "ไฟล์ ≤20MB reply ข้อความนี้ได้เลย · สลับ 🎬/🖼 หรือเปลี่ยนตัวละครด้วยปุ่มข้างล่าง",
         reply_markup=studio_keyboard(wait),
     )
+    # Both messages take a reply: the human answers whichever is on screen.
     wait["versions"][token] = {"message_id": (sent or {}).get("message_id"),
+                               "message_ids": [m for m in ((doc or {}).get("message_id"),
+                                                           (sent or {}).get("message_id")) if m],
                                "pending": pending, "shots": pack["shots"]}
     # Only the newest few versions can still be answered: an export of an
     # older shot map would be cut on the wrong boundaries.
@@ -1432,7 +1486,8 @@ async def on_studio_callback(client: httpx.AsyncClient, state: dict, data: str) 
         await cut_evenly(client, state, arg)
         return
     if kind == "str":
-        await render_studio(client, state, clip_id)
+        # Spawned: a render runs for minutes and this is the poll loop.
+        spawn(render_studio(client, state, clip_id), "render_studio")
         return
     if wait.get("busy"):
         await say(client, "กำลังทำ pack อยู่ รอสักครู่แล้วค่อยกดใหม่")
@@ -1470,7 +1525,7 @@ async def shorten_cards(client: httpx.AsyncClient, state: dict, wait: dict) -> N
     long_cards = [f"การ์ด {i + 1} ({span:.1f} วิ)" for i, span in enumerate(wait["spans"])
                   if studio.shots_for(span) > 1]
     state.pop("clip_wait", None)
-    studio.discard(wait["clip_id"])
+    drop_studio_files(wait)
     if wait.get("pair"):
         # The 🌏 half went into the pack with the Script; it comes back with it.
         state["pair"] = wait["pair"]
@@ -1489,12 +1544,138 @@ async def shorten_cards(client: httpx.AsyncClient, state: dict, wait: dict) -> N
 
 
 async def render_studio(client: httpx.AsyncClient, state: dict, clip_id: str) -> None:
-    """Replaced in Task 8."""
-    await say(client, "render Studio ยังไม่พร้อม")
+    """Render with every Flow Card's kept footage; Pexels for the rest.
+
+    Takes the live slots the way render_parked() does, so it needs an idle
+    bot; a busy one gets a button rather than a dropped render.
+    """
+    wait = _studio_wait(state, clip_id)
+    if not wait:
+        await say(client, "pack นี้เก่าแล้ว กด 🎞 ที่สคริปต์ใหม่นะ")
+        return
+    mode = state.get("mode", "idle")
+    if mode != "idle":
+        note = st.busy_note(mode) if mode in st.HOLDING_MODES else "ยังมีสคริปต์ค้างรีวิวอยู่"
+        await say(client, f"{note}\nfootage พร้อมแล้ว กด render เมื่อบอทว่าง",
+                  reply_markup={"inline_keyboard": [[
+                      {"text": "🎬 render Studio", "callback_data": f"str:{clip_id}"}]]})
+        return
+    count = len(wait["script"]["cards"])
+    have = studio.have_segments(clip_id, count)
+    missing = studio.pending_cards(wait["sources"], have)
+    if missing:
+        # A 🎬 Card with no footage is never quietly rendered on Pexels.
+        await say(client, f"การ์ด {', '.join(str(c + 1) for c in missing)} ตั้งเป็น 🎬 Flow "
+                          "แต่ยังไม่มี footage — ใช้ pack ล่าสุด หรือสลับการ์ดนั้นเป็น 🖼")
+        return
+    supplied = {i: studio.segment_path(clip_id, i) for i in have
+                if wait["sources"][i] == characters.FLOW}
+    narration = studio.load_narration(clip_id)
+    if narration is None:
+        await say(client, "🔁 เสียงพากย์เปลี่ยน (/say) หรือหาไฟล์เดิมไม่เจอ — อัดเสียงใหม่ "
+                          "จุดตัดอาจคลาดเล็กน้อย")
+    if wait.get("pair"):
+        state["pair"] = wait.pop("pair")
+    # The Fact sheet and hook Variant come back with the Script: do_render's
+    # footer and the Manifest read them, and to_idle() cleared both at 🎞.
+    state.update(script=wait["script"], topic=wait.get("topic"), clip_id=clip_id,
+                 research=wait.get("research"), style=wait.get("style", ""),
+                 locale=wait["locale"], message_id=None)
+    save_state(state)
+    await do_render(client, state, supplied=supplied, narration=narration, hold=set(supplied))
+
+
+async def process_export(client: httpx.AsyncClient, state: dict, token: str, path: Path,
+                         even: bool = False) -> None:
+    """One stitched export → per-Card footage → render. Never cut on a guess.
+
+    The claimed file is deleted on every exit but one: an export of the wrong
+    length is held for ✂️ cut evenly, and drop_studio_files() owns it after that.
+    """
+    keep = False
+    try:
+        wait = state.get("clip_wait") or {}
+        version = (wait.get("versions") or {}).get(token) if wait.get("kind") == "studio" else None
+        if not version:
+            await say(client, "ได้ไฟล์มา แต่ pack นั้นเก่าแล้ว — ใช้ pack ล่าสุดนะ")
+            return
+        clip_id = wait["clip_id"]
+        shots = {int(k): v for k, v in version["shots"].items()}
+        total = studio.total_shots(shots)
+        try:
+            # ffprobe/ffmpeg are blocking subprocesses; never on the event loop.
+            seconds = await asyncio.to_thread(studio.duration, path)
+        except RuntimeError as exc:
+            await say(client, f"อ่านไฟล์ไม่ได้: {exc}\nexport จาก Flow ใหม่แล้วส่งอีกครั้ง")
+            return
+        if not even and not studio.fits(seconds, total):
+            keep = True
+            wait.setdefault("uneven", {})[token] = str(path)
+            save_state(state)
+            await say(client,
+                      f"ได้ {seconds:.1f} วิ แต่ pack นี้มี {total} shot × 8 = {total * 8} วิ\n"
+                      "เช็คว่าใน Scenes เรียงครบทุก shot ไม่ได้ตัดต่อ แล้ว export ใหม่ "
+                      "หรือกดหั่นเท่าๆ กันถ้ามั่นใจว่าลำดับถูก",
+                      reply_markup={"inline_keyboard": [[{
+                          "text": "✂️ หั่นเท่าๆ กัน (cut evenly)",
+                          "callback_data": f"ste:{clip_id}:{token}"}]]})
+            return
+        (wait.get("uneven") or {}).pop(token, None)
+        save_state(state)
+        try:
+            await asyncio.to_thread(studio.cut, path, version["pending"], shots, clip_id,
+                                    studio.shot_length(seconds, total, even))
+        except RuntimeError as exc:
+            await say(client, f"หั่นคลิปไม่สำเร็จ: {exc}\nส่งไฟล์ใหม่อีกครั้งได้")
+            return
+        path.unlink(missing_ok=True)
+        await say(client, f"✂️ หั่น {total} shot แล้ว กำลัง render")
+        await render_studio(client, state, clip_id)
+    finally:
+        if not keep:
+            path.unlink(missing_ok=True)
 
 
 async def cut_evenly(client: httpx.AsyncClient, state: dict, token: str) -> None:
-    """Replaced in Task 8."""
+    wait = state.get("clip_wait") or {}
+    held = (wait.get("uneven") or {}).get(token)
+    if not held or not Path(held).is_file():
+        await say(client, "ไม่เจอไฟล์ที่รอหั่นแล้ว ส่งใหม่ได้เลย")
+        return
+    spawn(process_export(client, state, token, Path(held), even=True), "studio_cut_even")
+
+
+async def on_studio_reply(client: httpx.AsyncClient, state: dict, message: dict, token: str) -> None:
+    """A video replied to a Studio pack message (or its script.md): that version's export."""
+    media = message.get("video") or message.get("document") or {}
+    wait = state.get("clip_wait") or {}
+    if (media.get("file_size") or 0) > TELEGRAM_FILE_LIMIT:
+        await say(client, "ไฟล์ใหญ่เกิน 20MB — อัปที่หน้าเว็บแทน (ไม่โดนบีบภาพ): "
+                          f"{pack_url(wait.get('clip_id', ''))}")
+        return
+    file_id = media.get("file_id")
+    if not file_id:
+        await say(client, "ไม่เจอไฟล์ในข้อความนี้ แนบคลิปมาด้วยนะ")
+        return
+    dest = studio.inbox_dir() / f"{token}.mp4.taken"
+    await say(client, "⬇️ กำลังรับคลิปจาก Flow...")
+    try:
+        fetched = await download_footage(client, file_id, dest)
+    except Exception:
+        dest.unlink(missing_ok=True)
+        raise
+    if not fetched:
+        dest.unlink(missing_ok=True)
+        return
+    await process_export(client, state, token, dest)
+
+
+def finish_studio_after_upload(state: dict, clip_id: str | None) -> None:
+    """The clip is on YouTube: its pack, take and footage have done their job."""
+    wait = _studio_wait(state, clip_id) if clip_id else None
+    if wait:
+        state.pop("clip_wait", None)
+        drop_studio_files(wait)
 
 
 def _to_upload(state: dict, clip_id: str | None) -> dict | None:
@@ -1576,6 +1757,8 @@ async def do_upload(client: httpx.AsyncClient, state: dict,
         privacy=privacy,
         published_at=datetime.now().isoformat(timespec="seconds"),
     )
+    finish_studio_after_upload(state, clip_id or state.get("last_clip_id"))
+    save_state(state)
 
     url = f"https://youtu.be/{video_id}"
     note = (
@@ -1890,6 +2073,13 @@ async def on_redo(client: httpx.AsyncClient, state: dict) -> None:
     script = state.get("last_script")
     if not script:
         await say(client, "ยังไม่มีคลิปล่าสุดให้ render ซ้ำ ส่งหัวข้อมาก่อนนะ")
+        return
+    wait = state.get("clip_wait") or {}
+    if wait.get("kind") == "studio" and wait.get("clip_id") == state.get("last_clip_id"):
+        # Without this, /redo (which do_render's footer recommends after /say)
+        # re-renders with no supplied footage: every Card falls back to Pexels.
+        await say(client, f"🔁 render ซ้ำด้วย footage จาก Flow เดิม: {script['title']}")
+        spawn(render_studio(client, state, wait["clip_id"]), "render_studio")
         return
     # The Clip is re-opened where it left off, so the re-render lands in the
     # Manifest it belongs to instead of starting an untitled one.
@@ -2553,6 +2743,10 @@ async def handle(client: httpx.AsyncClient, state: dict, update: dict) -> None:
         # otherwise, and guessing between them files the wrong video.
         replied = (message.get("reply_to_message") or {}).get("message_id")
         waiting = state.get("clip_wait") or {}
+        token = studio.version_for_message(waiting, replied)
+        if token:
+            spawn(on_studio_reply(client, state, message, token), "on_studio_reply")
+            return
         if replied and replied == waiting.get("message_id"):
             spawn(on_storyboard_clip(client, state, message), "on_storyboard_clip")
             return
@@ -2649,8 +2843,17 @@ async def main() -> None:
                 # Dropped before the message goes out, same as a Parked Clip: a
                 # slow sendMessage would let the next tick fire a second one.
                 stale = state.pop("clip_wait", None)
+                drop_studio_files(stale or {})
                 save_state(state)
                 spawn(drop_clip_wait(client, stale or {}), "drop_clip_wait")
+            waiting = state.get("clip_wait") or {}
+            live = set(waiting.get("versions") or {}) if waiting.get("kind") == "studio" else set()
+            # Exports uploaded through the Shop API land here; the bot has no
+            # port of its own (docs/adr/0002), so the poll loop collects them.
+            # Claiming is a rename; the probe and the cut run off the loop.
+            for token, path in studio.claim_inbox(live):
+                spawn(process_export(client, state, token, path), "studio_export")
+            studio.sweep_inbox(live)
             if take_auto_pick(state):
                 spawn(auto_pick(client, state), "auto_pick")
             try:

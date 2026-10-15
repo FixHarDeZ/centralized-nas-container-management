@@ -242,6 +242,7 @@ def version_for_message(wait: dict, message_id: int | None) -> str | None:
     if wait.get("kind") != "studio" or not message_id:
         return None
     for token, version in (wait.get("versions") or {}).items():
-        if version.get("message_id") == message_id:
+        # The pack message and its script.md document both take a reply.
+        if message_id == version.get("message_id") or message_id in (version.get("message_ids") or []):
             return token
     return None

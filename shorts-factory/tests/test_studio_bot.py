@@ -201,3 +201,247 @@ def test_shorten_keeps_the_fact_sheet_and_variant(bot):
     run(main.on_studio_callback(None, state, f"stx:{CLIP}"))
     assert state["research"] == facts and state["style"] == "hook-b"
     assert any("📎 https://example.invalid/a" in item[1] for item in bot if item[0] == "say")
+
+
+import subprocess  # noqa: E402
+
+
+def testsrc(path, seconds):
+    subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i", f"testsrc=size=720x1280:rate=24:duration={seconds}",
+                    "-c:v", "libx264", "-preset", "ultrafast", "-f", "mp4", str(path)], check=True, capture_output=True)
+    return path
+
+
+testsrc.__test__ = False  # a helper, not a test: pytest collects any `test*` name
+
+
+def capture_render(monkeypatch):
+    calls = []
+
+    async def fake(client, state, supplied=None, narration=None, hold=frozenset()):
+        calls.append({"supplied": supplied, "narration": narration, "hold": set(hold),
+                      "clip_id": state.get("clip_id")})
+
+    monkeypatch.setattr(main, "do_render", fake)
+    return calls
+
+
+def studio_ready(bot):
+    state = review_state()
+    run(main.on_studio(None, state))
+    token, = state["clip_wait"]["versions"]
+    return state, token
+
+
+def test_inbox_export_is_cut_and_rendered_with_the_saved_take(bot, monkeypatch, tmp_path):
+    calls = capture_render(monkeypatch)
+    monkeypatch.setattr(studio, "load_narration", lambda clip_id: (pathlib.Path("take.wav"), [0.0, 7.0, 16.0]))
+    state, token = studio_ready(bot)
+    inbox = studio.inbox_dir()
+    inbox.mkdir(parents=True, exist_ok=True)
+    testsrc(inbox / f"{token}.mp4", 8)
+    (claimed_token, path), = studio.claim_inbox({token})
+    asyncio.run(main.process_export(None, state, claimed_token, path))
+    assert calls and calls[0]["hold"] == {0}
+    assert calls[0]["supplied"] == {0: studio.segment_path(CLIP, 0)}
+    assert calls[0]["narration"][1] == [0.0, 7.0, 16.0]
+    assert not path.exists()
+
+
+def test_wrong_length_waits_for_cut_evenly(bot, monkeypatch):
+    calls = capture_render(monkeypatch)
+    monkeypatch.setattr(studio, "load_narration", lambda clip_id: None)
+    state, token = studio_ready(bot)
+    inbox = studio.inbox_dir()
+    inbox.mkdir(parents=True, exist_ok=True)
+    path = testsrc(inbox / f"{token}.mp4.taken", 5)
+    asyncio.run(main.process_export(None, state, token, path))
+    assert not calls and token in state["clip_wait"]["uneven"]
+    assert any("cut evenly" in str(item[2]) or "หั่นเท่า" in str(item[2]) for item in bot if item[0] == "say")
+    run(main.on_studio_callback(None, state, f"ste:{CLIP}:{token}"))
+    assert calls and calls[0]["narration"] is None
+    assert any("/say" in item[1] for item in bot if item[0] == "say")
+
+
+def test_busy_bot_keeps_a_render_button(bot, monkeypatch):
+    calls = capture_render(monkeypatch)
+    state, token = studio_ready(bot)
+    state["mode"] = "rendering"
+    asyncio.run(main.render_studio(None, state, CLIP))
+    assert not calls
+    last = [item for item in bot if item[0] == "say"][-1]
+    assert f"str:{CLIP}" in json.dumps(last[2])
+
+
+def test_reply_routes_to_the_version_it_answered(bot, monkeypatch):
+    state, token = studio_ready(bot)
+    monkeypatch.setattr(main, "is_ours", lambda update: True)
+    labels = []
+    monkeypatch.setattr(main, "spawn", lambda coro, label: labels.append(label) or coro.close())
+    message_id = state["clip_wait"]["versions"][token]["message_id"]
+    for replied, expected in ((message_id, "on_studio_reply"), (1, "on_footage")):
+        message = {"video": {"file_id": "f", "file_size": 10}, "reply_to_message": {"message_id": replied}}
+        asyncio.run(main.handle(None, state, {"message": message}))
+    assert labels == ["on_studio_reply", "on_footage"]
+
+
+def test_oversize_reply_points_to_the_web_page(bot):
+    state, token = studio_ready(bot)
+    message = {"video": {"file_id": "f", "file_size": main.TELEGRAM_FILE_LIMIT + 1}}
+    asyncio.run(main.on_studio_reply(None, state, message, token))
+    assert any("/storyboard/" in item[1] for item in bot if item[0] == "say")
+
+
+def test_flow_to_pexels_after_render_keeps_other_footage(bot, monkeypatch):
+    calls = capture_render(monkeypatch)
+    monkeypatch.setattr(studio, "load_narration", lambda clip_id: None)
+    state, token = studio_ready(bot)
+    seg = studio.segment_path(CLIP, 0)
+    seg.parent.mkdir(parents=True, exist_ok=True)
+    seg.write_bytes(b"x")
+    state["clip_wait"]["sources"] = ["flow", "flow", "pexels"]
+    state["clip_wait"]["versions"].clear()
+    run(main.on_studio_callback(None, state, f"stt:{CLIP}:1"))
+    assert calls and calls[-1]["hold"] == {0}
+
+
+def test_a_flow_card_without_footage_is_never_rendered_on_pexels(bot, monkeypatch):
+    calls = capture_render(monkeypatch)
+    state, token = studio_ready(bot)
+    seg = studio.segment_path(CLIP, 0)
+    seg.parent.mkdir(parents=True, exist_ok=True)
+    seg.write_bytes(b"x")
+    state["clip_wait"]["sources"] = ["flow", "flow", "pexels"]
+    run(main.render_studio(None, state, CLIP))
+    assert not calls
+    assert any("การ์ด 2" in item[1] for item in bot if item[0] == "say")
+
+
+def test_a_queued_pair_waits_inside_the_studio_pack(bot, monkeypatch):
+    calls = capture_render(monkeypatch)
+    state = review_state()
+    state["pair"] = {"pair_id": CLIP, "topic": "หัวข้อ"}
+    run(main.on_studio(None, state))
+    assert "pair" not in state and state["clip_wait"]["pair"]["pair_id"] == CLIP
+    seg = studio.segment_path(CLIP, 0)
+    seg.parent.mkdir(parents=True, exist_ok=True)
+    seg.write_bytes(b"x")
+    run(main.render_studio(None, state, CLIP))
+    assert calls and state["pair"]["pair_id"] == CLIP
+
+
+def test_a_second_studio_pack_is_refused_while_one_is_live(bot):
+    state = review_state()
+    run(main.on_studio(None, state))
+    other = {**review_state(), "clip_id": "20261016-090000-000",
+             "clip_wait": state["clip_wait"]}
+    run(main.on_studio(None, other))
+    assert other["mode"] == "review" and other["clip_wait"]["clip_id"] == CLIP
+    assert any("ค้างอยู่" in item[1] for item in bot if item[0] == "say")
+
+
+def test_redo_keeps_the_flow_footage(bot, monkeypatch):
+    rendered = []
+
+    async def fake(client, state, clip_id):
+        rendered.append(clip_id)
+
+    monkeypatch.setattr(main, "render_studio", fake)
+    state, token = studio_ready(bot)
+    state.update(last_script=state["clip_wait"]["script"], last_clip_id=CLIP, mode="idle")
+    run(main.on_redo(None, state))
+    assert rendered == [CLIP]
+
+
+def test_upload_success_cleans_the_studio_files(bot, monkeypatch, tmp_path):
+    state, token = studio_ready(bot)
+    assert studio.read_pack(CLIP)
+    main.finish_studio_after_upload(state, CLIP)
+    assert "clip_wait" not in state and studio.read_pack(CLIP) is None
+
+
+def test_render_studio_restores_the_fact_sheet_and_variant(bot, monkeypatch):
+    seen = []
+
+    async def fake(client, state, supplied=None, narration=None, hold=frozenset()):
+        seen.append((state.get("style"), state.get("research")))
+
+    monkeypatch.setattr(main, "do_render", fake)
+    facts = {"query": "หัวข้อ", "results": []}
+    state = review_state()
+    state.update(research=facts, style="hook-b")
+    run(main.on_studio(None, state))
+    assert state.get("research") is None
+    seg = studio.segment_path(CLIP, 0)
+    seg.parent.mkdir(parents=True, exist_ok=True)
+    seg.write_bytes(b"x")
+    run(main.render_studio(None, state, CLIP))
+    assert seen == [("hook-b", facts)]
+
+
+def test_a_reply_to_script_md_routes_too(bot, monkeypatch):
+    state, token = studio_ready(bot)
+    doc_id = next(100 + i + 1 for i, item in enumerate(bot) if item[0] == "doc")
+    assert doc_id != state["clip_wait"]["versions"][token]["message_id"]
+    monkeypatch.setattr(main, "is_ours", lambda update: True)
+    labels = []
+    monkeypatch.setattr(main, "spawn", lambda coro, label: labels.append(label) or coro.close())
+    message = {"video": {"file_id": "f", "file_size": 10}, "reply_to_message": {"message_id": doc_id}}
+    asyncio.run(main.handle(None, state, {"message": message}))
+    assert labels == ["on_studio_reply"]
+
+
+def test_a_storyboard_over_a_live_pack_drops_it_out_loud(bot, monkeypatch):
+    state, token = studio_ready(bot)
+    state["clip_wait"]["pair"] = {"pair_id": CLIP, "topic": "หัวข้อ"}
+    held = studio.inbox_dir() / f"{token}.mp4.taken"
+    held.parent.mkdir(parents=True, exist_ok=True)
+    held.write_bytes(b"x")
+
+    async def board(*args, **kwargs):
+        return {"overview": {"title": "t"}, "scenes": []}
+
+    async def send(client, board):
+        return 555
+
+    monkeypatch.setattr(storyboard, "for_script", board)
+    monkeypatch.setattr(main, "send_storyboard", send)
+    run(main.on_storyboard(None, state, script=a_script(), clip_id=CLIP))
+    assert state["clip_wait"]["message_id"] == 555 and "kind" not in state["clip_wait"]
+    assert studio.read_pack(CLIP) is None and not held.exists()
+    note = [item[1] for item in bot if item[0] == "say"][-1]
+    assert "Studio pack" in note and "อังกฤษ" in note
+
+
+def test_a_studio_pack_over_a_storyboard_wait_says_so(bot):
+    state = review_state()
+    state["clip_wait"] = {"message_id": 7, "script": {"title": "บอร์ดเก่า"}, "topic": "x",
+                          "locale": "th", "created_at": "2026-10-16T08:00:00"}
+    run(main.on_studio(None, state))
+    assert state["clip_wait"]["kind"] == "studio"
+    assert any("บอร์ดเก่า" in item[1] for item in bot if item[0] == "say")
+
+
+def test_a_failed_cut_leaves_no_inbox_file(bot, monkeypatch):
+    calls = capture_render(monkeypatch)
+    state, token = studio_ready(bot)
+    inbox = studio.inbox_dir()
+    inbox.mkdir(parents=True, exist_ok=True)
+    path = testsrc(inbox / f"{token}.mp4.taken", 8)
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("ffmpeg died")
+
+    monkeypatch.setattr(studio, "cut", broken)
+    asyncio.run(main.process_export(None, state, token, path))
+    assert not calls and not path.exists()
+    assert any("ffmpeg died" in item[1] for item in bot if item[0] == "say")
+
+
+def test_expiry_cleans_a_held_export(bot):
+    state, token = studio_ready(bot)
+    held = studio.inbox_dir() / f"{token}.mp4.taken"
+    held.parent.mkdir(parents=True, exist_ok=True)
+    held.write_bytes(b"x")
+    main.drop_studio_files(state.pop("clip_wait"))
+    assert not held.exists() and studio.read_pack(CLIP) is None
