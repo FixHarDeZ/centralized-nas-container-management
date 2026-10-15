@@ -873,7 +873,7 @@ so `เก็บ log ไว้` comes out with the English word as empty boxes.
 
 ## Shop Flow Studio
 
-[คู่มือใช้งานภาษาไทยพร้อมภาพ — HTML](docs/shop-flow-studio-guide.html)
+[คู่มือ Shopee Affiliate ตั้งแต่เลือกสินค้า ทำคลิป จนโพสต์ — HTML](docs/shop-flow-studio-guide.html)
 
 Creator Studio `/shop` adds persistent product jobs, editable scene plans, manual Google Flow prompts/reference packs, validated MP4/MOV uploads and mixed-video rendering. Thai narration, subtitles, price card and affiliate disclosure remain in shorts-factory. Original Telegram `/shop` stays available.
 
