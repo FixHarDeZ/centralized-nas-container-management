@@ -19,7 +19,7 @@
 {% set rows = library.characters + [{'id': '', 'tag': '', 'thai': '', 'english': '', 'flow_ready': False}] %}
 {% for c in rows %}<fieldset class="card channel-settings"><legend>{{ c.tag or 'เพิ่มตัวละครใหม่' }}</legend>
 <div class="form-grid">
-<div class="field"><label for="char-{{ loop.index0 }}-id">id (a-z, 0-9) — ลบตัวละคร = ล้างช่องนี้</label><input id="char-{{ loop.index0 }}-id" name="char_{{ loop.index0 }}_id" value="{{ c.id }}"></div>
+<div class="field"><label for="char-{{ loop.index0 }}-id">id (a-z, 0-9) — ลบตัวละคร = ล้างทุกช่องในแถวนี้</label><input id="char-{{ loop.index0 }}-id" name="char_{{ loop.index0 }}_id" value="{{ c.id }}"></div>
 <div class="field"><label for="char-{{ loop.index0 }}-tag">tag ใน Flow</label><input id="char-{{ loop.index0 }}-tag" name="char_{{ loop.index0 }}_tag" value="{{ c.tag }}" placeholder="@Nong"></div>
 </div>
 <div class="field"><label for="char-{{ loop.index0 }}-thai">ลักษณะ (ไทย)</label><input id="char-{{ loop.index0 }}-thai" name="char_{{ loop.index0 }}_thai" value="{{ c.thai }}" placeholder="ผู้หญิงไทย 28 ปี ผมบ๊อบสีดำ แว่นกลม เสื้อเชิ้ตลินินสีเบจ"></div>

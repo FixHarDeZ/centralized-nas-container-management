@@ -350,6 +350,20 @@ def test_a_filled_row_without_an_id_is_rejected_not_dropped(client, config_dir):
     assert (config_dir / "characters.json").read_text(encoding="utf-8") == before
 
 
+
+def test_clearing_every_field_of_a_row_deletes_the_character(client, config_dir):
+    """The page says a character is deleted by emptying its row. A row with
+    only the id cleared is refused instead (see the test above)."""
+    assert client.post("/settings", data=settings_form_data()).status_code == 200
+    reply = client.post("/settings", data=settings_form_data(
+        char_0_id="", char_0_tag="", char_0_thai="", char_0_english="", char_0_ready="",
+        default_th=""))
+    assert reply.status_code == 200
+    saved = json.loads((config_dir / "characters.json").read_text(encoding="utf-8"))
+    assert saved["characters"] == []
+    assert "ล้างทุกช่องในแถวนี้" in reply.text
+
+
 def write_pack(data_dir, character):
     where = data_dir / "studio" / "20261015-170226-065"
     where.mkdir(parents=True)
