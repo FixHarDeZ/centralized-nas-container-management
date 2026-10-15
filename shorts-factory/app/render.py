@@ -391,19 +391,24 @@ def _segment(png: Path, seconds: float, out: Path, zoom_in: bool = True) -> Path
     return out
 
 
-def _segment_over_footage(card_png: Path, seconds: float, clip: Path, out: Path) -> Path:
+def _segment_over_footage(card_png: Path, seconds: float, clip: Path, out: Path,
+                          hold: bool = False) -> Path:
     """Stock footage, held back by a scrim, with the card laid over it.
 
     No zoompan here — the footage already moves. `-stream_loop -1` covers a
-    Card that outlasts the clip. Video only.
+    Card that outlasts the clip. Studio footage (`hold`) is cut to the Card
+    from a longer shot and is never looped: a loop visibly jumps back to the
+    shot's first frame, so the last frame is held instead. Video only.
     """
     _run([
         "ffmpeg", "-y",
-        "-stream_loop", "-1", "-i", str(clip),
+        *([] if hold else ["-stream_loop", "-1"]), "-i", str(clip),
         "-loop", "1", "-i", str(card_png),
         "-filter_complex",
         (
-            f"[0:v]scale={W}:{H}:force_original_aspect_ratio=increase,"
+            "[0:v]"
+            + (f"tpad=stop_mode=clone:stop_duration={seconds:.3f}," if hold else "")
+            + f"scale={W}:{H}:force_original_aspect_ratio=increase,"
             f"crop={W}:{H},fps={ZOOM_FPS},"
             f"drawbox=x=0:y=0:w=iw:h=ih:color={SCRIM}:t=fill[bg];"
             "[bg][1:v]overlay=0:0:format=auto,format=yuv420p[v]"
@@ -596,7 +601,9 @@ async def _ready(path: Path) -> Path:
 
 async def build(script: dict, workdir: Path,
                 supplied: dict[int, Path] | None = None,
-                locale: str = locales.DEFAULT) -> tuple[Path, dict]:
+                locale: str = locales.DEFAULT,
+                narration: tuple[Path, list[float]] | None = None,
+                hold: frozenset[int] | set[int] = frozenset()) -> tuple[Path, dict]:
     """Script → mp4, plus the parameters it was actually built with.
 
     The second return value is what the Manifest records: the workdir is wiped
@@ -604,21 +611,27 @@ async def build(script: dict, workdir: Path,
 
     `supplied` maps a Card index to Footage a human generated in Google Flow
     (docs/adr/0005). Those Cards skip the Pexels search entirely; the rest are
-    unaffected.
+    unaffected. `narration` is a take already spoken for a Storyboard Studio
+    pack: reusing it keeps the cut points the shots were planned from. `hold`
+    names the supplied Cards that come from that pack, whose footage is held
+    on its last frame rather than looped.
     """
     workdir.mkdir(parents=True, exist_ok=True)
     cards = script["cards"]
     supplied = {i: Path(p) for i, p in (supplied or {}).items() if Path(p).is_file()}
 
-    narration, clips = await asyncio.gather(
-        _narration_track(cards, workdir, locale),
+    async def given() -> tuple[Path, list[float]]:
+        return narration
+
+    narration_result, clips = await asyncio.gather(
+        given() if narration else _narration_track(cards, workdir, locale),
         asyncio.gather(
             *(_ready(supplied[i]) if i in supplied
               else footage.fetch(c.get("query", ""), workdir / f"broll{i:02d}.mp4")
               for i, c in enumerate(cards))
         ),
     )
-    audio, starts = narration
+    audio, starts = narration_result
     total = audio_seconds(audio)
     # Each Card runs until the next one starts; the last runs past the end of
     # the narration so the mux trims video rather than speech.
@@ -634,7 +647,7 @@ async def build(script: dict, workdir: Path,
         )
         out = workdir / f"seg{i:02d}.mp4"
         if clip:
-            segments.append(_segment_over_footage(png, seconds, clip, out))
+            segments.append(_segment_over_footage(png, seconds, clip, out, hold=i in hold and i in supplied))
         else:
             # Alternate push and pull so a run of gradient cards does not feel
             # like one long drift.
@@ -657,6 +670,7 @@ async def build(script: dict, workdir: Path,
         "pitch": os.environ.get("TTS_PITCH", "+0Hz"),
         "join_silence": JOIN_SILENCE,
         "bgm": music.name if music else None,
+        "narration_reused": bool(narration),
         # The narration rides along: `/retention` names the Card a drop-off
         # landed on, and a Card with only timings to show would name it blank.
         "cards": [
@@ -664,7 +678,8 @@ async def build(script: dict, workdir: Path,
              "footage": bool(clip_path),
              # Which Footage a Card got, so "does a Flow hook hold viewers
              # longer than a stock one" is answerable later without guessing.
-             "footage_source": ("flow" if i in supplied else "pexels") if clip_path else None,
+             "footage_source": (("flow-studio" if i in hold else "flow") if i in supplied
+                                else "pexels") if clip_path else None,
              "narration": card["narration"]}
             for i, (card, start, span, clip_path) in enumerate(zip(cards, starts, spans, clips))
         ],
