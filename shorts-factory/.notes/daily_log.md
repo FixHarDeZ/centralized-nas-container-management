@@ -2349,3 +2349,4 @@ User closed the task. Expanded 12-step HTML guide published in `898c7ea`; public
 - Spec: `docs/superpowers/specs/2026-10-15-storyboard-studio-pack-design.md`. ADR 0016 จะเขียนตอนลงมือ
 - **ค้าง**: ผู้ใช้รีวิว spec → writing-plans → Phase 1 (Shorts) → ทดสอบจริง 1 คลิปตอบ 5 คำถาม (STYLE header, 9:16/8 วิ, `@tag` ผูก Asset Profile, export ปิดเสียง, ขนาดไฟล์) → Phase 2 Shop
 - ไม่มีโค้ดเปลี่ยน ไม่มี deploy
+- **แก้ spec หลัง review (commit ถัดไป)**: วัดบน NAS 280 คลิป/1,506 card: median 6.8 วิ, p90 9.3, **34% เกิน 7.5 วิ** → เลิกกติกา 1 card = 1 shot / rewrite (rewrite หลังกด Studio = ข้อความที่คนไม่ได้อนุมัติ). ใหม่: เจนเสียงก่อน แล้ว card ได้ `ceil((span+0.5)/8)` shot, ปุ่ม ✂️ ผ่าน revise ปกติ. คลิป studio ไม่เข้า `experiment.tally` (ยังนับ Gate). เสียงเก็บ `/data/studio/<clip_id>/` + hash `say.json`. **Step 0 ต้องทำก่อนเขียนโค้ด** (6 คำถามรวมเครดิต Flow ต่อ Animate + โควตา AI Pro) — script ทดสอบ 3 shot จากคลิป สินเชื่อบ้าน 15/10 ส่งให้ผู้ใช้แล้ว

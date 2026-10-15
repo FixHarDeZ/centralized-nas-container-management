@@ -53,9 +53,14 @@ When a library character is used, the board takes the cached `locked_prompt_tag`
 
 ### Timing rules (what makes the return leg deterministic)
 
-- Every scene is exactly **8 seconds**, one shot per scene. Shorts already have 5–7 Cards, so a clip comes back at 40–56 s.
-- At pack time the bot synthesises the full narration once with edge-tts (the same single call as rendering), measures each Card's span, and rejects any Card over **7.5 s**. A rejected Card is rewritten by mimo within the existing deadline. The 0.5 s margin covers join silence and the voice tail.
-- The narration audio and Card starts are saved to `/data/work/<clip_id>/` and reused at render, so cut points match exactly what was measured. Reuse also avoids an edge-tts `NoAudioReceived` failure at render time.
+Measured on the NAS (2026-10-15, 280 rendered clips, 1,506 non-final Cards): median Card span 6.8 s, p90 9.3 s, max 17.8 s. **518 Cards (34%) exceed 7.5 s.** One Card per 8 s shot would therefore force rewrites on most clips. Rewriting after 🎞 Studio would also ship Card text the human never approved. So Cards are not shortened. Instead, a long Card gets more shots:
+
+- Every shot is exactly **8 seconds**. `script.md` lists shots, not Cards.
+- **Narrate first, plan second.** When 🎞 Studio is pressed, the bot synthesises the full narration once with edge-tts (the same single call as rendering) and measures each Card's span. Card i then gets `shots_i = ceil((span_i + 0.5) / 8)` shots. The 0.5 s margin covers join silence and the voice tail. The last Card uses `span + TAIL_PAD`.
+- The planner receives the shot count per Card. A Card with two or more shots gets distinct shots of the same beat, such as another angle, a closer framing, or the next action. `validate()` checks that each Card has exactly its shot count.
+- The pack shows the total shot count and expected export length (Σ shots × 8 s), because each shot costs Flow credits. If that looks too expensive, the human can press ✂️ to get shorter Cards. ✂️ goes through the **normal revise path**: prefilled feedback naming the long Cards, then the Script returns to review. The bot never rewrites approved text by itself.
+- The narration audio, Card starts and shot map are saved to `/data/studio/<clip_id>/`. That directory is separate from the render workdir, which is wiped after every render, and is removed when the `clip_wait` expires or is replaced. Render reuses the saved audio, so cut points match what was measured, and edge-tts cannot fail with `NoAudioReceived` at render time.
+- `/say` staleness: the saved directory records a hash of `say.json`. If the hash differs at render, the bot re-synthesises, says so in chat, and relies on `tpad` for small drift. Otherwise it reuses the saved audio.
 
 ### `script.md`
 
@@ -77,7 +82,7 @@ INT. <PLACE> - <TIME>
 CAMERA: <motion>, 8 seconds.
 ```
 
-Every scene repeats both `@tag` and the full `locked_prompt_tag`. The tag text is the fallback if Flow does not bind the tag. In Shop, every scene that shows the product references `@Product`, which the human creates as a Prop from the real product photos.
+Each `[SCENE n]` block is one 8 s shot, so a Card with two shots appears as two blocks. Every block repeats both `@tag` and the full `locked_prompt_tag`. The tag text is the fallback if Flow does not bind the tag. In Shop, every scene that shows the product references `@Product`, which the human creates as a Prop from the real product photos.
 
 ### Delivery
 
@@ -90,24 +95,26 @@ Every scene repeats both `@tag` and the full `locked_prompt_tag`. The tag text i
 | 1 | Character: portrait prompt, tag, baseline details | expanded when not ticked as created in Flow, or when invented; otherwise collapsed with "use @Nong in your existing project" |
 | 2 | Product prop: tag `@Product` + download chosen photo(s) | Shop only |
 | 3 | Full script with Copy + Download `script.md` | always, primary |
-| 4 | Per scene: image prompt + motion, Thai narration and measured seconds | collapsed; for regenerating a scene Autofill got wrong |
-| 5 | Export checklist: N × 8 s = X s, muted, in order, which message to reply to | always |
+| 4 | Per shot: image prompt + motion, with its Card's Thai narration and measured seconds | collapsed; for regenerating a scene Autofill got wrong |
+| 5 | Export checklist: S shots × 8 s = X s, muted, in order, which message to reply to | always |
 
 Copy buttons follow the Creator Studio page conventions. The dashboard stays free of PIL and edge-tts imports.
 
 ## Return leg: Shorts via Telegram
 
-`clip_wait` gains `kind: "studio"` with the Script snapshot, scene count, scene seconds, locale, character id and the work directory. One wait at a time and the 72 h lifetime are unchanged. A reply to an older storyboard (no `kind`) keeps the current behaviour: file the clip as finished, no cutting.
+`clip_wait` gains `kind: "studio"` with the Script snapshot, shot map (shots per Card), locale, character id and the work directory. One wait at a time and the 72 h lifetime are unchanged. A reply to an older storyboard (no `kind`) keeps the current behaviour: file the clip as finished, no cutting.
 
 On a reply with video:
 
-1. **Download** with `download_footage()`. Over 20 MB returns the existing "send as a normal video" message.
-2. **Probe** duration with ffprobe.
-   - Within ±0.5 s of N × 8: cut at 0, 8, 16, …
-   - Otherwise: say `got 41.2 s but storyboard has 6 scenes × 8 = 48 s` with a button **"cut evenly"**, which splits the actual length into N equal parts. Never cut silently on a guess (ADR 0005 matching rule).
-3. **Cut**: scene i from i × 8 for that Card's narration span, audio removed (`-an`). The last Card runs to the end of narration plus `TAIL_PAD`.
+1. **Download** with `download_footage()`. Over 20 MB returns the existing "send as a normal video" message, which makes Telegram recompress. Here the footage is the whole picture, so recompression costs more than it does for a hook clip. Step 0 measures real export sizes. If they routinely exceed 20 MB, Phase 1 adds an authenticated upload for Shorts studio clips to the existing Shop API service, which already accepts 100 MiB behind nginx. The read-only dashboard stays read-only. Until step 0 answers, the Telegram path is the only one.
+2. **Probe** duration with ffprobe. Let S be the total shot count.
+   - Within ±0.5 s of S × 8: shot j starts at j × 8.
+   - Otherwise: say `got 41.2 s but storyboard has 6 shots × 8 = 48 s` with a button **"cut evenly"**, which splits the actual length into S equal shots. Never cut silently on a guess (ADR 0005 matching rule).
+3. **Cut**: Card i's footage is its consecutive shots, joined and trimmed to that Card's narration span, with audio removed (`-an`). The last Card runs to the end of narration plus `TAIL_PAD`.
 4. **Render**: `render.build(script, supplied={i: seg_i}, narration=<saved audio and starts>)`. New `narration` parameter skips TTS. Cards are drawn, subtitles written, BGM mixed as today.
 5. **Deliver** through the existing `deliver()`: mp4, upload button, `.srt`, Manifest with `footage_source: "flow-studio"` per Card so retention can later compare against Pexels clips.
+
+**Experiments (ADR 0004).** An all-Flow clip is a large confounder for day-7 retention. Studio clips keep their hook variant in the Manifest, but `experiment.tally` excludes any clip whose Cards have `footage_source == "flow-studio"`, the same way explore clips are excluded. Studio clips still count toward the Gate and appear in `/stats`. Comparing Studio and Pexels clips is a separate question for later, answered from `footage_source`.
 
 If a Card's span is longer than its footage by a little, hold the last frame with `tpad`. Never loop: `-stream_loop` would visibly jump back. This applies only to supplied studio segments; the Pexels path is unchanged.
 
@@ -137,30 +144,36 @@ Unit tests, in the image, no network:
 
 - `characters`: validate/save/load; per-channel defaults; unknown id falls back to 🤖; invalid input writes nothing.
 - `script.md`: no Thai characters; every scene contains `@tag` and the full `locked_prompt_tag`; STYLE line contains 9:16, 8 seconds and no dialogue; no narration text present; Shop scenes reference `@Product`.
-- Timing: with mocked audio durations, a Card over 7.5 s triggers a rewrite.
-- Cutter: ffmpeg `testsrc` of 48 s gives 6 segments; 47.6 s accepted; 45 s refused with the button; "cut evenly" gives 6 equal segments.
+- Timing: mocked spans map to shot counts. 7.4 s gives 1 shot, 7.6 s gives 2, and 13.3 s gives 2. `validate()` rejects a board whose shots per Card differ from the map. ✂️ enters the revise path and never rewrites by itself.
+- Cutter: ffmpeg `testsrc` of 48 s gives 6 shots. 47.6 s is accepted. 45 s is refused with the button. "cut evenly" gives 6 equal shots. A 2-shot Card's footage is shot j and shot j+1 joined, then trimmed to its span.
+- Experiments: a clip with `flow-studio` footage is excluded from `tally` and still included in the Gate count.
+- `say.json` hash changed: render re-synthesises. Unchanged: render reuses the saved audio.
 - `render.build(narration=...)` makes no TTS call (mock asserts). A span longer than its footage holds the last frame rather than looping.
 - Dashboard: `/storyboard/<id>` shows boxes per the conditions above; `WRITING_ROUTES` unchanged; invalid characters are rejected without writing.
 - Shop: combined upload accepts all scenes; revision invariants hold.
 - Shared-sync and the existing suite stay green.
 
-Live acceptance (human, one real clip) answers what the docs could not:
-
-1. Does Storyboard Studio honour the STYLE header?
-2. Can 9:16 and 8 s per shot be set?
-3. Does `@tag` bind to an existing Asset Profile?
-4. Can the stitched video be exported muted?
-5. What file size does a 48 s export have?
-
-Adjust the template, and if needed the checklist boxes, from those answers before Phase 2.
-
 ## Phases
 
-1. Character library + pack + Telegram return leg, Shorts TH/EN.
-2. Live acceptance on one real clip; tune the template.
+**Step 0: live probe before any code.** The return leg rests on Flow behaviour that only third-party tutorials describe. Those tutorials show per-panel Animate clips. None confirms that Storyboard Studio exports one stitched file. Before planning, the human runs a hand-written `script.md`, built from a real Script, through Flow and answers:
+
+1. Does Storyboard Studio honour the STYLE header, or must each setting be set in the app?
+2. Can 9:16 and 8 s per shot be set?
+3. Does `@tag` bind to an existing Asset Profile?
+4. Can all shots be stitched (Storyboard Studio or Scene Builder) and exported as **one muted** file? If not, how do shots leave Flow?
+5. What file size does the export have, and at what length?
+6. **Credits:** how many Flow credits does one 8 s Animate cost, and what is the monthly AI Pro allowance? At 1–2 clips a day plus Shop, and with 8–11 shots per clip as the measured spans imply, does the allowance cover it?
+
+How the answers change the design:
+- (4) fails → the return leg becomes per-shot upload in one batch, and the cutter is dropped.
+- (5) usually over 20 MB → Phase 1 adds the Shop API upload for Shorts.
+- (6) cannot cover it → mix Flow and Pexels shots per Card, as an amendment to this spec before planning.
+
+1. Character library + pack + return leg, Shorts TH/EN, shaped by step 0.
+2. A second live clip end to end; tune the template.
 3. Shop combined upload and character dropdown.
 
-Shop waits for step 2 so template changes land in one place.
+Shop waits for step 2 so template changes land in one place. writing-plans starts only after the step 0 answers are in.
 
 ## Out of scope
 
