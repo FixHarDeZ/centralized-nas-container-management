@@ -51,3 +51,26 @@ def test_build_reuses_narration_and_labels_studio_footage(tmp_path, monkeypatch)
     assert details["narration_reused"] is True
     assert details["cards"][0]["footage_source"] == "flow-studio"
     assert details["cards"][1]["footage_source"] is None
+
+
+def test_build_speaks_afresh_when_the_saved_take_has_another_card_count(tmp_path, monkeypatch):
+    spoken = []
+
+    async def tts(cards, workdir, locale):
+        spoken.append(len(cards))
+        return tone(tmp_path / "fresh.wav", 4), [0.0, 2.0]
+
+    async def no_footage(query, dest):
+        return None
+
+    monkeypatch.setattr(render, "_narration_track", tts)
+    monkeypatch.setattr(footage, "fetch", no_footage)
+    monkeypatch.setattr(render, "pick_music", lambda: None)
+    script = {"title": "t", "cards": [
+        {"lines": ["หนึ่ง"], "narration": "หนึ่ง", "spoken": "หนึ่ง", "query": "x"},
+        {"lines": ["สอง"], "narration": "สอง", "spoken": "สอง", "query": "y"}]}
+    stale = (tone(tmp_path / "old.wav", 4), [0.0])
+    _, details = asyncio.run(render.build(script, tmp_path / "work", narration=stale))
+    assert spoken == [2]
+    assert details["narration_reused"] is False
+    assert len(details["cards"]) == 2

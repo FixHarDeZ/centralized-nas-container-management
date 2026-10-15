@@ -619,6 +619,12 @@ async def build(script: dict, workdir: Path,
     workdir.mkdir(parents=True, exist_ok=True)
     cards = script["cards"]
     supplied = {i: Path(p) for i, p in (supplied or {}).items() if Path(p).is_file()}
+    if narration and len(narration[1]) != len(cards):
+        # A take for a different Card count would silently drop Cards in the
+        # zip below; speak afresh, as a `/say` change already does.
+        logger.warning("เสียงที่เก็บไว้มี %d ช่วง แต่สคริปต์มี %d การ์ด พูดใหม่",
+                       len(narration[1]), len(cards))
+        narration = None
 
     async def given() -> tuple[Path, list[float]]:
         return narration
