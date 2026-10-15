@@ -1,3 +1,7 @@
+**2026-10-15 — Shop Flow Studio direction selected.** User chose manual Google Flow generation/import and Creator Studio scene UI, with Telegram notifications. Detailed design draft: `docs/superpowers/specs/2026-10-15-shop-flow-studio-design.md`; awaits review before implementation planning. Proposed dedicated Shop API/worker and persistent jobs, preserving dashboard read-only bot mount; n8n orchestration with idempotent render dispatch. No runtime code changes or deployment; NAS/n8n live state unverified.
+
+**2026-10-15 — Shop motion redesign: audit only, design pending.** Local Shop is image-only (Ken Burns); Pitch sees text + photo count, no visual analysis. No Shop job/media API. Proposed mixed video sources + manual Google Flow import first, n8n orchestration through future persistent job API; paid video API is separate alternative. Await production-path preference. No implementation, tests, commit, deploy or NAS verification this session. See daily_log “Shop motion redesign”.
+
 **2026-10-15 — คำถาม affiliate ในคลิป trends ปกติ: ตอบแล้ว ยังไม่ทำ.** ลิงก์ใน description Shorts กดไม่ได้ (ตั้งแต่ 08/2023);
 ทางจริง = YouTube Shopping affiliate (Shopee) ต้อง YPP + ติด tag ใน Studio เอง. รอผู้ใช้ตอบว่าช่องเข้า YPP หรือยัง —
 ได้ = ช่องลิงก์ optional ตอนรีวิว + `paidProductPlacementDetails` + flag `affiliate` ใน Manifest (แยกจาก Experiment/Gate);

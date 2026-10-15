@@ -2214,3 +2214,17 @@ install` จะสำเร็จ. ต้องสร้าง venv ใต้ re
 **ค้าง**: ผู้ใช้ตอบว่าช่องอยู่ YPP หรือยัง. เรื่องค้างจาก 14/10 ยังเดิม: edge-tts pin `7.3.1` อยู่ใน commit `d85451c` แล้ว แต่สถานะบน NAS (hot-patch/deploy `/shop`) ไม่ได้ตรวจใน session นี้.
 
 **ปิดงาน 2026-10-15**: ไม่มีโค้ดเปลี่ยน ไม่มี deploy. แก้แค่ notes (ยังไม่ commit).
+
+
+## 2026-10-15 — Shop motion redesign: initial audit
+
+Reviewed local shop.py, shop_render.py, main.py routing, dashboard endpoints, ADR 0015 and n8n README. Current Shop accepts images only; renderer uses photo layers and Ken Burns for all beats. Pitch generation receives brief text and photo count, not image contents. No Shop job/media API or dashboard workspace. Shop holds the bot while open; long external generation needs persistent jobs independent of conversational state.
+
+Proposed direction (not approved): mixed real product footage + Google Flow shots + existing Thai narration/subtitles/end card. Start with manual Flow export/import using existing subscription; n8n coordinates waiting and rendering via a future authenticated job API. Alternative: paid video API for full automation. Checked official Google Flow, Gemini API and n8n Wait documentation; do not assume Flow subscription credits fund API calls. Await user's preferred manual-versus-automated production path before detailed design.
+
+Verification: source/documentation review only; no tests run, no runtime changes, no commit or deployment. NAS state not checked; previous deployment notes remain historical, not a live status assertion.
+
+
+## 2026-10-15 — Shop Flow Studio detailed design
+
+User selected semi-automatic Flow and recommended Creator Studio UI. Drafted detailed specification covering brief/shot-plan approval, manual reference/prompt export, scene uploads and acceptance, measured narration timing, separate Shop API/worker storage, render concurrency, n8n reconciliation, Telegram notifications and validation. Reviewed existing Compose, nginx and dashboard boundary; preserve bot data read-only access in dashboard. Detailed spec awaits user review; no implementation or tests yet. No deployment or live NAS/n8n inspection. Documentation commit attempted separately; see Git for resulting status.
