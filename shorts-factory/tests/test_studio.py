@@ -160,3 +160,13 @@ def test_a_restart_puts_back_an_export_caught_mid_cut(tmp_path, monkeypatch):
     assert studio.unclaim_inbox({"aaaaaaaaaaaa"}) == 1
     assert (inbox / "aaaaaaaaaaaa.mp4").is_file()
     assert (inbox / "bbbbbbbbbbbb.mp4.taken").is_file()
+
+
+def test_studio_clips_are_left_out_of_the_tally():
+    from app import experiment
+    arm = sorted(experiment.VARIANTS)[0]
+    plain = {"variant": arm, "outcome": "rendered", "render": {"cards": [{"footage_source": "flow"}]}}
+    flow = {"variant": arm, "outcome": "rendered",
+            "render": {"cards": [{"footage_source": "flow-studio"}, {"footage_source": "pexels"}]}}
+    assert experiment.studio_clip(flow) and not experiment.studio_clip(plain)
+    assert experiment.tally([plain, flow])[arm]["clips"] == 1

@@ -99,6 +99,16 @@ def for_locale(records: list[dict], locale: str = locales.DEFAULT) -> list[dict]
     return [r for r in records if r.get("locale", locales.DEFAULT) == locale]
 
 
+def studio_clip(record: dict) -> bool:
+    """Whether any Card came from a Storyboard Studio pack (docs/adr/0016).
+
+    A clip shot in Flow differs from a Pexels one far more than one hook clause
+    does, so counting it would credit an arm with the footage.
+    """
+    cards = (record.get("render") or {}).get("cards") or []
+    return any(c.get("footage_source") == "flow-studio" for c in cards)
+
+
 def tally(records: list[dict]) -> dict[str, dict]:
     """Per Variant: how many Clips, how they did, and how many were thrown out.
 
@@ -119,6 +129,8 @@ def tally(records: list[dict]) -> dict[str, dict]:
     REAL = {"rendered", "discarded"}
 
     for record in records:
+        if studio_clip(record):
+            continue
         key = "explore" if record.get("explore") else record.get("variant")
         if key not in out:
             continue   # written before the Experiment started
