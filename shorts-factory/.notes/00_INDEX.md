@@ -1,3 +1,8 @@
+**2026-10-15 — Storyboard Studio Pack: spec รอผู้ใช้รีวิว (ยังไม่ลงโค้ด).** แทน loop ทีละ scene ของ Shop Flow Studio:
+บอทออก `script.md` + หน้า `/storyboard/<id>` → คนทำใน Flow Storyboard Studio → reply ไฟล์รวมไม่มีเสียงไฟล์เดียว → บอทหั่นทุก 8 วิ + เสียงที่เจนไว้ตอนสร้าง pack.
+คลังตัวละคร `/config/characters.json` + cache แปล `/data/character_tags.json`. **ห้าม automate Flow** (gflow-cli ไม่ headless; flowkit #67 บัญชีโดนบล็อก). ต้องฟรี — ไม่ใช้ Veo API.
+Spec `docs/superpowers/specs/2026-10-15-storyboard-studio-pack-design.md`. รายละเอียด daily_log 15/10 "Storyboard Studio Pack".
+
 **2026-10-15 ปิดงาน — main = origin/main, NAS รัน `438ad26`.** Affiliate tracking (Sub ID/posts/CSV import/`/shop/revenue`/alerts) ใช้งานได้บน NAS.
 Pitch fix: `validate()` รวมปัญหาทุก beat + บอกจำนวนตัวที่ต้องตัด, `fit_lines()` ตัดบรรทัดที่ช่องว่างเอง, `MAX_ATTEMPTS=5` ตาม deadline.
 ค้างอย่างเดียว: CSV จริง (header + 1 แถว) เพื่อยืนยัน alias; งาน SHARP WH-B55 ต้องกดสร้างแผนใหม่ (ยังไม่เห็นผล).

@@ -2340,3 +2340,12 @@ User closed the task. Expanded 12-step HTML guide published in `898c7ea`; public
 - **ตรวจ**: Docker 426 passed / 2 skipped / 1 deselected; หน้า `/shop/revenue` + section 4 ดูใน Chrome ด้วยข้อมูลสังเคราะห์ในเครื่อง; บน NAS route ภายใน 200 / ผ่าน nginx ไม่มี credential 401
 - **ยังไม่ยืนยัน**: CSV จริงจาก Affiliate Portal (alias ใน `app/shop_report.py` = เดา), Sub ID ของสินค้าที่แนบใน Shopee Video, หน้าเว็บผ่าน Basic Auth จริง, งาน SHARP WH-B55 สร้างแผนผ่านหลัง fix หรือยัง (ผู้ใช้ต้องกดสร้างแผนใหม่เอง)
 - **ค้าง**: ผู้ใช้ส่ง header + 1 แถว ของรายงานคำสั่งซื้อ/คลิก → แก้ alias table
+
+## 2026-10-15 — Storyboard Studio Pack: ออกแบบ (spec เท่านั้น ยังไม่ลงโค้ด)
+ผู้ใช้บอก Shop Flow Studio "ไม่เวิค ใช้ effort เยอะ manual เยอะ" + ส่งคำแนะนำ Gemini (gflow-cli ใน container บน NAS).
+- **ตรวจคำแนะนำ Gemini**: README gflow-cli เอง = ไม่ headless, "container image can inspect but can't generate" → ใช้บน NAS ไม่ได้. flowkit (fork `~/MyCode/flowkit-for-th-lang` หยุดที่ 22/09 = วันเดียวกับ Flow build `20260922` ที่ทำ captcha RPC โดน `PUBLIC_ERROR_UNUSUAL_ACTIVITY`) + upstream #67 มีบัญชีโดนบล็อกเจนมือใน Flow UI ด้วย → **ห้าม automate Flow ด้วยบัญชีหลัก**. Veo API: Lite $0.05/วิ, Fast $0.10 (720p, ไม่มี free tier) — ผู้ใช้ปัด เพราะต้องฟรี
+- **ทางที่เลือก**: ใช้ Storyboard Studio ของ Flow เอง. บอทออก pack (`script.md` อังกฤษล้วน ไม่มีบทพูด + หน้า dashboard `/storyboard/<id>` กล่อง copy) → คนอัป/Autofill/Animate/export ไฟล์รวมไม่มีเสียง → reply ไฟล์เดียว → บอทหั่นทุก 8 วิ + ใช้เสียงพากย์ที่เจนเก็บไว้ตอนสร้าง pack + render เดิม (`supplied=`)
+- คลังตัวละคร: `/config/characters.json` (dashboard เขียนผ่าน `POST /settings`) + `/data/character_tags.json` (บอทแปลอังกฤษ cache ตาม hash). default ต่อช่อง th/en/shop. Shop รับไฟล์รวมผ่านหน้า Shop Studio (100 MiB)
+- Spec: `docs/superpowers/specs/2026-10-15-storyboard-studio-pack-design.md`. ADR 0016 จะเขียนตอนลงมือ
+- **ค้าง**: ผู้ใช้รีวิว spec → writing-plans → Phase 1 (Shorts) → ทดสอบจริง 1 คลิปตอบ 5 คำถาม (STYLE header, 9:16/8 วิ, `@tag` ผูก Asset Profile, export ปิดเสียง, ขนาดไฟล์) → Phase 2 Shop
+- ไม่มีโค้ดเปลี่ยน ไม่มี deploy
