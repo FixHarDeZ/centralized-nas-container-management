@@ -142,3 +142,27 @@ Telegram
   ข้อความ ตัดได้ด้วยการ forward 8443 ที่ router
 - `secretary-ingest` เคยขึ้นค้างทั้งที่เป็น one-shot `restart: "no"` แล้วโดน
   host OOM killer (exit 137) ทำ NAS ล่ม 4 ชม. — ยังไม่ได้ตามว่าใครสั่งมันรัน
+
+## 2026-10-15 — Shop Flow Studio orchestration (local, inactive)
+
+Added `workflows/Shop_Flow_Studio.json` and `docs/shop-flow-studio.md`: minute-based durable render dispatch, bounded wait/status checks and terminal notification recovery. Custom HTTP credential combines existing gateway Basic Auth with scoped X-Shop-Token. Workflow carries job/render metadata only; manual Flow generation/import stays in Shop UI. Worker sends Telegram notices through durable deduplicated commands.
+
+Wiring tests passed locally; final cross-module review PASS. Workflow remains inactive, not imported to NAS; no live credentials/routes or executions tested. No implementation commit/push/deploy. Shared implementation worktree `/private/tmp/shorts-flow-studio`, branch `codex/shorts-flow-studio`.
+
+### Verification follow-up — 2026-10-15
+
+Companion Shop container regression passed: 408 passed, 2 repository-wiring skips (covered by passing local tests), 1 live TTS deselection. Workflow graph/authentication reviewed; local wiring tests passed. Visual Thai usage guide: `../shorts-factory/docs/shop-flow-studio-guide.html`. Workflow still inactive and unimported; live NAS/n8n integration not verified. Implementation uncommitted in task worktree.
+
+## 2026-10-15 - Task closed at user request
+
+Implementation and Thai HTML guide completed locally in `/private/tmp/shorts-flow-studio`, branch `codex/shorts-flow-studio`. Implementation remains UNCOMMITTED; no merge, push, NAS deployment, or live n8n import/activation. HEAD remains design commit `ec2eb27`. Main checkout memory includes this handoff so the next session can find the implementation.
+
+Verification: Docker regression 408 passed, 2 repository wiring tests skipped (passed separately locally), 1 live TTS test deselected. Image build, make check, and final code review passed; no Critical/Important findings. HTML anchors/local links and save/validate/reapprove instructions checked. Browser visual inspection and real Flow/provider acceptance remain unverified.
+
+Next session: resume existing worktree, review/commit full changes, configure public URL and automation credentials, import inactive n8n workflow, deploy through scripts/deploy.sh when requested, and validate a real Flow clip end-to-end on NAS before production acceptance. Local tests do not imply deployment.
+
+Completed Shop_Flow_Studio.json and setup guide. Workflow remains inactive and has not been imported into live n8n.
+
+## 2026-10-15 - Release authorized
+
+User explicitly requested commit to main, push, and deploy. Reopening release work. Preserve prior closure entries as history; current deployment outcome will be recorded after verification. Shop public URL now resolves from vault-managed deployment configuration using the existing Creator Studio external origin. No secrets in workflow JSON.

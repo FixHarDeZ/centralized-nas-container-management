@@ -174,3 +174,8 @@ After uploading files to the NAS via `deploy.sh`, register each stack in Synolog
 ### AI Deck coding workspaces
 
 AI Deck can clone GitHub repositories into persistent task branches via its optional `coding` Compose profile. Code runs in a separate worker; deployment runs on a trusted Mac/VM with its own credentials. See [coding workflow](ai-deck/README.md#coding-projects) and [runner setup](ai-deck/docs/CODING_DEPLOY.md). New private runner settings are vault-managed under `stacks.ai_desk.deploy_runner.*`; no new NAS public port is required. The Mac runner uses private HTTPS port 8792.
+
+
+### Product video workspace
+
+shorts-factory Creator Studio includes a Shop Flow Studio workspace for manual Google Flow scene imports and mixed-video product clips. It uses dedicated private API/worker services on the existing authenticated port5071. Configure vault-managed `SHOP_AUTOMATION_TOKEN` and optional external-origin `SHOP_PUBLIC_URL`, then bind the inactive [n8n workflow](n8n/docs/shop-flow-studio.md). See [Shop usage](shorts-factory/docs/shop-flow-studio.md).

@@ -595,3 +595,31 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
   "Changes nothing about the Clip" on purpose, 🎨 parks because that clip cannot
   be rendered any other way while 📋 leaves 🎬 Pexels available, and it would
   not close the class anyway (a human who taps nothing still silences the bot).
+
+## 2026-10-15 — Shop Flow Studio implementation (local branch)
+
+Implemented persistent Shop product/plan/media/render API and Creator Studio UI, manual Google Flow prompt/reference export and scene import/acceptance, durable worker leases and ownership fencing, immutable render snapshots, bounded FFmpeg operations, destination-specific closings, real video composition and shared legacy render lock. Added private API/worker Compose services and authenticated nginx routing; scoped automation token added through SOPS tooling. HTML Thai visual user guide requested and linked from README/usage guide.
+
+Review: final cross-module review PASS with no Critical/Important findings. Focused current Shop tests: 63 passed, 1 skipped (local Raqm/font dependency), one existing Starlette warning. nginx syntax and make check passed. Docker image build and container render regression still in progress. Browser visual validation unavailable; real Flow video and live providers not verified. No implementation commit, push, NAS deployment, or live n8n activation. Worktree `/private/tmp/shorts-flow-studio`, branch `codex/shorts-flow-studio`; original design commit `ec2eb27`.
+
+### Verification follow-up — 2026-10-15
+
+Full production-dependency container regression: **408 passed, 2 skipped, 1 deselected**, exit 0. The two repository-wiring tests skip in source-only mounts and passed locally. The live TTS integration test was deliberately excluded; no real provider calls or secrets were mounted. HTTP → durable worker → real FFmpeg → restart → MP4/caption download → approval integration passed. Synthetic output: `/private/tmp/shop-flow-artifacts/shop-flow-synthetic.mp4` (246,587 bytes; synthetic image/audio, not a real product demo). `make check` passed using the main checkout venv.
+
+Thai standalone HTML guide completed at `docs/shop-flow-studio-guide.html`: six steps, role diagram, illustrative mockups, example, exact limits, troubleshooting/checklist, offline and print CSS. README and Markdown guide link to it. HTML anchors/local links validated; browser visual inspection unavailable. Current Flow help sources checked 15 Oct 2026. Final application review PASS; no Critical/Important findings. No production deploy, live n8n activation, or live Flow/provider acceptance. Implementation remains uncommitted in task worktree.
+
+Guide review follow-up: explicitly documented save → validate → reapprove after changing crop/contain, source or reference, before accepting all scenes again. Final image rebuild passed.
+
+## 2026-10-15 - Task closed at user request
+
+Implementation and Thai HTML guide completed locally in `/private/tmp/shorts-flow-studio`, branch `codex/shorts-flow-studio`. Implementation remains UNCOMMITTED; no merge, push, NAS deployment, or live n8n import/activation. HEAD remains design commit `ec2eb27`. Main checkout memory includes this handoff so the next session can find the implementation.
+
+Verification: Docker regression 408 passed, 2 repository wiring tests skipped (passed separately locally), 1 live TTS test deselected. Image build, make check, and final code review passed; no Critical/Important findings. HTML anchors/local links and save/validate/reapprove instructions checked. Browser visual inspection and real Flow/provider acceptance remain unverified.
+
+Next session: resume existing worktree, review/commit full changes, configure public URL and automation credentials, import inactive n8n workflow, deploy through scripts/deploy.sh when requested, and validate a real Flow clip end-to-end on NAS before production acceptance. Local tests do not imply deployment.
+
+Completed Shop API/UI/worker, motion scene import/approval/render/recovery and illustrated Thai guide: `/private/tmp/shorts-flow-studio/shorts-factory/docs/shop-flow-studio-guide.html`.
+
+## 2026-10-15 - Release authorized
+
+User explicitly requested commit to main, push, and deploy. Reopening release work. Preserve prior closure entries as history; current deployment outcome will be recorded after verification. Shop public URL now resolves from vault-managed deployment configuration using the existing Creator Studio external origin. No secrets in workflow JSON.

@@ -47,6 +47,52 @@ services:
     depends_on:
       - shorts-factory
 
+  shorts-factory-shop:
+    build: .
+    container_name: shorts-factory-shop
+    restart: unless-stopped
+    command: ["uvicorn", "app.shop_api:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]
+    environment:
+      - TZ=Asia/Bangkok
+      - SHOP_ROOT=/shop-data
+      - SHOP_MEDIA_ROOT=/output/shop-studio
+      - SHOP_AUTOMATION_TOKEN=${SHOP_AUTOMATION_TOKEN}
+    expose:
+      - "8000"
+    volumes:
+      - shorts_factory_shop:/shop-data
+      - /volume1/shorts:/output
+    mem_limit: 384m
+
+  shorts-factory-shop-worker:
+    build: .
+    container_name: shorts-factory-shop-worker
+    restart: unless-stopped
+    command: ["python", "-m", "app.shop_worker"]
+    environment:
+      - TZ=Asia/Bangkok
+      - SHOP_ROOT=/shop-data
+      - SHOP_MEDIA_ROOT=/output/shop-studio
+      - SHOP_PUBLIC_URL=${SHOP_PUBLIC_URL:-}
+      - OUTPUT_DIR=/output
+      - DATA_DIR=/data
+      - CONFIG_DIR=/config
+      - BGM_DIR=/output/bgm
+      - MIMO_API_KEY=${MIMO_API_KEY}
+      - MIMO_BASE_URL=${MIMO_BASE_URL}
+      - MIMO_MODEL=${MIMO_MODEL}
+      - MIMO_TIMEOUT_SECONDS=${MIMO_TIMEOUT_SECONDS:-600}
+      - MIMO_REASONING_EFFORT=${MIMO_REASONING_EFFORT:-low}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+      - TTS_RATE=${TTS_RATE:-+10%}
+    volumes:
+      - shorts_factory_shop:/shop-data
+      - shorts_factory_data:/data:ro
+      - shorts_factory_config:/config:ro
+      - /volume1/shorts:/output
+    mem_limit: 2g
+
   nginx:
     image: nginx:alpine
     container_name: shorts-factory-nginx
@@ -61,7 +107,9 @@ services:
     mem_limit: 64m
     depends_on:
       - shorts-factory-dashboard
+      - shorts-factory-shop
 
 volumes:
   shorts_factory_data:
   shorts_factory_config:
+  shorts_factory_shop:

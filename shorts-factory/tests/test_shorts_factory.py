@@ -3026,6 +3026,7 @@ def test_the_sibling_note_asks_for_a_rewrite_not_a_translation():
 
 
 def test_a_delivered_clip_queues_the_other_half(monkeypatch, tmp_path):
+    monkeypatch.setenv("OUTPUT_DIR", str(tmp_path))
     spawned = []
 
     async def fake_build(script, workdir, supplied=None, locale="th"):
@@ -3050,7 +3051,8 @@ def test_a_delivered_clip_queues_the_other_half(monkeypatch, tmp_path):
     assert spawned == ["continue_pair"]
 
 
-def test_a_failed_render_cancels_the_other_half(monkeypatch):
+def test_a_failed_render_cancels_the_other_half(monkeypatch, tmp_path):
+    monkeypatch.setenv("OUTPUT_DIR", str(tmp_path))
     said = []
 
     async def boom(script, workdir, supplied=None, locale="th"):

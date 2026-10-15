@@ -1,6 +1,6 @@
 # Shop Flow Studio
 
-Date: 2026-10-15. Status: proposed detailed design; user selected semi-automatic Google Flow and Creator Studio UI. Detailed specification awaits review.
+Date: 2026-10-15. Status: approved by user; implementation in progress. User selected semi-automatic Google Flow and Creator Studio UI.
 
 ## Outcome
 

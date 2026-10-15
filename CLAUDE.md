@@ -75,3 +75,7 @@ For coding workspace, Git, session/terminal routing, or deployment runner change
 3. **Atomic Commit:** รวมไฟล์เอกสารที่อัปเดตทั้งหมดเข้ากับ Commit ของซอร์สโค้ดหลักในรอบนั้นทันที (ห้ามแยก Commit เอกสารออกจากโค้ด)
 4. **Security Guardrail:** ห้าม Commit `.env`, `.env.deploy`, `secrets/vault.yaml` (plaintext intermediate) หรือ Hardcode ไอพี/รหัสผ่านจริงลงในโค้ดหรือเอกสาร ให้แทนที่ด้วย Placeholder เช่น `<NAS_HOST>`, `<NAS_USER>`, `<NAS_SUDO_PASSWORD>` ทุกครั้ง — `secrets/vault.sops.yaml` commit ได้เพราะ encrypted แล้ว
 5. **Vault Edits:** ใช้ `make edit-vault` (sops จัดการ encrypt/decrypt ในที่) ห้ามแก้ `vault.sops.yaml` ตรงๆ ใน editor
+
+## Shop Flow Studio (shorts-factory)
+
+Creator Studio `/shop` is served by dedicated private Shop API/worker services. Keep dashboard bot `/data:ro` and no-PIL/no-edge_tts boundary. SQLite metadata lives in `shorts_factory_shop`; media in `/volume1/shorts/shop-studio`. Back up both. Existing host port5071 stays; nginx authenticates every route. `SHOP_AUTOMATION_TOKEN` is vault path `stacks.shorts_factory.shop.automation_token`; optional `SHOP_PUBLIC_URL` is external Creator Studio origin for Telegram links. n8n workflow ships inactive and needs Custom Auth credentials (gateway Basic Auth plus scoped token). Legacy bot `/shop` remains; both render paths use shared `/output/.render.lock`. No Shop jobs enter Shorts experiments.

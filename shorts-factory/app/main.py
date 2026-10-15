@@ -21,6 +21,7 @@ from app import (analytics, backfill, experiment, history, locales, manifest, mo
                  pronunciation, research,
                  render, retention, schedule, script as script_gen, shop, shop_render, snapshots,
                  storyboard, telegram, trends, youtube)
+from app.render_lock import render_slot
 from app import state as st
 # Re-exported: the tests and the dashboard reach these through `main`.
 from app.state import (BUSY_MODES, CLIP_WAIT_LIFETIME, PARK_LIFETIME,  # noqa: F401
@@ -696,10 +697,11 @@ async def do_render(client: httpx.AsyncClient, state: dict,
     workdir = WORK_DIR / datetime.now().strftime("%Y%m%d-%H%M%S")
     delivered = False
     try:
-        clip, details = await render.build(
-            script, workdir, supplied=supplied,
-            locale=state.get("locale", locales.DEFAULT),
-        )
+        async with render_slot():
+            clip, details = await render.build(
+                script, workdir, supplied=supplied,
+                locale=state.get("locale", locales.DEFAULT),
+            )
         manifest.update(state.get("clip_id"), outcome="rendered", render=details)
         await deliver(client, state, script, clip)
         delivered = True
@@ -1999,6 +2001,9 @@ async def shop_resume(client: httpx.AsyncClient, state: dict) -> None:
 
 
 async def on_shop_start(client: httpx.AsyncClient, state: dict, text: str) -> None:
+    workspace = os.environ.get("SHOP_PUBLIC_URL", "").rstrip("/")
+    if workspace:
+        await say(client, f"🛍 Flow Studio: {workspace}/shop")
     mode = state.get("mode", "idle")
     if mode == st.SHOP_MODE:
         await say(client, "🛍 มีคลิปสินค้าเปิดอยู่แล้ว 👇")
@@ -2195,7 +2200,8 @@ async def shop_render_job(client: httpx.AsyncClient, state: dict) -> None:
     save_state(state)
     workdir = WORK_DIR / f"shop-{brief['id']}"
     try:
-        clip, details = await shop_render.build(pitch, [Path(p) for p in brief["photos"]], workdir)
+        async with render_slot():
+            clip, details = await shop_render.build(pitch, [Path(p) for p in brief["photos"]], workdir)
         out = SHOP_DIR / brief["id"]
         out.mkdir(parents=True, exist_ok=True)
         final = out / f"{brief['id']}.mp4"

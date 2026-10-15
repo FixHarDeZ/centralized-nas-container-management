@@ -334,17 +334,23 @@ async def speak(text: str, path: Path, locale: str = locales.DEFAULT,
 
 
 def _run(args: list[str]) -> None:
-    done = subprocess.run(args, capture_output=True, text=True)
+    try:
+        done = subprocess.run(args, capture_output=True, text=True, timeout=1800)
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("ffmpeg timed out after 1800 seconds") from exc
     if done.returncode != 0:
         raise RuntimeError(f"ffmpeg ล้มเหลว: {done.stderr.strip()[-600:]}")
 
 
 def audio_seconds(path: Path) -> float:
-    done = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
-         "-of", "default=nw=1:nk=1", str(path)],
-        capture_output=True, text=True,
-    )
+    try:
+        done = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=nw=1:nk=1", str(path)],
+            capture_output=True, text=True, timeout=30,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError("ffprobe timed out after 30 seconds") from exc
     try:
         return float(done.stdout.strip())
     except ValueError as exc:

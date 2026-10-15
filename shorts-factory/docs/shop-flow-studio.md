@@ -1,0 +1,45 @@
+# Shop Flow Studio
+
+**คู่มือภาษาไทยพร้อมภาพลำดับงาน:** [เปิดคู่มือ HTML — Shop × Google Flow](shop-flow-studio-guide.html). ดาวน์โหลดไฟล์แล้วเปิดด้วย browser ได้โดยไม่ต้องติดตั้งโปรแกรมเพิ่ม
+
+Shop in Creator Studio prepares product videos with manually generated Google Flow scenes. Existing `/shop` in Telegram still supports the original photo workflow.
+
+## Make a clip
+
+1. Open **Shop**, create a product, choose Shopee Video/Facebook/YouTube, and enter factual product details, optional prices and your affiliate URL.
+2. Upload up to six real product photos. Wait for media validation, then generate a plan.
+3. Review narration, on-screen text and reference selection for every scene. Choose Flow video, real footage or a still detail shot. At least one video scene is required. Approve the plan after checking the facts and reference matches.
+4. Copy each Flow prompt and download its reference photo, or download the prompt pack. Generate manually in your own Flow account. No account password or cookie is needed by shorts-factory.
+5. Upload the exported MP4/MOV to its scene. Preview the framing and confirm the product shape, color and logo match. Accept each scene. A failed replacement leaves the previous accepted file intact.
+6. Render. n8n starts the queued render; progress appears in Shop. Review the finished clip, approve it and download video/caption for manual posting.
+
+Changing a product or plan clears approval. Changing media requires accepting that scene again. Older completed clips remain downloadable but are marked outdated when they no longer match current work.
+
+## Media and timing
+
+Video uploads: MP4/MOV, at most 100 MiB, 60 seconds, 3840x2160 or portrait equivalent. Photos: JPEG/PNG/WebP, at most 15 MiB each. Validating means decoding the actual contents, not trusting the extension.
+
+Choose crop or contain for footage outside 9:16. Original audio is removed; Thai narration and music come from shorts-factory. Narration determines scene durations. If a video is too short, the job fails with the scene and required duration; shorten the narration or upload a longer video. The renderer does not silently freeze or loop footage.
+
+The model uses supplied text, not visual inspection of photos. Confirm its reference selections. Flow can change product appearance; human scene acceptance is required. Use real footage when demonstrating product performance. Prices and labels are rendered by shorts-factory, not generated into Flow footage.
+
+## Services and persistent data
+
+- `shorts-factory-shop`: private HTTP API and Shop UI; same existing nginx/DSM URL and Basic Auth. It has no model or Telegram credential.
+- `shorts-factory-shop-worker`: plan generation, media validation, render and notifications. Shares a render lock with legacy bot jobs.
+- `shorts_factory_shop`: SQLite job/command store. Back up this volume together with `/volume1/shorts/shop-studio` media. Do not delete the volume during upgrades.
+- `SHOP_ROOT=/shop-data`, `SHOP_MEDIA_ROOT=/output/shop-studio`; original media and immutable render versions are retained. Automatic deletion is not included.
+- `SHOP_AUTOMATION_TOKEN`: separate service token in SOPS vault. API has no published host port; nginx still authenticates every Shop path.
+- `SHOP_PUBLIC_URL`: external Creator Studio origin for Telegram links, without `/shop`. Managed at `stacks.shorts_factory.shop.public_url` in the vault; set to the actual deployment origin before enabling notifications.
+
+See `n8n/docs/shop-flow-studio.md` for workflow/credential setup. No paid video API is used and Flow subscription credits are never treated as API credits.
+
+## Recovery
+
+Restart preserves drafts, accepted scenes and queued commands. A new worker reclaims expired leases; stale workers cannot overwrite new results. Duplicate n8n dispatch does not create a second render. Unsent terminal notifications are discoverable by reconciliation. A Telegram failure does not change a successful render to failed.
+
+Waiting for Flow never holds the Telegram bot's conversational state or render lock. Rendering itself is serialized across Shop Studio and legacy bot renders to limit NAS load.
+
+## Release acceptance
+
+Automated tests cover synthetic videos and persisted job behavior. Before production acceptance, run one complete clip with real Flow output and listen to Thai narration, inspect subtitles and compare product appearance. Local tests do not prove live n8n credentials, DSM routing or NAS runtime readiness.

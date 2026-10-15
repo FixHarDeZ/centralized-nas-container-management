@@ -91,3 +91,8 @@ Workflow JSON files in `workflows/` are git-tracked.
 # Import a specific workflow file
 ./scripts/n8n_import.sh n8n/workflows/Secretary_Bot__syPPm4qxmVNENC9U.json
 ```
+
+
+## Shop Flow Studio
+
+`workflows/Shop_Flow_Studio.json` is an inactive scheduled reconciliation workflow for shorts-factory Shop. It dispatches approved render IDs, checks progress and requests worker-owned notifications, using Basic Auth plus a scoped token. See [credential setup and bring-up](docs/shop-flow-studio.md). No video binaries, Google session or Telegram Trigger are stored in this workflow.

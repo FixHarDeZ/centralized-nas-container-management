@@ -12,6 +12,7 @@ new here.
 from __future__ import annotations
 
 import logging
+import math
 import os
 from pathlib import Path
 
@@ -132,7 +133,7 @@ def end_layer(pitch: dict, out: Path) -> Path:
         left, ink_top, right, _ = draw.textbbox((0, 0), text, font=big, stroke_width=6)
         draw.text(((W - (right - left)) / 2 - left, top - ink_top), text, font=big,
                   fill=PRICE, stroke_width=6, stroke_fill=(0, 0, 0))
-    _pill(draw, shop.CTA, SUBTITLE_Y, size=60)
+    _pill(draw, pitch.get("cta") or shop.CTA, SUBTITLE_Y, size=60)
     img.save(out)
     return out
 
@@ -146,7 +147,7 @@ def segment(base: Path, text: Path, seconds: float, out: Path, zoom_in: bool) ->
         f"[0:v]{render.ken_burns(frames, zoom_in)}[bg];"
         "[bg][1:v]overlay=0:0:format=auto,format=yuv420p[v]",
         "-map", "[v]", "-t", f"{seconds:.3f}",
-        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+        "-c:v", "libx264", "-threads", "2", "-filter_complex_threads", "2", "-preset", "veryfast", "-crf", "23",
         "-r", str(render.ZOOM_FPS), "-an", str(out),
     ])
     return out
@@ -189,3 +190,101 @@ async def build(pitch: dict, photos: list[Path], workdir: Path) -> tuple[Path, d
                   for s, span in zip(starts, spans)],
     }
     return clip, details
+
+
+def video_segment(source: Path, text: Path, seconds: float, out: Path, *, fit: str, scene_id: str) -> Path:
+    """Trim actual footage to narration; never repeat or freeze its last frame."""
+    from app.shop_media import MediaError, probe, run
+    info = probe(source)
+    if info['type'] != 'video':
+        raise MediaError(f'scene {scene_id}: expected video')
+    if info['duration'] + .025 < seconds:
+        raise MediaError(f'scene {scene_id}: source too short ({info["duration"]:.2f}s; need {seconds:.2f}s)')
+    if fit not in {'crop', 'contain'}:
+        raise MediaError(f'scene {scene_id}: invalid fit')
+    scale = (f'scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H}' if fit == 'crop'
+             else f'scale={W}:{H}:force_original_aspect_ratio=decrease,pad={W}:{H}:(ow-iw)/2:(oh-ih)/2:color=black')
+    run(['ffmpeg', '-v', 'error', '-y', '-threads', '2', '-i', str(source), '-loop', '1', '-i', str(text),
+         '-filter_complex_threads', '2', '-filter_complex',
+         f'[0:v]{scale},setsar=1,fps={render.ZOOM_FPS}[bg];[bg][1:v]overlay=0:0:format=auto,format=yuv420p[v]',
+         '-map', '[v]', '-t', f'{seconds:.3f}', '-an', '-c:v', 'libx264', '-threads', '2',
+         '-preset', 'veryfast', '-crf', '23', str(out)])
+    return out
+
+
+def factual_brief(job: dict) -> str:
+    return '\n'.join([job['name'], job['brief'], f"ราคาปัจจุบัน {job['current_price']}",
+                      f"ราคาเดิม {job['old_price']}"])
+
+
+def pitch_from_plan(job: dict) -> dict:
+    plan = job['plan']
+    references = job['references']
+    return {**plan, 'beats': [{**scene, 'photo': references.index(scene['reference_id']) + 1,
+                            'spoken': scene.get('spoken') or scene['narration']}
+                           for scene in plan['scenes']]}
+
+
+def canonical_plan(job: dict) -> dict:
+    """Use the exact validated values for speech, overlays, prices and captions.
+
+    Validation strips blank lines/whitespace and normalizes currency. Merge those
+    values back by position while preserving immutable scene IDs and media keys.
+    """
+    raw = job['plan']
+    clean = shop.validate(pitch_from_plan(job), factual_brief(job), len(job['references']))
+    scenes = [{**scene, **beat} for scene, beat in zip(raw['scenes'], clean['beats'])]
+    return {**raw, **clean, 'scenes': scenes}
+
+
+async def build_snapshot(snapshot: dict, media_root: Path, workdir: Path) -> tuple[Path, dict]:
+    """Render only the frozen approved snapshot after measuring its TTS."""
+    from app.shop_media import MediaError, probe
+    plan, assets = canonical_plan(snapshot), snapshot['assets']
+    scenes = plan['scenes']
+    if not any(scene['source'] in {'flow', 'real'} for scene in scenes):
+        raise MediaError('at least one video scene is required')
+    workdir.mkdir(parents=True, exist_ok=True)
+    cards = [{'narration': s['narration'], 'spoken': s.get('spoken') or s['narration']} for s in scenes]
+    cards.append({'narration': plan['end_narration'], 'spoken': plan.get('end_spoken') or plan['end_narration']})
+    audio, starts = await render._narration_track(cards, workdir, voice=shop.VOICE)
+    total = render.audio_seconds(audio)
+    if not math.isfinite(total) or not 0 < total + render.TAIL_PAD <= 60:
+        raise MediaError('measured narration plus tail must fit within 60 seconds')
+    if len(starts) != len(cards) or any(not math.isfinite(start) for start in starts):
+        raise MediaError('invalid measured narration timing')
+    spans = [(starts[i + 1] if i + 1 < len(starts) else total + render.TAIL_PAD) - start for i, start in enumerate(starts)]
+    if any(not 0 < span <= 60 for span in spans):
+        raise MediaError('invalid measured narration scene duration')
+    segments = []
+    root = media_root.resolve()
+    def source_path(asset_id):
+        asset = assets.get(asset_id)
+        if not asset or asset['validation'] != 'valid':
+            raise MediaError('snapshot asset missing or invalid')
+        path = (root / 'assets' / asset['key']).resolve()
+        if not path.is_relative_to(root):
+            raise MediaError('unsafe snapshot asset path')
+        return path
+    for i, (scene, seconds) in enumerate(zip(scenes, spans)):
+        source = source_path(scene['media_id'])
+        info = probe(source)
+        text = text_layer({'badge': scene.get('badge') or scene.get('purpose') or 'สินค้า', 'lines': scene['lines']}, workdir / f'text{i:02d}.png')
+        out = workdir / f'seg{i:02d}.mp4'
+        if scene['source'] == 'still':
+            if info['type'] != 'image':
+                raise MediaError(f'scene {scene["id"]}: expected still image')
+            base = photo_layer(source, workdir / f'photo{i:02d}.png')
+            segments.append(segment(base, text, seconds, out, zoom_in=i % 2 == 0))
+        else:
+            segments.append(video_segment(source, text, seconds, out, fit=scene.get('fit', 'crop'), scene_id=scene['id']))
+    base = photo_layer(source_path(scenes[0]['reference_id']), workdir / 'photo-end.png', END_PHOTO_TOP, END_PHOTO_H)
+    text = end_layer(plan, workdir / 'text-end.png')
+    segments.append(segment(base, text, spans[-1], workdir / 'seg-end.mp4', zoom_in=True))
+    silent = render.concat(segments, workdir / 'silent.mp4')
+    music = render.pick_music()
+    clip = render.mux(silent, audio, workdir / 'clip.mp4', music)
+    return clip, {'seconds': round(render.audio_seconds(clip), 3), 'frame': [W, H], 'voice': shop.VOICE,
+                  'bgm': music.name if music else None,
+                  'scenes': [{'id': scene['id'], 'start': round(start, 3), 'seconds': round(span, 3)}
+                             for scene, start, span in zip(scenes, starts, spans)]}

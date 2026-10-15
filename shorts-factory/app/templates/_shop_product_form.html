@@ -1,0 +1,8 @@
+<div class="shop-fields">
+  <label>ชื่อสินค้า<input name="name" value="{{ job.name if job else '' }}" required maxlength="200"></label>
+  <label>ช่องทางโพสต์<select name="destination">{% for value, label in [('shopee','Shopee Video'),('facebook','Facebook'),('youtube','YouTube Shorts')] %}<option value="{{ value }}"{% if job and job.destination == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+  <label class="wide">ข้อมูลสินค้าจริง<textarea name="brief" rows="4" maxlength="10000" placeholder="สินค้าแก้ปัญหาอะไร จุดเด่น ข้อจำกัด และข้อเท็จจริงจากร้าน">{{ job.brief if job else '' }}</textarea></label>
+  <label>ราคา (บาท)<input name="current_price" inputmode="decimal" value="{{ job.current_price if job else '' }}" placeholder="ไม่ระบุก็ได้"></label>
+  <label>ราคาปกติ (บาท)<input name="old_price" inputmode="decimal" value="{{ job.old_price if job else '' }}" placeholder="ถ้ามีราคาอ้างอิงจริง"></label>
+  <label class="wide">ลิงก์ affiliate<input name="affiliate_link" type="url" value="{{ job.affiliate_link if job else '' }}" placeholder="https://..."></label>
+</div>

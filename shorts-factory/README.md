@@ -869,3 +869,14 @@ shipping. ffmpeg's `drawtext` does no shaping at all and is not an alternative.
 The face is Waree Bold from `fonts-thai-tlwg`, chosen because it covers Thai
 and Latin in one file. Noto Sans Thai does not: its cmap has no A-Z or digits,
 so `เก็บ log ไว้` comes out with the English word as empty boxes.
+
+
+## Shop Flow Studio
+
+[คู่มือใช้งานภาษาไทยพร้อมภาพ — HTML](docs/shop-flow-studio-guide.html)
+
+Creator Studio `/shop` adds persistent product jobs, editable scene plans, manual Google Flow prompts/reference packs, validated MP4/MOV uploads and mixed-video rendering. Thai narration, subtitles, price card and affiliate disclosure remain in shorts-factory. Original Telegram `/shop` stays available.
+
+See [usage and recovery](docs/shop-flow-studio.md) and [n8n setup](../n8n/docs/shop-flow-studio.md). The new private `shorts-factory-shop` API and `shorts-factory-shop-worker` services share dedicated `shorts_factory_shop` metadata storage and `/volume1/shorts/shop-studio` media. The dashboard keeps its read-only bot mount; nginx still publishes only port5071 with Basic Auth. Shop automation additionally requires vault-managed `SHOP_AUTOMATION_TOKEN`. `SHOP_PUBLIC_URL` is the external origin for Telegram links; no Flow password/API key is needed.
+
+Back up metadata and media together. Deployment requires recreating the new services and nginx, binding the n8n Custom Auth credential and testing the inactive workflow before activation. A real Flow output and listening check remain necessary for product acceptance.
