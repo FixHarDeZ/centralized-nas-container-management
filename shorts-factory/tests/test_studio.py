@@ -149,3 +149,14 @@ def test_saved_narration_is_dropped_when_say_changes(dirs, monkeypatch):
     assert studio.load_narration("20261015-170226-065") == (audio, [0.0, 7.0])
     render.SAY_PATH.write_text('{"พาส": "พาสะ"}', encoding="utf-8")
     assert studio.load_narration("20261015-170226-065") is None
+
+
+def test_a_restart_puts_back_an_export_caught_mid_cut(tmp_path, monkeypatch):
+    monkeypatch.setenv("STUDIO_INBOX", str(tmp_path / "inbox"))
+    inbox = tmp_path / "inbox"
+    inbox.mkdir()
+    (inbox / "aaaaaaaaaaaa.mp4.taken").write_bytes(b"x")
+    (inbox / "bbbbbbbbbbbb.mp4.taken").write_bytes(b"x")
+    assert studio.unclaim_inbox({"aaaaaaaaaaaa"}) == 1
+    assert (inbox / "aaaaaaaaaaaa.mp4").is_file()
+    assert (inbox / "bbbbbbbbbbbb.mp4.taken").is_file()

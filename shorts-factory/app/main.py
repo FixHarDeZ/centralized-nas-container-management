@@ -2768,6 +2768,10 @@ async def main() -> None:
         # every button on the pack would answer "busy" until it expired.
         state["clip_wait"]["busy"] = False
         save_state(state)
+        # An export claimed but not yet cut died with the process; without
+        # this it sits as `.taken` until the wait expires and nobody is told.
+        wait = state["clip_wait"]
+        studio.unclaim_inbox(set(wait.get("versions") or {}) - set(wait.get("uneven") or {}))
     shop_recovered = st.recover_shop(state)
     if shop_recovered:
         # A Brief caught mid-write or mid-render goes back to waiting on the

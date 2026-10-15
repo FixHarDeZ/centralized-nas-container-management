@@ -222,6 +222,20 @@ def claim_inbox(tokens: set[str]) -> list[tuple[str, Path]]:
     return taken
 
 
+def unclaim_inbox(tokens: set[str]) -> int:
+    """Put back exports a restart caught mid-cut, so the next tick claims them again."""
+    inbox = inbox_dir()
+    if not inbox.is_dir():
+        return 0
+    restored = 0
+    for token in sorted(tokens):
+        claimed = inbox / f"{token}.mp4.taken"
+        if claimed.is_file() and not (inbox / f"{token}.mp4").exists():
+            claimed.replace(inbox / f"{token}.mp4")
+            restored += 1
+    return restored
+
+
 def sweep_inbox(live: set[str], hours: float = 72) -> int:
     """Delete inbox files nobody will claim: past the wait, whatever their token."""
     inbox = inbox_dir()
