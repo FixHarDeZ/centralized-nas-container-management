@@ -20,6 +20,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.background import BackgroundTask
 
+from app.shop_affiliate import Affiliate
+from app.shop_report import ReportError
 from app.shop_store import Conflict, Invalid, NotFound, Store
 
 
@@ -63,6 +65,43 @@ class Start(Revision):
     idempotency_key: str = Field(min_length=1, max_length=200)
 
 
+class ProductInfo(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    revision: int = Field(ge=0, strict=True)
+    product_url: str | None = None
+    shop_name: str | None = None
+    category: str | None = None
+    commission_rate: str | float | None = None
+    campaign_name: str | None = None
+    campaign_ends: str | None = None
+
+
+class Manual(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    clicks: str | int | None = None
+    orders: str | int | None = None
+    commission: str | float | None = None
+
+
+class Post(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    channel: str
+    url: str = ""
+    posted_on: str | None = None
+    render_id: str | None = None
+
+
+class PostEdit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    url: str | None = None
+    posted_on: str | None = None
+    render_id: str | None = None
+    manual: Manual | None = None
+
+
+REPORT_LIMIT = 20 * 1024 * 1024
+
+
 class Notification(BaseModel):
     model_config = ConfigDict(extra="forbid")
     job_id: str
@@ -78,6 +117,8 @@ def create_app(root: Path | None = None) -> FastAPI:
     store = Store(root, Path(media_root) if media_root else None)
     app = FastAPI(title="Shop Flow Studio", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.store = store
+    affiliate = Affiliate(store)
+    app.state.affiliate = affiliate
     automation_token = os.environ.get("SHOP_AUTOMATION_TOKEN", "")
 
     def origin_for(request):
@@ -111,6 +152,10 @@ def create_app(root: Path | None = None) -> FastAPI:
         status = 404 if isinstance(exc, NotFound) else 409 if isinstance(exc, Conflict) else 422
         return JSONResponse({"detail": str(exc)}, status_code=status)
 
+    @app.exception_handler(ReportError)
+    async def report_handler(request, exc):
+        return JSONResponse({"detail": str(exc)}, status_code=422)
+
     @app.get("/healthz")
     def health():
         return {"ok": True}
@@ -125,7 +170,8 @@ def create_app(root: Path | None = None) -> FastAPI:
 
     @app.get("/shop/api/jobs")
     def jobs():
-        return store.list_jobs()
+        posted = affiliate.posted_counts()
+        return [{**job, "posts": posted.get(job["id"], 0)} for job in store.list_jobs()]
 
     @app.post("/shop/api/jobs", status_code=201)
     def create(body: Product):
@@ -227,6 +273,39 @@ def create_app(root: Path | None = None) -> FastAPI:
         if not path.is_relative_to(store.media_root.resolve()) or not path.is_file():
             raise NotFound("render asset not found")
         return FileResponse(path, filename=path.name)
+
+    @app.get("/shop/api/jobs/{job_id}/affiliate")
+    def affiliate_view(job_id: str):
+        return affiliate.job_view(job_id)
+
+    @app.put("/shop/api/jobs/{job_id}/affiliate")
+    def affiliate_product(job_id: str, body: ProductInfo):
+        return affiliate.update_product(job_id, body.revision, body.model_dump(exclude={"revision"}, exclude_unset=True))
+
+    @app.post("/shop/api/jobs/{job_id}/posts", status_code=201)
+    def add_post(job_id: str, body: Post):
+        return affiliate.add_post(job_id, body.model_dump(exclude_unset=True))
+
+    @app.patch("/shop/api/jobs/{job_id}/posts/{post_id}")
+    def edit_post(job_id: str, post_id: str, body: PostEdit):
+        return affiliate.update_post(job_id, post_id, body.model_dump(exclude_unset=True))
+
+    @app.delete("/shop/api/jobs/{job_id}/posts/{post_id}", status_code=204)
+    def delete_post(job_id: str, post_id: str):
+        affiliate.delete_post(job_id, post_id)
+
+    @app.post("/shop/api/affiliate/imports", status_code=201)
+    def import_report(file: UploadFile = File(...)):
+        data = file.file.read(REPORT_LIMIT + 1)
+        if len(data) > REPORT_LIMIT:
+            raise Invalid("report exceeds 20 MiB; export a shorter date range")
+        if not data:
+            raise Invalid("empty report")
+        return affiliate.import_report(file.filename or "report.csv", data)
+
+    @app.get("/shop/api/affiliate/summary")
+    def revenue_summary():
+        return affiliate.summary()
 
     @app.get("/shop/automation/pending")
     def pending():

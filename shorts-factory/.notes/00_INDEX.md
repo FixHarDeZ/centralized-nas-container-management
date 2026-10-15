@@ -1,3 +1,9 @@
+**2026-10-15 — Shop affiliate tracking (1-6) ทำแล้วใน main checkout — ยังไม่ commit/deploy.** Sub ID ต่องาน/ช่องทาง (`sf…sv|fb|yt`),
+บันทึกโพสต์, import CSV รายงาน Affiliate (`app/shop_report.py` alias table — **ยังไม่เทียบไฟล์จริง**), product snapshot + ค่าคอม history,
+`/shop/revenue`, alert ไม่มีคลิก 7 วัน/แคมเปญใกล้หมด ผ่าน worker สแกนรายชั่วโมง → `notify`. ข้อมูลอยู่ตารางแยกใน `shop.sqlite3`
+(`app/shop_affiliate.py`) **ห้าม bump `job.revision`** (fence ของ render/approve). Docker 423 pass. ค้าง: commit, สำรอง volume
+`shorts_factory_shop` แล้ว deploy, ขอ CSV จริงจากผู้ใช้. รายละเอียด daily_log 15/10 "Affiliate tracking".
+
 **2026-10-15 — Shop Flow Studio direction selected.** User chose manual Google Flow generation/import and Creator Studio scene UI, with Telegram notifications. Detailed design draft: `docs/superpowers/specs/2026-10-15-shop-flow-studio-design.md`; awaits review before implementation planning. Proposed dedicated Shop API/worker and persistent jobs, preserving dashboard read-only bot mount; n8n orchestration with idempotent render dispatch. No runtime code changes or deployment; NAS/n8n live state unverified.
 
 **2026-10-15 — Shop motion redesign: audit only, design pending.** Local Shop is image-only (Ken Burns); Pitch sees text + photo count, no visual analysis. No Shop job/media API. Proposed mixed video sources + manual Google Flow import first, n8n orchestration through future persistent job API; paid video API is separate alternative. Await production-path preference. No implementation, tests, commit, deploy or NAS verification this session. See daily_log “Shop motion redesign”.

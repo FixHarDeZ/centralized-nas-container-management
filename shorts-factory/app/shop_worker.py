@@ -6,6 +6,7 @@ import contextlib
 import json
 import logging
 import os
+import time
 import uuid
 from pathlib import Path
 
@@ -13,11 +14,16 @@ import httpx
 
 from app import shop, shop_render, telegram
 from app.render_lock import render_slot_sync
+from app.shop_affiliate import NO_CLICK_DAYS, Affiliate
 from app.shop_media import MediaError, probe
 from app.shop_store import Conflict, Store
 
 logger = logging.getLogger(__name__)
 CTA = {'shopee': 'กดดูสินค้าในตะกร้า', 'facebook': 'กดลิงก์ในคอมเมนต์', 'youtube': 'ดูลิงก์สินค้าที่หน้าโปรไฟล์'}
+MILESTONES = {'plan_ready': 'แผนฉากพร้อมตรวจ', 'waiting': 'รอคลิปจาก Flow', 'ready': 'คลิปพร้อมตรวจ',
+              'failed': 'ตัดต่อไม่สำเร็จ', 'no_clicks': f'ยังไม่มีคลิกหลังโพสต์ {NO_CLICK_DAYS} วัน',
+              'campaign_ending': 'แคมเปญ affiliate ใกล้หมด'}
+ALERT_SCAN_SECONDS = 3600
 
 
 def factual_brief(job: dict) -> str:
@@ -198,7 +204,9 @@ class Worker:
         payload = command['payload']
         job = self.store.get_job(payload['job_id'])
         url = os.environ.get('SHOP_PUBLIC_URL', '').rstrip('/')
-        text = f"🛍 {job['name']}: {payload['milestone']}"
+        text = f"🛍 {job['name']}: {MILESTONES.get(payload['milestone'], payload['milestone'])}"
+        if payload.get('detail'):
+            text += f"\n{payload['detail']}"
         if url:
             text += f"\n{url}/shop/{job['id']}"
         self.store.heartbeat(command['id'], owner, lease_seconds=self.lease_seconds)
@@ -217,7 +225,15 @@ async def serve():
     store = Store(Path(os.environ.get('SHOP_ROOT', '/shop-data')),
                   Path(os.environ.get('SHOP_MEDIA_ROOT', '/output/shop-studio')))
     worker = Worker(store)
+    affiliate = Affiliate(store)
+    scanned = None
     while True:
+        if scanned is None or time.monotonic() - scanned >= ALERT_SCAN_SECONDS:
+            scanned = time.monotonic()
+            try:
+                await asyncio.to_thread(affiliate.enqueue_alerts)
+            except Exception:
+                logger.exception('Affiliate alert scan failed')
         try:
             if not await worker.run_once():
                 await asyncio.sleep(1)

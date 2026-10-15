@@ -15,6 +15,15 @@ Shop in Creator Studio prepares product videos with manually generated Google Fl
 
 Changing a product or plan clears approval. Changing media requires accepting that scene again. Older completed clips remain downloadable but are marked outdated when they no longer match current work.
 
+## After posting: affiliate tracking
+
+7. In section 4 of the job, copy the Sub ID for the channel and paste it into the Sub ID field when you convert the link in the Affiliate Portal. Record the post (channel, date, URL, clip).
+8. Fill in the product snapshot: full product URL, shop, category, today's commission %, and the campaign end date if there is one.
+9. Every few days, export the conversion report (and the click report, if you want the "no clicks" alert) as CSV with Sub ID columns. Import it at **สรุปรายได้ affiliate** (`/shop/revenue`). Re-importing an overlapping range is safe.
+10. If a file is rejected, the message lists its headers. Send them along so the alias table can be extended. Do not rename columns by hand.
+
+Commission marked "สำเร็จ" is what the report says is completed, not money received. Manual numbers on a post are added to imported numbers, so use them only where no report covers that post.
+
 ## Media and timing
 
 Video uploads: MP4/MOV, at most 100 MiB, 60 seconds, 3840x2160 or portrait equivalent. Photos: JPEG/PNG/WebP, at most 15 MiB each. Validating means decoding the actual contents, not trusting the extension.

@@ -88,12 +88,13 @@
     const wrap=$('shop-jobs'); wrap.replaceChildren();
     const filter=$('shop-filter').value;
     const groups={draft:['draft','planning'],waiting:['waiting_for_clips'],ready:['ready_to_render'],rendering:['pending_dispatch','queued','running'],finished:['ready'],failed:['failed']};
-    const visible=jobs.filter(j=>filter==='all'||(groups[filter]||[]).includes(j.status));
+    // "Posted" is derived from affiliate post records; job.status belongs to the render pipeline.
+    const visible=jobs.filter(j=>filter==='all'||(filter==='posted'?j.posts>0:(groups[filter]||[]).includes(j.status)));
     if (!visible.length) wrap.append(node('p',jobs.length?'ยังไม่มีงานในสถานะนี้':'ยังไม่มีคลิปสินค้า เริ่มจากสินค้าที่อยากเล่าให้คนดูฟัง','muted'));
     for (const j of visible) {
       const card=node('article',undefined,'shop-card');
       if(j.references.length) { const img=node('img');img.className='shop-thumb';img.alt='รูปอ้างอิง '+j.name;img.src='/shop/api/jobs/'+j.id+'/assets/'+j.references[0];img.loading='lazy';card.append(img); }
-      card.append(link(j.name,'/shop/'+j.id),node('p',labels[j.status]||j.status,'muted'));
+      card.append(link(j.name,'/shop/'+j.id),node('p',(labels[j.status]||j.status)+(j.posts?' · โพสต์แล้ว '+j.posts+' ครั้ง':''),'muted'));
       const scenes=j.plan?.scenes || [];
       card.append(node('p',scenes.filter(s=>s.accepted_at).length+' / '+scenes.length+' ฉากพร้อม'));
       card.append(node('small',new Date(j.updated_at*1000).toLocaleString('th-TH'),'muted'));

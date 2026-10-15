@@ -565,8 +565,12 @@ class Store:
     def _notification_key(self, job_id, milestone, event_id):
         return f"notify:{job_id}:{event_id}:{milestone}"
 
-    def notify(self, job_id: str, milestone: str, idempotency_key: str, *, render_id: str | None = None, retry: bool = False, command_id: str | None = None, owner: str | None = None) -> dict:
-        if milestone not in ("plan_ready", "waiting", "ready", "failed") or not idempotency_key or len(idempotency_key) > 200:
+    def notify(self, job_id: str, milestone: str, idempotency_key: str, *, render_id: str | None = None, retry: bool = False,
+               command_id: str | None = None, owner: str | None = None, event_id: str | None = None, detail: str | None = None) -> dict:
+        if milestone not in ("plan_ready", "waiting", "ready", "failed", "no_clicks", "campaign_ending") or not idempotency_key or len(idempotency_key) > 200:
+            raise Invalid("invalid notification request")
+        # Affiliate alerts are not tied to a render or plan; they name their own event.
+        if (milestone in ("no_clicks", "campaign_ending")) != bool(event_id) or (event_id and len(event_id) > 200):
             raise Invalid("invalid notification request")
         with self._tx() as db:
             self._fence(db, command_id, owner, job_id=job_id)
@@ -575,9 +579,12 @@ class Store:
                 render = self._get(db, "renders", render_id)
                 if render["job_id"] != job_id or (milestone in ("ready", "failed") and render["status"] != milestone):
                     raise Invalid("notification does not match render status")
-            event_id = render_id or f"plan-{job['plan_version']}"
+            event_id = event_id or render_id or f"plan-{job['plan_version']}"
             key = self._notification_key(job_id, milestone, event_id)
-            command = self._enqueue(db, "notify", {"job_id": job_id, "milestone": milestone, "render_id": render_id}, key)
+            payload = {"job_id": job_id, "milestone": milestone, "render_id": render_id}
+            if detail:
+                payload["detail"] = str(detail)[:300]
+            command = self._enqueue(db, "notify", payload, key)
             # Random reconciliation keys never bypass an exhausted command.
             # An explicit retry reuses its durable identity and starts one new
             # bounded delivery cycle; worker still controls max attempts.

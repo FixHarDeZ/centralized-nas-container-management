@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block title %}สรุปรายได้ affiliate — Shop{% endblock %}
+{% set channel_names = {'shopee': 'Shopee Video', 'facebook': 'Facebook', 'youtube': 'YouTube Shorts'} %}
+{% set kind_names = {'flow': 'มีฉากจาก Flow', 'real': 'ภาพจริงล้วน', 'unknown': 'ไม่รู้ (ไม่ได้ผูกคลิป)'} %}
+{% macro baht(n) %}฿{{ '{:,.2f}'.format(n or 0) }}{% endmacro %}
+{% macro metric_cells(m) %}<td>{{ m.posts }}</td><td>{{ m.clicks }}</td><td>{{ m.orders }}</td><td>{{ baht(m.commission_pending) }}</td><td>{{ baht(m.commission_completed) }}</td>{% endmacro %}
+{% block page_header %}<div class="page-head"><div><a href="/shop">← งานสินค้า</a><p class="eyebrow">SHOP · AFFILIATE</p><h1>สรุปรายได้ affiliate</h1><p class="muted">ตัวเลขมาจากรายงานที่นำเข้าเองจาก Shopee Affiliate (ไม่มี API) จับคู่กับงานด้วย Sub ID · ค่าคอม "สำเร็จ" ยังไม่ใช่เงินที่ได้รับแล้ว</p></div></div>{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="/static/shop.css">
+<section class="shop-panel"><h2>นำเข้ารายงาน</h2>
+<p class="muted">ใน Affiliate Portal เปิดรายงานคำสั่งซื้อ (Conversion report) หรือรายงานคลิก (Click report) เลือกช่วงวันที่ แล้ว Export เป็น CSV ที่มีคอลัมน์ Sub ID — นำเข้าไฟล์ช่วงเดิมซ้ำได้ ระบบอัปเดตสถานะออเดอร์ ไม่นับซ้ำ</p>
+<form id="report-import" class="shop-upload"><label>ไฟล์ CSV (ไม่เกิน 20 MiB)<input type="file" name="file" accept=".csv,text/csv" required></label><button class="primary" type="submit">นำเข้า</button></form>
+<p id="import-message" role="status" aria-live="polite"></p>
+{% if summary.imports %}<details><summary>ไฟล์ที่นำเข้าล่าสุด</summary><table class="aff-table"><thead><tr><th>ไฟล์</th><th>ชนิด</th><th>ช่วงวันที่</th><th>แถว</th><th>ใหม่/อัปเดต</th><th>คอลัมน์ที่ใช้</th></tr></thead><tbody>
+{% for i in summary.imports %}<tr><td>{{ i.filename }}</td><td>{{ 'คลิก' if i.kind == 'clicks' else 'คำสั่งซื้อ' }}</td><td>{{ i.date_from or '?' }} – {{ i.date_to or '?' }}</td><td>{{ i.rows }}</td><td>{{ i.inserted }}/{{ i.updated }}</td><td><small>{% for field, header in (i.matched or {}).items() %}{{ field }} ← {{ header }}{% if not loop.last %}<br>{% endif %}{% endfor %}</small></td></tr>{% endfor %}
+</tbody></table></details>{% endif %}
+<p class="muted">ตรวจคอลัมน์ "ค่าคอม" ที่ระบบเลือกในตารางด้านบน ถ้ารายงานมีหลายคอลัมน์ (ก่อน/หลังหักค่าธรรมเนียม) แล้วเลือกผิด ตัวเลขทั้งหมดจะผิด</p>
+<p class="muted">{% if summary.click_coverage %}รายงานคลิกครอบคลุมถึง {{ summary.click_coverage }} — แจ้งเตือน "ไม่มีคลิก 7 วัน" ใช้เฉพาะโพสต์ที่รายงานครอบคลุมครบสัปดาห์{% else %}ยังไม่เคยนำเข้ารายงานคลิก — แจ้งเตือน "ไม่มีคลิก" จึงยังไม่ทำงาน{% endif %}</p>
+</section>
+
+<section class="shop-panel"><h2>ฉาก Flow คุ้มไหม</h2>
+{% set c = summary.comparison %}
+<table class="aff-table"><thead><tr><th>กลุ่ม</th><th>สินค้าที่โพสต์ (n)</th><th>ค่าคอมเฉลี่ยต่อสินค้า</th></tr></thead><tbody>
+{% for kind in ['flow', 'real'] %}<tr><td>{{ kind_names[kind] }}</td><td>{{ c[kind].products }}</td><td>{{ baht(c[kind].average_commission) if c[kind].average_commission is not none else '—' }}</td></tr>{% endfor %}
+</tbody></table>
+<p class="muted">{% if c.enough %}แต่ละกลุ่มมีอย่างน้อย {{ c.minimum }} สินค้าแล้ว เทียบค่าเฉลี่ยได้ แต่สินค้าคนละชิ้นต่างกันเองมาก อย่าอ่านเป็นผลทดลอง{% else %}ยังสรุปไม่ได้ — ต้องมีสินค้าที่โพสต์อย่างน้อย {{ c.minimum }} ชิ้นต่อกลุ่ม{% endif %} · จัดกลุ่มจากคลิปที่โพสต์จริง ไม่ใช่แผนที่แก้ทีหลัง</p>
+</section>
+
+<section class="shop-panel"><h2>แยกตามช่องทาง / หมวด</h2>
+{% for group, title, names in [('channel', 'ช่องทาง', channel_names), ('category', 'หมวด', {}), ('scene_kind', 'ชนิดฉาก', kind_names)] %}
+<h3>{{ title }}</h3>
+{% if summary.groups[group] %}<div class="aff-scroll"><table class="aff-table"><thead><tr><th>{{ title }}</th><th>สินค้า</th><th>โพสต์</th><th>คลิก</th><th>ออเดอร์</th><th>รอตรวจ</th><th>สำเร็จ</th></tr></thead><tbody>
+{% for key, m in summary.groups[group].items() %}<tr><td>{{ names.get(key, key) }}</td><td>{{ m.products }}</td>{{ metric_cells(m) }}</tr>{% endfor %}
+</tbody></table></div>{% else %}<p class="muted">ยังไม่มีข้อมูล</p>{% endif %}
+{% endfor %}
+</section>
+
+<section class="shop-panel"><h2>ต่อสินค้า</h2>
+{% if summary.rows %}<div class="aff-scroll"><table class="aff-table"><thead><tr><th>สินค้า</th><th>หมวด</th><th>ฉาก</th><th>ค่าคอม %</th><th>โพสต์</th><th>คลิก</th><th>ออเดอร์</th><th>รอตรวจ</th><th>สำเร็จ</th></tr></thead><tbody>
+{% for r in summary.rows %}<tr><td><a href="/shop/{{ r.job_id }}">{{ r.name }}</a><br><small class="muted">{% for ch, m in r.channels.items() %}{{ channel_names[ch] }} {{ m.clicks }} คลิก{% if m.manual %} (กรอกเอง){% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</small></td><td>{{ r.category }}</td><td>{{ kind_names[r.scene_kind] }}</td><td>{{ r.commission_rate if r.commission_rate is not none else '—' }}</td>{{ metric_cells(r.total) }}</tr>{% endfor %}
+</tbody></table></div>{% else %}<p class="muted">ยังไม่มีงานที่โพสต์หรือมีตัวเลข — บันทึกการโพสต์ในหน้างานสินค้า แล้วนำเข้ารายงาน</p>{% endif %}
+{% set u = summary.unattributed %}
+<p class="muted">ยังจับคู่ไม่ได้ (Sub ID ไม่ตรงงานไหน หรือไม่มี Sub ID): {{ u.clicks }} คลิก · {{ u.orders }} ออเดอร์ · รอตรวจ {{ baht(u.commission_pending) }} · สำเร็จ {{ baht(u.commission_completed) }}</p>
+</section>
+<script src="/static/shop_affiliate.js" defer></script>
+{% endblock %}

@@ -2280,3 +2280,38 @@ Verification: HTML/SVG nesting, unique IDs, all internal/local links, steps exac
 ## 2026-10-15 - Final closure: Affiliate guideline
 
 User closed the task. Expanded 12-step HTML guide published in `898c7ea`; publication record pushed in `d9cc8e9`. Main and origin/main verified aligned before closure. NAS upload-only completed successfully; runtime and n8n were not restarted or changed by the documentation release. HTML structure, step order, links and offline assets verified; browser visual inspection and real-product/live-TTS acceptance remain unverified. No remaining requested documentation work. Existing untracked `.agents/` left untouched.
+
+## 2026-10-15 — ข้อเสนอ: ข้อมูล Affiliate ใน Shop dashboard (ยังไม่ทำ)
+
+ผู้ใช้ขอคำแนะนำว่าควรเพิ่มข้อมูล Shopee Affiliate อะไรใน Creator Studio `/shop`. ตอบเชิงข้อเสนอ ไม่แก้โค้ด.
+ข้อจำกัด: ไม่มี Open API (ADR 0015) → ตัวเลขต้องมาจากการ import รายงานที่ export เอง. Shop job มีแค่ name/brief/destination/prices/affiliate_link; flow จบที่ approve+download ไม่รู้ว่าโพสต์ที่ไหนหรือได้เงินเท่าไร.
+แนะนำเรียง: (1) Sub ID ต่อ job+ช่องทาง (2) บันทึกการโพสต์ (URL/วันที่) (3) import CSV รายงาน conversion จับคู่ด้วย Sub ID → คลิก/ออเดอร์/ค่าคอม pending/approved (4) snapshot ค่าคอม %/ร้าน/หมวด/วันหมดแคมเปญ (5) หน้าสรุปรายได้ต่อสินค้า/ช่องทาง/ชนิดฉาก. ไม่แนะนำ scrape/auto-post. ต้องเช็คในบัญชีจริงว่า export CSV ได้และมีคอลัมน์ Sub ID.
+**ค้าง**: ผู้ใช้เลือกข้อ → brainstorm/spec ก่อน implement.
+
+## 2026-10-15 — Affiliate tracking ใน Shop (ข้อ 1-6) — ทำแล้ว ยังไม่ commit/deploy
+
+ผู้ใช้สั่ง "ทำตามลำดับ 1-6 ได้เลย". ทำครบทั้ง 6 ข้อใน checkout หลัก (main, ยังไม่ commit).
+
+**ทำ**
+- `app/shop_report.py` (ใหม่): parse CSV ของ Affiliate. Header จับผ่าน alias table หลัง normalise (อังกฤษ+ไทย), utf-8-sig/cp874, ปี พ.ศ.→ค.ศ., `฿1,234.56`. ชนิด conversions (order/checkout id + commission) หรือ clicks (click id/time). ไม่มีคอลัมน์ที่ต้องใช้หรือไม่มี Sub ID = 422 พร้อมรายชื่อ header (ไม่ import เงียบเป็นศูนย์). Commission ระดับ order ที่ซ้ำทุกแถว item นับครั้งเดียว. สถานะ → pending/completed/cancelled
+- `app/shop_affiliate.py` (ใหม่): ตารางของตัวเอง `affiliate/subids/posts/conversions/clicks/imports` ใน `shop.sqlite3` เดิม. **ห้ามแตะ `job.revision`/`update_job`** (revision ใช้ fence ผล render + approve; bump แล้ว render ที่วิ่งอยู่ไม่ลง job, approve ตีกลับ, คลิปขึ้น "ก่อนแก้ไข")
+  1. Sub ID `sf<8hex job id><sv|fb|yt>` ตัวอักษร+ตัวเลขล้วน สร้างครั้งเดียวเก็บไว้ (UNIQUE), จับคู่ทุกช่อง Sub ID แบบ case-insensitive + หั่น token (Shopee อาจรวมหลาย Sub ID ในช่องเดียว)
+  2. Posts: channel/date/URL/render_id (+ manual clicks/orders/commission เป็น fallback); "โพสต์แล้ว" คำนวณจาก posts ไม่เขียน job.status
+  3. Import upsert ตาม order|item|model (pending→completed อัปเดต ไม่นับซ้ำ), clicks dedupe click id, แถวที่ไม่ match เก็บไว้เป็น unattributed (match ย้อนหลังได้เมื่อมี Sub ID)
+  4. Product snapshot: product URL (parse shop/item id ไว้ fallback same-item), ร้าน, หมวด, ค่าคอม % + history ตามวันที่, แคมเปญ + วันหมด (revision ของตัวเอง)
+  5. `summary()`: ต่อสินค้า/ช่องทาง/หมวด/ชนิดฉาก; Flow vs real จาก snapshot ของ render ที่โพสต์ ไม่ใช่ plan ปัจจุบัน; เทียบได้เมื่อ ≥5 สินค้าต่อกลุ่ม
+  6. `due_alerts()`/`enqueue_alerts()`: ไม่มีคลิก 7 วัน (เฉพาะไม่ใช่ Shopee + มี click report ครอบคลุม posted+7d) และแคมเปญหมดภายใน 2 วัน (เฉพาะงานที่โพสต์แล้ว). ผ่าน `Store.notify` เดิม (เพิ่ม milestone `no_clicks`/`campaign_ending` + `event_id`/`detail`), worker สแกนชั่วโมงละครั้งใน `serve()`, ข้อความ Telegram เป็นไทยแล้ว (`MILESTONES`). ไม่แก้ n8n workflow
+- API: `GET/PUT /shop/api/jobs/{id}/affiliate`, `POST/PATCH/DELETE .../posts`, `POST /shop/api/affiliate/imports`, `GET /shop/api/affiliate/summary`; `/shop/api/jobs` มี `posts`. CSRF เดิมคุมทุก route เขียน
+- UI: section 4 ในหน้างาน (`static/shop_affiliate.js` แยกจาก shop.js), หน้า `/shop/revenue` (register ก่อน `/shop/{job_id}`), list มีปุ่มสรุปรายได้ + filter "โพสต์แล้ว"
+- Docs: README "Affiliate tracking", `docs/shop-flow-studio.md` ขั้น 7-10, root CLAUDE.md Shop section
+
+**ตรวจ**
+- `tests/test_shop_affiliate.py` 15 ข้อ (รวม regression: affiliate writes ไม่เปลี่ยน revision/plan/accepted/approved + render ที่วิ่งก่อนยังลง ready + approve ได้)
+- Docker image (build ใหม่จาก tree นี้, `--network none`): **423 passed, 2 skipped, 1 deselected** (เดิม 408 + 15 ใหม่)
+- ruff (uvx) ผ่านไฟล์ที่แก้; `node --check` JS ผ่าน
+- Browser จริง (Chrome, preview local ข้อมูลสังเคราะห์ ใน scratchpad): section 4, `/shop/revenue`, list. เจอแล้วแก้: จำนวนโพสต์ในสรุปนับซ้ำสองเท่า, ข้อความเล็กในการ์ดโพสต์ติดกัน. บันทึก manual ผ่าน UI แล้วตัวเลขรวมถูก (2 import + 5 manual = 7). CSV ผิดรูปได้ 422 พร้อม header
+
+- รีวิวรอบสอง: conversions ต้องมีคอลัมน์ status + item id ไม่งั้น 422 (เดิม fallback = pending ตลอด / key ตามเลขแถว import ซ้ำช่วงทับ = นับซ้ำ), import เก็บ `matched` (field ← header) โชว์ใน `/shop/revenue` ให้เช็คว่าเลือกคอลัมน์ค่าคอมถูก, alert scan สร้าง `{sub: [days]}` ครั้งเดียว (เดิมสแกน clicks ทั้งตารางต่อโพสต์ใน write lock). TZ=Asia/Bangkok ใน compose ทุก service แล้ว
+
+**ยังไม่ยืนยัน**: ชื่อคอลัมน์จริงของ CSV ไทยจาก Affiliate Portal (alias = เดา), Sub ID ติดไปกับสินค้าที่แนบใน Shopee Video หรือไม่, รูปแบบ Sub ID ที่ Portal รับ (ใช้ตัวอักษร+ตัวเลขล้วนเพื่อเลี่ยง)
+**ค้าง**: commit → deploy (`deploy.sh -s shorts-factory -y`; สำรอง volume `shorts_factory_shop` ก่อน เพราะเพิ่มตารางใน SQLite จริง — `CREATE TABLE IF NOT EXISTS` ไม่แตะตารางเดิม) → ผู้ใช้ export CSV จริงมาเช็ค alias

@@ -1,11 +1,11 @@
 {% extends 'base.html' %}
 {% block title %}Shop — Creator Studio{% endblock %}
-{% block page_header %}<div class="page-head"><div><p class="eyebrow">SHOP · FLOW STUDIO</p><h1>คลิปที่เห็นสินค้าขยับจริง</h1><p class="muted">เตรียมบทและฉาก → สร้างใน Flow → ส่งคลิปกลับมาตัดต่อ</p></div></div>{% endblock %}
+{% block page_header %}<div class="page-head"><div><p class="eyebrow">SHOP · FLOW STUDIO</p><h1>คลิปที่เห็นสินค้าขยับจริง</h1><p class="muted">เตรียมบทและฉาก → สร้างใน Flow → ส่งคลิปกลับมาตัดต่อ</p></div><a class="shop-button" href="/shop/revenue">สรุปรายได้ affiliate</a></div>{% endblock %}
 {% block content %}
 <link rel="stylesheet" href="/static/shop.css">
 <div id="shop-message" role="status" aria-live="polite"></div>
 <section class="shop-panel"><h2>เริ่มคลิปสินค้า</h2><form id="new-product">{% set job = none %}{% include '_shop_product_form.html' %}<button class="primary" type="submit">สร้างงานสินค้า</button></form></section>
-<section class="shop-panel"><div class="shop-toolbar"><h2>งานสินค้า</h2><label>สถานะ<select id="shop-filter"><option value="all">ทั้งหมด</option><option value="draft">ร่างและแผนฉาก</option><option value="waiting">รอคลิปจาก Flow</option><option value="ready">พร้อมตัดต่อ</option><option value="rendering">กำลังทำงาน</option><option value="finished">เสร็จแล้ว</option><option value="failed">ต้องแก้ไข</option></select></label></div><div id="shop-jobs" class="shop-grid"></div></section>
+<section class="shop-panel"><div class="shop-toolbar"><h2>งานสินค้า</h2><label>สถานะ<select id="shop-filter"><option value="all">ทั้งหมด</option><option value="draft">ร่างและแผนฉาก</option><option value="waiting">รอคลิปจาก Flow</option><option value="ready">พร้อมตัดต่อ</option><option value="rendering">กำลังทำงาน</option><option value="finished">เสร็จแล้ว</option><option value="posted">โพสต์แล้ว</option><option value="failed">ต้องแก้ไข</option></select></label></div><div id="shop-jobs" class="shop-grid"></div></section>
 <script id="shop-state" type="application/json">{{ {'jobs': jobs}|tojson }}</script>
 <script src="/static/shop.js" defer></script>
 {% endblock %}
