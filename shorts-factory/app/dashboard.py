@@ -364,8 +364,9 @@ def settings_form(request: Request):
 
 @app.post("/settings", response_class=HTMLResponse)
 async def settings_save(request: Request):
-    """Rewrite `/config/schedule.json`, `/config/models.json` and
-    `/config/characters.json`. The only non-GET route in this app.
+    """Rewrite `/config/schedule.json`, `/config/models.json` and, when the
+    form carries the `characters_form` marker, `/config/characters.json`.
+    The only non-GET route in this app.
 
     Everything the form sends is untrusted text off a LAN page behind one basic
     auth, so nothing is coerced generously: `schedule.validate()` rejects the
@@ -382,15 +383,20 @@ async def settings_save(request: Request):
             "auto_pick_minutes": form.get(f"{code}_minutes", "15"),
         }
     models = {role: str(form.get(f"model_{role}", "")) for role in model_choice.ROLES}
-    library = characters.from_form(form)
+    # Only a form that drew the character section may rewrite the library: a
+    # tab opened before that section existed posts no `char_*` rows, and
+    # reading its silence as "no characters" would wipe the stored ones.
+    library = characters.from_form(form) if form.get("characters_form") == "1" else None
     try:
         # All three checked before any is written: one bad field stores nothing.
         schedule.validate(payload)
         model_choice.validate(models)
-        characters.validate(library)
+        if library is not None:
+            characters.validate(library)
         stored = schedule.save(payload)
         chosen = model_choice.save(models)
-        characters.save(library)
+        if library is not None:
+            characters.save(library)
     except ValueError as exc:
         # Show what they typed back, not what is on disk: a rejected form that
         # redraws itself from storage silently discards the edit.

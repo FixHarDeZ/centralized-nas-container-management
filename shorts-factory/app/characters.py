@@ -55,6 +55,8 @@ def validate(payload: dict) -> dict:
         tag = str(row.get("tag", "")).strip()
         thai = str(row.get("thai", "")).strip()
         english = str(row.get("english", "")).strip()
+        if not cid:
+            raise ValueError(f"ตัวละคร {tag or thai[:20]}: ต้องใส่ id (a-z 0-9 _ -)")
         if not ID.fullmatch(cid):
             raise ValueError(f"id '{cid}' ใช้ได้แค่ a-z 0-9 _ - ยาวไม่เกิน 20")
         if cid in seen:
@@ -122,16 +124,20 @@ def default_sources(count: int) -> list[str]:
 
 
 def from_form(form) -> dict:
-    """Rows `char_<n>_*`; a row with an empty id is a blank slot, not an error."""
+    """Rows `char_<n>_*`. A fully blank row is the empty slot, not an error.
+
+    A row with text but no id is kept, so `validate()` rejects it ("ต้องใส่ id")
+    and the page redraws it: dropping it would lose a typed character silently.
+    """
     rows, n = [], 0
     while f"char_{n}_id" in form:
-        cid = str(form.get(f"char_{n}_id", "")).strip()
-        if cid:
-            rows.append({"id": cid,
-                         "tag": str(form.get(f"char_{n}_tag", "")).strip(),
-                         "thai": str(form.get(f"char_{n}_thai", "")).strip(),
-                         "english": str(form.get(f"char_{n}_english", "")).strip(),
-                         "flow_ready": bool(form.get(f"char_{n}_ready"))})
+        row = {"id": str(form.get(f"char_{n}_id", "")).strip(),
+               "tag": str(form.get(f"char_{n}_tag", "")).strip(),
+               "thai": str(form.get(f"char_{n}_thai", "")).strip(),
+               "english": str(form.get(f"char_{n}_english", "")).strip(),
+               "flow_ready": bool(form.get(f"char_{n}_ready"))}
+        if row["id"] or row["tag"] or row["thai"] or row["english"]:
+            rows.append(row)
         n += 1
     return {"characters": rows,
             "defaults": {c: str(form.get(f"default_{c}", "")) for c in CHANNELS},

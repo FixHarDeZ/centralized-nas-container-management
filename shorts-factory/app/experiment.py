@@ -199,6 +199,8 @@ def by_category(records: list[dict]) -> dict[str, dict]:
     for record in records:
         if record.get("outcome") not in {"rendered", "discarded"}:
             continue
+        if studio_clip(record):
+            continue   # footage shot in Flow, same reason as `tally`
         bucket = out.setdefault(
             _category_of(record), {"clips": 0, "views": 0, "percents": [], "trend": 0}
         )

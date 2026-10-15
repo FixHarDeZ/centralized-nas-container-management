@@ -170,3 +170,15 @@ def test_studio_clips_are_left_out_of_the_tally():
             "render": {"cards": [{"footage_source": "flow-studio"}, {"footage_source": "pexels"}]}}
     assert experiment.studio_clip(flow) and not experiment.studio_clip(plain)
     assert experiment.tally([plain, flow])[arm]["clips"] == 1
+
+
+def test_studio_clips_are_left_out_of_the_categories():
+    from app import experiment
+    plain = {"variant": "question", "outcome": "rendered",
+             "scripts": [{"script": {"category": "เทค"}}],
+             "render": {"cards": [{"footage_source": "pexels"}]}}
+    flow = {"variant": "question", "outcome": "rendered",
+            "scripts": [{"script": {"category": "เทค"}}],
+            "render": {"cards": [{"footage_source": "flow-studio"}]}}
+    assert experiment.by_category([plain, flow])["เทค"]["clips"] == 1
+    assert experiment.by_category([flow]) == {}

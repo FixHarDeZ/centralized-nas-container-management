@@ -76,3 +76,18 @@ def test_from_form_reads_rows_and_drops_blank_ones():
     assert payload["characters"] == [{"id": "nong", "tag": "@Nong", "thai": "ผู้หญิง",
                                       "english": "", "flow_ready": True}]
     assert payload["defaults"] == {"th": "nong", "en": "", "shop": ""}
+
+
+@pytest.mark.parametrize("field", ["tag", "thai"])
+def test_a_filled_row_with_a_blank_id_is_an_error(field):
+    form = {"char_0_id": "", "char_0_tag": "", "char_0_thai": "", "char_0_english": "",
+            "default_th": "", "default_en": "", "default_shop": "", "footage": "hook"}
+    form[f"char_0_{field}"] = "@Mek" if field == "tag" else "ผู้ชาย"
+    with pytest.raises(ValueError, match="ต้องใส่ id"):
+        characters.validate(characters.from_form(form))
+
+
+def test_a_fully_blank_row_is_still_a_blank_slot():
+    form = {"char_0_id": " ", "char_0_tag": "", "char_0_thai": "", "char_0_english": "",
+            "default_th": "", "default_en": "", "default_shop": "", "footage": "hook"}
+    assert characters.validate(characters.from_form(form))["characters"] == []

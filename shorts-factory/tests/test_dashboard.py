@@ -299,7 +299,8 @@ def settings_form_data(**extra):
             "char_0_id": "nong", "char_0_tag": "@Nong", "char_0_thai": "ผู้หญิงไทย 28 ปี",
             "char_0_english": "", "char_0_ready": "on",
             "char_1_id": "", "char_1_tag": "", "char_1_thai": "", "char_1_english": "",
-            "default_th": "nong", "default_en": "", "default_shop": "", "footage": "hook"}
+            "default_th": "nong", "default_en": "", "default_shop": "", "footage": "hook",
+            "characters_form": "1"}
     data.update(extra)
     return data
 
@@ -318,6 +319,35 @@ def test_a_bad_character_stores_nothing_at_all(client, config_dir):
     assert not (config_dir / "characters.json").exists()
     assert not (config_dir / "schedule.json").exists()
     assert 'value="Nong"' in reply.text
+
+
+
+def test_a_form_without_the_character_section_leaves_the_library_alone(client, config_dir):
+    """A tab opened before the character section existed posts no `char_*`
+    fields. Saving its schedule must not save an empty library over the real one."""
+    assert client.post("/settings", data=settings_form_data()).status_code == 200
+    before = (config_dir / "characters.json").read_text(encoding="utf-8")
+    reply = client.post("/settings", data={"th_hours": "9", "th_minutes": "15",
+                                           "en_hours": "", "en_minutes": "15"})
+    assert reply.status_code == 200
+    assert (config_dir / "characters.json").read_text(encoding="utf-8") == before
+    assert json.loads((config_dir / "schedule.json").read_text())["th"]["hours"] == [9]
+    assert "@Nong" in reply.text
+
+
+def test_the_settings_page_marks_its_character_section(client):
+    assert 'name="characters_form" value="1"' in client.get("/settings").text
+
+
+def test_a_filled_row_without_an_id_is_rejected_not_dropped(client, config_dir):
+    assert client.post("/settings", data=settings_form_data()).status_code == 200
+    before = (config_dir / "characters.json").read_text(encoding="utf-8")
+    reply = client.post("/settings", data=settings_form_data(
+        char_1_tag="@Mek", char_1_thai="ผู้ชายไทย 30 ปี"))
+    assert reply.status_code == 400
+    assert "ต้องใส่ id" in reply.text
+    assert 'value="@Mek"' in reply.text, "the typed row must be shown back"
+    assert (config_dir / "characters.json").read_text(encoding="utf-8") == before
 
 
 def write_pack(data_dir, character):
