@@ -503,6 +503,8 @@ Details worth knowing:
 
 ## Storyboard Studio (🎞)
 
+คู่มือใช้งานภาษาไทยแบบทีละขั้น (Telegram → Flow → ส่งไฟล์กลับ): [`docs/studio-pack-guide.html`](docs/studio-pack-guide.html).
+
 📋 and 🎨 make you loop per scene: copy a prompt, generate, download, send back.
 **🎞 Studio (Flow)** on a reviewed script hands the whole shot list to Flow's
 own Storyboard Studio instead, takes back **one** stitched export, and
@@ -955,6 +957,8 @@ so `เก็บ log ไว้` comes out with the English word as empty boxes.
 ## Shop Flow Studio
 
 [คู่มือ Shopee Affiliate ตั้งแต่เลือกสินค้า ทำคลิป จนโพสต์ — HTML](docs/shop-flow-studio-guide.html)
+
+[คู่มือ 🎞 Studio Pack: ทำ hook ด้วย Flow Storyboard Studio — HTML](docs/studio-pack-guide.html)
 
 Creator Studio `/shop` adds persistent product jobs, editable scene plans, manual Google Flow prompts/reference packs, validated MP4/MOV uploads and mixed-video rendering. Thai narration, subtitles, price card and affiliate disclosure remain in shorts-factory. Original Telegram `/shop` stays available.
 

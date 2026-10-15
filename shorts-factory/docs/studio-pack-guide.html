@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="คู่มือภาษาไทย: ทำ hook ของ Shorts ด้วย Google Flow Storyboard Studio ผ่านปุ่ม 🎞 ของ shorts-factory ตั้งแต่ตั้งตัวละครจนได้คลิปพร้อมอัป">
+<title>คู่มือ 🎞 Studio Pack · shorts-factory</title>
+<style>
+:root{--paper:#f7f6f0;--card:#fff;--ink:#17343e;--muted:#526974;--line:#d8e1df;--teal:#006e68;--teal-soft:#e3f2ec;--amber:#8a5000;--amber-soft:#fff0d4;--red-soft:#fde8e4;--red:#9b2c1c;--night:#102e38;--radius:20px;--shadow:0 12px 35px #17343e0b}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:20px}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.8 -apple-system,BlinkMacSystemFont,"Sukhumvit Set","Leelawadee UI","Noto Sans Thai",sans-serif}
+a{color:var(--teal);text-underline-offset:4px}
+h1,h2,h3,p{margin:0}h1,h2,h3{line-height:1.45}
+h1{font-size:clamp(30px,4.2vw,50px);letter-spacing:-.02em;font-weight:760}
+h2{font-size:25px;letter-spacing:-.01em}h3{font-size:18px;margin-top:22px}
+p+p{margin-top:12px}ul,ol{padding-left:24px;margin:12px 0}li+li{margin-top:6px}
+strong{font-weight:730}
+code{font:14px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;background:#eff2ef;border-radius:5px;padding:2px 6px;overflow-wrap:anywhere}
+.wrap{max-width:1100px;margin:auto;padding:0 22px}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:20px 0;gap:14px}
+.brand{font-weight:800;display:flex;align-items:center;gap:10px}
+.brand-mark{display:grid;place-items:center;width:34px;height:34px;background:var(--teal);border-radius:11px;color:#fff}
+.stamp{font-size:12px;color:var(--muted)}
+.hero{background:var(--night);border-radius:28px;color:#f5f7ed;padding:40px;margin-bottom:26px}
+.eyebrow{font-size:12px;font-weight:750;letter-spacing:.1em;color:#a3d9cb;margin-bottom:14px}
+.hero h1 span{color:#a5e7c7}
+.hero code{background:#35606a;color:#f5f7ed}
+.hero p{margin-top:18px;color:#d4e4e2;max-width:720px}
+.flow{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:28px}
+.flow div{background:#1d424b;border:1px solid #35606a;border-radius:16px;padding:14px;font-size:13px;line-height:1.55;color:#d9ebe7}
+.flow b{display:block;color:#fff;font-size:15px;margin-bottom:4px}
+.flow .who{display:inline-block;font-size:11px;border-radius:20px;padding:1px 8px;margin-bottom:8px;background:#35606a;color:#cfe9e2}
+.flow .who.me{background:#cf8700;color:#fff}
+.layout{display:grid;grid-template-columns:190px minmax(0,1fr);gap:30px}
+.toc{align-self:start;position:sticky;top:20px;font-size:13px;line-height:1.6}
+.toc .t{font-weight:800;margin-bottom:10px}
+.toc a{display:block;text-decoration:none;color:var(--muted);padding:6px 0 6px 12px;border-left:2px solid var(--line)}
+.toc a:hover{color:var(--teal);border-color:var(--teal)}
+.section{margin-bottom:30px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:28px;box-shadow:var(--shadow)}
+.head{display:flex;gap:14px;align-items:flex-start;margin-bottom:18px}
+.num{flex:0 0 40px;height:40px;display:grid;place-items:center;border-radius:12px;background:var(--teal-soft);font:750 17px/1 ui-monospace,monospace;color:var(--teal)}
+.sub{font-size:14px;color:var(--muted);margin-top:4px}
+.where{display:inline-block;font-size:12px;border-radius:20px;padding:1px 10px;background:var(--teal-soft);color:#005c54;margin-left:6px;vertical-align:middle}
+.where.flow{background:#e8ecf7;color:#35568d}.where.bot{background:#eee;color:#444}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start}
+.callout{padding:14px 18px;border-radius:14px;background:var(--teal-soft);font-size:14px;border-left:4px solid var(--teal);margin-top:16px}
+.callout.warn{background:var(--amber-soft);border-color:#bf780c;color:#68440e}
+.callout.bad{background:var(--red-soft);border-color:var(--red);color:#6a2215}
+.callout strong{display:block;margin-bottom:3px}
+.tg{background:#dfe7ee;border-radius:16px;padding:14px;font-size:14px}
+.bubble{background:#fff;border-radius:14px 14px 14px 4px;padding:10px 13px;line-height:1.6;white-space:pre-line;box-shadow:0 1px 1px #0001}
+.bubble.mine{background:#e1f6d3;border-radius:14px 14px 4px 14px;margin-left:30%}
+.bubble+.bubble,.kbd+.bubble{margin-top:8px}
+.kbd{display:grid;gap:4px;margin-top:4px}
+.kbd .row{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:4px}
+.kbd span{background:#ffffffd0;border-radius:8px;padding:6px 4px;text-align:center;font-size:13px;color:#2a5885}
+.doc{display:flex;align-items:center;gap:10px}
+.doc i{font-style:normal;display:grid;place-items:center;width:36px;height:36px;border-radius:50%;background:#4f9ad6;color:#fff;font-size:12px}
+.mock{border:1px solid #cbd8d8;border-radius:14px;background:#f3f6f4;overflow:hidden;font-size:13px}
+.mock-bar{padding:9px 14px;background:#fff;border-bottom:1px solid var(--line);color:var(--muted);font-size:12px}
+.mock-body{padding:14px}
+.mock .box{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:10px}
+.mock .box:first-child{margin-top:0}
+.mock .lbl{font-size:11px;color:var(--muted)}
+.mock .btn{display:inline-block;background:var(--teal);color:#fff;border-radius:8px;padding:5px 11px;font-size:12px;font-weight:700;margin-top:8px}
+.mock pre{margin:6px 0 0;font:12px/1.5 ui-monospace,monospace;white-space:pre-wrap;color:#24414a}
+table{width:100%;border-collapse:collapse;font-size:14px;margin-top:12px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;color:var(--muted);font-weight:700}
+.tbl{overflow-x:auto}
+.check li{list-style:none;position:relative}
+.check{padding-left:6px}.check li::before{content:"☐";margin-right:8px;color:var(--teal)}
+footer{color:var(--muted);font-size:13px;padding:10px 0 40px}
+@media (max-width:860px){.layout{grid-template-columns:1fr}.toc{display:none}.two{grid-template-columns:1fr}.flow{grid-template-columns:1fr 1fr}.hero{padding:26px}.section{padding:20px}}
+@media print{body{background:#fff}.toc{display:none}.layout{grid-template-columns:1fr}.section{box-shadow:none;break-inside:avoid}.hero{background:#fff;color:#000;border:1px solid #ccc}.hero p,.flow div{color:#000}.flow div{background:#fff}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="topbar">
+  <div class="brand"><span class="brand-mark">🎞</span> shorts-factory · Studio Pack</div>
+  <div class="stamp">อัปเดต 16 ต.ค. 2026 · ADR 0016</div>
+</div>
+
+<header class="hero">
+  <div class="eyebrow">คู่มือการใช้งาน · ฟรี ไม่มีค่าใช้จ่ายเพิ่ม</div>
+  <h1>ทำภาพ hook ด้วย <span>Flow Storyboard Studio</span><br>แล้วให้บอทประกอบคลิปให้</h1>
+  <p>บอทเตรียม prompt ภาษาอังกฤษให้ครบ คุณทำแค่ก๊อปไปวางใน Google Flow, กด Animate แล้ว export ไฟล์เดียวส่งกลับ บอทจะหั่นตามการ์ด ใส่เสียงพากย์ไทย ซับ เพลง แล้ว render ให้เอง การ์ดที่ไม่ได้เลือก Flow ยังใช้ภาพ Pexels เหมือนเดิม</p>
+  <div class="flow">
+    <div><span class="who me">คุณ</span><b>1. กด 🎞</b>ที่สคริปต์ที่รีวิวผ่านแล้วใน Telegram</div>
+    <div><span class="who">บอท</span><b>2. ส่ง pack</b>อัดเสียง วาง shot ส่ง <code>script.md</code> + ลิงก์หน้า copy</div>
+    <div><span class="who me">คุณ</span><b>3. ทำใน Flow</b>Storyboard → Animate ทีละ shot → Scenes export</div>
+    <div><span class="who me">คุณ</span><b>4. ส่งไฟล์กลับ</b>reply ใน Telegram หรืออัปที่หน้าเว็บ</div>
+    <div><span class="who">บอท</span><b>5. ได้คลิป</b>หั่น + render ส่ง mp4 พร้อมปุ่มอัป YouTube</div>
+  </div>
+</header>
+
+<div class="layout">
+<nav class="toc" aria-label="สารบัญ">
+  <div class="t">สารบัญ</div>
+  <a href="#setup">0 · ตั้งตัวละคร (ครั้งแรก)</a>
+  <a href="#start">1 · กด 🎞</a>
+  <a href="#buttons">2 · ปุ่มบน pack</a>
+  <a href="#page">3 · หน้า pack</a>
+  <a href="#flow">4 · ทำใน Flow</a>
+  <a href="#return">5 · ส่งไฟล์กลับ</a>
+  <a href="#render">6 · บอท render</a>
+  <a href="#change">7 · เปลี่ยนใจ / แก้</a>
+  <a href="#messages">ข้อความที่อาจเจอ</a>
+  <a href="#limits">ข้อจำกัด</a>
+  <a href="#checklist">เช็คลิสต์</a>
+</nav>
+
+<main>
+
+<section class="section" id="setup">
+  <div class="head"><div class="num">0</div><div><h2>ตั้งตัวละครประจำ <span class="where">dashboard /settings</span></h2><p class="sub">ทำครั้งเดียว ข้ามได้ถ้าไม่อยากมีคนในภาพ หรือให้บอทแต่งตัวละครเองทุกคลิป</p></div></div>
+  <div class="two">
+    <div>
+      <p>เปิด dashboard → <strong>ตั้งค่า</strong> → เลื่อนลงไปที่ส่วน <strong>ตัวละครประจำ</strong></p>
+      <ol>
+        <li><strong>id</strong>: ตัวพิมพ์เล็ก a-z, 0-9, <code>_</code>, <code>-</code> เช่น <code>nong</code></li>
+        <li><strong>tag ใน Flow</strong>: ขึ้นต้นด้วย <code>@</code> ตามด้วยอักษรอังกฤษ เช่น <code>@Nong</code> (ใช้ชื่อเดียวกับ Asset Profile ใน Flow)</li>
+        <li><strong>ลักษณะ (ไทย)</strong>: อายุ ผม แว่น เสื้อผ้า สี ยิ่งละเอียดหน้ายิ่งนิ่ง บอทแปลเป็นอังกฤษให้ครั้งเดียวแล้วจำไว้ คำเดิมเป๊ะทุกคลิป</li>
+        <li><strong>English</strong>: ไม่บังคับ ใส่เองถ้าอยากคุมคำเอง (ห้ามมีภาษาไทย)</li>
+        <li>ติ๊ก <strong>สร้างใน Flow แล้ว</strong> หลังจากสร้าง Asset Profile ใน Flow แล้ว หน้า pack จะพับ prompt ภาพตัวละครเก็บไว้</li>
+      </ol>
+      <p>ด้านล่างมีให้เลือก <strong>ตัวละครเริ่มต้นแต่ละช่อง</strong> (TH / EN / SHOP) และ <strong>แหล่งภาพเริ่มต้นของการ์ด</strong>:</p>
+      <ul>
+        <li><code>hook = Flow, ที่เหลือ Pexels</code> (ค่าเริ่มต้น แนะนำ)</li>
+        <li><code>Pexels ทั้งหมด</code> / <code>Flow ทั้งหมด</code></li>
+      </ul>
+    </div>
+    <div class="mock" aria-hidden="true">
+      <div class="mock-bar">dashboard · ตั้งค่า · ตัวละครประจำ (Studio)</div>
+      <div class="mock-body">
+        <div class="box"><div class="lbl">id</div>nong</div>
+        <div class="box"><div class="lbl">tag ใน Flow</div>@Nong</div>
+        <div class="box"><div class="lbl">ลักษณะ (ไทย)</div>ผู้หญิงไทย 28 ปี ผมบ๊อบสั้นสีดำ แว่นกลมกรอบบาง เสื้อเชิ้ตลินินสีเบจทับเสื้อยืดขาว</div>
+        <div class="box"><div class="lbl">English (ไม่บังคับ)</div><span style="color:#9aa">—</span></div>
+        <div class="box">☑ สร้างใน Flow แล้ว</div>
+        <div class="box"><div class="lbl">ตัวละครเริ่มต้นช่อง TH</div>@Nong ▾</div>
+        <div class="box"><div class="lbl">แหล่งภาพเริ่มต้นของแต่ละการ์ด</div>hook = Flow, ที่เหลือ Pexels ▾</div>
+        <span class="btn">✓ บันทึกการตั้งค่า</span>
+      </div>
+    </div>
+  </div>
+  <div class="callout warn"><strong>ลบตัวละคร</strong>ล้างให้ว่าง <em>ทุกช่อง</em> ในแถวนั้นแล้วกดบันทึก ถ้าล้างแค่ id แต่ช่องอื่นยังมีข้อความ หน้าจะฟ้อง "ต้องใส่ id" และไม่บันทึกอะไรเลย</div>
+  <div class="callout"><strong>แท็บเก่าไม่ทำของหาย</strong>ถ้ากดบันทึกจากแท็บ /settings ที่เปิดค้างไว้ตั้งแต่ก่อนมีฟีเจอร์นี้ คลังตัวละครจะไม่ถูกแตะ (แต่แก้ตัวละครจากแท็บนั้นก็ไม่ติดเช่นกัน — รีโหลดหน้าก่อนแก้)</div>
+</section>
+
+<section class="section" id="start">
+  <div class="head"><div class="num">1</div><div><h2>กด 🎞 Studio (Flow) <span class="where bot">Telegram</span></h2><p class="sub">ที่สคริปต์ที่อ่านแล้วพอใจ — ข้อความในสคริปต์ถือว่าอนุมัติแล้ว</p></div></div>
+  <div class="two">
+    <div>
+      <p>ใต้สคริปต์ที่บอทส่งมารีวิว มีปุ่ม <strong>🎞 Studio (Flow)</strong> กดแล้วบอทจะ:</p>
+      <ol>
+        <li><strong>อัดเสียงพากย์ทั้งคลิปก่อน</strong> เพื่อรู้ว่าแต่ละการ์ดพูดยาวกี่วินาที (เสียงชุดนี้เก็บไว้ใช้ตอน render จริง จุดตัดภาพจึงตรงกับที่วางแผน)</li>
+        <li>คำนวณว่าแต่ละการ์ดต้องใช้กี่ shot (shot ละ 8 วิ) — การ์ดที่พูดเกิน ~7.5 วิ ได้ 2 shot</li>
+        <li>เขียน prompt ภาษาอังกฤษล้วน (ไม่มีบทพูด ไม่มีภาษาไทย) ส่ง <code>script.md</code> + ข้อความ pack พร้อมปุ่ม</li>
+      </ol>
+      <p>ระหว่างนี้บอท<strong>ว่าง</strong> พิมพ์หัวข้อใหม่ทำคลิปอื่นต่อได้เลย pack รอคุณได้ <strong>72 ชม.</strong></p>
+      <div class="callout warn"><strong>pack ค้างได้ทีละคลิป</strong>ถ้ามี pack ของคลิปอื่นค้างอยู่ บอทจะไม่ให้กด 🎞 คลิปใหม่ (กันเครดิตที่ใช้กับ pack แรกเสียเปล่า) ส่งไฟล์ของอันเก่าก่อน หรือรอหมดอายุ</div>
+    </div>
+    <div class="tg" aria-hidden="true">
+      <div class="bubble">สินเชื่อบ้าน 2.60% 40 ปี คุ้มไหม?
+…สคริปต์…</div>
+      <div class="kbd"><div class="row"><span>🎬 render (Pexels)</span><span>🎨 ทำ footage เอง</span></div><div class="row"><span><b>🎞 Studio (Flow)</b></span><span>📋 prompt ทำ storyboard</span><span>🗑 ทิ้ง</span></div></div>
+      <div class="bubble doc"><i>MD</i><div>script.md<br><small>script.md — pack v1</small></div></div>
+      <div class="bubble">🎞 Studio pack v1 — สินเชื่อบ้าน 2.60% 40 ปี คุ้มไหม?
+การ์ด Flow: 1 · 1 shot × 8 วิ = 8 วิ ≈ 12 เครดิต
+หน้า copy + อัปไฟล์: https://…/storyboard/20261016-…
+ไฟล์ ≤20MB reply ข้อความนี้ได้เลย · สลับ 🎬/🖼 หรือเปลี่ยนตัวละครด้วยปุ่มข้างล่าง</div>
+      <div class="kbd"><div class="row"><span>1 🎬</span><span>2 🖼</span><span>3 🖼</span></div><div class="row"><span>4 🖼</span><span>5 🖼</span></div><div class="row"><span>@Nong ✓</span><span>🤖 แต่งใหม่</span><span>🚫 ไม่มีคน</span></div><div class="row"><span>✅ Pexels ทั้งหมด — render เลย</span><span>✂️ ย่อการ์ดยาว</span></div></div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="buttons">
+  <div class="head"><div class="num">2</div><div><h2>ปุ่มบน pack <span class="where bot">Telegram</span></h2><p class="sub">กดปุ่มไหนก็ตาม = บอทออก pack เวอร์ชันใหม่ (v2, v3 …) ทับให้ ใช้เวอร์ชันล่าสุดเสมอ</p></div></div>
+  <div class="tbl"><table>
+    <thead><tr><th>ปุ่ม</th><th>ทำอะไร</th><th>ใช้เมื่อ</th></tr></thead>
+    <tbody>
+      <tr><td><code>1 🎬</code> / <code>2 🖼</code> …</td><td>สลับการ์ดนั้นระหว่าง 🎬 Flow กับ 🖼 Pexels</td><td>อยากให้การ์ดอื่นใช้ Flow ด้วย หรืออยากประหยัดเครดิต</td></tr>
+      <tr><td><code>@Nong</code> (ชื่อในคลัง)</td><td>ใช้ตัวละครจากคลัง tag + คำบรรยายเดิมเป๊ะทุกฉาก</td><td>อยากให้หน้าคนเหมือนกันข้ามคลิป</td></tr>
+      <tr><td><code>🤖 แต่งใหม่</code></td><td>ให้บอทออกแบบตัวละครใหม่สำหรับคลิปนี้ (tag <code>@Lead</code>)</td><td>ไม่มีตัวละครประจำที่เข้ากับเรื่อง</td></tr>
+      <tr><td><code>🚫 ไม่มีคน</code></td><td>ภาพไม่มีตัวละคร (สิ่งของ ฉาก บรรยากาศ)</td><td>หัวข้อที่ไม่ต้องมีคน</td></tr>
+      <tr><td><code>✅ Pexels ทั้งหมด — render เลย</code></td><td>ยกเลิก Flow ทุกการ์ด render ด้วย Pexels ทันที</td><td>เปลี่ยนใจ ไม่ทำ Flow แล้ว</td></tr>
+      <tr><td><code>✂️ ย่อการ์ดยาว</code></td><td>ทิ้ง pack แล้วส่งสคริปต์กลับไปรีวิว พร้อมบอกว่าการ์ดไหนยาวเกิน 1 shot</td><td>อยากให้แต่ละการ์ดพอดี 1 shot (ประหยัดเครดิต) — พิมพ์ feedback เช่น "ย่อการ์ด 2 ให้พูดไม่เกิน 7 วินาที"</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout"><strong>เครดิตโดยประมาณ</strong>บอทคิด 12 เครดิตต่อ shot (วัดจาก Omni 1.1 Flash · 720p · 8 วิ · x1) ตัวเลขบน pack เป็นค่าประมาณ ของจริงดูใน Flow</div>
+  <div class="callout warn"><strong>บอทไม่แก้ข้อความที่อนุมัติแล้วเอง</strong>การ์ดยาวจะได้หลาย shot แทนที่จะถูกตัดคำ ถ้าอยากให้สั้นลงต้องกด ✂️ แล้วสั่งแก้เอง</div>
+</section>
+
+<section class="section" id="page">
+  <div class="head"><div class="num">3</div><div><h2>เปิดหน้า pack <span class="where">dashboard /storyboard/&lt;id&gt;</span></h2><p class="sub">กดลิงก์ในข้อความ pack — หน้าเดียวมีทุกอย่างที่ต้องก๊อป พร้อมปุ่มคัดลอก</p></div></div>
+  <div class="two">
+    <div>
+      <ul>
+        <li><strong>0 · ตั้ง project ใน Flow</strong> — ค่าที่ต้องตั้ง</li>
+        <li><strong>1 · ตัวละคร</strong> — prompt เจนภาพหน้าตรงไว้สร้าง Asset Profile (ถ้าติ๊ก "สร้างแล้ว" ส่วนนี้จะพับไว้)</li>
+        <li><strong>3 · Script สำหรับ Storyboard Studio</strong> — <code>script.md</code> ทั้งก้อน ปุ่ม <em>คัดลอกทั้งหมด</em> / <em>ดาวน์โหลด</em></li>
+        <li><strong>4 · Animate ทีละ shot</strong> — กดขยายทีละ shot: Ingredients ที่ต้องแนบ, บทพูดไทยของช่วงนั้น (ไว้ดูจังหวะ), prompt + การเคลื่อนกล้อง</li>
+        <li><strong>5 · Export แล้วอัปกลับ</strong> — ความยาวที่ควรได้ + ฟอร์มอัปไฟล์</li>
+      </ul>
+      <p>(ไม่มีข้อ 2 — สงวนไว้สำหรับ Shop)</p>
+      <div class="callout warn"><strong>หน้าเว็บผูกกับเวอร์ชัน</strong>ถ้ากดปุ่มใน Telegram จนได้ pack ใหม่ ให้เปิดลิงก์ของเวอร์ชันใหม่/รีโหลดหน้า ฟอร์มอัปของเวอร์ชันเก่าจะถูกปฏิเสธ (บอทเก็บรับไฟล์ได้แค่ 5 เวอร์ชันล่าสุด)</div>
+    </div>
+    <div class="mock" aria-hidden="true">
+      <div class="mock-bar">STORYBOARD STUDIO · PACK v1</div>
+      <div class="mock-body">
+        <div class="box"><b>สินเชื่อบ้าน 2.60% 40 ปี คุ้มไหม?</b><div class="lbl">1 shot × 8 วิ = 8 วิ · ≈ 12 เครดิต · การ์ด Flow: 1</div></div>
+        <div class="box"><b>3 · Script สำหรับ Storyboard Studio</b> <span class="btn">คัดลอกทั้งหมด</span>
+<pre># Shot list (1 shots x 8 seconds)
+
+STYLE: Photorealistic cinematic, vertical 9:16, …
+No dialogue, no voiceover, no on-screen text, …
+
+CHARACTERS: @Nong — the same 28-year-old Thai woman …
+
+[SCENE 1]
+@Nong: the same 28-year-old Thai woman … sits on a sofa holding a new house key …
+CAMERA: Slow push in from medium shot to her face, 8 seconds.</pre></div>
+        <div class="box"><b>4 · Animate ทีละ shot</b><div class="lbl">▸ Shot 1 · การ์ด 1 · พูด 6.8 วิ</div></div>
+        <div class="box"><b>5 · Export แล้วอัปกลับ</b><div class="lbl">ไฟล์ควรยาว 8 วิ</div><span class="btn">อัปไฟล์ให้บอท</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="flow">
+  <div class="head"><div class="num">4</div><div><h2>ทำใน Google Flow <span class="where flow">labs.google/flow</span></h2><p class="sub">ทำบนคอมหรือมือถือก็ได้ ใช้บัญชี AI Pro ที่มีอยู่ — บอทไม่แตะ Flow เลย</p></div></div>
+  <h3>4.1 ตั้ง project</h3>
+  <ul>
+    <li>ใช้ <strong>project เดิม</strong> ที่มี Asset Profile ตัวละครอยู่แล้ว (ตัวละครเดียวกันข้ามคลิป)</li>
+    <li>Storyboard Studio → สัดส่วน <strong>9:16</strong>, preset <strong>Photorealistic</strong></li>
+  </ul>
+  <h3>4.2 ตัวละคร (ครั้งแรกของแต่ละตัว)</h3>
+  <ol>
+    <li>ก๊อป prompt จากข้อ <strong>1 · ตัวละคร</strong> ในหน้า pack ไปเจนภาพใน Flow</li>
+    <li>สร้าง <strong>Asset Profile</strong> จากภาพนั้น ตั้งชื่อตรงกับ tag (เช่น <code>@Nong</code>)</li>
+    <li>กลับไปติ๊ก <strong>สร้างใน Flow แล้ว</strong> ที่ /settings ครั้งหน้าไม่ต้องทำซ้ำ</li>
+  </ol>
+  <h3>4.3 Storyboard</h3>
+  <ol>
+    <li>วาง <code>script.md</code> ทั้งก้อนใน Storyboard Studio (หรืออัปไฟล์)</li>
+    <li>ให้ Flow สร้าง frame ของแต่ละ scene (ได้ 3 frame ต่อ scene) เลือก/เจนใหม่จนพอใจ</li>
+  </ol>
+  <h3>4.4 Animate ทีละ shot</h3>
+  <p>ใน composer ตั้ง: <strong>Video · Ingredients · 9:16 · 720p · 8s · x1</strong> แล้วสำหรับแต่ละ shot:</p>
+  <ol>
+    <li>แนบ Ingredients สูงสุด 3 รูป: (1) ตัวละคร (2) frame ของ shot นี้ (3) frame ถัดไปของฉากเดียวกัน (ถ้ามี)</li>
+    <li>ก๊อป prompt + motion ของ shot นั้นจากข้อ <strong>4</strong> ในหน้า pack → Generate</li>
+  </ol>
+  <div class="callout warn"><strong>ความยาวต้องเป็น 8 วิทุก shot</strong>บอทหั่นไฟล์ทุก 8 วินาที ถ้าตั้ง 4/6/10 วิ ไฟล์รวมจะยาวผิดและบอทจะไม่หั่นให้</div>
+  <h3>4.5 Scenes → Export</h3>
+  <ol>
+    <li>เปิด <strong>Scenes</strong> เรียงคลิปทุก shot <strong>ตามลำดับ Shot 1, 2, 3 …</strong> ห้ามตัดต่อ/ตัดหัวท้าย</li>
+    <li>Export เป็นไฟล์เดียว (เสียงติดมาด้วย ไม่เป็นไร บอทตัดทิ้ง)</li>
+    <li>ไฟล์ควรยาว = จำนวน shot × 8 วิ (คลาดได้ ±0.5 วิ)</li>
+  </ol>
+  <div class="callout"><strong>ไฟล์ใหญ่แค่ไหน</strong>วัดจริง 3 shot (24 วิ) = 21.3 MB (~7 MB ต่อ shot) — pack ที่มีแค่ hook 1 shot ส่งใน Telegram ได้ ถ้า 3 shot ขึ้นไปมักเกิน 20 MB ต้องอัปทางเว็บ</div>
+</section>
+
+<section class="section" id="return">
+  <div class="head"><div class="num">5</div><div><h2>ส่งไฟล์กลับให้บอท</h2><p class="sub">เลือกทางใดทางหนึ่ง</p></div></div>
+  <div class="two">
+    <div>
+      <h3 style="margin-top:0">ทาง A · Telegram (ไฟล์ ≤ 20 MB)</h3>
+      <ol>
+        <li>กด <strong>Reply</strong> ที่ข้อความ pack (หรือที่ข้อความ <code>script.md</code>) ของเวอร์ชันที่ใช้</li>
+        <li>แนบ mp4 แล้วส่ง</li>
+      </ol>
+      <p>ต้องเป็นการ <strong>reply</strong> เท่านั้น บอทใช้ข้อความที่ reply บอกว่าไฟล์นี้เป็นของ pack ไหน ส่งเฉยๆ ไม่ reply บอทจะไม่รู้</p>
+      <p>ไฟล์เกิน 20 MB บอทจะตอบลิงก์หน้าเว็บให้ไปอัปแทน</p>
+    </div>
+    <div>
+      <h3 style="margin-top:0">ทาง B · หน้าเว็บ (ไฟล์ ≤ 100 MB)</h3>
+      <ol>
+        <li>เปิดหน้า pack ข้อ <strong>5 · Export แล้วอัปกลับ</strong></li>
+        <li>เลือกไฟล์ → <strong>อัปไฟล์ให้บอท</strong></li>
+        <li>ขึ้นข้อความว่าอัปแล้ว บอทจะหยิบไฟล์ภายในไม่กี่วินาทีและแจ้งใน Telegram</li>
+      </ol>
+      <p>ไม่ถูกบีบภาพเหมือนส่งใน Telegram</p>
+    </div>
+  </div>
+  <div class="callout warn"><strong>ยังไม่เคยลองอัปไฟล์ใหญ่จากนอกบ้าน</strong>ลิงก์ในข้อความใช้โดเมนภายนอก ผ่าน reverse proxy ของ DSM ซึ่งยังไม่ได้ทดสอบกับไฟล์เกิน 20 MB อาจได้ error <code>413</code> ถ้าเจอ ให้เปิด dashboard ผ่าน LAN ที่ <code>http://&lt;NAS_HOST&gt;:5071/storyboard/&lt;id&gt;</code> แล้วอัปจากในบ้านแทน (แล้วบอกให้แก้ proxy)</div>
+</section>
+
+<section class="section" id="render">
+  <div class="head"><div class="num">6</div><div><h2>บอทหั่นและ render <span class="where bot">อัตโนมัติ</span></h2><p class="sub">ไม่ต้องกดอะไร</p></div></div>
+  <ol>
+    <li>บอทวัดความยาวไฟล์ ถ้าตรงกับ shot × 8 วิ (±0.5) → หั่นตามการ์ด: <em>"✂️ หั่น N shot แล้ว กำลัง render"</em></li>
+    <li>render: ภาพ Flow สำหรับการ์ด 🎬 + Pexels สำหรับการ์ด 🖼 + <strong>เสียงพากย์ชุดเดิม</strong>ที่อัดตอนกด 🎞 + ซับ + BGM</li>
+    <li>ถ้าภาพ Flow สั้นกว่าเสียงของการ์ดนั้น ภาพจะ<strong>ค้างเฟรมสุดท้าย</strong> (ไม่วนกลับต้น shot)</li>
+    <li>ได้ mp4 ใน Telegram พร้อมปุ่ม <strong>⬆️ อัปโหลดขึ้น YouTube</strong> เหมือนคลิปปกติ</li>
+  </ol>
+  <h3>ถ้าความยาวไม่ตรง</h3>
+  <p>บอทจะไม่เดาจุดตัด แต่ตอบว่าได้กี่วิ ควรได้กี่วิ พร้อมปุ่ม <strong>✂️ หั่นเท่าๆ กัน (cut evenly)</strong></p>
+  <ul>
+    <li>เช็คใน Scenes ว่าเรียงครบทุก shot และไม่ได้ตัดต่อ แล้ว export ใหม่ส่งมาอีกครั้ง — <strong>ทางนี้ปลอดภัยกว่า</strong></li>
+    <li>หรือกด cut evenly ถ้ามั่นใจว่าลำดับถูก แค่ความยาวคลาด (เช่น Flow ปัดเศษ) บอทจะแบ่งไฟล์เท่าๆ กันตามจำนวน shot</li>
+  </ul>
+  <div class="callout"><strong>คลิป Studio ไม่นับในผลทดลอง hook</strong>เพราะภาพ hook ต่างจากคลิปอื่นมาก จะทำให้ /experiment เพี้ยน (แต่ยังนับใน Gate 30 คลิปตามปกติ)</div>
+  <div class="callout"><strong>ไฟล์ถูกลบเอง</strong>หลังกดอัป YouTube สำเร็จ หรือ pack หมดอายุ 72 ชม. บอทลบเสียง/ภาพที่หั่น/ไฟล์ export ของ pack นั้นทิ้ง</div>
+</section>
+
+<section class="section" id="change">
+  <div class="head"><div class="num">7</div><div><h2>เปลี่ยนใจ / แก้ทีหลัง</h2><p class="sub">ใช้ปุ่มบน pack ข้อความล่าสุดได้ตลอด จนกว่าจะอัป YouTube หรือหมดอายุ</p></div></div>
+  <div class="tbl"><table>
+    <thead><tr><th>อยากทำ</th><th>วิธี</th><th>ผล</th></tr></thead>
+    <tbody>
+      <tr><td>render แล้ว อยากเปลี่ยนการ์ด Flow กลับเป็น Pexels</td><td>กด <code>1 🎬</code> ให้เป็น 🖼</td><td>ทุกการ์ดมีภาพครบ → render ใหม่ทันที ไม่ต้องทำ Flow</td></tr>
+      <tr><td>render แล้ว อยากเพิ่มการ์ดเป็น Flow</td><td>กดการ์ดนั้นให้เป็น 🎬</td><td>ได้ pack ใหม่เฉพาะการ์ดที่ยังไม่มีภาพ (การ์ดที่ทำไปแล้วเก็บไว้)</td></tr>
+      <tr><td>เปลี่ยนตัวละคร</td><td>กดชื่อ / 🤖 / 🚫</td><td>pack ใหม่ ต้องทำ Flow ของการ์ดที่ยังไม่มีภาพใหม่</td></tr>
+      <tr><td>แก้คำอ่านผิดด้วย <code>/say</code> แล้วอยากได้เสียงใหม่</td><td><code>/say ผิด = ถูก</code> แล้ว <code>/redo</code></td><td>ใช้ภาพ Flow ชุดเดิม อัดเสียงใหม่ (บอทบอก 🔁 จุดตัดอาจคลาดเล็กน้อย)</td></tr>
+      <tr><td>ไม่เอา Flow แล้ว</td><td><code>✅ Pexels ทั้งหมด — render เลย</code></td><td>render Pexels ทันที</td></tr>
+      <tr><td>อยากให้การ์ดยาวสั้นลง</td><td><code>✂️ ย่อการ์ดยาว</code> → พิมพ์ feedback</td><td>สคริปต์กลับไปรีวิว (Fact sheet + hook variant + คู่ 🌏 ยังอยู่ครบ) แล้วกด 🎞 ใหม่</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout warn"><strong>📋 กับ 🎞 ใช้ช่องรอคลิปเดียวกัน</strong>ถ้ากด 📋 prompt ทำ storyboard ระหว่างที่ pack ยังค้าง pack จะถูกทิ้ง (บอทบอกในแชท) และกลับกัน</div>
+  <div class="callout"><strong>คู่ 2 ภาษา (🌏)</strong>ฝั่งอังกฤษรอจนคลิปไทยจาก Studio render เสร็จ แล้วเขียนต่อตามปกติ ใช้ภาพ Pexels และต้องรีวิวเอง (จังหวะการ์ดอังกฤษไม่เท่าไทย ใช้ภาพ Flow ชุดเดิมไม่ได้)</div>
+</section>
+
+<section class="section" id="messages">
+  <div class="head"><div class="num">?</div><div><h2>ข้อความที่อาจเจอ</h2></div></div>
+  <div class="tbl"><table>
+    <thead><tr><th>บอทพูดว่า</th><th>แปลว่า</th><th>ทำอะไร</th></tr></thead>
+    <tbody>
+      <tr><td>ยังมี Studio pack ค้างอยู่: …</td><td>มี pack ของคลิปอื่นรออยู่</td><td>ส่งไฟล์ของอันนั้นก่อน หรือรอหมดอายุ</td></tr>
+      <tr><td>อัดเสียงสำหรับ Studio ไม่สำเร็จ</td><td>edge-tts ปัดคำขอ (เป็นครั้งคราว)</td><td>สคริปต์กลับมาให้รีวิว กด 🎞 ใหม่</td></tr>
+      <tr><td>วาง shot ไม่สำเร็จ …</td><td>โมเดลเขียน prompt ไม่ผ่านกติกา</td><td>กดปุ่มบนข้อความนั้นอีกครั้ง</td></tr>
+      <tr><td>กำลังทำ pack อยู่ รอสักครู่</td><td>กดปุ่มซ้อนกันเร็วเกิน</td><td>รอ pack ใหม่ขึ้นแล้วค่อยกด</td></tr>
+      <tr><td>pack นี้เก่าแล้ว …</td><td>กดปุ่ม/ส่งไฟล์ของเวอร์ชันที่หมดอายุหรือมีใหม่กว่า</td><td>ใช้ pack ข้อความล่าสุด</td></tr>
+      <tr><td>ได้ X วิ แต่ pack นี้มี N shot × 8 = Y วิ</td><td>ความยาว export ไม่ตรง</td><td>ดู <a href="#render">ข้อ 6</a></td></tr>
+      <tr><td>การ์ด N ตั้งเป็น 🎬 Flow แต่ยังไม่มี footage</td><td>บอทจะไม่แอบใช้ Pexels แทน</td><td>ส่งไฟล์ของ pack ล่าสุด หรือสลับการ์ดนั้นเป็น 🖼</td></tr>
+      <tr><td>footage พร้อมแล้ว กด render เมื่อบอทว่าง</td><td>ไฟล์มาตอนบอททำคลิปอื่นอยู่</td><td>กด <code>🎬 render Studio</code> เมื่อบอทว่าง</td></tr>
+      <tr><td>ไฟล์ใหญ่เกิน 20MB — อัปที่หน้าเว็บแทน</td><td>เพดาน Telegram</td><td>ใช้ <a href="#return">ทาง B</a></td></tr>
+      <tr><td>🔁 เสียงพากย์เปลี่ยน (/say) …</td><td>คำอ่านเปลี่ยนหลังสร้าง pack</td><td>ไม่ต้องทำอะไร บอทอัดเสียงใหม่ให้</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section class="section" id="limits">
+  <div class="head"><div class="num">!</div><div><h2>ข้อจำกัดและสิ่งที่ยังไม่ยืนยัน</h2></div></div>
+  <ul>
+    <li><strong>ห้ามใช้เครื่องมือ automate Flow</strong> (gflow-cli, flowkit ฯลฯ) กับบัญชีหลัก — มีรายงานบัญชีโดนบล็อก ทุกอย่างในคู่มือนี้กดเองในเว็บ Flow</li>
+    <li>ยังไม่ยืนยันว่า Flow ทำตามบรรทัด <code>STYLE:</code> ใน script.md ทุกข้อ และ frame ใน Storyboard ออกมาเป็น 9:16 จริง (ถ้าได้แนวนอน ให้ตั้งสัดส่วนเองใน project)</li>
+    <li>ยังไม่ยืนยันว่า <code>@tag</code> ใน script ผูกกับ Asset Profile ชื่อเดียวกันอัตโนมัติ — ถ้าไม่ผูก ให้แนบรูปตัวละครเป็น Ingredient (1) เอง</li>
+    <li>ยังไม่รู้ว่าเครดิต AI Pro ต่อเดือนพอทำได้กี่คลิป — hook 1 shot ≈ 12 เครดิต</li>
+    <li>อัปไฟล์เกิน 20 MB ผ่านโดเมนภายนอกยังไม่เคยลอง (ดู <a href="#return">ข้อ 5</a>)</li>
+    <li>อย่าอัปไฟล์ซ้ำของเวอร์ชันเดียวกันระหว่างที่บอทกำลังหั่น — ไฟล์ใหม่จะทับไฟล์ที่กำลังอ่านอยู่</li>
+  </ul>
+</section>
+
+<section class="section" id="checklist">
+  <div class="head"><div class="num">✓</div><div><h2>เช็คลิสต์ต่อคลิป</h2></div></div>
+  <ul class="check">
+    <li>สคริปต์รีวิวผ่าน → กด 🎞</li>
+    <li>เช็คการ์ด 🎬 / ตัวละครบน pack (แก้ด้วยปุ่มถ้าต้องการ)</li>
+    <li>เปิดหน้า pack → ก๊อป script.md ไปวางใน Storyboard Studio (9:16)</li>
+    <li>Animate ทุก shot: Video · Ingredients · 9:16 · 720p · <strong>8s</strong> · x1</li>
+    <li>Scenes เรียงครบตามลำดับ → export ไฟล์เดียว ยาว = shot × 8 วิ</li>
+    <li>reply ไฟล์ที่ข้อความ pack (≤20 MB) หรืออัปที่หน้าเว็บ</li>
+    <li>ดูคลิปที่ได้ → กด ⬆️ อัปโหลดขึ้น YouTube</li>
+  </ul>
+</section>
+
+</main>
+</div>
+<footer>รายละเอียดเชิงเทคนิค: <code>docs/adr/0016-storyboard-studio-pack.md</code> · <code>shorts-factory/README.md</code> หัวข้อ Storyboard Studio (🎞)</footer>
+</div>
+</body>
+</html>
