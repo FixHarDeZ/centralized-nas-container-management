@@ -10,6 +10,7 @@ import hmac
 import json
 import mimetypes
 import os
+import re
 import secrets
 import tempfile
 import zipfile
@@ -100,6 +101,8 @@ class PostEdit(BaseModel):
 
 
 REPORT_LIMIT = 20 * 1024 * 1024
+STUDIO_TOKEN = re.compile(r"^[a-f0-9]{12}$")
+STUDIO_LIMIT = 100 * 1024 * 1024
 
 
 class Notification(BaseModel):
@@ -212,6 +215,38 @@ def create_app(root: Path | None = None) -> FastAPI:
     @app.post("/shop/api/jobs/{job_id}/scenes/{scene_id}/accept")
     def accept(job_id: str, scene_id: str, body: Accept):
         return store.accept_scene(job_id, body.revision, scene_id, reference_matches=body.reference_matches)
+
+    studio_inbox = Path(os.environ.get("STUDIO_INBOX", "/output/studio-inbox"))
+
+    @app.post("/shop/api/studio-inbox/{token}", status_code=201)
+    def studio_upload(token: str, file: UploadFile = File(...)):
+        """A Storyboard Studio export for the bot to pick up (docs/adr/0016).
+
+        No decoding here (see the module docstring): the bot probes the file
+        when it claims it. This route checks the token's shape, the MP4/MOV
+        `ftyp` box and the size, and renames into place so the bot never sees
+        half a file.
+        """
+        if not STUDIO_TOKEN.fullmatch(token):
+            raise Invalid("token ไม่ถูกต้อง")
+        head = file.file.read(12)
+        if len(head) < 12 or head[4:8] != b"ftyp":
+            raise Invalid("ต้องเป็นไฟล์ MP4/MOV ที่ export จาก Flow")
+        studio_inbox.mkdir(parents=True, exist_ok=True)
+        part = studio_inbox / f"{token}.mp4.part"
+        written = len(head)
+        with part.open("wb") as out:
+            out.write(head)
+            while chunk := file.file.read(1 << 20):
+                written += len(chunk)
+                if written > STUDIO_LIMIT:
+                    break
+                out.write(chunk)
+        if written > STUDIO_LIMIT:
+            part.unlink(missing_ok=True)
+            raise Invalid("ไฟล์ใหญ่เกิน 100 MiB")
+        part.replace(studio_inbox / f"{token}.mp4")
+        return {"ok": True, "bytes": written}
 
     @app.get("/shop/api/jobs/{job_id}/assets/{asset_id}")
     def asset(job_id: str, asset_id: str):

@@ -10,6 +10,7 @@ from .test_shop_store import prepared
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("SHOP_AUTOMATION_TOKEN", "scoped-secret")
+    monkeypatch.setenv("STUDIO_INBOX", str(tmp_path / "inbox"))
     return TestClient(create_app(tmp_path))
 
 
@@ -123,3 +124,43 @@ def test_csrf_session_is_stable_across_browser_tabs(tmp_path):
     response = client.post('/shop/api/jobs', json={'name': 'two tabs'},
                            headers={'Origin': 'http://testserver', 'X-CSRF-Token': first})
     assert response.status_code == 201
+
+
+MP4_HEAD = b"\x00\x00\x00\x18ftypisom" + b"\x00" * 100
+
+
+def test_studio_inbox_accepts_an_mp4_for_a_token(client, tmp_path, monkeypatch):
+    headers = browser(client)
+    token = "a1b2c3d4e5f6"
+    reply = client.post(f"/shop/api/studio-inbox/{token}", headers=headers,
+                        files={"file": ("x.mp4", io.BytesIO(MP4_HEAD), "video/mp4")})
+    assert reply.status_code == 201
+    inbox = tmp_path / "inbox"
+    assert (inbox / f"{token}.mp4").read_bytes() == MP4_HEAD
+    assert not list(inbox.glob("*.part"))
+
+
+def test_studio_inbox_refuses_bad_token_bad_media_and_no_csrf(client, tmp_path):
+    headers = browser(client)
+    files = {"file": ("x.mp4", io.BytesIO(MP4_HEAD), "video/mp4")}
+    # The client folds `../..` into /shop/etc, a GET-only view route (405):
+    # the traversal never reaches the inbox route at all.
+    assert client.post("/shop/api/studio-inbox/../../etc", headers=headers, files=files).status_code in (404, 405, 422)
+    assert client.post("/shop/api/studio-inbox/ZZZZZZZZZZZZ", headers=headers, files=files).status_code == 422
+    assert client.post("/shop/api/studio-inbox/a1b2c3d4e5f6", headers=headers,
+                       files={"file": ("x.mp4", io.BytesIO(b"not a video at all"), "video/mp4")}).status_code == 422
+    assert client.post("/shop/api/studio-inbox/a1b2c3d4e5f6",
+                       files={"file": ("x.mp4", io.BytesIO(MP4_HEAD), "video/mp4")}).status_code == 403
+    assert not (tmp_path / "inbox" / "a1b2c3d4e5f6.mp4").exists()
+
+
+def test_studio_inbox_refuses_a_file_over_the_cap(client, tmp_path, monkeypatch):
+    import app.shop_api as shop_api
+
+    monkeypatch.setattr(shop_api, "STUDIO_LIMIT", 64)
+    reply = client.post("/shop/api/studio-inbox/a1b2c3d4e5f6", headers=browser(client),
+                        files={"file": ("x.mp4", io.BytesIO(MP4_HEAD), "video/mp4")})
+    assert reply.status_code == 422
+    inbox = tmp_path / "inbox"
+    assert not (inbox / "a1b2c3d4e5f6.mp4").exists()
+    assert not list(inbox.glob("*.part"))
