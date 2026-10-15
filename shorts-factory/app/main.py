@@ -17,10 +17,10 @@ from pathlib import Path
 
 import httpx
 
-from app import (analytics, backfill, experiment, history, locales, manifest, model_choice,
-                 pronunciation, research,
+from app import (analytics, backfill, characters, experiment, history, locales, manifest,
+                 model_choice, pronunciation, research,
                  render, retention, schedule, script as script_gen, shop, shop_render, snapshots,
-                 storyboard, telegram, trends, youtube)
+                 storyboard, studio, telegram, trends, youtube)
 from app.render_lock import render_slot
 from app import state as st
 # Re-exported: the tests and the dashboard reach these through `main`.
@@ -48,6 +48,11 @@ PAIR_CB = "pair"
 FLOW_CB, PARK_RENDER_CB = "flow", "parked_render"
 # 📋 on a Script: the Storyboard Prompt for it. Changes nothing about the Clip.
 STORYBOARD_CB = "storyboard"
+# 🎞 on a Script: a Storyboard Studio pack for the Cards marked Flow
+# (docs/adr/0016). Callbacks carry the clip id, so a stale pack message is
+# recognised rather than acted on.
+STUDIO_CB = "studio"
+STUDIO_PREFIXES = ("stt:", "stc:", "stp:", "stx:", "ste:", "str:")
 # The answer to the character question a Storyboard opens with:
 # `sbchar:<auto|own|none>:<token>`. The token is the question this answers — a
 # tap on an older question must not plan a board for a Script that is gone.
@@ -114,6 +119,7 @@ REVIEW_KEYBOARD = {
             {"text": "🎨 ทำ footage เอง", "callback_data": FLOW_CB},
         ],
         [
+            {"text": "🎞 Studio (Flow)", "callback_data": STUDIO_CB},
             {"text": "📋 prompt ทำ storyboard", "callback_data": STORYBOARD_CB},
             {"text": "🗑 ทิ้ง", "callback_data": DISCARD_CB},
         ],
@@ -332,6 +338,10 @@ async def send_video(client: httpx.AsyncClient, path: Path, caption: str, **extr
     if sent is None:
         await say(client, "ส่งไฟล์เข้า Telegram ไม่ผ่าน แต่คลิปอยู่บน NAS แล้ว")
     return sent
+
+
+async def send_document(client: httpx.AsyncClient, path: Path, caption: str = "", **extra) -> dict | None:
+    return await _bot(client).send_document(path, caption, **extra)
 
 
 async def close_prompt(client: httpx.AsyncClient, message_id: int | None, note: str) -> None:
@@ -1223,6 +1233,264 @@ async def drop_clip_wait(client: httpx.AsyncClient, wait: dict) -> None:
                       "ยังส่งเข้ามาได้ ถ้าสั่ง storyboard ใหม่")
 
 
+# --- Storyboard Studio packs (docs/adr/0016) ----------------------------------
+
+def pack_url(clip_id: str) -> str:
+    base = os.environ.get("SHOP_PUBLIC_URL", "").rstrip("/")
+    return f"{base}/storyboard/{clip_id}" if base else f"/storyboard/{clip_id} บน dashboard"
+
+
+def _studio_wait(state: dict, clip_id: str) -> dict | None:
+    wait = state.get("clip_wait") or {}
+    if wait.get("kind") == "studio" and wait.get("clip_id") == clip_id:
+        return wait
+    return None
+
+
+def studio_keyboard(wait: dict) -> dict:
+    clip_id = wait["clip_id"]
+    toggles = [{"text": f"{i + 1} {'🎬' if s == characters.FLOW else '🖼'}",
+                "callback_data": f"stt:{clip_id}:{i}"} for i, s in enumerate(wait["sources"])]
+    rows = [toggles[i:i + 3] for i in range(0, len(toggles), 3)]
+    people = [{"text": f"{c['tag']}{' ✓' if wait['choice'] == c['id'] else ''}",
+               "callback_data": f"stc:{clip_id}:{c['id']}"}
+              for c in characters.stored()["characters"]]
+    people += [{"text": f"🤖 แต่งใหม่{' ✓' if wait['choice'] == 'auto' else ''}",
+                "callback_data": f"stc:{clip_id}:auto"},
+               {"text": f"🚫 ไม่มีคน{' ✓' if wait['choice'] == 'none' else ''}",
+                "callback_data": f"stc:{clip_id}:none"}]
+    rows += [people[i:i + 3] for i in range(0, len(people), 3)]
+    rows.append([{"text": "✅ Pexels ทั้งหมด — render เลย", "callback_data": f"stp:{clip_id}"},
+                 {"text": "✂️ ย่อการ์ดยาว", "callback_data": f"stx:{clip_id}"}])
+    return {"inline_keyboard": rows}
+
+
+async def _character_for(choice: str) -> tuple[str, str, str, dict | None]:
+    """(storyboard choice, character text, fixed English, pack profile).
+
+    A library character goes to the model as OWN with the same English as both
+    the description and the fixed lock: the model only ever sees `character`,
+    and `fixed_tag` is what every scene is checked against. Never Thai.
+    """
+    if choice == "none":
+        return storyboard.NONE, "", "", None
+    person = characters.get(choice) if choice not in ("auto", "") else None
+    if not person:
+        return storyboard.AUTO, "", "", {"choice": "auto", "id": "", "tag": storyboard.AUTO_TAG,
+                                        "flow_ready": False}
+    english = characters.cached_english(person)
+    if not english:
+        english = await storyboard.english_character(person["thai"])
+        characters.remember_english(person, english)
+    return storyboard.OWN, english, english, {
+        "choice": person["id"], "id": person["id"], "tag": person["tag"], "locked": english,
+        "flow_ready": person["flow_ready"], "portrait": storyboard.portrait_prompt(english)}
+
+
+async def on_studio(client: httpx.AsyncClient, state: dict) -> None:
+    """🎞 pressed: speak the Script once, then publish the first pack.
+
+    Mirrors 🎨: the review closes and the bot goes idle, with everything the
+    clip needs snapshotted into `clip_wait`. A failure re-posts the Script so
+    its buttons come back.
+    """
+    if state.get("mode") != "review" or not state.get("script"):
+        # Spawned from a tap; a second tap (or anything else) may have moved
+        # the review on before this ran.
+        return
+    script = state["script"]
+    clip_id = state.get("clip_id")
+    live = state.get("clip_wait") or {}
+    if live.get("kind") == "studio" and live.get("clip_id") != clip_id:
+        # Same rule as 🎨's one Parked Clip: a second pack would orphan credits
+        # already spent in Flow on the first. The Script stays in review.
+        await say(client, f"ยังมี Studio pack ค้างอยู่: {live['script']['title']}\n"
+                          "ส่งคลิปของอันนั้นก่อน (หรือรอหมดอายุ) แล้วค่อยกด 🎞 อันนี้")
+        return
+    # Claimed before the first await: the poll loop keeps running, and a Topic
+    # (or a second 🎞 tap) arriving now would overwrite this one.
+    message_id = state.get("message_id")
+    state.update(mode="writing", message_id=None)
+    save_state(state)
+    await close_prompt(client, message_id, f"🎞 {script['title']} — กำลังอัดเสียงและวาง shot")
+    locale = state.get("locale", locales.DEFAULT)
+    try:
+        meta = await studio.prepare_narration(script, locale, clip_id)
+    except Exception as exc:
+        logger.exception("studio narration failed")
+        studio.discard(clip_id or "")
+        sent = await say(client, format_script(script), reply_markup=REVIEW_KEYBOARD)
+        st.to_review(state, message_id=(sent or {}).get("message_id"))
+        save_state(state)
+        await say(client, f"อัดเสียงสำหรับ Studio ไม่สำเร็จ: {exc}")
+        return
+    state["clip_wait"] = {
+        "kind": "studio", "clip_id": clip_id, "script": script,
+        "topic": state.get("topic"), "locale": locale, "spans": meta["spans"],
+        "choice": characters.default_for(locale) or "auto",
+        "sources": characters.default_sources(len(script["cards"])),
+        "versions": {}, "uneven": {}, "busy": False,
+        # A queued 🌏 half belongs to this clip, not to whatever renders next
+        # while Flow is being shot — same reason on_flow() parks it.
+        "pair": state.pop("pair", None),
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+    }
+    st.to_idle(state)
+    save_state(state)
+    await publish_pack(client, state)
+
+
+async def publish_pack(client: httpx.AsyncClient, state: dict) -> None:
+    """A new pack version for the current choices, or a render if nothing is pending."""
+    wait = state.get("clip_wait") or {}
+    if wait.get("kind") != "studio":
+        return
+    clip_id, script, card_spans = wait["clip_id"], wait["script"], wait["spans"]
+    wait["busy"] = True
+    save_state(state)
+    try:
+        pending = studio.pending_cards(wait["sources"],
+                                       studio.have_segments(clip_id, len(script["cards"])))
+        if not pending:
+            wait["busy"] = False
+            save_state(state)
+            await render_studio(client, state, clip_id)
+            return
+        await _publish_version(client, state, wait, pending)
+    finally:
+        # Every exit, not only a failed plan: a raise from writing the pack or
+        # sending it would otherwise leave every button answering "busy".
+        wait["busy"] = False
+        save_state(state)
+
+
+async def _publish_version(client: httpx.AsyncClient, state: dict, wait: dict,
+                           pending: list[int]) -> None:
+    clip_id, script, card_spans = wait["clip_id"], wait["script"], wait["spans"]
+    shots = studio.shot_map(card_spans, pending)
+    try:
+        choice, text, fixed, profile = await _character_for(wait["choice"])
+        board = await storyboard.for_studio(script, pending, shots, choice=choice,
+                                            character=text, fixed_tag=fixed,
+                                            topic=wait.get("topic") or "")
+    except Exception as exc:
+        logger.exception("studio plan failed")
+        await say(client, f"วาง shot ไม่สำเร็จ: {exc}\nกดปุ่มบน pack อีกครั้งเพื่อลองใหม่",
+                  reply_markup=studio_keyboard(wait))
+        return
+    tag = (profile or {}).get("tag", "")
+    if profile and profile.get("id") == "":
+        person = board["overview"].get("master_character") or {}
+        profile.update(locked=person.get("locked_prompt_tag", ""),
+                       portrait=storyboard.portrait_prompt(person.get("locked_prompt_tag", "")))
+    markdown = storyboard.studio_markdown(board, tag)
+    token = studio.new_token()
+    total = studio.total_shots(shots)
+    pack = {
+        "clip_id": clip_id, "token": token, "version": len(wait["versions"]) + 1,
+        "title": script["title"], "locale": wait["locale"],
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "character": profile, "sources": list(wait["sources"]), "pending": pending,
+        "shots": {str(k): v for k, v in shots.items()}, "total_shots": total,
+        "credits": studio.credits(total), "spans": card_spans,
+        "scenes": [{"n": i + 1, "card": s["card"], "image_prompt": s["image_gen_prompt"],
+                    "motion": s["motion"], "narration": script["cards"][s["card"]]["narration"],
+                    "span": round(card_spans[s["card"]], 2)}
+                   for i, s in enumerate(board["scenes"])],
+    }
+    studio.write_pack(clip_id, pack, markdown)
+    await send_document(client, studio.root(clip_id) / "script.md",
+                        f"script.md — pack v{pack['version']}")
+    flow_cards = ", ".join(str(c + 1) for c in pending)
+    sent = await say(
+        client,
+        f"🎞 Studio pack v{pack['version']} — {script['title']}\n"
+        f"การ์ด Flow: {flow_cards} · {total} shot × 8 วิ = {total * 8} วิ ≈ {pack['credits']} เครดิต\n"
+        f"หน้า copy + อัปไฟล์: {pack_url(clip_id)}\n"
+        "ไฟล์ ≤20MB reply ข้อความนี้ได้เลย · สลับ 🎬/🖼 หรือเปลี่ยนตัวละครด้วยปุ่มข้างล่าง",
+        reply_markup=studio_keyboard(wait),
+    )
+    wait["versions"][token] = {"message_id": (sent or {}).get("message_id"),
+                               "pending": pending, "shots": pack["shots"]}
+    # Only the newest few versions can still be answered: an export of an
+    # older shot map would be cut on the wrong boundaries.
+    for stale in list(wait["versions"])[:-5]:
+        wait["versions"].pop(stale, None)
+
+
+async def on_studio_callback(client: httpx.AsyncClient, state: dict, data: str) -> None:
+    kind, _, rest = data.partition(":")
+    clip_id, _, arg = rest.partition(":")
+    wait = _studio_wait(state, clip_id)
+    if not wait:
+        await say(client, "pack นี้เก่าแล้ว (หมดอายุหรือมีอันใหม่กว่า) กด 🎞 ที่สคริปต์ใหม่นะ")
+        return
+    if kind == "ste":
+        await cut_evenly(client, state, arg)
+        return
+    if kind == "str":
+        await render_studio(client, state, clip_id)
+        return
+    if wait.get("busy"):
+        await say(client, "กำลังทำ pack อยู่ รอสักครู่แล้วค่อยกดใหม่")
+        return
+    if kind == "stt":
+        try:
+            card = int(arg)
+            if card < 0:
+                raise IndexError(card)
+            wait["sources"][card] = (characters.PEXELS if wait["sources"][card] == characters.FLOW
+                                     else characters.FLOW)
+        except (ValueError, IndexError):
+            return
+    elif kind == "stc":
+        wait["choice"] = arg
+    elif kind == "stp":
+        wait["sources"] = [characters.PEXELS] * len(wait["sources"])
+    elif kind == "stx":
+        await shorten_cards(client, state, wait)
+        return
+    # Claimed here, not when publish_pack starts: two taps in one getUpdates
+    # batch would otherwise both pass the check above and plan twice.
+    wait["busy"] = True
+    save_state(state)
+    spawn(publish_pack(client, state), "publish_pack")
+
+
+async def shorten_cards(client: httpx.AsyncClient, state: dict, wait: dict) -> None:
+    """✂️: back to review with the long Cards named. The bot never rewrites approved text."""
+    if state.get("mode", "idle") != "idle":
+        await say(client, st.busy_note(state.get("mode", "idle"))
+                  if state.get("mode") in st.HOLDING_MODES
+                  else "ยังมีสคริปต์ค้างรีวิวอยู่ กด 🎬 หรือ 🗑 ให้อันนั้นก่อน")
+        return
+    long_cards = [f"การ์ด {i + 1} ({span:.1f} วิ)" for i, span in enumerate(wait["spans"])
+                  if studio.shots_for(span) > 1]
+    state.pop("clip_wait", None)
+    studio.discard(wait["clip_id"])
+    if wait.get("pair"):
+        # The 🌏 half went into the pack with the Script; it comes back with it.
+        state["pair"] = wait["pair"]
+    state.update(script=wait["script"], clip_id=wait["clip_id"], topic=wait.get("topic"),
+                 locale=wait["locale"])
+    sent = await say(client, format_script(wait["script"]), reply_markup=REVIEW_KEYBOARD)
+    st.to_review(state, message_id=(sent or {}).get("message_id"))
+    save_state(state)
+    hint = ", ".join(long_cards) or "ไม่มีการ์ดที่เกิน 1 shot"
+    example = long_cards[0].split(" (")[0] if long_cards else "การ์ด 2"
+    await say(client, f"✂️ การ์ดที่ยาวเกิน 1 shot: {hint}\n"
+                      f"พิมพ์ feedback ได้เลย เช่น: ย่อ{example} ให้พูดไม่เกิน 7 วินาที")
+
+
+async def render_studio(client: httpx.AsyncClient, state: dict, clip_id: str) -> None:
+    """Replaced in Task 8."""
+    await say(client, "render Studio ยังไม่พร้อม")
+
+
+async def cut_evenly(client: httpx.AsyncClient, state: dict, token: str) -> None:
+    """Replaced in Task 8."""
+
+
 def _to_upload(state: dict, clip_id: str | None) -> dict | None:
     """The Clip a pressed upload button belongs to.
 
@@ -1790,6 +2058,11 @@ async def on_callback(client: httpx.AsyncClient, state: dict, query: dict) -> No
         # the bot idle, and 📋 asks it from a review the human may have left.
         await on_character_choice(client, state, data)
         return
+    if data.startswith(STUDIO_PREFIXES):
+        # Above the mode guard: a Studio pack outlives the review that made it,
+        # and its buttons are pressed while the bot is idle.
+        await on_studio_callback(client, state, data)
+        return
     if not data.startswith(UPLOAD_CB) and state.get("mode") != "review":
         return
     if data == UPLOAD_CB or data.startswith(f"{UPLOAD_CB}:"):
@@ -1821,6 +2094,8 @@ async def on_callback(client: httpx.AsyncClient, state: dict, query: dict) -> No
             await say(client, "ยังมีคลิปรอ footage อยู่ ส่ง footage ของอันนั้นก่อน (หรือรอให้หมดอายุ)")
             return
         spawn(on_flow(client, state), "on_flow")
+    elif query.get("data") == STUDIO_CB:
+        spawn(on_studio(client, state), "on_studio")
     elif query.get("data") == DISCARD_CB:
         await close_prompt(client, state.get("message_id"), "🗑 ทิ้งสคริปต์แล้ว")
         manifest.update(state.get("clip_id"), outcome="discarded")
@@ -2287,6 +2562,11 @@ async def main() -> None:
     if state.get("mode") in BUSY_MODES:
         # Crashed or restarted mid-job; the workdir is gone either way.
         st.to_idle(state)
+        save_state(state)
+    if (state.get("clip_wait") or {}).get("kind") == "studio":
+        # A pack being planned when the bot died never finished; left set,
+        # every button on the pack would answer "busy" until it expired.
+        state["clip_wait"]["busy"] = False
         save_state(state)
     shop_recovered = st.recover_shop(state)
     if shop_recovered:
