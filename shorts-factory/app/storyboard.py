@@ -21,7 +21,7 @@ from app.script import ScriptError, _client, _parse, _say
 logger = logging.getLogger(__name__)
 
 DEFAULT_SCENES = 4
-MIN_SCENES, MAX_SCENES = 2, 8
+MIN_SCENES, MAX_SCENES = 1, 8
 SHORTS_RATIO, LONG_RATIO = "9:16", "16:9"
 BUDGET_SECONDS = float(os.environ.get("STORYBOARD_TIMEOUT_SECONDS", "300"))
 
@@ -130,12 +130,12 @@ SCENE_FIELDS = ("camera", "scene_description", "visual_details", "scene_mood_not
 CHARACTER_RULES = {AUTO: CHARACTER_AUTO, OWN: CHARACTER_OWN, NONE: CHARACTER_NONE}
 
 
-def _system(ratio: str, shorts: bool, choice: str = AUTO) -> str:
+def _system(ratio: str, shorts: bool, choice: str = AUTO, script_rule: str | None = None) -> str:
     return SYSTEM_PROMPT.format(
         ratio=ratio,
         negatives=NEGATIVES,
         layout=SHORTS_LAYOUT if shorts else LONG_LAYOUT,
-        script_rule=SHORTS_SCRIPT_RULE if shorts else LONG_SCRIPT_RULE,
+        script_rule=script_rule or (SHORTS_SCRIPT_RULE if shorts else LONG_SCRIPT_RULE),
         character_rule=CHARACTER_RULES.get(choice, CHARACTER_AUTO),
     )
 
@@ -170,7 +170,7 @@ def _brief_from_script(script: dict, topic: str = "") -> str:
 
 
 def validate(data: dict, ratio: str, scenes_wanted: int | None = None,
-             choice: str = AUTO) -> dict:
+             choice: str = AUTO, max_scenes: int = MAX_SCENES) -> dict:
     """Reject a storyboard that would send the human to Flow with holes in it."""
     overview = data.get("overview")
     if not isinstance(overview, dict):
@@ -184,8 +184,8 @@ def validate(data: dict, ratio: str, scenes_wanted: int | None = None,
         raise ScriptError("scenes ต้องเป็น list")
     if scenes_wanted is not None and len(scenes) != scenes_wanted:
         raise ScriptError(f"ต้องมี {scenes_wanted} ฉากให้ตรงกับสคริปต์ แต่ได้ {len(scenes)}")
-    if not MIN_SCENES <= len(scenes) <= MAX_SCENES:
-        raise ScriptError(f"ต้องมี {MIN_SCENES}-{MAX_SCENES} ฉาก แต่ได้ {len(scenes)}")
+    if not MIN_SCENES <= len(scenes) <= max_scenes:
+        raise ScriptError(f"ต้องมี {MIN_SCENES}-{max_scenes} ฉาก แต่ได้ {len(scenes)}")
 
     character = overview.get("master_character") or None
     tag = str((character or {}).get("locked_prompt_tag") or "").strip()
@@ -249,21 +249,38 @@ def _with_character(brief: str, choice: str, character: str) -> str:
 
 
 async def plan(brief: str, ratio: str, cards: list[dict] | None = None,
-               choice: str = AUTO, character: str = "") -> dict:
-    """A brief (or a Script) → a validated storyboard. One retry, told what broke."""
+               choice: str = AUTO, character: str = "", *,
+               scenes_wanted: int | None = None, max_scenes: int = MAX_SCENES,
+               fixed_tag: str = "", script_rule: str | None = None,
+               finish=None) -> dict:
+    """A brief (or a Script) → a validated storyboard. One retry, told what broke.
+
+    `fixed_tag` is a library character's English, translated once and reused
+    across clips: it is written over whatever the model named the character,
+    so validation checks every prompt against *that* text, not the model's.
+    """
     if choice not in CHOICES:
         choice = AUTO
     messages = [
-        {"role": "system", "content": _system(ratio, shorts=cards is not None, choice=choice)},
+        {"role": "system", "content": _system(ratio, shorts=cards is not None, choice=choice,
+                                              script_rule=script_rule)},
         {"role": "user", "content": _with_character(brief, choice, character)},
     ]
     client = _client()
-    wanted = len(cards) if cards else None
+    wanted = scenes_wanted if scenes_wanted is not None else (len(cards) if cards else None)
     last: Exception | None = None
     for attempt in range(2):
         raw = await _say(client, messages, temperature=0.8, budget=BUDGET_SECONDS)
         try:
-            data = validate(_parse(raw), ratio, wanted, choice)
+            data = _parse(raw)
+            if fixed_tag and isinstance(data.get("overview"), dict):
+                person = data["overview"].get("master_character") or {}
+                if isinstance(person, dict):
+                    person["locked_prompt_tag"] = fixed_tag
+                    data["overview"]["master_character"] = person
+            data = validate(data, ratio, wanted, choice, max_scenes=max_scenes)
+            if finish:
+                return finish(data)
             return lock_to_script(data, cards) if cards else data
         except ScriptError as exc:
             logger.warning("storyboard ผิดกติกา: %s", exc)
@@ -301,6 +318,101 @@ def as_script(data: dict) -> dict:
     Studio — which the bot says when it hands the upload button over.
     """
     return {"title": data["overview"]["title"], "description": "", "hashtags": []}
+
+
+# --- Storyboard Studio packs (docs/superpowers/specs/2026-10-15-storyboard-studio-pack-design.md)
+
+STUDIO_MAX_SHOTS = 24
+AUTO_TAG = "@Lead"
+STUDIO_SCRIPT_RULE = (
+    "The shots are given below and are fixed: write exactly one scene per shot, in "
+    "the same order and the same number. Shots that belong to the same Card show the "
+    "same beat from another angle, a closer framing or the next action — never a new "
+    "story beat. Every shot is one continuous 8-second take. Leave `sound_verbatim` "
+    "and `on_screen_text` empty; they are filled in from the Script.")
+STUDIO_STYLE = (
+    "STYLE: Photorealistic cinematic, vertical 9:16, one shot per scene, each shot exactly 8 seconds.\n"
+    "No dialogue, no voiceover, no on-screen text, no subtitles, no watermark, no UI, no split-screen.\n"
+    "Keep clean negative space in the centre of the frame for captions added later.")
+ENGLISH_CHARACTER_PROMPT = (
+    "Translate the character description into ONE English noun phrase that starts with "
+    "\"the same\" and names age, ethnicity, hair, accessories and clothing colours, e.g. "
+    "\"the same 28-year-old Thai woman with a short black bob, round glasses, and a beige "
+    "linen shirt\". Keep every detail given; invent only what is missing. Reply with the "
+    "phrase only — no quotes, no Thai, no real people or brands.")
+
+
+def _brief_for_studio(script: dict, pending: list[int], shots: dict[int, int],
+                      topic: str = "") -> str:
+    parts = [f"หัวข้อคลิป: {script['title']}", ""]
+    if topic and topic.strip() and topic.strip() != script["title"]:
+        parts = [f"หัวข้อที่คนพิมพ์มาเอง: {topic.strip()} (ใช้เฉพาะรายละเอียดภาพ)", ""] + parts
+    for card in pending:
+        c = script["cards"][card]
+        parts += [
+            f"การ์ด {card + 1}: {shots[card]} shot",
+            f"  เรื่องที่พูดในการ์ดนี้ (ห้ามใส่ลงภาพเป็นตัวหนังสือ): {c['narration']}",
+            f"  ภาพที่คิดไว้คร่าวๆ: {c.get('query', '-')}",
+        ]
+    return "\n".join(parts)
+
+
+def _assign_cards(data: dict, script: dict, pending: list[int], shots: dict[int, int]) -> dict:
+    order = [card for card in pending for _ in range(shots[card])]
+    for scene, card in zip(data["scenes"], order):
+        scene["card"] = card
+        scene["sound_verbatim"] = script["cards"][card]["narration"]
+        scene["on_screen_text"] = " ".join(script["cards"][card]["lines"])
+    return data
+
+
+async def for_studio(script: dict, pending: list[int], shots: dict[int, int],
+                     choice: str = AUTO, character: str = "", fixed_tag: str = "",
+                     topic: str = "") -> dict:
+    """A shot list for the Flow Cards only, one scene per 8s shot."""
+    total = sum(shots[c] for c in pending)
+    return await plan(
+        _brief_for_studio(script, pending, shots, "" if choice == NONE else topic),
+        SHORTS_RATIO, cards=[script["cards"][c] for c in pending],
+        choice=choice, character=character,
+        scenes_wanted=total, max_scenes=STUDIO_MAX_SHOTS, fixed_tag=fixed_tag,
+        script_rule=STUDIO_SCRIPT_RULE,
+        finish=lambda data: _assign_cards(data, script, pending, shots))
+
+
+def portrait_prompt(locked: str) -> str:
+    return (f"A photorealistic 9:16 portrait of {locked}, neutral studio lighting, "
+            f"plain background, full body visible, {NEGATIVES}")
+
+
+def studio_markdown(board: dict, tag: str) -> str:
+    """What Storyboard Studio reads. English only, and nothing anyone says:
+    Thai narration in here could make Veo animate speech."""
+    person = board["overview"].get("master_character") or None
+    locked = (person or {}).get("locked_prompt_tag", "")
+    lines = [f"# Shot list ({len(board['scenes'])} shots x 8 seconds)", "", STUDIO_STYLE, ""]
+    if person and tag:
+        lines += [f"CHARACTERS: {tag} — {locked}", ""]
+    for i, scene in enumerate(board["scenes"], 1):
+        prompt = scene["image_gen_prompt"]
+        lines += [f"[SCENE {i}]",
+                  f"{tag}: {prompt}" if person and tag else prompt,
+                  f"CAMERA: {scene['motion']}, 8 seconds.", ""]
+    return "\n".join(lines).rstrip() + "\n"
+
+
+async def english_character(thai: str) -> str:
+    """A library character's Thai description → its English lock. One retry."""
+    messages = [{"role": "system", "content": ENGLISH_CHARACTER_PROMPT},
+                {"role": "user", "content": thai}]
+    client = _client()
+    for attempt in range(2):
+        raw = (await _say(client, messages, temperature=0.3, budget=BUDGET_SECONDS)).strip().strip('"')
+        if raw and not THAI.search(raw):
+            return raw[:300]
+        messages += [{"role": "assistant", "content": raw},
+                     {"role": "user", "content": "ต้องเป็นภาษาอังกฤษล้วน วลีเดียว"}]
+    raise ScriptError("แปลตัวละครเป็นภาษาอังกฤษไม่สำเร็จ")
 
 
 def character_message(data: dict) -> dict | None:
