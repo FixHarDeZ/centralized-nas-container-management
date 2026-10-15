@@ -46,6 +46,7 @@ LINK = re.compile(r"https?://\S+", re.IGNORECASE)
 SHOPEE_LINK = re.compile(r"https?://(?:[\w-]+\.)*(?:shopee\.co\.th|shp\.ee)\S*", re.IGNORECASE)
 BUDGET_SECONDS = float(os.environ.get("SHOP_PITCH_TIMEOUT_SECONDS", str(mimo.budget())))
 MIN_ATTEMPT = 60.0
+MAX_ATTEMPTS = 5
 
 
 class PitchError(script_gen.ScriptError):
@@ -153,6 +154,36 @@ def line_too_wide(line: str) -> bool:
     return font.getlength(line) > SUBTITLE_WIDTH
 
 
+def _overflow(line: str) -> int:
+    """Roughly how many characters to cut so the line fits; 0 when it does."""
+    cut = 0
+    while cut < len(line) and line_too_wide(line[:len(line) - cut]):
+        cut += 1
+    return cut
+
+
+def fit_lines(lines: list[str]) -> list[str]:
+    """Re-break a beat's subtitle at spaces so every line fits, if it can.
+
+    The model cannot measure pixels, and asking it to re-break a line costs a
+    whole round trip (2026-10-15: a plan failed after three). Where the text
+    has spaces to break on we do it ourselves; Thai with no space is left as
+    it was, because a break mid-word reads wrong, and goes back to the model.
+    """
+    if not any(line_too_wide(line) for line in lines):
+        return lines
+    words = " ".join(lines).split()
+    best = None
+    for cut in range(1, len(words)):
+        first, second = " ".join(words[:cut]), " ".join(words[cut:])
+        if line_too_wide(first) or line_too_wide(second):
+            continue
+        balance = abs(len(first) - len(second))
+        if best is None or balance < best[0]:
+            best = (balance, [first, second])
+    return best[1] if best else lines
+
+
 def _text(value) -> str:
     return value.strip() if isinstance(value, str) else ""
 
@@ -189,37 +220,49 @@ def validate(pitch: dict, brief: str, photos: int) -> dict:
     if not isinstance(beats, list) or not MIN_BEATS <= len(beats) <= MAX_BEATS:
         raise PitchError(f"ต้องมี {MIN_BEATS}-{MAX_BEATS} beat")
 
+    # Every beat is checked before anything is raised: the model can only fix
+    # what it is shown, and one slip per round trip ran a plan out of attempts
+    # on 2026-10-15 (subtitle split, then badge, then line width).
+    problems: list[str] = []
     clean_beats = []
     for i, beat in enumerate(beats, 1):
         where = f"beat {i}"
         if not isinstance(beat, dict):
-            raise PitchError(f"{where}: ต้องเป็น object")
+            problems.append(f"{where}: ต้องเป็น object")
+            continue
         badge = _text(beat.get("badge"))
         if not badge or len(badge) > MAX_BADGE_CHARS:
-            raise PitchError(f"{where}: badge ต้องมีและไม่เกิน {MAX_BADGE_CHARS} ตัวอักษร")
-        lines = [_text(line) for line in beat.get("lines") or [] if _text(line)]
+            problems.append(f"{where}: badge ต้องมีและไม่เกิน {MAX_BADGE_CHARS} ตัวอักษร (ตอนนี้ {len(badge)})")
+        lines = fit_lines([_text(line) for line in beat.get("lines") or [] if _text(line)])
         if not 1 <= len(lines) <= 2:
-            raise PitchError(f"{where}: lines ต้องมี 1-2 บรรทัด")
-        wide = [line for line in lines if line_too_wide(line)]
-        if wide:
-            raise PitchError(f"{where}: บรรทัดซับยาวเกินจอ ({wide[0]}) ตัดให้สั้นลงหรือแยก beat")
+            problems.append(f"{where}: lines ต้องมี 1-2 บรรทัด")
+        for line in lines:
+            over = _overflow(line)
+            if over:
+                problems.append(f"{where}: บรรทัดซับยาวเกินจอ ต้องตัดออกราว {over} ตัวอักษร "
+                                f"หรือเว้นวรรคให้ตัดบรรทัดได้ หรือแยก beat: {line}")
         narration, spoken = _text(beat.get("narration")), _text(beat.get("spoken"))
         # Burned in for viewers with the sound off: the subtitle must be what
         # the voice says, not a paraphrase of it.
         if _squash("".join(lines)) != _squash(narration):
-            raise PitchError(f"{where}: lines ต่อกันต้องได้ narration ทุกตัวอักษร")
-        _check_voice(narration, spoken, where, brief)
+            problems.append(f"{where}: lines ต่อกันต้องได้ narration ทุกตัวอักษร")
+        try:
+            _check_voice(narration, spoken, where, brief)
+        except PitchError as exc:
+            problems.append(str(exc))
         made_up = unsourced(badge, brief)
         if made_up:
-            raise PitchError(f"{where}: ตัวเลข {', '.join(made_up)} ใน badge ไม่มีใน Brief")
+            problems.append(f"{where}: ตัวเลข {', '.join(made_up)} ใน badge ไม่มีใน Brief")
         try:
             photo = int(beat.get("photo"))
         except (TypeError, ValueError):
-            raise PitchError(f"{where}: photo ต้องเป็นเลขรูป 1-{photos}") from None
+            photo = 0
         if not 1 <= photo <= photos:
-            raise PitchError(f"{where}: photo ต้องเป็นเลขรูป 1-{photos}")
+            problems.append(f"{where}: photo ต้องเป็นเลขรูป 1-{photos}")
         clean_beats.append({"badge": badge, "lines": lines, "narration": narration,
                             "spoken": spoken, "photo": photo})
+    if problems:
+        raise PitchError("; ".join(problems))
 
     prices = {}
     for key in ("price", "old_price"):
@@ -282,7 +325,8 @@ async def generate(brief: str, photos: int, previous: dict | None = None,
     client = script_gen._client()
     deadline = time.monotonic() + BUDGET_SECONDS
     last_error: Exception | None = None
-    for attempt in range(3):
+    # Deadline-driven like Scripts, capped so a fast-failing client cannot spin.
+    for attempt in range(MAX_ATTEMPTS):
         left = deadline - time.monotonic()
         if left < MIN_ATTEMPT:
             break

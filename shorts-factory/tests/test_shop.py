@@ -126,6 +126,37 @@ def test_a_rejected_pitch_goes_back_to_the_model_with_the_reason(monkeypatch):
     assert "price" in asked[1][-1]["content"]
 
 
+def test_a_wide_line_with_spaces_is_rebroken_here_not_sent_back(monkeypatch):
+    monkeypatch.setattr(shop, "line_too_wide", lambda line: len(line) > 22)
+    narration = "ระบบตัดไฟอัตโนมัติ มีเทอร์โมสตัท ปลอดภัย"
+    assert shop.fit_lines([narration]) == ["ระบบตัดไฟอัตโนมัติ", "มีเทอร์โมสตัท ปลอดภัย"]
+    # Thai with nowhere to break stays as the model wrote it and goes back.
+    assert shop.fit_lines(["มีเทอร์โมสตัทตัดไฟเมื่อความร้อนเกิน"]) == ["มีเทอร์โมสตัทตัดไฟเมื่อความร้อนเกิน"]
+
+
+def test_every_beat_problem_is_reported_in_one_round(monkeypatch):
+    monkeypatch.setattr(shop, "line_too_wide", lambda line: len(line) > 20)
+    pitch = a_pitch()
+    pitch["beats"][0].update(badge="ป้ายที่ยาวเกินยี่สิบตัวอักษรแน่นอน")
+    wide = "มีเทอร์โมสตัทตัดไฟเมื่อความร้อนเกิน"
+    pitch["beats"][1].update(narration=wide, spoken=wide, lines=[wide])
+    with pytest.raises(shop.PitchError) as caught:
+        shop.validate(pitch, BRIEF, photos=2)
+    message = str(caught.value)
+    assert "beat 1: badge" in message and "beat 2: บรรทัดซับยาวเกินจอ ต้องตัดออกราว 15 ตัวอักษร" in message
+
+
+def test_generation_keeps_trying_past_three_rejections_while_time_remains(monkeypatch):
+    replies = [json.dumps(a_pitch(price="999"), ensure_ascii=False)] * 3 + [json.dumps(a_pitch(), ensure_ascii=False)]
+
+    async def fake_say(client, messages, temperature, budget, model=None):
+        return replies.pop(0)
+
+    monkeypatch.setattr(shop.script_gen, "_say", fake_say)
+    monkeypatch.setattr(shop.script_gen, "_client", lambda: None)
+    assert asyncio.run(shop.generate(BRIEF, 2))["price"] == "1299"
+
+
 # --- the Brief's state --------------------------------------------------------
 
 def test_a_brief_holds_the_bot_and_idle_clears_it():
