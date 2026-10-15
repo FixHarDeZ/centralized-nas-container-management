@@ -291,3 +291,30 @@ def test_the_model_dropdown_follows_the_catalog_the_bot_fetched(client, data_dir
     })
     assert reply.status_code == 200
     assert json.loads((config_dir / "models.json").read_text())["primary"] == "mimo-v2.6-pro"
+
+
+def settings_form_data(**extra):
+    data = {"th_hours": "8", "th_minutes": "15", "en_hours": "", "en_minutes": "15",
+            "model_primary": "", "model_fallback": "",
+            "char_0_id": "nong", "char_0_tag": "@Nong", "char_0_thai": "ผู้หญิงไทย 28 ปี",
+            "char_0_english": "", "char_0_ready": "on",
+            "char_1_id": "", "char_1_tag": "", "char_1_thai": "", "char_1_english": "",
+            "default_th": "nong", "default_en": "", "default_shop": "", "footage": "hook"}
+    data.update(extra)
+    return data
+
+
+def test_settings_saves_the_character_library(client, config_dir):
+    reply = client.post("/settings", data=settings_form_data())
+    assert reply.status_code == 200
+    saved = json.loads((config_dir / "characters.json").read_text(encoding="utf-8"))
+    assert saved["characters"][0]["tag"] == "@Nong" and saved["defaults"]["th"] == "nong"
+    assert "@Nong" in client.get("/settings").text
+
+
+def test_a_bad_character_stores_nothing_at_all(client, config_dir):
+    reply = client.post("/settings", data=settings_form_data(char_0_tag="Nong"))
+    assert reply.status_code == 400
+    assert not (config_dir / "characters.json").exists()
+    assert not (config_dir / "schedule.json").exists()
+    assert 'value="Nong"' in reply.text

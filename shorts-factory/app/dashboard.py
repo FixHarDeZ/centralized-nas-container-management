@@ -20,6 +20,7 @@ from fastapi.templating import Jinja2Templates
 
 from app import (
     analytics,
+    characters,
     experiment,
     history,
     locales,
@@ -295,7 +296,7 @@ def now(request: Request):
 
 def _settings_page(request: Request, stored: dict, models: dict,
                    saved: bool = False, error: str = "", status: int = 200,
-                   submitted=None):
+                   submitted=None, library: dict | None = None):
     rows = [{"code": code, "label": locales.get(code)["label"],
              "enabled": spec["enabled"], "hours": ",".join(str(h) for h in spec["hours"]),
              "minutes": spec["auto_pick_minutes"]} for code, spec in sorted(stored.items())]
@@ -316,6 +317,9 @@ def _settings_page(request: Request, stored: dict, models: dict,
         "model_choices": choices,
         "invalid_models": [name for name in models.values() if name and name not in choices],
         "catalog_at": model_choice.catalog().get("fetched_at"),
+        # On a rejected form this is what they typed, not what is on disk.
+        "library": library or characters.stored(),
+        "channels": characters.CHANNELS,
         "saved": saved,
         "error": error,
         "gate": None,
@@ -329,8 +333,8 @@ def settings_form(request: Request):
 
 @app.post("/settings", response_class=HTMLResponse)
 async def settings_save(request: Request):
-    """Rewrite `/config/schedule.json` and `/config/models.json`. The only
-    non-GET route in this app.
+    """Rewrite `/config/schedule.json`, `/config/models.json` and
+    `/config/characters.json`. The only non-GET route in this app.
 
     Everything the form sends is untrusted text off a LAN page behind one basic
     auth, so nothing is coerced generously: `schedule.validate()` rejects the
@@ -347,17 +351,20 @@ async def settings_save(request: Request):
             "auto_pick_minutes": form.get(f"{code}_minutes", "15"),
         }
     models = {role: str(form.get(f"model_{role}", "")) for role in model_choice.ROLES}
+    library = characters.from_form(form)
     try:
-        # Both checked before either is written: one bad field stores nothing.
+        # All three checked before any is written: one bad field stores nothing.
         schedule.validate(payload)
         model_choice.validate(models)
+        characters.validate(library)
         stored = schedule.save(payload)
         chosen = model_choice.save(models)
+        characters.save(library)
     except ValueError as exc:
         # Show what they typed back, not what is on disk: a rejected form that
         # redraws itself from storage silently discards the edit.
         return _settings_page(request, schedule.settings(), model_choice.stored(),
-                              error=str(exc), status=400, submitted=form)
+                              error=str(exc), status=400, submitted=form, library=library)
     return _settings_page(request, stored, chosen, saved=True)
 
 

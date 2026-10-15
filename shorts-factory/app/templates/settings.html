@@ -13,8 +13,23 @@
 <section class="card model-settings"><div class="card-head"><h2>โมเดลสำหรับงานเขียน</h2>{{ icon('flask') }}</div><p class="muted small">ใช้เขียนสคริปต์ เสนอหัวข้อ /trends, Flow prompt และ Storyboard ตัวสำรองใช้เมื่อการเขียนสคริปต์รอบแรกไม่ผ่าน และยังเหลือเวลา</p><div class="form-grid">
 {% for role, label in [('primary', 'โมเดลตัวหลัก'), ('fallback', 'โมเดลตัวสำรอง')] %}<div class="field"><label for="model-{{ role }}">{{ label }}</label><select id="model-{{ role }}" name="model_{{ role }}" aria-describedby="model-{{ role }}-hint"><option value=""{% if not models[role] %} selected{% endif %}>ค่าตั้งต้นของบอท</option>{% if models[role] and models[role] not in model_choices %}<option value="{{ models[role] }}" selected>{{ models[role] }} (ไม่อยู่ในรายชื่อที่ใช้ได้)</option>{% endif %}{% for name in model_choices %}<option value="{{ name }}"{% if models[role] == name %} selected{% endif %}>{{ name }}</option>{% endfor %}</select><small id="model-{{ role }}-hint">{% if role == 'primary' %}ใช้กับคำขอใหม่ของบอท{% else %}ใช้เมื่อรอบแรกไม่ผ่านภายในเวลาที่เหลือ{% endif %}</small></div>{% endfor %}
 </div><p class="schedule-note">รายชื่อโมเดลอัปเดตทุก 6 ชม. {% if catalog_at %}ล่าสุด <time datetime="{{ catalog_at }}">{{ catalog_at|datetime_display }}</time>{% else %}ยังไม่เคยดึงรายชื่อ ใช้ลิสต์ตั้งต้น{% endif %}<br>เลือกค่าตั้งต้นของบอทเพื่อใช้โมเดลที่ตั้งไว้สำหรับบอท</p></section>
+<section class="card model-settings"><div class="card-head"><h2>ตัวละครประจำ (Storyboard Studio)</h2>{{ icon('flask') }}</div>
+<p class="muted small">ตั้งครั้งเดียว ใช้ทุกคลิป tag ต้องตรงกับ Asset Profile ใน Flow · ช่อง English เว้นว่างได้ บอทแปลให้ครั้งแรกแล้วจำไว้</p>
+{% set rows = library.characters + [{'id': '', 'tag': '', 'thai': '', 'english': '', 'flow_ready': False}] %}
+{% for c in rows %}<fieldset class="card channel-settings"><legend>{{ c.tag or 'เพิ่มตัวละครใหม่' }}</legend>
+<div class="form-grid">
+<div class="field"><label for="char-{{ loop.index0 }}-id">id (a-z, 0-9) — ลบตัวละคร = ล้างช่องนี้</label><input id="char-{{ loop.index0 }}-id" name="char_{{ loop.index0 }}_id" value="{{ c.id }}"></div>
+<div class="field"><label for="char-{{ loop.index0 }}-tag">tag ใน Flow</label><input id="char-{{ loop.index0 }}-tag" name="char_{{ loop.index0 }}_tag" value="{{ c.tag }}" placeholder="@Nong"></div>
+</div>
+<div class="field"><label for="char-{{ loop.index0 }}-thai">ลักษณะ (ไทย)</label><input id="char-{{ loop.index0 }}-thai" name="char_{{ loop.index0 }}_thai" value="{{ c.thai }}" placeholder="ผู้หญิงไทย 28 ปี ผมบ๊อบสีดำ แว่นกลม เสื้อเชิ้ตลินินสีเบจ"></div>
+<div class="field"><label for="char-{{ loop.index0 }}-english">English (ไม่บังคับ)</label><input id="char-{{ loop.index0 }}-english" name="char_{{ loop.index0 }}_english" value="{{ c.english }}"></div>
+<label class="toggle" for="char-{{ loop.index0 }}-ready"><input id="char-{{ loop.index0 }}-ready" type="checkbox" name="char_{{ loop.index0 }}_ready"{% if c.flow_ready %} checked{% endif %}><span>สร้าง Asset Profile ใน Flow แล้ว</span></label>
+</fieldset>{% endfor %}
+<div class="form-grid">{% for ch in channels %}<div class="field"><label for="default-{{ ch }}">ตัวละครเริ่มต้นช่อง {{ ch|upper }}</label><select id="default-{{ ch }}" name="default_{{ ch }}"><option value="">🤖 ให้บอทแต่ง</option>{% for c in library.characters %}<option value="{{ c.id }}"{% if library.defaults[ch] == c.id %} selected{% endif %}>{{ c.tag }}</option>{% endfor %}</select></div>{% endfor %}
+<div class="field"><label for="footage-rule">แหล่งภาพเริ่มต้นของแต่ละการ์ด</label><select id="footage-rule" name="footage">{% for value, label in [('hook', 'hook = Flow, ที่เหลือ Pexels'), ('none', 'Pexels ทั้งหมด'), ('all', 'Flow ทั้งหมด')] %}<option value="{{ value }}"{% if library.footage == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div></div>
+</section>
 <div class="settings-actions"><button class="primary" type="submit">{{ icon('check') }} บันทึกการตั้งค่า</button><p>มีผลกับคำขอถัดไป · ไม่ต้อง restart</p></div>
 </form>
 <details class="card disclosure schedule-stamps"><summary>รอบล่าสุดที่ยิงไปแล้ว</summary><div class="table-scroll"><table><thead><tr><th>ช่อง</th><th>รอบที่บันทึก</th></tr></thead><tbody>{% for code, slot in stamps.items() %}<tr><td>{{ code|upper }}</td><td>{{ slot }}</td></tr>{% else %}<tr><td colspan="2" class="empty-inline">ยังไม่เคยยิงรอบอัตโนมัติ</td></tr>{% endfor %}</tbody></table></div></details>
-<p class="muted small settings-scope">การตั้งค่านี้มีผลเฉพาะตารางเวลาและโมเดล ข้อมูลคลิป สถานะ และประวัติเป็นข้อมูลอ่านอย่างเดียว</p>
+<p class="muted small settings-scope">การตั้งค่านี้มีผลเฉพาะตารางเวลา โมเดล และตัวละครประจำ ข้อมูลคลิป สถานะ และประวัติเป็นข้อมูลอ่านอย่างเดียว</p>
 {% endblock %}
