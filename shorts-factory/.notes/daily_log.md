@@ -2315,3 +2315,11 @@ User closed the task. Expanded 12-step HTML guide published in `898c7ea`; public
 
 **ยังไม่ยืนยัน**: ชื่อคอลัมน์จริงของ CSV ไทยจาก Affiliate Portal (alias = เดา), Sub ID ติดไปกับสินค้าที่แนบใน Shopee Video หรือไม่, รูปแบบ Sub ID ที่ Portal รับ (ใช้ตัวอักษร+ตัวเลขล้วนเพื่อเลี่ยง)
 **ค้าง**: commit → deploy (`deploy.sh -s shorts-factory -y`; สำรอง volume `shorts_factory_shop` ก่อน เพราะเพิ่มตารางใน SQLite จริง — `CREATE TABLE IF NOT EXISTS` ไม่แตะตารางเดิม) → ผู้ใช้ export CSV จริงมาเช็ค alias
+
+### 2026-10-15 — Affiliate tracking: commit + deploy
+- Commit `c0672ac` บน main (ยังไม่ push — ผู้ใช้สั่ง commit + deploy)
+- สำรอง SQLite ก่อน deploy ด้วย `sqlite3.backup` ในคอนเทนเนอร์ → `~/backups/shorts-factory-shop/shop-20261015-143216.sqlite3` บน NAS (integrity ok, jobs=0)
+- `scripts/deploy.sh -s shorts-factory -y` ผ่าน (45s) ทั้ง 5 containers สร้างใหม่ running, restart=0
+- ตรวจในคอนเทนเนอร์: `shop_affiliate.py` อยู่ใน shop + worker, ตารางใหม่ `affiliate/clicks/conversions/imports/posts/subids` สร้างแล้ว ตารางเดิมอยู่ครบ, `/shop` `/shop/revenue` `/shop/api/affiliate/summary` `/healthz` = 200 ภายใน, ผ่าน nginx ไม่มี credential = 401, ไม่มี traceback, บอท mode=idle
+- ยังไม่ได้ทดสอบด้วย CSV จริงจาก Portal / ยังไม่ได้เปิดผ่าน nginx ด้วย Basic Auth จริง
+**ค้าง**: push (รอผู้ใช้), CSV จริง (header + 1 แถว) เพื่อแก้ alias
