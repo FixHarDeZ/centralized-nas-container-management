@@ -1,7 +1,7 @@
 **2026-10-15 — Storyboard Studio Pack: spec รอผู้ใช้รีวิว (ยังไม่ลงโค้ด).** แทน loop ทีละ scene ของ Shop Flow Studio:
 บอทออก `script.md` + หน้า `/storyboard/<id>` → คนทำใน Flow Storyboard Studio → reply ไฟล์รวมไม่มีเสียงไฟล์เดียว → บอทหั่นทุก 8 วิ + เสียงที่เจนไว้ตอนสร้าง pack.
 คลังตัวละคร `/config/characters.json` + cache แปล `/data/character_tags.json`. **ห้าม automate Flow** (gflow-cli ไม่ headless; flowkit #67 บัญชีโดนบล็อก). ต้องฟรี — ไม่ใช้ Veo API.
-card ยาวได้ หลาย shot ต่อ card (34% ของ card จริงเกิน 7.5 วิ). Step 0 ผ่านเกือบหมด (export 24.000 วิ ตัดที่ 8/16 พอดี, 21.3MB เกิน Telegram → อัปผ่าน Shop API inbox). เลือก Flow/Pexels ทีละการ์ด default hook=Flow. **รอผู้ใช้รีวิว spec** ก่อน writing-plans.
+card ยาวได้ หลาย shot ต่อ card (34% ของ card จริงเกิน 7.5 วิ). Step 0 ผ่านเกือบหมด (export 24.000 วิ ตัดที่ 8/16 พอดี, 21.3MB เกิน Telegram → อัปผ่าน Shop API inbox). เลือก Flow/Pexels ทีละการ์ด default hook=Flow. spec ผ่าน; **แผน Phase 1 พร้อม** `docs/superpowers/plans/2026-10-15-storyboard-studio-pack-phase1.md` รอเลือกวิธี execute (ยังไม่ลงโค้ด/deploy).
 Spec `docs/superpowers/specs/2026-10-15-storyboard-studio-pack-design.md`. รายละเอียด daily_log 15/10 "Storyboard Studio Pack".
 
 **2026-10-15 ปิดงาน — main = origin/main, NAS รัน `438ad26`.** Affiliate tracking (Sub ID/posts/CSV import/`/shop/revenue`/alerts) ใช้งานได้บน NAS.
