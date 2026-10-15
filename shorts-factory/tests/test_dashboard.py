@@ -6,6 +6,7 @@ the reloads below.
 """
 import importlib
 import json
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -431,3 +432,12 @@ def test_upload_script_goes_through_the_shop_csrf(client, data_dir):
     assert script.status_code == 200
     for needle in ("/shop/api/session", "X-CSRF-Token", "/shop/api/studio-inbox/", "same-origin"):
         assert needle in script.text
+
+
+def test_the_pack_page_upload_script_is_served(client):
+    # Reading the file proves nothing if no route serves it to the browser.
+    page = Path(__file__).resolve().parents[1] / "app" / "templates" / "storyboard.html"
+    assert '<script src="/static/studio.js"' in page.read_text(encoding="utf-8")
+    got = client.get("/static/studio.js")
+    assert got.status_code == 200
+    assert "/shop/api/studio-inbox/" in got.text
