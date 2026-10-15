@@ -1,5 +1,10 @@
+**2026-10-15 — คำถาม affiliate ในคลิป trends ปกติ: ตอบแล้ว ยังไม่ทำ.** ลิงก์ใน description Shorts กดไม่ได้ (ตั้งแต่ 08/2023);
+ทางจริง = YouTube Shopping affiliate (Shopee) ต้อง YPP + ติด tag ใน Studio เอง. รอผู้ใช้ตอบว่าช่องเข้า YPP หรือยัง —
+ได้ = ช่องลิงก์ optional ตอนรีวิว + `paidProductPlacementDetails` + flag `affiliate` ใน Manifest (แยกจาก Experiment/Gate);
+ไม่ได้ = ใช้ `/shop` ต่อ. รายละเอียด daily_log 15/10. edge-tts `7.3.1` commit แล้วใน `d85451c` — สถานะบน NAS ยังไม่ได้ตรวจซ้ำ.
+
 **2026-10-14 — ⚠️ บอท render ไม่ได้ (edge-tts 403) — แก้ในเครื่องแล้ว ยังไม่ถึง NAS.** Microsoft เปลี่ยน token 13/10;
-7.2.8 = 403, 7.3.1 = ผ่าน (ทดสอบแล้ว, API เดิม). `requirements.txt` → `edge-tts==7.3.1` **ยังไม่ commit**.
+7.2.8 = 403, 7.3.1 = ผ่าน (ทดสอบแล้ว, API เดิม). `requirements.txt` → `edge-tts==7.3.1` (commit แล้ว `d85451c`).
 คอนเทนเนอร์ยังเป็น image 09/10 (ไม่มี `/shop`). **ค้าง (ผู้ใช้เลือก)**: (1) hot-patch `docker exec -u 0 shorts-factory pip install edge-tts==7.3.1` + `docker restart`
 (ไม่พ่วง `/shop`, classifier บล็อกตอนผมยิง) หรือ (2) commit + deploy เต็ม (พ่วง `/shop` 3c8d73b). หลังแก้: `/redo` คลิปจับผิดภาพ (อยู่ใน `last_script`).
 

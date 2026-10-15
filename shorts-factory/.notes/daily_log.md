@@ -2200,3 +2200,17 @@ install` จะสำเร็จ. ต้องสร้าง venv ใต้ re
 **ค้าง**: แก้บน NAS (hot-patch หรือ deploy เต็มที่พ่วง `/shop`), commit pin bump, deploy `/shop` เดิม
 
 **ปิดงาน 2026-10-14**: NAS ยังไม่ได้แก้ (บอทยัง render ไม่ได้), pin bump + notes ยังไม่ commit, ยังไม่ deploy. ผู้ใช้จะเลือกระหว่าง hot-patch pip ในคอนเทนเนอร์ หรือ deploy เต็มพ่วง `/shop`.
+
+## 2026-10-15 — คำถาม: แปะลิงก์ affiliate ในคลิป trends ปกติ (ยังไม่ทำ)
+
+ผู้ใช้ถามว่าคลิป Shorts ปกติจาก trends แนบลิงก์ Shopee affiliate ใน description ได้ไหม (นอกจาก `/shop`). **ไม่ได้แก้โค้ด** — ตอบเชิงออกแบบ รอคำตอบผู้ใช้.
+
+- **ลิงก์ใน description/comment ของ Shorts กดไม่ได้** ตั้งแต่ 31/08/2023 (YouTube Help 13748639) = แปะไปก็แค่ข้อความ ไม่คุ้มต้องติด `#ad` ทุกคลิป
+- ทางที่กดได้จริง = **YouTube Shopping affiliate (Shopee, ไทยเปิดปลาย 2024)** ต้องอยู่ YPP (+500 subs ตามแหล่งรอง ไม่ทางการ), ติด product tag ใน Studio รายคลิป — Data API ที่ `youtube.py` ใช้น่าจะติด tag ไม่ได้ (ยังไม่ verify)
+- บอทเลือกสินค้าเองไม่ได้: บัญชีไม่มี Shopee Open API (ADR 0015) + หัวข้อ trends สุ่มหมวด → รอบอัตโนมัติใส่ลิงก์ไม่ได้
+- ถ้าทำ ต้องตั้ง `paidProductPlacementDetails.hasPaidProductPlacement` + เก็บ flag `affiliate` ใน Manifest แยกตอนนับ Experiment/Gate (ADR 0004) ไม่งั้นตัวเลขปน
+- ข้อเสนอ: (1) ผู้ใช้เช็ค Studio → Monetization → Shopping ว่าเข้า Affiliate ได้ไหม → ได้ = ช่องวางลิงก์ optional ตอนรีวิว + paid flag + `#ad`, ติด tag เองใน Studio; (2) ไม่ได้ = ใช้ `/shop` โพสต์ Shopee Video/Facebook ต่อ; (3) description เฉยๆ ไม่แนะนำ
+
+**ค้าง**: ผู้ใช้ตอบว่าช่องอยู่ YPP หรือยัง. เรื่องค้างจาก 14/10 ยังเดิม: edge-tts pin `7.3.1` อยู่ใน commit `d85451c` แล้ว แต่สถานะบน NAS (hot-patch/deploy `/shop`) ไม่ได้ตรวจใน session นี้.
+
+**ปิดงาน 2026-10-15**: ไม่มีโค้ดเปลี่ยน ไม่มี deploy. แก้แค่ notes (ยังไม่ commit).
