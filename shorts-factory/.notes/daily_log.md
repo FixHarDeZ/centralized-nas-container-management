@@ -2332,3 +2332,11 @@ User closed the task. Expanded 12-step HTML guide published in `898c7ea`; public
 - Commit `438ad26`, Docker 426 pass, deploy แล้ว (บอท idle + ไม่มี command ค้างก่อน deploy), restart=0
 - ผู้ใช้ต้องกด "สร้างแผนฉาก" ใหม่เอง (command เดิม failed; request_plan เปิดคิวใหม่ได้)
 - Push `5dac1f3..577dd25` เข้า origin/main ตามคำสั่งผู้ใช้
+
+## 2026-10-15 — ปิดงาน: Affiliate tracking + Pitch retry fix
+ผู้ใช้สั่ง "จบงาน".
+- **ทำแล้ว**: Shop affiliate tracking ข้อ 1-6 (`c0672ac`), แก้ Pitch ล้มเพราะแก้ทีละข้อ (`438ad26`), notes (`d5cfae8`, `577dd25`, note push). ทั้งหมดอยู่ main = origin/main
+- **Deploy**: NAS รันโค้ด `438ad26` แล้ว (deploy สองรอบ, restart=0 ทุก container). Backup SQLite ก่อน deploy ที่ NAS `~/backups/shorts-factory-shop/shop-20261015-143216.sqlite3`
+- **ตรวจ**: Docker 426 passed / 2 skipped / 1 deselected; หน้า `/shop/revenue` + section 4 ดูใน Chrome ด้วยข้อมูลสังเคราะห์ในเครื่อง; บน NAS route ภายใน 200 / ผ่าน nginx ไม่มี credential 401
+- **ยังไม่ยืนยัน**: CSV จริงจาก Affiliate Portal (alias ใน `app/shop_report.py` = เดา), Sub ID ของสินค้าที่แนบใน Shopee Video, หน้าเว็บผ่าน Basic Auth จริง, งาน SHARP WH-B55 สร้างแผนผ่านหลัง fix หรือยัง (ผู้ใช้ต้องกดสร้างแผนใหม่เอง)
+- **ค้าง**: ผู้ใช้ส่ง header + 1 แถว ของรายงานคำสั่งซื้อ/คลิก → แก้ alias table

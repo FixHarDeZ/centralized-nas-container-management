@@ -1,3 +1,7 @@
+**2026-10-15 ปิดงาน — main = origin/main, NAS รัน `438ad26`.** Affiliate tracking (Sub ID/posts/CSV import/`/shop/revenue`/alerts) ใช้งานได้บน NAS.
+Pitch fix: `validate()` รวมปัญหาทุก beat + บอกจำนวนตัวที่ต้องตัด, `fit_lines()` ตัดบรรทัดที่ช่องว่างเอง, `MAX_ATTEMPTS=5` ตาม deadline.
+ค้างอย่างเดียว: CSV จริง (header + 1 แถว) เพื่อยืนยัน alias; งาน SHARP WH-B55 ต้องกดสร้างแผนใหม่ (ยังไม่เห็นผล).
+
 **2026-10-15 — Shop affiliate tracking (1-6) commit `c0672ac` + deploy + push แล้ว (fix Pitch retry `438ad26` ด้วย). Backup ก่อน deploy: NAS `~/backups/shorts-factory-shop/shop-20261015-143216.sqlite3`.** Sub ID ต่องาน/ช่องทาง (`sf…sv|fb|yt`),
 บันทึกโพสต์, import CSV รายงาน Affiliate (`app/shop_report.py` alias table — **ยังไม่เทียบไฟล์จริง**), product snapshot + ค่าคอม history,
 `/shop/revenue`, alert ไม่มีคลิก 7 วัน/แคมเปญใกล้หมด ผ่าน worker สแกนรายชั่วโมง → `notify`. ข้อมูลอยู่ตารางแยกใน `shop.sqlite3`
