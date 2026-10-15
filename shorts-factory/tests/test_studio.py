@@ -58,6 +58,12 @@ def test_pack_round_trip_and_discard():
 def test_unsafe_clip_ids_are_refused():
     with pytest.raises(ValueError):
         studio.root("../etc")
+    with pytest.raises(ValueError):
+        studio.root("20261015-170226-065-../x")
+
+
+def test_a_bumped_clip_id_gets_a_pack_folder():
+    assert studio.root("20261015-170226-065-1").name == "20261015-170226-065-1"
 
 
 def test_have_segments_lists_cards_with_files():

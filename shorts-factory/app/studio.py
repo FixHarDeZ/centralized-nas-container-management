@@ -25,7 +25,7 @@ SHOT_SECONDS = 8.0
 MARGIN = 0.5       # join silence + voice tail inside one shot
 TOLERANCE = 0.5    # export length vs shots × 8
 TOKEN = re.compile(r"^[a-f0-9]{12}$")
-CLIP_ID = re.compile(r"^\d{8}-\d{6}-\d{3}$")
+CLIP_ID = re.compile(r"^\d{8}-\d{6}-\d{3}(-\d+)?$")  # manifest.start bumps a collision to `-<n>`
 
 
 def spans(starts: list[float], total: float, tail_pad: float) -> list[float]:
