@@ -28,24 +28,24 @@
 - Do not edit `app/mimo.py` or `app/telegram.py`. They are vendored copies of `shared/`.
 - No new spend, no Flow automation.
 
-**Test commands** (run from the repo root):
+**Test commands** (run from the repo root). Task 1 Step 0 creates `shorts-factory/scripts/sf-test`. It is a committed wrapper, not a shell variable: every Bash call starts a fresh zsh, and zsh does not word-split an unquoted `$VAR`.
 
 ```bash
 # once per session, and again after requirements/Dockerfile change
 docker build -t shorts-factory:studio shorts-factory
-# any test file, sources mounted so no rebuild per edit
-SF_TEST='docker run --rm --network none -v '"$PWD"'/shorts-factory/app:/app/app:ro -v '"$PWD"'/shorts-factory/tests:/app/tests:ro shorts-factory:studio pytest'
-$SF_TEST tests/test_studio.py -q
+# any test file; app/ and tests/ are mounted, so no rebuild per edit
+shorts-factory/scripts/sf-test tests/test_studio.py -q
 ```
 
 The full regression excludes the one live-TTS test:
-`$SF_TEST tests/ -q --deselect tests/test_shorts_factory.py::test_narration_is_one_take_with_a_start_per_card`
+`shorts-factory/scripts/sf-test tests/ -q --deselect tests/test_shorts_factory.py::test_narration_is_one_take_with_a_start_per_card`
 
 ---
 
 ### Task 1: Character library (`app/characters.py`)
 
 **Files:**
+- Create: `shorts-factory/scripts/sf-test`
 - Create: `shorts-factory/app/characters.py`
 - Test: `shorts-factory/tests/test_studio_characters.py`
 
@@ -62,6 +62,23 @@ The full regression excludes the one live-TTS test:
   - `remember_english(character: dict, english: str) -> None`
   - Constants: `CHANNELS = ("th", "en", "shop")`, `FLOW = "flow"`, `PEXELS = "pexels"`
 - Character dict: `{"id": str, "tag": "@Name", "thai": str, "english": str, "flow_ready": bool}`
+
+- [ ] **Step 0: Test wrapper**
+
+```sh
+#!/bin/sh
+# shorts-factory/scripts/sf-test — pytest inside the stack image, with this
+# checkout's app/ and tests/ mounted read-only and no network (no live TTS,
+# no model calls). Build the image first: docker build -t shorts-factory:studio shorts-factory
+set -eu
+here=$(cd "$(dirname "$0")/.." && pwd)
+exec docker run --rm --network none \
+  -v "$here/app:/app/app:ro" -v "$here/tests:/app/tests:ro" \
+  "${SF_IMAGE:-shorts-factory:studio}" pytest "$@"
+```
+
+Run: `chmod +x shorts-factory/scripts/sf-test && docker build -t shorts-factory:studio shorts-factory && shorts-factory/scripts/sf-test tests/test_dashboard.py -q`
+Expected: the existing dashboard tests pass.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -148,7 +165,7 @@ def test_from_form_reads_rows_and_drops_blank_ones():
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `$SF_TEST tests/test_studio_characters.py -q`
+Run: `shorts-factory/scripts/sf-test tests/test_studio_characters.py -q`
 Expected: FAIL with `ImportError: cannot import name 'characters'`
 
 - [ ] **Step 3: Implement**
@@ -317,13 +334,13 @@ def remember_english(character: dict, english: str) -> None:
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `$SF_TEST tests/test_studio_characters.py -q`
+Run: `shorts-factory/scripts/sf-test tests/test_studio_characters.py -q`
 Expected: 12 passed
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add shorts-factory/app/characters.py shorts-factory/tests/test_studio_characters.py
+git add shorts-factory/scripts/sf-test shorts-factory/app/characters.py shorts-factory/tests/test_studio_characters.py
 git commit -m "feat(shorts-factory): character library for Studio packs"
 ```
 
@@ -472,7 +489,7 @@ def test_version_for_message():
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `$SF_TEST tests/test_studio.py -q`
+Run: `shorts-factory/scripts/sf-test tests/test_studio.py -q`
 Expected: FAIL with `ImportError: cannot import name 'studio'`
 
 - [ ] **Step 3: Implement**
@@ -730,7 +747,7 @@ def version_for_message(wait: dict, message_id: int | None) -> str | None:
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `$SF_TEST tests/test_studio.py -q`
+Run: `shorts-factory/scripts/sf-test tests/test_studio.py -q`
 Expected: 17 passed
 
 - [ ] **Step 5: Commit**
@@ -807,7 +824,7 @@ def test_saved_narration_is_dropped_when_say_changes(dirs, monkeypatch):
 
 - [ ] **Step 2: Run the tests**
 
-Run: `$SF_TEST tests/test_studio.py -q`
+Run: `shorts-factory/scripts/sf-test tests/test_studio.py -q`
 Expected: 20 passed. Task 2 already implements these functions; this task adds coverage against real ffmpeg. If any test fails, fix `studio.cut` or `studio.load_narration`, not the test.
 
 - [ ] **Step 3: Commit**
@@ -892,7 +909,7 @@ def test_build_reuses_narration_and_labels_studio_footage(tmp_path, monkeypatch)
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `$SF_TEST tests/test_studio_render.py -q`
+Run: `shorts-factory/scripts/sf-test tests/test_studio_render.py -q`
 Expected: FAIL with `TypeError: _segment_over_footage() got an unexpected keyword argument 'hold'`
 
 - [ ] **Step 3: Implement.** Replace `_segment_over_footage` in `render.py`:
@@ -981,7 +998,7 @@ In `details`, add `"narration_reused": bool(narration),` after `"bgm"`. Change t
 
 - [ ] **Step 4: Run the new tests and the existing render tests**
 
-Run: `$SF_TEST tests/test_studio_render.py tests/test_shorts_factory.py -q -k "studio or footage or build or segment" --deselect tests/test_shorts_factory.py::test_narration_is_one_take_with_a_start_per_card`
+Run: `shorts-factory/scripts/sf-test tests/test_studio_render.py tests/test_shorts_factory.py -q -k "studio or footage or build or segment" --deselect tests/test_shorts_factory.py::test_narration_is_one_take_with_a_start_per_card`
 Expected: all pass
 
 - [ ] **Step 5: Commit**
@@ -1114,7 +1131,7 @@ def test_portrait_prompt():
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `$SF_TEST tests/test_studio_storyboard.py -q`
+Run: `shorts-factory/scripts/sf-test tests/test_studio_storyboard.py -q`
 Expected: FAIL with `AttributeError: module 'app.storyboard' has no attribute 'for_studio'`
 
 - [ ] **Step 3: Implement** in `storyboard.py`.
@@ -1288,7 +1305,7 @@ async def english_character(thai: str) -> str:
 
 - [ ] **Step 4: Run the new tests and the existing storyboard tests**
 
-Run: `$SF_TEST tests/test_studio_storyboard.py tests/test_shorts_factory.py -q -k "storyboard or studio"`
+Run: `shorts-factory/scripts/sf-test tests/test_studio_storyboard.py tests/test_shorts_factory.py -q -k "storyboard or studio"`
 Expected: all pass. If an existing test asserted `MIN_SCENES == 2`, update it to `1` and note in the commit message why: a one-Card studio pack is a 1-shot board.
 
 - [ ] **Step 5: Commit**
@@ -1350,7 +1367,7 @@ def client(tmp_path, monkeypatch):
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `$SF_TEST tests/test_shop_api.py -q -k studio_inbox`
+Run: `shorts-factory/scripts/sf-test tests/test_shop_api.py -q -k studio_inbox`
 Expected: FAIL. The first assertion gets 404 instead of 201.
 
 - [ ] **Step 3: Implement.** In `shop_api.py`, add `import re` at the top, and after `REPORT_LIMIT` add:
@@ -1398,7 +1415,7 @@ Inside `create_app`, after the scene `accept` route, add:
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
-Run: `$SF_TEST tests/test_shop_api.py -q`
+Run: `shorts-factory/scripts/sf-test tests/test_shop_api.py -q`
 Expected: all pass
 
 - [ ] **Step 5: Commit**
@@ -1606,7 +1623,7 @@ def test_review_keyboard_offers_studio():
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `$SF_TEST tests/test_studio_bot.py -q`
+Run: `shorts-factory/scripts/sf-test tests/test_studio_bot.py -q`
 Expected: FAIL with `AttributeError: module 'app.main' has no attribute 'on_studio'`
 
 - [ ] **Step 3: Implement in `main.py`.**
@@ -1701,6 +1718,13 @@ async def on_studio(client: httpx.AsyncClient, state: dict) -> None:
     """
     script = state["script"]
     clip_id = state.get("clip_id")
+    live = state.get("clip_wait") or {}
+    if live.get("kind") == "studio" and live.get("clip_id") != clip_id:
+        # Same rule as 🎨's one Parked Clip: a second pack would orphan credits
+        # already spent in Flow on the first. The Script stays in review.
+        await say(client, f"ยังมี Studio pack ค้างอยู่: {live['script']['title']}\n"
+                          "ส่งคลิปของอันนั้นก่อน (หรือรอหมดอายุ) แล้วค่อยกด 🎞 อันนี้")
+        return
     await close_prompt(client, state.get("message_id"),
                        f"🎞 {script['title']} — กำลังอัดเสียงและวาง shot")
     state.update(mode="writing", message_id=None)
@@ -1721,6 +1745,9 @@ async def on_studio(client: httpx.AsyncClient, state: dict) -> None:
         "choice": characters.default_for(locale) or "auto",
         "sources": characters.default_sources(len(script["cards"])),
         "versions": {}, "uneven": {}, "busy": False,
+        # A queued 🌏 half belongs to this clip, not to whatever renders next
+        # while Flow is being shot — same reason on_flow() parks it.
+        "pair": state.pop("pair", None),
         "created_at": datetime.now().isoformat(timespec="seconds"),
     }
     st.to_idle(state)
@@ -1870,10 +1897,10 @@ In the branch chain under the mode guard (next to `elif query.get("data") == FLO
 
 - [ ] **Step 4: Run the tests**
 
-Run: `$SF_TEST tests/test_studio_bot.py -q`
+Run: `shorts-factory/scripts/sf-test tests/test_studio_bot.py -q`
 Expected: 8 passed (`test_all_pexels_renders_without_a_pack` uses the monkeypatched `render_studio`).
 
-Then run the existing keyboard tests: `$SF_TEST tests/test_shorts_factory.py -q -k "keyboard or review"`
+Then run the existing keyboard tests: `shorts-factory/scripts/sf-test tests/test_shorts_factory.py -q -k "keyboard or review"`
 Expected: pass. If a test pins `REVIEW_KEYBOARD`'s exact shape, update it to the new 3-button second row.
 
 - [ ] **Step 5: Commit**
@@ -2003,6 +2030,54 @@ def test_flow_to_pexels_after_render_keeps_other_footage(bot, monkeypatch):
     assert calls and calls[-1]["hold"] == {0}
 
 
+def test_a_flow_card_without_footage_is_never_rendered_on_pexels(bot, monkeypatch):
+    calls = capture_render(monkeypatch)
+    state, token = studio_ready(bot)
+    seg = studio.segment_path(CLIP, 0)
+    seg.parent.mkdir(parents=True, exist_ok=True)
+    seg.write_bytes(b"x")
+    state["clip_wait"]["sources"] = ["flow", "flow", "pexels"]
+    run(main.render_studio(None, state, CLIP))
+    assert not calls
+    assert any("การ์ด 2" in item[1] for item in bot if item[0] == "say")
+
+
+def test_a_queued_pair_waits_inside_the_studio_pack(bot, monkeypatch):
+    calls = capture_render(monkeypatch)
+    state = review_state()
+    state["pair"] = {"pair_id": CLIP, "topic": "หัวข้อ"}
+    run(main.on_studio(None, state))
+    assert "pair" not in state and state["clip_wait"]["pair"]["pair_id"] == CLIP
+    seg = studio.segment_path(CLIP, 0)
+    seg.parent.mkdir(parents=True, exist_ok=True)
+    seg.write_bytes(b"x")
+    run(main.render_studio(None, state, CLIP))
+    assert calls and state["pair"]["pair_id"] == CLIP
+
+
+def test_a_second_studio_pack_is_refused_while_one_is_live(bot):
+    state = review_state()
+    run(main.on_studio(None, state))
+    other = {**review_state(), "clip_id": "20261016-090000-000",
+             "clip_wait": state["clip_wait"]}
+    run(main.on_studio(None, other))
+    assert other["mode"] == "review" and other["clip_wait"]["clip_id"] == CLIP
+    assert any("ค้างอยู่" in item[1] for item in bot if item[0] == "say")
+
+
+def test_redo_keeps_the_flow_footage(bot, monkeypatch):
+    rendered = []
+
+    async def fake(client, state, clip_id):
+        rendered.append(clip_id)
+
+    monkeypatch.setattr(main, "render_studio", fake)
+    state, token = studio_ready(bot)
+    state.update(last_script=state["clip_wait"]["script"], last_clip_id=CLIP, mode="idle")
+    run(main.on_redo(None, state))
+    assert rendered == [CLIP]
+
+
 def test_upload_success_cleans_the_studio_files(bot, monkeypatch, tmp_path):
     state, token = studio_ready(bot)
     assert studio.read_pack(CLIP)
@@ -2012,7 +2087,7 @@ def test_upload_success_cleans_the_studio_files(bot, monkeypatch, tmp_path):
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `$SF_TEST tests/test_studio_bot.py -q`
+Run: `shorts-factory/scripts/sf-test tests/test_studio_bot.py -q`
 Expected: FAIL with `AttributeError: module 'app.main' has no attribute 'process_export'`
 
 - [ ] **Step 3: Implement.**
@@ -2056,12 +2131,20 @@ async def render_studio(client: httpx.AsyncClient, state: dict, clip_id: str) ->
         return
     count = len(wait["script"]["cards"])
     have = studio.have_segments(clip_id, count)
+    missing = studio.pending_cards(wait["sources"], have)
+    if missing:
+        # A 🎬 Card with no footage is never quietly rendered on Pexels.
+        await say(client, f"การ์ด {', '.join(str(c + 1) for c in missing)} ตั้งเป็น 🎬 Flow "
+                          "แต่ยังไม่มี footage — ใช้ pack ล่าสุด หรือสลับการ์ดนั้นเป็น 🖼")
+        return
     supplied = {i: studio.segment_path(clip_id, i) for i in have
                 if wait["sources"][i] == characters.FLOW}
     narration = studio.load_narration(clip_id)
     if narration is None:
         await say(client, "🔁 เสียงพากย์เปลี่ยน (/say) หรือหาไฟล์เดิมไม่เจอ — อัดเสียงใหม่ "
                           "จุดตัดอาจคลาดเล็กน้อย")
+    if wait.get("pair"):
+        state["pair"] = wait.pop("pair")
     state.update(script=wait["script"], topic=wait.get("topic"), clip_id=clip_id,
                  style="", locale=wait["locale"], message_id=None)
     save_state(state)
@@ -2164,6 +2247,16 @@ def finish_studio_after_upload(state: dict, clip_id: str | None) -> None:
             studio.sweep_inbox(set(waiting.get("versions") or {}))
 ```
 
+(f) `/redo` must not throw the Flow footage away. In `on_redo`, insert the block below after the `if not script:` guard. Without it, `/redo` (which `do_render`'s footer recommends after `/say`) re-renders with no `supplied` footage, so every Card falls back to Pexels and the clip re-enters the experiment tally:
+
+```python
+    wait = state.get("clip_wait") or {}
+    if wait.get("kind") == "studio" and wait.get("clip_id") == state.get("last_clip_id"):
+        await say(client, f"🔁 render ซ้ำด้วย footage จาก Flow เดิม: {script['title']}")
+        spawn(render_studio(client, state, wait["clip_id"]), "render_studio")
+        return
+```
+
 (e) `do_upload`: after the `manifest.update(...)` call that records `video_id`, add:
 
 ```python
@@ -2173,10 +2266,10 @@ def finish_studio_after_upload(state: dict, clip_id: str | None) -> None:
 
 - [ ] **Step 4: Run the tests**
 
-Run: `$SF_TEST tests/test_studio_bot.py tests/test_studio.py -q`
+Run: `shorts-factory/scripts/sf-test tests/test_studio_bot.py tests/test_studio.py -q`
 Expected: all pass.
 
-Then run: `$SF_TEST tests/test_shorts_factory.py -q --deselect tests/test_shorts_factory.py::test_narration_is_one_take_with_a_start_per_card`
+Then run: `shorts-factory/scripts/sf-test tests/test_shorts_factory.py -q --deselect tests/test_shorts_factory.py::test_narration_is_one_take_with_a_start_per_card`
 Expected: all pass. Existing `fake_render(client, state, supplied=None)` doubles still work, because the new kwargs are only passed by `render_studio`.
 
 - [ ] **Step 5: Commit**
@@ -2212,7 +2305,7 @@ def test_studio_clips_are_left_out_of_the_tally():
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `$SF_TEST tests/test_studio.py -q -k tally`
+Run: `shorts-factory/scripts/sf-test tests/test_studio.py -q -k tally`
 Expected: FAIL with `AttributeError: ... has no attribute 'studio_clip'`
 
 - [ ] **Step 3: Implement.** Add above `tally`:
@@ -2232,7 +2325,7 @@ In `tally`'s loop, make the first statement `if studio_clip(record): continue`.
 
 - [ ] **Step 4: Run the tests**
 
-Run: `$SF_TEST tests/test_studio.py tests/test_shorts_factory.py -q -k "tally or experiment or studio"`
+Run: `shorts-factory/scripts/sf-test tests/test_studio.py tests/test_shorts_factory.py -q -k "tally or experiment or studio"`
 Expected: pass
 
 - [ ] **Step 5: Commit**
@@ -2287,7 +2380,7 @@ def test_a_bad_character_stores_nothing_at_all(client, config_dir):
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `$SF_TEST tests/test_dashboard.py -q -k character`
+Run: `shorts-factory/scripts/sf-test tests/test_dashboard.py -q -k character`
 Expected: FAIL, because `characters.json` is not written
 
 - [ ] **Step 3: Implement.**
@@ -2343,7 +2436,7 @@ In `settings.html`, insert before `<div class="settings-actions">`:
 
 - [ ] **Step 4: Run the dashboard suite**
 
-Run: `$SF_TEST tests/test_dashboard.py tests/test_dashboard_studio.py -q`
+Run: `shorts-factory/scripts/sf-test tests/test_dashboard.py tests/test_dashboard_studio.py -q`
 Expected: all pass, including `test_only_the_schedule_route_can_write`, which stays unchanged.
 
 - [ ] **Step 5: Commit**
@@ -2409,7 +2502,7 @@ def test_script_md_downloads_and_bad_ids_404(client, data_dir):
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
-Run: `$SF_TEST tests/test_dashboard.py -q -k "pack_page or script_md or ready_character"`
+Run: `shorts-factory/scripts/sf-test tests/test_dashboard.py -q -k "pack_page or script_md or ready_character"`
 Expected: FAIL with 404
 
 - [ ] **Step 3: Implement.**
@@ -2521,7 +2614,7 @@ Create `static/studio.js`:
 
 - [ ] **Step 4: Run the dashboard suite**
 
-Run: `$SF_TEST tests/test_dashboard.py tests/test_dashboard_studio.py -q`
+Run: `shorts-factory/scripts/sf-test tests/test_dashboard.py tests/test_dashboard_studio.py -q`
 Expected: all pass, including the PIL/edge_tts import guard and `test_only_the_schedule_route_can_write`.
 
 - [ ] **Step 5: Commit**
@@ -2600,5 +2693,7 @@ In `shorts-factory/.notes/daily_log.md`, add a dated entry: what shipped, the te
 git add docs/adr/0016-storyboard-studio-pack.md shorts-factory/README.md CLAUDE.md shorts-factory/.notes
 git commit -m "docs(shorts-factory): ADR 0016 Storyboard Studio packs"
 ```
+
+Live acceptance (after deploy, before calling Phase 1 done): one real clip end to end, **including a web upload over 20 MB through the external URL**. The stack nginx allows 102m, but the DSM reverse proxy in front of it has never carried a 45–80 MB body to `/shop/api/…` and may answer 413 first. A hook-only pack is about 7 MB per shot (21.3 MB ÷ 3), so the Telegram reply covers the common case either way.
 
 Deployment is **not** part of this plan. It needs the user's go-ahead: `scripts/deploy.sh -s shorts-factory -y` while the bot is idle, then one live clip end to end (Phase 2 of the spec).
