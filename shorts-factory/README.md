@@ -491,13 +491,85 @@ Details worth knowing:
   second publish erasing the first.
 - The wait lasts 72 hours (`STORYBOARD_CLIP_HOURS`) and stays open after a file
   arrives — send a better cut and it is filed as its own clip with its own
-  button. One storyboard is waited on at a time; a new one replaces it.
+  button. One storyboard is waited on at a time; a new one replaces it. A 🎞
+  Studio pack shares that one slot: a board and a pack replace each other,
+  the bot says so in chat, and a replaced pack's files are deleted.
 - The Locale the storyboard was asked in is snapshotted with the wait, not read
   when the file lands: it picks the output folder *and* which channel's token
   publishes the clip, and a board takes minutes to plan (`docs/adr/0008`).
 - Uploaded this way, the clip counts in `/stats` and toward the ADR 0004 Gate
   like any other published clip — it is one. It carries no experiment variant,
   so `/experiment`'s arms ignore it, which is correct: nothing was randomised.
+
+## Storyboard Studio (🎞)
+
+📋 and 🎨 make you loop per scene: copy a prompt, generate, download, send back.
+**🎞 Studio (Flow)** on a reviewed script hands the whole shot list to Flow's
+own Storyboard Studio instead, takes back **one** stitched export, and
+assembles the Short itself. `docs/adr/0016` has the reasoning.
+
+1. Press 🎞. The bot speaks the script once (the take is kept), measures how
+   long each Card is on screen, and goes idle; the script leaves review the
+   same way it does on 🎨.
+2. It posts a **pack**: `script.md` as a document, and a message with the shot
+   count, the estimated credits and a link to the pack page. Under it, one
+   toggle per Card (🎬 Flow / 🖼 Pexels), a character row, ✅ Pexels ทั้งหมด
+   and ✂️ ย่อการ์ดยาว. The default is the hook on Flow and everything else on
+   Pexels; the rule (`hook`, `none` or `all`) is set in `/settings`.
+3. Each Flow Card gets `ceil((span + 0.5) / 8)` shots of 8 s. Every tap
+   publishes a new pack version with its own token; only the newest 5 still
+   accept an export, because an older shot map cuts on the wrong boundaries.
+4. Open the pack page (`/storyboard/<clip_id>` on the dashboard): Flow setup,
+   the character portrait prompt, `script.md` with a copy button and a
+   download, and one motion prompt per shot. Generate, put the shots in order
+   in Scenes, export.
+5. Send the export back either way:
+   - **≤20 MB**: reply to the pack message *or* its `script.md` with the video.
+   - **Bigger**: the upload form at the bottom of the pack page. It goes to
+     the Shop API (`POST /shop/api/studio-inbox/<token>`, same nginx basic
+     auth, Shop CSRF, 100 MiB cap) into `/output/studio-inbox/`, and the bot
+     picks it up on its next poll (~30 s). The bot still has no port.
+6. The bot checks the length. Within 0.5 s of `shots × 8` it cuts every 8 s
+   (re-encoded, Flow exports carry a keyframe only every 3 s) and renders
+   with the saved take, Pexels for every 🖼 Card. A Card that outlasts its
+   footage holds the last frame instead of looping. Any other length is
+   refused with **✂️ หั่นเท่าๆ กัน (cut evenly)**, which divides the file by
+   the shot count. Use it only when you are sure the order is right.
+
+Details worth knowing:
+
+- **Characters** live in the library on `/settings` (id, Flow `@tag`, Thai
+  description, optional English, "created in Flow" tick, a default per
+  channel). The bot translates the Thai once and caches the English in
+  `/data/character_tags.json`, so the lock stays word for word across clips.
+  🤖 lets the model invent one, 🚫 means no person. `script.md` is English
+  only, holds no narration, and repeats the `@tag` and the full lock in every
+  scene.
+- **✂️ ย่อการ์ดยาว** sends the script back to review with the long Cards
+  named. The bot never rewrites approved text; you type the feedback. The
+  Fact sheet and hook variant come back with it.
+- **The take is reused only while it still fits.** A `/say` change since 🎞,
+  a missing file, or a script with another Card count means the renderer
+  speaks again and says the cut may drift slightly.
+- **A 🎬 Card with no footage stops the render** and says which one. It is
+  never filled from Pexels quietly. If the bot is busy when the footage is
+  ready, it posts a 🎬 render Studio button instead.
+- **One pack at a time.** A second 🎞 on another script is refused while one
+  waits. 📋 shares the same slot (see above).
+- **Files**: `/data/studio/<clip_id>/` (pack, take, cut segments). Deleted on
+  YouTube upload, ✂️, replacement, or when the 72-hour wait
+  (`STORYBOARD_CLIP_HOURS`) runs out. A channel without YouTube credentials
+  keeps them until then. Inbox files nobody claims go after 72 h. A restart
+  puts back an export caught mid-cut so the next poll takes it again.
+- **Credits** shown are `shots × FLOW_CREDITS_PER_SHOT` (default 12), an
+  estimate, not read from Flow.
+- **Experiment**: a clip with any Studio Card (`footage_source:
+  flow-studio`) is left out of `/experiment` and its category table. The
+  footage would be measured, not the hook.
+- **Not yet checked on a real clip**: Flow honouring the STYLE header,
+  `@tag` binding to an Asset Profile, the frame aspect, the monthly credit
+  allowance, and a web upload over 20 MB through the external DSM reverse
+  proxy (may answer 413; the LAN dashboard at `<NAS_HOST>:5071` avoids it).
 
 ## What it records
 
@@ -787,11 +859,12 @@ make secrets                    # render .env from vault + manifest
 | :--- | :--- | :--- |
 | `TRENDS_HOURS` | `8,12,17` | Thai's default hours, until a schedule is saved in the dashboard |
 | `AUTO_PICK_MINUTES` | `15` | default wait before the list picks itself, same |
-| `CONFIG_DIR` | `/config` | where `schedule.json` and `models.json` live; the dashboard's only writable mount |
+| `CONFIG_DIR` | `/config` | where `schedule.json`, `models.json` and `characters.json` live; the dashboard's only writable mount |
 | `FLOW_PARK_HOURS` | `24` | how long a clip waits for footage you generate in Flow |
 | `FLOW_PROMPT_TIMEOUT_SECONDS` | `180` | cap on writing one Flow Prompt |
 | `STORYBOARD_TIMEOUT_SECONDS` | `300` | cap on planning one storyboard |
 | `STORYBOARD_CLIP_HOURS` | `72` | how long a storyboard waits for the clip you assemble from it |
+| `FLOW_CREDITS_PER_SHOT` | `12` | Flow credits per 8 s shot, for the estimate on a 🎞 Studio pack (bot only; written into the pack) |
 | `REVIEW_LIFETIME_HOURS` | `6` | how long a script waits for you to press a button before it is let go |
 | `TTS_VOICE_EN` | `en-US-AndrewNeural` | the English Locale's voice, used by `/en` and `/trends en` clips |
 | `TTS_ATTEMPTS` | `3` | tries per synthesis call; the endpoint drops whole calls at random (`No audio was received`) |
@@ -809,12 +882,16 @@ A Creator Studio view of everything the bot has already written down, served at
 `http://<NAS_HOST>:5071` behind nginx basic auth (credentials from the vault,
 see below). It runs as its own container from the same image as the bot with
 `/data` mounted `:ro`. The sole writing route is `POST /settings`, which saves
-the schedule and model choices to `/config` after validating both payloads
-(`docs/adr/0009` amends `0007`). It carries no
+the schedule, model choices and character library to `/config` after
+validating every payload (`docs/adr/0009` amends `0007`). The library is only
+rewritten when the form carries the hidden `characters_form=1` marker, so a
+tab opened before that section existed cannot wipe it; a character row with
+text but no id is rejected, and a character is deleted by clearing its whole
+row. It carries no
 `env_file`, so the Telegram bot token and the YouTube refresh token never
 reach this LAN-facing process.
 
-Five views:
+Six views:
 
 | Page | Answers |
 | :--- | :--- |
@@ -822,7 +899,8 @@ Five views:
 | `/clip/{id}` | latest Script, text pronunciation checks, earlier drafts, research links, render detail and snapshots |
 | `/experiment` | hook arms and their medians per channel; a verdict once both channel and arm thresholds pass |
 | `/now` | recorded `state.json`, pending work, `say.json` overrides and recent uploads; no live heartbeat claim |
-| `/settings` | channel schedules and writing models, with saved/error feedback and rejected edits preserved |
+| `/settings` | channel schedules, writing models and the 🎞 character library, with saved/error feedback and rejected edits preserved |
+| `/storyboard/<clip_id>` | a 🎞 Studio pack: copy boxes, `script.md` (also at `/storyboard/<clip_id>/script.md`) and the export upload form |
 
 The charcoal/amber interface has a desktop sidebar and mobile navigation.
 Library search and status filters act within the selected channel; its figures
@@ -850,8 +928,11 @@ Set it up once with:
 htpasswd -cB shorts-factory/nginx/.htpasswd <username>   # gitignored; use the vault password
 ```
 
-Nothing on this surface can start a render, edit a Script, or touch YouTube —
-that all still happens in Telegram, on the phone.
+This process cannot start a render, edit a Script, or touch YouTube — that
+all still happens in Telegram, on the phone. The one indirect path is the
+pack page's upload form, which `static/studio.js` posts to the Shop API
+(`/shop/api/studio-inbox/<token>`, same origin, with the `/shop/api/session`
+CSRF token); the bot then finds the file and renders.
 
 `/healthz` sits behind the same basic auth as every other path on this
 dashboard, so an Uptime Kuma monitor pointed at it must be given the vault
