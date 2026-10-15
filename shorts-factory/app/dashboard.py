@@ -13,8 +13,8 @@ import os
 from pathlib import Path
 from statistics import median
 
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -28,6 +28,7 @@ from app import (
     model_choice,
     pronunciation,
     schedule,
+    studio,
 )
 from app import dashboard_view as view
 
@@ -290,6 +291,36 @@ def now(request: Request):
         "waits": view.waiting_jobs(state),
         "gate": None,
     })
+
+
+# --- Storyboard Studio packs (docs/adr/0016) ----------------------------------
+
+def _pack_or_404(clip_id: str) -> dict:
+    """The pack the bot wrote, or 404. `studio.root` refuses anything that is
+    not a clip id (bumped `-<n>` ids included) before a path is built."""
+    try:
+        pack = studio.read_pack(clip_id)
+    except ValueError:
+        pack = None
+    if not pack:
+        raise HTTPException(status_code=404)
+    return pack
+
+
+@app.get("/storyboard/{clip_id}", response_class=HTMLResponse)
+def storyboard_pack(request: Request, clip_id: str):
+    """The Storyboard Studio pack: read-only, like every page but /settings.
+    The upload form posts to the Shop API, not to this app."""
+    pack = _pack_or_404(clip_id)
+    return TEMPLATES.TemplateResponse(request, "storyboard.html", {
+        "pack": pack, "markdown": studio.read_markdown(clip_id) or "", "gate": None})
+
+
+@app.get("/storyboard/{clip_id}/script.md")
+def storyboard_markdown(clip_id: str):
+    _pack_or_404(clip_id)
+    return PlainTextResponse(studio.read_markdown(clip_id) or "", media_type="text/markdown",
+                             headers={"Content-Disposition": f'attachment; filename="{clip_id}-script.md"'})
 
 
 # --- the one writing route (docs/adr/0009) -----------------------------------

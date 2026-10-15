@@ -318,3 +318,72 @@ def test_a_bad_character_stores_nothing_at_all(client, config_dir):
     assert not (config_dir / "characters.json").exists()
     assert not (config_dir / "schedule.json").exists()
     assert 'value="Nong"' in reply.text
+
+
+def write_pack(data_dir, character):
+    where = data_dir / "studio" / "20261015-170226-065"
+    where.mkdir(parents=True)
+    (where / "pack.json").write_text(json.dumps({
+        "clip_id": "20261015-170226-065", "token": "a1b2c3d4e5f6", "version": 2, "title": "หัวข้อ",
+        "character": character, "sources": ["flow", "pexels"], "pending": [0],
+        "shots": {"0": 2}, "total_shots": 2, "credits": 24, "spans": [9.1, 8.0],
+        "scenes": [{"n": 1, "card": 0, "image_prompt": "P1", "motion": "M1", "narration": "พูด", "span": 9.1},
+                   {"n": 2, "card": 0, "image_prompt": "P2", "motion": "M2", "narration": "พูด", "span": 9.1}]},
+        ensure_ascii=False), encoding="utf-8")
+    (where / "script.md").write_text("# Shot list\n", encoding="utf-8")
+
+
+def test_pack_page_shows_boxes_and_upload_token(client, data_dir):
+    write_pack(data_dir, {"id": "nong", "tag": "@Nong", "locked": "L", "flow_ready": False, "portrait": "PORTRAIT"})
+    page = client.get("/storyboard/20261015-170226-065")
+    assert page.status_code == 200
+    text = page.text
+    assert "PORTRAIT" in text and "# Shot list" in text and "P2" in text and "M1" in text
+    assert "2 shot × 8 วิ = 16 วิ" in text and "a1b2c3d4e5f6" in text
+
+
+def test_ready_character_box_is_collapsed(client, data_dir):
+    write_pack(data_dir, {"id": "nong", "tag": "@Nong", "locked": "L", "flow_ready": True, "portrait": "PORTRAIT"})
+    text = client.get("/storyboard/20261015-170226-065").text
+    assert "<details" in text.split("PORTRAIT")[0].rsplit("<section", 1)[1]
+
+
+def test_script_md_downloads_and_bad_ids_404(client, data_dir):
+    write_pack(data_dir, None)
+    reply = client.get("/storyboard/20261015-170226-065/script.md")
+    assert reply.status_code == 200 and reply.text == "# Shot list\n"
+    assert "attachment" in reply.headers["content-disposition"]
+    assert client.get("/storyboard/..%2Fetc").status_code == 404
+    assert client.get("/storyboard/20200101-000000-000").status_code == 404
+
+
+def test_pack_page_accepts_a_bumped_clip_id(client, data_dir):
+    """manifest.start bumps a same-second collision to `-<n>`; its pack must still open."""
+    write_pack(data_dir, None)
+    (data_dir / "studio" / "20261015-170226-065").rename(data_dir / "studio" / "20261015-170226-065-1")
+    assert client.get("/storyboard/20261015-170226-065-1").status_code == 200
+    assert client.get("/storyboard/20261015-170226-065-1/script.md").status_code == 200
+
+
+def test_pack_page_writes_nothing_under_data(client, data_dir):
+    write_pack(data_dir, None)
+    before = sorted(str(p.relative_to(data_dir)) for p in data_dir.rglob("*"))
+    client.get("/storyboard/20261015-170226-065")
+    client.get("/storyboard/20261015-170226-065/script.md")
+    assert sorted(str(p.relative_to(data_dir)) for p in data_dir.rglob("*")) == before
+
+
+def test_upload_script_goes_through_the_shop_csrf(client, data_dir):
+    """The form posts to the Shop API, never to this app (WRITING_ROUTES).
+
+    The Shop middleware wants a same-origin `Origin`, the `shop_csrf` cookie and
+    the same value in `X-CSRF-Token`; the token comes from /shop/api/session.
+    """
+    write_pack(data_dir, None)
+    page = client.get("/storyboard/20261015-170226-065").text
+    assert 'src="/static/studio.js"' in page and 'data-token="a1b2c3d4e5f6"' in page
+    assert 'method="post"' not in page.split('id="studio-upload"')[1].split(">")[0]
+    script = client.get("/static/studio.js")
+    assert script.status_code == 200
+    for needle in ("/shop/api/session", "X-CSRF-Token", "/shop/api/studio-inbox/", "same-origin"):
+        assert needle in script.text
