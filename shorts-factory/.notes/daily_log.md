@@ -2323,3 +2323,11 @@ User closed the task. Expanded 12-step HTML guide published in `898c7ea`; public
 - ตรวจในคอนเทนเนอร์: `shop_affiliate.py` อยู่ใน shop + worker, ตารางใหม่ `affiliate/clicks/conversions/imports/posts/subids` สร้างแล้ว ตารางเดิมอยู่ครบ, `/shop` `/shop/revenue` `/shop/api/affiliate/summary` `/healthz` = 200 ภายใน, ผ่าน nginx ไม่มี credential = 401, ไม่มี traceback, บอท mode=idle
 - ยังไม่ได้ทดสอบด้วย CSV จริงจาก Portal / ยังไม่ได้เปิดผ่าน nginx ด้วย Basic Auth จริง
 **ค้าง**: push (รอผู้ใช้), CSV จริง (header + 1 แถว) เพื่อแก้ alias
+
+### 2026-10-15 — แก้: Shop สร้างแผนฉากล้ม "beat 5: บรรทัดซับยาวเกินจอ"
+งาน "เครื่องทำน้ำอุ่น SHARP WH-B55" สร้างแผนไม่ผ่าน. log worker: 3 รอบ ล้มคนละข้อทุกรอบ (lines ไม่ตรง narration → badge >20 → ซับกว้าง). เดิม `validate()` raise ข้อแรกข้อเดียว + `generate()` 3 รอบตายตัว (ใช้ไปราว 293 วิจาก budget 600). บรรทัดที่ล้ม (`มีเทอร์โมสตัทตัดไฟเมื่อความร้อนเกิน`) เกินจอแค่ ~1 ตัวอักษรเมื่อวัดด้วยฟอนต์จริง.
+- `validate()` รวมปัญหาทุก beat ส่งกลับรอบเดียว (บทเรียนเดียวกับ Scripts 09/09) + บอกว่าต้องตัดกี่ตัว (`_overflow`)
+- `fit_lines()` ตัดบรรทัดใหม่ที่ช่องว่างเองถ้าทำได้ (ไทยไม่มีช่องว่าง = ส่งกลับโมเดลตามเดิม ไม่ตัดกลางคำ)
+- `MAX_ATTEMPTS = 5` วนตาม deadline
+- Commit `438ad26`, Docker 426 pass, deploy แล้ว (บอท idle + ไม่มี command ค้างก่อน deploy), restart=0
+- ผู้ใช้ต้องกด "สร้างแผนฉาก" ใหม่เอง (command เดิม failed; request_plan เปิดคิวใหม่ได้)
