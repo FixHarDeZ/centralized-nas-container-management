@@ -1,0 +1,9 @@
+#!/bin/sh
+# shorts-factory/scripts/sf-test — pytest inside the stack image, with this
+# checkout's app/ and tests/ mounted read-only and no network (no live TTS,
+# no model calls). Build the image first: docker build -t shorts-factory:studio shorts-factory
+set -eu
+here=$(cd "$(dirname "$0")/.." && pwd)
+exec docker run --rm --network none \
+  -v "$here/app:/app/app:ro" -v "$here/tests:/app/tests:ro" \
+  "${SF_IMAGE:-shorts-factory:studio}" pytest "$@"
