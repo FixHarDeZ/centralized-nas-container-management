@@ -2331,3 +2331,4 @@ User closed the task. Expanded 12-step HTML guide published in `898c7ea`; public
 - `MAX_ATTEMPTS = 5` วนตาม deadline
 - Commit `438ad26`, Docker 426 pass, deploy แล้ว (บอท idle + ไม่มี command ค้างก่อน deploy), restart=0
 - ผู้ใช้ต้องกด "สร้างแผนฉาก" ใหม่เอง (command เดิม failed; request_plan เปิดคิวใหม่ได้)
+- Push `5dac1f3..577dd25` เข้า origin/main ตามคำสั่งผู้ใช้
