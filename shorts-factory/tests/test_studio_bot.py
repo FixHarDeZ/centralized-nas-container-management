@@ -189,3 +189,15 @@ def test_a_failed_plan_leaves_the_pack_usable(bot, monkeypatch):
     assert wait["busy"] is False and wait["versions"] == {}
     failed = [item for item in bot if item[0] == "say" and "ไม่สำเร็จ" in item[1]][-1]
     assert f"stt:{CLIP}:0" in json.dumps(failed[2])
+
+
+def test_shorten_keeps_the_fact_sheet_and_variant(bot):
+    state = review_state()
+    facts = {"query": "หัวข้อ", "results": [{"title": "แหล่ง", "url": "https://example.invalid/a",
+                                           "content": "ตัวเลข 42"}]}
+    state.update(research=facts, style="hook-b")
+    run(main.on_studio(None, state))
+    assert state["research"] is None and state["clip_wait"]["research"] == facts
+    run(main.on_studio_callback(None, state, f"stx:{CLIP}"))
+    assert state["research"] == facts and state["style"] == "hook-b"
+    assert any("📎 https://example.invalid/a" in item[1] for item in bot if item[0] == "say")

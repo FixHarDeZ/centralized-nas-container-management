@@ -1327,6 +1327,9 @@ async def on_studio(client: httpx.AsyncClient, state: dict) -> None:
     state["clip_wait"] = {
         "kind": "studio", "clip_id": clip_id, "script": script,
         "topic": state.get("topic"), "locale": locale, "spans": meta["spans"],
+        # to_idle() clears both, and ✂️ sends the Script back to review: a
+        # rewrite there must keep its Fact sheet and its hook Variant.
+        "research": state.get("research"), "style": state.get("style", ""),
         "choice": characters.default_for(locale) or "auto",
         "sources": characters.default_sources(len(script["cards"])),
         "versions": {}, "uneven": {}, "busy": False,
@@ -1472,8 +1475,11 @@ async def shorten_cards(client: httpx.AsyncClient, state: dict, wait: dict) -> N
         # The 🌏 half went into the pack with the Script; it comes back with it.
         state["pair"] = wait["pair"]
     state.update(script=wait["script"], clip_id=wait["clip_id"], topic=wait.get("topic"),
-                 locale=wait["locale"])
-    sent = await say(client, format_script(wait["script"]), reply_markup=REVIEW_KEYBOARD)
+                 locale=wait["locale"], research=wait.get("research"),
+                 style=wait.get("style", ""))
+    sent = await say(client, format_script(wait["script"],
+                                           research.sources_line(wait.get("research"))),
+                     reply_markup=REVIEW_KEYBOARD)
     st.to_review(state, message_id=(sent or {}).get("message_id"))
     save_state(state)
     hint = ", ".join(long_cards) or "ไม่มีการ์ดที่เกิน 1 shot"
