@@ -25,6 +25,7 @@ Docker stacks for Synology DS925+ NAS, managed via Synology Container Manager.
 | `ops-bot/` | AI incident-response bot — Uptime Kuma webhook, SSH diagnostics, Telegram fixes, fix-as-PR | `5070` | `https://…:15070` |
 | `shorts-factory/` | Telegram bot that renders Thai YouTube Shorts — read-only dashboard over the clip record | `5071` (Nginx basic-auth dashboard) | `https://…:15071` |
 | `ai-deck/` | Claude Code as a document desk from the phone — web terminal + key bar, pptx/docx/xlsx skills, `out/` download drawer, chat view (a second Claude Code over stream-json), sessions sheet (tap to resume), 5h/7d rate-limit chip with reset countdowns, finish notification, workstation status line (`STATUSLINE_BAR_W` picks the phone layout) | `5072` (Nginx basic-auth) | `https://…:15072` |
+| `lotto-picker/` | สุ่มเลขท้าย 3 ตัวไม่ซ้ำ N งวดล่าสุด (ผลจาก API กองสลาก) — dashboard, เลขอัตโนมัติ + ผลรางวัลเข้า Telegram, ตรวจผลเลขที่บันทึกไว้ | `5073` (Nginx basic-auth) | `https://…:15073` |
 
 ### Reverse Proxy Summary
 
@@ -46,6 +47,7 @@ All stacks except `watchtower` are exposed externally via **Synology Reverse Pro
 | friendly-reminder | `https://…:15066` | `http://localhost:5066` |
 | ops-bot | `https://…:15070` | `http://localhost:5070` |
 | shorts-factory | `https://…:15071` | `http://localhost:5071` |
+| lotto-picker | `https://…:15073` | `http://localhost:5073` |
 
 > Your router must forward each **external port → NAS** so traffic reaches Synology Reverse Proxy. Homepage is the only exception — it has its own Nginx inside the container that handles TLS, so Synology RP simply forwards `:443` to port `3000` unencrypted and lets Nginx take over from there.
 

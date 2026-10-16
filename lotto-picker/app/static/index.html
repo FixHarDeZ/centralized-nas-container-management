@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0f172a">
+  <title>สุ่มเลขท้าย 3 ตัว</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <h1>🎲 สุ่มเลขท้าย 3 ตัว</h1>
+    <p class="sub" id="latest">กำลังโหลด…</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <div class="grid">
+        <label>ย้อนหลัง (งวด)
+          <input id="draws" type="number" min="1" max="24" inputmode="numeric">
+        </label>
+        <label>จำนวนเลข
+          <input id="picks" type="number" min="1" max="50" inputmode="numeric">
+        </label>
+      </div>
+      <label>ตัดจากรางวัล
+        <select id="scope">
+          <option value="all">ทุกรางวัล (3 ตัวท้ายของทุกรางวัล)</option>
+          <option value="front_back">เฉพาะเลขหน้า/ท้าย 3 ตัว</option>
+        </select>
+      </label>
+      <label class="switch">
+        <input id="permute" type="checkbox">
+        <span>ตัดเลขโต๊ดด้วย (058 ออก → ตัด 085 508 580 805 850)</span>
+      </label>
+      <button id="go" class="primary">สุ่มเลข</button>
+
+      <div id="result" hidden>
+        <div id="numbers" class="numbers"></div>
+        <p class="muted" id="poolInfo"></p>
+        <div class="row">
+          <button id="save">บันทึกไว้ตรวจผล</button>
+          <button id="again" class="ghost">สุ่มใหม่</button>
+        </div>
+        <details>
+          <summary id="exSummary">เลขที่ถูกตัดออก</summary>
+          <div id="excluded" class="chips"></div>
+        </details>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>แจ้งเตือน</h2>
+      <label class="switch">
+        <input id="notify" type="checkbox">
+        <span>ส่งผลรางวัล + เลขสุ่มอัตโนมัติ (เย็นวันก่อนออกรางวัล)</span>
+      </label>
+      <button id="saveSettings" class="ghost">ใช้ค่าด้านบนเป็นค่าของเลขอัตโนมัติ</button>
+      <p class="muted" id="settingsInfo"></p>
+    </section>
+
+    <section class="card">
+      <h2>สถิติเลขที่บันทึกไว้</h2>
+      <p id="stats" class="muted">ยังไม่มีเลขที่ตรวจผลแล้ว</p>
+      <ul id="picks-list" class="list"></ul>
+    </section>
+
+    <section class="card">
+      <h2>ผลรางวัลที่เก็บไว้</h2>
+      <ul id="draws-list" class="list"></ul>
+      <button id="sync" class="ghost">ดึงผลล่าสุดตอนนี้</button>
+    </section>
+
+    <p class="note">ทุกเลขมีโอกาสออก 1 ใน 1000 เท่ากันทุกงวด การตัดเลขที่เคยออกไม่ได้ทำให้โอกาสถูกเพิ่มขึ้น — สถิติด้านบนเอาไว้ดูว่าเป็นอย่างนั้นจริงไหม</p>
+  </main>
+
+  <div id="toast" hidden></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
