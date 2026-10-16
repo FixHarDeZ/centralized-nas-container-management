@@ -63,3 +63,5 @@ plan settles on. There is no upload button.
 Keep legacy `/shop` as the original photo mode. Add a separate Creator Studio workspace for manual Flow/real video scene imports. Long-lived Shop jobs live in a dedicated SQLite store and do not hold Telegram conversational state. New private Shop API/worker services share media storage and a filesystem render lock with legacy renders; the existing dashboard retains its read-only bot data and no drawing-library boundary.
 
 n8n dispatches approved immutable render revisions through a scoped authenticated API. User review owns reference/scene/product fidelity and final approval; no auto-publishing or paid video-generation API. Full design: `docs/superpowers/specs/2026-10-15-shop-flow-studio-design.md`. New artifacts remain separate from Shorts Manifests, history and experiments.
+
+> `shopee-short/` was removed on 2026-10-16. The plan it points at is in git history: `git show f85077a:shopee-short/docs/PLAN.md`.

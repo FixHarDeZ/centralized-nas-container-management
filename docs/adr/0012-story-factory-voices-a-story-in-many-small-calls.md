@@ -1,3 +1,5 @@
+> **Retired 2026-10-16:** the `story-factory` stack was removed from the repo without ever being deployed (last tree: `git show f85077a:story-factory/`). Kept as a record of the decision.
+
 # A Story is voiced in twenty small calls, not one long one
 
 Google's Text-to-Speech API has an endpoint built for exactly this stack:

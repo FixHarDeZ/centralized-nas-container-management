@@ -1,3 +1,5 @@
+> **Retired 2026-10-16:** the `story-factory` stack was removed from the repo without ever being deployed (last tree: `git show f85077a:story-factory/`). Kept as a record of the decision.
+
 # The human approves an Outline, and nobody is required to read the prose
 
 A Shorts Script is around 120 words. It arrives in Telegram, the human reads

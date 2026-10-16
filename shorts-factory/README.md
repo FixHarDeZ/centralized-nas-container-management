@@ -74,7 +74,7 @@ episodes are a correlated sick window of a few minutes; a fourth concurrent
 request would have died with the other three, and every hedge tripled the
 token spend for the privilege. The hedge machinery was removed on 2026-09-15.
 `_say()` is now one request under one deadline, built on `app/mimo.py`
-(vendored from `shared/mimo.py`, the same client story-factory uses). The
+(vendored from `shared/mimo.py`). The
 smaller model is still used in one place where it earns it: a retry after a
 schema slip, which has only the tail of the shared budget left to finish in.
 

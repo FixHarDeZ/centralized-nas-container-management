@@ -1,3 +1,5 @@
+> **Retired 2026-10-16:** the `story-factory` stack was removed from the repo without ever being deployed (last tree: `git show f85077a:story-factory/`). Kept as a record of the decision.
+
 # Documentary subjects, bedtime packaging, and no religion for the first ten
 
 This stack was asked for as a bedtime storytelling channel — เรื่องเล่าก่อนนอน,
