@@ -3,78 +3,170 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#0f172a">
-  <title>สุ่มเลขท้าย 3 ตัว</title>
+  <meta name="theme-color" content="#123e32">
+  <meta name="description" content="สุ่มเลขท้าย 3 ตัว เลือกงวดย้อนหลัง บันทึกเลขและติดตามผลรางวัลในที่เดียว">
+  <title>Lotto Picker · สุ่มเลขท้าย 3 ตัว</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <header>
-    <h1>🎲 สุ่มเลขท้าย 3 ตัว</h1>
-    <p class="sub" id="latest">กำลังโหลด…</p>
+  <a class="skip-link" href="#main">ข้ามไปเนื้อหา</a>
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32" fill="none"><path d="M5 7h22v6a3 3 0 0 0 0 6v6H5v-6a3 3 0 0 0 0-6V7Z" stroke="currentColor" stroke-width="1.7"/><path d="M21 8v3m0 3v4m0 3v3M10 12h6m-6 5h6m-6 4h3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+      </span>
+      <div><span class="brand-name">Lotto Picker<span class="brand-dot">.</span></span><p class="brand-caption">พื้นที่เล็ก ๆ ของเลขสามหลัก</p></div>
+    </div>
+    <p class="latest-draw" id="latest">กำลังโหลดผลรางวัล…</p>
   </header>
 
-  <main>
-    <section class="card">
-      <div class="grid">
-        <label>ย้อนหลัง (งวด)
-          <input id="draws" type="number" min="1" max="24" inputmode="numeric">
-        </label>
-        <label>จำนวนเลข
-          <input id="picks" type="number" min="1" max="50" inputmode="numeric">
-        </label>
-      </div>
-      <label>ตัดจากรางวัล
-        <select id="scope">
-          <option value="all">ทุกรางวัล (3 ตัวท้ายของทุกรางวัล)</option>
-          <option value="front_back">เฉพาะเลขหน้า/ท้าย 3 ตัว</option>
-        </select>
-      </label>
-      <label class="switch">
-        <input id="permute" type="checkbox">
-        <span>ตัดเลขโต๊ดด้วย (058 ออก → ตัด 085 508 580 805 850)</span>
-      </label>
-      <button id="go" class="primary">สุ่มเลข</button>
+  <nav class="app-nav" aria-label="เมนูหลัก">
+    <button type="button" class="nav-item active" data-view="pick" aria-controls="view-pick" aria-current="page">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M8 8h.01M12 12h.01M16 16h.01" stroke-width="3" stroke-linecap="round"/></svg>
+      <span>สุ่มเลข</span>
+    </button>
+    <button type="button" class="nav-item" data-view="history" aria-controls="view-history">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v17l-6-4-6 4V4Z"/></svg>
+      <span>เลขที่บันทึก</span>
+    </button>
+    <button type="button" class="nav-item" data-view="draws" aria-controls="view-draws">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v5a4 4 0 0 1-8 0V4Zm0 2H4v2a4 4 0 0 0 5 4m7-6h4v2a4 4 0 0 1-5 4m-3 1v5m-4 2h8"/></svg>
+      <span>ผลรางวัล</span>
+    </button>
+  </nav>
 
-      <div id="result" hidden>
-        <div id="numbers" class="numbers"></div>
-        <p class="muted" id="poolInfo"></p>
-        <div class="row">
-          <button id="save">บันทึกไว้ตรวจผล</button>
-          <button id="again" class="ghost">สุ่มใหม่</button>
+  <main id="main" class="app-main">
+    <section id="view-pick" class="view-panel" aria-labelledby="pick-title">
+      <div class="page-heading">
+        <div><p class="eyebrow">YOUR NUMBER, YOUR CHOICE</p><h1 id="pick-title">เริ่มที่เลขชุดใหม่</h1></div>
+        <span class="section-tag">เลขท้าย 3 ตัว</span>
+      </div>
+
+      <div class="pick-layout">
+        <div class="pick-controls">
+          <form id="pick-form" class="card setup-card">
+            <div class="card-heading"><h2>ตั้งค่าการสุ่ม</h2><span class="small-label">เลือกได้ตามใจ</span></div>
+            <div class="control-grid">
+              <div class="control-field">
+                <label for="draws">ย้อนหลัง <span class="unit">/ งวด</span></label>
+                <div class="stepper">
+                  <button type="button" data-step-target="draws" data-step="-1" aria-label="ลดจำนวนงวดย้อนหลัง">−</button>
+                  <input id="draws" type="number" min="1" max="24" value="2" inputmode="numeric" required aria-describedby="draws-help">
+                  <button type="button" data-step-target="draws" data-step="1" aria-label="เพิ่มจำนวนงวดย้อนหลัง">+</button>
+                </div>
+                <div class="presets" aria-label="เลือกงวดย้อนหลังอย่างรวดเร็ว">
+                  <button type="button" data-preset-target="draws" data-value="1">1 งวด</button>
+                  <button type="button" data-preset-target="draws" data-value="2">2 งวด</button>
+                  <button type="button" data-preset-target="draws" data-value="4">4 งวด</button>
+                </div>
+                <p class="field-help" id="draws-help">ตัดเลขที่เคยออก 1–24 งวด</p>
+              </div>
+              <div class="control-field">
+                <label for="picks">จำนวนเลข <span class="unit">/ ชุด</span></label>
+                <div class="stepper">
+                  <button type="button" data-step-target="picks" data-step="-1" aria-label="ลดจำนวนเลข">−</button>
+                  <input id="picks" type="number" min="1" max="50" value="5" inputmode="numeric" required aria-describedby="picks-help">
+                  <button type="button" data-step-target="picks" data-step="1" aria-label="เพิ่มจำนวนเลข">+</button>
+                </div>
+                <div class="presets" aria-label="เลือกจำนวนเลขอย่างรวดเร็ว">
+                  <button type="button" data-preset-target="picks" data-value="3">3 เลข</button>
+                  <button type="button" data-preset-target="picks" data-value="5">5 เลข</button>
+                  <button type="button" data-preset-target="picks" data-value="10">10 เลข</button>
+                </div>
+                <p class="field-help" id="picks-help">สุ่มได้ครั้งละ 1–50 เลข</p>
+              </div>
+            </div>
+            <details class="settings-details advanced-details">
+              <summary><span><strong>ตัวเลือกเพิ่มเติม</strong><small>รางวัลที่ใช้ · ตัดเลขโต๊ด</small></span></summary>
+              <div class="details-body">
+                <label class="select-label" for="scope">ตัดเลขจากรางวัล</label>
+                <select id="scope">
+                  <option value="all">ทุกรางวัล (3 ตัวท้ายของทุกรางวัล)</option>
+                  <option value="front_back">เฉพาะเลขหน้า/ท้าย 3 ตัว</option>
+                </select>
+                <p class="field-help">เลขที่เคยออกในรางวัลที่เลือกจะไม่ถูกสุ่มซ้ำ</p>
+                <label class="switch">
+                  <input id="permute" type="checkbox">
+                  <span class="switch-toggle" aria-hidden="true"></span>
+                  <span class="switch-copy"><strong>ตัดเลขโต๊ดด้วย</strong><small>เช่น 058 ออก จะตัด 085, 508, 580, 805, 850</small></span>
+                </label>
+              </div>
+            </details>
+            <button id="go" type="submit" class="primary pick-button">สุ่มเลข <span aria-hidden="true">↗</span></button>
+            <p class="form-caption">สุ่มจากเลขที่เหลือ โดยไม่ซ้ำกันในชุด</p>
+          </form>
+
+          <details class="card settings-details automation-details">
+            <summary><span><strong>เลขอัตโนมัติและการแจ้งเตือน</strong><small>ตั้งค่าครั้งเดียว เก็บไว้ใช้รอบต่อไป</small></span></summary>
+            <div class="details-body">
+              <label class="switch">
+                <input id="notify" type="checkbox">
+                <span class="switch-toggle" aria-hidden="true"></span>
+                <span class="switch-copy"><strong>เลขอัตโนมัติและแจ้งเตือน</strong><small>ส่งผลรางวัลและเลขสุ่มอัตโนมัติ เย็นวันก่อนออกรางวัล</small></span>
+              </label>
+              <button id="saveSettings" type="button" class="secondary">ใช้ค่าด้านบนกับเลขอัตโนมัติ</button>
+              <p class="muted settings-info" id="settingsInfo">กำลังโหลดการตั้งค่า…</p>
+            </div>
+          </details>
         </div>
-        <details>
-          <summary id="exSummary">เลขที่ถูกตัดออก</summary>
-          <div id="excluded" class="chips"></div>
-        </details>
+
+        <div class="result-stage">
+          <div class="result-heading"><p class="eyebrow">THE NEXT POSSIBILITIES</p><span class="ticket-stamp" aria-hidden="true">PICK / 003</span></div>
+          <h2>เลขชุดของคุณ</h2>
+          <div id="result-empty" class="result-empty">
+            <div class="empty-ticket" aria-hidden="true"><span>?</span><span>?</span><span>?</span></div>
+            <h3>เลขชุดใหม่รออยู่</h3>
+            <p>เลือกจำนวน แล้วแตะ “สุ่มเลข”<br>เลขที่ได้จะมาอยู่ตรงนี้</p>
+          </div>
+          <div id="result" aria-live="polite" hidden>
+            <p id="result-status" class="result-status">ยังไม่ได้บันทึก</p>
+            <div id="numbers" class="numbers"></div>
+            <p class="muted" id="poolInfo"></p>
+            <div class="result-actions">
+              <button id="save" type="button" class="save-button">บันทึกไว้ตรวจผล</button>
+              <div class="row">
+                <button id="copy" type="button" class="ghost">คัดลอกเลข</button>
+                <button id="again" type="button" class="ghost">สุ่มใหม่</button>
+              </div>
+            </div>
+            <details class="excluded-details">
+              <summary id="exSummary">เลขที่ถูกตัดออก</summary>
+              <div id="excluded" class="chips"></div>
+            </details>
+          </div>
+          <div class="result-footer"><span class="footer-mark" aria-hidden="true">✳</span><span>ทุกเลขมีโอกาสเท่ากัน<br><strong>บันทึกไว้ แล้วกลับมาติดตามผล</strong></span></div>
+        </div>
       </div>
     </section>
 
-    <section class="card">
-      <h2>แจ้งเตือน</h2>
-      <label class="switch">
-        <input id="notify" type="checkbox">
-        <span>ส่งผลรางวัล + เลขสุ่มอัตโนมัติ (เย็นวันก่อนออกรางวัล)</span>
-      </label>
-      <button id="saveSettings" class="ghost">ใช้ค่าด้านบนเป็นค่าของเลขอัตโนมัติ</button>
-      <p class="muted" id="settingsInfo"></p>
+    <section id="view-history" class="view-panel" aria-labelledby="history-title" hidden>
+      <div class="page-heading">
+        <div><p class="eyebrow">YOUR SAVED NUMBERS</p><h1 id="history-title">เลขที่บันทึก</h1></div>
+        <span id="history-count" class="section-tag">0 ชุด</span>
+      </div>
+      <div class="stats-grid" aria-label="สถิติเลขที่ตรวจผลแล้ว">
+        <div class="stat-card"><span class="stat-label">ตรวจผลแล้ว</span><strong id="stat-picks">0</strong><span class="stat-unit">ชุด</span></div>
+        <div class="stat-card"><span class="stat-label">ถูกตรงตัว</span><strong id="stat-exact">0</strong><span class="stat-unit">ครั้ง</span></div>
+        <div class="stat-card"><span class="stat-label">ถูกโต๊ด</span><strong id="stat-tod">0</strong><span class="stat-unit">ครั้ง</span></div>
+        <div class="stat-card"><span class="stat-label">สุ่มธรรมดาคาดว่า</span><strong id="stat-expected">0.00</strong><span class="stat-unit">ครั้ง</span></div>
+      </div>
+      <p id="stats" class="muted stats-note">ยังไม่มีเลขที่ตรวจผลแล้ว</p>
+      <ul id="picks-list" class="list picks-list" aria-label="ชุดเลขที่บันทึกไว้"></ul>
     </section>
 
-    <section class="card">
-      <h2>สถิติเลขที่บันทึกไว้</h2>
-      <p id="stats" class="muted">ยังไม่มีเลขที่ตรวจผลแล้ว</p>
-      <ul id="picks-list" class="list"></ul>
+    <section id="view-draws" class="view-panel" aria-labelledby="draws-title" hidden>
+      <div class="page-heading">
+        <div><p class="eyebrow">LOTTERY RESULTS</p><h1 id="draws-title">ผลรางวัลที่เก็บไว้</h1></div>
+        <button id="sync" type="button" class="secondary sync-button">ดึงผลล่าสุดตอนนี้</button>
+      </div>
+      <p class="section-intro">ผลรางวัลจากสำนักงานสลากกินแบ่งรัฐบาล</p>
+      <ul id="draws-list" class="list draws-list" aria-label="ผลรางวัลแต่ละงวด"></ul>
     </section>
 
-    <section class="card">
-      <h2>ผลรางวัลที่เก็บไว้</h2>
-      <ul id="draws-list" class="list"></ul>
-      <button id="sync" class="ghost">ดึงผลล่าสุดตอนนี้</button>
-    </section>
-
-    <p class="note">ทุกเลขมีโอกาสออก 1 ใน 1000 เท่ากันทุกงวด การตัดเลขที่เคยออกไม่ได้ทำให้โอกาสถูกเพิ่มขึ้น — สถิติด้านบนเอาไว้ดูว่าเป็นอย่างนั้นจริงไหม</p>
+    <p class="note"><span aria-hidden="true">i</span><span>ทุกเลขมีโอกาสออก 1 ใน 1,000 เท่ากันทุกงวด การตัดเลขที่เคยออกไม่ได้ทำให้โอกาสถูกเพิ่มขึ้น สถิติมีไว้ติดตามผลเท่านั้น</span></p>
   </main>
 
-  <div id="toast" hidden></div>
+  <div id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
   <script src="/static/app.js"></script>
 </body>
 </html>

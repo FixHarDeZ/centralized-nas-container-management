@@ -1,5 +1,16 @@
 # lotto-picker — daily log
 
+## 2026-10-16 — Redesign UI สำหรับมือถือ
+- ผู้ใช้อนุมัติแนวแอปมือถือ ครีม/เขียวเข้ม เมนูล่าง 3 ส่วน (“สุ่มเลข / เลขที่บันทึก / ผลรางวัล”) และให้ทำต่อ
+- แก้ `app/static/index.html`, `style.css`, `app.js`: stepper/presets, ตัวเลือกพับเก็บ, ticket numbers ใหญ่, copy, saved status, ประวัติพร้อมประเภทรางวัล, draw cards, ปุ่มอย่างน้อย 44px, safe area, dark mode, focus และ reduced motion; API/DB/งานตามเวลา/auth เดิม
+- เพิ่ม request guards กันสุ่ม/บันทึกชนกัน, บันทึก generation settings snapshot, empty/error/retry, rollback notify เมื่อบันทึกไม่ได้, ยืนยันก่อนลบ; สลับเมนูกลับด้านบนหน้าเสมอ
+- Independent review พบ notify-only ใช้ค่าเก่าอาจทับ settings จากอีกเครื่อง → แก้เป็น GET ล่าสุดก่อน PUT โดยไม่เปลี่ยนค่าที่ยังไม่ได้บันทึกในฟอร์ม; regression test เห็น fail ก่อนแก้และ pass หลังแก้. Re-review: spec/quality ผ่าน ไม่มีประเด็นค้าง
+- ตรวจ: backend 21 + browser 15 = **36 passed (16.64s)**; `node --check`, ruff และ `git diff --check` ผ่าน. Browser ครอบคลุมสุ่ม/บันทึก/คัดลอก/ลบ/ตั้งค่า/โหลดใหม่หลัง error/เลขหมด/หลายเครื่อง/การสลับเมนู/จอ 320,390,768,1440px; ตรวจภาพ light/dark และมือถือ/desktop
+- Test environment เดิมขาด apscheduler จึงใช้ venv ชั่วคราว `/tmp/lotto-picker-ui-venv` ลง requirements ของ stack + pytest/ruff/playwright; ไม่แก้ production dependencies. UI ใช้ fixture server ไม่มี scheduler/GLO/Telegram
+- อัปเดต README + design/plan ใน `docs/superpowers/` และ memory ทั้งสองไฟล์
+- ก่อน release: พบ `scripts/deploy.sh` ไม่ exclude `.env.deploy` ตามกฎ repo → เพิ่ม exclusion ทั้งไฟล์นี้และ plaintext `secrets/vault.yaml`; regression test ใช้ synthetic tar เห็น fail ก่อนแก้/ผ่านหลังแก้. Repo tests **64 passed**, bash syntax/ruff/diff ผ่าน
+- สถานะ: แก้ใน native worktree branch `codex/lotto-mobile-ui`, **ยังไม่ commit/push/deploy**. NAS ยังคง UI เดิมที่ deploy ก่อนรอบนี้; งาน GLO live fixture / รอบ auto pick / LINE / backup ค้างตามรายการเดิม
+
 ## 2026-10-16 — สร้าง stack
 - ที่มา: สคริปต์จาก Gemini ใช้ `lotto.api.rayriffy.com` → DNS ตาย (เช็คทั้ง Mac และ NAS) เปลี่ยนไปใช้ GLO `getLatestLottery`/`getLotteryResult` (ไม่มีคีย์, วันไม่มีงวด = `response: null`, ยืนยัน 17 ม.ค./2 พ.ค. 2569 เป็นวันเลื่อน)
 - ผู้ใช้เลือก: stack ใหม่, เว็บ + แจ้งเตือน, N=2 K=5, ทำครบ 4 ส่วนเสริม (ส่งเลขล่วงหน้า/ตรวจผล/ตัดโต๊ด/เลือกรางวัล), เปิดจากข้างนอก

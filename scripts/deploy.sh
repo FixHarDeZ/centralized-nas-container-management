@@ -172,6 +172,8 @@ if [[ "$RESTART_ONLY" == false ]]; then
   TAR_EXCLUDES=(
     --exclude='./.git'
     --exclude='.env'
+    --exclude='.env.deploy'
+    --exclude='./secrets/vault.yaml'
     --exclude='./__pycache__'
     --exclude='./*.pyc'
     --exclude='./*.pyo'
