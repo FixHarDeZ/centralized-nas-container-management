@@ -1,8 +1,9 @@
 """SQLite storage for lotto-picker.
 
-``draws`` only ever holds complete results (see ``lotto.is_complete``), so a
-cached row is final. ``nodraw`` remembers past days GLO answered null for, so a
-history backfill never probes the same day twice.
+New ``draws`` rows hold complete results (see ``lotto.is_complete``). Legacy
+rows missing last2 can receive that field from a complete official payload.
+``nodraw`` remembers past days GLO answered null for, so a history backfill
+never probes the same day twice.
 """
 
 from __future__ import annotations
@@ -12,6 +13,8 @@ import os
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
+
+from . import lotto
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 DB_PATH = DATA_DIR / "lotto.db"
@@ -75,6 +78,29 @@ def add_draw(draw: dict) -> bool:
         return cur.rowcount == 1
 
 
+def repair_last2(draw: dict) -> bool:
+    """Fill a legacy cached last2 only from a complete, same-date payload.
+
+    Existing three-digit prizes, fetched timestamp and saved pick results stay
+    intact. A repair is never an insertion and must not trigger announcements.
+    """
+    if not lotto.is_complete(draw["prizes"]):
+        return False
+    with conn() as c:
+        row = c.execute("SELECT prizes FROM draws WHERE date = ?", (draw["date"],)).fetchone()
+        if row is None:
+            return False
+        prizes = json.loads(row["prizes"])
+        if lotto.has_last2(prizes):
+            return False
+        prizes["last2"] = draw["prizes"]["last2"]
+        c.execute(
+            "UPDATE draws SET prizes = ? WHERE date = ?",
+            (json.dumps(prizes), draw["date"]),
+        )
+        return True
+
+
 def draws(limit: int | None = None) -> list[dict]:
     sql = "SELECT date, prizes FROM draws ORDER BY date DESC"
     args: tuple = ()
@@ -107,12 +133,14 @@ def add_nodraw(date: str) -> None:
 
 
 def _pick_row(r: sqlite3.Row) -> dict:
+    settings = json.loads(r["settings"])
+    settings["digits"] = settings.get("digits") or 3
     return {
         "id": r["id"],
         "created_at": r["created_at"],
         "source": r["source"],
         "numbers": json.loads(r["numbers"]),
-        "settings": json.loads(r["settings"]),
+        "settings": settings,
         "based_on": r["based_on"],
         "result_draw": r["result_draw"],
         "result": json.loads(r["result"]) if r["result"] else None,
@@ -128,9 +156,16 @@ def add_pick(source: str, numbers: list[str], settings: dict, based_on: str | No
         return cur.lastrowid
 
 
-def picks(limit: int = 50) -> list[dict]:
+def picks(limit: int = 50, digits: int | None = None) -> list[dict]:
+    sql = "SELECT * FROM picks"
+    args = []
+    if digits is not None:
+        sql += " WHERE COALESCE(json_extract(settings, '$.digits'), 3) = ?"
+        args.append(digits)
+    sql += " ORDER BY id DESC LIMIT ?"
+    args.append(limit)
     with conn() as c:
-        rows = c.execute("SELECT * FROM picks ORDER BY id DESC LIMIT ?", (limit,))
+        rows = c.execute(sql, args)
         return [_pick_row(r) for r in rows]
 
 
@@ -153,9 +188,15 @@ def delete_pick(pick_id: int) -> bool:
         return c.execute("DELETE FROM picks WHERE id = ?", (pick_id,)).rowcount == 1
 
 
-def checked_picks() -> list[dict]:
+def checked_picks(digits: int | None = None) -> list[dict]:
+    sql = "SELECT * FROM picks WHERE result IS NOT NULL"
+    args = ()
+    if digits is not None:
+        sql += " AND COALESCE(json_extract(settings, '$.digits'), 3) = ?"
+        args = (digits,)
+    sql += " ORDER BY id"
     with conn() as c:
-        rows = c.execute("SELECT * FROM picks WHERE result IS NOT NULL ORDER BY id")
+        rows = c.execute(sql, args)
         return [_pick_row(r) for r in rows]
 
 
@@ -177,5 +218,10 @@ def put(key: str, value) -> None:
         )
 
 
-def settings() -> dict:
-    return {**DEFAULT_SETTINGS, **get("settings", {})}
+def settings(digits: int = 3) -> dict:
+    key = "settings_2" if digits == 2 else "settings"
+    defaults = {**DEFAULT_SETTINGS, "notify": False} if digits == 2 else DEFAULT_SETTINGS
+    profile = {**defaults, **get(key, {}), "digits": digits}
+    if digits == 2:
+        profile["scope"] = "last2"
+    return profile

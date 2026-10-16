@@ -4,18 +4,18 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#123e32">
-  <meta name="description" content="สุ่มเลขท้าย 3 ตัว เลือกงวดย้อนหลัง บันทึกเลขและติดตามผลรางวัลในที่เดียว">
-  <title>Lotto Picker · สุ่มเลขท้าย 3 ตัว</title>
+  <meta name="description" content="สุ่มเลขท้าย 2 และ 3 ตัว เลือกงวดย้อนหลัง บันทึกเลขและติดตามผลรางวัลในที่เดียว">
+  <title>Lotto Picker · สุ่มเลข 2 / 3 ตัว</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
-<body>
+<body data-digits="3">
   <a class="skip-link" href="#main">ข้ามไปเนื้อหา</a>
   <header class="app-header">
     <div class="brand">
       <span class="brand-mark" aria-hidden="true">
         <svg viewBox="0 0 32 32" fill="none"><path d="M5 7h22v6a3 3 0 0 0 0 6v6H5v-6a3 3 0 0 0 0-6V7Z" stroke="currentColor" stroke-width="1.7"/><path d="M21 8v3m0 3v4m0 3v3M10 12h6m-6 5h6m-6 4h3" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
       </span>
-      <div><span class="brand-name">Lotto Picker<span class="brand-dot">.</span></span><p class="brand-caption">พื้นที่เล็ก ๆ ของเลขสามหลัก</p></div>
+      <div><span class="brand-name">Lotto Picker<span class="brand-dot">.</span></span><p class="brand-caption">พื้นที่เล็ก ๆ ของเลขชุดถัดไป</p></div>
     </div>
     <p class="latest-draw" id="latest">กำลังโหลดผลรางวัล…</p>
   </header>
@@ -36,10 +36,14 @@
   </nav>
 
   <main id="main" class="app-main">
+    <div class="mode-selector" role="group" aria-label="เลือกจำนวนหลัก">
+      <button id="mode-two" type="button" data-digits="2" aria-pressed="false"><strong>2 ตัว</strong><span>เลขท้าย 2 ตัว</span></button>
+      <button id="mode-three" type="button" data-digits="3" aria-pressed="true"><strong>3 ตัว</strong><span>เลขท้าย 3 ตัว</span></button>
+    </div>
     <section id="view-pick" class="view-panel" aria-labelledby="pick-title">
       <div class="page-heading">
         <div><p class="eyebrow">YOUR NUMBER, YOUR CHOICE</p><h1 id="pick-title">เริ่มที่เลขชุดใหม่</h1></div>
-        <span class="section-tag">เลขท้าย 3 ตัว</span>
+        <span id="mode-label" class="section-tag">เลขท้าย 3 ตัว</span>
       </div>
 
       <div class="pick-layout">
@@ -76,19 +80,22 @@
                 <p class="field-help" id="picks-help">สุ่มได้ครั้งละ 1–50 เลข</p>
               </div>
             </div>
+            <p id="fixed-scope" class="fixed-scope" hidden>ตัดเฉพาะรางวัลเลขท้าย 2 ตัวของกองสลาก</p>
             <details class="settings-details advanced-details">
-              <summary><span><strong>ตัวเลือกเพิ่มเติม</strong><small>รางวัลที่ใช้ · ตัดเลขโต๊ด</small></span></summary>
+              <summary><span><strong>ตัวเลือกเพิ่มเติม</strong><small id="advanced-caption">รางวัลที่ใช้ · ตัดเลขโต๊ด</small></span></summary>
               <div class="details-body">
-                <label class="select-label" for="scope">ตัดเลขจากรางวัล</label>
-                <select id="scope">
-                  <option value="all">ทุกรางวัล (3 ตัวท้ายของทุกรางวัล)</option>
-                  <option value="front_back">เฉพาะเลขหน้า/ท้าย 3 ตัว</option>
-                </select>
-                <p class="field-help">เลขที่เคยออกในรางวัลที่เลือกจะไม่ถูกสุ่มซ้ำ</p>
+                <div id="scope-options">
+                  <label class="select-label" for="scope">ตัดเลขจากรางวัล</label>
+                  <select id="scope">
+                    <option value="all">ทุกรางวัล (3 ตัวท้ายของทุกรางวัล)</option>
+                    <option value="front_back">เฉพาะเลขหน้า/ท้าย 3 ตัว</option>
+                  </select>
+                  <p class="field-help">เลขที่เคยออกในรางวัลที่เลือกจะไม่ถูกสุ่มซ้ำ</p>
+                </div>
                 <label class="switch">
                   <input id="permute" type="checkbox">
                   <span class="switch-toggle" aria-hidden="true"></span>
-                  <span class="switch-copy"><strong>ตัดเลขโต๊ดด้วย</strong><small>เช่น 058 ออก จะตัด 085, 508, 580, 805, 850</small></span>
+                  <span class="switch-copy"><strong id="permute-label">ตัดเลขโต๊ดด้วย</strong><small id="permute-help">เช่น 058 ออก จะตัด 085, 508, 580, 805, 850</small></span>
                 </label>
               </div>
             </details>
@@ -111,7 +118,7 @@
         </div>
 
         <div class="result-stage">
-          <div class="result-heading"><p class="eyebrow">THE NEXT POSSIBILITIES</p><span class="ticket-stamp" aria-hidden="true">PICK / 003</span></div>
+          <div class="result-heading"><p class="eyebrow">THE NEXT POSSIBILITIES</p><span id="ticket-stamp" class="ticket-stamp" aria-hidden="true">PICK / 003</span></div>
           <h2>เลขชุดของคุณ</h2>
           <div id="result-empty" class="result-empty">
             <div class="empty-ticket" aria-hidden="true"><span>?</span><span>?</span><span>?</span></div>
@@ -147,7 +154,7 @@
       <div class="stats-grid" aria-label="สถิติเลขที่ตรวจผลแล้ว">
         <div class="stat-card"><span class="stat-label">ตรวจผลแล้ว</span><strong id="stat-picks">0</strong><span class="stat-unit">ชุด</span></div>
         <div class="stat-card"><span class="stat-label">ถูกตรงตัว</span><strong id="stat-exact">0</strong><span class="stat-unit">ครั้ง</span></div>
-        <div class="stat-card"><span class="stat-label">ถูกโต๊ด</span><strong id="stat-tod">0</strong><span class="stat-unit">ครั้ง</span></div>
+        <div id="tod-stat" class="stat-card"><span class="stat-label">ถูกโต๊ด</span><strong id="stat-tod">0</strong><span class="stat-unit">ครั้ง</span></div>
         <div class="stat-card"><span class="stat-label">สุ่มธรรมดาคาดว่า</span><strong id="stat-expected">0.00</strong><span class="stat-unit">ครั้ง</span></div>
       </div>
       <p id="stats" class="muted stats-note">ยังไม่มีเลขที่ตรวจผลแล้ว</p>
@@ -163,7 +170,7 @@
       <ul id="draws-list" class="list draws-list" aria-label="ผลรางวัลแต่ละงวด"></ul>
     </section>
 
-    <p class="note"><span aria-hidden="true">i</span><span>ทุกเลขมีโอกาสออก 1 ใน 1,000 เท่ากันทุกงวด การตัดเลขที่เคยออกไม่ได้ทำให้โอกาสถูกเพิ่มขึ้น สถิติมีไว้ติดตามผลเท่านั้น</span></p>
+    <p class="note"><span aria-hidden="true">i</span><span id="probability-note">ทุกเลขมีโอกาสออก 1 ใน 1,000 เท่ากันทุกงวด การตัดเลขที่เคยออกไม่ได้ทำให้โอกาสถูกเพิ่มขึ้น สถิติมีไว้ติดตามผลเท่านั้น</span></p>
   </main>
 
   <div id="toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>

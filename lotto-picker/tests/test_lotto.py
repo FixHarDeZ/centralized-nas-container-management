@@ -92,3 +92,38 @@ def test_next_expected_draw():
 
 def test_thai_date():
     assert lotto.thai_date("2026-10-01") == "1 ต.ค. 2569"
+
+
+def test_two_digit_pool_uses_only_last2_and_retains_leading_zeroes():
+    draw = {"date": "2026-10-01", "prizes": {"first": ["123499"], "last2": ["07"]}}
+    assert lotto.draw_numbers(draw["prizes"], digits=2) == {"07"}
+    assert lotto.targets(draw["prizes"], digits=2) == {"last2": {"07"}}
+    available = lotto.pool([draw], digits=2)
+    assert len(available) == 99
+    assert "00" in available and "99" in available and "07" not in available
+    assert all(len(n) == 2 for n in available)
+
+
+def test_two_digit_reverse_exclusion_does_not_multiply_doubles():
+    draw = {"date": "x", "prizes": {"last2": ["07", "11"]}}
+    assert lotto.excluded([draw], permute=True, digits=2) == {"07", "70", "11"}
+    assert len(lotto.pool([draw], permute=True, digits=2)) == 97
+
+
+def test_two_digit_score_is_exact_only_with_one_in_hundred_baseline():
+    prizes = {"first": ["123470"], "last3b": ["007"], "last2": ["07", "07"]}
+    assert lotto.score(["07", "70", "00"], prizes, digits=2) == {
+        "hits": [{"number": "07", "kinds": ["last2"]}],
+        "exact_hits": 1,
+        "expected": 3 / 100,
+    }
+
+
+def test_complete_draw_requires_exactly_one_valid_last2():
+    for last2 in (None, [], ["70", "07"], ["\uff17\uff10"], ["7"], ["-7"]):
+        prizes = {k: list(v) for k, v in OCT1["prizes"].items()}
+        if last2 is None:
+            prizes.pop("last2")
+        else:
+            prizes["last2"] = last2
+        assert not lotto.is_complete(prizes), last2

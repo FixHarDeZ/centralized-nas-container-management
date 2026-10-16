@@ -12,6 +12,7 @@ import itertools
 import random
 
 ALL_THREE = {f"{i:03d}" for i in range(1000)}
+ALL_TWO = {f"{i:02d}" for i in range(100)}
 
 # Every prize a ticket can win, by how many numbers GLO draws for it. A result
 # with fewer is still being drawn (GLO publishes live during the afternoon) and
@@ -62,18 +63,36 @@ def parse_prizes(data: dict) -> dict[str, list[str]]:
     }
 
 
+def has_last2(prizes: dict[str, list[str]]) -> bool:
+    """Whether the official last-two prize has exactly one usable number."""
+    numbers = prizes.get("last2", [])
+    return len(numbers) == 1 and all(
+        isinstance(n, str) and n.isascii() and n.isdigit() and len(n) == 2
+        for n in numbers
+    )
+
+
 def is_complete(prizes: dict[str, list[str]]) -> bool:
+    # Keep last2 separate: EXPECTED_COUNTS also defines the legacy all-three
+    # exclusion scope and must never start including the two-digit prize.
+    if not has_last2(prizes):
+        return False
     if any(len(prizes.get(k, [])) != n for k, n in EXPECTED_COUNTS.items()):
         return False
     return all(
-        num.isdigit() and len(num) == DIGITS[k]
+        isinstance(num, str) and num.isascii() and num.isdigit() and len(num) == DIGITS[k]
         for k in DIGITS
         for num in prizes.get(k, [])
     )
 
 
-def draw_numbers(prizes: dict[str, list[str]], scope: str = "all") -> set[str]:
-    """3-digit numbers a draw 'used': last 3 of 6-digit prizes, 3-digit as-is."""
+def draw_numbers(prizes: dict[str, list[str]], scope: str = "all", digits: int = 3) -> set[str]:
+    """Numbers a draw used in the selected mode; two digits uses last2 only."""
+    if digits == 2:
+        return {
+            n for n in prizes.get("last2", [])
+            if isinstance(n, str) and n.isascii() and n.isdigit() and len(n) == 2
+        }
     out = set()
     for key in SCOPES[scope]:
         for num in prizes.get(key, []):
@@ -86,17 +105,22 @@ def permutations(num: str) -> set[str]:
     return {"".join(p) for p in itertools.permutations(num)}
 
 
-def excluded(draws: list[dict], scope: str = "all", permute: bool = False) -> set[str]:
+def excluded(
+    draws: list[dict], scope: str = "all", permute: bool = False, digits: int = 3,
+) -> set[str]:
     out: set[str] = set()
     for d in draws:
-        out |= draw_numbers(d["prizes"], scope)
+        out |= draw_numbers(d["prizes"], scope, digits)
     if permute:
         out = set().union(*(permutations(n) for n in out)) if out else set()
     return out
 
 
-def pool(draws: list[dict], scope: str = "all", permute: bool = False) -> list[str]:
-    return sorted(ALL_THREE - excluded(draws, scope, permute))
+def pool(
+    draws: list[dict], scope: str = "all", permute: bool = False, digits: int = 3,
+) -> list[str]:
+    universe = ALL_TWO if digits == 2 else ALL_THREE
+    return sorted(universe - excluded(draws, scope, permute, digits))
 
 
 def pick(available: list[str], k: int, rng: random.Random | None = None) -> list[str]:
@@ -105,8 +129,10 @@ def pick(available: list[str], k: int, rng: random.Random | None = None) -> list
     return sorted(rng.sample(available, min(k, len(available))))
 
 
-def targets(prizes: dict[str, list[str]]) -> dict[str, set[str]]:
-    """What a picked 3-digit number is scored against."""
+def targets(prizes: dict[str, list[str]], digits: int = 3) -> dict[str, set[str]]:
+    """Official exact targets for the selected number width."""
+    if digits == 2:
+        return {"last2": draw_numbers(prizes, digits=2)}
     first = prizes.get("first", [])
     return {
         "first3": {n[-3:] for n in first},
@@ -115,13 +141,20 @@ def targets(prizes: dict[str, list[str]]) -> dict[str, set[str]]:
     }
 
 
-def score(numbers: list[str], prizes: dict[str, list[str]]) -> dict:
+def score(numbers: list[str], prizes: dict[str, list[str]], digits: int = 3) -> dict:
     """Hits per number plus the hit count a uniform random pick would expect.
 
     ``expected`` is the honest baseline: each number hits an exact target with
-    probability (distinct targets / 1000), whatever exclusion was applied.
+    probability (distinct targets / universe size), whatever exclusion was applied.
     """
-    t = targets(prizes)
+    t = targets(prizes, digits)
+    if digits == 2:
+        hits = [{"number": num, "kinds": ["last2"]} for num in numbers if num in t["last2"]]
+        return {
+            "hits": hits,
+            "exact_hits": len(hits),
+            "expected": len(numbers) * len(t["last2"]) / 100,
+        }
     exact = t["first3"] | t["last3f"] | t["last3b"]
     hits = []
     for num in numbers:

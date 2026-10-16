@@ -2,7 +2,12 @@
 
 const $ = (id) => document.getElementById(id);
 const MONTHS = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
-const KIND = { first3: "3 ตัวท้ายรางวัลที่ 1", first3_tod: "โต๊ด 3 ตัวท้ายรางวัลที่ 1", last3f: "เลขหน้า 3 ตัว", last3b: "เลขท้าย 3 ตัว" };
+const KIND = { last2: "เลขท้าย 2 ตัว", first3: "3 ตัวท้ายรางวัลที่ 1", first3_tod: "โต๊ด 3 ตัวท้ายรางวัลที่ 1", last3f: "เลขหน้า 3 ตัว", last3b: "เลขท้าย 3 ตัว" };
+let activeDigits = 3;
+const profiles = {
+  2: { savedSettings: null, draft: null, current: null, resultSaved: false },
+  3: { savedSettings: null, draft: null, current: null, resultSaved: false },
+};
 let current = null;
 let savedSettings = null;
 let rolling = false;
@@ -78,6 +83,7 @@ function normalizeField(id) {
 }
 
 function updateControls() {
+  for (const id of ["draws", "picks", "scope", "permute"]) $(id).disabled = !savedSettings;
   document.querySelectorAll("[data-step-target]").forEach((button) => {
     const input = $(button.dataset.stepTarget);
     button.disabled = !savedSettings || (Number(button.dataset.step) < 0
@@ -85,6 +91,7 @@ function updateControls() {
       : Number(input.value) >= Number(input.max));
   });
   document.querySelectorAll("[data-preset-target]").forEach((button) => {
+    button.disabled = !savedSettings;
     const active = Number($(button.dataset.presetTarget).value) === Number(button.dataset.value);
     button.classList.toggle("active", active);
     button.setAttribute("aria-pressed", String(active));
@@ -93,13 +100,14 @@ function updateControls() {
 
 function params() {
   return {
-    draws: normalizeField("draws"), picks: normalizeField("picks"),
-    scope: $("scope").value, permute: $("permute").checked,
+    digits: activeDigits, draws: normalizeField("draws"), picks: normalizeField("picks"),
+    scope: activeDigits === 2 ? "last2" : $("scope").value, permute: $("permute").checked,
   };
 }
 
 function updateActions() {
-  const busy = rolling || saving;
+  const busy = rolling || saving || settingsBusy;
+  document.querySelectorAll(".mode-selector button").forEach((button) => { button.disabled = busy; });
   $("go").disabled = busy || !savedSettings;
   $("again").disabled = busy || !savedSettings;
   $("save").disabled = busy || resultSaved || !current?.numbers.length;
@@ -108,10 +116,11 @@ function updateActions() {
   $("again").textContent = rolling ? "กำลังสุ่ม…" : "สุ่มใหม่";
   $("save").textContent = saving ? "กำลังบันทึก…" : resultSaved ? "บันทึกแล้ว ✓" : "บันทึกไว้ตรวจผล";
   $("result").setAttribute("aria-busy", String(busy));
+  updateSettingsActions();
 }
 
 async function roll() {
-  if (rolling || saving || !savedSettings) return;
+  if (rolling || saving || settingsBusy || !savedSettings) return;
   const body = params();
   rolling = true;
   updateActions();
@@ -119,19 +128,10 @@ async function roll() {
     const result = await api("/api/pick", { method: "POST", body });
     current = result;
     resultSaved = false;
-    $("result-empty").hidden = true;
-    $("result").hidden = false;
-    $("result-status").textContent = result.numbers.length ? "ยังไม่ได้บันทึก" : "ไม่มีเลขให้สุ่ม";
-    $("numbers").replaceChildren(...(result.numbers.length
-      ? result.numbers.map((number) => el("span", { class: "number-ticket" }, number))
-      : [el("p", { class: "empty-state" }, "ไม่มีเลขเหลือในเงื่อนไขนี้ ลองลดจำนวนงวดหรือปิดตัดโต๊ด")]));
-    const used = result.draws_used.length
-      ? `ใช้ผล ${result.draws_used.length} งวด: ${result.draws_used.map(thaiDate).join(", ")}`
-      : "ยังไม่มีผลรางวัล ใช้เลขทั้งหมด 000–999";
-    $("poolInfo").textContent = `${used} · ตัดออก ${result.excluded_count} เลข · เหลือ ${result.pool_size} เลข`;
-    if (result.numbers.length < result.settings.picks) toast(`เหลือเลขให้สุ่ม ${result.numbers.length} เลข ลองลดจำนวนงวดหรือปิดตัดโต๊ด`);
-    $("exSummary").textContent = `ดูเลขที่ตัดออก ${result.excluded.length} เลข`;
-    $("excluded").replaceChildren(...result.excluded.map((number) => el("span", {}, number)));
+    profiles[activeDigits].current = result;
+    profiles[activeDigits].resultSaved = false;
+    renderResult();
+    if (result.numbers.length < result.settings.picks) toast(`เหลือเลขให้สุ่ม ${result.numbers.length} เลข ลองลดจำนวนงวดหรือปิด${activeDigits === 2 ? "ตัดเลขกลับ" : "ตัดโต๊ด"}`);
     $("result").scrollIntoView({ block: "nearest", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
   } catch (error) {
     toast(`สุ่มไม่สำเร็จ: ${error.message}`);
@@ -142,13 +142,14 @@ async function roll() {
 }
 
 async function savePick() {
-  if (!current?.numbers.length || rolling || saving || resultSaved) return;
+  if (!current?.numbers.length || rolling || saving || settingsBusy || resultSaved) return;
   saving = true;
   $("result-status").textContent = "กำลังบันทึก…";
   updateActions();
   try {
     await api("/api/picks", { method: "POST", body: { numbers: current.numbers, settings: current.settings } });
     resultSaved = true;
+    profiles[activeDigits].resultSaved = true;
     $("result-status").textContent = "บันทึกแล้ว · รอตรวจผล";
     toast("บันทึกแล้ว จะตรวจให้เมื่อผลรางวัลครบ");
     await loadPicks();
@@ -172,25 +173,29 @@ async function copyNumbers() {
 }
 
 function settingsText(settings) {
-  const scope = settings.scope === "all" ? "ทุกรางวัล" : "เฉพาะหน้า/ท้าย 3 ตัว";
-  return `ค่าที่บันทึก: ${settings.picks} เลข · ย้อนหลัง ${settings.draws} งวด · ${scope}${settings.permute ? " · ตัดโต๊ด" : ""} · ${settings.notify ? "เปิดอัตโนมัติและแจ้งเตือน" : "ปิดอัตโนมัติและแจ้งเตือน"}`;
+  const two = settings.digits === 2;
+  const scope = two ? "เลขท้าย 2 ตัว" : settings.scope === "all" ? "ทุกรางวัล" : "เฉพาะหน้า/ท้าย 3 ตัว";
+  return `ค่าที่บันทึก: ${settings.picks} เลข · ย้อนหลัง ${settings.draws} งวด · ${scope}${settings.permute ? two ? " · ตัดเลขกลับ" : " · ตัดโต๊ด" : ""} · ${settings.notify ? "เปิดอัตโนมัติและแจ้งเตือน" : "ปิดอัตโนมัติและแจ้งเตือน"}`;
 }
 
 function updateSettingsActions() {
-  $("notify").disabled = settingsBusy || !savedSettings;
-  $("saveSettings").disabled = settingsBusy || !savedSettings;
+  const busy = settingsBusy || rolling || saving;
+  $("notify").disabled = busy || !savedSettings;
+  $("saveSettings").disabled = busy || !savedSettings;
   $("saveSettings").textContent = settingsBusy ? "กำลังบันทึก…" : "ใช้ค่าชุดนี้กับเลขอัตโนมัติ";
 }
 
 async function saveSettings(notifyOnly = false) {
-  if (settingsBusy || !savedSettings) return;
+  if (settingsBusy || rolling || saving || !savedSettings) return;
   const requestedNotify = $("notify").checked;
   settingsBusy = true;
   updateSettingsActions();
+  updateActions();
   try {
-    if (notifyOnly) savedSettings = await api("/api/settings");
-    const body = { ...(notifyOnly ? savedSettings : params()), notify: requestedNotify };
+    if (notifyOnly) savedSettings = await api(modePath("/api/settings"));
+    const body = { ...(notifyOnly ? savedSettings : params()), digits: activeDigits, notify: requestedNotify };
     savedSettings = await api("/api/settings", { method: "PUT", body });
+    profiles[activeDigits].savedSettings = savedSettings;
     $("settingsInfo").textContent = settingsText(savedSettings);
     toast("บันทึกการตั้งค่าแล้ว");
   } catch (error) {
@@ -200,6 +205,7 @@ async function saveSettings(notifyOnly = false) {
   } finally {
     settingsBusy = false;
     updateSettingsActions();
+    updateActions();
   }
 }
 
@@ -208,20 +214,90 @@ function retryMessage(message, retry, tag = "li") {
     el("button", { type: "button", class: "ghost retry", onclick: retry }, "ลองโหลดอีกครั้ง"));
 }
 
-async function loadSettings() {
-  try {
-    savedSettings = await api("/api/settings");
-    for (const id of ["draws", "picks", "scope"]) $(id).value = savedSettings[id];
-    $("permute").checked = savedSettings.permute;
-    $("notify").checked = savedSettings.notify;
-    $("settingsInfo").textContent = settingsText(savedSettings);
-  } catch (error) {
-    $("settingsInfo").replaceChildren(retryMessage(`โหลดตั้งค่าไม่ได้: ${error.message}`, loadSettings, "span"));
-    toast("โหลดตั้งค่าไม่ได้ เปิดตัวเลือกเลขอัตโนมัติเพื่อลองโหลดอีกครั้ง");
+function modePath(path, digits = activeDigits) {
+  return digits === 3 ? path : `${path}?digits=${digits}`;
+}
+
+function cacheProfile() {
+  const profile = profiles[activeDigits];
+  if (savedSettings) {
+    profile.draft = { draws: $("draws").value, picks: $("picks").value, scope: $("scope").value, permute: $("permute").checked };
   }
+  Object.assign(profile, { savedSettings, current, resultSaved });
+}
+
+function renderResult() {
+  $("result-empty").hidden = Boolean(current);
+  $("result").hidden = !current;
+  $("numbers").replaceChildren();
+  $("excluded").replaceChildren();
+  $("poolInfo").textContent = "";
+  if (!current) return;
+  const result = current;
+  $("result-status").textContent = resultSaved ? "บันทึกแล้ว · รอตรวจผล" : result.numbers.length ? "ยังไม่ได้บันทึก" : "ไม่มีเลขให้สุ่ม";
+  $("numbers").replaceChildren(...(result.numbers.length
+    ? result.numbers.map((number) => el("span", { class: "number-ticket" }, number))
+    : [el("p", { class: "empty-state" }, `ไม่มีเลขเหลือในเงื่อนไขนี้ ลองลดจำนวนงวดหรือปิด${activeDigits === 2 ? "ตัดเลขกลับ" : "ตัดโต๊ด"}`)]));
+  const used = result.draws_used.length
+    ? `ใช้ผล ${result.draws_used.length} งวด: ${result.draws_used.map(thaiDate).join(", ")}`
+    : `ยังไม่มีผลรางวัล ใช้เลขทั้งหมด ${activeDigits === 2 ? "00–99" : "000–999"}`;
+  $("poolInfo").textContent = `${used} · ตัดออก ${result.excluded_count} เลข · เหลือ ${result.pool_size} เลข`;
+  $("exSummary").textContent = `ดูเลขที่ตัดออก ${result.excluded.length} เลข`;
+  $("excluded").replaceChildren(...result.excluded.map((number) => el("span", {}, number)));
+}
+
+function renderProfile() {
+  const profile = profiles[activeDigits];
+  ({ savedSettings, current, resultSaved } = profile);
+  const draft = profile.draft || { draws: 2, picks: 5, scope: "all", permute: false };
+  for (const id of ["draws", "picks", "scope"]) $(id).value = draft[id] === "last2" ? "all" : draft[id];
+  $("permute").checked = draft.permute;
+  $("notify").checked = savedSettings?.notify || false;
+  $("settingsInfo").textContent = savedSettings ? settingsText(savedSettings) : "กำลังโหลดการตั้งค่า…";
+  if (profile.settingsError) $("settingsInfo").replaceChildren(retryMessage(`โหลดตั้งค่าไม่ได้: ${profile.settingsError}`, () => loadSettings(), "span"));
+  renderResult();
   updateControls();
   updateActions();
   updateSettingsActions();
+}
+
+function selectMode(digits) {
+  if (digits === activeDigits || rolling || saving || settingsBusy) return;
+  cacheProfile();
+  activeDigits = digits;
+  document.body.dataset.digits = digits;
+  document.querySelectorAll(".mode-selector button").forEach((button) => button.setAttribute("aria-pressed", String(Number(button.dataset.digits) === digits)));
+  const two = digits === 2;
+  $("mode-label").textContent = `เลขท้าย ${digits} ตัว`;
+  $("ticket-stamp").textContent = `PICK / 00${digits}`;
+  $("scope-options").hidden = two;
+  $("fixed-scope").hidden = !two;
+  $("advanced-caption").textContent = two ? "เลขท้าย 2 ตัว · ตัดเลขกลับ" : "รางวัลที่ใช้ · ตัดเลขโต๊ด";
+  $("permute-label").textContent = two ? "ตัดเลขกลับด้วย" : "ตัดเลขโต๊ดด้วย";
+  $("permute-help").textContent = two ? "เช่น 07 ออก จะตัด 70 ด้วย · ตรวจรางวัลเฉพาะเลขตรงตัว" : "เช่น 058 ออก จะตัด 085, 508, 580, 805, 850";
+  $("tod-stat").hidden = two;
+  $("probability-note").textContent = `ทุกเลขมีโอกาสออก 1 ใน ${two ? "100" : "1,000"} เท่ากันทุกงวด การตัดเลขที่เคยออกไม่ได้ทำให้โอกาสถูกเพิ่มขึ้น สถิติมีไว้ติดตามผลเท่านั้น`;
+  $("toast").hidden = true;
+  renderProfile();
+  if (!savedSettings) loadSettings();
+  loadPicks();
+}
+
+async function loadSettings(digits = activeDigits) {
+  const profile = profiles[digits];
+  if (profile.settingsLoading) return;
+  profile.settingsLoading = true;
+  try {
+    profile.savedSettings = await api(modePath("/api/settings", digits));
+    profile.draft ||= { ...profile.savedSettings };
+    profile.settingsError = null;
+  } catch (error) {
+    profile.settingsError = error.message;
+    if (digits === activeDigits) toast("โหลดตั้งค่าไม่ได้ เปิดตัวเลือกเลขอัตโนมัติเพื่อลองโหลดอีกครั้ง");
+  } finally {
+    profile.settingsLoading = false;
+    if (digits === activeDigits) renderProfile();
+  }
 }
 
 function prize(label, value, extra = "") {
@@ -257,7 +333,7 @@ function pickLine(pick) {
     onclick: () => removePick(pick.id, remove) }, "ลบชุดนี้");
   item.append(el("div", { class: "pick-header" },
     el("span", { class: `pick-status ${!checked ? "pending" : hits.length ? "hit" : "checked"}` }, status), remove),
-  el("div", { class: "pick-meta" }, `${pick.source === "auto" ? "อัตโนมัติ" : "บันทึกเอง"} · ${createdDate(pick.created_at)}`),
+  el("div", { class: "pick-meta" }, el("span", { class: "mode-badge" }, `${pick.settings.digits || 3} ตัว`), `${pick.source === "auto" ? "อัตโนมัติ" : "บันทึกเอง"} · ${createdDate(pick.created_at)}`),
   el("div", { class: "number-chips" }, pick.numbers.map((number) => {
     const awards = kinds.get(number);
     const hitClass = !awards ? "" : awards.every((kind) => kind === "first3_tod") ? "tod" : "hit";
@@ -281,8 +357,14 @@ async function removePick(id, button) {
   }
 }
 
-async function loadPicks() {
-  const [picksResult, statsResult] = await Promise.allSettled([api("/api/picks"), api("/api/stats")]);
+async function loadPicks(digits = activeDigits) {
+  const request = profiles[digits].historyRequest = (profiles[digits].historyRequest || 0) + 1;
+  $("history-count").textContent = "กำลังโหลด…";
+  $("picks-list").replaceChildren(el("li", { class: "empty-state" }, "กำลังโหลดเลขที่บันทึก…"));
+  for (const id of ["stat-picks", "stat-exact", "stat-tod", "stat-expected"]) $(id).textContent = "—";
+  $("stats").textContent = "กำลังโหลดสถิติ…";
+  const [picksResult, statsResult] = await Promise.allSettled([api(modePath("/api/picks", digits)), api(modePath("/api/stats", digits))]);
+  if (digits !== activeDigits || request !== profiles[digits].historyRequest) return;
   if (picksResult.status === "fulfilled") {
     const picks = picksResult.value;
     $("history-count").textContent = `${picks.length} ชุดล่าสุด`;
@@ -290,7 +372,7 @@ async function loadPicks() {
       [el("li", { class: "empty-state" }, "ยังไม่มีเลขที่บันทึก สุ่มเลขแล้วกด ‘บันทึกไว้ตรวจผล’ เพื่อเริ่มเก็บชุดแรก")]));
   } else {
     $("history-count").textContent = "โหลดไม่สำเร็จ";
-    $("picks-list").replaceChildren(retryMessage(picksResult.reason.message, loadPicks));
+    $("picks-list").replaceChildren(retryMessage(picksResult.reason.message, () => loadPicks()));
   }
   if (statsResult.status === "fulfilled") {
     const stats = statsResult.value;
@@ -298,7 +380,7 @@ async function loadPicks() {
     $("stats").textContent = stats.picks ? `จาก ${stats.numbers} เลขที่ตรวจแล้วทั้งหมด · “คาดว่าถูก” ใช้เทียบกับการสุ่มธรรมดา` : "สถิติจะเริ่มนับเมื่อเลขที่บันทึกได้รับการตรวจผล";
   } else {
     for (const id of ["stat-picks", "stat-exact", "stat-tod", "stat-expected"]) $(id).textContent = "—";
-    $("stats").replaceChildren(retryMessage(`โหลดสถิติไม่ได้: ${statsResult.reason.message}`, loadPicks, "span"));
+    $("stats").replaceChildren(retryMessage(`โหลดสถิติไม่ได้: ${statsResult.reason.message}`, () => loadPicks(), "span"));
   }
 }
 
@@ -319,6 +401,7 @@ async function syncNow() {
   }
 }
 
+document.querySelectorAll(".mode-selector button").forEach((button) => button.addEventListener("click", () => selectMode(Number(button.dataset.digits))));
 document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click", () => selectView(button.dataset.view)));
 document.querySelectorAll("[data-step-target]").forEach((button) => button.addEventListener("click", () => {
   const id = button.dataset.stepTarget;

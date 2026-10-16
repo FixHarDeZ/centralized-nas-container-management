@@ -6,6 +6,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
@@ -28,6 +29,7 @@ def browser():
 def ui(browser):
     state = {
         "settings": {
+            "digits": 3,
             "draws": 2,
             "picks": 5,
             "scope": "all",
@@ -58,45 +60,78 @@ def ui(browser):
         },
     }
 
+    state.update(
+        settings_2={
+            **state["settings"],
+            "digits": 2,
+            "scope": "last2",
+            "notify": False,
+        },
+        numbers_2=["00", "07", "12", "45", "89"],
+        picks_2=[],
+        stats_2={**state["stats"]},
+    )
+
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *_args):
             pass
 
         def handle_request(self):
             key = f"{self.command} {self.path}"
+            url = urlsplit(self.path)
+            path = url.path
             body = json.loads(
                 self.rfile.read(int(self.headers.get("Content-Length", 0))) or "null"
             )
+            digits = int(parse_qs(url.query).get("digits", [3])[0])
+            if body:
+                digits = body.get(
+                    "digits", body.get("settings", {}).get("digits", digits)
+                )
+            suffix = "_2" if digits == 2 else ""
             state["requests"].append((key, body))
             time.sleep(state["delays"].get(key, 0))
             if state["failures"].get(key, 0):
                 state["failures"][key] -= 1
                 return self.reply({"detail": "Temporary failure"}, 503)
-            if self.path == "/api/settings":
+            if path == "/api/settings":
                 if self.command == "PUT":
-                    state["settings"] = body
-                return self.reply(state["settings"])
-            if self.path == "/api/draws":
+                    state["settings" + suffix] = body
+                return self.reply(state["settings" + suffix])
+            if path == "/api/draws":
                 return self.reply(state["draws"])
-            if self.path == "/api/stats":
-                return self.reply(state["stats"])
-            if self.path == "/api/pick":
+            if path == "/api/stats":
+                return self.reply(state["stats" + suffix])
+            if path == "/api/pick":
                 return self.reply(
                     {
-                        "numbers": state["numbers"],
+                        "numbers": state["numbers" + suffix],
                         "settings": body,
-                        "excluded": ["001", "002"],
+                        "excluded": ["01", "02"] if digits == 2 else ["001", "002"],
                         "excluded_count": 2,
-                        "pool_size": 998 if state["numbers"] else 0,
+                        "pool_size": (98 if digits == 2 else 998)
+                        if state["numbers" + suffix]
+                        else 0,
                         "draws_used": ["2026-10-01"],
                     }
                 )
-            if self.path == "/api/picks":
+            if path == "/api/picks":
                 if self.command == "POST":
-                    state["picks"].insert(
+                    pick_id = (
+                        max(
+                            (
+                                pick["id"]
+                                for name in ("picks", "picks_2")
+                                for pick in state[name]
+                            ),
+                            default=0,
+                        )
+                        + 1
+                    )
+                    state["picks" + suffix].insert(
                         0,
                         {
-                            "id": 1,
+                            "id": pick_id,
                             "numbers": body["numbers"],
                             "settings": body["settings"],
                             "source": "manual",
@@ -106,12 +141,17 @@ def ui(browser):
                             "result": None,
                         },
                     )
-                    return self.reply({"id": 1}, 201)
-                return self.reply(state["picks"])
+                    return self.reply({"id": pick_id}, 201)
+                return self.reply(state["picks" + suffix])
             if self.path.startswith("/api/picks/") and self.command == "DELETE":
-                state["picks"] = []
+                for name in ("picks", "picks_2"):
+                    state[name] = [
+                        pick
+                        for pick in state[name]
+                        if pick["id"] != int(path.rsplit("/", 1)[1])
+                    ]
                 return self.reply(None, 204)
-            if self.path == "/api/sync":
+            if path == "/api/sync":
                 return self.reply({"draws": 1, "latest_seen": "2026-10-01"})
             filename = (
                 "index.html" if self.path == "/" else self.path.removeprefix("/static/")
@@ -293,6 +333,7 @@ def test_notification_uses_latest_settings_from_other_device(ui):
     page.locator("label").filter(has=page.locator("#notify")).click()
     page.wait_for_function("document.getElementById('notify').disabled === false")
     assert state["settings"] == {
+        "digits": 3,
         "draws": 7,
         "picks": 10,
         "scope": "front_back",
@@ -411,3 +452,215 @@ def test_layout_and_result_visibility(ui, width):
             full_page=True,
             animations="disabled",
         )
+
+
+def select_mode(page, digits):
+    page.locator(f"#mode-{'two' if digits == 2 else 'three'}").click()
+    page.wait_for_function(
+        "digits => document.body.dataset.digits === String(digits) && !document.getElementById('go').disabled",
+        arg=digits,
+    )
+
+
+def test_two_digit_leading_zero_snapshot_and_settings(ui):
+    page, state = ui
+    assert page.locator("#mode-three").get_attribute("aria-pressed") == "true"
+    select_mode(page, 2)
+    assert page.locator("#scope-options").is_hidden()
+    assert "เลขท้าย 2 ตัว" in page.locator("#fixed-scope").inner_text()
+    assert "1 ใน 100" in page.locator("#probability-note").inner_text()
+    page.locator(".advanced-details").evaluate("node => node.open = true")
+    assert "ตัดเลขกลับด้วย" in page.locator("#permute-label").inner_text()
+    page.locator("#permute").check(force=True)
+    page.locator("#draws").fill("4")
+    page.locator("#go").click()
+    page.locator("#numbers .number-ticket").first.wait_for()
+    assert (
+        page.locator("#numbers .number-ticket").all_inner_texts() == state["numbers_2"]
+    )
+    page.locator("#copy").click()
+    page.wait_for_function(
+        "navigator.clipboard.readText().then(t => t.startsWith('00 07'))"
+    )
+    page.locator("#draws").fill("9")
+    page.locator("#save").click()
+    page.wait_for_function(
+        "document.getElementById('result-status').textContent.includes('บันทึกแล้ว')"
+    )
+    posted = [body for key, body in state["requests"] if key == "POST /api/picks"]
+    assert posted[-1]["settings"] == {
+        "digits": 2,
+        "draws": 4,
+        "picks": 5,
+        "scope": "last2",
+        "permute": True,
+    }
+    assert posted[-1]["numbers"][:2] == ["00", "07"]
+    assert state["picks"] == []
+    assert len(state["picks_2"]) == 1
+    page.locator("#notify").evaluate("node => node.closest('details').open = true")
+    assert not page.locator("#notify").is_checked()
+    page.locator("#saveSettings").click()
+    page.wait_for_function("document.getElementById('saveSettings').disabled === false")
+    assert state["settings_2"]["draws"] == 9
+    assert state["settings_2"]["scope"] == "last2"
+    assert state["settings"]["draws"] == 2
+    assert state["settings"]["notify"] is True
+
+
+def test_mode_drafts_results_and_saved_status_are_independent(ui):
+    page, _ = ui
+    page.locator(".advanced-details").evaluate("node => node.open = true")
+    page.locator("#scope").select_option("front_back")
+    page.locator("label").filter(has=page.locator("#permute")).click()
+    page.locator("#draws").fill("7")
+    page.locator("#go").click()
+    page.locator("#numbers .number-ticket").first.wait_for()
+    three_numbers = page.locator("#numbers").inner_text()
+    page.locator("#save").click()
+    page.wait_for_function(
+        "document.getElementById('save').textContent.includes('บันทึกแล้ว')"
+    )
+    page.locator("#draws").fill("11")
+    select_mode(page, 2)
+    assert page.locator("#result").is_hidden()
+    assert page.locator("#draws").input_value() == "2"
+    assert not page.locator("#permute").is_checked()
+    page.locator("#draws").fill("4")
+    page.locator("#go").click()
+    page.locator("#numbers .number-ticket").first.wait_for()
+    two_numbers = page.locator("#numbers").inner_text()
+    select_mode(page, 3)
+    assert page.locator("#draws").input_value() == "11"
+    assert page.locator("#scope").input_value() == "front_back"
+    assert page.locator("#permute").is_checked()
+    assert page.locator("#numbers").inner_text() == three_numbers
+    assert page.locator("#save").is_disabled()
+    select_mode(page, 2)
+    assert page.locator("#draws").input_value() == "4"
+    assert page.locator("#numbers").inner_text() == two_numbers
+    assert page.locator("#save").is_enabled()
+
+
+def test_notification_profiles_preserve_independent_unsaved_drafts(ui):
+    page, state = ui
+    select_mode(page, 2)
+    page.locator("#draws").fill("9")
+    page.locator("#notify").evaluate("node => node.closest('details').open = true")
+    page.locator("label").filter(has=page.locator("#notify")).click()
+    page.wait_for_function("document.getElementById('notify').disabled === false")
+    assert state["settings_2"]["notify"] is True
+    assert state["settings_2"]["draws"] == 2
+    assert state["settings_2"]["digits"] == 2
+    select_mode(page, 3)
+    assert page.locator("#notify").is_checked()
+    page.locator("label").filter(has=page.locator("#notify")).click()
+    page.wait_for_function("document.getElementById('notify').disabled === false")
+    assert state["settings"]["notify"] is False
+    assert state["settings_2"]["notify"] is True
+    select_mode(page, 2)
+    assert page.locator("#notify").is_checked()
+    assert page.locator("#draws").input_value() == "9"
+
+
+def test_mode_history_stats_and_prize_labels(ui):
+    page, state = ui
+    base = {
+        "source": "manual",
+        "created_at": "2026-10-16 09:00:00",
+        "based_on": "2026-10-01",
+        "result_draw": "2026-10-16",
+    }
+    state["picks_2"] = [
+        {
+            **base,
+            "id": 2,
+            "numbers": ["07"],
+            "settings": state["settings_2"],
+            "result": {"hits": [{"number": "07", "kinds": ["last2"]}]},
+        }
+    ]
+    state["stats_2"].update(picks=1, numbers=1, exact_hits=1, expected=0.01)
+    select_mode(page, 2)
+    page.get_by_role("button", name="เลขที่บันทึก", exact=True).click()
+    page.locator(".pick-card").wait_for()
+    assert "2 ตัว" in page.locator(".mode-badge").inner_text()
+    assert "เลขท้าย 2 ตัว" in page.locator(".pick-detail").inner_text()
+    assert page.locator("#stat-exact").inner_text() == "1"
+    assert page.locator("#stat-tod").is_hidden()
+    select_mode(page, 3)
+    page.wait_for_function("document.getElementById('stat-exact').textContent === '0'")
+    assert page.locator("#picks-list .empty-state").is_visible()
+    assert page.locator("#stat-tod").is_visible()
+    page.get_by_role("button", name="ผลรางวัล", exact=True).click()
+    assert page.locator("#mode-two").is_visible()
+    select_mode(page, 2)
+    assert page.locator("#view-draws").is_visible()
+
+
+def test_mode_switch_is_blocked_during_mutations(ui):
+    page, state = ui
+    state["delays"]["POST /api/pick"] = 0.4
+    page.locator("#go").click()
+    assert page.locator("#mode-two").is_disabled()
+    page.locator("#numbers .number-ticket").first.wait_for()
+    state["delays"]["POST /api/picks"] = 0.4
+    page.locator("#save").click()
+    assert page.locator("#mode-two").is_disabled()
+    page.wait_for_function("document.getElementById('mode-two').disabled === false")
+    state["delays"]["PUT /api/settings"] = 0.4
+    page.locator("#notify").evaluate("node => node.closest('details').open = true")
+    page.locator("#saveSettings").click()
+    assert page.locator("#mode-two").is_disabled()
+    page.wait_for_function("document.getElementById('mode-two').disabled === false")
+
+
+def test_delayed_mode_reads_cannot_overwrite_current_mode(ui):
+    page, state = ui
+    state["settings_2"].update(draws=8, picks=10)
+    state["stats_2"].update(picks=8, exact_hits=2)
+    for path in ("settings", "picks", "stats"):
+        state["delays"][f"GET /api/{path}?digits=2"] = 0.4
+    page.locator("#mode-two").click()
+    assert page.locator("#result").is_hidden()
+    page.locator("#mode-three").click()
+    page.wait_for_function(
+        "document.body.dataset.digits === '3' && !document.getElementById('go').disabled"
+    )
+    page.wait_for_timeout(550)
+    assert page.locator("#draws").input_value() == "2"
+    assert page.locator("#picks").input_value() == "5"
+    assert "เลขท้าย 3 ตัว" in page.locator("#mode-label").inner_text()
+    page.get_by_role("button", name="เลขที่บันทึก", exact=True).click()
+    assert page.locator("#stat-exact").inner_text() == "0"
+    select_mode(page, 2)
+    assert page.locator("#draws").input_value() == "8"
+    assert page.locator("#picks").input_value() == "10"
+    page.wait_for_function("document.getElementById('stat-exact').textContent === '2'")
+
+
+@pytest.mark.parametrize("width", [320, 390, 768, 1440])
+def test_two_digit_layout_and_result_visibility(ui, width):
+    page, _ = ui
+    page.set_viewport_size({"width": width, "height": 900})
+    select_mode(page, 2)
+    page.locator("#go").click()
+    page.locator("#numbers .number-ticket").first.wait_for()
+    assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+    assert all(
+        len(number) == 2
+        for number in page.locator("#numbers .number-ticket").all_inner_texts()
+    )
+    for selector in ["#mode-two", "#mode-three", "#go", "#save", "#copy", "#again"]:
+        box = page.locator(selector).bounding_box()
+        assert box and box["height"] >= 44 and box["width"] >= 44, (selector, box)
+    destination = os.environ.get("LOTTO_UI_SCREENSHOTS")
+    if destination:
+        Path(destination).mkdir(parents=True, exist_ok=True)
+        for theme in ("light", "dark"):
+            page.emulate_media(color_scheme=theme)
+            page.screenshot(
+                path=str(Path(destination) / f"lotto-two-{width}-{theme}.png"),
+                full_page=True,
+                animations="disabled",
+            )

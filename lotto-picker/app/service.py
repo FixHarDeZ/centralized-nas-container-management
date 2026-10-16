@@ -46,11 +46,15 @@ def sync(want: int, fetch_latest=None, fetch_on=None, today=None, sleep=time.sle
                 # An empty cache means first boot: the latest draw may be weeks
                 # old, so cache it silently instead of announcing it as news.
                 first_boot = not db.draw_dates()
-                if db.add_draw(latest) and not first_boot:
+                inserted = db.add_draw(latest)
+                if inserted and not first_boot:
                     fresh = latest
+                elif not inserted:
+                    db.repair_last2(latest)
             else:
                 logger.info("draw %s still in progress, not caching", latest["date"])
 
+        _repair_cached(want, latest, fetch_on, sleep)
         have = db.draw_dates()
         if not have:
             return fresh
@@ -84,22 +88,58 @@ def sync(want: int, fetch_latest=None, fetch_on=None, today=None, sleep=time.sle
         return fresh
 
 
+def _repair_cached(want: int, latest: dict | None, fetch_on, sleep) -> None:
+    """Repair recent legacy rows and older targets that block pending two picks."""
+    cached = db.draws()
+    candidates = {draw["date"]: draw for draw in cached[:want]}
+    ascending = list(reversed(cached))
+    for saved in db.unchecked_picks():
+        if saved["settings"]["digits"] != 2 or not saved["based_on"]:
+            continue
+        target = next((d for d in ascending if d["date"] > saved["based_on"]), None)
+        if target:
+            candidates[target["date"]] = target
+    for iso, cached_draw in candidates.items():
+        if lotto.has_last2(cached_draw["prizes"]):
+            continue
+        # The latest response was already considered, including live/partial
+        # responses. Avoid a second request for the same date in this sync.
+        if latest and latest["date"] == iso:
+            continue
+        try:
+            fetched = fetch_on(dt.date.fromisoformat(iso))
+        except Exception as exc:
+            logger.warning("last2 repair failed at %s: %s", iso, exc)
+            continue
+        sleep(PROBE_DELAY)
+        if fetched and fetched["date"] == iso:
+            db.repair_last2(fetched)
+
+
 def based_on() -> str | None:
     seen = db.get("latest_seen")
     cached = db.draw_dates()
     return max(filter(None, [seen, *cached]), default=None)
 
 
-def make_pick(draws: int, picks: int, scope: str, permute: bool) -> dict:
-    used = db.draws(limit=draws)
-    excluded = lotto.excluded(used, scope, permute)
-    available = sorted(lotto.ALL_THREE - excluded)
+def make_pick(draws: int, picks: int, scope: str, permute: bool, digits: int = 3) -> dict:
+    if digits == 2:
+        scope = "last2"
+        used = [draw for draw in db.draws() if lotto.has_last2(draw["prizes"])][:draws]
+    else:
+        used = db.draws(limit=draws)
+    excluded = lotto.excluded(used, scope, permute, digits)
+    universe = lotto.ALL_TWO if digits == 2 else lotto.ALL_THREE
+    available = sorted(universe - excluded)
     return {
         "numbers": lotto.pick(available, picks),
         "pool_size": len(available),
         "excluded_count": len(excluded),
+        "excluded": sorted(excluded),
         "draws_used": [d["date"] for d in used],
-        "settings": {"draws": draws, "picks": picks, "scope": scope, "permute": permute},
+        "settings": {
+            "draws": draws, "picks": picks, "scope": scope, "permute": permute, "digits": digits,
+        },
     }
 
 
@@ -113,14 +153,17 @@ def score_pending() -> list[dict]:
         target = next((d for d in all_draws if d["date"] > p["based_on"]), None)
         if target is None:
             continue
-        result = lotto.score(p["numbers"], target["prizes"])
+        digits = p["settings"]["digits"]
+        if digits == 2 and not lotto.has_last2(target["prizes"]):
+            continue
+        result = lotto.score(p["numbers"], target["prizes"], digits)
         db.set_result(p["id"], target["date"], result)
         scored.append({**p, "result_draw": target["date"], "result": result})
     return scored
 
 
-def stats() -> dict:
-    checked = db.checked_picks()
+def stats(digits: int = 3) -> dict:
+    checked = db.checked_picks(digits)
     numbers = sum(len(p["numbers"]) for p in checked)
     return {
         "picks": len(checked),

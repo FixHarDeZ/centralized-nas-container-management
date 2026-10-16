@@ -95,3 +95,151 @@ def test_make_pick_excludes_cached_draws():
     assert len(p["numbers"]) == 5
     assert not set(p["numbers"]) & lotto.draw_numbers(PRIZES)
     assert p["draws_used"] == ["2026-03-01", "2026-02-16"]
+
+
+def test_make_two_digit_pick_uses_last2_pool_and_mode_snapshot():
+    db.add_draw({"date": "2026-10-01", "prizes": PRIZES})
+    p = service.make_pick(2, 100, "all", False, digits=2)
+    assert len(p["numbers"]) == 99
+    assert PRIZES["last2"][0] not in p["numbers"]
+    assert p["pool_size"] == 99 and p["excluded_count"] == 1
+    assert p["excluded"] == ["70"]
+    assert p["settings"] == {
+        "draws": 2, "picks": 100, "scope": "last2", "permute": False, "digits": 2,
+    }
+
+
+def test_mixed_pending_picks_use_their_own_modes_and_stats_stay_separate():
+    three = db.add_pick("manual", ["701", "107"], {}, "2026-10-01")
+    two = db.add_pick("manual", ["70", "07"], {"digits": 2}, "2026-10-01")
+    db.add_draw({"date": "2026-10-16", "prizes": PRIZES})
+    results = {p["id"]: p for p in service.score_pending()}
+    assert results[three]["result"]["exact_hits"] == 1
+    assert results[two]["result"]["hits"] == [{"number": "70", "kinds": ["last2"]}]
+    assert service.stats(2) == {
+        "picks": 1, "numbers": 2, "exact_hits": 1, "expected": 0.02, "tod_hits": 0,
+    }
+    assert service.stats()["tod_hits"] == 1
+    assert service.stats()["numbers"] == 2
+
+
+def test_two_digit_pick_waits_for_earliest_target_with_missing_last2():
+    two = db.add_pick("manual", ["70"], {"digits": 2}, "2026-10-01")
+    three = db.add_pick("manual", ["701"], {}, "2026-10-01")
+    old_prizes = {k: v for k, v in PRIZES.items() if k != "last2"}
+    db.add_draw({"date": "2026-10-16", "prizes": old_prizes})
+    db.add_draw({"date": "2026-11-01", "prizes": PRIZES})
+    assert [p["id"] for p in service.score_pending()] == [three]
+    assert db.picks(digits=2)[0]["result_draw"] is None
+    assert db.unchecked_picks()[0]["id"] == two
+
+
+def test_sync_repairs_latest_missing_last2_without_announcing_or_rewriting_results():
+    old_prizes = {k: v for k, v in PRIZES.items() if k != "last2"}
+    db.add_draw({"date": "2026-10-16", "prizes": old_prizes})
+    saved = db.add_pick("manual", ["701"], {}, "2026-10-01")
+    historical_result = {"hits": [], "exact_hits": 0, "expected": 0.005}
+    db.set_result(saved, "2026-10-16", historical_result)
+
+    def latest():
+        return {"date": "2026-10-16", "prizes": PRIZES}
+
+    assert run(1, latest, lambda _: None, today="2026-10-17") is None
+    assert db.draws()[0]["prizes"]["last2"] == ["70"]
+    assert db.picks()[0]["result"] == historical_result
+
+
+def test_sync_repairs_missing_last2_in_requested_history_without_announcing():
+    old_prizes = {k: v for k, v in PRIZES.items() if k != "last2"}
+    db.add_draw({"date": "2026-10-01", "prizes": old_prizes})
+    db.add_draw({"date": "2026-10-16", "prizes": PRIZES})
+    calls = []
+
+    def on(day):
+        calls.append(day.isoformat())
+        return ({"date": day.isoformat(), "prizes": PRIZES}
+                if day.isoformat() == "2026-10-01" else None)
+
+    def latest():
+        return {"date": "2026-10-16", "prizes": PRIZES}
+
+    assert run(2, latest, on, today="2026-10-17") is None
+    assert calls.count("2026-10-01") == 1
+    assert db.draws()[1]["prizes"]["last2"] == ["70"]
+
+
+def test_sync_never_repairs_cached_draw_from_partial_result():
+    old_prizes = {k: v for k, v in PRIZES.items() if k != "last2"}
+    db.add_draw({"date": "2026-10-16", "prizes": old_prizes})
+    partial = {**PRIZES, "fifth": []}
+
+    def latest():
+        return {"date": "2026-10-16", "prizes": partial}
+
+    assert run(1, latest, lambda _: {"date": "2026-10-16", "prizes": partial},
+               today="2026-10-17") is None
+    assert db.draws()[0]["prizes"] == old_prizes
+
+
+
+def test_make_two_digit_pick_skips_cached_draws_without_last2():
+    old_prizes = {k: v for k, v in PRIZES.items() if k != "last2"}
+    db.add_draw({"date": "2026-10-01", "prizes": PRIZES})
+    db.add_draw({"date": "2026-10-16", "prizes": old_prizes})
+    p = service.make_pick(1, 5, "last2", False, digits=2)
+    assert p["draws_used"] == ["2026-10-01"]
+    assert p["excluded"] == ["70"]
+
+
+def test_sync_repairs_older_pending_target_then_scores_that_draw():
+    old_prizes = {k: v for k, v in PRIZES.items() if k != "last2"}
+    db.add_draw({"date": "2026-10-16", "prizes": old_prizes})
+    db.add_draw({"date": "2026-11-01", "prizes": PRIZES})
+    saved = db.add_pick("manual", ["70"], {"digits": 2}, "2026-10-01")
+    calls = []
+
+    def on(day):
+        calls.append(day.isoformat())
+        return {"date": day.isoformat(), "prizes": PRIZES}
+
+    def latest():
+        return {"date": "2026-11-01", "prizes": PRIZES}
+
+    assert run(1, latest, on, today="2026-11-02") is None
+    assert calls == ["2026-10-16"]
+    scored = service.score_pending()
+    assert len(scored) == 1 and scored[0]["id"] == saved
+    assert scored[0]["result_draw"] == "2026-10-16"
+    assert scored[0]["result"]["exact_hits"] == 1
+    assert service.score_pending() == []
+
+
+def test_sync_repair_ignores_wrong_date_and_preserves_retryable_cached_row():
+    old_prizes = {k: v for k, v in PRIZES.items() if k != "last2"}
+    db.add_draw({"date": "2026-10-16", "prizes": old_prizes})
+    db.add_draw({"date": "2026-11-01", "prizes": PRIZES})
+
+    def latest():
+        return {"date": "2026-11-01", "prizes": PRIZES}
+
+    def on(day):
+        return ({"date": "2026-10-01", "prizes": PRIZES}
+                if day.isoformat() == "2026-10-16" else None)
+
+    assert run(2, latest, on, today="2026-11-02") is None
+    assert db.draws()[1]["prizes"] == old_prizes
+    assert "2026-10-16" not in db.nodraw_dates()
+    assert db.draw_dates() == {"2026-10-16", "2026-11-01"}
+
+
+def test_repair_only_adds_last2_and_does_not_replace_known_prizes_or_valid_last2():
+    cached_prizes = {**PRIZES, "first": ["123456"]}
+    cached_prizes.pop("last2")
+    db.add_draw({"date": "2026-10-16", "prizes": cached_prizes})
+    assert db.repair_last2({"date": "2026-10-16", "prizes": PRIZES})
+    assert db.draws()[0]["prizes"]["first"] == ["123456"]
+    assert db.draws()[0]["prizes"]["last2"] == ["70"]
+    assert not db.repair_last2({"date": "2026-10-16", "prizes": {**PRIZES, "last2": ["07"]}})
+    assert db.draws()[0]["prizes"]["last2"] == ["70"]
+    assert not db.repair_last2({"date": "2026-10-01", "prizes": PRIZES})
+    assert db.draw_dates() == {"2026-10-16"}

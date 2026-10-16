@@ -1,5 +1,18 @@
 # lotto-picker — daily log
 
+## 2026-10-16 — ระบบสุ่ม 2 ตัว / 3 ตัวแยกกัน
+- ผู้ใช้สั่งเพิ่มระบบสุ่มแยก 2/3 ตัว พร้อม commit main/push/deploy/ลบ worktree+branch และปิดงานอัตโนมัติ
+- เพิ่ม mode selector มือถือ, draft/result/saved state แยก, ประวัติ/สถิติ/notification settings แยก; ป้องกัน mutation ข้ามโหมดและ async GET เก่าทับโหมดใหม่
+- Backend เพิ่ม `digits=2|3` default3, key settings_2 (notify=false เริ่มต้น) แยกจาก settings เดิม; SQL mode filter ก่อน LIMIT; ไม่เปลี่ยน schema/ลบข้อมูลเดิม, legacy ไม่มีdigitsถือเป็น3
+- 2 ตัวใช้ official last2 เท่านั้น, 00–99/leading zeros, optional reverse exclusion, scoring last2 ตรงตัวเท่านั้น และ expected /100; 3 ตัว /1000 และ scope/scoring เดิม
+- API validation ใช้ ASCII จำนวนหลักตรงโหมด; auto pick/ผลรางวัลแยก mode+stats, guards auto_pick_target เดิม / auto_pick_target_2 ใหม่, process lock กัน auto ซ้ำพร้อมกัน
+- Complete draw ต้องมี last2 ครบ; cache legacy ขาด last2 ซ่อมเฉพาะ field นี้ด้วย payload ครบ/วันที่ตรง ไม่แตะ 3 prizes/results ไม่ประกาศงวดเก่า และไม่ตรวจ2เป็นแพ้ระหว่างรอข้อมูล
+- TDD: เห็น fail ก่อนทำทั้ง pure/db/service, API/auto/messages และ browser modes; ตรวจรวม **85 passed (36.32s; backend60 + browser25)**, repo **64 passed (1.10s)**, JS syntax/Ruff/diff ผ่าน. มี Starlette TestClient/AnyIO deprecation warning จาก dependency ของ test environment1รายการ
+- Independent backend/API และ UI/spec/quality review approve ไม่มี actionable findings. ไม่ยิง GLO/Telegram จาก tests
+- NAS JSON1 verified; สำรอง SQLite ด้วย backup API และ integrity_check=ok ที่ `/data/backups/lotto-before-dual-20261016-121632.db`; baseline 0 picks/5 draws/settings เดิม เพื่อ verify หลัง deploy
+- อัปเดต README stack + root README/CLAUDE summary + design/plan + memory ทั้งสองไฟล์
+- สถานะก่อน release: branch `codex/lotto-two-three-digits`, ยังไม่ commit/push/deploy รุ่นนี้; จะทำต่อครบตามคำสั่ง (backlog GLO live fixture/LINE/daily backup เดิมไม่เปลี่ยน)
+
 ## 2026-10-16 — ปิดงาน release UI
 - ตามคำสั่งผู้ใช้: commit `6e752db` รวม source/UI/docs/tests/deploy guard, fast-forward เข้า `main` และ push origin/main สำเร็จ (รวม commits stack/homepage เดิมที่ค้าง push)
 - ตรวจซ้ำก่อนปล่อย: stack **36 passed (25.43s)**, repo **64 passed (0.87s)**; JS syntax, bash syntax, ruff และ diff ผ่าน

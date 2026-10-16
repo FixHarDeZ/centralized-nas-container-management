@@ -337,3 +337,21 @@ select { width: 100%; max-width: 100%; padding: 11px 9px; border: 1px solid var(
   html { scroll-behavior: auto; }
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
+
+.mode-selector { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-width: 460px; margin: 0 0 24px; padding: 5px; border: 1px solid var(--line); border-radius: 16px; background: var(--card); }
+.mode-selector button { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 56px; min-width: 44px; padding: 8px; border-color: transparent; background: transparent; color: var(--muted); }
+.mode-selector button strong { font-size: 1.05rem; }
+.mode-selector button span { font-size: .65rem; font-weight: 450; }
+.mode-selector button[aria-pressed="true"] { background: var(--green-soft); color: var(--green); border-color: var(--line); }
+.fixed-scope { font-size: .76rem; color: var(--green); background: var(--green-soft); border-radius: 10px; padding: 12px; line-height: 1.7; }
+.mode-badge { display: inline-flex; font-size: .62rem; color: var(--green); background: var(--green-soft); border: 1px solid var(--line); border-radius: 5px; padding: 2px 6px; margin-right: 7px; }
+body[data-digits="2"] .empty-ticket span:last-child { display: none; }
+body[data-digits="2"] .number-ticket { min-width: 88px; }
+body[data-digits="2"] .stats-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 699px) {
+  body[data-digits="2"] .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 379px) {
+  .mode-selector button { gap: 6px; }
+  .mode-selector button span { font-size: .59rem; }
+}
