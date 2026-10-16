@@ -3,10 +3,11 @@
 สุ่มเลข 2 ตัว/3 ตัวแยกกัน ไม่ซ้ำ N งวดล่าสุด (ผลจาก GLO) + Telegram + ตรวจผล. รายละเอียดเต็ม: `../README.md`
 
 ## สถานะ
-- งาน 2/3 ตัว (2026-10-16): implementation/review เสร็จใน `codex/lotto-two-three-digits`, เตรียม commit เข้า main/push/deploy ตามคำสั่งผู้ใช้; ยังไม่ deploy รุ่นนี้
+- ระบบ 2/3 ตัว **commit `1ca3560` เข้า main + push + deploy แล้ว (2026-10-16)**; NAS app healthy/nginx running, Basic Auth 401/200, exact asset hashes ตรง source, API settings/picks/stats แยกโหมดและสุ่มจริงทั้ง2/3ผ่าน
 - แยก settings/history/stats/auto guards ตาม `digits=2|3`; legacy ไม่มี digits = 3. โหมด 2 ตัวเฉพาะ `last2`, pool 00–99, ตรวจตรงตัว /100, ตัดเลขกลับได้แต่ไม่ถือว่าถูก; 3 ตัวคง logic เดิม
 - ตรวจรอบนี้: **85 stack tests (60 backend + 25 browser) + 64 repo tests ผ่าน**, JS/ruff/diff ผ่าน, independent backend+UI review approve. Warning เดียวมาจาก Starlette TestClient/AnyIO deprecation ใน test environment
-- NAS JSON1 verified; backup ก่อน deploy `/data/backups/lotto-before-dual-20261016-121632.db` integrity ok; baseline 0 saved sets / 5 draws / settings เดิมเก็บไว้ตรวจหลัง deploy
+- NAS JSON1 verified; backup ก่อน deploy `/data/backups/lotto-before-dual-20261016-121632.db` integrity ok; หลัง deploy ตรวจแล้ว saved sets/settings เดิมไม่เปลี่ยน, backup ยังอยู่, HTTPS proxy 401/200 + JS hash ผ่าน
+- ปิดงาน 2/3 ตัว: native archive/remove worktree และลบ local branch `codex/lotto-two-three-digits` แล้ว; ไม่มี remote feature branch; primary main ตรง origin/main หลัง push บันทึกปิดงาน. `.agents/` เดิมไม่แตะต้อง
 - UI redesign 2026-10-16 **commit `6e752db` เข้า main + push + deploy แล้ว**: ครีม/เขียว, bottom navigation 3 ส่วน, stepper/presets, ticket numbers, copy/saved state, ประวัติ/ผลรางวัลใหม่, dark mode + ปุ่ม 44px; API/DB/scheduler/auth เดิม
 - ปิดงาน release: NAS app healthy/nginx running, noauth 401/auth 200, API settings/draws/picks/stats 200; SHA-256 index.html/app.js/style.css ตรง source `6e752db`; HTTPS proxy 401/200 และ app.js hash ตรง. ลบ active worktree และ branch `codex/lotto-mobile-ui` แล้ว (native archive เก็บ snapshot กู้คืนได้)
 - Deploy guard: archive exclude `.env.deploy` + `secrets/vault.yaml`; ลบ `.env.deploy` เก่าที่เคยอยู่บน NAS แล้ว. ใช้ clean export ของ main + generated env/auth files ไม่ส่ง untracked `.agents/`

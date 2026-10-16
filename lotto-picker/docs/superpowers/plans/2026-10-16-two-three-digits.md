@@ -51,6 +51,10 @@ Files: app/static/index.html, style.css, app.js; tests/test_ui_browser.py.
 
 - [x] Run full stack, root tests, JS/shell syntax, Ruff and diff checks.
 - [x] Independent spec/correctness review and resolve all actionable findings.
-- [ ] Update README/root Lotto summary and both stack memory files, commit source into main and push.
-- [ ] Back up NAS DB, deploy only lotto-picker, verify health/auth/assets/both modes/history.
-- [ ] Remove native worktree/local branch; update and verify closure memory, commit/push documentation.
+- [x] Update README/root Lotto summary and both stack memory files, commit source into main and push.
+- [x] Back up NAS DB, deploy only lotto-picker, verify health/auth/assets/both modes/history.
+- [x] Remove native worktree/local branch; update and verify closure memory, commit/push documentation.
+
+## Release result
+
+Source 1ca3560 merged into main, pushed and deployed. Stack85 + root64 tests passed; independent backend/UI review approved. Production health/auth/assets, both-mode generation/read APIs, existing settings/history and backup verified. Temporary worktree archived/removed and branch deleted. Closure documentation is committed and pushed after deployment; no runtime changes in that update.

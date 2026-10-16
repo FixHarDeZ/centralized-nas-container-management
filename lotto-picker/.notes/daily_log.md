@@ -1,5 +1,15 @@
 # lotto-picker — daily log
 
+## 2026-10-16 — ปิดงานระบบ 2/3 ตัว
+- Source commit `1ca3560` fast-forward เข้า `main` และ push origin/main แล้ว; deploy ด้วย `scripts/deploy.sh -s lotto-picker -y` จาก clean tracked export + generated env/auth files ไม่ส่ง untracked `.agents/` หรือ workstation credentials
+- Rebuild/restart เฉพาะ lotto-picker app/nginx, volume SQLite เดิม. Verified app running/healthy, nginx running; noauth401/auth200; SHA-256 HTML/JS/CSS ตรง source `1ca3560`
+- Production GET settings/picks/stats สำหรับ digits2และ3 =200; POST /api/pick ทั้ง2/3สุ่มได้5เลข จำนวนหลัก/leadingzero format/exclusions/settingsถูกต้อง, 2ตัวscope last2 และnotify=false. Smoke สุ่มอย่างเดียว ไม่บันทึกเลขทดสอบลงประวัติ
+- ตรวจ preservation หลัง deploy: saved sets/settings เดิมไม่เปลี่ยน และจำนวนdrawsไม่ลด; backup `/data/backups/lotto-before-dual-20261016-121632.db` ยังอยู่. Public HTTPS proxy noauth401/auth200 และ JS hash ตรง
+- SSH หลุด255ระหว่างตรวจไฟล์ต้องห้ามท้ายสุดหลัง health/API/preservation ผ่าน → retry เฉพาะ check ที่เหลือสำเร็จ; ไม่มี `.env.deploy` หรือ plaintext `secrets/vault.yaml` บน NAS. `refs/deploy/lotto-picker` = source `1ca3560`
+- Native worktree archive/remove สำเร็จ (snapshot กู้คืนได้), ลบ local branch `codex/lotto-two-three-digits` แล้ว; ไม่สร้าง remote feature branch. ไม่แตะ worktreeอื่นหรือ `.agents/` เดิม
+- อัปเดตและตรวจ memory ทั้ง `daily_log.md` / `00_INDEX.md` พร้อมปิด plan; บันทึกปิดงาน commit/push ตามหลัง source ไม่มี runtime changes. Tests/review: **85 stack +64 repo passed**, independent spec/quality approve
+- งานที่ขอครบแล้ว; backlog เดิม GLO live fixture/LINE/daily backup ไม่อยู่ในขอบเขตรอบนี้
+
 ## 2026-10-16 — ระบบสุ่ม 2 ตัว / 3 ตัวแยกกัน
 - ผู้ใช้สั่งเพิ่มระบบสุ่มแยก 2/3 ตัว พร้อม commit main/push/deploy/ลบ worktree+branch และปิดงานอัตโนมัติ
 - เพิ่ม mode selector มือถือ, draft/result/saved state แยก, ประวัติ/สถิติ/notification settings แยก; ป้องกัน mutation ข้ามโหมดและ async GET เก่าทับโหมดใหม่
