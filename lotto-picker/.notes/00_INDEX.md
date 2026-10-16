@@ -3,8 +3,9 @@
 สุ่มเลขท้าย 3 ตัวไม่ซ้ำ N งวดล่าสุด (ผลจาก GLO) + Telegram + ตรวจผล. รายละเอียดเต็ม: `../README.md`
 
 ## สถานะ
-- สร้าง + deploy 2026-10-16 (commit ใน log), verified บน NAS (401/200/healthy/Telegram). **ยังไม่ push**
-- Port 5073 (nginx basic auth) → DSM RP 15073 — **ผู้ใช้ต้องสร้างเองใน DSM UI** (+ router forward 15073)
+- สร้าง + deploy 2026-10-16 (`94c4bf6` + commit `feat(homepage): add Lotto Picker tile`), verified บน NAS (401/200/healthy/Telegram) + external 401. **ยังไม่ push**
+- ค้าง: payload GLO ระหว่างจับสด `/tmp/glo-live/` บน NAS (เก็บ 16/10 14:30-16:30) → ทำ fixture
+- Port 5073 (nginx basic auth) → DSM RP 15073 (สร้างแล้ว 16/10) + tile ใน homepage
 - รอบจริงรอบแรก: ผลงวด 16/10 (poll 15:00+), auto pick แรก 31/10 20:00
 
 ## โครงไฟล์

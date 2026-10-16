@@ -156,6 +156,11 @@
         href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15066"
         description: ระบบติดตามการผ่อนชำระรายเดือน
 
+    - Lotto Picker:
+        icon: mdi-dice-multiple
+        href: "{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15073"
+        description: สุ่มเลขท้าย 3 ตัวไม่ซ้ำงวดล่าสุด
+
     - Synology Note Station:
         icon: synology-note-station.png
         href: "{{HOMEPAGE_VAR_QUICKCONNECT_URL}}/note/"

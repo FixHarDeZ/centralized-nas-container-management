@@ -9,3 +9,9 @@
 - เพิ่มหลังรีวิว: `is_complete` เช็คตัวเลข+ความยาว (`DIGITS`) ไม่ใช่แค่จำนวน, เทสต์ `auto_pick` 4 เคส → stack tests 21 ผ่าน, ruff สะอาด
 - สถานะ: commit `feat(lotto-picker): new stack` (amend รวมรอบรีวิว) deploy + verified บน NAS, **ยังไม่ push**
 - ค้าง: ผู้ใช้ต้องสร้าง DSM Reverse Proxy `https://<domain>:15073` → `http://localhost:5073` เอง (+ เช็ค router forward 15073); ยังไม่เห็นรอบ `poll_results`/`auto_pick` จริง (16/10 เป็นวันออกรางวัล: auto pick รอบนี้ไม่มีเพราะ deploy หลัง 20:00 ของ 15/10, ผลงวด 16/10 จะ poll+ประกาศ 15:00+ วันนี้ = รอบจริงรอบแรก)
+
+## 2026-10-16 (ต่อ)
+- ผู้ใช้สร้าง DSM RP 15073 เสร็จแล้ว
+- เพิ่ม tile ใน homepage (deploy แล้ว)
+- ปิดงาน: commits `94c4bf6` (stack) + `feat(homepage): add Lotto Picker tile` (commit ถัดไป) — deploy ทั้งคู่แล้ว, **ยังไม่ push**. External `:15073` ตอบ 401 (RP ต่อถึง nginx)
+- ค้างรอบหน้า: (1) ดูผลงวด 16/10 ใน Telegram เย็นนี้ = รอบจริงรอบแรก (2) NAS เก็บ payload GLO ระหว่างจับสดที่ `/tmp/glo-live/latest_HHMM.json` (14:30-16:30 ทุก 10 นาที) → ถ้าเห็นทรงข้อมูลตอนกำลังจับ เอามาทำ fixture + เทสต์ `is_complete` (3) auto pick แรก 31/10 20:00

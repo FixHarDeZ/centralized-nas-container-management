@@ -58,6 +58,7 @@ Basic auth ผ่าน nginx:
 
 ## Change Log
 
+- **2026-10-16** — เพิ่ม tile Lotto Picker (Tools & Notes, `:15073`) ไม่ใส่ ping/widget เพราะ basic auth ทุก path — deploy แล้ว
 - **2026-09-29** — เพิ่ม background รูปวิวภูเขา/ทะเลหมอก (`settings.yaml` `background` + `cardBlur`, volume `./images`) — ยังไม่ deploy
 - **2026-09-15** — เพิ่มการ์ด Public IP (customapi → `ipinfo.io/json`, ยิงฝั่ง server = IP ของ NAS) + ซ่อม Jellyfin widget ที่พังเพราะ Jellyfin 12 ตัด `/emby` และเลิกรับ `api_key=` query → เปลี่ยนเป็น customapi + header `Authorization: MediaBrowser Token=...`
 - **2026-07-26** — เพิ่ม tile ops-bot (AI Incident Response Bot, port 5070/15070) — href ต้องมี `/dashboard` (app ไม่มี route ที่ `/`), ไม่ใส่ ping/widget เพราะอยู่หลัง basic auth (401 = ขึ้นเป็น down)

@@ -236,3 +236,7 @@ curl -s -H "Host: <LAN_IP>:3000" "http://$IP:3000/api/services/proxy?group=<grou
 - เพิ่ม `config/custom.css` (homepage โหลดอัตโนมัติจาก /app/config): การ์ด/stat block ทึบขึ้น (slate-900 72%), title ขาว+text-shadow, description slate-300 opacity 1 (เดิม ink-reader/Portainer จางเกือบมองไม่เห็น)
 - ยืนยัน class ที่ใช้ (`service-card`, `service-block`, `information-widget`, `service-description` ฯลฯ) มีใน build ของ container จริง
 - Deploy แล้ว (`deploy.sh -s homepage -y`) commit + push แล้ว
+
+## 2026-10-16
+- เพิ่ม tile `Lotto Picker` ใน `config/services.yaml` กลุ่ม 📝 Tools & Notes → `{{HOMEPAGE_VAR_DDNS_BASE_HTTPS}}:15073`, icon `mdi-dice-multiple`, ไม่มี ping/widget (basic auth = 401)
+- deploy `-s homepage -y`, ยืนยันไฟล์ใน container มี tile, container healthy
