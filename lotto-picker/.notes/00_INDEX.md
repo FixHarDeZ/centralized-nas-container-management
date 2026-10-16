@@ -3,9 +3,11 @@
 สุ่มเลขท้าย 3 ตัวไม่ซ้ำ N งวดล่าสุด (ผลจาก GLO) + Telegram + ตรวจผล. รายละเอียดเต็ม: `../README.md`
 
 ## สถานะ
-- UI redesign 2026-10-16 เสร็จใน worktree branch `codex/lotto-mobile-ui` (ยังไม่ commit/push/deploy): ครีม/เขียว, bottom navigation 3 ส่วน, stepper/presets, ticket numbers, copy/saved state, ประวัติ/ผลรางวัลใหม่, dark mode + ปุ่ม 44px; API/DB/scheduler/auth เดิม
+- UI redesign 2026-10-16 **commit `6e752db` เข้า main + push + deploy แล้ว**: ครีม/เขียว, bottom navigation 3 ส่วน, stepper/presets, ticket numbers, copy/saved state, ประวัติ/ผลรางวัลใหม่, dark mode + ปุ่ม 44px; API/DB/scheduler/auth เดิม
+- ปิดงาน release: NAS app healthy/nginx running, noauth 401/auth 200, API settings/draws/picks/stats 200; SHA-256 index.html/app.js/style.css ตรง source `6e752db`; HTTPS proxy 401/200 และ app.js hash ตรง. ลบ active worktree และ branch `codex/lotto-mobile-ui` แล้ว (native archive เก็บ snapshot กู้คืนได้)
+- Deploy guard: archive exclude `.env.deploy` + `secrets/vault.yaml`; ลบ `.env.deploy` เก่าที่เคยอยู่บน NAS แล้ว. ใช้ clean export ของ main + generated env/auth files ไม่ส่ง untracked `.agents/`
 - ตรวจ UI รอบนี้: backend 21 + browser 15 = **36 passed**, JS syntax/ruff/diff สะอาด, independent review ผ่าน. Browser ใช้ local fixture server ไม่เรียก GLO/Telegram. คำสั่ง/flow ใน README; design/plan ใน `docs/superpowers/`
-- สร้าง + deploy 2026-10-16 (`94c4bf6` + commit `feat(homepage): add Lotto Picker tile`), verified บน NAS (401/200/healthy/Telegram) + external 401. **ยังไม่ push**
+- สร้าง + deploy 2026-10-16 (`94c4bf6` + `757b49c`), verified บน NAS (401/200/healthy/Telegram) + external 401; push ทั้งสอง commit แล้วพร้อม release UI
 - ค้าง: payload GLO ระหว่างจับสด `/tmp/glo-live/` บน NAS (เก็บ 16/10 14:30-16:30) → ทำ fixture
 - Port 5073 (nginx basic auth) → DSM RP 15073 (สร้างแล้ว 16/10) + tile ใน homepage
 - รอบจริงรอบแรก: ผลงวด 16/10 (poll 15:00+), auto pick แรก 31/10 20:00

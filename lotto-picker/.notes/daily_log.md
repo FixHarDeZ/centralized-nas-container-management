@@ -1,5 +1,15 @@
 # lotto-picker — daily log
 
+## 2026-10-16 — ปิดงาน release UI
+- ตามคำสั่งผู้ใช้: commit `6e752db` รวม source/UI/docs/tests/deploy guard, fast-forward เข้า `main` และ push origin/main สำเร็จ (รวม commits stack/homepage เดิมที่ค้าง push)
+- ตรวจซ้ำก่อนปล่อย: stack **36 passed (25.43s)**, repo **64 passed (0.87s)**; JS syntax, bash syntax, ruff และ diff ผ่าน
+- Deploy ผ่าน `scripts/deploy.sh -s lotto-picker -y` จาก clean tracked export ของ main + generated per-stack env/nginx auth files; ไม่ส่ง `.agents/` ที่ untracked. Rebuild/restart เฉพาะ lotto-picker (app+nginx), volume SQLite เดิม
+- Verify หลัง deploy: app running/healthy, nginx running; noauth 401; auth HTML/JS/CSS 200 พร้อม SHA-256 ตรง source `6e752db` ทุกไฟล์; read-only API settings/draws/picks/stats 200; HTTPS proxy noauth 401/auth 200 และ app.js hash ตรง
+- Security cleanup: archive ไม่ส่ง workstation `.env.deploy` และ plaintext `secrets/vault.yaml` อีก; พบ `.env.deploy` เก่าบน NAS และลบแล้ว, plaintext vault ไม่พบ. ไม่แสดงค่า credentials ใน log
+- Native archive/remove worktree สำเร็จ (มี snapshot กู้คืนได้); ลบ local branch `codex/lotto-mobile-ui` แล้ว. ไม่มี remote feature branch ที่สร้างในงานนี้. Primary checkout อยู่ `main`; `.agents/` เดิมไม่แตะต้อง
+- อัปเดตและตรวจ `daily_log.md` + `00_INDEX.md` พร้อม plan release status; source `6e752db` deploy แล้ว, บันทึกปิดงาน commit/push ตามหลัง (ไม่มี runtime changes)
+- งาน UI ไม่มีค้าง; GLO live fixture/รอบ auto pick/LINE/backup เป็น backlog เดิม
+
 ## 2026-10-16 — Redesign UI สำหรับมือถือ
 - ผู้ใช้อนุมัติแนวแอปมือถือ ครีม/เขียวเข้ม เมนูล่าง 3 ส่วน (“สุ่มเลข / เลขที่บันทึก / ผลรางวัล”) และให้ทำต่อ
 - แก้ `app/static/index.html`, `style.css`, `app.js`: stepper/presets, ตัวเลือกพับเก็บ, ticket numbers ใหญ่, copy, saved status, ประวัติพร้อมประเภทรางวัล, draw cards, ปุ่มอย่างน้อย 44px, safe area, dark mode, focus และ reduced motion; API/DB/งานตามเวลา/auth เดิม
