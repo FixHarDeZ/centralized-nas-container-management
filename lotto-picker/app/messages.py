@@ -28,6 +28,19 @@ KIND_LABEL = {
 }
 
 
+TICKET_LABEL = {
+    "first": "รางวัลที่ 1",
+    "second": "รางวัลที่ 2",
+    "third": "รางวัลที่ 3",
+    "fourth": "รางวัลที่ 4",
+    "fifth": "รางวัลที่ 5",
+    "near1": "ข้างเคียงรางวัลที่ 1",
+    "last3f": "เลขหน้า 3 ตัว",
+    "last3b": "เลขท้าย 3 ตัว",
+    "last2": "เลขท้าย 2 ตัว",
+}
+
+
 def notifier() -> Notifier:
     return Notifier(
         line=LineCreds(
@@ -112,4 +125,27 @@ def result(draw: dict, scored: list[dict], stats: dict, digits: int = 3) -> str:
             f"สถิติสะสม {digits} ตัว: ถูก {stats['exact_hits']} จาก {stats['numbers']} เลข"
             f" (สุ่มธรรมดาคาดว่า {stats['expected']:.2f})"
         )
+    return "\n".join(lines) + _link()
+
+
+def win(found: dict) -> str:
+    """Its own message, so a win never hides inside the routine result text."""
+    lines = [f"🎉 <b>ถูกรางวัล · งวด {lotto.thai_date(found['draw'])}</b>"]
+    for t in found["tickets"]:
+        lines.append("")
+        label = f" ({_escape(t['label'])})" if t["label"] else ""
+        lines.append(f"🎟 สลากในบัญชี{label}")
+        for w in t["wins"]:
+            qty = f" ×{w['qty']}" if w["qty"] > 1 else ""  # noqa: RUF001 (shown to people)
+            kinds = " + ".join(TICKET_LABEL[k] for k in w["kinds"])
+            lines.append(f"<b>{w['number']}</b>{qty} → {kinds} · {w['amount']:,.0f} บาท")
+    if found["tickets"]:
+        lines.append(f"\n💰 รวม <b>{found['total']:,.0f} บาท</b> · ขึ้นเงินภายใน 2 ปีนับจากวันออกรางวัล")
+    for p in found["picks"]:
+        lines.append("")
+        lines.append(
+            f"🎲 เลข {p['digits']} ตัวที่บันทึกไว้ ({'อัตโนมัติ' if p['source'] == 'auto' else 'บันทึกเอง'})"
+        )
+        for h in p["hits"]:
+            lines.append(f"<b>{h['number']}</b> → {', '.join(KIND_LABEL[k] for k in h['kinds'])}")
     return "\n".join(lines) + _link()

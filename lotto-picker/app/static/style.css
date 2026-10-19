@@ -303,6 +303,17 @@ select { width: 100%; max-width: 100%; padding: 11px 9px; border: 1px solid var(
   .first-prize .prize-number { font-size: 1.65rem; }
 }
 
+/* --- win banner --- */
+.win-banner { display: flex; flex-direction: column; gap: 12px; margin: 0 0 20px; padding: 16px 18px; border: 1px solid var(--accent); border-radius: 16px; background: var(--accent-soft); color: var(--text); box-shadow: var(--shadow); }
+.win-copy strong { display: block; font-size: 1rem; color: var(--accent); }
+.win-copy ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; font-size: .78rem; line-height: 1.6; }
+.win-copy b { font-family: var(--font-numbers); letter-spacing: .06em; }
+.win-actions { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+@media (min-width: 700px) {
+  .win-banner { flex-direction: row; align-items: center; justify-content: space-between; }
+  .win-actions { grid-template-columns: auto auto; }
+}
+
 /* --- users --- */
 .header-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
 .user-chip { display: inline-flex; align-items: center; gap: 6px; font-size: .68rem; color: var(--green); background: var(--green-soft); border: 1px solid var(--line); border-radius: 20px; padding: 3px 10px; }

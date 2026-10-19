@@ -197,3 +197,36 @@ def test_user_chip_and_owner_only_automation(browser, app_url):
         assert page.locator("#automation-owner-only").is_visible() is not owner
         assert no_horizontal_scroll(page)
         context.close()
+
+
+def test_win_banner_for_any_user_and_dismiss_sticks(browser, app_url):
+    from app import db
+
+    latest = app_url[1][-1]
+    db.add_ledger({"draw_date": latest["date"], "label": "", "tickets": [
+        {"number": "000" + latest["prizes"]["last3b"][0], "qty": 2}], "cost": 160, "prize": None}, user="Pookzii")
+    context = browser.new_context(viewport={"width": 390, "height": 844},
+                                  extra_http_headers={"X-Remote-User": "Pookzii"})
+    page = context.new_page()
+    page.goto(app_url[0])
+    page.locator("#win-banner").wait_for()
+    assert "8,000 บาท" in page.locator("#win-title").inner_text()
+    assert "เลขท้าย 3 ตัว" in page.locator("#win-lines").inner_text()
+    assert no_horizontal_scroll(page)
+    page.locator("#win-open").click()
+    assert page.locator("#view-ledger").is_visible()
+    page.locator("#win-dismiss").click()
+    assert page.locator("#win-banner").is_hidden()
+    page.reload()
+    page.wait_for_function("document.getElementById('user-chip').textContent === 'Pookzii'")
+    page.wait_for_timeout(300)
+    assert page.locator("#win-banner").is_hidden()
+    context.close()
+    # the owner has no win, so no banner
+    context = browser.new_context(viewport={"width": 390, "height": 844})
+    page = context.new_page()
+    page.goto(app_url[0])
+    page.wait_for_function("document.getElementById('user-chip').textContent !== ''")
+    page.wait_for_timeout(300)
+    assert page.locator("#win-banner").is_hidden()
+    context.close()

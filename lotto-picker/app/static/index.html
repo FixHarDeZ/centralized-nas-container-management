@@ -47,6 +47,16 @@
   </nav>
 
   <main id="main" class="app-main">
+    <section id="win-banner" class="win-banner" role="status" aria-live="polite" hidden>
+      <div class="win-copy">
+        <strong id="win-title">ถูกรางวัล</strong>
+        <ul id="win-lines"></ul>
+      </div>
+      <div class="win-actions">
+        <button id="win-open" type="button" class="primary">ดูรายละเอียด</button>
+        <button id="win-dismiss" type="button" class="ghost" aria-label="ซ่อนป้ายถูกรางวัลของงวดนี้">ซ่อน</button>
+      </div>
+    </section>
     <div class="mode-selector" role="group" aria-label="เลือกจำนวนหลัก">
       <button id="mode-two" type="button" data-digits="2" aria-pressed="false"><strong>2 ตัว</strong><span>เลขท้าย 2 ตัว</span></button>
       <button id="mode-three" type="button" data-digits="3" aria-pressed="true"><strong>3 ตัว</strong><span>เลขท้าย 3 ตัว</span></button>

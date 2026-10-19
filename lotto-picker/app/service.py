@@ -407,3 +407,62 @@ def check_ticket(number: str, date: str | None = None) -> dict | None:
         "amounts": {k: amounts[k] for k in kinds},
         "total": sum(amounts[k] for k in kinds),
     }
+
+
+# --- wins: the banner and the Telegram win alert ----------------------------------
+
+ALERTED_KEEP = 500
+
+
+def wins(user: str = db.OWNER) -> dict:
+    """What this user won in the latest cached draw: saved picks that hit and
+    ledger tickets that won. Older draws are left out on purpose — the banner
+    is news, and the next draw replaces it."""
+    latest = db.draws(limit=1)
+    if not latest:
+        return {"draw": None, "picks": [], "tickets": [], "total": 0}
+    draw = latest[0]["date"]
+    picks = [
+        {"id": p["id"], "digits": p["settings"]["digits"], "source": p["source"],
+         "hits": p["result"]["hits"]}
+        for p in db.picks(limit=200, user=user)
+        if p["result_draw"] == draw and p["result"] and p["result"]["hits"]
+    ]
+    tickets = [
+        {"id": e["id"], "label": e["label"], "wins": e["wins"], "won": e["won"]}
+        for e in ledger(user)["entries"]
+        # a manual prize is one the user typed in — nothing to tell them
+        if e["result_draw"] == draw and e["status"] == "won"
+    ]
+    return {
+        "draw": draw,
+        "picks": picks,
+        "tickets": tickets,
+        "total": sum(t["won"] for t in tickets),
+    }
+
+
+def _alert_keys(found: dict) -> dict[str, set[str]]:
+    draw = found["draw"]
+    return {
+        "picks": {f"p:{p['id']}" for p in found["picks"]},
+        "tickets": {f"l:{t['id']}:{draw}" for t in found["tickets"]},
+    }
+
+
+def pending_win_alerts() -> dict:
+    """The owner's wins in the latest draw not yet sent to Telegram."""
+    found = wins(db.OWNER)
+    sent = set(db.get("win_alerted", []))
+    draw = found["draw"]
+    return {
+        **found,
+        "picks": [p for p in found["picks"] if f"p:{p['id']}" not in sent],
+        "tickets": [t for t in found["tickets"] if f"l:{t['id']}:{draw}" not in sent],
+    }
+
+
+def mark_wins_alerted(found: dict) -> None:
+    keys = _alert_keys(found)
+    sent = [*db.get("win_alerted", []), *sorted(keys["picks"] | keys["tickets"])]
+    db.put("win_alerted", list(dict.fromkeys(sent))[-ALERTED_KEEP:])

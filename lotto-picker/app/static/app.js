@@ -15,6 +15,9 @@ let saving = false;
 let resultSaved = false;
 let settingsBusy = false;
 let activeView = "pick";
+// Declared up here: loadWins() runs at startup, before the bottom of the file.
+let wins = null;
+let me = null;
 let latestDraws = [];
 const STYLE = { random: "สุ่มล้วน", hot: "ตามกระแส", cold: "สวนกระแส", overdue: "เลขค้างนาน" };
 const fmt = (n) => Number(n).toLocaleString("th-TH", { maximumFractionDigits: 2 });
@@ -442,7 +445,7 @@ async function syncNow() {
   button.textContent = "กำลังดึงผล…";
   try {
     await api("/api/sync", { method: "POST" });
-    await Promise.all([loadDraws(), loadPicks()]);
+    await Promise.all([loadDraws(), loadPicks(), loadWins()]);
     toast("ดึงข้อมูลแล้ว แสดงผลล่าสุดที่ระบบเก็บไว้");
   } catch (error) {
     toast(`ดึงผลไม่สำเร็จ: ${error.message}`);
@@ -487,6 +490,7 @@ $("ledger-cost").addEventListener("input", () => { $("ledger-cost").dataset.touc
 updateActions();
 updateSettingsActions();
 loadMe();
+loadWins();
 loadSettings();
 loadDraws();
 loadPicks();
@@ -816,7 +820,7 @@ async function saveLedger() {
     for (const id of ["ledger-tickets", "ledger-cost", "ledger-prize", "ledger-label"]) $(id).value = "";
     $("ledger-cost").dataset.touched = "";
     toast("บันทึกรายการแล้ว");
-    await loadLedger();
+    await Promise.all([loadLedger(), loadWins()]);
   } catch (error) {
     toast(`บันทึกไม่สำเร็จ: ${error.message}`);
   } finally {
@@ -848,3 +852,41 @@ async function loadMe() {
     $("automation-owner-only").hidden = me.owner;
   } catch { /* chip stays hidden; the server still scopes data by login */ }
 }
+
+// --- win banner ------------------------------------------------------------------
+// Every user sees their own wins in the latest draw here (only the owner also
+// gets Telegram). Hiding is remembered per user and draw in this browser.
+
+function winKey() {
+  return `lotto-win-hidden:${me?.user || ""}:${wins?.draw || ""}`;
+}
+
+function winHidden() {
+  try { return localStorage.getItem(winKey()) === "1"; } catch { return false; }
+}
+
+async function loadWins() {
+  try {
+    me ||= await api("/api/me").catch(() => null);
+    wins = await api("/api/wins");
+  } catch {
+    return;
+  }
+  const lines = [
+    ...wins.tickets.flatMap((t) => t.wins.map((w) => el("li", {}, "🎟 ", el("b", {}, w.number), w.qty > 1 ? ` ×${w.qty}` : "",
+      ` · ${w.kinds.map((k) => PRIZE[k]).join(" + ")} · ${fmt(w.amount)} บาท`))),
+    ...wins.picks.flatMap((p) => p.hits.map((h) => el("li", {}, `🎲 ${p.digits} ตัว `, el("b", {}, h.number),
+      ` · ${h.kinds.map((k) => KIND[k] || k).join(" / ")}`))),
+  ];
+  const show = lines.length > 0 && !winHidden();
+  $("win-banner").hidden = !show;
+  if (!show) return;
+  $("win-title").textContent = `🎉 ถูกรางวัล งวด ${thaiDate(wins.draw)}${wins.total ? ` · รวม ${fmt(wins.total)} บาท` : ""}`;
+  $("win-lines").replaceChildren(...lines);
+}
+
+$("win-open").addEventListener("click", () => selectView(wins?.tickets.length ? "ledger" : "history"));
+$("win-dismiss").addEventListener("click", () => {
+  try { localStorage.setItem(winKey(), "1"); } catch { /* hidden for this visit only */ }
+  $("win-banner").hidden = true;
+});

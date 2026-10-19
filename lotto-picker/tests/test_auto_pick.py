@@ -116,9 +116,13 @@ def test_poll_notifies_only_enabled_mode_with_its_own_picks_and_stats(env, monke
     two = db.add_pick("manual", ["70"], {"digits": 2}, "2026-09-16")
     db.add_pick("manual", ["701"], {"digits": 3}, "2026-09-16")
     monkeypatch.setattr(main, "_sync", lambda: {"date": "2026-10-01", "prizes": PRIZES})
+    monkeypatch.setattr(main.insight, "start", lambda *a, **k: None)
+    db.add_draw({"date": "2026-10-01", "prizes": PRIZES})
     main.poll_results()
-    assert len(sent) == 1 and "2 ตัว" in sent[0]
+    # the result message, then the separate win alert — both 2-digit only
+    assert len(sent) == 2 and "2 ตัว" in sent[0]
     assert "✅70" in sent[0] and "✅701" not in sent[0]
+    assert sent[1].startswith("🎉") and "<b>70</b>" in sent[1] and "701" not in sent[1]
     assert db.picks(digits=2)[0]["id"] == two
 
 

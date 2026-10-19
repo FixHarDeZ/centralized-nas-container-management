@@ -74,8 +74,37 @@ def poll_results() -> None:
         logger.warning("results poll failed: %s", exc)
         return
     scored = service.score_pending()
-    if fresh is None:
-        return
+    if fresh is not None:
+        announce(fresh, scored)
+    # After the result message, and on every poll — a ledger entry for this
+    # draw is only checked once the draw is cached, which may be a later poll.
+    send_win_alerts()
+
+
+def send_win_alerts() -> None:
+    """A separate 🎉 message for the owner's wins in the latest draw, once.
+
+    Tickets always alert — that is real money. Saved 2/3-digit picks follow
+    their mode's notify switch, like the result message they belong to.
+    Everything found is marked sent either way, so switching notify on later
+    never replays an old win.
+    """
+    try:
+        found = service.pending_win_alerts()
+        if not found["picks"] and not found["tickets"]:
+            return
+        loud = {
+            **found,
+            "picks": [p for p in found["picks"] if db.settings(p["digits"])["notify"]],
+        }
+        if loud["picks"] or loud["tickets"]:
+            messages.notifier().send(messages.win(loud))
+        service.mark_wins_alerted(found)
+    except Exception:
+        logger.exception("win alert failed")
+
+
+def announce(fresh: dict, scored: list[dict]) -> None:
     logger.info("new draw %s, scored %d pick(s)", fresh["date"], len(scored))
     for digits in (3, 2):
         if db.settings(digits)["notify"]:
@@ -373,16 +402,32 @@ def get_ledger(user: str = User):
     return service.ledger(user)
 
 
+def _seen_by_owner(user: str) -> None:
+    """An entry typed in after its draw is already checked on screen — the
+    person is looking at the result, a Telegram ping would be noise."""
+    if user == db.OWNER:
+        # tickets only: a pick alert that failed to send must still retry
+        service.mark_wins_alerted({**service.pending_win_alerts(), "picks": []})
+
+
 @app.post("/api/ledger", status_code=201)
 def add_ledger(body: LedgerEntry, user: str = User):
-    return {"id": db.add_ledger(body.row(), user)}
+    entry_id = db.add_ledger(body.row(), user)
+    _seen_by_owner(user)
+    return {"id": entry_id}
 
 
 @app.put("/api/ledger/{entry_id}")
 def put_ledger(entry_id: int, body: LedgerEntry, user: str = User):
     if not db.update_ledger(entry_id, body.row(), user):
         raise HTTPException(404)
+    _seen_by_owner(user)
     return {"id": entry_id}
+
+
+@app.get("/api/wins")
+def get_wins(user: str = User):
+    return service.wins(user)
 
 
 @app.delete("/api/ledger/{entry_id}", status_code=204)
