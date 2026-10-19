@@ -445,3 +445,64 @@ def test_expiry_cleans_a_held_export(bot):
     held.write_bytes(b"x")
     main.drop_studio_files(state.pop("clip_wait"))
     assert not held.exists() and studio.read_pack(CLIP) is None
+
+
+def capture_api(monkeypatch):
+    calls = []
+
+    async def api(client, method, **payload):
+        calls.append((method, payload))
+        return {}
+
+    monkeypatch.setattr(main, "api", api)
+    return calls
+
+
+def a_tap(data, text="🎞 Studio pack v1 — หัวข้อ"):
+    return {"id": "q1", "data": data, "message": {"message_id": 77, "text": text}}
+
+
+def test_a_toggle_tap_says_so_at_once_and_ticks_the_tapped_message(bot, monkeypatch):
+    state = review_state()
+    run(main.on_studio(None, state))
+    calls = capture_api(monkeypatch)
+    asyncio.run(main.on_callback(None, state, a_tap(f"stt:{CLIP}:2")))
+    answers = [p for m, p in calls if m == "answerCallbackQuery"]
+    assert len(answers) == 1 and "การ์ด 3 → 🎬 Flow" in answers[0]["text"]
+    assert "pack v2" in answers[0]["text"]
+    (edit,) = [p for m, p in calls if m == "editMessageText"]
+    assert edit["message_id"] == 77 and "⏳" in edit["text"]
+    assert "3 🎬" in json.dumps(edit["reply_markup"], ensure_ascii=False)
+    for coro in SPAWNED:
+        coro.close()
+    SPAWNED.clear()
+
+
+def test_a_second_tap_while_busy_is_a_toast_not_a_chat_line(bot, monkeypatch):
+    state = review_state()
+    run(main.on_studio(None, state))
+    state["clip_wait"]["busy"] = True
+    calls = capture_api(monkeypatch)
+    before = len(bot)
+    asyncio.run(main.on_callback(None, state, a_tap(f"stt:{CLIP}:1")))
+    (answer,) = [p for m, p in calls if m == "answerCallbackQuery"]
+    assert "กำลังทำ pack" in answer["text"] and len(bot) == before
+    assert state["clip_wait"]["sources"] == ["flow", "pexels", "pexels"]
+
+
+def test_tapping_the_ticked_character_does_not_replan(bot, monkeypatch):
+    state = review_state()
+    run(main.on_studio(None, state))
+    calls = capture_api(monkeypatch)
+    boards = len([item for item in bot if item[0] == "board"])
+    asyncio.run(main.on_callback(None, state, a_tap(f"stc:{CLIP}:auto")))
+    assert not SPAWNED and len([item for item in bot if item[0] == "board"]) == boards
+    (answer,) = [p for m, p in calls if m == "answerCallbackQuery"]
+    assert "อยู่แล้ว" in answer["text"]
+
+
+def test_the_pack_message_says_numbers_are_cards(bot):
+    state = review_state()
+    run(main.on_studio(None, state))
+    message = next(item for item in bot if item[0] == "say" and "Studio pack" in item[1])
+    assert "ปุ่มเลข = การ์ด" in message[1]

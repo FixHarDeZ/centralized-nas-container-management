@@ -344,6 +344,17 @@ async def send_document(client: httpx.AsyncClient, path: Path, caption: str = ""
     return await _bot(client).send_document(path, caption, **extra)
 
 
+async def toast(client: httpx.AsyncClient, query: dict | None, text: str = "") -> None:
+    """Answer a button tap, with a line that flashes over the chat.
+
+    The only sign a tap landed when the work behind it takes a minute: an
+    answer without text just stops the spinner, which reads as "nothing".
+    """
+    if query and query.get("id"):
+        await api(client, "answerCallbackQuery", callback_query_id=query["id"],
+                  **({"text": text[:200]} if text else {}))
+
+
 async def close_prompt(client: httpx.AsyncClient, message_id: int | None, note: str) -> None:
     """Retire a message's buttons in place. editMessageText fires no
     notification, so anything the human must see follows as a fresh message."""
@@ -1461,7 +1472,9 @@ async def _publish_version(client: httpx.AsyncClient, state: dict, wait: dict,
         f"🎞 Studio pack v{pack['version']} — {script['title']}\n"
         f"การ์ด Flow: {flow_cards} · {total} shot × 8 วิ = {total * 8} วิ ≈ {pack['credits']} เครดิต\n"
         f"หน้า copy + อัปไฟล์: {pack_url(clip_id)}\n"
-        "ไฟล์ ≤20MB reply ข้อความนี้ได้เลย · สลับ 🎬/🖼 หรือเปลี่ยนตัวละครด้วยปุ่มข้างล่าง",
+        "ไฟล์ ≤20MB reply ข้อความนี้ได้เลย · สลับ 🎬/🖼 หรือเปลี่ยนตัวละครด้วยปุ่มข้างล่าง\n"
+        "ปุ่มเลข = การ์ด (ประโยคพากย์) ไม่ใช่ฉาก · 🎬 ถ่ายใน Flow / 🖼 ใช้ Pexels · "
+        "กดแล้วรอ pack ใหม่ ~1 นาที",
         reply_markup=studio_keyboard(wait),
     )
     # Both messages take a reply: the human answers whichever is on screen.
@@ -1475,22 +1488,28 @@ async def _publish_version(client: httpx.AsyncClient, state: dict, wait: dict,
         wait["versions"].pop(stale, None)
 
 
-async def on_studio_callback(client: httpx.AsyncClient, state: dict, data: str) -> None:
+async def on_studio_callback(client: httpx.AsyncClient, state: dict, data: str,
+                             query: dict | None = None) -> None:
+    """A tap on a Studio pack. Every path answers the tap exactly once."""
     kind, _, rest = data.partition(":")
     clip_id, _, arg = rest.partition(":")
     wait = _studio_wait(state, clip_id)
     if not wait:
+        await toast(client, query, "pack นี้เก่าแล้ว")
         await say(client, "pack นี้เก่าแล้ว (หมดอายุหรือมีอันใหม่กว่า) กด 🎞 ที่สคริปต์ใหม่นะ")
         return
     if kind == "ste":
+        await toast(client, query, "✂️ กำลังหั่นเท่าๆ กัน แล้ว render")
         await cut_evenly(client, state, arg)
         return
     if kind == "str":
+        await toast(client, query, "🎬 เริ่ม render แล้ว")
         # Spawned: a render runs for minutes and this is the poll loop.
         spawn(render_studio(client, state, clip_id), "render_studio")
         return
     if wait.get("busy"):
-        await say(client, "กำลังทำ pack อยู่ รอสักครู่แล้วค่อยกดใหม่")
+        # A toast, not a chat line: the pack message already says it is working.
+        await toast(client, query, "⏳ กำลังทำ pack อยู่ รอให้ pack ใหม่มาก่อนแล้วค่อยกด")
         return
     if kind == "stt":
         try:
@@ -1500,19 +1519,48 @@ async def on_studio_callback(client: httpx.AsyncClient, state: dict, data: str) 
             wait["sources"][card] = (characters.PEXELS if wait["sources"][card] == characters.FLOW
                                      else characters.FLOW)
         except (ValueError, IndexError):
+            await toast(client, query)
             return
+        now = "🎬 Flow" if wait["sources"][card] == characters.FLOW else "🖼 Pexels"
+        note = f"การ์ด {card + 1} → {now}"
     elif kind == "stc":
+        if wait["choice"] == arg:
+            # Already ticked: re-planning would spend a minute for the same pack.
+            await toast(client, query, "เลือกอันนี้อยู่แล้ว")
+            return
         wait["choice"] = arg
+        note = "เปลี่ยนตัวละครแล้ว"
     elif kind == "stp":
         wait["sources"] = [characters.PEXELS] * len(wait["sources"])
+        await toast(client, query, "🖼 Pexels ทั้งหมด — เริ่ม render")
     elif kind == "stx":
+        await toast(client, query, "✂️ ส่งสคริปต์กลับไปรีวิว")
         await shorten_cards(client, state, wait)
+        return
+    else:
+        await toast(client, query)
         return
     # Claimed here, not when publish_pack starts: two taps in one getUpdates
     # batch would otherwise both pass the check above and plan twice.
     wait["busy"] = True
     save_state(state)
+    if kind != "stp":
+        version = len(wait["versions"]) + 1
+        await toast(client, query, f"{note} · กำลังทำ pack v{version} (~1 นาที)")
+        # The tapped message shows the new ticks at once, keyboard kept: the
+        # pack takes a minute, and a failure past the plan step re-sends none.
+        await mark_pack_busy(client, query, wait, f"⏳ {note} — กำลังทำ pack v{version} (~1 นาที)")
     spawn(publish_pack(client, state), "publish_pack")
+
+
+async def mark_pack_busy(client: httpx.AsyncClient, query: dict | None, wait: dict,
+                         line: str) -> None:
+    message = (query or {}).get("message") or {}
+    if not message.get("message_id") or "text" not in message:
+        return
+    text = message["text"].split("\n⏳ ")[0]
+    await api(client, "editMessageText", chat_id=CHAT_ID, message_id=message["message_id"],
+              text=f"{text}\n{line}", reply_markup=studio_keyboard(wait))
 
 
 async def shorten_cards(client: httpx.AsyncClient, state: dict, wait: dict) -> None:
@@ -2227,8 +2275,14 @@ async def on_text(client: httpx.AsyncClient, state: dict, text: str) -> None:
 
 
 async def on_callback(client: httpx.AsyncClient, state: dict, query: dict) -> None:
-    await api(client, "answerCallbackQuery", callback_query_id=query["id"])
     data = query.get("data") or ""
+    if data.startswith(STUDIO_PREFIXES):
+        # Ahead of the plain answer: these taps answer with a toast of their
+        # own. Also above the mode guard: a Studio pack outlives the review
+        # that made it, and its buttons are pressed while the bot is idle.
+        await on_studio_callback(client, state, data, query)
+        return
+    await api(client, "answerCallbackQuery", callback_query_id=query["id"])
     if data.startswith(f"{PICK_CB}:"):
         await on_pick(client, state, data)
         return
@@ -2253,11 +2307,6 @@ async def on_callback(client: httpx.AsyncClient, state: dict, query: dict) -> No
         # Above the mode guard too: `/storyboard <บรีฟ>` asks this question with
         # the bot idle, and 📋 asks it from a review the human may have left.
         await on_character_choice(client, state, data)
-        return
-    if data.startswith(STUDIO_PREFIXES):
-        # Above the mode guard: a Studio pack outlives the review that made it,
-        # and its buttons are pressed while the bot is idle.
-        await on_studio_callback(client, state, data)
         return
     if not data.startswith(UPLOAD_CB) and state.get("mode") != "review":
         return
