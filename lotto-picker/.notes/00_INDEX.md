@@ -3,6 +3,7 @@
 สุ่มเลข 2 ตัว/3 ตัวแยกกัน ไม่ซ้ำ N งวดล่าสุด (ผลจาก GLO) + Telegram + ตรวจผล + สถิติย้อนหลังตั้งแต่ 2558 + ทดสอบย้อนหลัง + สไตล์ + บัญชี + สรุป AI. รายละเอียดเต็ม: `../README.md`
 
 ## สถานะ
+- **2026-10-20 แจ้งถูกรางวัล commit `e49a6b1` deploy + verified**: 🎉 Telegram ของ owner (สลากเสมอ, picks ตาม notify), ป้าย `/api/wins` ทุก user. ยังไม่เห็นข้อความ 🎉 จริง — รองวด 1 พ.ย. (fixhardez มี ledger 2 ใบรอผล). Backup `lotto-before-wins-20261020.db`
 - **ปิดงาน 2026-10-19**: main = origin/main (`88bbe45`), NAS รันโค้ด `557b67a` healthy; ไม่มี branch ค้าง (`feat/lotto-insights` ลบแล้ว); `.agents/` untracked เดิมไม่แตะ. Backups วันนี้: `lotto-before-insights-20261019.db`, `lotto-before-users-20261019.db`. งานค้าง: daily SQLite backup (สำคัญขึ้นเพราะ ledger), GLO live fixture, LINE; รอดูรอบจริงงวด 1 พ.ย. (สรุปสถิติ Telegram + auto pick 31/10 20:00)
 - **2026-10-19 แยกข้อมูลต่อ user commit `557b67a` deploy + verified แล้ว**: `X-Remote-User` จาก nginx, `username` ใน picks/ledger, kv `settings:<user>`, owner = `LOTTO_OWNER` fixhardez ถือข้อมูลเก่า + Telegram
 - **2026-10-19 insights commit `ec2c939` เข้า main + push + deploy แล้ว**: ประวัติลึก (NAS 265 งวด done) / ความถี่ / backtest / สไตล์ / บัญชี / ตรวจสลาก / ตัวช่วย 6 หลัก / สรุป mimo (verified บน NAS 13 วิ). Tests 84+32 browser+64 repo ผ่าน. Backup ก่อน deploy `/data/backups/lotto-before-insights-20261019.db`. ข้อความสรุปหลังผลออกรอบจริงแรก = งวด 1 พ.ย. 2569
@@ -25,6 +26,7 @@
 - `app/insight.py` facts (คีย์ไทย) → mimo → `check()` (ตัวเลขต้องอยู่ใน facts, `BANNED`, ต้องมี `DISCLAIMER`) → fallback `template()`; thread ต่อโหมด; kv `insight_2/3`
 - `app/mimo.py` vendored จาก `shared/` (ห้ามแก้สำเนา); `requirements` เพิ่ม `openai==1.93.0`
 - service ใหม่: `backfill_history`, `history`, `frequency`/`backtest` (`_cached` ต่องวดล่าสุด), `make_pick(style, stat_window)` คืน `reasons`/`candidates`, `ledger()` + `_resolve_draw` ±5 วัน, `check_ticket`
+- win alerts: `service.wins/pending_win_alerts/mark_wins_alerted`, `main.send_win_alerts` (ท้ายทุก poll), `messages.win`, kv `win_alerted` (`p:<id>`, `l:<id>:<draw>`, 500 ล่าสุด), `tests/test_wins.py`
 - DB ใหม่: ตาราง `ledger(draw_date,label,tickets json,cost,prize)`; kv `history_status`, `history_skipped`, `prize_amounts`, `insight_2/3`
 - `tests/test_analysis.py`, `test_insights_api.py`, `test_ui_insights_browser.py` (opt-in, FastAPI จริง + DB จำลอง 60 งวด)
 - `app/lotto.py` logic ล้วน (parse, is_complete, excluded/pool/pick, score, next_expected_draw, thai_date)
@@ -43,6 +45,8 @@
 - GET settings/picks/stats รับ `?digits=2|3` default3; PUT/POST mode อยู่ใน body/settings. Auto guards: `auto_pick_target` / `auto_pick_target_2`
 
 ## Gotchas
+- app.js: state ที่ฟังก์ชันตอน startup ใช้ต้องประกาศ**บนสุด** — `let` ท้ายไฟล์ = TDZ ถูก catch กลืนเงียบ (เจอกับป้ายถูกรางวัล 20/10)
+- win alert ดูแค่งวดล่าสุด: เครื่องดับข้ามหลายงวด งวดกลางที่ถูกจะไม่ส่ง Telegram (ยังเห็นในหน้าเว็บบัญชี/ประวัติ)
 - user มาจาก header `X-Remote-User` ที่ nginx **เขียนทับ** — ถ้าวันหน้าเปิดพอร์ตแอปตรง (ไม่ผ่าน nginx) ใครก็ปลอม header เป็นคนอื่นได้; ไม่มี header = owner
 - `.htpasswd` ของ lotto-picker มี 3 คน (`lotto` จาก vault, `fixhardez`, `Pookzii`) — ไฟล์นี้ gitignored และไม่ได้ generate จาก vault ทั้งหมด เพิ่มคนแก้ไฟล์ตรงแล้ว deploy; `lotto` เป็นบัญชีแยก ข้อมูลว่าง (ใช้ตรวจหลัง deploy)
 - **history backfill ห้ามรันก่อน poll แรก** (first-boot check ดูตารางว่าง); walk 45 วันของ sync ใช้กับประวัติลึกไม่ได้ (งดออก 2563)

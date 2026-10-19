@@ -1,5 +1,15 @@
 # lotto-picker — daily log
 
+## 2026-10-20 — แจ้งเตือนถูกรางวัล (Telegram + ป้ายในเว็บ)
+- ผู้ใช้ถามว่ามีแจ้งเตือนถูกรางวัลไหม → เดิมมีแค่ ✅ ในข้อความผลรางวัลปกติ, สลาก 6 หลักในบัญชีไม่แจ้ง, user อื่นไม่ได้อะไร. ผู้ใช้เลือก: (1) ข้อความ 🎉 แยก (2) สลากในบัญชีแจ้งด้วย (3) user อื่น = ป้ายในเว็บ
+- ทำ: `service.wins(user)` (งวดล่าสุด: picks ที่ hit + ledger status won), `pending_win_alerts`/`mark_wins_alerted` (kv `win_alerted`), `main.send_win_alerts()` ท้าย `poll_results` ทุกรอบ (แยก `announce()` ออกมา); สลากแจ้งเสมอ, picks ตาม notify ของโหมด แต่ mark ทั้งหมด; owner เพิ่ม/แก้ ledger หลังผลออก = mark เฉพาะสลาก; `messages.win()` (+ ขึ้นเงินภายใน 2 ปี); `GET /api/wins` + ป้าย `#win-banner` ซ่อนได้ต่อ user+งวด (localStorage)
+- บั๊กที่จับได้ระหว่างทำ: `let wins/me` ประกาศท้ายไฟล์ แต่ `loadWins()` ถูกเรียกตอน startup → TDZ ReferenceError ถูก catch กลืน ป้ายไม่ขึ้นเลย + promise `/api/wins` ที่สร้างไว้แล้ว reject ไม่มีคนรับ (pageerror ใน browser tests เก่า 25 ตัว) → ย้าย state ขึ้นบนสุด
+- เทสต์เก่า `test_poll_notifies_only_enabled_mode...` แก้ตั้งใจ: ตอนนี้ได้ 2 ข้อความ (ผล + 🎉) และ stub `insight.start` (thread แข่งกัน)
+- ตรวจ: stack **133 passed** (รวม browser; ใหม่ `tests/test_wins.py` 7 + browser 1), repo 64, ruff สะอาด; screenshot ป้าย 390px light/dark
+- Release: commit `e49a6b1` push แล้ว; backup `/data/backups/lotto-before-wins-20261020.db` (12 picks/1 ledger) → deploy 11:32 จาก clean export
+- Verify NAS: healthy, noauth 401, hash index/app.js/style.css ตรง, `/api/wins` owner/Pookzii ตอบงวด 16 ต.ค. ว่าง, startup poll รัน `send_win_alerts` ไม่มี error ไม่มีข้อความหลุด (ไม่มีชุดไหนถูกงวด 16 ต.ค.)
+- **ยังไม่เห็นข้อความ 🎉 ผ่าน Telegram จริง** — รอบแรกที่เป็นไปได้: งวด 1 พ.ย. (fixhardez มีรายการบัญชี 2 ใบรอผลอยู่แล้ว)
+
 ## 2026-10-19 — ปิดงาน
 - ทั้งสองงานวันนี้ (insights `ec2c939` + แยก user `557b67a`) merge main, push, deploy, verified บน NAS แล้ว; notes commit `818b611`, `88bbe45`
 - ไม่มี branch/worktree ค้าง; scratch DB/screenshot อยู่ใน scratchpad ของ session เท่านั้น
