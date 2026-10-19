@@ -2423,3 +2423,10 @@ pack page โชว์ `animate` + "ตั้ง Ns". render_studio: มี wav 
 ตรวจ: sf-test 534 passed/2 skipped (+10 ข้อใหม่). render เต็มจากไฟล์จริงใน image (ไม่มีเน็ต) ได้คลิป 47.08 วิ
 การ์ด flow 8.0 วิ ×5 + การ์ด 3 TTS 7.08 วิ — ไฟล์ให้ผู้ใช้ฟัง `~/Downloads/speaking-test-rendered.mp4`.
 ยังไม่ verify: เครดิต shot 10 วิ, lip sync/ความชัดภาษาไทย (หูผู้ใช้), pack จริงบน NAS.
+- ต่อ (advisor review): re-render คลิปทดสอบด้วย take TTS จริงจาก NAS (เดิมเป็น sine) → `~/Downloads/speaking-test-rendered.mp4` 47.08 วิ.
+  VOICE ใช้ถ้อยคำที่เทสแล้ว (warm, clear, medium pitch…) เพศให้ภาพบอก, `camera_move()` ตัด "over N seconds" ออกจาก motion,
+  คอมเมนต์/README: 6.3 วิ = ขอบที่สังเกต ไม่ใช่ margin, 10 วิ ยังไม่เคยวัด, คู่มือ `docs/studio-pack-guide.html` เพิ่ม 4.6 🗣.
+  commit `3310e85` + `d969939`, deploy แล้ว (grep ใน bot+dashboard เจอโค้ดใหม่, 5 Up, log ไม่มี error).
+  ทดลองวาง pack 🗣 จริงในคอนเทนเนอร์ (ไม่แตะ state/ไม่ส่ง Telegram): mimo 65 วิ, script.md ตรงรูปแบบ A, CAMERA สั้นไม่มีวินาทีซ้อน.
+  การ์ด 1 take 6.3018 วิ → ได้ 10 วิ (เกินขอบ 6.3 นิดเดียว ทั้งที่ตอนเทสพูดจบใน 8 วิ) — ปรับ `SPEAK_MAX_TAKE_SECONDS` ได้.
+  การ์ดข้อความ (scrim 50%) ทับปากตัวละคร — ยังไม่แก้ รอผู้ใช้เลือก. ยังไม่ push (`daa0e86`..`d969939`).
