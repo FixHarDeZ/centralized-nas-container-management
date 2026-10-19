@@ -12,6 +12,16 @@
 | Data | volume `lotto_picker_data:/data` → `lotto.db` |
 | Stack | FastAPI + SQLite + APScheduler (`python:3.12-slim`, uid 1000) |
 
+## ผู้ใช้ (แยกข้อมูลตาม login)
+
+nginx ส่งชื่อ basic auth เป็น header `X-Remote-User: $remote_user` (**เขียนทับ**ค่าที่ client ส่งมา ปลอมเป็นคนอื่นไม่ได้) แอปอ่านผ่าน `main.current_user`
+- **แยกต่อคน**: เลขที่บันทึก (`picks.username`), บัญชี (`ledger.username`), ค่าการสุ่ม (kv `settings:<user>` / `settings_2:<user>`), สถิติเลขที่ตรวจแล้ว — ลบ/แก้ของคนอื่นได้ 404
+- **ใช้ร่วม**: ผลรางวัล, ประวัติ, ความถี่, ทดสอบย้อนหลัง, สรุปสถิติ
+- **เจ้าของ** (`LOTTO_OWNER`, ค่าเริ่มต้น `fixhardez`): ข้อมูลก่อนมีระบบ user ย้ายเป็นของเจ้าของตอน `db.init()` (เพิ่มคอลัมน์ `username` แล้ว `UPDATE` แถวเก่า) และใช้ kv `settings` / `settings_2` เดิม
+  เลขอัตโนมัติ + Telegram ทำงานให้เจ้าของคนเดียว (แชทเดียว) — คนอื่น `notify` ถูกบังคับเป็น false และหน้าเว็บซ่อนส่วนตั้งค่านี้; เลขที่คนอื่นบันทึกยังถูกตรวจผลตามปกติ แค่ไม่ประกาศ
+- ไม่มี header (เรียกพอร์ตแอปตรงจากในคอนเทนเนอร์ เช่น healthcheck/เทสต์) = เจ้าของ; พอร์ต 8000 ไม่ได้ publish
+- เพิ่มคน = เพิ่มบรรทัดใน `nginx/.htpasswd` (`htpasswd`/`openssl passwd -apr1`) ไม่ต้องแก้แอป ข้อมูลเริ่มว่าง
+
 ## หน้าเว็บบนมือถือ
 
 - ปุ่มเลือก **2 ตัว / 3 ตัว** อยู่เหนือเนื้อหา ใช้ได้ทุกหน้า; แยกฟอร์มที่ยังไม่บันทึก ผลสุ่ม ประวัติ สถิติ และค่าของเลขอัตโนมัติ โดยเปิดครั้งแรกที่ 3 ตัว
@@ -128,6 +138,7 @@ GLO ปล่อยผลระหว่างการจับสด ถ้า
 | GET/POST/PUT/DELETE | `/api/ledger` · `/api/ledger/{id}` | `{draw_date, label, tickets:[{number, qty}], cost, prize?}` GET คืน entries + summary |
 | GET | `/api/check` | `?number=6หลัก&date=` ตรวจสลากกับงวดที่เก็บไว้ (ไม่ใส่ date = ล่าสุด) |
 | POST | `/api/sync` | ดึงผลรางวัลทันที |
+| GET | `/api/me` | `{user, owner}` ของคนที่ login |
 | GET | `/healthz` | healthcheck (ยิงตรงที่แอป ไม่ผ่าน nginx) |
 
 ตั้งค่า 3 ตัวใช้ kv `settings`, 2 ตัวใช้ `settings_2`; เลขที่บันทึกเก็บ `digits` (และ `style`) ใน settings JSON — ไม่มี `style` = สุ่มล้วน
@@ -139,7 +150,7 @@ GLO ปล่อยผลระหว่างการจับสด ถ้า
 
 `secrets.manifest.yaml`:
 - `LOTTO_TELEGRAM_BOT_TOKEN` / `LOTTO_TELEGRAM_CHAT_ID` → ใช้ bot ของ news-feed (`stacks.news_feed.telegram.*`) ส่งอย่างเดียว ไม่ได้อ่าน update จึงไม่ชนกับ news-feed
-- literals `DATA_DIR=/data`, `PICK_TIME=20:00`
+- literals `DATA_DIR=/data`, `PICK_TIME=20:00`, `LOTTO_OWNER=fixhardez` (ต้องตรงกับชื่อใน `.htpasswd`)
 - `MIMO_API_KEY` → `shared.llm.mimo_api_key` (ร่วมกับ news-feed/shorts-factory) + literals `MIMO_BASE_URL`, `MIMO_MODEL`, `MIMO_REASONING_EFFORT=low` สำหรับสรุปสถิติ — `app/mimo.py` vendored จาก `shared/` (`make sync-shared`) ห้ามแก้สำเนา
 - ไม่บังคับ: `LINE_CHANNEL_ACCESS_TOKEN` + `LINE_TO` (ถ้าว่างจะไม่ส่ง LINE) และ `PUBLIC_URL` (ใส่ลิงก์ท้ายข้อความ)
 

@@ -9,6 +9,10 @@ Jobs (APScheduler, Asia/Bangkok):
   every draw since lotto.HISTORY_START for the statistics pages.
 - after a new draw is announced, a stats summary (mimo or template) follows as
   a second message per notifying mode.
+
+Users: nginx overwrites ``X-Remote-User`` with the basic-auth name; saved picks,
+the ledger and pick settings are per user. The jobs work for ``db.OWNER`` only
+(one Telegram chat) — other users' picks are still scored, never announced.
 """
 
 from __future__ import annotations
@@ -25,7 +29,7 @@ from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, model_validator
@@ -46,6 +50,17 @@ _auto_lock = threading.Lock()
 
 def _today() -> dt.date:
     return dt.datetime.now(_TZ).date()
+
+
+def current_user(x_remote_user: str | None = Header(None)) -> str:
+    """nginx sets this from basic auth on every request (overwriting whatever a
+    client sent). The app port is not published, so the only caller without
+    it is in-container — the healthcheck, tests — which acts as the owner."""
+    user = (x_remote_user or "").strip()
+    return user[:64] if user else db.OWNER
+
+
+User = Depends(current_user)
 
 
 def _sync() -> dict | None:
@@ -69,6 +84,7 @@ def poll_results() -> None:
                 for s in scored
                 if s["result_draw"] == fresh["date"]
                 and s["settings"].get("digits", 3) == digits
+                and s["user"] == db.OWNER
             ]
             messages.notifier().send(
                 messages.result(fresh, mine, service.stats(digits), digits=digits)
@@ -211,15 +227,20 @@ def healthz():
     return {"ok": True}
 
 
+@app.get("/api/me")
+def me(user: str = User):
+    return {"user": user, "owner": user == db.OWNER}
+
+
 @app.get("/api/settings")
-def get_settings(digits: int = Query(3, ge=2, le=3)):
-    return db.settings(digits)
+def get_settings(digits: int = Query(3, ge=2, le=3), user: str = User):
+    return db.settings(digits, user)
 
 
 @app.put("/api/settings")
-def put_settings(body: Settings):
-    db.put("settings" if body.digits == 3 else "settings_2", body.model_dump())
-    return db.settings(body.digits)
+def put_settings(body: Settings, user: str = User):
+    db.put_settings(body.model_dump(), user)
+    return db.settings(body.digits, user)
 
 
 @app.get("/api/draws")
@@ -258,12 +279,12 @@ def pick(body: PickParams):
 
 
 @app.get("/api/picks")
-def list_picks(digits: int = Query(3, ge=2, le=3)):
-    return db.picks(digits=digits)
+def list_picks(digits: int = Query(3, ge=2, le=3), user: str = User):
+    return db.picks(digits=digits, user=user)
 
 
 @app.post("/api/picks", status_code=201)
-def save_pick(body: SavePick):
+def save_pick(body: SavePick, user: str = User):
     if not all(
         re.fullmatch(rf"[0-9]{{{body.settings.digits}}}", number)
         for number in body.numbers
@@ -280,19 +301,20 @@ def save_pick(body: SavePick):
         sorted(set(body.numbers)),
         body.settings.model_dump(),
         service.based_on(),
+        user,
     )
     return {"id": pick_id}
 
 
 @app.delete("/api/picks/{pick_id}", status_code=204)
-def delete_pick(pick_id: int):
-    if not db.delete_pick(pick_id):
+def delete_pick(pick_id: int, user: str = User):
+    if not db.delete_pick(pick_id, user):
         raise HTTPException(404)
 
 
 @app.get("/api/stats")
-def get_stats(digits: int = Query(3, ge=2, le=3)):
-    return service.stats(digits)
+def get_stats(digits: int = Query(3, ge=2, le=3), user: str = User):
+    return service.stats(digits, user)
 
 
 @app.get("/api/history")
@@ -347,25 +369,25 @@ def make_insight(digits: int = Query(3, ge=2, le=3)):
 
 
 @app.get("/api/ledger")
-def get_ledger():
-    return service.ledger()
+def get_ledger(user: str = User):
+    return service.ledger(user)
 
 
 @app.post("/api/ledger", status_code=201)
-def add_ledger(body: LedgerEntry):
-    return {"id": db.add_ledger(body.row())}
+def add_ledger(body: LedgerEntry, user: str = User):
+    return {"id": db.add_ledger(body.row(), user)}
 
 
 @app.put("/api/ledger/{entry_id}")
-def put_ledger(entry_id: int, body: LedgerEntry):
-    if not db.update_ledger(entry_id, body.row()):
+def put_ledger(entry_id: int, body: LedgerEntry, user: str = User):
+    if not db.update_ledger(entry_id, body.row(), user):
         raise HTTPException(404)
     return {"id": entry_id}
 
 
 @app.delete("/api/ledger/{entry_id}", status_code=204)
-def delete_ledger(entry_id: int):
-    if not db.delete_ledger(entry_id):
+def delete_ledger(entry_id: int, user: str = User):
+    if not db.delete_ledger(entry_id, user):
         raise HTTPException(404)
 
 

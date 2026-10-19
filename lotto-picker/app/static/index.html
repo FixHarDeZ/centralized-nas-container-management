@@ -17,7 +17,10 @@
       </span>
       <div><span class="brand-name">Lotto Picker<span class="brand-dot">.</span></span><p class="brand-caption">พื้นที่เล็ก ๆ ของเลขชุดถัดไป</p></div>
     </div>
-    <p class="latest-draw" id="latest">กำลังโหลดผลรางวัล…</p>
+    <div class="header-meta">
+      <p class="latest-draw" id="latest">กำลังโหลดผลรางวัล…</p>
+      <p class="user-chip" id="user-chip" hidden></p>
+    </div>
   </header>
 
   <nav class="app-nav" aria-label="เมนูหลัก">
@@ -128,7 +131,8 @@
             <p class="form-caption">สุ่มจากเลขที่เหลือ โดยไม่ซ้ำกันในชุด</p>
           </form>
 
-          <details class="card settings-details automation-details">
+          <p id="automation-owner-only" class="muted owner-note" hidden>เลขอัตโนมัติและแจ้งเตือน Telegram ใช้ได้กับบัญชีเจ้าของเท่านั้น · เลขที่บันทึกและบัญชีของคุณแยกจากคนอื่น</p>
+          <details class="card settings-details automation-details" id="automation">
             <summary><span><strong>เลขอัตโนมัติและการแจ้งเตือน</strong><small>ตั้งค่าครั้งเดียว เก็บไว้ใช้รอบต่อไป</small></span></summary>
             <div class="details-body">
               <label class="switch">

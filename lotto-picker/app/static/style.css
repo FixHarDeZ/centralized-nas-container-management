@@ -209,6 +209,7 @@ select { width: 100%; max-width: 100%; padding: 11px 9px; border: 1px solid var(
 @media (min-width: 700px) {
   .app-header { flex-direction: row; align-items: center; justify-content: space-between; padding-block: 30px 24px; }
   .latest-draw { max-width: 320px; text-align: right; }
+  .header-meta { justify-content: flex-end; }
   .app-nav { position: static; width: min(100% - 40px, 1080px); background: transparent; backdrop-filter: none; border: 0; padding: 20px 0 0; display: flex; gap: 8px; }
   .nav-item { flex-direction: row; gap: 9px; min-height: 45px; padding: 10px 19px; font-size: .77rem; }
   .nav-item svg { width: 18px; height: 18px; }
@@ -301,6 +302,12 @@ select { width: 100%; max-width: 100%; padding: 11px 9px; border: 1px solid var(
   .prize-number { font-size: 1.05rem; }
   .first-prize .prize-number { font-size: 1.65rem; }
 }
+
+/* --- users --- */
+.header-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.user-chip { display: inline-flex; align-items: center; gap: 6px; font-size: .68rem; color: var(--green); background: var(--green-soft); border: 1px solid var(--line); border-radius: 20px; padding: 3px 10px; }
+.user-chip::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+.owner-note { padding: 0 4px; font-size: .68rem; }
 
 /* --- insights: stats, backtest, summary, ledger --- */
 textarea, .panel-card input:not([type="checkbox"]) { width: 100%; min-width: 0; padding: 11px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--text); font: inherit; font-size: 16px; }

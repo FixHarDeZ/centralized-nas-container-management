@@ -184,3 +184,16 @@ def test_new_views_fit_every_width(page, width):
         nav(page, view)
         page.wait_for_timeout(300)
         assert no_horizontal_scroll(page), view
+
+
+def test_user_chip_and_owner_only_automation(browser, app_url):
+    for user, owner in (("fixhardez", True), ("Pookzii", False)):
+        context = browser.new_context(viewport={"width": 390, "height": 844},
+                                      extra_http_headers={"X-Remote-User": user})
+        page = context.new_page()
+        page.goto(app_url[0])
+        page.wait_for_function(f"document.getElementById('user-chip').textContent === '{user}'")
+        assert page.locator("#automation").is_visible() is owner
+        assert page.locator("#automation-owner-only").is_visible() is not owner
+        assert no_horizontal_scroll(page)
+        context.close()

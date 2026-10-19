@@ -74,7 +74,7 @@ def test_backfill_finds_moved_draw_by_probing_short_months():
 
 
 def test_backfill_records_incomplete_payloads_and_stops_on_error():
-    on, calls = fake_on({"2026-01-02"}, incomplete={"2026-01-16"})
+    on, _calls = fake_on({"2026-01-02"}, incomplete={"2026-01-16"})
     service.backfill_history(on, today=dt.date(2026, 1, 20), sleep=lambda s: None)
     assert "2026-01-16" in db.get("history_skipped")
     assert "2026-01-16" not in db.nodraw_dates()

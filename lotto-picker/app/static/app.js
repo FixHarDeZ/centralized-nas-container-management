@@ -486,6 +486,7 @@ $("ledger-tickets").addEventListener("input", autoCost);
 $("ledger-cost").addEventListener("input", () => { $("ledger-cost").dataset.touched = $("ledger-cost").value ? "1" : ""; });
 updateActions();
 updateSettingsActions();
+loadMe();
 loadSettings();
 loadDraws();
 loadPicks();
@@ -833,4 +834,17 @@ async function removeLedger(id, button) {
     button.disabled = false;
     toast(`ลบไม่สำเร็จ: ${error.message}`);
   }
+}
+
+// --- who is logged in ------------------------------------------------------------
+
+async function loadMe() {
+  try {
+    const me = await api("/api/me");
+    $("user-chip").textContent = me.user;
+    $("user-chip").hidden = false;
+    // Auto picks and Telegram belong to the owner's chat; others save and check in the page only.
+    $("automation").hidden = !me.owner;
+    $("automation-owner-only").hidden = me.owner;
+  } catch { /* chip stays hidden; the server still scopes data by login */ }
 }

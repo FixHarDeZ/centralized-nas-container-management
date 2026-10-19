@@ -4,6 +4,11 @@ New ``draws`` rows hold complete results (see ``lotto.is_complete``). Legacy
 rows missing last2 can receive that field from a complete official payload.
 ``nodraw`` remembers past days GLO answered null for, so a history backfill
 never probes the same day twice.
+
+Saved picks, the ledger and pick settings belong to the nginx basic-auth user
+who made them (``username``). Draws, history and the stats summary are shared.
+Rows from before users existed belong to ``OWNER``, whose settings keep the
+original kv keys — so the owner's data and the scheduler never moved.
 """
 
 from __future__ import annotations
@@ -18,6 +23,8 @@ from . import lotto
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/data"))
 DB_PATH = DATA_DIR / "lotto.db"
+# The user the scheduler works for: auto picks, Telegram, legacy rows.
+OWNER = os.environ.get("LOTTO_OWNER", "fixhardez")
 
 DEFAULT_SETTINGS = {
     "draws": 2,
@@ -63,6 +70,12 @@ def init() -> None:
             );
             """
         )
+        for table in ("picks", "ledger"):
+            cols = {r[1] for r in c.execute(f"PRAGMA table_info({table})")}
+            if "username" not in cols:
+                # Everything saved before per-user data belongs to the owner.
+                c.execute(f"ALTER TABLE {table} ADD COLUMN username TEXT")
+                c.execute(f"UPDATE {table} SET username = ? WHERE username IS NULL", (OWNER,))
 
 
 @contextmanager
@@ -155,23 +168,26 @@ def _pick_row(r: sqlite3.Row) -> dict:
         "based_on": r["based_on"],
         "result_draw": r["result_draw"],
         "result": json.loads(r["result"]) if r["result"] else None,
+        "user": r["username"],
     }
 
 
-def add_pick(source: str, numbers: list[str], settings: dict, based_on: str | None) -> int:
+def add_pick(
+    source: str, numbers: list[str], settings: dict, based_on: str | None, user: str = OWNER,
+) -> int:
     with conn() as c:
         cur = c.execute(
-            "INSERT INTO picks (source, numbers, settings, based_on) VALUES (?, ?, ?, ?)",
-            (source, json.dumps(numbers), json.dumps(settings), based_on),
+            "INSERT INTO picks (source, numbers, settings, based_on, username) VALUES (?, ?, ?, ?, ?)",
+            (source, json.dumps(numbers), json.dumps(settings), based_on, user),
         )
         return cur.lastrowid
 
 
-def picks(limit: int = 50, digits: int | None = None) -> list[dict]:
-    sql = "SELECT * FROM picks"
-    args = []
+def picks(limit: int = 50, digits: int | None = None, user: str = OWNER) -> list[dict]:
+    sql = "SELECT * FROM picks WHERE username = ?"
+    args: list = [user]
     if digits is not None:
-        sql += " WHERE COALESCE(json_extract(settings, '$.digits'), 3) = ?"
+        sql += " AND COALESCE(json_extract(settings, '$.digits'), 3) = ?"
         args.append(digits)
     sql += " ORDER BY id DESC LIMIT ?"
     args.append(limit)
@@ -181,6 +197,7 @@ def picks(limit: int = 50, digits: int | None = None) -> list[dict]:
 
 
 def unchecked_picks() -> list[dict]:
+    """Every user's — scoring is the same work whoever saved the pick."""
     with conn() as c:
         rows = c.execute("SELECT * FROM picks WHERE result_draw IS NULL ORDER BY id")
         return [_pick_row(r) for r in rows]
@@ -194,17 +211,19 @@ def set_result(pick_id: int, draw_date: str, result: dict) -> None:
         )
 
 
-def delete_pick(pick_id: int) -> bool:
+def delete_pick(pick_id: int, user: str = OWNER) -> bool:
     with conn() as c:
-        return c.execute("DELETE FROM picks WHERE id = ?", (pick_id,)).rowcount == 1
+        return c.execute(
+            "DELETE FROM picks WHERE id = ? AND username = ?", (pick_id, user)
+        ).rowcount == 1
 
 
-def checked_picks(digits: int | None = None) -> list[dict]:
-    sql = "SELECT * FROM picks WHERE result IS NOT NULL"
-    args = ()
+def checked_picks(digits: int | None = None, user: str = OWNER) -> list[dict]:
+    sql = "SELECT * FROM picks WHERE result IS NOT NULL AND username = ?"
+    args: tuple = (user,)
     if digits is not None:
         sql += " AND COALESCE(json_extract(settings, '$.digits'), 3) = ?"
-        args = (digits,)
+        args = (user, digits)
     sql += " ORDER BY id"
     with conn() as c:
         rows = c.execute(sql, args)
@@ -228,34 +247,40 @@ def _ledger_row(r: sqlite3.Row) -> dict:
     }
 
 
-def ledger() -> list[dict]:
+def ledger(user: str = OWNER) -> list[dict]:
     with conn() as c:
-        rows = c.execute("SELECT * FROM ledger ORDER BY draw_date DESC, id DESC")
+        rows = c.execute(
+            "SELECT * FROM ledger WHERE username = ? ORDER BY draw_date DESC, id DESC", (user,)
+        )
         return [_ledger_row(r) for r in rows]
 
 
-def add_ledger(entry: dict) -> int:
+def add_ledger(entry: dict, user: str = OWNER) -> int:
     with conn() as c:
         cur = c.execute(
-            "INSERT INTO ledger (draw_date, label, tickets, cost, prize) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO ledger (draw_date, label, tickets, cost, prize, username) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
             (entry["draw_date"], entry["label"], json.dumps(entry["tickets"]),
-             entry["cost"], entry["prize"]),
+             entry["cost"], entry["prize"], user),
         )
         return cur.lastrowid
 
 
-def update_ledger(entry_id: int, entry: dict) -> bool:
+def update_ledger(entry_id: int, entry: dict, user: str = OWNER) -> bool:
     with conn() as c:
         return c.execute(
-            "UPDATE ledger SET draw_date = ?, label = ?, tickets = ?, cost = ?, prize = ? WHERE id = ?",
+            "UPDATE ledger SET draw_date = ?, label = ?, tickets = ?, cost = ?, prize = ? "
+            "WHERE id = ? AND username = ?",
             (entry["draw_date"], entry["label"], json.dumps(entry["tickets"]),
-             entry["cost"], entry["prize"], entry_id),
+             entry["cost"], entry["prize"], entry_id, user),
         ).rowcount == 1
 
 
-def delete_ledger(entry_id: int) -> bool:
+def delete_ledger(entry_id: int, user: str = OWNER) -> bool:
     with conn() as c:
-        return c.execute("DELETE FROM ledger WHERE id = ?", (entry_id,)).rowcount == 1
+        return c.execute(
+            "DELETE FROM ledger WHERE id = ? AND username = ?", (entry_id, user)
+        ).rowcount == 1
 
 
 # --- kv: settings + bookkeeping -------------------------------------------
@@ -276,10 +301,24 @@ def put(key: str, value) -> None:
         )
 
 
-def settings(digits: int = 3) -> dict:
+def settings_key(digits: int, user: str = OWNER) -> str:
+    """The owner keeps the original keys; everyone else gets ``…:<user>``."""
     key = "settings_2" if digits == 2 else "settings"
+    return key if user == OWNER else f"{key}:{user}"
+
+
+def settings(digits: int = 3, user: str = OWNER) -> dict:
     defaults = {**DEFAULT_SETTINGS, "notify": False} if digits == 2 else DEFAULT_SETTINGS
-    profile = {**defaults, **get(key, {}), "digits": digits}
+    profile = {**defaults, **get(settings_key(digits, user), {}), "digits": digits}
     if digits == 2:
         profile["scope"] = "last2"
+    if user != OWNER:
+        # Auto picks and Telegram work for the owner only (one chat, one bot).
+        profile["notify"] = False
     return profile
+
+
+def put_settings(profile: dict, user: str = OWNER) -> None:
+    if user != OWNER:
+        profile = {**profile, "notify": False}
+    put(settings_key(profile["digits"], user), profile)

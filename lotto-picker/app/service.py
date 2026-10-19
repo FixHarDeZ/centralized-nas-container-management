@@ -306,8 +306,8 @@ def score_pending() -> list[dict]:
     return scored
 
 
-def stats(digits: int = 3) -> dict:
-    checked = db.checked_picks(digits)
+def stats(digits: int = 3, user: str = db.OWNER) -> dict:
+    checked = db.checked_picks(digits, user)
     numbers = sum(len(p["numbers"]) for p in checked)
     return {
         "picks": len(checked),
@@ -327,7 +327,7 @@ def prize_amounts() -> dict[str, int]:
     return {**lotto.PRIZE_AMOUNTS, **db.get("prize_amounts", {})}
 
 
-def ledger() -> dict:
+def ledger(user: str = db.OWNER) -> dict:
     """Entries with their prize resolved, plus the running totals.
 
     A manual ``prize`` wins; otherwise tickets are checked against the cached
@@ -336,7 +336,7 @@ def ledger() -> dict:
     amounts = prize_amounts()
     by_date = {d["date"]: d["prizes"] for d in db.draws()}
     entries = []
-    for e in db.ledger():
+    for e in db.ledger(user):
         drawn = _resolve_draw(e["draw_date"], by_date)
         prizes = by_date.get(drawn)
         wins = []
