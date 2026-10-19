@@ -1,5 +1,16 @@
 # lotto-picker — daily log
 
+## 2026-10-19 — สถิติย้อนหลัง / ทดสอบย้อนหลัง / สไตล์ / บัญชี / ตรวจสลาก / สรุป AI
+- ผู้ใช้ถามว่าให้ AI วิเคราะห์เลขหวังรางวัลที่ 1 + ให้คะแนนเลขจาก stat ได้ไหม → อธิบายตรงๆ ว่าสถิติทำนายไม่ได้ เสนอ 6 ข้อแบบไม่หลอก ผู้ใช้เลือกทำครบ (1 ประวัติลึก → 2 ความถี่ → 4 backtest → 3 สไตล์ → 5 บัญชี → 6 ตัวช่วย 6 หลัก → AI สรุป)
+- GLO probe: รูปแบบรางวัลปัจจุบันเริ่ม **2015-09-01** (ก่อนนั้น last3b 4 ตัว ไม่มี last3f) และทุก payload มี `price` ต่อรางวัล → `HISTORY_START`, `parse_amounts`, kv `prize_amounts`
+- `service.backfill_history` (lock แยก, หลัง poll แรก + 04:30) วัดจริงจาก Mac: **265 งวด, 1,508 probes, 12.3 นาที, skipped 0**; รอบสองยิงทุกวันของเดือน <2 งวด — ม.ค. ทุกปีโดนเพราะงวด 30 ธ.ค. (ครั้งเดียว ~250 probes)
+- `app/analysis.py`: ความถี่ + ช่วง Binomial/ค่าสูงสุดปกติ, สไตล์ quarter-of-pool ใช้ร่วมกับ backtest (no lookahead, expected แบบ analytic). ผลจริง 2 ตัว: ออกบ่อยสุด 7 ครั้ง vs สุ่มล้วนปกติ 7–9, backtest 241 งวดไม่มีสไตล์ไหนมีนัยสำคัญ (z สูงสุด 1.71)
+- Review แก้ 2 จุด: (1) z-score ใช้ variance ผิด (`k·p(1−p)` ของจำนวนจริง) ทำให้ z เล็ก 2.5–8 เท่า → ใช้ null variance ของค่าคาดหวัง มีเทสต์ bias 15% ที่สูตรเก่าได้ z 1.1 สูตรใหม่ 3.8 (2) บัญชีจับวันตามปฏิทิน ไม่ match งวด 30 ธ.ค. → `_resolve_draw` ±5 วัน
+- สรุป AI: mimo จริงตอบ 20–75 วิ ผ่าน `check()` ทั้ง 2 โหมด; รอบแรกหลุดชื่อฟิลด์อังกฤษ (`max_typical`) → เปลี่ยนคีย์ facts เป็นไทย + สั่งห้าม
+- UI: เมนู 5 ส่วน, heatmap 00–99, อันดับ (ค้างนานไม่รวมเลขที่ไม่เคยออก เพราะอยู่ในออกน้อยแล้ว), กราฟส่วนต่างสะสม, ฟอร์มบัญชี, ตรวจสลาก; แก้ป้าย 6 หลักที่บอกผิดว่า `xxx123` ถูก “3 ตัวท้ายรางวัลที่ 1” (สลากไม่มีรางวัลนี้)
+- ตรวจ: stack **84 passed** + browser **32 passed** (เดิม 25 + ใหม่ 7 รัน FastAPI จริงบน DB จำลอง) + repo **64 passed**; ruff สะอาด (ยกเว้น vendored `mimo.py` ที่ shared/ เองก็ติด UP041 อยู่แล้ว); `make check` ผ่าน; screenshot จริงบนข้อมูล 265 งวด light/dark
+- สถานะ: branch `feat/lotto-insights` → merge main / deploy ตามด้านล่าง
+
 ## 2026-10-16 — ปิดงานระบบ 2/3 ตัว
 - Source commit `1ca3560` fast-forward เข้า `main` และ push origin/main แล้ว; deploy ด้วย `scripts/deploy.sh -s lotto-picker -y` จาก clean tracked export + generated env/auth files ไม่ส่ง untracked `.agents/` หรือ workstation credentials
 - Rebuild/restart เฉพาะ lotto-picker app/nginx, volume SQLite เดิม. Verified app running/healthy, nginx running; noauth401/auth200; SHA-256 HTML/JS/CSS ตรง source `1ca3560`

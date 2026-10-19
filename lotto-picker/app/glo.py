@@ -41,7 +41,12 @@ def _post(path: str, body: dict, timeout: float = 20.0) -> dict | None:
 def _to_draw(resp: dict | None) -> dict | None:
     if not resp or not resp.get("date"):
         return None
-    return {"date": resp["date"], "prizes": lotto.parse_prizes(resp.get("data"))}
+    data = resp.get("data")
+    return {
+        "date": resp["date"],
+        "prizes": lotto.parse_prizes(data),
+        "amounts": lotto.parse_amounts(data),
+    }
 
 
 def latest() -> dict | None:

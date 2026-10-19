@@ -25,6 +25,8 @@ DEFAULT_SETTINGS = {
     "scope": "all",
     "permute": False,
     "notify": True,
+    "style": "random",
+    "stat_window": 0,
 }
 
 
@@ -50,6 +52,15 @@ def init() -> None:
                 result      TEXT
             );
             CREATE TABLE IF NOT EXISTS kv (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS ledger (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+                draw_date  TEXT NOT NULL,
+                label      TEXT NOT NULL DEFAULT '',
+                tickets    TEXT NOT NULL DEFAULT '[]',
+                cost       REAL NOT NULL,
+                prize      REAL
+            );
             """
         )
 
@@ -198,6 +209,53 @@ def checked_picks(digits: int | None = None) -> list[dict]:
     with conn() as c:
         rows = c.execute(sql, args)
         return [_pick_row(r) for r in rows]
+
+
+# --- ledger: money spent and won ---------------------------------------------
+# ``tickets`` are 6-digit numbers checked automatically once the draw is cached;
+# ``prize`` is a manual amount and, when set, wins over the automatic check.
+
+
+def _ledger_row(r: sqlite3.Row) -> dict:
+    return {
+        "id": r["id"],
+        "created_at": r["created_at"],
+        "draw_date": r["draw_date"],
+        "label": r["label"],
+        "tickets": json.loads(r["tickets"]),
+        "cost": r["cost"],
+        "prize": r["prize"],
+    }
+
+
+def ledger() -> list[dict]:
+    with conn() as c:
+        rows = c.execute("SELECT * FROM ledger ORDER BY draw_date DESC, id DESC")
+        return [_ledger_row(r) for r in rows]
+
+
+def add_ledger(entry: dict) -> int:
+    with conn() as c:
+        cur = c.execute(
+            "INSERT INTO ledger (draw_date, label, tickets, cost, prize) VALUES (?, ?, ?, ?, ?)",
+            (entry["draw_date"], entry["label"], json.dumps(entry["tickets"]),
+             entry["cost"], entry["prize"]),
+        )
+        return cur.lastrowid
+
+
+def update_ledger(entry_id: int, entry: dict) -> bool:
+    with conn() as c:
+        return c.execute(
+            "UPDATE ledger SET draw_date = ?, label = ?, tickets = ?, cost = ?, prize = ? WHERE id = ?",
+            (entry["draw_date"], entry["label"], json.dumps(entry["tickets"]),
+             entry["cost"], entry["prize"], entry_id),
+        ).rowcount == 1
+
+
+def delete_ledger(entry_id: int) -> bool:
+    with conn() as c:
+        return c.execute("DELETE FROM ledger WHERE id = ?", (entry_id,)).rowcount == 1
 
 
 # --- kv: settings + bookkeeping -------------------------------------------

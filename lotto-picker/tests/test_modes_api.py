@@ -49,6 +49,8 @@ def test_legacy_settings_remain_three_digit_and_two_defaults_are_independent(cli
         "scope": "last2",
         "permute": False,
         "notify": False,
+        "style": "random",
+        "stat_window": 0,
     }
     two.update(draws=7, picks=10, permute=True, notify=True)
     assert client.put("/api/settings", json=two).json() == two

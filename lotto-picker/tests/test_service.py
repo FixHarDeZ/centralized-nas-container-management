@@ -106,6 +106,7 @@ def test_make_two_digit_pick_uses_last2_pool_and_mode_snapshot():
     assert p["excluded"] == ["70"]
     assert p["settings"] == {
         "draws": 2, "picks": 100, "scope": "last2", "permute": False, "digits": 2,
+        "style": "random", "stat_window": 0,
     }
 
 

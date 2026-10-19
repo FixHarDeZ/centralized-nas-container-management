@@ -29,9 +29,17 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h12v17l-6-4-6 4V4Z"/></svg>
       <span>เลขที่บันทึก</span>
     </button>
+    <button type="button" class="nav-item" data-view="stats" aria-controls="view-stats">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16M7 16v-5m5 5V6m5 10v-8"/></svg>
+      <span>สถิติ</span>
+    </button>
     <button type="button" class="nav-item" data-view="draws" aria-controls="view-draws">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8v5a4 4 0 0 1-8 0V4Zm0 2H4v2a4 4 0 0 0 5 4m7-6h4v2a4 4 0 0 1-5 4m-3 1v5m-4 2h8"/></svg>
       <span>ผลรางวัล</span>
+    </button>
+    <button type="button" class="nav-item" data-view="ledger" aria-controls="view-ledger">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="3"/><path d="M3 10h18M16 15h2"/></svg>
+      <span>บัญชี</span>
     </button>
   </nav>
 
@@ -92,6 +100,23 @@
                   </select>
                   <p class="field-help">เลขที่เคยออกในรางวัลที่เลือกจะไม่ถูกสุ่มซ้ำ</p>
                 </div>
+                <div class="style-options">
+                  <label class="select-label" for="style">สไตล์การสุ่ม</label>
+                  <select id="style">
+                    <option value="random">🎲 สุ่มล้วน</option>
+                    <option value="hot">🔥 ตามกระแส · เลขที่ออกบ่อย</option>
+                    <option value="cold">❄️ สวนกระแส · เลขที่ออกน้อย</option>
+                    <option value="overdue">⏳ เลขที่ค้างนาน</option>
+                  </select>
+                  <label class="select-label" for="stat-window">นับสถิติจาก</label>
+                  <select id="stat-window">
+                    <option value="0">ประวัติทั้งหมด</option>
+                    <option value="120">120 งวดล่าสุด (~5 ปี)</option>
+                    <option value="48">48 งวดล่าสุด (~2 ปี)</option>
+                    <option value="24">24 งวดล่าสุด (~1 ปี)</option>
+                  </select>
+                  <p class="field-help">ทุกสไตล์มีโอกาสถูกเท่ากัน สไตล์แค่เลือกว่าจะสุ่มจากกลุ่มเลขไหน (หนึ่งในสี่ของเลขที่เหลือ) · ดูผลทดสอบย้อนหลังได้ในหน้าสถิติ</p>
+                </div>
                 <label class="switch">
                   <input id="permute" type="checkbox">
                   <span class="switch-toggle" aria-hidden="true"></span>
@@ -129,6 +154,7 @@
             <p id="result-status" class="result-status">ยังไม่ได้บันทึก</p>
             <div id="numbers" class="numbers"></div>
             <p class="muted" id="poolInfo"></p>
+            <ul id="reasons" class="reasons" aria-label="ประวัติของแต่ละเลข"></ul>
             <div class="result-actions">
               <button id="save" type="button" class="save-button">บันทึกไว้ตรวจผล</button>
               <div class="row">
@@ -139,6 +165,12 @@
             <details class="excluded-details">
               <summary id="exSummary">เลขที่ถูกตัดออก</summary>
               <div id="excluded" class="chips"></div>
+            </details>
+            <details class="excluded-details six-details">
+              <summary>ใช้กับสลาก 6 หลัก</summary>
+              <p class="six-intro" id="six-intro"></p>
+              <ul id="six-list" class="six-list"></ul>
+              <button id="six-copy" type="button" class="ghost">คัดลอกรูปแบบทั้งหมด</button>
             </details>
           </div>
           <div class="result-footer"><span class="footer-mark" aria-hidden="true">✳</span><span>ทุกเลขมีโอกาสเท่ากัน<br><strong>บันทึกไว้ แล้วกลับมาติดตามผล</strong></span></div>
@@ -161,13 +193,104 @@
       <ul id="picks-list" class="list picks-list" aria-label="ชุดเลขที่บันทึกไว้"></ul>
     </section>
 
+    <section id="view-stats" class="view-panel" aria-labelledby="stats-title" hidden>
+      <div class="page-heading">
+        <div><p class="eyebrow">HOW OFTEN, REALLY</p><h1 id="stats-title">สถิติย้อนหลัง</h1></div>
+        <span id="stats-tag" class="section-tag">—</span>
+      </div>
+      <p id="history-info" class="section-intro">กำลังโหลดประวัติ…</p>
+
+      <div class="card panel-card">
+        <div class="card-heading"><h2>เลขไหนออกบ่อยแค่ไหน</h2><span class="small-label" id="freq-range"></span></div>
+        <div class="filter-row">
+          <div id="category-field">
+            <label class="select-label" for="category">รางวัล</label>
+            <select id="category">
+              <option value="targets">รางวัล 3 ตัวทั้งหมด (3 ตัวท้ายที่ 1 + หน้า + ท้าย)</option>
+              <option value="last3f">เลขหน้า 3 ตัว</option>
+              <option value="last3b">เลขท้าย 3 ตัว</option>
+              <option value="first3">3 ตัวท้ายรางวัลที่ 1</option>
+              <option value="all">3 ตัวท้ายของทุกรางวัล</option>
+            </select>
+          </div>
+          <div>
+            <label class="select-label" for="freq-window">ช่วงเวลา</label>
+            <select id="freq-window">
+              <option value="0">ทั้งหมด</option>
+              <option value="120">120 งวด</option>
+              <option value="48">48 งวด</option>
+              <option value="24">24 งวด</option>
+            </select>
+          </div>
+        </div>
+        <div class="fact-grid" id="freq-facts"></div>
+        <p id="freq-verdict" class="verdict"></p>
+        <div id="heatmap" class="heatmap" role="img" aria-label="ตารางความถี่เลข 00–99" hidden></div>
+        <div id="heat-legend" class="heat-legend" hidden><span class="lg low">น้อยกว่าช่วงปกติ</span><span class="lg normal">อยู่ในช่วงปกติ</span><span class="lg high">มากกว่าช่วงปกติ</span></div>
+        <div class="rank-grid">
+          <div><h3>ออกบ่อยสุด</h3><ol id="rank-hot" class="rank-list"></ol></div>
+          <div><h3>ออกน้อยสุด</h3><ol id="rank-cold" class="rank-list"></ol></div>
+          <div><h3>ค้างนานสุด</h3><ol id="rank-overdue" class="rank-list"></ol></div>
+        </div>
+        <form id="lookup-form" class="lookup">
+          <label class="select-label" for="lookup">ดูเลขที่สนใจ</label>
+          <div class="inline-field"><input id="lookup" inputmode="numeric" autocomplete="off" placeholder="เช่น 123"><button type="submit" class="secondary">ดู</button></div>
+          <p id="lookup-result" class="muted"></p>
+        </form>
+      </div>
+
+      <div class="card panel-card">
+        <div class="card-heading"><h2>ทดสอบย้อนหลัง</h2><span class="small-label">ใช้ค่าจากหน้าสุ่มเลข</span></div>
+        <p class="muted">ถ้าซื้อตามแต่ละสไตล์ทุกงวดที่ผ่านมา (ใช้เฉพาะข้อมูลก่อนงวดนั้น) จะถูกกี่ครั้ง เทียบกับสุ่มล้วน</p>
+        <button id="run-backtest" type="button" class="secondary wide">ทดสอบด้วยค่าปัจจุบัน</button>
+        <div id="backtest-result" aria-live="polite"></div>
+      </div>
+
+      <div class="card panel-card">
+        <div class="card-heading"><h2>สรุปสถิติ</h2><span class="small-label" id="insight-source"></span></div>
+        <p id="insight-text" class="insight-text">ยังไม่มีสรุป</p>
+        <button id="run-insight" type="button" class="secondary wide">สรุปใหม่</button>
+        <p class="field-help">AI เรียบเรียงจากตัวเลขที่ระบบคำนวณเท่านั้น ห้ามทำนาย ถ้าตอบมีตัวเลขที่ไม่มีในข้อมูลจะใช้สรุปอัตโนมัติแทน</p>
+      </div>
+    </section>
+
     <section id="view-draws" class="view-panel" aria-labelledby="draws-title" hidden>
       <div class="page-heading">
         <div><p class="eyebrow">LOTTERY RESULTS</p><h1 id="draws-title">ผลรางวัลที่เก็บไว้</h1></div>
         <button id="sync" type="button" class="secondary sync-button">ดึงผลล่าสุดตอนนี้</button>
       </div>
       <p class="section-intro">ผลรางวัลจากสำนักงานสลากกินแบ่งรัฐบาล</p>
+      <form id="check-form" class="card panel-card check-card">
+        <label class="select-label" for="check-number">ตรวจสลาก 6 หลัก</label>
+        <div class="inline-field"><input id="check-number" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="เลข 6 หลัก"><select id="check-date" aria-label="งวดที่ตรวจ"></select><button type="submit" class="primary">ตรวจ</button></div>
+        <p id="check-result" class="muted" aria-live="polite"></p>
+      </form>
       <ul id="draws-list" class="list draws-list" aria-label="ผลรางวัลแต่ละงวด"></ul>
+    </section>
+
+    <section id="view-ledger" class="view-panel" aria-labelledby="ledger-title" hidden>
+      <div class="page-heading">
+        <div><p class="eyebrow">SPENT AND WON</p><h1 id="ledger-title">บัญชีซื้อสลาก</h1></div>
+        <span id="ledger-count" class="section-tag">0 รายการ</span>
+      </div>
+      <div class="fact-grid ledger-summary" id="ledger-summary"></div>
+      <p id="ledger-note" class="muted stats-note"></p>
+      <form id="ledger-form" class="card panel-card">
+        <div class="card-heading"><h2>เพิ่มรายการ</h2><span class="small-label">ใบละ <span id="ticket-price">80</span> บาท</span></div>
+        <label class="select-label" for="ledger-date">งวด</label>
+        <select id="ledger-date"></select>
+        <label class="select-label" for="ledger-tickets">เลขสลาก (ไม่บังคับ)</label>
+        <textarea id="ledger-tickets" rows="3" placeholder="บรรทัดละใบ เช่น&#10;123456&#10;654321 x2"></textarea>
+        <p class="field-help">ใส่เลขสลากแล้วระบบตรวจรางวัลให้เองเมื่อผลออก</p>
+        <div class="control-grid">
+          <div><label class="select-label" for="ledger-cost">จ่ายไป (บาท)</label><input id="ledger-cost" inputmode="decimal" autocomplete="off"></div>
+          <div><label class="select-label" for="ledger-prize">ได้รางวัล (บาท)</label><input id="ledger-prize" inputmode="decimal" autocomplete="off" placeholder="ว่าง = ตรวจเอง"></div>
+        </div>
+        <label class="select-label" for="ledger-label">บันทึก</label>
+        <input id="ledger-label" maxlength="120" autocomplete="off" placeholder="เช่น ซื้อแผงหน้าบ้าน">
+        <button id="ledger-save" type="submit" class="primary pick-button">บันทึกรายการ</button>
+      </form>
+      <ul id="ledger-list" class="list ledger-list" aria-label="รายการซื้อสลาก"></ul>
     </section>
 
     <p class="note"><span aria-hidden="true">i</span><span id="probability-note">ทุกเลขมีโอกาสออก 1 ใน 1,000 เท่ากันทุกงวด การตัดเลขที่เคยออกไม่ได้ทำให้โอกาสถูกเพิ่มขึ้น สถิติมีไว้ติดตามผลเท่านั้น</span></p>

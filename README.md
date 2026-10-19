@@ -25,7 +25,7 @@ Docker stacks for Synology DS925+ NAS, managed via Synology Container Manager.
 | `ops-bot/` | AI incident-response bot — Uptime Kuma webhook, SSH diagnostics, Telegram fixes, fix-as-PR | `5070` | `https://…:15070` |
 | `shorts-factory/` | Telegram bot that renders Thai YouTube Shorts — read-only dashboard over the clip record | `5071` (Nginx basic-auth dashboard) | `https://…:15071` |
 | `ai-deck/` | Claude Code as a document desk from the phone — web terminal + key bar, pptx/docx/xlsx skills, `out/` download drawer, chat view (a second Claude Code over stream-json), sessions sheet (tap to resume), 5h/7d rate-limit chip with reset countdowns, finish notification, workstation status line (`STATUSLINE_BAR_W` picks the phone layout) | `5072` (Nginx basic-auth) | `https://…:15072` |
-| `lotto-picker/` | สุ่มเลข 2 ตัว/3 ตัวแยกกัน ไม่ซ้ำ N งวดล่าสุด (ผลจาก API กองสลาก) — dashboard, เลขอัตโนมัติ + ผลรางวัลเข้า Telegram, ตรวจผลเลขที่บันทึกไว้ | `5073` (Nginx basic-auth) | `https://…:15073` |
+| `lotto-picker/` | สุ่มเลข 2 ตัว/3 ตัวแยกกัน ไม่ซ้ำ N งวดล่าสุด (ผลจาก API กองสลาก) — dashboard, เลขอัตโนมัติ + ผลรางวัลเข้า Telegram, ตรวจผลเลขที่บันทึกไว้, สถิติย้อนหลังตั้งแต่ 2558 + ทดสอบย้อนหลัง, บัญชีซื้อสลาก, สรุปสถิติด้วย mimo (`shared.llm.mimo_api_key`) | `5073` (Nginx basic-auth) | `https://…:15073` |
 
 ### Reverse Proxy Summary
 

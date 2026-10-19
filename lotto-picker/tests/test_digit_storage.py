@@ -18,7 +18,7 @@ def test_settings_profiles_preserve_legacy_three_defaults_and_start_two_off():
     assert db.settings()["scope"] == "all"
     assert db.settings(2) == {
         "draws": 2, "picks": 5, "scope": "last2", "permute": False,
-        "notify": False, "digits": 2,
+        "notify": False, "digits": 2, "style": "random", "stat_window": 0,
     }
     db.put("settings_2", {"draws": 4, "notify": True, "permute": True})
     assert db.settings(2)["draws"] == 4

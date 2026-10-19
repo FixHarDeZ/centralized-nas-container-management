@@ -13,6 +13,12 @@ SCOPE_LABEL = {
     "front_back": "เฉพาะเลขหน้า/ท้าย 3 ตัว",
     "last2": "เลขท้าย 2 ตัว",
 }
+STYLE_LABEL = {
+    "random": "สุ่มล้วน",
+    "hot": "ตามกระแส (เลขออกบ่อย)",
+    "cold": "สวนกระแส (เลขออกน้อย)",
+    "overdue": "เลขค้างนาน",
+}
 KIND_LABEL = {
     "last2": "เลขท้าย 2 ตัว",
     "first3": "3 ตัวท้ายรางวัลที่ 1",
@@ -39,6 +45,9 @@ def _rule(settings: dict) -> str:
     rule = f"ไม่ซ้ำ {settings['draws']} งวดล่าสุด ({SCOPE_LABEL[settings['scope']]})"
     if settings.get("permute"):
         rule += " ตัดเลขกลับด้วย" if settings.get("digits", 3) == 2 else " ตัดโต๊ดด้วย"
+    style = settings.get("style", "random")
+    if style != "random":
+        rule += f"\nสไตล์: {STYLE_LABEL[style]} (โอกาสถูกเท่าสุ่มล้วน)"
     return rule
 
 
@@ -54,6 +63,18 @@ def auto_pick(target: str, pick: dict) -> str:
         f"{_rule(pick['settings'])}\n"
         f"เหลือให้สุ่ม {pick['pool_size']} เลข"
         f"{_link()}"
+    )
+
+
+def _escape(text: str) -> str:
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def insight(record: dict, digits: int) -> str:
+    source = "สรุปโดย AI จากตัวเลขที่ระบบคำนวณ" if record["source"] == "ai" else "สรุปอัตโนมัติ"
+    return (
+        f"📊 <b>สถิติ {digits} ตัว · งวด {lotto.thai_date(record['draw'])}</b>\n"
+        f"{_escape(record['text'])}\n\n<i>{source}</i>{_link()}"
     )
 
 

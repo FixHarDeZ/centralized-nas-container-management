@@ -45,10 +45,35 @@ SCOPES = {
 # per draw instead of 15.
 CANDIDATE_DAYS = {1, 2, 3, 15, 16, 17, 28, 29, 30, 31}
 
+# First draw with today's prize shape (two front-3 and two back-3 numbers).
+# Before it GLO serves four back-3 numbers and no front-3, which would make the
+# 3-digit statistics mean different things over time — history stops here.
+HISTORY_START = dt.date(2015, 9, 1)
+
+# Baht per ticket, by prize. GLO sends these as ``price`` with every result
+# (unchanged since HISTORY_START); the latest payload's values override these.
+PRIZE_AMOUNTS = {
+    "first": 6_000_000, "second": 200_000, "third": 80_000, "fourth": 40_000,
+    "fifth": 20_000, "near1": 100_000, "last3f": 4_000, "last3b": 4_000, "last2": 2_000,
+}
+TICKET_PRICE = 80
+SIX_DIGIT_PRIZES = ("first", "second", "third", "fourth", "fifth", "near1")
+
 THAI_MONTHS = (
     "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
     "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค.",
 )
+
+
+def parse_amounts(data: dict) -> dict[str, int]:
+    """GLO ``response.data`` → ``{key: baht}`` from each prize's ``price``."""
+    out = {}
+    for key, prize in (data or {}).items():
+        try:
+            out[key] = int(float(prize.get("price")))
+        except (TypeError, ValueError):
+            continue
+    return out
 
 
 def parse_prizes(data: dict) -> dict[str, list[str]]:
@@ -185,3 +210,29 @@ def thai_date(d: str | dt.date) -> str:
     if isinstance(d, str):
         d = dt.date.fromisoformat(d)
     return f"{d.day} {THAI_MONTHS[d.month - 1]} {d.year + 543}"
+
+
+def ticket_prizes(number: str, prizes: dict[str, list[str]]) -> list[str]:
+    """Every prize one 6-digit ticket wins — a ticket can win several at once
+    (first prize also matches its own back-3 and last-2, for example)."""
+    won = [k for k in SIX_DIGIT_PRIZES if number in prizes.get(k, [])]
+    if number[:3] in prizes.get("last3f", []):
+        won.append("last3f")
+    if number[-3:] in prizes.get("last3b", []):
+        won.append("last3b")
+    if number[-2:] in prizes.get("last2", []):
+        won.append("last2")
+    return won
+
+
+def ticket_value(number: str, prizes: dict[str, list[str]], amounts: dict[str, int]) -> int:
+    return sum(amounts.get(k, PRIZE_AMOUNTS[k]) for k in ticket_prizes(number, prizes))
+
+
+def expected_return(amounts: dict[str, int], price: float = TICKET_PRICE) -> float:
+    """Average baht back per baht spent on one ticket, from the prize table:
+    each prize pays ``amount`` with probability ``count / its universe``."""
+    a = {**PRIZE_AMOUNTS, **amounts}
+    value = sum(a[k] * EXPECTED_COUNTS[k] for k in SIX_DIGIT_PRIZES) / 1_000_000
+    value += (a["last3f"] * 2 + a["last3b"] * 2) / 1000 + a["last2"] / 100
+    return value / price

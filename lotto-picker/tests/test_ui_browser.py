@@ -494,6 +494,8 @@ def test_two_digit_leading_zero_snapshot_and_settings(ui):
         "picks": 5,
         "scope": "last2",
         "permute": True,
+        "style": "random",
+        "stat_window": 0,
     }
     assert posted[-1]["numbers"][:2] == ["00", "07"]
     assert state["picks"] == []
