@@ -400,12 +400,16 @@ export const register: Register = on => {
 
   // ── band ────────────────────────────────────────────────────────────────────
 
+  // The band is one instance shared by every plugin that draws there (the
+  // user-scope turn-chips sparkline, say): draw ours on top of what the rest
+  // of the chain drew instead of in its place.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const below = await next(e)
     const s = await read($, rails)
-    if (e.props.hasSurvey || !s || (await read($, isHidden))) return next(e)
+    if (e.props.hasSurvey || !s || (await read($, isHidden))) return below
     const und = s.undeployed
     const notes = pendingNotes(s)
-    if (!notes.length && !und.length && !s.drift.length) return next(e)
+    if (!notes.length && !und.length && !s.drift.length) return below
     const { Box, Button, Text } = $.ui.resolve(e)
     return (
       <Box flexDirection="column">
@@ -438,6 +442,7 @@ export const register: Register = on => {
         <Box>
           <Button key="hide" plain label="hide (/rails to show)" onPress={() => update($, isHidden, () => true)} />
         </Box>
+        {below}
       </Box>
     )
   })

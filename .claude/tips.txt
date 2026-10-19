@@ -1,0 +1,9 @@
+# Tips the pretty-term mod rotates under the prompt (one per line).
+/rails shows notes, undeployed stacks and shared drift
+/deployed <stack> after a deploy clears the undeployed mark
+make edit-vault → make secrets → ./scripts/deploy.sh -s <stack> -y
+deploy.sh uploads without restarting: check the container image after
+make sync-shared after editing shared/*.py
+never rsync to the NAS: tar | ssh
+"จบงาน" makes nas-rails check both .notes files
+ctrl+o expands collapsed tool rows
