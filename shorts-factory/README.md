@@ -558,6 +558,36 @@ Details worth knowing:
   ready, it posts a 🎬 render Studio button instead.
 - **One pack at a time.** A second 🎞 on another script is refused while one
   waits. 📋 shares the same slot (see above).
+
+### 🗣 The character speaks (`docs/adr/0017`)
+
+The **🗣 ตัวละครพูดเอง** toggle under a pack makes the character say each Flow
+Card's narration on camera, and keeps that audio. 🖼 Pexels Cards keep the
+edge-tts take, so a mixed clip switches voice between them. Off by default; it
+needs a character (🚫 refuses it).
+
+- **One shot per Card.** Veo speaks Thai 15–25 % slower than the take
+  (measured on a real 6-shot export, 2026-10-19), so a Card whose take runs
+  ≤ 6.3 s (`SPEAK_MAX_TAKE_SECONDS`) gets an 8 s shot and a longer one a
+  **10 s** shot. The pack message lists which Cards to set to 10 s in Flow
+  and warns about any Card too long even for that (press ✂️ first). The
+  export length is the sum of those, not `shots × 8`.
+- **`script.md` changes shape**: a STYLE line that says the character speaks,
+  a `VOICE:` line, and a `DIALOGUE (Thai): "…"` line per scene, written in
+  from the Script after validation. The model's own prompts still never hold
+  Thai, and `motion` is the camera move alone.
+- **The pack page's per-shot prompt** becomes just the line, lip sync and the
+  camera: `Speaks in Thai: "…" Natural lip movement. Gentle push in. No
+  subtitles, no on-screen text, no background music.` Looks come from the
+  Ingredients.
+- **The export must carry audio.** The cut keeps each speaking Card's audio as
+  `segments/cNN.wav` beside its silent video; a silent export is refused.
+  The render splices those into the saved take: the head is kept (lip sync),
+  only the tail silence is trimmed, and every piece is loudness-normalised.
+  `loudnorm` runs in a pass of its own because in one graph with `areverse`
+  ffmpeg 7.1 dies on `Assertion best_input >= 0`.
+- **`/say` and the pronunciation checklist do not reach a speaking Card.**
+  Veo pronounces it; a wrong word means regenerating that shot.
 - **Files**: `/data/studio/<clip_id>/` (pack, take, cut segments). Deleted on
   YouTube upload, ✂️, replacement, or when the 72-hour wait
   (`STORYBOARD_CLIP_HOURS`) runs out. A channel without YouTube credentials

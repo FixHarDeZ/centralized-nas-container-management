@@ -52,7 +52,7 @@ STORYBOARD_CB = "storyboard"
 # (docs/adr/0016). Callbacks carry the clip id, so a stale pack message is
 # recognised rather than acted on.
 STUDIO_CB = "studio"
-STUDIO_PREFIXES = ("stt:", "stc:", "stp:", "stx:", "ste:", "str:")
+STUDIO_PREFIXES = ("stt:", "stc:", "sts:", "stp:", "stx:", "ste:", "str:")
 # The answer to the character question a Storyboard opens with:
 # `sbchar:<auto|own|none>:<token>`. The token is the question this answers — a
 # tap on an older question must not plan a board for a Script that is gone.
@@ -1316,6 +1316,8 @@ def studio_keyboard(wait: dict) -> dict:
                {"text": f"🚫 ไม่มีคน{' ✓' if wait['choice'] == 'none' else ''}",
                 "callback_data": f"stc:{clip_id}:none"}]
     rows += [people[i:i + 3] for i in range(0, len(people), 3)]
+    rows.append([{"text": f"🗣 ตัวละครพูดเอง{' ✓' if wait.get('speak') else ''}",
+                  "callback_data": f"sts:{clip_id}"}])
     rows.append([{"text": "✅ Pexels ทั้งหมด — render เลย", "callback_data": f"stp:{clip_id}"},
                  {"text": "✂️ ย่อการ์ดยาว", "callback_data": f"stx:{clip_id}"}])
     return {"inline_keyboard": rows}
@@ -1395,6 +1397,9 @@ async def on_studio(client: httpx.AsyncClient, state: dict) -> None:
         "choice": characters.default_for(locale) or "auto",
         "sources": characters.default_sources(len(script["cards"])),
         "versions": {}, "uneven": {}, "busy": False,
+        # 🗣: the character says each Flow Card's line on camera and that
+        # audio is kept (docs/adr/0017). Off = the take speaks every Card.
+        "speak": False,
         # A queued 🌏 half belongs to this clip, not to whatever renders next
         # while Flow is being shot — same reason on_flow() parks it.
         "pair": state.pop("pair", None),
@@ -1432,12 +1437,20 @@ async def publish_pack(client: httpx.AsyncClient, state: dict) -> None:
 async def _publish_version(client: httpx.AsyncClient, state: dict, wait: dict,
                            pending: list[int]) -> None:
     clip_id, script, card_spans = wait["clip_id"], wait["script"], wait["spans"]
-    shots = studio.shot_map(card_spans, pending)
+    speak = bool(wait.get("speak"))
+    if speak:
+        # One shot per speaking Card: a line split across shots has no safe
+        # cut point in Thai, and a too-long Card is ✂️'s job.
+        shots = {c: 1 for c in pending}
+        seconds = {c: studio.speak_seconds(card_spans[c]) for c in pending}
+    else:
+        shots, seconds = studio.shot_map(card_spans, pending), {c: studio.SHOT_SECONDS for c in pending}
+    language = storyboard.SPEAK_LANGUAGE.get(wait["locale"], "Thai")
     try:
         choice, text, fixed, profile = await _character_for(wait["choice"])
         board = await storyboard.for_studio(script, pending, shots, choice=choice,
                                             character=text, fixed_tag=fixed,
-                                            topic=wait.get("topic") or "")
+                                            topic=wait.get("topic") or "", speak=speak)
     except Exception as exc:
         logger.exception("studio plan failed")
         await say(client, f"วาง shot ไม่สำเร็จ: {exc}\nกดปุ่มบน pack อีกครั้งเพื่อลองใหม่",
@@ -1448,9 +1461,12 @@ async def _publish_version(client: httpx.AsyncClient, state: dict, wait: dict,
         person = board["overview"].get("master_character") or {}
         profile.update(locked=person.get("locked_prompt_tag", ""),
                        portrait=storyboard.portrait_prompt(person.get("locked_prompt_tag", "")))
-    markdown = storyboard.studio_markdown(board, tag)
+    markdown = storyboard.studio_markdown(
+        board, tag, {"language": language, "seconds": seconds} if speak else None)
     token = studio.new_token()
     total = studio.total_shots(shots)
+    owned = studio.footage_seconds(shots, seconds)
+    length = sum(owned.values())
     pack = {
         "clip_id": clip_id, "token": token, "version": len(wait["versions"]) + 1,
         "title": script["title"], "locale": wait["locale"],
@@ -1458,19 +1474,33 @@ async def _publish_version(client: httpx.AsyncClient, state: dict, wait: dict,
         "character": profile, "sources": list(wait["sources"]), "pending": pending,
         "shots": {str(k): v for k, v in shots.items()}, "total_shots": total,
         "credits": studio.credits(total), "spans": card_spans,
+        "speak": speak, "seconds": {str(k): v for k, v in seconds.items()}, "length": length,
         "scenes": [{"n": i + 1, "card": s["card"], "image_prompt": s["image_gen_prompt"],
                     "motion": s["motion"], "narration": script["cards"][s["card"]]["narration"],
-                    "span": round(card_spans[s["card"]], 2)}
+                    "span": round(card_spans[s["card"]], 2), "seconds": seconds[s["card"]],
+                    "animate": storyboard.animate_prompt(s, language) if speak else ""}
                    for i, s in enumerate(board["scenes"])],
     }
     studio.write_pack(clip_id, pack, markdown)
     doc = await send_document(client, studio.root(clip_id) / "script.md",
                               f"script.md — pack v{pack['version']}")
     flow_cards = ", ".join(str(c + 1) for c in pending)
+    if speak:
+        long_cards = [c for c in pending if seconds[c] > studio.SHOT_SECONDS]
+        too_long = [c for c in pending if studio.speak_too_long(card_spans[c])]
+        plan_line = (f"🗣 ตัวละครพูดเอง · การ์ด Flow: {flow_cards} · {total} shot = {length:g} วิ "
+                     f"≈ {pack['credits']}+ เครดิต\n"
+                     + (f"ตั้ง shot 10 วิ ใน Flow: การ์ด {', '.join(str(c + 1) for c in long_cards)} "
+                        "(ที่เหลือ 8 วิ)\n" if long_cards else "ทุก shot 8 วิ\n")
+                     + (f"⚠️ การ์ด {', '.join(str(c + 1) for c in too_long)} ยาวเกิน 10 วิ "
+                        "น่าจะพูดไม่จบ — กด ✂️ ย่อก่อนเจน\n" if too_long else ""))
+    else:
+        plan_line = (f"การ์ด Flow: {flow_cards} · {total} shot × 8 วิ = {total * 8} วิ "
+                     f"≈ {pack['credits']} เครดิต\n")
     sent = await say(
         client,
         f"🎞 Studio pack v{pack['version']} — {script['title']}\n"
-        f"การ์ด Flow: {flow_cards} · {total} shot × 8 วิ = {total * 8} วิ ≈ {pack['credits']} เครดิต\n"
+        + plan_line +
         f"หน้า copy + อัปไฟล์: {pack_url(clip_id)}\n"
         "ไฟล์ ≤20MB reply ข้อความนี้ได้เลย · สลับ 🎬/🖼 หรือเปลี่ยนตัวละครด้วยปุ่มข้างล่าง\n"
         "ปุ่มเลข = การ์ด (ประโยคพากย์) ไม่ใช่ฉาก · 🎬 ถ่ายใน Flow / 🖼 ใช้ Pexels · "
@@ -1481,7 +1511,8 @@ async def _publish_version(client: httpx.AsyncClient, state: dict, wait: dict,
     wait["versions"][token] = {"message_id": (sent or {}).get("message_id"),
                                "message_ids": [m for m in ((doc or {}).get("message_id"),
                                                            (sent or {}).get("message_id")) if m],
-                               "pending": pending, "shots": pack["shots"]}
+                               "pending": pending, "shots": pack["shots"],
+                               "seconds": pack["seconds"], "speak": speak}
     # Only the newest few versions can still be answered: an export of an
     # older shot map would be cut on the wrong boundaries.
     for stale in list(wait["versions"])[:-5]:
@@ -1528,8 +1559,17 @@ async def on_studio_callback(client: httpx.AsyncClient, state: dict, data: str,
             # Already ticked: re-planning would spend a minute for the same pack.
             await toast(client, query, "เลือกอันนี้อยู่แล้ว")
             return
+        if arg == "none" and wait.get("speak"):
+            await toast(client, query, "🗣 เปิดอยู่ ต้องมีตัวละครพูด — ปิด 🗣 ก่อน")
+            return
         wait["choice"] = arg
         note = "เปลี่ยนตัวละครแล้ว"
+    elif kind == "sts":
+        if not wait.get("speak") and wait["choice"] == "none":
+            await toast(client, query, "เลือกตัวละครก่อน (🚫 ไม่มีคน พูดไม่ได้)")
+            return
+        wait["speak"] = not wait.get("speak")
+        note = "🗣 ตัวละครพูดเอง" if wait["speak"] else "🗣 ปิด — ใช้เสียงพากย์"
     elif kind == "stp":
         wait["sources"] = [characters.PEXELS] * len(wait["sources"])
         await toast(client, query, "🖼 Pexels ทั้งหมด — เริ่ม render")
@@ -1622,6 +1662,19 @@ async def render_studio(client: httpx.AsyncClient, state: dict, clip_id: str) ->
     if narration is None:
         await say(client, "🔁 เสียงพากย์เปลี่ยน (/say) หรือหาไฟล์เดิมไม่เจอ — อัดเสียงใหม่ "
                           "จุดตัดอาจคลาดเล็กน้อย")
+    if any(studio.voice_path(clip_id, i).is_file() for i in supplied):
+        # 🗣 Cards: their own voice replaces the take's slice. The Pexels Cards
+        # still need the take, so one is spoken now if /say retired the old one.
+        try:
+            if narration is None:
+                meta = await studio.prepare_narration(wait["script"], wait["locale"], clip_id)
+                narration = (Path(meta["audio"]), list(meta["starts"]))
+            narration = await asyncio.to_thread(studio.speaking_take, clip_id, wait["sources"],
+                                                *narration)
+        except Exception as exc:
+            logger.exception("speaking take failed")
+            await say(client, f"ต่อเสียงตัวละครไม่สำเร็จ: {exc}\nส่งไฟล์เดิมใหม่อีกครั้งได้")
+            return
     if wait.get("pair"):
         state["pair"] = wait.pop("pair")
     # The Fact sheet and hook Variant come back with the Script: do_render's
@@ -1650,18 +1703,21 @@ async def process_export(client: httpx.AsyncClient, state: dict, token: str, pat
         clip_id = wait["clip_id"]
         shots = {int(k): v for k, v in version["shots"].items()}
         total = studio.total_shots(shots)
+        owned = studio.footage_seconds(
+            shots, {int(k): v for k, v in (version.get("seconds") or {}).items()})
+        expected = sum(owned.values())
         try:
             # ffprobe/ffmpeg are blocking subprocesses; never on the event loop.
             seconds = await asyncio.to_thread(studio.duration, path)
         except RuntimeError as exc:
             await say(client, f"อ่านไฟล์ไม่ได้: {exc}\nexport จาก Flow ใหม่แล้วส่งอีกครั้ง")
             return
-        if not even and not studio.fits(seconds, total):
+        if not even and not studio.fits(seconds, expected):
             keep = True
             wait.setdefault("uneven", {})[token] = str(path)
             save_state(state)
             await say(client,
-                      f"ได้ {seconds:.1f} วิ แต่ pack นี้มี {total} shot × 8 = {total * 8} วิ\n"
+                      f"ได้ {seconds:.1f} วิ แต่ pack นี้มี {total} shot = {expected:g} วิ\n"
                       "เช็คว่าใน Scenes เรียงครบทุก shot ไม่ได้ตัดต่อ แล้ว export ใหม่ "
                       "หรือกดหั่นเท่าๆ กันถ้ามั่นใจว่าลำดับถูก",
                       reply_markup={"inline_keyboard": [[{
@@ -1671,8 +1727,9 @@ async def process_export(client: httpx.AsyncClient, state: dict, token: str, pat
         (wait.get("uneven") or {}).pop(token, None)
         save_state(state)
         try:
-            await asyncio.to_thread(studio.cut, path, version["pending"], shots, clip_id,
-                                    studio.shot_length(seconds, total, even))
+            await asyncio.to_thread(studio.cut, path, version["pending"],
+                                    studio.lengths(version["pending"], owned, seconds, even),
+                                    clip_id, bool(version.get("speak")))
         except RuntimeError as exc:
             await say(client, f"หั่นคลิปไม่สำเร็จ: {exc}\nส่งไฟล์ใหม่อีกครั้งได้")
             return

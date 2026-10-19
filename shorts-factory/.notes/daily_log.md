@@ -2401,3 +2401,25 @@ Deploy `deploy.sh -s shorts-factory -y` ตอนบอท idle (pack ค้า�
 แผนถ้าผ่าน: toggle 🗣 ต่อ pack (default off), บทพูดไทย inject หลัง validate (แบบ `_assign_cards`) ไม่ให้โมเดลเขียน,
 `studio_markdown` ~บรรทัด 411 กรองไทยทิ้ง ต้องแก้+เทสต์, render เก็บเสียง segment Flow แทน TTS ช่วงการ์ดนั้น
 (ต้องดู `do_render(narration=)`/tighten/.srt), `/say`+pronunciation ไม่มีผลกับการ์ดพูด, ADR 0017.
+
+### 2026-10-19 (3) — 🗣 ตัวละครพูดเอง ลงโค้ดแล้ว (ADR 0017)
+
+ผลเทส export จริงของผู้ใช้ (`~/Downloads/Untitled_Scene_10-19_…mp4`, 6 shot @IU บทไทย): 48.000 วิ h264+AAC
+(Scenes export มีเสียง), pitch median 195-211 Hz ทุก shot = เสียงคนเดียวกัน, Veo พูดช้ากว่า TTS 15-25%:
+take 5.7/6.3 วิ จบใน 8 วิ, take 7.1-7.9 วิ ไม่มีช่วงเงียบตรงรอยต่อ = ล้น. ไม่มีพิมพ์ทับ/ซับในภาพ, มีลาย ✦ มุมขวาล่าง (Veo).
+ผู้ใช้เลือก: Pexels คงเดิม (TTS), shot 10 วิ เฉพาะการ์ดยาว, prompt ทีละ shot แบบสั้น
+`Speaks in Thai: "…" Natural lip movement. <camera>. No subtitles, no on-screen text, no background music.`
+
+โค้ด: ปุ่ม `sts:` 🗣 (ต้องมีตัวละคร; 🚫 กับ 🗣 กันกัน), `wait["speak"]`. speak → shots 1/การ์ด,
+`studio.speak_seconds()` 8 ถ้า take ≤ `SPEAK_MAX_TAKE` 6.3 ไม่งั้น 10, `speak_too_long()` > 7.875 เตือน ✂️.
+version เก็บ `seconds` + `speak`; `fits(duration, expected)`/`lengths()` แทน `shot_length` (ลบแล้ว).
+`studio.cut(..., seconds, clip_id, keep_voice)` เก็บ `segments/cNN.wav` 24k mono (ไม่มีเสียง = RuntimeError "ไม่มีเสียง"),
+ตัด non-speak ลบ wav เก่า. `studio.speaking_take()` ต่อเสียง Veo แทนช่วง TTS ของการ์ด flow ที่มี wav
+(เก็บหัว เล็มหาง loudnorm). **ffmpeg 7.1 `areverse…areverse,loudnorm` กราฟเดียว = `Assertion best_input >= 0`** — เจอกับเสียงจริง
+ไม่เจอกับ sine ในเทสต์ → แยก 2 pass. `storyboard.STUDIO_SPEAK_RULE` (หันกล้อง/ปากชัด, motion = กล้องอย่างเดียว),
+`studio_markdown(board, tag, speak=)` (STYLE/VOICE/DIALOGUE/CAMERA n seconds), `animate_prompt()`.
+pack page โชว์ `animate` + "ตั้ง Ns". render_studio: มี wav → speaking_take (take หาย → prepare_narration ใหม่).
+
+ตรวจ: sf-test 534 passed/2 skipped (+10 ข้อใหม่). render เต็มจากไฟล์จริงใน image (ไม่มีเน็ต) ได้คลิป 47.08 วิ
+การ์ด flow 8.0 วิ ×5 + การ์ด 3 TTS 7.08 วิ — ไฟล์ให้ผู้ใช้ฟัง `~/Downloads/speaking-test-rendered.mp4`.
+ยังไม่ verify: เครดิต shot 10 วิ, lip sync/ความชัดภาษาไทย (หูผู้ใช้), pack จริงบน NAS.

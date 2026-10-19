@@ -24,6 +24,14 @@ from pathlib import Path
 SHOT_SECONDS = 8.0
 MARGIN = 0.5       # join silence + voice tail inside one shot
 TOLERANCE = 0.5    # export length vs shots × 8
+# A speaking Card is one shot whose own audio is kept: the character says the
+# narration on camera in Flow (docs/adr/0017). Measured on a real export
+# (2026-10-19): Veo speaks Thai 15-25% slower than the edge-tts take, and an
+# 8s shot held a 6.3s take with room to spare while 7.1s takes ran into the
+# cut. Longer Cards get Flow's 10s shot; longer than that is ✂️'s job.
+SPEAK_LONG_SHOT = 10.0
+VOICE_RATE = 24000  # the edge-tts take's own rate, so the concat needs no resample
+SPEAK_MAX_TAKE = float(os.environ.get("SPEAK_MAX_TAKE_SECONDS", "6.3"))
 TOKEN = re.compile(r"^[a-f0-9]{12}$")
 CLIP_ID = re.compile(r"^\d{8}-\d{6}-\d{3}(-\d+)?$")  # manifest.start bumps a collision to `-<n>`
 
@@ -60,12 +68,30 @@ def new_token() -> str:
     return secrets.token_hex(6)
 
 
-def fits(duration: float, total: int) -> bool:
-    return abs(duration - total * SHOT_SECONDS) <= TOLERANCE + 1e-9
+def speak_seconds(span: float) -> float:
+    """The Flow shot length for a speaking Card whose take runs `span` seconds."""
+    return SHOT_SECONDS if span <= SPEAK_MAX_TAKE else SPEAK_LONG_SHOT
 
 
-def shot_length(duration: float, total: int, even: bool) -> float:
-    return duration / total if even else SHOT_SECONDS
+def speak_too_long(span: float) -> bool:
+    return span > SPEAK_MAX_TAKE * SPEAK_LONG_SHOT / SHOT_SECONDS
+
+
+def footage_seconds(shots: dict[int, int], seconds: dict[int, float] | None = None) -> dict[int, float]:
+    """Seconds of export each Card owns: its shots times its shot length."""
+    return {c: n * (seconds or {}).get(c, SHOT_SECONDS) for c, n in shots.items()}
+
+
+def fits(duration: float, expected: float) -> bool:
+    return abs(duration - expected) <= TOLERANCE + 1e-9
+
+
+def lengths(pending: list[int], owned: dict[int, float], duration: float,
+            even: bool) -> dict[int, float]:
+    """Where to cut: each Card's seconds, stretched to the real length when cut evenly."""
+    expected = sum(owned[c] for c in pending)
+    scale = duration / expected if even and expected else 1.0
+    return {c: owned[c] * scale for c in pending}
 
 
 # --- files -------------------------------------------------------------------
@@ -82,6 +108,11 @@ def root(clip_id: str) -> Path:
 
 def segment_path(clip_id: str, card: int) -> Path:
     return root(clip_id) / "segments" / f"c{card:02d}.mp4"
+
+
+def voice_path(clip_id: str, card: int) -> Path:
+    """A speaking Card's own audio, cut from the export beside its video."""
+    return root(clip_id) / "segments" / f"c{card:02d}.wav"
 
 
 def have_segments(clip_id: str, count: int) -> set[int]:
@@ -173,32 +204,85 @@ def duration(path: Path) -> float:
         raise RuntimeError(f"อ่านความยาวไฟล์ไม่ได้: {done.stderr.strip()[-300:]}") from exc
 
 
-def cut(export: Path, pending: list[int], shots: dict[int, int], clip_id: str,
-        shot_len: float) -> dict[int, Path]:
-    """One file per pending Card: its consecutive shots, silent, re-encoded.
+def cut(export: Path, pending: list[int], seconds: dict[int, float], clip_id: str,
+        keep_voice: bool = False) -> dict[int, Path]:
+    """One file per pending Card: its stretch of the export, silent, re-encoded.
 
     Re-encoded, not stream-copied: Flow exports carry a keyframe every 3s, so
-    a copy would start each Card on the wrong frame.
+    a copy would start each Card on the wrong frame. With `keep_voice` the
+    Card's audio is cut too, as a separate file in the take's own format, for
+    speaking_take() to splice in.
     """
-    made, offset = {}, 0
+    made, offset = {}, 0.0
     for card in pending:
-        count = shots[card]
+        length = seconds[card]
         dest = segment_path(clip_id, card)
         dest.parent.mkdir(parents=True, exist_ok=True)
         temporary = dest.with_suffix(".part.mp4")
-        done = subprocess.run(
-            ["ffmpeg", "-y", "-ss", f"{offset * shot_len:.3f}", "-i", str(export),
-             "-t", f"{count * shot_len:.3f}", "-an",
-             "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", str(temporary)],
-            capture_output=True, text=True, timeout=1800,
-        )
+        # -t on the input, not the output: it then bounds both outputs.
+        args = ["ffmpeg", "-y", "-ss", f"{offset:.3f}", "-t", f"{length:.3f}", "-i", str(export),
+                "-map", "0:v:0", "-an",
+                "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", str(temporary)]
+        voice = voice_path(clip_id, card)
+        if keep_voice:
+            args += ["-map", "0:a:0", "-vn", "-ac", "1", "-ar", str(VOICE_RATE),
+                     "-c:a", "pcm_s16le", str(voice)]
+        done = subprocess.run(args, capture_output=True, text=True, timeout=1800)
         if done.returncode != 0:
             temporary.unlink(missing_ok=True)
+            voice.unlink(missing_ok=True)
+            if keep_voice and "matches no streams" in done.stderr:
+                raise RuntimeError("ไฟล์ไม่มีเสียง — export จาก Scenes ใหม่ (ต้องมีเสียงที่ตัวละครพูด)")
             raise RuntimeError(f"หั่นคลิปไม่สำเร็จ: {done.stderr.strip()[-400:]}")
+        if not keep_voice:
+            # A Card re-shot without speech must not keep last version's voice.
+            voice.unlink(missing_ok=True)
         temporary.replace(dest)
         made[card] = dest
-        offset += count
+        offset += length
     return made
+
+
+def speaking_take(clip_id: str, sources: list[str], audio: Path,
+                  starts: list[float]) -> tuple[Path, list[float]]:
+    """The saved take with every speaking Flow Card's slice swapped for its own voice.
+
+    The Card's voice keeps its head, which is what keeps the lips in sync with
+    the frames it was cut with; only its tail silence is trimmed, as tighten()
+    trims the take's. Every piece is loudness-normalised so the switch between
+    the character and the edge-tts voice does not also jump in level.
+    """
+    from app import render
+    work = root(clip_id) / "speaking"
+    shutil.rmtree(work, ignore_errors=True)
+    work.mkdir(parents=True)
+    pcm = ["-ac", "1", "-ar", str(VOICE_RATE), "-c:a", "pcm_s16le"]
+    pieces = []
+    for i, start in enumerate(starts):
+        raw, out = work / f"raw{i:02d}.wav", work / f"p{i:02d}.wav"
+        voice = voice_path(clip_id, i)
+        if sources[i] == "flow" and voice.is_file():
+            args = ["ffmpeg", "-y", "-i", str(voice), "-af",
+                    "areverse,silenceremove=start_periods=1:start_duration=0"
+                    f":start_threshold={render.SILENCE_FLOOR}:start_silence={render.JOIN_SILENCE},"
+                    "areverse"]
+        else:
+            args = ["ffmpeg", "-y", "-ss", f"{start:.3f}"]
+            if i + 1 < len(starts):
+                args += ["-to", f"{starts[i + 1]:.3f}"]
+            args += ["-i", str(audio)]
+        render._run([*args, *pcm, str(raw)])
+        # A pass of its own: loudnorm in the same graph as areverse trips an
+        # ffmpeg 7.1 assertion (`best_input >= 0`) on real Flow audio.
+        render._run(["ffmpeg", "-y", "-i", str(raw), "-af", "loudnorm=I=-18:TP=-1.5:LRA=11",
+                     *pcm, str(out)])
+        pieces.append(out)
+    joined = render.concat_audio(pieces, work / "take.wav")
+    new_starts, clock = [], 0.0
+    for piece in pieces:
+        new_starts.append(clock)
+        clock += render.audio_seconds(piece)
+    return joined, new_starts
 
 
 # --- the inbox the Shop API writes into ----------------------------------------

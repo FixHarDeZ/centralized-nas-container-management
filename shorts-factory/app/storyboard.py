@@ -334,6 +334,18 @@ STUDIO_STYLE = (
     "STYLE: Photorealistic cinematic, vertical 9:16, one shot per scene, each shot exactly 8 seconds.\n"
     "No dialogue, no voiceover, no on-screen text, no subtitles, no watermark, no UI, no split-screen.\n"
     "Keep clean negative space in the centre of the frame for captions added later.")
+# A speaking pack (docs/adr/0017): the character says each Card's narration on
+# camera in Flow, and that audio is kept. Every frame is planned for it, and
+# `motion` shrinks to the camera move alone: the per-shot prompt the human
+# pastes is just the line, lip sync and that move.
+STUDIO_SPEAK_RULE = (
+    " The character talks straight to the camera in every shot, mid-sentence, face "
+    "and mouth clearly visible and well lit; never turned away, never in silhouette. "
+    "`motion` is the camera move only, two to five words such as \"Gentle push in\" "
+    "or \"Static camera\" — no action, no duration, no graphics.")
+SPEAK_VOICE = ("a warm, clear, natural voice that matches {tag}, fluent native {language} "
+               "with a natural accent, friendly conversational pace")
+SPEAK_LANGUAGE = {"th": "Thai", "en": "English"}
 ENGLISH_CHARACTER_PROMPT = (
     "Translate the character description into ONE English noun phrase that starts with "
     "\"the same\" and names age, ethnicity, hair, accessories and clothing colours, e.g. "
@@ -368,15 +380,15 @@ def _assign_cards(data: dict, script: dict, pending: list[int], shots: dict[int,
 
 async def for_studio(script: dict, pending: list[int], shots: dict[int, int],
                      choice: str = AUTO, character: str = "", fixed_tag: str = "",
-                     topic: str = "") -> dict:
-    """A shot list for the Flow Cards only, one scene per 8s shot."""
+                     topic: str = "", speak: bool = False) -> dict:
+    """A shot list for the Flow Cards only, one scene per shot."""
     total = sum(shots[c] for c in pending)
     return await plan(
         _brief_for_studio(script, pending, shots, "" if choice == NONE else topic),
         SHORTS_RATIO, cards=[script["cards"][c] for c in pending],
         choice=choice, character=character,
         scenes_wanted=total, max_scenes=STUDIO_MAX_SHOTS, fixed_tag=fixed_tag,
-        script_rule=STUDIO_SCRIPT_RULE,
+        script_rule=STUDIO_SCRIPT_RULE + (STUDIO_SPEAK_RULE if speak else ""),
         finish=lambda data: _assign_cards(data, script, pending, shots))
 
 
@@ -385,20 +397,52 @@ def portrait_prompt(locked: str) -> str:
             f"plain background, full body visible, {NEGATIVES}")
 
 
-def studio_markdown(board: dict, tag: str) -> str:
+def studio_markdown(board: dict, tag: str, speak: dict | None = None) -> str:
     """What Storyboard Studio reads. English only, and nothing anyone says:
-    Thai narration in here could make Veo animate speech."""
+    Thai narration in here could make Veo animate speech.
+
+    Unless `speak` is given ({"language", "seconds": {card: s}}): then making
+    Veo speak is the point, and each scene carries its Card's narration word
+    for word as DIALOGUE, injected here after validate() so the model's own
+    prompts still never hold Thai.
+    """
     person = board["overview"].get("master_character") or None
     locked = (person or {}).get("locked_prompt_tag", "")
-    lines = [f"# Shot list ({len(board['scenes'])} shots x 8 seconds)", "", STUDIO_STYLE, ""]
+    if not speak:
+        lines = [f"# Shot list ({len(board['scenes'])} shots x 8 seconds)", "", STUDIO_STYLE, ""]
+    else:
+        language, seconds = speak["language"], speak["seconds"]
+        total = sum(seconds[s["card"]] for s in board["scenes"])
+        lines = [f"# Shot list ({len(board['scenes'])} shots, {total:g} seconds)", "",
+                 "STYLE: Photorealistic cinematic, vertical 9:16, one shot per scene, each shot "
+                 "exactly the length given on its CAMERA line.",
+                 f"{tag} speaks {language} directly to the camera in every scene. No subtitles, "
+                 "no on-screen text, no background music, no watermark, no UI, no split-screen.",
+                 "Keep clean negative space in the centre of the frame for captions added later.", ""]
     if person and tag:
         lines += [f"CHARACTERS: {tag} — {locked}", ""]
+    if speak:
+        lines += [f"VOICE: {SPEAK_VOICE.format(tag=tag or 'the speaker', language=language)}. "
+                  "The same voice in every scene.", ""]
     for i, scene in enumerate(board["scenes"], 1):
         prompt = scene["image_gen_prompt"]
-        lines += [f"[SCENE {i}]",
-                  f"{tag}: {prompt}" if person and tag else prompt,
-                  f"CAMERA: {scene['motion']}, 8 seconds.", ""]
+        lines += [f"[SCENE {i}]", f"{tag}: {prompt}" if person and tag else prompt]
+        if speak:
+            lines += [f'DIALOGUE ({language}): "{scene["sound_verbatim"]}"',
+                      f"CAMERA: {scene['motion']}, {seconds[scene['card']]:g} seconds.", ""]
+        else:
+            lines += [f"CAMERA: {scene['motion']}, 8 seconds.", ""]
     return "\n".join(lines).rstrip() + "\n"
+
+
+def animate_prompt(scene: dict, language: str) -> str:
+    """The per-shot prompt for a speaking pack: the line, lip sync, the camera.
+
+    Looks come from the Ingredients attached in Flow, so none are repeated here.
+    """
+    move = scene["motion"].strip().rstrip(".")
+    return (f'Speaks in {language}: "{scene["sound_verbatim"]}" Natural lip movement. '
+            f"{move}. No subtitles, no on-screen text, no background music.")
 
 
 async def english_character(thai: str) -> str:

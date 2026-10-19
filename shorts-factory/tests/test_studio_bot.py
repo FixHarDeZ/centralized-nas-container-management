@@ -506,3 +506,63 @@ def test_the_pack_message_says_numbers_are_cards(bot):
     run(main.on_studio(None, state))
     message = next(item for item in bot if item[0] == "say" and "Studio pack" in item[1])
     assert "ปุ่มเลข = การ์ด" in message[1]
+
+
+def test_speak_toggle_plans_one_shot_per_card_with_a_10s_shot_for_long_cards(bot, monkeypatch):
+    state = review_state()
+    run(main.on_studio(None, state))
+    state["clip_wait"]["sources"] = ["flow", "flow", "pexels"]
+    run(main.on_studio_callback(None, state, f"sts:{CLIP}"))
+    wait = state["clip_wait"]
+    assert wait["speak"] is True
+    assert [item for item in bot if item[0] == "board"][-1][1]["speak"] is True
+    pack = studio.read_pack(CLIP)
+    # spans 7.0 / 9.0: both over the 8s budget, card 2 past 10s too.
+    assert pack["shots"] == {"0": 1, "1": 1} and pack["seconds"] == {"0": 10.0, "1": 10.0}
+    assert pack["length"] == 20.0 and pack["speak"] is True
+    assert pack["scenes"][0]["animate"] == (
+        'Speaks in Thai: "พูด 0" Natural lip movement. slow push in. '
+        "No subtitles, no on-screen text, no background music.")
+    message = [item for item in bot if item[0] == "say" and "Studio pack" in item[1]][-1][1]
+    assert "🗣" in message and "ตั้ง shot 10 วิ" in message and "การ์ด 2 ยาวเกิน 10 วิ" in message
+    doc = [item for item in bot if item[0] == "doc"][-1][1]
+    assert 'DIALOGUE (Thai): "พูด 0"' in doc and "10 seconds." in doc and "No dialogue" not in doc
+    version = wait["versions"][pack["token"]]
+    assert version["speak"] is True and version["seconds"] == {"0": 10.0, "1": 10.0}
+
+
+def test_speak_needs_a_character(bot, monkeypatch):
+    state = review_state()
+    run(main.on_studio(None, state))
+    run(main.on_studio_callback(None, state, f"stc:{CLIP}:none"))
+    calls = capture_api(monkeypatch)
+    asyncio.run(main.on_callback(None, state, a_tap(f"sts:{CLIP}")))
+    assert state["clip_wait"]["speak"] is False and not SPAWNED
+    assert "เลือกตัวละครก่อน" in next(p for m, p in calls if m == "answerCallbackQuery")["text"]
+
+
+def test_speaking_export_keeps_voice_and_renders_with_a_spliced_take(bot, monkeypatch):
+    calls = capture_render(monkeypatch)
+    monkeypatch.setattr(studio, "load_narration", lambda clip_id: (pathlib.Path("take.wav"), [0.0, 7.0, 16.0]))
+    spliced = []
+
+    def take(clip_id, sources, audio, starts):
+        spliced.append((sources, starts))
+        return pathlib.Path("spliced.wav"), [0.0, 9.5, 18.0]
+
+    monkeypatch.setattr(studio, "speaking_take", take)
+    state = review_state()
+    run(main.on_studio(None, state))
+    run(main.on_studio_callback(None, state, f"sts:{CLIP}"))
+    token = studio.read_pack(CLIP)["token"]
+    inbox = studio.inbox_dir()
+    inbox.mkdir(parents=True, exist_ok=True)
+    path = inbox / f"{token}.mp4.taken"
+    subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i", "testsrc=size=720x1280:rate=24:duration=10",
+                    "-f", "lavfi", "-i", "sine=duration=10", "-shortest",
+                    "-c:v", "libx264", "-preset", "ultrafast", "-c:a", "aac", "-f", "mp4", str(path)],
+                   check=True, capture_output=True)
+    asyncio.run(main.process_export(None, state, token, path))
+    assert studio.voice_path(CLIP, 0).is_file()
+    assert spliced == [(["flow", "pexels", "pexels"], [0.0, 7.0, 16.0])]
+    assert calls and calls[0]["narration"] == (pathlib.Path("spliced.wav"), [0.0, 9.5, 18.0])

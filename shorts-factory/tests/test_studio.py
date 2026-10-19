@@ -36,10 +36,23 @@ def test_shot_map_and_totals():
 
 
 def test_fits_within_half_a_second():
-    assert studio.fits(24.0, 3) and studio.fits(23.6, 3) and studio.fits(24.5, 3)
-    assert not studio.fits(21.0, 3)
-    assert studio.shot_length(24.0, 3, even=False) == 8.0
-    assert studio.shot_length(21.0, 3, even=True) == 7.0
+    assert studio.fits(24.0, 24.0) and studio.fits(23.6, 24.0) and studio.fits(24.5, 24.0)
+    assert not studio.fits(21.0, 24.0)
+
+
+def test_lengths_stretch_only_when_cut_evenly():
+    owned = studio.footage_seconds({0: 1, 2: 2})
+    assert owned == {0: 8.0, 2: 16.0}
+    assert studio.lengths([0, 2], owned, 24.3, even=False) == {0: 8.0, 2: 16.0}
+    assert studio.lengths([0, 2], owned, 21.0, even=True) == {0: 7.0, 2: 14.0}
+
+
+@pytest.mark.parametrize("span, seconds, too_long", [
+    (5.7, 8.0, False), (6.3, 8.0, False), (6.4, 10.0, False), (7.8, 10.0, False), (7.9, 10.0, True)])
+def test_speaking_cards_get_an_8_or_10_second_shot(span, seconds, too_long):
+    assert studio.speak_seconds(span) == seconds
+    assert studio.speak_too_long(span) is too_long
+    assert studio.footage_seconds({1: 1, 4: 1}, {1: 8.0, 4: 10.0}) == {1: 8.0, 4: 10.0}
 
 
 def test_tokens_are_twelve_hex():
@@ -122,17 +135,56 @@ def has_audio(path):
 def test_cut_gives_each_card_its_shots_silently(dirs):
     export = make_testsrc(dirs / "export.mp4", 24)
     assert studio.duration(export) == pytest.approx(24.0, abs=0.05)
-    made = studio.cut(export, [0, 2], {0: 1, 2: 2}, "20261015-170226-065", 8.0)
+    made = studio.cut(export, [0, 2], {0: 8.0, 2: 16.0}, "20261015-170226-065")
     assert set(made) == {0, 2}
     assert studio.duration(made[0]) == pytest.approx(8.0, abs=0.1)
     assert studio.duration(made[2]) == pytest.approx(16.0, abs=0.1)
     assert not has_audio(made[0])
+    assert not studio.voice_path("20261015-170226-065", 0).exists()
+
+
+def test_cut_keeps_a_speaking_cards_voice_beside_it(dirs):
+    export = make_testsrc(dirs / "export.mp4", 18)
+    clip = "20261015-170226-065"
+    made = studio.cut(export, [1, 4], {1: 8.0, 4: 10.0}, clip, keep_voice=True)
+    assert studio.duration(made[4]) == pytest.approx(10.0, abs=0.1) and not has_audio(made[4])
+    for card, seconds in ((1, 8.0), (4, 10.0)):
+        voice = studio.voice_path(clip, card)
+        assert studio.duration(voice) == pytest.approx(seconds, abs=0.1)
+    # The same Card cut again without speech drops last version's voice.
+    studio.cut(export, [1], {1: 8.0}, clip)
+    assert not studio.voice_path(clip, 1).exists()
+
+
+def test_cut_refuses_a_silent_export_for_speaking_cards(dirs):
+    export = dirs / "silent.mp4"
+    subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i", "testsrc=size=720x1280:rate=24:duration=8",
+                    "-c:v", "libx264", "-preset", "ultrafast", str(export)], check=True, capture_output=True)
+    with pytest.raises(RuntimeError, match="ไม่มีเสียง"):
+        studio.cut(export, [0], {0: 8.0}, "20261015-170226-065", keep_voice=True)
+
+
+def test_speaking_take_swaps_in_the_cards_own_voice(dirs):
+    clip = "20261015-170226-065"
+    take = dirs / "take.wav"
+    subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i", "sine=frequency=300:duration=12",
+                    "-ac", "1", "-ar", "24000", str(take)], check=True, capture_output=True)
+    voice = studio.voice_path(clip, 1)
+    voice.parent.mkdir(parents=True)
+    # 4s of speech then 4s of silence: the tail is trimmed, the head is kept.
+    subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i", "sine=frequency=500:duration=4",
+                    "-af", "apad=pad_dur=4", "-ac", "1", "-ar", "24000", str(voice)],
+                   check=True, capture_output=True)
+    audio, starts = studio.speaking_take(clip, ["pexels", "flow", "pexels"], take, [0.0, 5.0, 9.0])
+    assert starts[0] == 0.0 and starts[1] == pytest.approx(5.0, abs=0.05)
+    assert starts[2] == pytest.approx(5.0 + 4.3, abs=0.15)
+    assert studio.duration(audio) == pytest.approx(5.0 + 4.3 + 3.0, abs=0.2)
 
 
 def test_cut_evenly_splits_the_real_length(dirs):
     export = make_testsrc(dirs / "short.mp4", 21)
-    shot = studio.shot_length(studio.duration(export), 3, even=True)
-    made = studio.cut(export, [1], {1: 3}, "20261015-170226-065", shot)
+    seconds = studio.lengths([1], studio.footage_seconds({1: 3}), studio.duration(export), even=True)
+    made = studio.cut(export, [1], seconds, "20261015-170226-065")
     assert studio.duration(made[1]) == pytest.approx(21.0, abs=0.1)
 
 
