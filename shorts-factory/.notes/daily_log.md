@@ -2389,3 +2389,15 @@ busy = toast ไม่ใช่แชท. กดตัวละครที่ �
 ผล: `sf-test` 522 passed/2 skipped (+4 เทสต์ใหม่ใน `test_studio_bot.py`), ruff ไม่มี finding ใหม่.
 Deploy `deploy.sh -s shorts-factory -y` ตอนบอท idle (pack ค้าง busy=False รอดใน state), grep ในคอนเทนเนอร์เจอโค้ดใหม่,
 5 containers Up, log ไม่มี error. ยังไม่ push.
+
+### 2026-10-19 (ต่อ) — ผู้ใช้ขอ "ตัวละครพูดเอง" ใน Studio pack: ตัดสินใจแล้ว รอผลทดสอบใน Flow ก่อนลงโค้ด
+
+กลับหลัก ADR 0016 (TTS = timing master) เลยยังไม่ลงโค้ด. ผู้ใช้เลือก:
+- การ์ด 🖼 Pexels **คงเดิม** (TTS) — เปลี่ยนเฉพาะการ์ด 🎬 Flow ใน Studio pack = mixed mode (เสียง Veo ↔ TTS สลับกลางคลิป รับรู้แล้ว)
+- 1 การ์ดพูด = 1 shot, การ์ดยาวไป ✂️ ย่อ (ไม่หั่นประโยคไทยข้าม shot)
+ส่ง prompt ทดสอบ 2 shot (@IU, การ์ด 1-2 ของ pack อายุ 30-40) ให้ลองเอง ถาม 5 ข้อ: ไทยฟังรู้เรื่อง / lip-sync /
+**เสียงเดียวกันข้าม shot** / พูดจบใน 8 วิ / **export รวมจาก Storyboard Studio มีเสียงไหม** (Step 0 15/10 = export ไม่มีเสียง —
+ถ้าเงียบจริง ทาง "export ไฟล์เดียว" ใช้ไม่ได้ ต้องรับทีละ shot).
+แผนถ้าผ่าน: toggle 🗣 ต่อ pack (default off), บทพูดไทย inject หลัง validate (แบบ `_assign_cards`) ไม่ให้โมเดลเขียน,
+`studio_markdown` ~บรรทัด 411 กรองไทยทิ้ง ต้องแก้+เทสต์, render เก็บเสียง segment Flow แทน TTS ช่วงการ์ดนั้น
+(ต้องดู `do_render(narration=)`/tighten/.srt), `/say`+pronunciation ไม่มีผลกับการ์ดพูด, ADR 0017.
