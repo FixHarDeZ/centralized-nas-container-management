@@ -1,5 +1,13 @@
 # lotto-picker — daily log
 
+## เทสต์รางวัลที่ 2–5 + ข้างเคียง (ต่อจากรอบ 20/10; นาฬิกาเครื่องบอก 2026-10-19)
+- ผู้ใช้ถามว่าถูกรางวัลที่ 2/3 ระบบรู้ไหม → รู้ เฉพาะสลาก 6 หลักใน ledger (`lotto.ticket_prizes` เช็ค `SIX_DIGIT_PRIZES` ครบ); เลข 2/3 ตัวที่สุ่มตรวจแค่ 3 ตัว/2 ตัวตาม scope (ตั้งใจ). เดิมไม่มีเทสต์ครอบรางวัล 2–5/near1
+- เพิ่มใน `tests/test_wins.py` (parametrize second/third/fourth/fifth/near1 จาก fixture `latest_2026-10-01.json`): alert เต็มเส้นทาง (kinds, ยอด = `PRIZE_AMOUNTS`, ชื่อรางวัล+บาทใน 🎉), ทุกเลขในลิสต์ถูกรางวัลนั้น, เลขต่างหลักท้ายหลักเดียวไม่ถูก
+- ตรวจ: **114 passed, 34 skipped** (browser opt-in), ruff ผ่าน. Mutation (matcher ดูแค่ `[0]` ของลิสต์) → แดง 5 ตัว แล้วคืนโค้ด
+- shared `../.venv` ยังขาด `apscheduler` (collection error 5 ไฟล์ ทั้งก่อน/หลังแก้) → ใช้ venv ชั่วคราวใน job tmp
+- สถานะ: แก้เฉพาะเทสต์ + notes, **ยังไม่ commit**, ไม่ต้อง deploy (ไม่แตะโค้ดแอป)
+- ปิดงาน: working tree = `tests/test_wins.py` + `.notes/` 2 ไฟล์ (uncommitted); NAS ยังรัน `e49a6b1`; ลบ venv ชั่วคราวแล้ว. ค้างเดิม: 🎉 จริงงวด 1 พ.ย., auto pick 31/10 20:00, daily SQLite backup, GLO live fixture, LINE, ซ่อม shared `.venv` (`apscheduler`)
+
 ## 2026-10-20 — ปิดงาน
 - งานวันนี้: แจ้งถูกรางวัล (🎉 Telegram owner + ป้ายเว็บทุก user) commit `e49a6b1` + notes `2336764` — merge main, push, deploy, verified บน NAS แล้ว (healthy, `/api/wins` ทำงาน, ไม่มีข้อความหลุดตอน startup)
 - ไม่มี branch/worktree ค้าง; temp dir screenshot/export ลบแล้ว; `.agents/`, `.claude/tips.txt`, `.claude/skills/nas-rails/hooks/index.tsx` เป็นของเดิมนอกงานนี้ ไม่แตะ

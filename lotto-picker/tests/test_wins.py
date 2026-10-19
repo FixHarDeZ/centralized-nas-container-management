@@ -54,6 +54,39 @@ def test_ledger_win_alerts_once_with_total_even_with_notify_off(env):
     assert len(env) == 1  # never twice, across polls or restarts (state lives in kv)
 
 
+LOWER_PRIZES = ("second", "third", "fourth", "fifth", "near1")
+
+
+@pytest.mark.parametrize("kind", LOWER_PRIZES)
+def test_lower_prize_ticket_alerts_with_its_name_and_amount(env, kind):
+    number = PRIZES[kind][0]
+    db.add_ledger({"draw_date": "2026-10-01", "label": "", "tickets": [ticket(number)], "cost": 80,
+                   "prize": None})
+    db.add_draw({"date": "2026-10-01", "prizes": PRIZES})
+    found = service.wins()
+    assert found["tickets"][0]["wins"][0]["kinds"] == [kind]
+    assert found["total"] == lotto.PRIZE_AMOUNTS[kind]
+    main.send_win_alerts()
+    assert len(env) == 1
+    assert number in env[0] and main.messages.TICKET_LABEL[kind] in env[0]
+    assert f"{lotto.PRIZE_AMOUNTS[kind]:,.0f} บาท" in env[0]
+
+
+@pytest.mark.parametrize("kind", LOWER_PRIZES)
+def test_every_number_of_a_lower_prize_wins_it(kind):
+    # the whole list, not just the head: a check that only read [0] would pass above
+    for number in PRIZES[kind]:
+        assert kind in lotto.ticket_prizes(number, PRIZES), number
+
+
+@pytest.mark.parametrize("kind", LOWER_PRIZES)
+def test_lower_prize_needs_all_six_digits(kind):
+    number = PRIZES[kind][0]
+    near = next(n for n in (number[:-1] + str((int(number[-1]) + i) % 10) for i in range(1, 10))
+                if n not in PRIZES[kind])
+    assert kind not in lotto.ticket_prizes(near, PRIZES)
+
+
 def test_nominal_date_entry_alerts_when_shifted_draw_lands(env):
     db.add_ledger({"draw_date": "2026-01-01", "label": "", "tickets": [ticket("123" + BACK3[-3:], 2)],
                    "cost": 160, "prize": None})

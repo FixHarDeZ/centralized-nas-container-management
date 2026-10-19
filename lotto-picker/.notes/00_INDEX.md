@@ -3,6 +3,7 @@
 สุ่มเลข 2 ตัว/3 ตัวแยกกัน ไม่ซ้ำ N งวดล่าสุด (ผลจาก GLO) + Telegram + ตรวจผล + สถิติย้อนหลังตั้งแต่ 2558 + ทดสอบย้อนหลัง + สไตล์ + บัญชี + สรุป AI. รายละเอียดเต็ม: `../README.md`
 
 ## สถานะ
+- **ปิดงานรอบเทสต์รางวัล 2–5** (หลัง 20/10): เพิ่มเทสต์ใน `tests/test_wins.py` (114 passed/34 skipped, ruff ผ่าน, mutation แดง) — **ยังไม่ commit** (working tree: test_wins.py + notes 2 ไฟล์), ไม่ต้อง deploy (ไม่แตะโค้ดแอป), NAS ยังรัน `e49a6b1`. ค้างเดิม: 🎉 จริงงวด 1 พ.ย., auto pick 31/10 20:00, daily SQLite backup, GLO live fixture, LINE; shared `.venv` ขาด `apscheduler`
 - **2026-10-20 แจ้งถูกรางวัล commit `e49a6b1` deploy + verified**: 🎉 Telegram ของ owner (สลากเสมอ, picks ตาม notify), ป้าย `/api/wins` ทุก user. ยังไม่เห็นข้อความ 🎉 จริง — รองวด 1 พ.ย. (fixhardez มี ledger 2 ใบรอผล). Backup `lotto-before-wins-20261020.db`
 - **ปิดงาน 2026-10-20**: main = origin/main, NAS รันโค้ด `e49a6b1` healthy (backup ล่าสุด `lotto-before-wins-20261020.db`); รอดู 🎉 Telegram จริงงวด 1 พ.ย. + auto pick 31/10 20:00; ค้าง: daily SQLite backup, GLO live fixture, LINE
 - ปิดงาน 2026-10-19: main = origin/main (`88bbe45`), NAS รันโค้ด `557b67a` healthy; ไม่มี branch ค้าง (`feat/lotto-insights` ลบแล้ว); `.agents/` untracked เดิมไม่แตะ. Backups วันนี้: `lotto-before-insights-20261019.db`, `lotto-before-users-20261019.db`. งานค้าง: daily SQLite backup (สำคัญขึ้นเพราะ ledger), GLO live fixture, LINE; รอดูรอบจริงงวด 1 พ.ย. (สรุปสถิติ Telegram + auto pick 31/10 20:00)
@@ -27,7 +28,8 @@
 - `app/insight.py` facts (คีย์ไทย) → mimo → `check()` (ตัวเลขต้องอยู่ใน facts, `BANNED`, ต้องมี `DISCLAIMER`) → fallback `template()`; thread ต่อโหมด; kv `insight_2/3`
 - `app/mimo.py` vendored จาก `shared/` (ห้ามแก้สำเนา); `requirements` เพิ่ม `openai==1.93.0`
 - service ใหม่: `backfill_history`, `history`, `frequency`/`backtest` (`_cached` ต่องวดล่าสุด), `make_pick(style, stat_window)` คืน `reasons`/`candidates`, `ledger()` + `_resolve_draw` ±5 วัน, `check_ticket`
-- win alerts: `service.wins/pending_win_alerts/mark_wins_alerted`, `main.send_win_alerts` (ท้ายทุก poll), `messages.win`, kv `win_alerted` (`p:<id>`, `l:<id>:<draw>`, 500 ล่าสุด), `tests/test_wins.py`
+- win alerts: `service.wins/pending_win_alerts/mark_wins_alerted`, `main.send_win_alerts` (ท้ายทุก poll), `messages.win`, kv `win_alerted` (`p:<id>`, `l:<id>:<draw>`, 500 ล่าสุด), `tests/test_wins.py` (ครอบรางวัลที่ 2–5 + ข้างเคียง แบบ parametrize ด้วย)
+- รันเทสต์: shared `../.venv` ขาด `apscheduler` → ใช้ venv ชั่วคราว `uv venv` + `-r requirements.txt pytest httpx ruff`
 - DB ใหม่: ตาราง `ledger(draw_date,label,tickets json,cost,prize)`; kv `history_status`, `history_skipped`, `prize_amounts`, `insight_2/3`
 - `tests/test_analysis.py`, `test_insights_api.py`, `test_ui_insights_browser.py` (opt-in, FastAPI จริง + DB จำลอง 60 งวด)
 - `app/lotto.py` logic ล้วน (parse, is_complete, excluded/pool/pick, score, next_expected_draw, thai_date)
