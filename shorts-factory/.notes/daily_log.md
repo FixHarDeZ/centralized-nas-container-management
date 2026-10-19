@@ -2367,3 +2367,25 @@ User closed the task. Expanded 12-step HTML guide published in `898c7ea`; public
 - **Deploy 16/10** ตามคำสั่งผู้ใช้: เช็คก่อน บอท `mode=idle` ไม่มี `clip_wait`/`parked`. `deploy.sh -s shorts-factory -y` ผ่าน (29s) 5 containers ขึ้นใหม่ restart=0 ไม่มี traceback. ตรวจ: `app/studio.py`/`characters.py` อยู่ในคอนเทนเนอร์บอท, dashboard ภายใน `/static/studio.js` + `/settings` = 200, Shop `POST /shop/api/studio-inbox/<token>` ไม่มี CSRF = 403, nginx ไม่มี credential = 401, บอทกลับ idle. ยังไม่ push. ยังไม่ได้ทดสอบ pack จริง.
 - **Push 16/10** ตามคำสั่งผู้ใช้: `acfbe62..99b575f` เข้า origin/main (28 commit: spec/plan + โค้ด + notes). ไม่มี `.env`/vault plaintext ใน diff.
 - 16/10 เขียนคู่มือ HTML ภาษาไทย `shorts-factory/docs/studio-pack-guide.html` (ตั้งตัวละคร → 🎞 → ปุ่ม pack → หน้า pack → ทำใน Flow → ส่งกลับ → render → เปลี่ยนใจ/ข้อความที่เจอ/ข้อจำกัด/เช็คลิสต์) ลิงก์จาก README. เช็คภาพ headless desktop+mobile แล้ว.
+
+## 2026-10-19 — Studio pack: กดปุ่มแล้วไม่รู้ว่าติด (`90773fd`, deploy แล้ว)
+
+อาการ: กดปุ่มบน pack (เลขการ์ด/ตัวละคร) แล้วเงียบ ~1 นาที — `on_callback` ตอบ
+`answerCallbackQuery` แบบไม่มี text ทันที แล้ว `publish_pack` ยิง LLM วาง shot ก่อนส่งอะไรออกมา
+ข้อความเดิมยังโชว์ ✓ เก่า, กดซ้ำได้แค่ "กำลังทำ pack อยู่" เป็นข้อความแชท.
+
+แก้: `STUDIO_PREFIXES` ข้าม answer กลางแล้วให้ `on_studio_callback(..., query)` ตอบเอง
+**ครั้งเดียวทุก path** ผ่าน `toast()` (มี text ≤200). toggle/ตัวละคร → toast
+"การ์ด N → 🎬 Flow · กำลังทำ pack vX (~1 นาที)" + `mark_pack_busy()` edit ข้อความที่กด
+ใส่ ✓ ใหม่ + บรรทัด ⏳ **คง keyboard ไว้** (publish_pack พังหลังขั้น plan ไม่ส่งปุ่มใหม่ให้).
+busy = toast ไม่ใช่แชท. กดตัวละครที่ ✓ อยู่แล้ว = ไม่ re-plan. ข้อความ pack บอก "ปุ่มเลข = การ์ด
+(ประโยคพากย์) ไม่ใช่ฉาก" — ผู้ใช้เข้าใจ 6 = 6 ฉาก.
+ยังเป็น 1 tap = 1 version (ADR 0016) — toggle 3 การ์ด = รอ 3 รอบ; ทางแก้ (coalesce taps ระหว่าง busy) เสนอแล้ว ยังไม่ทำ.
+
+คำถามผู้ใช้ "ให้ตัวละครพูดเองได้ไหม": ตอนนี้ไม่ได้ — segment Flow ถูก `-an` แล้ว mux เสียง TTS ทับ,
+`storyboard.validate()` ห้ามไทยใน prompt, Veo ทางการรองรับเต็มเฉพาะอังกฤษ (ไทย "may work"), lip-sync
+ไม่ใช่ฟีเจอร์ที่ Google document. ตอบผู้ใช้เป็นตัวเลือก ยังไม่ลงโค้ด.
+
+ผล: `sf-test` 522 passed/2 skipped (+4 เทสต์ใหม่ใน `test_studio_bot.py`), ruff ไม่มี finding ใหม่.
+Deploy `deploy.sh -s shorts-factory -y` ตอนบอท idle (pack ค้าง busy=False รอดใน state), grep ในคอนเทนเนอร์เจอโค้ดใหม่,
+5 containers Up, log ไม่มี error. ยังไม่ push.
