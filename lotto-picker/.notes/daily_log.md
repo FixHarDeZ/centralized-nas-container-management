@@ -1,5 +1,10 @@
 # lotto-picker — daily log
 
+## 2026-10-20 — ปิดงาน
+- งานวันนี้: แจ้งถูกรางวัล (🎉 Telegram owner + ป้ายเว็บทุก user) commit `e49a6b1` + notes `2336764` — merge main, push, deploy, verified บน NAS แล้ว (healthy, `/api/wins` ทำงาน, ไม่มีข้อความหลุดตอน startup)
+- ไม่มี branch/worktree ค้าง; temp dir screenshot/export ลบแล้ว; `.agents/`, `.claude/tips.txt`, `.claude/skills/nas-rails/hooks/index.tsx` เป็นของเดิมนอกงานนี้ ไม่แตะ
+- ค้าง: ยังไม่เห็น 🎉 ผ่าน Telegram จริง (รองวด 1 พ.ย., fixhardez มีสลาก 2 ใบรอผล), daily SQLite backup (picks + ledger ดึงใหม่ไม่ได้), GLO live fixture `/tmp/glo-live/`, LINE; auto pick แรก 31/10 20:00
+
 ## 2026-10-20 — แจ้งเตือนถูกรางวัล (Telegram + ป้ายในเว็บ)
 - ผู้ใช้ถามว่ามีแจ้งเตือนถูกรางวัลไหม → เดิมมีแค่ ✅ ในข้อความผลรางวัลปกติ, สลาก 6 หลักในบัญชีไม่แจ้ง, user อื่นไม่ได้อะไร. ผู้ใช้เลือก: (1) ข้อความ 🎉 แยก (2) สลากในบัญชีแจ้งด้วย (3) user อื่น = ป้ายในเว็บ
 - ทำ: `service.wins(user)` (งวดล่าสุด: picks ที่ hit + ledger status won), `pending_win_alerts`/`mark_wins_alerted` (kv `win_alerted`), `main.send_win_alerts()` ท้าย `poll_results` ทุกรอบ (แยก `announce()` ออกมา); สลากแจ้งเสมอ, picks ตาม notify ของโหมด แต่ mark ทั้งหมด; owner เพิ่ม/แก้ ledger หลังผลออก = mark เฉพาะสลาก; `messages.win()` (+ ขึ้นเงินภายใน 2 ปี); `GET /api/wins` + ป้าย `#win-banner` ซ่อนได้ต่อ user+งวด (localStorage)
