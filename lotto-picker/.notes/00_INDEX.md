@@ -3,7 +3,7 @@
 สุ่มเลข 2 ตัว/3 ตัวแยกกัน ไม่ซ้ำ N งวดล่าสุด (ผลจาก GLO) + Telegram + ตรวจผล + สถิติย้อนหลังตั้งแต่ 2558 + ทดสอบย้อนหลัง + สไตล์ + บัญชี + สรุป AI. รายละเอียดเต็ม: `../README.md`
 
 ## สถานะ
-- **2026-10-19 insights** (branch `feat/lotto-insights`): ประวัติลึก/ความถี่/backtest/สไตล์/บัญชี/ตรวจสลาก/ตัวช่วย 6 หลัก/สรุป mimo — 84+32+64 tests ผ่าน; ดู daily_log สำหรับสถานะ merge/deploy ล่าสุด
+- **2026-10-19 insights commit `ec2c939` เข้า main + push + deploy แล้ว**: ประวัติลึก (NAS 265 งวด done) / ความถี่ / backtest / สไตล์ / บัญชี / ตรวจสลาก / ตัวช่วย 6 หลัก / สรุป mimo (verified บน NAS 13 วิ). Tests 84+32 browser+64 repo ผ่าน. Backup ก่อน deploy `/data/backups/lotto-before-insights-20261019.db`. ข้อความสรุปหลังผลออกรอบจริงแรก = งวด 1 พ.ย. 2569
 - ระบบ 2/3 ตัว **commit `1ca3560` เข้า main + push + deploy แล้ว (2026-10-16)**; NAS app healthy/nginx running, Basic Auth 401/200, exact asset hashes ตรง source, API settings/picks/stats แยกโหมดและสุ่มจริงทั้ง2/3ผ่าน
 - แยก settings/history/stats/auto guards ตาม `digits=2|3`; legacy ไม่มี digits = 3. โหมด 2 ตัวเฉพาะ `last2`, pool 00–99, ตรวจตรงตัว /100, ตัดเลขกลับได้แต่ไม่ถือว่าถูก; 3 ตัวคง logic เดิม
 - ตรวจรอบนี้: **85 stack tests (60 backend + 25 browser) + 64 repo tests ผ่าน**, JS/ruff/diff ผ่าน, independent backend+UI review approve. Warning เดียวมาจาก Starlette TestClient/AnyIO deprecation ใน test environment
@@ -60,4 +60,4 @@
 
 ## ยังไม่ทำ / ไอเดีย
 - LINE ยังไม่ผูก (env มีช่องรอ)
-- ไม่มี SQLite backup รายวัน (ผลรางวัลดึงใหม่ได้ เสียแค่ประวัติ picks)
+- ไม่มี SQLite backup รายวัน (ผลรางวัลดึงใหม่ได้ แต่ picks + **ledger** หายถาวร — ควรทำ `shared/sqlite_backup.py`)

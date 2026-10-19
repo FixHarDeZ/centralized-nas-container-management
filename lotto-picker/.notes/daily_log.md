@@ -9,7 +9,10 @@
 - สรุป AI: mimo จริงตอบ 20–75 วิ ผ่าน `check()` ทั้ง 2 โหมด; รอบแรกหลุดชื่อฟิลด์อังกฤษ (`max_typical`) → เปลี่ยนคีย์ facts เป็นไทย + สั่งห้าม
 - UI: เมนู 5 ส่วน, heatmap 00–99, อันดับ (ค้างนานไม่รวมเลขที่ไม่เคยออก เพราะอยู่ในออกน้อยแล้ว), กราฟส่วนต่างสะสม, ฟอร์มบัญชี, ตรวจสลาก; แก้ป้าย 6 หลักที่บอกผิดว่า `xxx123` ถูก “3 ตัวท้ายรางวัลที่ 1” (สลากไม่มีรางวัลนี้)
 - ตรวจ: stack **84 passed** + browser **32 passed** (เดิม 25 + ใหม่ 7 รัน FastAPI จริงบน DB จำลอง) + repo **64 passed**; ruff สะอาด (ยกเว้น vendored `mimo.py` ที่ shared/ เองก็ติด UP041 อยู่แล้ว); `make check` ผ่าน; screenshot จริงบนข้อมูล 265 งวด light/dark
-- สถานะ: branch `feat/lotto-insights` → merge main / deploy ตามด้านล่าง
+- **Release**: commit `ec2c939` fast-forward เข้า main + push origin/main, ลบ branch แล้ว. Backup ก่อน deploy `/data/backups/lotto-before-insights-20261019.db` integrity ok (6 draws/12 picks)
+- Deploy 10:19 (นอกช่วงจับ 15–20) จาก clean `git archive main` + generated env/htpasswd (ไม่ส่ง `.agents/`): image rebuild มี openai 1.93.0, healthy, nginx up
+- Verify NAS: noauth 401, auth 200 (LAN + external `:15073`), SHA-256 index/app.js/style.css ตรง source; picks 3 ตัวยังครบ 12, settings เดิม + style/stat_window default; ไม่มี Telegram ตอน startup; backfill **done 10:32 = 265 งวด 1,489 probes ~13 นาที**; frequency/backtest ตรงกับรันบน Mac; สรุป mimo บน NAS ผ่าน check (13 วิ); หน่วยความจำสูงสุดที่เห็น 104 MiB / 256m
+- ค้าง (เดิม): GLO live fixture `/tmp/glo-live/`, LINE, daily SQLite backup (ตอนนี้ ledger เป็นข้อมูลที่ดึงใหม่ไม่ได้แล้ว → backup สำคัญขึ้น); รอบจริงแรกของข้อความสรุปหลังผลออก = งวด 1 พ.ย. 2569
 
 ## 2026-10-16 — ปิดงานระบบ 2/3 ตัว
 - Source commit `1ca3560` fast-forward เข้า `main` และ push origin/main แล้ว; deploy ด้วย `scripts/deploy.sh -s lotto-picker -y` จาก clean tracked export + generated env/auth files ไม่ส่ง untracked `.agents/` หรือ workstation credentials
