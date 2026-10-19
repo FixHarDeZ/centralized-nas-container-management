@@ -2430,3 +2430,10 @@ pack page โชว์ `animate` + "ตั้ง Ns". render_studio: มี wav 
   ทดลองวาง pack 🗣 จริงในคอนเทนเนอร์ (ไม่แตะ state/ไม่ส่ง Telegram): mimo 65 วิ, script.md ตรงรูปแบบ A, CAMERA สั้นไม่มีวินาทีซ้อน.
   การ์ด 1 take 6.3018 วิ → ได้ 10 วิ (เกินขอบ 6.3 นิดเดียว ทั้งที่ตอนเทสพูดจบใน 8 วิ) — ปรับ `SPEAK_MAX_TAKE_SECONDS` ได้.
   การ์ดข้อความ (scrim 50%) ทับปากตัวละคร — ยังไม่แก้ รอผู้ใช้เลือก. ยังไม่ push (`daa0e86`..`d969939`).
+- ต่อ (ผู้ใช้เลือก): **ตัด scrim ทุกการ์ดที่มี footage** (`black@0.5` อ่านเป็นภาพมัว/เบลอ) → footage สว่างเต็ม ตัวหนังสือขอบดำ
+  `stroke_width` = 9% ของ font (หักออกจากความกว้างตอน fit), ตัดเงา offset เดิมทิ้ง. **การ์ด 🗣 ซับลงใต้คาง**: `render.build(low=)`
+  จาก `render_studio` (การ์ดที่มี `voice_path`) → ขอบล่าง 75% ของความสูง กว้าง 800 px สูงสุด 72 px — วัดจาก export จริง
+  ปาก ~44% คาง ~50%, หลบแถบชื่อ Shorts + ปุ่มขวา. การ์ด Pexels/การ์ดไม่พูดยังกึ่งกลาง (ขอบดำแทน scrim).
+  การ์ด 3 ใน render ทดสอบแรกเป็นพื้นเปล่า = ตั้งใจเทสเคสผสม (🖼 + TTS) และเครื่องเทสไม่มี Pexels key → fallback gradient; export จริงมี 6 shot.
+  re-render ทั้ง 6 การ์ดพูด → `~/Downloads/speaking-test-rendered-v2.mp4` 48.0 วิ (การ์ด 3-5 พูดเกิน 8 วิ ถูกตัดท้าย = เหตุผลของกฎ 10 วิ).
+  sf-test 538 passed/2 skipped, ruff ไม่มีของใหม่. commit `d62d26f` deploy แล้ว (grep ในคอนเทนเนอร์เจอ `LOW_BOTTOM`/`low=speaking`, 5 Up, log ไม่มี error). ยังไม่ push.
