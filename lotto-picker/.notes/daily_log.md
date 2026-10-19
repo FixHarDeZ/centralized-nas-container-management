@@ -1,5 +1,10 @@
 # lotto-picker — daily log
 
+## 2026-10-19 — ปิดงาน
+- ทั้งสองงานวันนี้ (insights `ec2c939` + แยก user `557b67a`) merge main, push, deploy, verified บน NAS แล้ว; notes commit `818b611`, `88bbe45`
+- ไม่มี branch/worktree ค้าง; scratch DB/screenshot อยู่ใน scratchpad ของ session เท่านั้น
+- ค้าง: daily SQLite backup (picks + ledger ดึงใหม่ไม่ได้), GLO live fixture `/tmp/glo-live/`, LINE; รอบจริงแรก: auto pick 31/10 20:00, ผล + สรุปสถิติ 1/11
+
 ## 2026-10-19 (ต่อ) — แยกข้อมูลต่อ user ที่ login nginx
 - ผู้ใช้ขอแยกข้อมูลตาม basic auth user. `.htpasswd` มี 3 คน: `lotto` (vault), `fixhardez`, `Pookzii`. ถาม 2 ข้อ: ข้อมูลเดิม → **fixhardez**, เลขอัตโนมัติ/Telegram → **เฉพาะ fixhardez**
 - ทำ: nginx `proxy_set_header X-Remote-User $remote_user` (เขียนทับของ client), `main.current_user` (ไม่มี header = owner), คอลัมน์ `username` ใน picks/ledger (migration ใน `db.init()` เติม owner ให้แถวเก่า), kv `settings:<user>` (owner ใช้ key เดิม), `LOTTO_OWNER=fixhardez` literal; คนอื่น notify บังคับ false + UI ซ่อนส่วน automation; ข้อความผลรางวัลรวมเฉพาะเลขของ owner; `/api/me` + chip ชื่อผู้ใช้บน header
