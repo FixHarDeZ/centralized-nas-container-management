@@ -343,9 +343,17 @@ STUDIO_SPEAK_RULE = (
     "and mouth clearly visible and well lit; never turned away, never in silhouette. "
     "`motion` is the camera move only, two to five words such as \"Gentle push in\" "
     "or \"Static camera\" — no action, no duration, no graphics.")
-SPEAK_VOICE = ("a warm, clear, natural voice that matches {tag}, fluent native {language} "
-               "with a natural accent, friendly conversational pace")
+# The wording a real export held steady across six shots (2026-10-19), with
+# the gender left to the picture: the library has no field for it.
+SPEAK_VOICE = ("the voice of {tag} as pictured: warm, clear, medium pitch, fluent native "
+               "{language} with a natural local accent, friendly conversational pace")
 SPEAK_LANGUAGE = {"th": "Thai", "en": "English"}
+# The motion rule asks for "~8 seconds", which a 10s CAMERA line contradicts.
+OVER_SECONDS = re.compile(r",?\s*\bover\s+(?:about\s+|~)?\d+(?:\.\d+)?\s*(?:seconds?|s)\b", re.I)
+
+
+def camera_move(motion: str) -> str:
+    return OVER_SECONDS.sub("", motion).strip().rstrip(".,")
 ENGLISH_CHARACTER_PROMPT = (
     "Translate the character description into ONE English noun phrase that starts with "
     "\"the same\" and names age, ethnicity, hair, accessories and clothing colours, e.g. "
@@ -429,7 +437,7 @@ def studio_markdown(board: dict, tag: str, speak: dict | None = None) -> str:
         lines += [f"[SCENE {i}]", f"{tag}: {prompt}" if person and tag else prompt]
         if speak:
             lines += [f'DIALOGUE ({language}): "{scene["sound_verbatim"]}"',
-                      f"CAMERA: {scene['motion']}, {seconds[scene['card']]:g} seconds.", ""]
+                      f"CAMERA: {camera_move(scene['motion'])}, {seconds[scene['card']]:g} seconds.", ""]
         else:
             lines += [f"CAMERA: {scene['motion']}, 8 seconds.", ""]
     return "\n".join(lines).rstrip() + "\n"
@@ -440,7 +448,7 @@ def animate_prompt(scene: dict, language: str) -> str:
 
     Looks come from the Ingredients attached in Flow, so none are repeated here.
     """
-    move = scene["motion"].strip().rstrip(".")
+    move = camera_move(scene["motion"])
     return (f'Speaks in {language}: "{scene["sound_verbatim"]}" Natural lip movement. '
             f"{move}. No subtitles, no on-screen text, no background music.")
 

@@ -254,13 +254,22 @@ CAMERA: Slow push in from medium shot to her face, 8 seconds.</pre></div>
     <li>แนบ Ingredients สูงสุด 3 รูป: (1) ตัวละคร (2) frame ของ shot นี้ (3) frame ถัดไปของฉากเดียวกัน (ถ้ามี)</li>
     <li>ก๊อป prompt + motion ของ shot นั้นจากข้อ <strong>4</strong> ในหน้า pack → Generate</li>
   </ol>
-  <div class="callout warn"><strong>ความยาวต้องเป็น 8 วิทุก shot</strong>บอทหั่นไฟล์ทุก 8 วินาที ถ้าตั้ง 4/6/10 วิ ไฟล์รวมจะยาวผิดและบอทจะไม่หั่นให้</div>
+  <div class="callout warn"><strong>ความยาวต้องเป็น 8 วิทุก shot</strong>บอทหั่นไฟล์ทุก 8 วินาที ถ้าตั้ง 4/6/10 วิ ไฟล์รวมจะยาวผิดและบอทจะไม่หั่นให้ — <em>ยกเว้น pack ที่เปิด 🗣 (ข้างล่าง)</em></div>
   <h3>4.5 Scenes → Export</h3>
   <ol>
     <li>เปิด <strong>Scenes</strong> เรียงคลิปทุก shot <strong>ตามลำดับ Shot 1, 2, 3 …</strong> ห้ามตัดต่อ/ตัดหัวท้าย</li>
     <li>Export เป็นไฟล์เดียว (เสียงติดมาด้วย ไม่เป็นไร บอทตัดทิ้ง)</li>
     <li>ไฟล์ควรยาว = จำนวน shot × 8 วิ (คลาดได้ ±0.5 วิ)</li>
   </ol>
+  <h3>4.6 🗣 ตัวละครพูดเอง (ถ้าเปิด)</h3>
+  <p>กดปุ่ม <strong>🗣 ตัวละครพูดเอง</strong> ใต้ pack (ต้องเลือกตัวละครก่อน) — การ์ด 🎬 ตัวละครพูดบทเองในคลิป Flow บอทเก็บเสียงนั้นไว้ การ์ด 🖼 Pexels ยังใช้เสียงพากย์ TTS เหมือนเดิม</p>
+  <ol>
+    <li>1 การ์ด = 1 shot. ข้อความ pack บอกว่าการ์ดไหน <strong>ตั้ง 10 วิ</strong> ที่เหลือ 8 วิ — ในหน้า pack แต่ละ shot มีป้าย "ตั้ง 8s/10s"</li>
+    <li>script.md มีบรรทัด <code>VOICE:</code> และ <code>DIALOGUE (Thai)</code> ทุกฉาก วางทั้งก้อนเหมือนเดิม</li>
+    <li>prompt ทีละ shot (ข้อ 4 ในหน้า pack) เหลือแค่บทพูด + กล้อง: <code>Speaks in Thai: "…" Natural lip movement. Gentle push in. …</code> หน้าตามาจาก Ingredients</li>
+    <li>Export <strong>ต้องมีเสียง</strong> (ห้ามปิดเสียง) ไฟล์ควรยาว = ผลรวมความยาวทุก shot ตามที่หน้า pack บอก</li>
+  </ol>
+  <div class="callout warn"><strong>ข้อควรรู้</strong>มี ⚠️ การ์ดยาวเกิน 10 วิ = กด ✂️ ย่อก่อนเจน (พูดไม่จบ) · <code>/say</code> ไม่มีผลกับการ์ดที่ตัวละครพูด คำเพี้ยน = เจน shot นั้นใหม่ · คลิปผสมจะได้ยินเสียงสลับคนระหว่างการ์ด 🎬 กับ 🖼</div>
   <div class="callout"><strong>ไฟล์ใหญ่แค่ไหน</strong>วัดจริง 3 shot (24 วิ) = 21.3 MB (~7 MB ต่อ shot) — pack ที่มีแค่ hook 1 shot ส่งใน Telegram ได้ ถ้า 3 shot ขึ้นไปมักเกิน 20 MB ต้องอัปทางเว็บ</div>
 </section>
 

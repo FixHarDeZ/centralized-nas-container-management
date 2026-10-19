@@ -26,9 +26,11 @@ MARGIN = 0.5       # join silence + voice tail inside one shot
 TOLERANCE = 0.5    # export length vs shots × 8
 # A speaking Card is one shot whose own audio is kept: the character says the
 # narration on camera in Flow (docs/adr/0017). Measured on a real export
-# (2026-10-19): Veo speaks Thai 15-25% slower than the edge-tts take, and an
-# 8s shot held a 6.3s take with room to spare while 7.1s takes ran into the
-# cut. Longer Cards get Flow's 10s shot; longer than that is ✂️'s job.
+# (2026-10-19): Veo speaks Thai 15-25% slower than the edge-tts take. 8s shots
+# held the 5.7s and 6.3s takes only just (speech ran to ~7.9s of 8) and the
+# 7.1-7.9s takes ran into the cut, so 6.3s is the observed edge, not a margin.
+# Longer Cards get Flow's 10s shot, scaled from that edge and not yet measured;
+# longer than that is ✂️'s job.
 SPEAK_LONG_SHOT = 10.0
 VOICE_RATE = 24000  # the edge-tts take's own rate, so the concat needs no resample
 SPEAK_MAX_TAKE = float(os.environ.get("SPEAK_MAX_TAKE_SECONDS", "6.3"))

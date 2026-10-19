@@ -567,9 +567,10 @@ edge-tts take, so a mixed clip switches voice between them. Off by default; it
 needs a character (🚫 refuses it).
 
 - **One shot per Card.** Veo speaks Thai 15–25 % slower than the take
-  (measured on a real 6-shot export, 2026-10-19), so a Card whose take runs
+  (measured on a real 6-shot export, 2026-10-19). A Card whose take runs
   ≤ 6.3 s (`SPEAK_MAX_TAKE_SECONDS`) gets an 8 s shot and a longer one a
-  **10 s** shot. The pack message lists which Cards to set to 10 s in Flow
+  **10 s** shot. 6.3 s is the observed edge (speech ran to ~7.9 s of 8), not
+  a margin, and the 10 s limit is scaled from it, never measured. The pack message lists which Cards to set to 10 s in Flow
   and warns about any Card too long even for that (press ✂️ first). The
   export length is the sum of those, not `shots × 8`.
 - **`script.md` changes shape**: a STYLE line that says the character speaks,

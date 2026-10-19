@@ -566,3 +566,12 @@ def test_speaking_export_keeps_voice_and_renders_with_a_spliced_take(bot, monkey
     assert studio.voice_path(CLIP, 0).is_file()
     assert spliced == [(["flow", "pexels", "pexels"], [0.0, 7.0, 16.0])]
     assert calls and calls[0]["narration"] == (pathlib.Path("spliced.wav"), [0.0, 9.5, 18.0])
+
+
+def test_a_duration_in_motion_never_reaches_a_speaking_prompt():
+    assert storyboard.camera_move("Slow 6% push in over 8 seconds as she talks.") == "Slow 6% push in as she talks"
+    assert storyboard.camera_move("Gentle push in, over ~8 s") == "Gentle push in"
+    scene = {"sound_verbatim": "สวัสดี", "motion": "Static camera over 8 seconds"}
+    assert storyboard.animate_prompt(scene, "Thai") == (
+        'Speaks in Thai: "สวัสดี" Natural lip movement. Static camera. '
+        "No subtitles, no on-screen text, no background music.")
