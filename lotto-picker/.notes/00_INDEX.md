@@ -3,7 +3,7 @@
 สุ่มเลข 2 ตัว/3 ตัวแยกกัน ไม่ซ้ำ N งวดล่าสุด (ผลจาก GLO) + Telegram + ตรวจผล + สถิติย้อนหลังตั้งแต่ 2558 + ทดสอบย้อนหลัง + สไตล์ + บัญชี + สรุป AI. รายละเอียดเต็ม: `../README.md`
 
 ## สถานะ
-- **2026-10-19 แยกข้อมูลต่อ user** (ดู daily_log): `X-Remote-User` จาก nginx, `username` ใน picks/ledger, kv `settings:<user>`, owner = `LOTTO_OWNER` fixhardez ถือข้อมูลเก่า + Telegram
+- **2026-10-19 แยกข้อมูลต่อ user commit `557b67a` deploy + verified แล้ว**: `X-Remote-User` จาก nginx, `username` ใน picks/ledger, kv `settings:<user>`, owner = `LOTTO_OWNER` fixhardez ถือข้อมูลเก่า + Telegram
 - **2026-10-19 insights commit `ec2c939` เข้า main + push + deploy แล้ว**: ประวัติลึก (NAS 265 งวด done) / ความถี่ / backtest / สไตล์ / บัญชี / ตรวจสลาก / ตัวช่วย 6 หลัก / สรุป mimo (verified บน NAS 13 วิ). Tests 84+32 browser+64 repo ผ่าน. Backup ก่อน deploy `/data/backups/lotto-before-insights-20261019.db`. ข้อความสรุปหลังผลออกรอบจริงแรก = งวด 1 พ.ย. 2569
 - ระบบ 2/3 ตัว **commit `1ca3560` เข้า main + push + deploy แล้ว (2026-10-16)**; NAS app healthy/nginx running, Basic Auth 401/200, exact asset hashes ตรง source, API settings/picks/stats แยกโหมดและสุ่มจริงทั้ง2/3ผ่าน
 - แยก settings/history/stats/auto guards ตาม `digits=2|3`; legacy ไม่มี digits = 3. โหมด 2 ตัวเฉพาะ `last2`, pool 00–99, ตรวจตรงตัว /100, ตัดเลขกลับได้แต่ไม่ถือว่าถูก; 3 ตัวคง logic เดิม

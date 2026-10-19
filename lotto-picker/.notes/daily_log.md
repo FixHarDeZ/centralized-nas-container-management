@@ -1,5 +1,12 @@
 # lotto-picker — daily log
 
+## 2026-10-19 (ต่อ) — แยกข้อมูลต่อ user ที่ login nginx
+- ผู้ใช้ขอแยกข้อมูลตาม basic auth user. `.htpasswd` มี 3 คน: `lotto` (vault), `fixhardez`, `Pookzii`. ถาม 2 ข้อ: ข้อมูลเดิม → **fixhardez**, เลขอัตโนมัติ/Telegram → **เฉพาะ fixhardez**
+- ทำ: nginx `proxy_set_header X-Remote-User $remote_user` (เขียนทับของ client), `main.current_user` (ไม่มี header = owner), คอลัมน์ `username` ใน picks/ledger (migration ใน `db.init()` เติม owner ให้แถวเก่า), kv `settings:<user>` (owner ใช้ key เดิม), `LOTTO_OWNER=fixhardez` literal; คนอื่น notify บังคับ false + UI ซ่อนส่วน automation; ข้อความผลรางวัลรวมเฉพาะเลขของ owner; `/api/me` + chip ชื่อผู้ใช้บน header
+- ตรวจ: stack **93 + browser 33 = 125 passed** (ใหม่ `tests/test_users.py` 8 + browser 1), repo 64, ruff/`make check` ผ่าน
+- Release: commit `557b67a`; backup `/data/backups/lotto-before-users-20261019.db` (12 picks/0 ledger) → deploy 11:07 จาก clean export (`.htpasswd` local = NAS hash เดียวกัน)
+- Verify NAS: migration `fixhardez` 12 แถว; fixhardez picks 12 notify true, Pookzii 0 notify false; nginx as `lotto` → `/api/me` = lotto; **ส่ง `X-Remote-User: fixhardez` ปลอมด้วย creds lotto ได้ข้อมูลของ lotto (`[]`)** = nginx เขียนทับจริง; noauth 401, app.js hash ตรง, healthy
+
 ## 2026-10-19 — สถิติย้อนหลัง / ทดสอบย้อนหลัง / สไตล์ / บัญชี / ตรวจสลาก / สรุป AI
 - ผู้ใช้ถามว่าให้ AI วิเคราะห์เลขหวังรางวัลที่ 1 + ให้คะแนนเลขจาก stat ได้ไหม → อธิบายตรงๆ ว่าสถิติทำนายไม่ได้ เสนอ 6 ข้อแบบไม่หลอก ผู้ใช้เลือกทำครบ (1 ประวัติลึก → 2 ความถี่ → 4 backtest → 3 สไตล์ → 5 บัญชี → 6 ตัวช่วย 6 หลัก → AI สรุป)
 - GLO probe: รูปแบบรางวัลปัจจุบันเริ่ม **2015-09-01** (ก่อนนั้น last3b 4 ตัว ไม่มี last3f) และทุก payload มี `price` ต่อรางวัล → `HISTORY_START`, `parse_amounts`, kv `prize_amounts`
