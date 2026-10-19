@@ -218,9 +218,9 @@ testsrc.__test__ = False  # a helper, not a test: pytest collects any `test*` na
 def capture_render(monkeypatch):
     calls = []
 
-    async def fake(client, state, supplied=None, narration=None, hold=frozenset()):
+    async def fake(client, state, supplied=None, narration=None, hold=frozenset(), low=frozenset()):
         calls.append({"supplied": supplied, "narration": narration, "hold": set(hold),
-                      "clip_id": state.get("clip_id")})
+                      "low": set(low), "clip_id": state.get("clip_id")})
 
     monkeypatch.setattr(main, "do_render", fake)
     return calls
@@ -363,7 +363,7 @@ def test_upload_success_cleans_the_studio_files(bot, monkeypatch, tmp_path):
 def test_render_studio_restores_the_fact_sheet_and_variant(bot, monkeypatch):
     seen = []
 
-    async def fake(client, state, supplied=None, narration=None, hold=frozenset()):
+    async def fake(client, state, supplied=None, narration=None, hold=frozenset(), low=frozenset()):
         seen.append((state.get("style"), state.get("research")))
 
     monkeypatch.setattr(main, "do_render", fake)
@@ -566,6 +566,8 @@ def test_speaking_export_keeps_voice_and_renders_with_a_spliced_take(bot, monkey
     assert studio.voice_path(CLIP, 0).is_file()
     assert spliced == [(["flow", "pexels", "pexels"], [0.0, 7.0, 16.0])]
     assert calls and calls[0]["narration"] == (pathlib.Path("spliced.wav"), [0.0, 9.5, 18.0])
+    # The speaking Card's caption moves under the face.
+    assert calls[0]["low"] == {0}
 
 
 def test_a_duration_in_motion_never_reaches_a_speaking_prompt():

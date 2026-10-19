@@ -30,6 +30,44 @@ def test_hold_freezes_the_last_frame_instead_of_looping(tmp_path):
     assert render.audio_seconds(out) == pytest.approx(3.0, abs=0.1)
 
 
+def test_footage_is_not_dimmed_under_the_card(tmp_path):
+    """A frame-wide scrim read as a dim, blurry picture; the outline carries the text."""
+    png = tmp_path / "card.png"
+    Image.new("RGBA", (render.W, render.H), (0, 0, 0, 0)).save(png)
+    src = tmp_path / "white.mp4"
+    subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i", "color=white:size=720x1280:rate=24:duration=1",
+                    "-c:v", "libx264", "-preset", "ultrafast", str(src)], check=True, capture_output=True)
+    out = render._segment_over_footage(png, 1.0, src, tmp_path / "s.mp4")
+    frame = tmp_path / "f.png"
+    subprocess.run(["ffmpeg", "-y", "-i", str(out), "-frames:v", "1", str(frame)], check=True, capture_output=True)
+    with Image.open(frame) as img:
+        assert min(img.convert("RGB").getpixel((render.W // 2, 50))) > 235
+
+
+def test_a_speaking_cards_caption_sits_under_the_face(tmp_path):
+    card = {"lines": ["อายุ 30 40 แล้ว", "ยังไม่ได้เริ่มลงทุน", "คิดว่าสายไปแล้วใช่ไหม", "คำตอบคือ ยังไม่สาย"]}
+
+    def ink_rows(**kw):
+        path = render.draw_card(card, tmp_path / "c.png", over_footage=True, **kw)
+        with Image.open(path) as img:
+            box = img.getchannel("A").getbbox()
+        return box
+
+    centred, low = ink_rows(), ink_rows(low=True)
+    # Clear of the mouth (~44% of the height) and of the Shorts title band.
+    assert low[1] > render.H * 0.5 and low[3] <= render.LOW_BOTTOM + 10
+    assert centred[1] < render.H * 0.44
+    # Narrow enough to clear the right-hand buttons.
+    assert low[2] - low[0] <= render.LOW_WIDTH
+
+
+def test_the_caption_over_footage_has_a_dark_outline(tmp_path):
+    path = render.draw_card({"lines": ["ทดสอบ"]}, tmp_path / "c.png", over_footage=True)
+    with Image.open(path) as img:
+        colours = {px[:3] for _, px in img.getcolors(1 << 24) if px[3] == 255}
+    assert (0, 0, 0) in colours and render.FG in colours
+
+
 def test_build_reuses_narration_and_labels_studio_footage(tmp_path, monkeypatch):
     async def no_tts(*args, **kwargs):
         raise AssertionError("narration was supplied; TTS must not run")

@@ -298,7 +298,11 @@ topic → mimo → script (hook + cards + metadata) → your review
       → edge-tts (one audio per card)        ┘
 ```
 
-Cards sit on real footage, dimmed by a scrim so the text reads. When Pexels has
+Cards sit on real footage at full brightness; the text carries a black outline
+that scales with the font, so it reads without dimming the picture (a
+frame-wide scrim did that until 2026-10-19 and read as a dim, blurry clip). A
+🗣 Card, whose character speaks on screen, has its caption under the chin
+instead of across the face (`LOW_BOTTOM`, `LOW_WIDTH`, `LOW_TEXT_SIZE`). When Pexels has
 nothing for a card — or the key is missing entirely — that card falls back to a
 gradient background with a slow Ken Burns move, and the render carries on.
 
@@ -585,6 +589,9 @@ needs a character (🚫 refuses it).
   `segments/cNN.wav` beside its silent video; a silent export is refused.
   The render splices those into the saved take: the head is kept (lip sync),
   only the tail silence is trimmed, and every piece is loudness-normalised.
+- **The caption moves under the face** on speaking Cards: bottom edge at 75%
+  of the height, 800 px wide, 72 px at most, clear of the mouth (~44%, measured
+  on the test export) and of the Shorts title and right-hand buttons.
   `loudnorm` runs in a pass of its own because in one graph with `areverse`
   ffmpeg 7.1 dies on `Assertion best_input >= 0`.
 - **`/say` and the pronunciation checklist do not reach a speaking Card.**

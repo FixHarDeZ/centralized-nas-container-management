@@ -35,6 +35,10 @@ A per-pack toggle, 🗣, off by default:
   take in place of that Card's slice, keeping its head for lip sync and
   trimming only its tail, so the take still drives every Card's start, the
   subtitles and the music ducking.
+- A speaking Card's caption sits under the chin, not across the face
+  (`render.draw_card(low=True)`, from `render_studio`'s set of Cards that
+  brought a voice). Footage Cards lost the frame-wide scrim at the same time;
+  the outline on the text carries legibility instead.
 
 ## Consequences
 

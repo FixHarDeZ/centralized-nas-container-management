@@ -29,10 +29,20 @@ BG_TOP, BG_BOTTOM = (16, 20, 24), (27, 36, 48)
 FG = (242, 244, 248)
 ACCENT = (255, 210, 74)
 CODE_BG, CODE_BORDER, CODE_FG = (11, 14, 18), (46, 56, 68), (168, 226, 181)
-# Text sits on live footage in the B-roll path, so it carries its own shadow.
-SHADOW = (0, 0, 0, 190)
-SHADOW_OFFSET = 5
-SCRIM = "black@0.5"  # holds the footage back far enough for text to read
+# Text sits on live footage in the B-roll path, so it carries its own outline
+# and the footage stays at full brightness: a frame-wide scrim read as a dim,
+# blurry picture. The outline scales with the font, so the 40px floor does not
+# smear Thai stacked marks into a blob.
+STROKE = (0, 0, 0)
+STROKE_RATIO = 0.09
+# A Card whose character speaks (docs/adr/0017) keeps the face clear: the
+# caption sits under the chin, measured on a real Flow export (mouth at ~44%
+# of the height, chin ~50%), and stops above the bottom quarter, where the
+# Shorts title and the right-hand buttons sit. Narrower than the frame for the
+# same buttons, and smaller, so a four-line Card still fits under the chin.
+LOW_BOTTOM = round(H * 0.75)
+LOW_WIDTH = 800
+LOW_TEXT_SIZE = 72
 
 # Waree covers Thai and Latin in one face; Noto Sans Thai has no Latin glyphs.
 THAI_BOLD = "/usr/share/fonts/truetype/tlwg/Waree-Bold.ttf"
@@ -90,21 +100,34 @@ def _draw_code(draw: ImageDraw.ImageDraw, code: str, top: int, w: int) -> None:
         draw.text((x0 + pad, top + pad + i * gap), row, font=font, fill=CODE_FG)
 
 
-def draw_card(card: dict, path: Path, is_hook: bool = False, over_footage: bool = False) -> Path:
+def _stroke(font: ImageFont.FreeTypeFont) -> int:
+    return max(2, round(font.size * STROKE_RATIO))
+
+
+def draw_card(card: dict, path: Path, is_hook: bool = False, over_footage: bool = False,
+              low: bool = False) -> Path:
     """Render one Card to a PNG.
 
     Over footage the card is a transparent overlay at frame size, because the
     footage supplies both the background and the movement. On its own it is
     drawn oversized on a gradient, and the Ken Burns crop provides the movement.
+    `low` puts the caption under a speaking character's face instead of across
+    it; it only applies over footage.
     """
+    low = low and over_footage
     w, h = (W, H) if over_footage else (CW, CH)
     img = Image.new("RGBA", (w, h), (0, 0, 0, 0)) if over_footage else _background(w, h)
     draw = ImageDraw.Draw(img)
 
     lines = card["lines"]
-    font = _fit(lines, THAI_BOLD, TEXT_SIZE, w - MARGIN * 2)
+    width = LOW_WIDTH if low else w - MARGIN * 2
+    if over_footage:
+        # The outline adds to every line's ink on both sides.
+        width -= 2 * round(TEXT_SIZE * STROKE_RATIO)
+    font = _fit(lines, THAI_BOLD, LOW_TEXT_SIZE if low else TEXT_SIZE, width)
     step = round(font.size * LINE_SPACING)
     text_h = step * len(lines)
+    stroke = _stroke(font) if over_footage else 0
 
     code = (card.get("code") or "").strip()
     code_h = 0
@@ -112,12 +135,11 @@ def draw_card(card: dict, path: Path, is_hook: bool = False, over_footage: bool 
         rows = code.splitlines()
         code_h = 64 + 32 * 2 + round(CODE_SIZE * 1.4) * len(rows)
 
-    y = (h - text_h - code_h) // 2
+    y = LOW_BOTTOM - text_h - code_h if low else (h - text_h - code_h) // 2
     for line in lines:
         x = (w - font.getlength(line)) / 2
-        if over_footage:
-            draw.text((x + SHADOW_OFFSET, y + SHADOW_OFFSET), line, font=font, fill=SHADOW)
-        draw.text((x, y), line, font=font, fill=ACCENT if is_hook else FG)
+        draw.text((x, y), line, font=font, fill=ACCENT if is_hook else FG,
+                  stroke_width=stroke, stroke_fill=STROKE)
         y += step
 
     if code:
@@ -393,7 +415,7 @@ def _segment(png: Path, seconds: float, out: Path, zoom_in: bool = True) -> Path
 
 def _segment_over_footage(card_png: Path, seconds: float, clip: Path, out: Path,
                           hold: bool = False) -> Path:
-    """Stock footage, held back by a scrim, with the card laid over it.
+    """Stock footage at full brightness with the card laid over it.
 
     No zoompan here — the footage already moves. `-stream_loop -1` covers a
     Card that outlasts the clip. Studio footage (`hold`) is cut to the Card
@@ -409,8 +431,7 @@ def _segment_over_footage(card_png: Path, seconds: float, clip: Path, out: Path,
             "[0:v]"
             + (f"tpad=stop_mode=clone:stop_duration={seconds:.3f}," if hold else "")
             + f"scale={W}:{H}:force_original_aspect_ratio=increase,"
-            f"crop={W}:{H},fps={ZOOM_FPS},"
-            f"drawbox=x=0:y=0:w=iw:h=ih:color={SCRIM}:t=fill[bg];"
+            f"crop={W}:{H},fps={ZOOM_FPS}[bg];"
             "[bg][1:v]overlay=0:0:format=auto,format=yuv420p[v]"
         ),
         "-map", "[v]", "-t", f"{seconds:.3f}",
@@ -603,7 +624,8 @@ async def build(script: dict, workdir: Path,
                 supplied: dict[int, Path] | None = None,
                 locale: str = locales.DEFAULT,
                 narration: tuple[Path, list[float]] | None = None,
-                hold: frozenset[int] | set[int] = frozenset()) -> tuple[Path, dict]:
+                hold: frozenset[int] | set[int] = frozenset(),
+                low: frozenset[int] | set[int] = frozenset()) -> tuple[Path, dict]:
     """Script → mp4, plus the parameters it was actually built with.
 
     The second return value is what the Manifest records: the workdir is wiped
@@ -614,7 +636,8 @@ async def build(script: dict, workdir: Path,
     unaffected. `narration` is a take already spoken for a Storyboard Studio
     pack: reusing it keeps the cut points the shots were planned from. `hold`
     names the supplied Cards that come from that pack, whose footage is held
-    on its last frame rather than looped.
+    on its last frame rather than looped. `low` names the Cards whose character
+    speaks on screen; their caption sits under the face.
     """
     workdir.mkdir(parents=True, exist_ok=True)
     cards = script["cards"]
@@ -649,7 +672,8 @@ async def build(script: dict, workdir: Path,
     segments = []
     for i, (card, seconds, clip) in enumerate(zip(cards, spans, clips)):
         png = draw_card(
-            card, workdir / f"card{i:02d}.png", is_hook=(i == 0), over_footage=bool(clip)
+            card, workdir / f"card{i:02d}.png", is_hook=(i == 0), over_footage=bool(clip),
+            low=i in low,
         )
         out = workdir / f"seg{i:02d}.mp4"
         if clip:

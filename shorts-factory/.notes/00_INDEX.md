@@ -355,7 +355,8 @@ surface, why Pillow). Those ADRs are binding — read them before changing shape
   `WordBoundary` (no spaces), so per-word timing does not exist. If the
   boundaries do not line up with the Cards, it falls back to speaking each Card
   separately.
-- Two card looks: over footage (transparent card + scrim, footage supplies the
+- Two card looks: over footage (transparent card with outlined text, no scrim
+  since 2026-10-19; 🗣 Cards caption under the chin; footage supplies the
   motion) or, when no footage came back, the gradient card with a Ken Burns
   move. The fallback is silent by design.
 - **Learning loop (ขั้น 1-2 ลงแล้ว 27/08).** แผน 6 ขั้นที่

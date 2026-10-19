@@ -707,7 +707,8 @@ async def make_script(client: httpx.AsyncClient, state: dict, topic: str,
 async def do_render(client: httpx.AsyncClient, state: dict,
                     supplied: dict[int, Path] | None = None,
                     narration: tuple[Path, list[float]] | None = None,
-                    hold: frozenset[int] | set[int] = frozenset()) -> None:
+                    hold: frozenset[int] | set[int] = frozenset(),
+                    low: frozenset[int] | set[int] = frozenset()) -> None:
     script = state["script"]
     # The Script stays on screen with only its buttons gone: once the clip is
     # out, the 🗣 lines are what the human copies into /say to fix a word.
@@ -728,6 +729,7 @@ async def do_render(client: httpx.AsyncClient, state: dict,
                 # build() exactly as it did before Studio existed.
                 **({"narration": narration} if narration else {}),
                 **({"hold": hold} if hold else {}),
+                **({"low": low} if low else {}),
             )
         manifest.update(state.get("clip_id"), outcome="rendered", render=details)
         await deliver(client, state, script, clip)
@@ -1662,7 +1664,8 @@ async def render_studio(client: httpx.AsyncClient, state: dict, clip_id: str) ->
     if narration is None:
         await say(client, "🔁 เสียงพากย์เปลี่ยน (/say) หรือหาไฟล์เดิมไม่เจอ — อัดเสียงใหม่ "
                           "จุดตัดอาจคลาดเล็กน้อย")
-    if any(studio.voice_path(clip_id, i).is_file() for i in supplied):
+    speaking = {i for i in supplied if studio.voice_path(clip_id, i).is_file()}
+    if speaking:
         # 🗣 Cards: their own voice replaces the take's slice. The Pexels Cards
         # still need the take, so one is spoken now if /say retired the old one.
         try:
@@ -1683,7 +1686,8 @@ async def render_studio(client: httpx.AsyncClient, state: dict, clip_id: str) ->
                  research=wait.get("research"), style=wait.get("style", ""),
                  locale=wait["locale"], message_id=None)
     save_state(state)
-    await do_render(client, state, supplied=supplied, narration=narration, hold=set(supplied))
+    await do_render(client, state, supplied=supplied, narration=narration, hold=set(supplied),
+                    low=speaking)
 
 
 async def process_export(client: httpx.AsyncClient, state: dict, token: str, path: Path,
