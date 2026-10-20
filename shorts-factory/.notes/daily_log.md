@@ -2471,3 +2471,13 @@ pack page โชว์ `animate` + "ตั้ง Ns". render_studio: มี wav 
 - `validate()`: รับ `none`, ปฏิเสธ `speak` + 🚫 (th/en). `default_for()` คืน `none` ได้, `default_speak()` ใหม่. `on_studio()` ใช้ speak เฉพาะช่องที่ไม่ใช่ 🚫
 - ตรวจ: sf-test 554 passed/2 skipped (+4), root 64, ruff ไม่มี finding ใหม่. Deploy ตอน mode=idle, 5 containers restart=0, `/settings` 200 มีการ์ดใหม่
 - ค้าง: ผู้ใช้ตั้ง ⭐ @Minjee (หรือ 🤖) + footage + 🗣 ใน `/settings` แล้วลอง 🎞; push
+
+## 2026-10-20 (3) — script.md ทรงสั้น + ย่อบท 🗣 ให้พูดทัน + export เงียบ (`a497967`, deploy แล้ว ยังไม่ push)
+- ผู้ใช้: script.md ซับซ้อนวางใน Storyboard Studio ไม่ได้ (ส่งตัวอย่างทรงที่ต้องการ: Story Title / Characters / Scene N + Dialogue); shot 2/5/6 พูดไม่จบใน 10 วิ (ตัดที่ "น้ำจะทำให้", "ทำสม่ำเสมอ", "แล้วค่อยเพิ่ม")
+- วัด pack `20261020-122900-391`: take ทุกการ์ด 9.4-13.5 วิ เกิน 7.875 (`SPEAK_FIT`) ทุกใบ — บอทแค่เตือน ⚠️. จุดตัดจริง = Veo พูดได้ ~9.5-9.8 วิของ take ใน 10 วิ → เกณฑ์ 7.875 มี margin, ไม่ขยับ
+- `storyboard.studio_markdown()` ทรงใหม่: `Story Title:` (`overview.title_en` ใหม่ใน STUDIO_SCRIPT_RULE, ไทย/ไม่มี = ไม่ใส่), `Characters:` `@Tag is a …` (+ประโยคเสียงถ้า 🗣), `Scene N:` `scene_text()` ตัด lock→tag/ratio/negatives/caption space/lead-in, `Dialogue: "…"` หรือ `Dialogue: none. …`. ไม่มีความยาว shot ในไฟล์ (ข้อความ pack + หน้าเว็บบอก)
+- `main.fit_speech()` (ก่อนวาง shot ใน pack 🗣): การ์ด Flow ที่ `speak_too_long` → `script.condense()` mimo ครั้งเดียว งบ `studio.speech_budget()` = units×7.875×0.92/span (ไทยนับตัวอักษรไม่นับช่องว่าง, en นับคำ), ตีกลับ 1 ครั้งถ้าเกินงบ/ตัวเลขใหม่ (`research.unsourced_numbers` เทียบต้นฉบับ)/ละติน/ขีด → `prepare_narration` วัดใหม่ ≤2 รอบ → เขียนทับ narration/spoken ใน `clip_wait.script` (ซับตาม, lines คงเดิม, pronunciation_checks กรอง). ข้อความ pack บอก "✂️ ย่อการ์ด N (x วิ): …". พัง = บทเดิม + ⚠️ เดิม
+- **บั๊ก export เงียบ**: 12:36 pack v3 เขียน pack.json แล้ว `sendDocument` ConnectTimeout → token ไม่เข้า `clip_wait.versions` → หน้าเว็บโชว์ v3 ผู้ใช้อัป 55MB 13:31 ไฟล์นอนใน inbox ไม่มีใครเคลม. แก้: ลง versions ทันทีหลัง write_pack (ก่อนส่ง), ส่ง script.md พัง = log แล้วไปต่อ, startup `adopt_written_pack()`. หลัง deploy adopt v3 แล้ว claim ไฟล์ได้
+- export จริงยาว 56.99 วิ (คาด 60) → บอทปฏิเสธ (uneven) เสนอปุ่ม cut evenly. scene detect: รอยต่อที่ 10 / 19.04 / 29.00 / 38.03 / 47.99 = shot 10/9/10/9/10/9 วิ (Flow "10s" ออกมา ~9 วิ ทุกใบที่สอง?) → cut evenly คลาด ~0.5 วิ 3 จุด
+- ตรวจ: sf-test 565 passed/2 skipped (+11), root 64, ruff 55 = baseline. Deploy ตอน idle, 5 containers Up
+- ค้าง: ผู้ใช้ตัดสินใจ export นี้ (บทถูกตัดกลางคำอยู่แล้ว แนะนำวาง pack ใหม่ให้บอทย่อ); ลองวาง script.md ใหม่ใน Storyboard Studio; ทำไม shot 10s ออกมา 9 วิ (ถ้าจริง `SPEAK_LONG_SHOT` ต้องเป็น 9 หรือรองรับตัดตามรอยต่อฉาก); push
