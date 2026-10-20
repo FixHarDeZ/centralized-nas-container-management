@@ -111,6 +111,8 @@ def test_scene_text_cuts_a_real_prompt_to_one_sentence():
         "skin texture, shallow depth of field.")
     close = LIVE.replace("9:16 frame of", "9:16 close-up frame of")
     assert storyboard.scene_text(close, LIVE_LOCK, "@Minjee").startswith("Close-up frame of @Minjee standing")
+    shot = LIVE.replace("9:16 frame of", "9:16 shot of")
+    assert storyboard.scene_text(shot, LIVE_LOCK, "@Minjee").startswith("@Minjee standing")
     assert storyboard.character_line("@Minjee", LIVE_LOCK).startswith(
         "@Minjee is a 28-year-old Korean woman with long straight dark hair")
 

@@ -408,7 +408,7 @@ def portrait_prompt(locked: str) -> str:
 # boilerplate (lock, ratio, negatives, caption space) is Flow's project
 # settings and the Ingredients' job there, and made the script too long to paste.
 LEAD = re.compile(r"^(?:(?:a|an|photorealistic|cinematic|vertical|portrait|\d{1,2}:\d{1,2}|"
-                  r"frame|image|photo)\b[\s,]*)+(?:of\s+)?", re.I)
+                  r"frame|image|photo|shot)\b[\s,]*)+(?:of\s+)?", re.I)
 RATIO = re.compile(r"\s*\b\d{1,2}:\d{1,2}\b(?:\s+(?:aspect\s+ratio|format))?", re.I)
 BOILERPLATE = re.compile(r",?\s*\b(?:no text|no watermark|no UI|no split-screen|"
                          r"clean cent(?:er|re) composition for text overlay)\b\.?", re.I)
