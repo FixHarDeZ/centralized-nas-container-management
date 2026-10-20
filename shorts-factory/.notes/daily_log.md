@@ -2442,7 +2442,7 @@ pack page โชว์ `animate` + "ตั้ง Ns". render_studio: มี wav 
   ขนาดซับใต้คาง (การ์ดบรรทัดยาวเล็กลงเพราะกว้าง 800 px — ปรับ `LOW_WIDTH`/`LOW_BOTTOM` ตามจอมือถือจริง);
   ขอบดำบน Pexels ฉากวุ่นๆ ยังไม่เห็นของจริง; เครดิต shot 10 วิ; กด 🗣 กับ pack จริง; Flow มี download 1080p ไหม (export 720p ถูกขยาย).
 
-### 2026-10-20 ปุ่มเปลี่ยนใจ หลังกด 🎨 / 📋 / 🎞 (`4b6e061`, deploy แล้ว ยังไม่ push)
+### 2026-10-20 ปุ่มเปลี่ยนใจ หลังกด 🎨 / 📋 / 🎞 (`4b6e061` + fix `7da3a47`, deploy แล้ว ยังไม่ push)
 ต้นเรื่อง: ผู้ใช้กด 🎞 กับสคริปต์ใหม่ แต่ติด "ยังมี Studio pack ค้างอยู่: อายุ 30-40 …" ไม่มีทางทิ้ง pack เดิมนอกจากรอหมด 72 ชม.
 และอยากให้หลังกด 🎨 / 📋 กลับมาเลือกวิธีใหม่ได้
 - **swap บนข้อความปฏิเสธ**: 🎞 / 🎨 ที่โดนปฏิเสธเพราะมีอันเดิมค้าง มีปุ่ม `wait:swap:<studio|park>:<old>:<new>` กดแล้วทิ้งอันเดิม (manifest `abandoned`)
@@ -2457,4 +2457,7 @@ pack page โชว์ `animate` + "ตั้ง Ns". render_studio: มี wav 
 - ตรวจ: sf-test 549 passed/2 skipped (+12 ข้อใหม่ใน test_studio_bot.py, แก้ 2 เทสต์เก่าตาม signature/ปุ่มใหม่); root `make test` 64; ruff ไม่มี finding ใหม่
 - Deploy `deploy.sh -s shorts-factory -y` ตอน mode=review (ไม่ใช่ holding) — grep ในคอนเทนเนอร์เจอโค้ดใหม่, 5 containers running restart=0, ไม่มี error.
   state หลัง restart: review คงอยู่, clip_wait = pack เดิม `20261019-133610-434` (kind studio) → ปุ่ม swap ใช้กับ pack นี้ได้
+- fix `7da3a47` (advisor review): ↩️ บน pack เช็ค "render แล้ว" จาก Manifest `outcome == rendered` ไม่ใช่ `uploads` (ช่องไม่มี credential เช่น en ไม่เคยลง uploads),
+  ทุก cancel คืนสคริปต์/บอก drop ก่อนแล้วค่อยแก้ข้อความเก่า, ปุ่ม pack ปลดด้วย `retire_buttons()` (editMessageReplyMarkup — pack อาจเป็นเอกสาร script.md),
+  `working` ครอบ export ตั้งแต่เจอ version (ไม่ใช่แค่ตอน cut). sf-test 550 passed. redeploy แล้ว ตรวจในคอนเทนเนอร์ผ่าน
 - ค้าง: ผู้ใช้กด 🎞 สคริปต์ใหม่ → กด 🗑 ทิ้ง pack เดิม แล้วทำอันนี้ (ข้อความ pack เก่าบนจอยังเป็นคีย์บอร์ดเดิม ไม่มี ↩️/🗑 — pack ใหม่ถึงมี); push
