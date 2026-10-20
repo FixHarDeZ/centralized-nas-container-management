@@ -252,12 +252,14 @@ async def plan(brief: str, ratio: str, cards: list[dict] | None = None,
                choice: str = AUTO, character: str = "", *,
                scenes_wanted: int | None = None, max_scenes: int = MAX_SCENES,
                fixed_tag: str = "", script_rule: str | None = None,
-               finish=None) -> dict:
+               finish=None, overview_defaults: dict | None = None, attempts: int = 2) -> dict:
     """A brief (or a Script) → a validated storyboard. One retry, told what broke.
 
     `fixed_tag` is a library character's English, translated once and reused
     across clips: it is written over whatever the model named the character,
     so validation checks every prompt against *that* text, not the model's.
+    `overview_defaults` fills overview fields the caller already knows when
+    the model leaves them out, instead of spending a whole retry on them.
     """
     if choice not in CHOICES:
         choice = AUTO
@@ -269,10 +271,14 @@ async def plan(brief: str, ratio: str, cards: list[dict] | None = None,
     client = _client()
     wanted = scenes_wanted if scenes_wanted is not None else (len(cards) if cards else None)
     last: Exception | None = None
-    for attempt in range(2):
+    for attempt in range(attempts):
         raw = await _say(client, messages, temperature=0.8, budget=BUDGET_SECONDS)
         try:
             data = _parse(raw)
+            if overview_defaults and isinstance(data.get("overview"), dict):
+                for key, value in overview_defaults.items():
+                    if not str(data["overview"].get(key) or "").strip():
+                        data["overview"][key] = value
             if fixed_tag and isinstance(data.get("overview"), dict):
                 person = data["overview"].get("master_character") or {}
                 if isinstance(person, dict):

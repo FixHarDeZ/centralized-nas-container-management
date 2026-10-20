@@ -79,18 +79,35 @@ def board(n, product=True):
                         "motion": "Static camera"} for i in range(n)]}
 
 
+def test_a_scene_that_forgot_the_product_gets_it_and_a_missing_title_is_filled(monkeypatch):
+    calls = []
+
+    async def say(client, messages, temperature, budget):
+        calls.append(messages)
+        data = board(3, product=False)
+        del data["overview"]["title"]
+        return json.dumps(data)
+
+    monkeypatch.setattr(storyboard, "_say", say)
+    monkeypatch.setattr(storyboard, "_client", lambda: None)
+    data = asyncio.run(shop_studio.plan(shop_studio.script_for(PITCH), {"text": BRIEF}, storyboard.AUTO))
+    assert len(calls) == 1 and data["overview"]["title"] == PITCH["title"]
+    prompt = data["scenes"][0]["image_gen_prompt"]
+    assert "holds earbuds to camera, 9:16, holding @Product clearly in view, no text" in prompt
+
+
 def test_plan_puts_the_product_in_every_scene_and_says_the_spoken_line(monkeypatch):
     calls = []
 
     async def say(client, messages, temperature, budget):
         calls.append(messages)
-        return json.dumps(board(3, product=len(calls) > 1))
+        return json.dumps(board(3))
 
     monkeypatch.setattr(storyboard, "_say", say)
     monkeypatch.setattr(storyboard, "_client", lambda: None)
     script_ = shop_studio.script_for(PITCH)
     data = asyncio.run(shop_studio.plan(script_, {"text": BRIEF}, storyboard.AUTO))
-    assert len(calls) == 2 and "@Product" in calls[1][-1]["content"]
+    assert len(calls) == 1
     assert [s["sound_verbatim"] for s in data["scenes"]] == [c["spoken"] for c in script_["cards"]]
     assert [s["photo"] for s in data["scenes"]] == [2, 1, 2]
     brief = calls[0][1]["content"]

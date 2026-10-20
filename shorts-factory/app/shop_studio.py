@@ -12,7 +12,6 @@ import re
 from pathlib import Path
 
 from app import render, shop, shop_render, storyboard, studio
-from app.script import ScriptError
 from app.shop_media import probe
 
 MAX_LINES = 2
@@ -81,15 +80,29 @@ def _brief(script: dict, product: dict) -> str:
     return "\n".join(parts)
 
 
+NEGATIVE_START = re.compile(r",?\s*\bno text\b", re.I)
+
+
+def _with_product(prompt: str) -> str:
+    """Name @Product in a prompt that lost it, ahead of the negatives."""
+    clause = f", holding {storyboard.PRODUCT_TAG} clearly in view"
+    found = NEGATIVE_START.search(prompt)
+    if not found:
+        return prompt.rstrip(" .,") + clause
+    return prompt[:found.start()].rstrip(" .,") + clause + prompt[found.start():]
+
+
 def _finish(script: dict):
     def finish(data: dict) -> dict:
         for i, (scene, card) in enumerate(zip(data["scenes"], script["cards"]), 1):
             # `@product` is the same tag in other clothes: fixed, not refused.
-            scene["image_gen_prompt"] = re.sub(re.escape(storyboard.PRODUCT_TAG),
-                                               storyboard.PRODUCT_TAG,
-                                               scene["image_gen_prompt"], flags=re.I)
-            if storyboard.PRODUCT_TAG not in scene["image_gen_prompt"]:
-                raise ScriptError(f"ฉากที่ {i}: image_gen_prompt ต้องมี {storyboard.PRODUCT_TAG}")
+            prompt = re.sub(re.escape(storyboard.PRODUCT_TAG), storyboard.PRODUCT_TAG,
+                            scene["image_gen_prompt"], flags=re.I)
+            if storyboard.PRODUCT_TAG not in prompt:
+                # A scene that forgot the product gets it put in, not refused: on
+                # a live @Kim plan (2026-10-20) a refusal burnt the last attempt.
+                prompt = _with_product(prompt)
+            scene["image_gen_prompt"] = prompt
             scene["card"] = i - 1
             # Dialogue is what the voice says: Thai script, digits, "บาท".
             scene["sound_verbatim"] = card["spoken"]
@@ -109,7 +122,11 @@ async def plan(script: dict, product: dict, choice: str, character: str = "",
     return await storyboard.plan(
         brief, storyboard.SHORTS_RATIO, cards=script["cards"], choice=choice, character=character,
         scenes_wanted=count, max_scenes=storyboard.STUDIO_MAX_SHOTS, fixed_tag=fixed_tag,
-        script_rule=PRODUCT_RULE + storyboard.STUDIO_SPEAK_RULE, finish=_finish(script))
+        script_rule=PRODUCT_RULE + storyboard.STUDIO_SPEAK_RULE, finish=_finish(script),
+        # Thai fields the model sometimes skips; the pack never shows them.
+        overview_defaults={"title": script["title"], "mood_tone_progression": "-",
+                           "target_audience": "-"},
+        attempts=3)
 
 
 def product_name(board: dict) -> str:
