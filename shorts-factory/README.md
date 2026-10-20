@@ -620,9 +620,9 @@ needs a character (🚫 refuses it).
   **10 s** shot. 6.3 s is the observed edge (speech ran to ~7.9 s of 8), not
   a margin, and the 10 s limit (7.875 s of take, `studio.SPEAK_FIT`) is scaled
   from it. One clean 10 s sample (2026-10-20) agrees from the other side:
-  Veo said ~70 % of a 13.5 s take, then went quiet. Two other shots of that
-  export came out ~9 s long (cause unknown), so a pack can still land as
-  uneven. The pack
+  Veo said ~70 % of a 13.5 s take, then went quiet. Three other shots of that
+  export were trimmed ~1 s by hand where the speech broke; a hand-trimmed
+  export lands as uneven, and ✂️ cut evenly rendered it acceptably. The pack
   message lists which Cards to set to 10 s in Flow. The export length is the
   sum of those, not `shots × 8`.
 - **Lines too long for 10 s are shortened by the bot** (`main.fit_speech()`,

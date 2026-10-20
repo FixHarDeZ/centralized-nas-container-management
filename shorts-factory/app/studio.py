@@ -36,8 +36,8 @@ VOICE_RATE = 24000  # the edge-tts take's own rate, so the concat needs no resam
 SPEAK_MAX_TAKE = float(os.environ.get("SPEAK_MAX_TAKE_SECONDS", "6.3"))
 # The longest take a 10s speaking shot holds, at the same edge. One clean
 # sample from the other side (2026-10-20, a 10s shot): Veo said ~70% of a
-# 13.5s take (~9.4s of it), then went quiet. Two more shots of that export
-# came out ~9s long, cause unknown, so they say nothing about the edge.
+# 13.5s take (~9.4s of it), then went quiet. Three more shots of that export
+# were trimmed ~1s by hand where the speech broke, so they say nothing here.
 SPEAK_FIT = SPEAK_MAX_TAKE * SPEAK_LONG_SHOT / SHOT_SECONDS
 # condense() aims under the edge, so the re-measured take lands inside it.
 SPEAK_AIM = 0.92
