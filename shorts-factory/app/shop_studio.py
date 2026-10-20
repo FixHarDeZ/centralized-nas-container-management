@@ -141,7 +141,16 @@ def _trim(piece: Path, seconds: float, out: Path) -> Path:
 
 
 def build(script: dict, clip_id: str, workdir: Path) -> tuple[Path, dict]:
-    """Every shot's own footage and own voice → mp4. Blocking: run off the loop.
+    """The Telegram pack's render: its cut footage and voices under /data/studio."""
+    for i in range(len(script["cards"])):
+        if not studio.segment_path(clip_id, i).is_file() or not studio.voice_path(clip_id, i).is_file():
+            raise RuntimeError(f"shot {i + 1}: ไม่มี footage หรือเสียง — ส่ง export ใหม่")
+    return build_shots([(card, studio.segment_path(clip_id, i), studio.voice_path(clip_id, i))
+                        for i, card in enumerate(script["cards"])], workdir)
+
+
+def build_shots(shots: list[tuple[dict, Path, Path]], workdir: Path) -> tuple[Path, dict]:
+    """(card, footage, voice) per shot → mp4. Blocking: run off the loop.
 
     shop_render's video path, the same one the Creator Studio render uses:
     badge on top, subtitle at ~75 %, clear of the mouth. Each segment is as
@@ -149,10 +158,7 @@ def build(script: dict, clip_id: str, workdir: Path) -> tuple[Path, dict]:
     """
     workdir.mkdir(parents=True, exist_ok=True)
     pieces, segments, timing, clock = [], [], [], 0.0
-    for i, card in enumerate(script["cards"]):
-        footage, voice = studio.segment_path(clip_id, i), studio.voice_path(clip_id, i)
-        if not footage.is_file() or not voice.is_file():
-            raise RuntimeError(f"shot {i + 1}: ไม่มี footage หรือเสียง — ส่ง export ใหม่")
+    for i, (card, footage, voice) in enumerate(shots):
         piece = studio.voice_piece(voice, workdir / f"v{i:02d}.wav")
         seconds = render.audio_seconds(piece)
         # A line that runs to the very end of its shot has no tail to trim, and
@@ -176,3 +182,61 @@ def build(script: dict, clip_id: str, workdir: Path) -> tuple[Path, dict]:
     return clip, {"mode": "studio", "seconds": round(render.audio_seconds(clip), 3),
                   "frame": [shop_render.W, shop_render.H], "bgm": music.name if music else None,
                   "shots": timing}
+
+
+# --- for the Creator Studio worker, which has no /data/studio to write -------
+
+async def measure(script: dict, workdir: Path) -> list[float]:
+    """Each shot's span in one take of the shop voice, as the bot measures it."""
+    workdir.mkdir(parents=True, exist_ok=True)
+    audio, starts = await render._narration_track(script["cards"], workdir, voice=shop.VOICE)
+    return studio.spans(starts, render.audio_seconds(audio), render.TAIL_PAD)
+
+
+async def fit(script: dict, spans: list[float], brief: str, workdir: Path) -> tuple[list[float], list[int]]:
+    """Shorten lines a 10s shot would cut off, re-measuring, two rounds at most.
+
+    main.fit_speech() without Telegram. Raises like condense() does; the
+    caller decides whether the old lines may stand.
+    """
+    from app import script as script_gen
+    done: list[int] = []
+    for round_ in range(2):
+        over = [c for c, span in enumerate(spans) if studio.speak_too_long(span)]
+        if not over:
+            break
+        cards = script["cards"]
+        targets = {c: studio.speech_budget(script_gen.speech_units(cards[c]["spoken"]), spans[c])
+                   for c in over}
+        shorter = await script_gen.condense(cards, targets, "th", spoken_rule=SPOKEN_RULE,
+                                            check=condense_check(brief))
+        for c, text in shorter.items():
+            apply_condensed(cards[c], text)
+        spans = await measure(script, workdir / f"fit{round_}")
+        done += [c for c in shorter if c not in done]
+    return spans, done
+
+
+def studio_plan(pitch: dict, script: dict, spans: list[float], board: dict, tag: str,
+                profile: dict | None, references: list[str]) -> dict:
+    """A Creator Studio plan: the Pitch plus one Flow scene per shot and the pack."""
+    product = product_name(board)
+    seconds = {i: studio.speak_seconds(span) for i, span in enumerate(spans)}
+    scenes = []
+    for i, (card, scene) in enumerate(zip(script["cards"], board["scenes"])):
+        photo = min(max(int(card.get("photo") or 1), 1), len(references))
+        scenes.append({
+            "id": f"scene-{i + 1}", "source": "flow", "fit": "crop", "required_duration": 0,
+            "reference_id": references[photo - 1], "photo": photo,
+            "badge": card.get("badge") or "", "lines": card["lines"], "narration": card["narration"],
+            "spoken": card["spoken"], "purpose": f"shot {i + 1}", "span": round(spans[i], 2),
+            "seconds": seconds[i], "flow_prompt": storyboard.animate_prompt(scene, "Thai"),
+        })
+    markdown = storyboard.studio_markdown(board, tag, {"language": "Thai", "seconds": seconds}, product)
+    length = sum(seconds.values())
+    beats = [{k: c[k] for k in ("badge", "lines", "narration", "spoken", "photo")}
+             for c in script["cards"][:-1]]
+    return {**pitch, "beats": beats, "scenes": scenes,
+            "studio": {"markdown": markdown, "product": product, "product_tag": storyboard.PRODUCT_TAG,
+                       "tag": tag, "character": profile, "length": length,
+                       "credits": studio.credits({i: 1 for i in seconds}, seconds)}}

@@ -9,6 +9,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import sqlite3
 import time
 import uuid
@@ -34,6 +35,14 @@ def _id():
 
 def _json(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+MODES = ("scenes", "studio")
+CHARACTER = re.compile(r"^(?:auto|[a-z0-9][a-z0-9_-]{0,19})$")
+# What a Studio pack quotes word for word or was measured from: changing any of
+# it on the page would leave script.md and the shot lengths describing another clip.
+STUDIO_LOCKED = ("narration", "spoken", "lines", "reference_id", "source", "seconds", "span", "flow_prompt", "photo")
+STUDIO_LOCKED_PLAN = ("end_narration", "end_spoken")
 
 
 class Store:
@@ -102,7 +111,8 @@ class Store:
         job["status"] = "draft"
 
     def _fields(self, data):
-        fields = {k: data[k] for k in ("name", "brief", "destination", "current_price", "old_price", "affiliate_link") if k in data}
+        fields = {k: data[k] for k in ("name", "brief", "destination", "current_price", "old_price", "affiliate_link",
+                                       "mode", "character") if k in data and data[k] is not None}
         for key, value in fields.items():
             if not isinstance(value, str) or len(value) > (10000 if key == "brief" else 2000):
                 raise Invalid(f"invalid {key}")
@@ -112,6 +122,10 @@ class Store:
             raise Invalid("invalid destination")
         if fields.get("affiliate_link") and not fields["affiliate_link"].startswith(("https://", "http://")):
             raise Invalid("affiliate link must be an HTTP URL")
+        if "mode" in fields and fields["mode"] not in MODES:
+            raise Invalid("invalid mode")
+        if fields.get("character") and not CHARACTER.fullmatch(fields["character"]):
+            raise Invalid("invalid character")
         return fields
 
     def create_job(self, data: dict) -> dict:
@@ -123,7 +137,8 @@ class Store:
                "name": "", "brief": "", "destination": "shopee", "current_price": "", "old_price": "", "affiliate_link": "",
                "references": [], "plan": None, "plan_version": 0, "plan_approved_at": None,
                "validated_plan_version": None, "plan_error": None, "generation_error": None,
-               "notification_error": None, "notification_errors": {}, "status": "draft", "final_approved_render_id": None, **fields}
+               "notification_error": None, "notification_errors": {}, "status": "draft", "final_approved_render_id": None,
+               "mode": "scenes", "character": "", "export": None, **fields}
         with self._tx() as db:
             db.execute("INSERT INTO jobs VALUES (?,?)", (job["id"], _json(job)))
         return job
@@ -140,6 +155,9 @@ class Store:
         fields = self._fields(data)
         with self._tx() as db:
             job = self._job(db, job_id, expected_revision)
+            if fields.get("mode", job.get("mode", "scenes")) != job.get("mode", "scenes"):
+                # A per-scene plan and a Studio pack are different plans (ADR 0018).
+                job["plan"], job["export"] = None, None
             job.update(fields)
             if job.get("plan"):
                 job["plan_version"] += 1
@@ -174,12 +192,16 @@ class Store:
             raise Invalid("invalid plan")
         plan = json.loads(_json(plan))
         scenes = plan.get("scenes")
-        if not isinstance(scenes, list) or not 3 <= len(scenes) <= 6:
-            raise Invalid("plan needs 3-6 scenes")
         seen = set()
         with self._tx() as db:
             self._fence(db, command_id, owner, job_id=job_id)
             job = self._job(db, job_id, expected_revision)
+            studio = job.get("mode") == "studio"
+            # A Studio pack is its beats plus the closing line as a shot: one more.
+            if not isinstance(scenes, list) or not 3 <= len(scenes) <= (7 if studio else 6):
+                raise Invalid(f"plan needs 3-{7 if studio else 6} scenes")
+            if studio:
+                self._studio_plan(job, plan, by_worker=command_id is not None)
             for scene in scenes:
                 if not isinstance(scene, dict):
                     raise Invalid("invalid scene")
@@ -202,7 +224,8 @@ class Store:
                 # Client edits cannot forge worker validation or acceptance.
                 previous = next((s for s in (job.get("plan") or {}).get("scenes", [])
                                  if s["id"] == identity and s["source"] == scene["source"]), {})
-                scene.update(accepted_at=None, media_id=previous.get("media_id"), pending_media_id=previous.get("pending_media_id"))
+                scene.update(accepted_at=None, media_id=previous.get("media_id"), pending_media_id=previous.get("pending_media_id"),
+                             voice_id=previous.get("voice_id"))
                 scene.setdefault("fit", "crop")
                 if scene["source"] == "still" and not scene["media_id"]:
                     scene["media_id"] = reference
@@ -252,9 +275,10 @@ class Store:
     def add_asset(self, job_id: str, expected_revision: int, kind: str, filename: str, stream, *, scene_id: str | None = None) -> dict:
         name = str(filename).replace("\\", "/").rsplit("/", 1)[-1][:250]
         extension = Path(name).suffix.lower()
-        if kind not in ("reference", "scene"):
+        if kind not in ("reference", "scene", "export"):
             raise Invalid("invalid asset kind")
-        allowed = (".jpg", ".jpeg", ".png", ".webp") if kind == "reference" else (".mp4", ".mov", ".jpg", ".jpeg", ".png", ".webp")
+        allowed = ((".jpg", ".jpeg", ".png", ".webp") if kind == "reference" else (".mp4", ".mov") if kind == "export"
+                   else (".mp4", ".mov", ".jpg", ".jpeg", ".png", ".webp"))
         if extension not in allowed:
             raise Invalid("unsupported file extension")
         limit = (15 if extension in (".jpg", ".jpeg", ".png", ".webp") else 100) * 1024 * 1024
@@ -286,7 +310,14 @@ class Store:
                     if job["plan"]:
                         job["plan_version"] += 1
                     self._invalidate(job)
+                elif kind == "export":
+                    # One Storyboard Studio export for the whole pack (ADR 0018).
+                    if job.get("mode") != "studio" or not job["plan_approved_at"]:
+                        raise Invalid("approve the Studio plan before uploading its export")
+                    job["export"] = {"asset_id": identity, "status": "pending", "error": None}
                 else:
+                    if job.get("mode") == "studio":
+                        raise Invalid("a Studio job takes one export for every scene, not a clip per scene")
                     scene = self._scene(job, scene_id)
                     if scene["source"] != "still" and extension not in (".mp4", ".mov"):
                         raise Invalid("video scene requires MP4 or MOV")
@@ -306,6 +337,78 @@ class Store:
             final.unlink(missing_ok=True)
             raise
 
+    def _studio_plan(self, job, plan, *, by_worker):
+        """A Studio plan comes from the worker; a page edit may only retitle it."""
+        if by_worker:
+            if not isinstance(plan.get("studio"), dict):
+                raise Invalid("Studio plan is missing its pack")
+            job["export"] = None
+            return
+        old = job.get("plan") or {}
+        if not old.get("studio"):
+            raise Invalid("generate the Studio plan first")
+        if [s.get("id") for s in plan["scenes"]] != [s["id"] for s in old["scenes"]]:
+            raise Invalid("Studio: ห้ามเพิ่ม ลบ หรือสลับฉาก — กดสร้างแผนใหม่")
+        previous = {s["id"]: s for s in old["scenes"]}
+        for scene in plan["scenes"]:
+            if any(scene.get(key) != previous[scene["id"]].get(key) for key in STUDIO_LOCKED):
+                raise Invalid("Studio: บทพูด ซับ และรูปอ้างอิงแก้ที่นี่ไม่ได้ (pack อ้างคำต่อคำ) — กดสร้างแผนใหม่")
+        if any(plan.get(key) != old.get(key) for key in STUDIO_LOCKED_PLAN):
+            raise Invalid("Studio: บทปิดท้ายแก้ที่นี่ไม่ได้ — กดสร้างแผนใหม่")
+        plan["studio"] = old["studio"]
+
+    def request_even_cut(self, job_id: str, expected_revision: int) -> dict:
+        """✂️ cut evenly: the human vouches for the order of an export of the wrong length."""
+        with self._tx() as db:
+            job = self._job(db, job_id, expected_revision)
+            export = job.get("export") or {}
+            if export.get("status") != "uneven":
+                raise Invalid("no export is waiting to be cut evenly")
+            export["status"] = "cutting"
+            self._enqueue(db, "cut_export", {"job_id": job_id, "asset_id": export["asset_id"], "even": True},
+                          f"cut:{export['asset_id']}:1")
+            job["export"] = export
+            return self._touch(db, job)
+
+    def set_export_result(self, job_id: str, asset_id: str, status: str, *, duration: float | None = None,
+                          expected: float | None = None, error: str | None = None, cuts: list | None = None,
+                          command_id: str | None = None, owner: str | None = None) -> dict:
+        """The worker's cut of a Studio export: per-scene video + voice, or why not.
+
+        `cuts` is [(scene_id, (video_path, metadata), (voice_path, metadata))];
+        the files are moved into the asset store here, under new ids, already
+        valid: they were made by the worker from a validated export.
+        """
+        if status not in ("uneven", "cut", "failed"):
+            raise Invalid("invalid export status")
+        with self._tx() as db:
+            self._fence(db, command_id, owner, job_id=job_id, asset_id=asset_id)
+            job = self._job(db, job_id)
+            export = job.get("export") or {}
+            if export.get("asset_id") != asset_id:
+                raise Conflict("export superseded")
+            export.update(status=status, duration=duration, expected=expected, error=error)
+            for scene_id, *files in cuts or []:
+                scene = self._scene(job, scene_id)
+                ids = []
+                for kind, (path, metadata) in zip(("scene", "voice"), files):
+                    path = Path(path)
+                    identity = _id()
+                    key = identity + path.suffix.lower()
+                    asset = {"id": identity, "job_id": job_id, "scene_id": scene_id, "kind": kind,
+                             "name": f"{scene_id}{path.suffix.lower()}", "key": key, "size": path.stat().st_size,
+                             "sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "validation": "valid",
+                             "metadata": metadata, "error": None, "created_at": time.time(), "export_id": asset_id}
+                    os.replace(path, self.assets_dir / key)
+                    db.execute("INSERT INTO assets VALUES (?,?,?)", (identity, job_id, _json(asset)))
+                    ids.append(identity)
+                scene.update(media_id=ids[0], voice_id=ids[1], pending_media_id=None, accepted_at=None)
+            if status == "cut":
+                job["final_approved_render_id"] = None
+                job["status"] = "waiting_for_clips"
+            job["export"] = export
+            return self._touch(db, job)
+
     def _scene(self, job, scene_id):
         for scene in (job.get("plan") or {}).get("scenes", []):
             if scene["id"] == scene_id:
@@ -319,6 +422,16 @@ class Store:
             asset.update(validation="valid" if valid else "invalid", metadata=metadata, error=None if valid else (error or "invalid media"))
             self._save(db, "assets", asset)
             job = self._job(db, asset["job_id"])
+            export = job.get("export") or {}
+            if asset["kind"] == "export" and export.get("asset_id") == asset_id:
+                if valid:
+                    export.update(status="probed", duration=metadata.get("duration"), error=None)
+                    self._enqueue(db, "cut_export", {"job_id": job["id"], "asset_id": asset_id, "even": False},
+                                  f"cut:{asset_id}:0")
+                else:
+                    export.update(status="invalid", error=asset["error"])
+                job["export"] = export
+                self._touch(db, job)
             if asset["kind"] == "scene":
                 try:
                     scene = self._scene(job, asset["scene_id"])
@@ -396,9 +509,12 @@ class Store:
                 raise Invalid("approve plan and accept every scene before rendering")
             if not any(s["source"] in ("flow", "real") for s in scenes):
                 raise Invalid("at least one accepted video scene is required")
-            assets = {a: self._get(db, "assets", a) for a in set(job["references"] + [s["media_id"] for s in scenes])}
+            if job.get("mode") == "studio" and any(not s.get("voice_id") for s in scenes):
+                raise Invalid("every Studio scene needs its voice cut from the export")
+            voices = [s["voice_id"] for s in scenes if s.get("voice_id")]
+            assets = {a: self._get(db, "assets", a) for a in set(job["references"] + [s["media_id"] for s in scenes] + voices)}
             snapshot = {**job, "assets": assets}
-            content = {k: snapshot[k] for k in ("name", "brief", "destination", "current_price", "old_price", "affiliate_link", "plan", "assets", "plan_version")}
+            content = {k: snapshot.get(k) for k in ("name", "brief", "destination", "current_price", "old_price", "affiliate_link", "plan", "assets", "plan_version", "mode")}
             fingerprint = hashlib.sha256(_json(content).encode()).hexdigest()
             prior = [json.loads(r[0]) for r in db.execute("SELECT body FROM renders WHERE job_id=? AND fingerprint=?", (job_id, fingerprint))]
             prior.sort(key=lambda r: r["attempt"], reverse=True)

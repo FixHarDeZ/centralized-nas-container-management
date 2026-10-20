@@ -80,7 +80,7 @@ footer{color:var(--muted);font-size:13px;padding:10px 0 40px}
 <div class="wrap">
 <div class="topbar">
   <div class="brand"><span class="brand-mark">🎞</span> shorts-factory · Studio Pack</div>
-  <div class="stamp">อัปเดต 16 ต.ค. 2026 · ADR 0016</div>
+  <div class="stamp">อัปเดต 20 ต.ค. 2026 · ADR 0016–0018</div>
 </div>
 
 <header class="hero">
@@ -126,10 +126,12 @@ footer{color:var(--muted);font-size:13px;padding:10px 0 40px}
         <li><strong>English</strong>: ไม่บังคับ ใส่เองถ้าอยากคุมคำเอง (ห้ามมีภาษาไทย)</li>
         <li>ติ๊ก <strong>สร้างใน Flow แล้ว</strong> หลังจากสร้าง Asset Profile ใน Flow แล้ว หน้า pack จะพับ prompt ภาพตัวละครเก็บไว้</li>
       </ol>
-      <p>ด้านล่างมีให้เลือก <strong>ตัวละครเริ่มต้นแต่ละช่อง</strong> (TH / EN / SHOP) และ <strong>แหล่งภาพเริ่มต้นของการ์ด</strong>:</p>
+      <p>การ์ด <strong>ค่าเริ่มต้นของ Studio pack 🎞</strong> (ใต้คลังตัวละคร) — pack ทุกอันเริ่มจากค่านี้ ไม่ต้องกดเปลี่ยนบน pack ทุกครั้ง (กด 1 ครั้ง = วาง pack ใหม่ ~1 นาที):</p>
       <ul>
-        <li><code>hook = Flow, ที่เหลือ Pexels</code> (ค่าเริ่มต้น แนะนำ)</li>
-        <li><code>Pexels ทั้งหมด</code> / <code>Flow ทั้งหมด</code></li>
+        <li><strong>⭐ ที่แถวตัวละคร</strong> = ใช้คนนั้นกับคลิปไทยทุกครั้ง หรือเลือก <code>🤖 ให้บอทแต่งใหม่ทุกครั้ง</code> / <code>🚫 ไม่มีตัวละคร</code></li>
+        <li><strong>ตัวละครเริ่มต้นช่อง EN</strong> และ <strong>ตัวละครคลิปสินค้า 🛍</strong> (ใช้กับ 🎞 Studio ของ /shop — ตัวละครพูดเองเสมอ)</li>
+        <li><strong>แหล่งภาพเริ่มต้นของแต่ละการ์ด</strong>: <code>hook = Flow, ที่เหลือ Pexels</code> (แนะนำ) / <code>Pexels ทั้งหมด</code> / <code>Flow ทั้งหมด</code></li>
+        <li><strong>🗣 ตัวละครพูดเอง</strong> เปิดไว้ตั้งแต่แรก (ใช้กับ 🚫 ไม่ได้ — ระบบไม่ยอมบันทึก)</li>
       </ul>
     </div>
     <div class="mock" aria-hidden="true">
@@ -140,8 +142,8 @@ footer{color:var(--muted);font-size:13px;padding:10px 0 40px}
         <div class="box"><div class="lbl">ลักษณะ (ไทย)</div>ผู้หญิงไทย 28 ปี ผมบ๊อบสั้นสีดำ แว่นกลมกรอบบาง เสื้อเชิ้ตลินินสีเบจทับเสื้อยืดขาว</div>
         <div class="box"><div class="lbl">English (ไม่บังคับ)</div><span style="color:#9aa">—</span></div>
         <div class="box">☑ สร้างใน Flow แล้ว</div>
-        <div class="box"><div class="lbl">ตัวละครเริ่มต้นช่อง TH</div>@Nong ▾</div>
-        <div class="box"><div class="lbl">แหล่งภาพเริ่มต้นของแต่ละการ์ด</div>hook = Flow, ที่เหลือ Pexels ▾</div>
+        <div class="box">◉ ⭐ ตัวละครเริ่มต้นของ Studio pack ใหม่</div>
+        <div class="box"><div class="lbl">ค่าเริ่มต้นของ Studio pack 🎞</div>○ 🤖 แต่งใหม่ทุกครั้ง · ○ 🚫 ไม่มีตัวละคร<br>แหล่งภาพ: hook = Flow, ที่เหลือ Pexels ▾<br>☑ 🗣 ตัวละครพูดเอง</div>
         <span class="btn">✓ บันทึกการตั้งค่า</span>
       </div>
     </div>
@@ -161,7 +163,7 @@ footer{color:var(--muted);font-size:13px;padding:10px 0 40px}
         <li>เขียน prompt ภาษาอังกฤษล้วน (ไม่มีบทพูด ไม่มีภาษาไทย) ส่ง <code>script.md</code> + ข้อความ pack พร้อมปุ่ม</li>
       </ol>
       <p>ระหว่างนี้บอท<strong>ว่าง</strong> พิมพ์หัวข้อใหม่ทำคลิปอื่นต่อได้เลย pack รอคุณได้ <strong>72 ชม.</strong></p>
-      <div class="callout warn"><strong>pack ค้างได้ทีละคลิป</strong>ถ้ามี pack ของคลิปอื่นค้างอยู่ บอทจะไม่ให้กด 🎞 คลิปใหม่ (กันเครดิตที่ใช้กับ pack แรกเสียเปล่า) ส่งไฟล์ของอันเก่าก่อน หรือรอหมดอายุ</div>
+      <div class="callout warn"><strong>pack ค้างได้ทีละคลิป</strong>ถ้ามี pack ของคลิปอื่นค้างอยู่ กด 🎞 แล้วบอทจะบอกชื่อ pack เดิม พร้อมปุ่ม <strong>🗑 ทิ้ง pack เดิม แล้วทำอันนี้</strong> (กดแล้วทิ้งอันเก่า + ทำ pack ของสคริปต์นี้ทันที) หรือส่งไฟล์ของอันเก่าให้เสร็จก่อน</div>
     </div>
     <div class="tg" aria-hidden="true">
       <div class="bubble">สินเชื่อบ้าน 2.60% 40 ปี คุ้มไหม?
@@ -172,7 +174,7 @@ footer{color:var(--muted);font-size:13px;padding:10px 0 40px}
 การ์ด Flow: 1 · 1 shot × 8 วิ = 8 วิ ≈ 12 เครดิต
 หน้า copy + อัปไฟล์: https://…/storyboard/20261016-…
 ไฟล์ ≤20MB reply ข้อความนี้ได้เลย · สลับ 🎬/🖼 หรือเปลี่ยนตัวละครด้วยปุ่มข้างล่าง</div>
-      <div class="kbd"><div class="row"><span>1 🎬</span><span>2 🖼</span><span>3 🖼</span></div><div class="row"><span>4 🖼</span><span>5 🖼</span></div><div class="row"><span>@Nong ✓</span><span>🤖 แต่งใหม่</span><span>🚫 ไม่มีคน</span></div><div class="row"><span>✅ Pexels ทั้งหมด — render เลย</span><span>✂️ ย่อการ์ดยาว</span></div></div>
+      <div class="kbd"><div class="row"><span>1 🎬</span><span>2 🖼</span><span>3 🖼</span></div><div class="row"><span>4 🖼</span><span>5 🖼</span></div><div class="row"><span>@Nong ✓</span><span>🤖 แต่งใหม่</span><span>🚫 ไม่มีคน</span></div><div class="row"><span>🗣 ตัวละครพูดเอง</span></div><div class="row"><span>✅ Pexels ทั้งหมด — render เลย</span><span>✂️ ย่อการ์ดยาว</span></div><div class="row"><span>↩️ ยกเลิก เลือกวิธีใหม่</span><span>🗑 เลิกทำคลิปนี้</span></div></div>
     </div>
   </div>
 </section>
@@ -187,10 +189,13 @@ footer{color:var(--muted);font-size:13px;padding:10px 0 40px}
       <tr><td><code>🤖 แต่งใหม่</code></td><td>ให้บอทออกแบบตัวละครใหม่สำหรับคลิปนี้ (tag <code>@Lead</code>)</td><td>ไม่มีตัวละครประจำที่เข้ากับเรื่อง</td></tr>
       <tr><td><code>🚫 ไม่มีคน</code></td><td>ภาพไม่มีตัวละคร (สิ่งของ ฉาก บรรยากาศ)</td><td>หัวข้อที่ไม่ต้องมีคน</td></tr>
       <tr><td><code>✅ Pexels ทั้งหมด — render เลย</code></td><td>ยกเลิก Flow ทุกการ์ด render ด้วย Pexels ทันที</td><td>เปลี่ยนใจ ไม่ทำ Flow แล้ว</td></tr>
+      <tr><td><code>🗣 ตัวละครพูดเอง</code></td><td>การ์ด 🎬 ตัวละครพูดบทเองในคลิป Flow (เก็บเสียงนั้น) — บทที่ยาวเกิน 10 วิ บอทย่อให้เอง (ดู <a href="#flow">4.6</a>)</td><td>อยากได้คนพูดหน้ากล้องแทนเสียงพากย์</td></tr>
+      <tr><td><code>↩️ ยกเลิก เลือกวิธีใหม่</code></td><td>ทิ้ง pack แล้วส่งสคริปต์กลับไปรีวิว (Fact sheet / hook / คู่ 🌏 กลับมาด้วย) — ต้องไม่มีสคริปต์อื่นค้างรีวิว ไม่งั้นบอทเสนอ 🗑 แทน</td><td>เปลี่ยนใจ อยากกด 🎬 / 🎨 / 📋 แทน</td></tr>
+      <tr><td><code>🗑 เลิกทำคลิปนี้</code></td><td>ทิ้ง pack + ไฟล์ทั้งหมด คลิปนี้จบ</td><td>ไม่อยากทำหัวข้อนี้แล้ว</td></tr>
       <tr><td><code>✂️ ย่อการ์ดยาว</code></td><td>ทิ้ง pack แล้วส่งสคริปต์กลับไปรีวิว พร้อมบอกว่าการ์ดไหนยาวเกิน 1 shot</td><td>อยากให้แต่ละการ์ดพอดี 1 shot (ประหยัดเครดิต) — พิมพ์ feedback เช่น "ย่อการ์ด 2 ให้พูดไม่เกิน 7 วินาที"</td></tr>
     </tbody>
   </table></div>
-  <div class="callout"><strong>เครดิตโดยประมาณ</strong>บอทคิด 12 เครดิตต่อ shot (วัดจาก Omni 1.1 Flash · 720p · 8 วิ · x1) ตัวเลขบน pack เป็นค่าประมาณ ของจริงดูใน Flow</div>
+  <div class="callout"><strong>เครดิตโดยประมาณ</strong>shot 8 วิ = 12 เครดิต · shot 10 วิ = 15 เครดิต (ราคา Flow ณ 20 ต.ค.) ตัวเลขบน pack เป็นค่าประมาณ ของจริงดูใน Flow · ↩️/🗑 กดไม่ได้ระหว่างบอทกำลังหั่นหรือ render คลิปนั้น</div>
   <div class="callout warn"><strong>บอทไม่แก้ข้อความที่อนุมัติแล้วเอง</strong>การ์ดยาวจะได้หลาย shot แทนที่จะถูกตัดคำ ถ้าอยากให้สั้นลงต้องกด ✂️ แล้วสั่งแก้เอง — <b>ยกเว้น 🗣 ตัวละครพูดเอง</b>: การ์ดที่พูดไม่ทันใน 10 วิ บอทย่อบทพูดให้เองแล้วอัดเสียงวัดใหม่ ซับเปลี่ยนตาม บรรทัดใหม่โชว์ในข้อความ pack</div>
 </section>
 
@@ -205,7 +210,7 @@ footer{color:var(--muted);font-size:13px;padding:10px 0 40px}
         <li><strong>4 · Animate ทีละ shot</strong> — กดขยายทีละ shot: Ingredients ที่ต้องแนบ, บทพูดไทยของช่วงนั้น (ไว้ดูจังหวะ), prompt + การเคลื่อนกล้อง</li>
         <li><strong>5 · Export แล้วอัปกลับ</strong> — ความยาวที่ควรได้ + ฟอร์มอัปไฟล์</li>
       </ul>
-      <p>(ไม่มีข้อ 2 — สงวนไว้สำหรับ Shop)</p>
+      <p>คลิปสินค้า (🎞 Studio ของ /shop) มีการ์ด <strong>🛍 สินค้า @Product</strong> เพิ่ม: รูปสินค้าให้ดาวน์โหลดไปสร้าง Asset Profile — ดู <a href="shop-guide.html#studio">คู่มือคลิปสินค้า</a></p>
       <div class="callout warn"><strong>หน้าเว็บผูกกับเวอร์ชัน</strong>ถ้ากดปุ่มใน Telegram จนได้ pack ใหม่ ให้เปิดลิงก์ของเวอร์ชันใหม่/รีโหลดหน้า ฟอร์มอัปของเวอร์ชันเก่าจะถูกปฏิเสธ (บอทเก็บรับไฟล์ได้แค่ 5 เวอร์ชันล่าสุด)</div>
     </div>
     <div class="mock" aria-hidden="true">
@@ -259,6 +264,7 @@ Dialogue: none. No voiceover, no on-screen text.</pre></div>
     <li>Export เป็นไฟล์เดียว (เสียงติดมาด้วย ไม่เป็นไร บอทตัดทิ้ง)</li>
     <li>ไฟล์ควรยาว = จำนวน shot × 8 วิ (คลาดได้ ±0.5 วิ)</li>
   </ol>
+  <div class="callout"><strong>ตัดท้าย shot เองได้ แต่ไฟล์จะยาวไม่ตรง</strong>เช่นตัดช่วงที่เสียงขาดออก shot ละ 1 วิ — บอทจะไม่หั่นเอง แต่ส่งปุ่ม <strong>✂️ หั่นเท่าๆ กัน</strong> ให้ (ลองจริง 20 ต.ค. ผลออกมาโอเค รอยต่อการ์ดอาจคลาดได้ราวครึ่งวินาที)</div>
   <h3>4.6 🗣 ตัวละครพูดเอง (ถ้าเปิด)</h3>
   <p>กดปุ่ม <strong>🗣 ตัวละครพูดเอง</strong> ใต้ pack (ต้องเลือกตัวละครก่อน) — การ์ด 🎬 ตัวละครพูดบทเองในคลิป Flow บอทเก็บเสียงนั้นไว้ การ์ด 🖼 Pexels ยังใช้เสียงพากย์ TTS เหมือนเดิม</p>
   <ol>
@@ -325,6 +331,8 @@ Dialogue: none. No voiceover, no on-screen text.</pre></div>
       <tr><td>เปลี่ยนตัวละคร</td><td>กดชื่อ / 🤖 / 🚫</td><td>pack ใหม่ ต้องทำ Flow ของการ์ดที่ยังไม่มีภาพใหม่</td></tr>
       <tr><td>แก้คำอ่านผิดด้วย <code>/say</code> แล้วอยากได้เสียงใหม่</td><td><code>/say ผิด = ถูก</code> แล้ว <code>/redo</code></td><td>ใช้ภาพ Flow ชุดเดิม อัดเสียงใหม่ (บอทบอก 🔁 จุดตัดอาจคลาดเล็กน้อย)</td></tr>
       <tr><td>ไม่เอา Flow แล้ว</td><td><code>✅ Pexels ทั้งหมด — render เลย</code></td><td>render Pexels ทันที</td></tr>
+      <tr><td>ไม่อยากทำ Flow แล้ว อยากกลับไปเลือกวิธีใหม่</td><td><code>↩️ ยกเลิก เลือกวิธีใหม่</code></td><td>สคริปต์กลับไปรีวิว พร้อมปุ่มเดิมทุกปุ่ม</td></tr>
+      <tr><td>มี pack อื่นค้างแต่อยากทำคลิปนี้</td><td>กด 🎞 แล้วกด <code>🗑 ทิ้ง pack เดิม แล้วทำอันนี้</code></td><td>ทิ้ง pack เก่า ทำ pack ใหม่ทันที</td></tr>
       <tr><td>อยากให้การ์ดยาวสั้นลง</td><td><code>✂️ ย่อการ์ดยาว</code> → พิมพ์ feedback</td><td>สคริปต์กลับไปรีวิว (Fact sheet + hook variant + คู่ 🌏 ยังอยู่ครบ) แล้วกด 🎞 ใหม่</td></tr>
     </tbody>
   </table></div>
@@ -347,6 +355,9 @@ Dialogue: none. No voiceover, no on-screen text.</pre></div>
       <tr><td>footage พร้อมแล้ว กด render เมื่อบอทว่าง</td><td>ไฟล์มาตอนบอททำคลิปอื่นอยู่</td><td>กด <code>🎬 render Studio</code> เมื่อบอทว่าง</td></tr>
       <tr><td>ไฟล์ใหญ่เกิน 20MB — อัปที่หน้าเว็บแทน</td><td>เพดาน Telegram</td><td>ใช้ <a href="#return">ทาง B</a></td></tr>
       <tr><td>🔁 เสียงพากย์เปลี่ยน (/say) …</td><td>คำอ่านเปลี่ยนหลังสร้าง pack</td><td>ไม่ต้องทำอะไร บอทอัดเสียงใหม่ให้</td></tr>
+      <tr><td>✂️ บทพูดการ์ด N ยาวเกิน 10 วิ — กำลังย่อ…</td><td>🗣 เปิดอยู่ บทยาวเกินพูดทัน</td><td>รอ 2-6 นาที ดูบทใหม่ใน "✂️ ย่อการ์ด N" ในข้อความ pack</td></tr>
+      <tr><td>ย่อบทพูดไม่สำเร็จ …</td><td>โมเดลย่อไม่ผ่านกติกา/เงียบ</td><td>ใช้บทเดิม หรือกด ✂️ ย่อเอง</td></tr>
+      <tr><td>ได้ไฟล์มา แต่ pack นั้นเก่าแล้ว</td><td>ไฟล์เป็นของ pack เวอร์ชันที่หมดสิทธิ์</td><td>ทำตาม pack ล่าสุด</td></tr>
     </tbody>
   </table></div>
 </section>
@@ -355,9 +366,10 @@ Dialogue: none. No voiceover, no on-screen text.</pre></div>
   <div class="head"><div class="num">!</div><div><h2>ข้อจำกัดและสิ่งที่ยังไม่ยืนยัน</h2></div></div>
   <ul>
     <li><strong>ห้ามใช้เครื่องมือ automate Flow</strong> (gflow-cli, flowkit ฯลฯ) กับบัญชีหลัก — มีรายงานบัญชีโดนบล็อก ทุกอย่างในคู่มือนี้กดเองในเว็บ Flow</li>
-    <li>ยังไม่ยืนยันว่า Flow ทำตามบรรทัด <code>STYLE:</code> ใน script.md ทุกข้อ และ frame ใน Storyboard ออกมาเป็น 9:16 จริง (ถ้าได้แนวนอน ให้ตั้งสัดส่วนเองใน project)</li>
+    <li>script.md เป็นทรงสั้น (<code>Story Title</code> / <code>Characters</code> / <code>Scene N</code> + <code>Dialogue</code>) ตามที่กล่อง script ของ Storyboard Studio รับได้ — สัดส่วน 9:16 ไม่ได้อยู่ในไฟล์แล้ว ตั้งใน project เอง</li>
     <li>ยังไม่ยืนยันว่า <code>@tag</code> ใน script ผูกกับ Asset Profile ชื่อเดียวกันอัตโนมัติ — ถ้าไม่ผูก ให้แนบรูปตัวละครเป็น Ingredient (1) เอง</li>
-    <li>ยังไม่รู้ว่าเครดิต AI Pro ต่อเดือนพอทำได้กี่คลิป — hook 1 shot ≈ 12 เครดิต</li>
+    <li>ยังไม่รู้ว่าเครดิต AI Pro ต่อเดือนพอทำได้กี่คลิป — hook 1 shot ≈ 12 เครดิต (10 วิ = 15)</li>
+    <li>บทที่บอทย่อให้ (🗣) วัดจากเสียง TTS — Veo จริงพูดช้า/เร็วต่างกันไปบ้าง ถ้ายังขาด ให้เจน shot นั้นใหม่หรือตัดท้ายแล้ว cut evenly</li>
     <li>อัปไฟล์เกิน 20 MB ผ่านโดเมนภายนอกยังไม่เคยลอง (ดู <a href="#return">ข้อ 5</a>)</li>
     <li>อย่าอัปไฟล์ซ้ำของเวอร์ชันเดียวกันระหว่างที่บอทกำลังหั่น — ไฟล์ใหม่จะทับไฟล์ที่กำลังอ่านอยู่</li>
   </ul>
@@ -369,7 +381,7 @@ Dialogue: none. No voiceover, no on-screen text.</pre></div>
     <li>สคริปต์รีวิวผ่าน → กด 🎞</li>
     <li>เช็คการ์ด 🎬 / ตัวละครบน pack (แก้ด้วยปุ่มถ้าต้องการ)</li>
     <li>เปิดหน้า pack → ก๊อป script.md ไปวางใน Storyboard Studio (9:16)</li>
-    <li>Animate ทุก shot: Video · Ingredients · 9:16 · 720p · <strong>8s</strong> · x1</li>
+    <li>Animate ทุก shot: Video · Ingredients · 9:16 · 720p · <strong>8s</strong> (หรือ 10s ตามป้ายของ shot ถ้าเปิด 🗣) · x1</li>
     <li>Scenes เรียงครบตามลำดับ → export ไฟล์เดียว ยาว = shot × 8 วิ</li>
     <li>reply ไฟล์ที่ข้อความ pack (≤20 MB) หรืออัปที่หน้าเว็บ</li>
     <li>ดูคลิปที่ได้ → กด ⬆️ อัปโหลดขึ้น YouTube</li>

@@ -12,7 +12,7 @@ from pathlib import Path
 
 import httpx
 
-from app import shop, shop_render, telegram
+from app import characters, shop, shop_render, shop_studio, storyboard, studio, telegram
 from app.render_lock import render_slot_sync
 from app.shop_affiliate import NO_CLICK_DAYS, Affiliate
 from app.shop_media import MediaError, probe
@@ -60,6 +60,22 @@ def flow_prompt(job: dict, scene: dict) -> str:
             'Do not add or alter text or logos; preserve all existing text and logos exactly as in the reference. '
             'No generated subtitles, price tags, watermarks or audio. '
             'The human must confirm that the rendered product matches the selected reference.')
+
+
+async def character_for(choice: str) -> tuple[str, str, str, dict]:
+    """A Studio job's speaker: a library character, or one the model invents (a woman).
+
+    The worker mounts /data read-only, so a translation it makes is used, not
+    cached; the bot caches it the first time it plans with that character.
+    """
+    person = characters.get(choice) if choice and choice != 'auto' else None
+    if not person:
+        return storyboard.AUTO, '', '', {'choice': 'auto', 'id': '', 'tag': storyboard.AUTO_TAG,
+                                         'flow_ready': False}
+    english = characters.cached_english(person) or await storyboard.english_character(person['thai'])
+    return storyboard.OWN, english, english, {
+        'choice': person['id'], 'id': person['id'], 'tag': person['tag'], 'locked': english,
+        'flow_ready': person['flow_ready'], 'portrait': storyboard.portrait_prompt(english)}
 
 
 class Worker:
@@ -112,6 +128,63 @@ class Worker:
             await asyncio.sleep(min(4, self.notification_backoff * 2 ** (command['attempts'] - 1)))
         return True
 
+    async def _studio_plan(self, job, pitch, command):
+        """The Pitch as a Storyboard Studio pack (ADR 0018), measured and fitted."""
+        script = shop_studio.script_for(pitch)
+        work = self.store.media_root / 'work' / f"plan-{command['id']}"
+        try:
+            spans = await shop_studio.measure(script, work)
+            try:
+                spans, _ = await shop_studio.fit(script, spans, factual_brief(job), work)
+            except Exception:
+                # The long lines stand; the page shows each shot's span against its length.
+                logger.exception('Studio fit failed; keeping the Pitch lines')
+            choice, text, fixed, profile = await character_for(job.get('character') or '')
+            board = await shop_studio.plan(script, {'text': factual_brief(job)}, choice,
+                                           character=text, fixed_tag=fixed)
+            if profile and not profile.get('id'):
+                person = board['overview'].get('master_character') or {}
+                profile.update(locked=person.get('locked_prompt_tag', ''),
+                               portrait=storyboard.portrait_prompt(person.get('locked_prompt_tag', '')))
+            return shop_studio.studio_plan(pitch, script, spans, board, profile['tag'], profile,
+                                           job['references'])
+        finally:
+            import shutil
+            shutil.rmtree(work, ignore_errors=True)
+
+    def cut_export(self, command, owner):
+        """One Storyboard Studio export → each scene's footage and voice, or a refusal."""
+        payload = command['payload']
+        job = self.store.get_job(payload['job_id'])
+        fence = {'command_id': command['id'], 'owner': owner}
+        asset = self.store.get_asset(payload['asset_id'], job['id'])
+        scenes = (job.get('plan') or {}).get('scenes') or []
+        owned = {i: float(scene.get('seconds') or studio.SHOT_SECONDS) for i, scene in enumerate(scenes)}
+        expected = sum(owned.values())
+        duration = float(asset['metadata'].get('duration') or 0)
+        if not payload.get('even') and not studio.fits(duration, expected):
+            self.store.set_export_result(job['id'], asset['id'], 'uneven', duration=duration,
+                                         expected=expected, **fence)
+            return
+        work = self.store.media_root / 'work' / f"cut-{command['id']}"
+        work.mkdir(parents=True, exist_ok=True)
+        try:
+            lengths = studio.lengths(list(owned), owned, duration, bool(payload.get('even')))
+            pieces = [(lengths[i], work / f"{scene['id']}.mp4", work / f"{scene['id']}.wav")
+                      for i, scene in enumerate(scenes)]
+            with render_slot_sync():
+                studio.cut_file(self.store.asset_path(asset['id']), pieces)
+            cuts = [(scene['id'], (video, probe(video)), (voice, {'duration': lengths[i]}))
+                    for i, (scene, (_, video, voice)) in enumerate(zip(scenes, pieces))]
+            self.store.set_export_result(job['id'], asset['id'], 'cut', duration=duration,
+                                         expected=expected, cuts=cuts, **fence)
+        except (RuntimeError, MediaError) as exc:
+            self.store.set_export_result(job['id'], asset['id'], 'failed', duration=duration,
+                                         expected=expected, error=str(exc)[:500], **fence)
+        finally:
+            import shutil
+            shutil.rmtree(work, ignore_errors=True)
+
     def probe_asset(self, command, owner):
         asset = self.store.get_asset(command['payload']['asset_id'])
         try:
@@ -133,6 +206,10 @@ class Worker:
         # Legacy generation uses a generic end card. The workspace targets one destination.
         cta = CTA[job['destination']]
         pitch.update(cta=cta, end_narration=cta + 'ได้เลยค่ะ', end_spoken=cta + 'ได้เลยค่ะ')
+        if job.get('mode') == 'studio':
+            plan = asyncio.run(self._studio_plan(job, pitch, command))
+            self.store.save_plan(job['id'], payload['revision'], plan, **self._fence(command, owner))
+            return
         scenes = []
         for i, beat in enumerate(pitch['beats'], 1):
             scene = {**beat, 'id': f'scene-{i}', 'source': 'flow', 'reference_id': job['references'][beat['photo'] - 1],

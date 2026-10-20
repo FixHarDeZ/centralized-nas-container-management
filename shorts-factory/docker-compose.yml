@@ -57,11 +57,14 @@ services:
       - SHOP_ROOT=/shop-data
       - SHOP_MEDIA_ROOT=/output/shop-studio
       - SHOP_AUTOMATION_TOKEN=${SHOP_AUTOMATION_TOKEN}
+      - CONFIG_DIR=/config
     expose:
       - "8000"
     volumes:
       - shorts_factory_shop:/shop-data
       - /volume1/shorts:/output
+      # The character library, read-only: a Studio job picks its speaker (ADR 0018).
+      - shorts_factory_config:/config:ro
     mem_limit: 384m
 
   shorts-factory-shop-worker:

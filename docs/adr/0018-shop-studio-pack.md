@@ -35,7 +35,16 @@ the Creator Studio web job. Three constraints were set in chat:
   `product` record. The Brief closes and the bot goes idle. Everything ADR 0016
   built for the slot (inbox, reply, uneven/cut-evenly, expiry, adopt) carries
   it unchanged. ↩️ reopens the Pitch review.
-- Creator Studio web: phase 2, planned against `shop_store`'s invariants.
+- Creator Studio web (phase 2, same day): a job `mode: studio` and
+  `character` on the product form.
+  - The worker plans the pack (3-7 scenes; studio only allows 7). Page edits
+    cannot change what is said.
+  - One export upload (asset kind `export`) is cut by a fenced `cut_export`
+    command into each scene's video and voice assets. It is refused when
+    uneven unless the human asks to cut evenly.
+  - Render branches in `build_snapshot` to the same `shop_studio` path the
+    bot uses. n8n dispatch and per-scene acceptance are unchanged.
+  - The shop API mounts `/config` read-only to list the characters.
 
 ## Consequences
 

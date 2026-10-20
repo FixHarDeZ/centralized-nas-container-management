@@ -232,6 +232,12 @@ def canonical_plan(job: dict) -> dict:
     values back by position while preserving immutable scene IDs and media keys.
     """
     raw = job['plan']
+    if raw.get('studio'):
+        # A Studio pack's last scene is the closing line, not a beat (ADR 0018).
+        beats_only = {**job, 'plan': {**raw, 'scenes': raw['scenes'][:-1]}}
+        clean = shop.validate(pitch_from_plan(beats_only), factual_brief(job), len(job['references']))
+        scenes = [{**scene, **beat} for scene, beat in zip(raw['scenes'], clean['beats'])] + raw['scenes'][-1:]
+        return {**raw, **clean, 'scenes': scenes}
     clean = shop.validate(pitch_from_plan(job), factual_brief(job), len(job['references']))
     scenes = [{**scene, **beat} for scene, beat in zip(raw['scenes'], clean['beats'])]
     return {**raw, **clean, 'scenes': scenes}
@@ -241,6 +247,8 @@ async def build_snapshot(snapshot: dict, media_root: Path, workdir: Path) -> tup
     """Render only the frozen approved snapshot after measuring its TTS."""
     from app.shop_media import MediaError, probe
     plan, assets = canonical_plan(snapshot), snapshot['assets']
+    if plan.get('studio'):
+        return await _build_studio(plan, assets, media_root, workdir)
     scenes = plan['scenes']
     if not any(scene['source'] in {'flow', 'real'} for scene in scenes):
         raise MediaError('at least one video scene is required')
@@ -288,3 +296,24 @@ async def build_snapshot(snapshot: dict, media_root: Path, workdir: Path) -> tup
                   'bgm': music.name if music else None,
                   'scenes': [{'id': scene['id'], 'start': round(start, 3), 'seconds': round(span, 3)}
                              for scene, start, span in zip(scenes, starts, spans)]}
+
+
+async def _build_studio(plan: dict, assets: dict, media_root: Path, workdir: Path) -> tuple[Path, dict]:
+    """A Studio job: each scene's cut footage and the character's own voice (ADR 0018)."""
+    import asyncio
+
+    from app import shop_studio
+    from app.shop_media import MediaError
+    root = media_root.resolve()
+
+    def path(asset_id):
+        asset = assets.get(asset_id)
+        if not asset or asset['validation'] != 'valid':
+            raise MediaError('snapshot asset missing or invalid')
+        found = (root / 'assets' / asset['key']).resolve()
+        if not found.is_relative_to(root):
+            raise MediaError('unsafe snapshot asset path')
+        return found
+
+    shots = [(scene, path(scene['media_id']), path(scene['voice_id'])) for scene in plan['scenes']]
+    return await asyncio.to_thread(shop_studio.build_shots, shots, workdir)

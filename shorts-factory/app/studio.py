@@ -232,43 +232,48 @@ def duration(path: Path) -> float:
         raise RuntimeError(f"อ่านความยาวไฟล์ไม่ได้: {done.stderr.strip()[-300:]}") from exc
 
 
-def cut(export: Path, pending: list[int], seconds: dict[int, float], clip_id: str,
-        keep_voice: bool = False) -> dict[int, Path]:
-    """One file per pending Card: its stretch of the export, silent, re-encoded.
+def cut_file(export: Path, pieces: list[tuple[float, Path, Path | None]]) -> None:
+    """Cut `export` in order into (seconds, video, voice) pieces, re-encoded.
 
     Re-encoded, not stream-copied: Flow exports carry a keyframe every 3s, so
-    a copy would start each Card on the wrong frame. With `keep_voice` the
-    Card's audio is cut too, as a separate file in the take's own format, for
-    speaking_take() to splice in.
+    a copy would start each piece on the wrong frame. Each video is silent;
+    with a `voice` path the piece's audio is cut too, in the take's own
+    format, for voice_piece() to splice. Writes beside each output and renames
+    into place, so a failed cut never leaves half a file under the real name.
     """
-    made, offset = {}, 0.0
-    for card in pending:
-        length = seconds[card]
-        dest = segment_path(clip_id, card)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        temporary = dest.with_suffix(".part.mp4")
+    offset = 0.0
+    for length, video, voice in pieces:
+        video.parent.mkdir(parents=True, exist_ok=True)
+        temporary = video.with_suffix(".part.mp4")
         # -t on the input, not the output: it then bounds both outputs.
         args = ["ffmpeg", "-y", "-ss", f"{offset:.3f}", "-t", f"{length:.3f}", "-i", str(export),
                 "-map", "0:v:0", "-an",
                 "-c:v", "libx264", "-preset", "veryfast", "-crf", "18", str(temporary)]
-        voice = voice_path(clip_id, card)
-        if keep_voice:
+        if voice:
             args += ["-map", "0:a:0", "-vn", "-ac", "1", "-ar", str(VOICE_RATE),
                      "-c:a", "pcm_s16le", str(voice)]
         done = subprocess.run(args, capture_output=True, text=True, timeout=1800)
         if done.returncode != 0:
             temporary.unlink(missing_ok=True)
-            voice.unlink(missing_ok=True)
-            if keep_voice and "matches no streams" in done.stderr:
+            if voice:
+                voice.unlink(missing_ok=True)
+            if voice and "matches no streams" in done.stderr:
                 raise RuntimeError("ไฟล์ไม่มีเสียง — export จาก Scenes ใหม่ (ต้องมีเสียงที่ตัวละครพูด)")
             raise RuntimeError(f"หั่นคลิปไม่สำเร็จ: {done.stderr.strip()[-400:]}")
-        if not keep_voice:
-            # A Card re-shot without speech must not keep last version's voice.
-            voice.unlink(missing_ok=True)
-        temporary.replace(dest)
-        made[card] = dest
+        temporary.replace(video)
         offset += length
-    return made
+
+
+def cut(export: Path, pending: list[int], seconds: dict[int, float], clip_id: str,
+        keep_voice: bool = False) -> dict[int, Path]:
+    """One file per pending Card: its stretch of the export, silent, re-encoded."""
+    cut_file(export, [(seconds[card], segment_path(clip_id, card),
+                       voice_path(clip_id, card) if keep_voice else None) for card in pending])
+    if not keep_voice:
+        # A Card re-shot without speech must not keep last version's voice.
+        for card in pending:
+            voice_path(clip_id, card).unlink(missing_ok=True)
+    return {card: segment_path(clip_id, card) for card in pending}
 
 
 def voice_piece(voice: Path, out: Path) -> Path:

@@ -1,6 +1,6 @@
 # Shop Studio pack: the Studio pack flow for Product Clips
 
-Status: accepted (2026-10-20), phased. **Phase 1**: core + Telegram `/shop`, deployed and run end to end once. **Phase 2**: Creator Studio web, planned separately after reading `shop_store`'s invariants (3-6 scenes in `save_plan`, `accept_scene`, the ≤60 s check, fenced writes). See ADR 0018.
+Status: accepted (2026-10-20), phased. **Phase 1**: core + Telegram `/shop`, deployed and run end to end once. **Phase 2**: Creator Studio web, built the same day (3-7 scenes for studio jobs, locked speech, a fenced `cut_export`, voice assets in the render snapshot). See ADR 0018 and the README.
 
 ## Goal
 

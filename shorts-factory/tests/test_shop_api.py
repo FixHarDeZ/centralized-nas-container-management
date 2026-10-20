@@ -164,3 +164,22 @@ def test_studio_inbox_refuses_a_file_over_the_cap(client, tmp_path, monkeypatch)
     inbox = tmp_path / "inbox"
     assert not (inbox / "a1b2c3d4e5f6.mp4").exists()
     assert not list(inbox.glob("*.part"))
+
+
+def test_studio_job_routes_need_csrf_and_a_studio_plan(client, tmp_path, monkeypatch):
+    monkeypatch.setenv("CONFIG_DIR", str(tmp_path / "config"))
+    headers = browser(client)
+    job = client.post("/shop/api/jobs", json={"name": "Lamp", "mode": "studio", "character": "auto"},
+                      headers=headers).json()
+    assert job["mode"] == "studio" and job["character"] == "auto"
+    files = {"file": ("flow.mp4", b"\x00\x00\x00\x18ftypmp42", "video/mp4")}
+    assert client.post(f"/shop/api/jobs/{job['id']}/export", data={"revision": job["revision"]},
+                       files=files).status_code == 403
+    refused = client.post(f"/shop/api/jobs/{job['id']}/export", data={"revision": job["revision"]},
+                          files=files, headers=headers)
+    assert refused.status_code == 422 and "approve the Studio plan" in refused.json()["detail"]
+    even = client.post(f"/shop/api/jobs/{job['id']}/export/even", json={"revision": job["revision"]},
+                       headers=headers)
+    assert even.status_code == 422
+    page = client.get(f"/shop/{job['id']}").text
+    assert 'value="studio" selected' in page and "🤖 ให้บอทแต่ง" in page

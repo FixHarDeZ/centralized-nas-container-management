@@ -117,20 +117,90 @@
     const plan=job.plan;
     $('plan-form').hidden=!plan;
     const pending=job.validated_plan_version!==job.plan_version;
-    $('plan-status').textContent=job.generation_error||job.plan_error||(['queued','running'].includes(job.generation_status)?'กำลังเขียนบทและวางแผนฉาก…':plan?(job.plan_approved_at?'ยืนยันแผนแล้ว · สร้างและอัปโหลดคลิปแต่ละฉาก':pending?'กำลังตรวจบท…':'ตรวจบท เลือกรูปอ้างอิง แล้วกดยืนยันแผน'):'เพิ่มรูปสินค้าแล้วกดสร้างแผนฉาก');
+    $('plan-status').textContent=job.generation_error||job.plan_error||(['queued','running'].includes(job.generation_status)?'กำลังเขียนบทและวางแผนฉาก…':plan?(job.plan_approved_at?(plan.studio?'ยืนยันแผนแล้ว · ทำใน Storyboard Studio แล้วอัป export ไฟล์เดียว':'ยืนยันแผนแล้ว · สร้างและอัปโหลดคลิปแต่ละฉาก'):pending?'กำลังตรวจบท…':'ตรวจบท เลือกรูปอ้างอิง แล้วกดยืนยันแผน'):'เพิ่มรูปสินค้าแล้วกดสร้างแผนฉาก');
     $('plan-status').className=job.generation_error||job.plan_error?'shop-error':'muted';
     $('generate-plan').disabled=['queued','running'].includes(job.generation_status)||!job.references.length||job.references.some(id=>job.assets.find(a=>a.id===id)?.validation!=='valid');
-    $('flow-pack').hidden=!job.plan_approved_at;
+    $('flow-pack').hidden=!job.plan_approved_at||!!plan?.studio;
+    drawStudio();
     $('download-pack').href=endpoint('/plan/pack');
     if(!plan) return;
     const fields=$('plan-fields');fields.replaceChildren();
-    for(const [key,label,multiline] of [['title','ชื่อคลิป',false],['caption','ข้อความโพสต์',true],['end_badge','หัวข้อการ์ดท้าย',false],['end_narration','บทพูดปิดท้าย',true],['end_spoken','คำอ่านปิดท้าย',true],['price','ราคาบนการ์ด',false],['old_price','ราคาเดิมบนการ์ด',false]]) field(fields,label,key,plan[key],null,multiline);
+    const plain=[['title','ชื่อคลิป',false],['caption','ข้อความโพสต์',true]];
+    const card=[['end_badge','หัวข้อการ์ดท้าย',false],['end_narration','บทพูดปิดท้าย',true],['end_spoken','คำอ่านปิดท้าย',true],['price','ราคาบนการ์ด',false],['old_price','ราคาเดิมบนการ์ด',false]];
+    // A Studio pack has no end card: its closing line is the last shot (ADR 0018).
+    for(const [key,label,multiline] of plan.studio?plain:plain.concat(card)) field(fields,label,key,plan[key],null,multiline);
     field(fields,'แฮชแท็ก','hashtags',(plan.hashtags||[]).join(' '));
     $('approve-plan').disabled=pending||!!job.plan_error||!!job.plan_approved_at;
     const scenes=$('scenes');scenes.replaceChildren();
     plan.scenes.forEach((scene,index)=>scenes.append(sceneCard(scene,index)));
   }
+  function studioScene(scene,index) {
+    const card=node('article',undefined,'shop-scene');card.dataset.sceneId=scene.id;
+    const studio=job.plan.studio;
+    card.append(node('h3','Shot '+(index+1)+' · ตั้ง '+scene.seconds+'s ใน Flow · พูด '+scene.span+' วิ'));
+    card.append(node('p','แนบ Ingredients: (1) '+(studio.tag||'ตัวละคร')+' (2) '+studio.product_tag+' (เน้นรูป '+scene.photo+') (3) frame ของ shot นี้','muted'));
+    const fields=node('div',undefined,'shop-fields');
+    field(fields,'ข้อความหัวฉาก','badge',scene.badge);
+    for(const [key,label,value] of [['narration','บทพูด (ซับ)',scene.narration],['spoken','ตัวละครพูดว่า',scene.spoken],['lines','ซับ (หนึ่งบรรทัดต่อแถว)',(scene.lines||[]).join('\n')],['flow_prompt','Prompt Animate ของ shot นี้',scene.flow_prompt]]) field(fields,label,key,value,null,true).readOnly=true;
+    card.append(fields);
+    const actions=node('div',undefined,'shop-actions');
+    actions.append(button('คัดลอก prompt',async()=>{await navigator.clipboard.writeText(scene.flow_prompt);}));
+    card.append(actions);
+    const selected=job.assets.find(a=>a.id===scene.media_id);
+    const media=node('div',undefined,'shop-scene-media');
+    if(scene.reference_id) { const img=node('img');img.src=assetURL(scene.reference_id);img.alt='รูปสินค้า shot '+(index+1);media.append(img); }
+    if(selected?.validation==='valid') { const v=node('video');v.src=assetURL(selected.id);v.controls=true;v.preload='metadata';v.playsInline=true;v.className='fit-crop';media.append(v); }
+    card.append(media);
+    card.append(node('p',scene.accepted_at?'รับ shot แล้ว':selected?'ดูคลิปที่หั่นแล้ว เช็คสินค้า/ตัวหนังสือบนกล่อง แล้วกดรับ':'รอ export จาก Storyboard Studio',scene.accepted_at?'shop-good':'muted'));
+    const check=node('label',undefined,'shop-check');const checkbox=node('input');checkbox.type='checkbox';checkbox.checked=!!scene.accepted_at;
+    check.append(checkbox,node('span','ตรวจแล้ว: สินค้าตรงรูป ตัวหนังสือ/โลโก้ไม่เพี้ยน ตัวละครพูดครบประโยค'));card.append(check);
+    card.append(button('รับ shot นี้',async()=>{
+      if(dirty) throw new Error('บันทึกข้อความที่แก้ก่อน');
+      if(!checkbox.checked) throw new Error('ตรวจคลิปแล้วติ๊กยืนยันก่อน');
+      await request(endpoint('/scenes/'+scene.id+'/accept'),'POST',{revision:job.revision,reference_matches:true});await refresh(true);
+    },!job.plan_approved_at||!selected||!!scene.accepted_at));
+    return card;
+  }
+  function drawStudio() {
+    const area=$('studio-pack');const studio=job.plan?.studio;
+    area.hidden=!studio;area.replaceChildren();
+    if(!studio) return;
+    const scenes=job.plan.scenes;
+    area.append(node('h3','🎞 Studio pack · '+scenes.length+' shot = '+studio.length+' วิ · ≈ '+studio.credits+' เครดิต'));
+    area.append(node('p','ทำใน Storyboard Studio ของ Flow: ตั้ง 9:16 → สร้าง Asset Profile '+(studio.tag||'')+' (ตัวละคร) และ '+studio.product_tag+' (จากรูปสินค้า) → วาง script.md → Animate ทีละ shot ด้วย prompt ในแต่ละ shot → เรียงครบแล้ว export (ต้องมีเสียง)','muted'));
+    if(studio.character?.portrait && !studio.character.flow_ready) {
+      area.append(node('p','ภาพตัวละคร (เจนก่อน แล้วสร้าง Asset Profile '+studio.tag+'):'));
+      area.append(node('pre',studio.character.portrait,'shop-caption'));
+      area.append(button('คัดลอก prompt ตัวละคร',async()=>{await navigator.clipboard.writeText(studio.character.portrait);}));
+    }
+    const refs=node('div',undefined,'shop-references');
+    job.references.forEach((id,i)=>{const a=link('รูปสินค้า '+(i+1),assetURL(id));a.download='';refs.append(a);});
+    area.append(node('p','รูปสินค้าสำหรับ Asset Profile '+studio.product_tag+':'),refs);
+    area.append(node('p','script.md สำหรับ Storyboard Studio:'));
+    area.append(node('pre',studio.markdown,'shop-caption'));
+    const actions=node('div',undefined,'shop-actions');
+    actions.append(button('คัดลอก script.md',async()=>{await navigator.clipboard.writeText(studio.markdown);}));
+    if(job.plan_approved_at) actions.append(link('ดาวน์โหลดชุด script.md + prompt + รูป',endpoint('/plan/pack')));
+    actions.append(link('เปิด Google Flow ↗','https://labs.google/fx/tools/flow'));
+    area.append(actions);
+    if(!job.plan_approved_at) { area.append(node('p','ยืนยันแผนฉากก่อน แล้วค่อยอัป export','muted')); return; }
+    const exp=job.export||{};
+    const states={pending:'กำลังตรวจไฟล์…',probed:'กำลังหั่นคลิป…',cutting:'กำลังหั่นคลิป…',cut:'หั่นแล้ว ตรวจและรับทุก shot ด้านล่าง',uneven:'ไฟล์ยาว '+Number(exp.duration||0).toFixed(1)+' วิ แต่ pack นี้ '+studio.length+' วิ — เช็คว่าเรียงครบทุก shot แล้ว export ใหม่ หรือหั่นเท่าๆ กันถ้ามั่นใจว่าลำดับถูก',failed:'หั่นไม่สำเร็จ: '+(exp.error||''),invalid:'ไฟล์ใช้ไม่ได้: '+(exp.error||'')};
+    if(exp.status) area.append(node('p',states[exp.status]||exp.status,['uneven','failed','invalid'].includes(exp.status)?'shop-error':exp.status==='cut'?'shop-good':'muted'));
+    if(exp.status==='uneven') area.append(button('✂️ หั่นเท่าๆ กัน',async()=>{await request(endpoint('/export/even'),'POST',{revision:job.revision});await refresh(true);}));
+    const upload=node('div',undefined,'shop-upload');
+    const label=node('label','อัป export จาก Storyboard Studio (MP4/MOV ≤100 MiB ต้องมีเสียง)');
+    const file=node('input');file.type='file';file.accept='video/mp4,video/quicktime,.mov';label.append(file);upload.append(label);
+    upload.append(button(exp.status?'อัปไฟล์ใหม่':'อัปไฟล์',async()=>{
+      if(dirty) throw new Error('บันทึกข้อความที่แก้ก่อนอัป');
+      if(!file.files[0]) throw new Error('เลือกไฟล์ก่อน');
+      const data=new FormData();data.set('revision',job.revision);data.set('file',file.files[0]);
+      await request(endpoint('/export'),'POST',data);await refresh(true);
+    },['pending','probed','cutting'].includes(exp.status)));
+    area.append(upload);
+  }
   function sceneCard(scene,index) {
+    if(job.plan.studio) return studioScene(scene,index);
     const card=node('article',undefined,'shop-scene');card.dataset.sceneId=scene.id;
     card.append(node('h3',(index+1)+' · '+(scene.purpose||scene.badge||'ฉากสินค้า')));
     const fields=node('div',undefined,'shop-fields');
@@ -206,7 +276,7 @@
     const active=job.renders.find(r=>['pending_dispatch','queued','running'].includes(r.status));
     $('missing-scenes').textContent=missing.length?'ยังรอรับฉาก: '+missing.map(s=>scenes.indexOf(s)+1).join(', '):'';
     $('request-render').disabled=!job.plan_approved_at||!!missing.length||!scenes.some(s=>s.source!=='still')||!!active;
-    $('render-status').textContent=active?(active.status==='pending_dispatch'?'รอระบบจัดคิวเริ่มงาน · ถ้ารอนาน ตรวจการเชื่อมต่อ n8n':labels[active.status]):'เมื่อทุกฉากพร้อม ระบบจะใส่เสียงไทย ซับ เพลง และการ์ดท้าย';
+    $('render-status').textContent=active?(active.status==='pending_dispatch'?'รอระบบจัดคิวเริ่มงาน · ถ้ารอนาน ตรวจการเชื่อมต่อ n8n':labels[active.status]):job.plan?.studio?'เมื่อรับครบทุก shot ระบบจะต่อคลิปด้วยเสียงตัวละคร ซับ และเพลง (ไม่มีการ์ดท้าย)':'เมื่อทุกฉากพร้อม ระบบจะใส่เสียงไทย ซับ เพลง และการ์ดท้าย';
     const area=$('render-results');area.replaceChildren();
     for(const render of [...job.renders].reverse()) {
       const wrap=node('article',undefined,'shop-render');const current=render.revision===job.revision;
@@ -230,7 +300,8 @@
     signature=JSON.stringify(job);
     for(const input of $('product-form').querySelectorAll('[name]')) input.value=job[input.name]||'';
     drawReferences();drawPlan();drawRenders();
-    $('next-action').textContent=!job.references.length?'เพิ่มรูปสินค้าจริงเพื่อเริ่มวางแผน':!job.plan?'สร้างบทและแผนฉาก':!job.plan_approved_at?'ตรวจบทและยืนยันรูปอ้างอิงของแต่ละฉาก':job.plan.scenes.some(s=>!s.accepted_at)?'สร้างคลิปใน Flow แล้วส่งกลับให้ตรงฉาก':'ฉากพร้อมแล้ว · ตัดต่อและตรวจคลิปสุดท้าย';
+    const studioWaiting=job.plan?.studio&&job.export?.status!=='cut';
+    $('next-action').textContent=!job.references.length?'เพิ่มรูปสินค้าจริงเพื่อเริ่มวางแผน':!job.plan?'สร้างบทและแผนฉาก':!job.plan_approved_at?'ตรวจบทและยืนยันรูปอ้างอิงของแต่ละฉาก':studioWaiting?'ทำใน Storyboard Studio แล้วอัป export ไฟล์เดียว':job.plan.scenes.some(s=>!s.accepted_at)?(job.plan.studio?'ตรวจและรับทุก shot ที่หั่นแล้ว':'สร้างคลิปใน Flow แล้วส่งกลับให้ตรงฉาก'):'ฉากพร้อมแล้ว · ตัดต่อและตรวจคลิปสุดท้าย';
   }
   if($('new-product')) {
     drawList(job.jobs);$('shop-filter').addEventListener('change',()=>drawList(job.jobs));

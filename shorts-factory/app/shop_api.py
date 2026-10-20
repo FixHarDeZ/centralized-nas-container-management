@@ -38,6 +38,8 @@ class Edit(Revision):
     current_price: str | None = None
     old_price: str | None = None
     affiliate_link: str | None = None
+    mode: str | None = None
+    character: str | None = None
 
 
 class Product(BaseModel):
@@ -48,6 +50,8 @@ class Product(BaseModel):
     current_price: str = ""
     old_price: str = ""
     affiliate_link: str = ""
+    mode: str = "scenes"
+    character: str = ""
 
 
 class PlanEdit(Revision):
@@ -216,6 +220,16 @@ def create_app(root: Path | None = None) -> FastAPI:
     def accept(job_id: str, scene_id: str, body: Accept):
         return store.accept_scene(job_id, body.revision, scene_id, reference_matches=body.reference_matches)
 
+    @app.post("/shop/api/jobs/{job_id}/export", status_code=201)
+    def export(job_id: str, revision: int = Form(...), file: UploadFile = File(...)):
+        """A Studio job's one Storyboard Studio export (docs/adr/0018): probed, then
+        cut into every scene's footage and voice by the worker."""
+        return store.add_asset(job_id, revision, "export", file.filename or "", file.file)
+
+    @app.post("/shop/api/jobs/{job_id}/export/even")
+    def export_even(job_id: str, body: Revision):
+        return store.request_even_cut(job_id, body.revision)
+
     studio_inbox = Path(os.environ.get("STUDIO_INBOX", "/output/studio-inbox"))
 
     @app.post("/shop/api/studio-inbox/{token}", status_code=201)
@@ -273,6 +287,9 @@ def create_app(root: Path | None = None) -> FastAPI:
                 for index, scene in enumerate(record["plan"]["scenes"], 1):
                     prompts.append(f"Scene {index}\n{scene.get('flow_prompt', '')}\n")
                 archive.writestr("prompts.txt", "\n".join(prompts))
+                pack = record["plan"].get("studio")
+                if pack:
+                    archive.writestr("script.md", pack["markdown"])
                 for reference in record["references"]:
                     asset = store.get_asset(reference, job_id)
                     archive.write(store.asset_path(reference, job_id), "references/" + asset["key"])

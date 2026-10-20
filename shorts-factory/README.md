@@ -214,8 +214,34 @@ What happens:
   files are dropped once the clip is sent, since there is no YouTube upload to
   keep them for.
 
-The Creator Studio web `/shop` gets the same pack in phase 2 (spec
-`docs/superpowers/specs/2026-10-20-shop-studio-pack-design.md`).
+**Creator Studio web `/shop` (phase 2).** A job has a `mode`, set on the
+product form. Use `scenes` for the per-scene flow (unchanged) or `studio`.
+It also has a `character`: a library id, or empty/`auto` for 🤖. The shop API
+mounts `/config:ro` to list the characters. Switching mode drops the plan.
+
+- **Plan.** `generate_plan` writes the Pitch, then
+  `shop_studio.measure`/`fit`/`plan`/`studio_plan`. The result is one Flow
+  scene per beat plus the closing line (3-7 scenes; `save_plan` allows 7 only
+  for studio). Each scene carries `seconds` (8/10), `span`, `photo`, and the
+  per-shot animate prompt as `flow_prompt`. `plan.studio` holds `script.md`,
+  the character, `@Product`, the length and the credits.
+- **Edits.** A page edit can only retitle. Narration, spoken text, lines,
+  reference, seconds and prompts are locked (`STUDIO_LOCKED`). `plan.studio`
+  is always the worker's.
+- **Export.** One upload, asset kind `export`, ≤100 MiB, only after
+  approval; per-scene uploads are refused. It goes through `probe_asset`, then
+  the worker command `cut_export`:
+  - If the length is outside ±0.5 s, the export is marked `uneven`.
+    `POST /shop/api/jobs/<id>/export/even` re-runs the cut with `even`.
+  - Otherwise `studio.cut_file` cuts each scene's video and voice.
+    `Store.set_export_result` (fenced on the command) files them as valid
+    `scene` + `voice` assets and sets `media_id`/`voice_id`.
+- **Render.** Acceptance per scene is unchanged. `request_render` snapshots
+  the voices too. `build_snapshot` branches to `shop_studio.build_shots` with
+  the character's voice, no TTS and no end card. `canonical_plan` validates
+  only the beats (the last scene is the closing line). The pack zip adds
+  `script.md`.
+- **Unchanged.** n8n dispatch, revision fencing and affiliate tracking.
 
 Step-by-step guide for the human (Thai, phone screenshots of the flow, where to
 post, why a Pitch gets sent back): [`docs/shop-guide.html`](docs/shop-guide.html).

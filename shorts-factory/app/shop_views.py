@@ -5,6 +5,8 @@ from fastapi import Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+from app import characters
+
 
 def register_views(app, store):
     templates = Jinja2Templates(directory=Path(__file__).parent / 'templates')
@@ -15,7 +17,8 @@ def register_views(app, store):
         posted = affiliate.posted_counts()
         jobs = [{**job, 'posts': posted.get(job['id'], 0)} for job in store.list_jobs()]
         return templates.TemplateResponse(request=request, name='shop_list.html',
-                                          context={'jobs': jobs, 'gate': None})
+                                          context={'jobs': jobs, 'gate': None,
+                                                   'characters': characters.stored()['characters']})
 
     # Registered before /shop/{job_id}, which would otherwise look up a job named "revenue".
     @app.get('/shop/revenue', response_class=HTMLResponse)
@@ -28,4 +31,5 @@ def register_views(app, store):
         job = {**store.get_job(job_id), 'assets': store.list_assets(job_id),
                'renders': store.list_renders(job_id)}
         return templates.TemplateResponse(request=request, name='shop_job.html',
-                                          context={'job': job, 'gate': None})
+                                          context={'job': job, 'gate': None,
+                                                   'characters': characters.stored()['characters']})

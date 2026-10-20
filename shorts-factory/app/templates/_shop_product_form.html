@@ -4,5 +4,7 @@
   <label class="wide">ข้อมูลสินค้าจริง<textarea name="brief" rows="4" maxlength="10000" placeholder="สินค้าแก้ปัญหาอะไร จุดเด่น ข้อจำกัด และข้อเท็จจริงจากร้าน">{{ job.brief if job else '' }}</textarea></label>
   <label>ราคา (บาท)<input name="current_price" inputmode="decimal" value="{{ job.current_price if job else '' }}" placeholder="ไม่ระบุก็ได้"></label>
   <label>ราคาปกติ (บาท)<input name="old_price" inputmode="decimal" value="{{ job.old_price if job else '' }}" placeholder="ถ้ามีราคาอ้างอิงจริง"></label>
+  <label>วิธีทำคลิป<select name="mode">{% for value, label in [('scenes','ทีละฉาก (อัปคลิปทีละฉาก เสียงพากย์)'),('studio','🎞 Studio (Flow ทุก shot ตัวละครพูดเอง)')] %}<option value="{{ value }}"{% if (job.mode if job else 'scenes') == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+  <label>ตัวละคร (Studio)<select name="character"><option value="">🤖 ให้บอทแต่ง (ผู้หญิง)</option>{% for c in characters or [] %}<option value="{{ c.id }}"{% if job and job.character == c.id %} selected{% endif %}>{{ c.tag }}</option>{% endfor %}</select></label>
   <label class="wide">ลิงก์ affiliate<input name="affiliate_link" type="url" value="{{ job.affiliate_link if job else '' }}" placeholder="https://..."></label>
 </div>
