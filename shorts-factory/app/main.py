@@ -52,11 +52,17 @@ STORYBOARD_CB = "storyboard"
 # (docs/adr/0016). Callbacks carry the clip id, so a stale pack message is
 # recognised rather than acted on.
 STUDIO_CB = "studio"
-STUDIO_PREFIXES = ("stt:", "stc:", "sts:", "stp:", "stx:", "ste:", "str:")
+STUDIO_PREFIXES = ("stt:", "stc:", "sts:", "stp:", "stx:", "ste:", "str:", "stb:", "stq:")
+# A change of mind on a Clip waiting outside the review — Parked for 🎨, or a
+# 📋 board waiting for its clip: `wait:<back|drop>:<park|board>:<key>`, and
+# `wait:swap:<park|studio>:<old clip id>:<new clip id>` on the refusal a second
+# 🎨/🎞 gets while one is live. `back` puts the Script into review again so
+# another way of shooting it can be picked; `drop` writes the Clip off.
 # The answer to the character question a Storyboard opens with:
 # `sbchar:<auto|own|none>:<token>`. The token is the question this answers — a
 # tap on an older question must not plan a board for a Script that is gone.
 SBCHAR_CB = "sbchar"
+WAIT_CB = "wait"
 # Prefix of the 💡 buttons under a /trends list: `pick:<suggested_at>:<index>`.
 PICK_CB = "pick"
 # The ✋ button under an automatic list: `cancel:<suggested_at>`.
@@ -154,6 +160,10 @@ def character_keyboard(token: str) -> dict:
             {"text": "🚫 ไม่มีตัวละคร",
              "callback_data": f"{SBCHAR_CB}:{storyboard.NONE}:{token}"},
         ],
+        [
+            {"text": "↩️ ยกเลิก ไม่ทำ storyboard",
+             "callback_data": f"{SBCHAR_CB}:cancel:{token}"},
+        ],
     ]}
 
 
@@ -187,6 +197,10 @@ HELP = """🎬 shorts-factory
    ไฟล์ต้องไม่เกิน 20MB — ส่งแบบวิดีโอธรรมดา · รอได้ 72 ชั่วโมงต่อ storyboard
    ชื่อ/คำอธิบายของคลิปยาวใช้แค่ชื่อจาก storyboard แก้ต่อใน YouTube Studio ได้
    ส่งใหม่ทับได้เรื่อยๆ — แต่ละไฟล์เก็บเป็นคลิปของตัวเอง มีปุ่มอัปของตัวเอง
+
+เปลี่ยนใจหลังกด 🎨 / 📋 / 🎞 ได้: ข้อความ prompt ของ 🎨, คำถามตัวละคร, ท้าย storyboard
+   และ Studio pack มีปุ่ม ↩️ ยกเลิก = สคริปต์กลับมารีวิว เลือกวิธีทำใหม่ได้
+   🗑 เลิกทำคลิปนี้ = ทิ้งทั้งคลิป · ถ้ากด 🎨/🎞 ตอนมีอันเดิมค้าง บอทให้ปุ่มทิ้งอันเดิมแล้วทำอันใหม่
 
 /storyboard <บรีฟ> — storyboard ของคลิปยาว (16:9)
    เช่น /storyboard โฆษณาบ้านเดี่ยว 10 ล้าน 3 ห้องนอน 6 ฉาก
@@ -809,7 +823,8 @@ async def on_flow(client: httpx.AsyncClient, state: dict) -> None:
         return
 
     manifest.update(state.get("clip_id"), flow_prompt=prompt)
-    sent = await say(client, flow_message(script, prompt), parse_mode="HTML")
+    sent = await say(client, flow_message(script, prompt), parse_mode="HTML",
+                     reply_markup=wait_keyboard("park", state.get("clip_id") or ""))
     # Everything the render needs moves into `parked`, and the live slots are
     # cleared: the bot is genuinely idle now — a new Topic is welcome and must
     # not be able to overwrite the Script that is waiting for its Footage.
@@ -818,6 +833,9 @@ async def on_flow(client: httpx.AsyncClient, state: dict) -> None:
         "topic": state.get("topic"),
         "script": script,
         "style": state.get("style", ""),
+        # to_idle() clears it, and ↩️ can send this Script back to review: a
+        # rewrite typed there must still be checked against its Fact sheet.
+        "research": state.get("research"),
         # Snapshotted for the same reason as the Script itself: the bot goes
         # idle here and the next Topic may be in the other Locale, which would
         # otherwise decide this Clip's voice and folder when it finally renders.
@@ -1004,16 +1022,25 @@ def storyboard_trailer(board: dict) -> str:
     )
 
 
-async def send_storyboard(client: httpx.AsyncClient, board: dict) -> int | None:
+def new_token() -> str:
+    return f"{datetime.now():%Y%m%d%H%M%S%f}"[:-3]
+
+
+async def send_storyboard(client: httpx.AsyncClient, board: dict,
+                          token: str = "") -> int | None:
     """Send the board, and return the id of the message a clip replies to."""
     for message in storyboard.messages(board):
         await send_prompt(client, message["heading"], message["blocks"])
-    sent = await say(client, storyboard_trailer(board), parse_mode="HTML")
+    extra = {"reply_markup": {"inline_keyboard": [[{
+        "text": "↩️ ยกเลิก storyboard นี้",
+        "callback_data": f"{WAIT_CB}:back:board:{token}"}]]}} if token else {}
+    sent = await say(client, storyboard_trailer(board), parse_mode="HTML", **extra)
     return (sent or {}).get("message_id")
 
 
 def wait_for_clip(state: dict, message_id: int | None, script: dict,
-                  topic: str | None, locale: str) -> dict | None:
+                  topic: str | None, locale: str, token: str = "",
+                  clip_id: str | None = None) -> dict | None:
     """Remember that a finished clip may come back as a reply to `message_id`.
 
     The Script is snapshotted, not read live when the file lands: by then it
@@ -1039,6 +1066,11 @@ def wait_for_clip(state: dict, message_id: int | None, script: dict,
         "script": script,
         "topic": topic,
         "locale": locale,
+        # Both read by ↩️ on the trailer: the token is the button this record
+        # answers, the Clip id is the review the Script may still be sitting
+        # in. A /storyboard <บรีฟ> board has no Clip id — nothing to go back to.
+        "token": token,
+        "clip_id": clip_id,
         "created_at": datetime.now().isoformat(timespec="seconds"),
     }
     save_state(state)
@@ -1130,10 +1162,12 @@ async def on_storyboard(client: httpx.AsyncClient, state: dict,
     # Against the id read *before* the model call: the human is free to start
     # another Topic while this runs, and state.clip_id may have moved on.
     manifest.update(clip_id, storyboard=board)
-    message_id = await send_storyboard(client, board)
+    token = new_token()
+    message_id = await send_storyboard(client, board, token)
     # The Script's own words are the clip's metadata: a Shorts storyboard is a
     # different way of shooting the Clip that was reviewed, not a different clip.
-    await say_dropped_pack(client, wait_for_clip(state, message_id, script, topic, locale))
+    await say_dropped_pack(client, wait_for_clip(state, message_id, script, topic, locale,
+                                                 token, clip_id))
 
 
 async def on_long_storyboard(client: httpx.AsyncClient, state: dict, brief: str,
@@ -1155,13 +1189,14 @@ async def on_long_storyboard(client: httpx.AsyncClient, state: dict, brief: str,
         logger.exception("storyboard failed")
         await say(client, f"วาง storyboard ไม่สำเร็จ: {exc}")
         return
-    message_id = await send_storyboard(client, board)
+    token = new_token()
+    message_id = await send_storyboard(client, board, token)
     # No Script exists for a long-form board, so the title is the board's own
     # and the description is left empty rather than filled with stage
     # directions (`storyboard.as_script`). Thai channel: a brief typed in has
     # no Locale of its own.
     await say_dropped_pack(client, wait_for_clip(state, message_id, storyboard.as_script(board),
-                                                 brief, locales.DEFAULT))
+                                                 brief, locales.DEFAULT, token))
 
 
 # --- the clip the human assembles from a Storyboard ---------------------------
@@ -1276,6 +1311,217 @@ async def drop_clip_wait(client: httpx.AsyncClient, wait: dict) -> None:
                       "ยังส่งเข้ามาได้ ถ้าสั่ง storyboard ใหม่")
 
 
+# --- changing your mind on a waiting Clip ------------------------------------
+# 🎨, 📋 and 🎞 each hand the Script to a wait outside the review. Without a
+# way back, a Clip the human no longer wants holds its one slot until it
+# expires (24-72 hours) and every second 🎨/🎞 is refused meanwhile.
+
+PAIR_NOTE = "\n(ยกเลิกภาษาอังกฤษของหัวข้อนี้ด้วย)"
+
+
+def tapped(query: dict | None) -> int | None:
+    return ((query or {}).get("message") or {}).get("message_id")
+
+
+def wait_keyboard(kind: str, key: str) -> dict:
+    return {"inline_keyboard": [[
+        {"text": "↩️ ยกเลิก เลือกวิธีใหม่", "callback_data": f"{WAIT_CB}:back:{kind}:{key}"},
+        {"text": "🗑 เลิกทำคลิปนี้", "callback_data": f"{WAIT_CB}:drop:{kind}:{key}"},
+    ]]}
+
+
+def swap_keyboard(kind: str, old: str | None, new: str | None) -> dict | None:
+    """Both ids ride along: a refusal tapped later must not drop the old Clip
+    and then find a different Script, or none, in review."""
+    if not old or not new:
+        return None
+    label = "🗑 ทิ้ง pack เดิม แล้วทำอันนี้" if kind == "studio" else "🗑 ทิ้งอันเดิม แล้วทำอันนี้"
+    return {"inline_keyboard": [[
+        {"text": label, "callback_data": f"{WAIT_CB}:swap:{kind}:{old}:{new}"}]]}
+
+
+def markup(keyboard: dict | None) -> dict:
+    return {"reply_markup": keyboard} if keyboard else {}
+
+
+def abandon(clip_id: str | None) -> None:
+    """Written off — unless the Clip already got further than a draft."""
+    record = manifest.load(clip_id) if clip_id else None
+    if record and record.get("outcome") in (None, "drafting"):
+        manifest.update(clip_id, outcome="abandoned")
+
+
+def review_taken(state: dict) -> str | None:
+    """Why the review slot cannot take a Script back right now, or None."""
+    mode = state.get("mode", "idle")
+    if mode == "idle":
+        return None
+    if mode in st.HOLDING_MODES:
+        return st.busy_note(mode)
+    return "ยังมีสคริปต์อื่นค้างรีวิวอยู่ กด 🎬 หรือ 🗑 ให้อันนั้นก่อน"
+
+
+async def restore_review(client: httpx.AsyncClient, state: dict, record: dict) -> None:
+    """A waiting Clip's snapshot back in the live slots, its Script on screen."""
+    if record.get("pair"):
+        # The 🌏 half went into the wait with the Script; it comes back with it.
+        state["pair"] = record["pair"]
+    state.update(script=record["script"], clip_id=record.get("clip_id"),
+                 topic=record.get("topic"), locale=record.get("locale", locales.DEFAULT),
+                 research=record.get("research"), style=record.get("style", ""))
+    sent = await say(client, format_script(record["script"],
+                                           research.sources_line(record.get("research"))),
+                     reply_markup=REVIEW_KEYBOARD)
+    st.to_review(state, message_id=(sent or {}).get("message_id"))
+    save_state(state)
+
+
+async def repost_review(client: httpx.AsyncClient, state: dict, clip_id: str | None) -> bool:
+    """📋 never took the Script out of review: bring its buttons back to the bottom.
+
+    False when the review has moved on — the board's copy is never put back,
+    because that Script may already be rendered or discarded.
+    """
+    if not clip_id or state.get("mode") != "review" or state.get("clip_id") != clip_id:
+        return False
+    await close_prompt(client, state.get("message_id"), "↩️ สคริปต์นี้ย้ายลงไปข้างล่างแล้ว")
+    sent = await say(client, "↩️ ยกเลิกแล้ว เลือกใหม่ได้เลยว่าจะทำแบบไหน\n\n"
+                     + format_script(state["script"], research.sources_line(state.get("research"))),
+                     reply_markup=REVIEW_KEYBOARD)
+    state["message_id"] = (sent or {}).get("message_id")
+    save_state(state)
+    return True
+
+
+async def on_wait_callback(client: httpx.AsyncClient, state: dict, data: str,
+                           query: dict | None = None) -> None:
+    """`wait:<action>:<kind>:<key>[:<new clip id>]` — see WAIT_CB."""
+    _, action, kind, key, *rest = [*data.split(":"), "", "", ""][:5]
+    if action == "swap":
+        await swap_wait(client, state, kind, key, rest[0])
+    elif kind == "park":
+        await cancel_parked(client, state, key, query, back=action == "back")
+    elif kind == "board":
+        await cancel_board(client, state, key, query)
+
+
+async def cancel_parked(client: httpx.AsyncClient, state: dict, clip_id: str,
+                        query: dict | None, back: bool) -> None:
+    parked = state.get("parked") or {}
+    if not clip_id or parked.get("clip_id") != clip_id:
+        await say(client, "คลิปนี้ไม่ได้รอ footage แล้ว (render ไปแล้ว หมดอายุ หรือยกเลิกไปก่อน)")
+        return
+    title = (parked.get("script") or {}).get("title", "")
+    if back:
+        busy = review_taken(state)
+        if busy:
+            await say(client, f"{busy}\nหรือจะเลิกทำคลิปนี้ไปเลยก็ได้",
+                      reply_markup={"inline_keyboard": [[
+                          {"text": "🗑 เลิกทำคลิปนี้",
+                           "callback_data": f"{WAIT_CB}:drop:park:{clip_id}"}]]})
+            return
+    state.pop("parked", None)
+    save_state(state)
+    await close_prompt(client, parked.get("prompt_message_id") or tapped(query),
+                       f"🎨 {title} — ยกเลิก footage แล้ว ไม่รับคลิปของ prompt นี้")
+    if back:
+        await restore_review(client, state, parked)
+        return
+    abandon(clip_id)
+    await say(client, f"🗑 เลิกทำคลิปนี้แล้ว: {title}" + (PAIR_NOTE if parked.get("pair") else ""))
+
+
+async def cancel_board(client: httpx.AsyncClient, state: dict, token: str,
+                       query: dict | None) -> None:
+    wait = state.get("clip_wait") or {}
+    if not token or wait.get("kind") == "studio" or wait.get("token") != token:
+        await say(client, "storyboard นี้ไม่ได้รอคลิปแล้ว (หมดอายุหรือมีอันใหม่กว่า)")
+        return
+    state.pop("clip_wait", None)
+    save_state(state)
+    await close_prompt(client, tapped(query),
+                       f"📋 {(wait.get('script') or {}).get('title', '')} — "
+                       "ยกเลิก storyboard แล้ว ไม่รับคลิปของอันนี้")
+    if not await repost_review(client, state, wait.get("clip_id")):
+        await say(client, "↩️ ยกเลิก storyboard แล้ว")
+
+
+async def cancel_studio(client: httpx.AsyncClient, state: dict, wait: dict,
+                        query: dict | None, back: bool) -> None:
+    """↩️/🗑 on a Studio pack. Never while its files are being cut or rendered."""
+    clip_id = wait["clip_id"]
+    mode = state.get("mode", "idle")
+    if wait.get("working") or (state.get("clip_id") == clip_id and mode in st.HOLDING_MODES):
+        await toast(client, query, "⏳ กำลังหั่น/render คลิปนี้อยู่ รอให้เสร็จก่อน")
+        return
+    rendered = clip_id in (state.get("uploads") or {})
+    if back and rendered:
+        await toast(client, query, "คลิปนี้ render ไปแล้ว")
+        await say(client, "คลิปนี้ render ไปแล้ว กลับไปรีวิวไม่ได้ — ใช้ /redo หรือเริ่มหัวข้อใหม่")
+        return
+    if back:
+        busy = review_taken(state)
+        if busy:
+            await toast(client, query)
+            await say(client, f"{busy}\nหรือจะเลิกทำคลิปนี้ไปเลยก็ได้",
+                      reply_markup={"inline_keyboard": [[
+                          {"text": "🗑 เลิกทำคลิปนี้", "callback_data": f"stq:{clip_id}"}]]})
+            return
+    await toast(client, query, "↩️ ส่งสคริปต์กลับไปรีวิว" if back else "🗑 เลิกทำคลิปนี้")
+    state.pop("clip_wait", None)
+    drop_studio_files(wait)
+    save_state(state)
+    title = wait["script"]["title"]
+    await close_prompt(client, tapped(query), f"🎞 {title} — ยกเลิก Studio pack แล้ว "
+                                              "ไม่รับคลิปจาก Flow ของ pack นี้")
+    if back:
+        await restore_review(client, state, wait)
+        return
+    abandon(clip_id)
+    await say(client, f"🗑 เลิกทำคลิปนี้แล้ว: {title}\nลบ pack และ footage ที่เก็บไว้แล้ว"
+                      + (PAIR_NOTE if wait.get("pair") else ""))
+
+
+async def swap_wait(client: httpx.AsyncClient, state: dict, kind: str, old: str,
+                    new: str) -> None:
+    """🗑 on a refusal: write the waiting Clip off, then do 🎨/🎞 for the one in review."""
+    if state.get("mode") != "review" or not new or state.get("clip_id") != new:
+        await say(client, "สคริปต์ที่กดไว้ไม่ได้รีวิวอยู่แล้ว ไม่ได้ทิ้งอะไร")
+        return
+    if kind == "studio":
+        wait = _studio_wait(state, old)
+        if not wait:
+            # Gone on its own meanwhile: nothing left in the way.
+            spawn(on_studio(client, state), "on_studio")
+            return
+        if wait.get("busy") or wait.get("working"):
+            await say(client, "pack เดิมกำลังทำงานอยู่ รอสักครู่แล้วกดใหม่")
+            return
+        state.pop("clip_wait", None)
+        drop_studio_files(wait)
+        save_state(state)
+        abandon(old)
+        await say(client, f"🗑 ทิ้ง Studio pack เดิมแล้ว: {wait['script']['title']}"
+                          + (PAIR_NOTE if wait.get("pair") else ""))
+        spawn(on_studio(client, state), "on_studio")
+        return
+    if kind == "park":
+        parked = state.get("parked") or {}
+        if parked.get("clip_id") == old:
+            state.pop("parked", None)
+            save_state(state)
+            abandon(old)
+            title = (parked.get("script") or {}).get("title", "")
+            await close_prompt(client, parked.get("prompt_message_id"),
+                               f"🎨 {title} — ยกเลิก footage แล้ว ไม่รับคลิปของ prompt นี้")
+            await say(client, f"🗑 ทิ้งคลิปที่รอ footage แล้ว: {title}"
+                              + (PAIR_NOTE if parked.get("pair") else ""))
+        elif parked:
+            await say(client, "ยังมีคลิปอื่นรอ footage อยู่ กด 🎨 ใหม่อีกที")
+            return
+        spawn(on_flow(client, state), "on_flow")
+
+
 # --- Storyboard Studio packs (docs/adr/0016) ----------------------------------
 
 def pack_url(clip_id: str) -> str:
@@ -1322,6 +1568,8 @@ def studio_keyboard(wait: dict) -> dict:
                   "callback_data": f"sts:{clip_id}"}])
     rows.append([{"text": "✅ Pexels ทั้งหมด — render เลย", "callback_data": f"stp:{clip_id}"},
                  {"text": "✂️ ย่อการ์ดยาว", "callback_data": f"stx:{clip_id}"}])
+    rows.append([{"text": "↩️ ยกเลิก เลือกวิธีใหม่", "callback_data": f"stb:{clip_id}"},
+                 {"text": "🗑 เลิกทำคลิปนี้", "callback_data": f"stq:{clip_id}"}])
     return {"inline_keyboard": rows}
 
 
@@ -1365,7 +1613,9 @@ async def on_studio(client: httpx.AsyncClient, state: dict) -> None:
         # Same rule as 🎨's one Parked Clip: a second pack would orphan credits
         # already spent in Flow on the first. The Script stays in review.
         await say(client, f"ยังมี Studio pack ค้างอยู่: {live['script']['title']}\n"
-                          "ส่งคลิปของอันนั้นก่อน (หรือรอหมดอายุ) แล้วค่อยกด 🎞 อันนี้")
+                          "ส่งคลิปของอันนั้นก่อน (หรือรอหมดอายุ) แล้วค่อยกด 🎞 อันนี้ "
+                          "หรือทิ้ง pack นั้นแล้วทำอันนี้แทน",
+                  **markup(swap_keyboard("studio", live.get("clip_id"), clip_id)))
         return
     # Claimed before the first await: the poll loop keeps running, and a Topic
     # (or a second 🎞 tap) arriving now would overwrite this one.
@@ -1579,6 +1829,9 @@ async def on_studio_callback(client: httpx.AsyncClient, state: dict, data: str,
         await toast(client, query, "✂️ ส่งสคริปต์กลับไปรีวิว")
         await shorten_cards(client, state, wait)
         return
+    elif kind in ("stb", "stq"):
+        await cancel_studio(client, state, wait, query, back=kind == "stb")
+        return
     else:
         await toast(client, query)
         return
@@ -1616,17 +1869,7 @@ async def shorten_cards(client: httpx.AsyncClient, state: dict, wait: dict) -> N
                   if studio.shots_for(span) > 1]
     state.pop("clip_wait", None)
     drop_studio_files(wait)
-    if wait.get("pair"):
-        # The 🌏 half went into the pack with the Script; it comes back with it.
-        state["pair"] = wait["pair"]
-    state.update(script=wait["script"], clip_id=wait["clip_id"], topic=wait.get("topic"),
-                 locale=wait["locale"], research=wait.get("research"),
-                 style=wait.get("style", ""))
-    sent = await say(client, format_script(wait["script"],
-                                           research.sources_line(wait.get("research"))),
-                     reply_markup=REVIEW_KEYBOARD)
-    st.to_review(state, message_id=(sent or {}).get("message_id"))
-    save_state(state)
+    await restore_review(client, state, wait)
     hint = ", ".join(long_cards) or "ไม่มีการ์ดที่เกิน 1 shot"
     example = long_cards[0].split(" (")[0] if long_cards else "การ์ด 2"
     await say(client, f"✂️ การ์ดที่ยาวเกิน 1 shot: {hint}\n"
@@ -1634,6 +1877,21 @@ async def shorten_cards(client: httpx.AsyncClient, state: dict, wait: dict) -> N
 
 
 async def render_studio(client: httpx.AsyncClient, state: dict, clip_id: str) -> None:
+    """_render_studio(), with ↩️/🗑 on the pack refused while it runs: the take
+    can be re-spoken before do_render() claims the mode, and those buttons
+    delete the footage it is about to read."""
+    wait = _studio_wait(state, clip_id)
+    if wait:
+        wait["working"] = True
+    try:
+        await _render_studio(client, state, clip_id)
+    finally:
+        if wait:
+            wait.pop("working", None)
+            save_state(state)
+
+
+async def _render_studio(client: httpx.AsyncClient, state: dict, clip_id: str) -> None:
     """Render with every Flow Card's kept footage; Pexels for the rest.
 
     Takes the live slots the way render_parked() does, so it needs an idle
@@ -1729,6 +1987,8 @@ async def process_export(client: httpx.AsyncClient, state: dict, token: str, pat
                           "callback_data": f"ste:{clip_id}:{token}"}]]})
             return
         (wait.get("uneven") or {}).pop(token, None)
+        # ↩️/🗑 on the pack delete these very files: refused until the cut is done.
+        wait["working"] = True
         save_state(state)
         try:
             await asyncio.to_thread(studio.cut, path, version["pending"],
@@ -1737,6 +1997,9 @@ async def process_export(client: httpx.AsyncClient, state: dict, token: str, pat
         except RuntimeError as exc:
             await say(client, f"หั่นคลิปไม่สำเร็จ: {exc}\nส่งไฟล์ใหม่อีกครั้งได้")
             return
+        finally:
+            wait.pop("working", None)
+            save_state(state)
         path.unlink(missing_ok=True)
         await say(client, f"✂️ หั่น {total} shot แล้ว กำลัง render")
         await render_studio(client, state, clip_id)
@@ -2270,7 +2533,7 @@ async def on_text(client: httpx.AsyncClient, state: dict, text: str) -> None:
             return
         await ask_character(client, state, {
             "kind": "brief",
-            "token": f"{datetime.now():%Y%m%d%H%M%S%f}"[:-3],
+            "token": new_token(),
             "brief": brief,
         })
         return
@@ -2367,7 +2630,11 @@ async def on_callback(client: httpx.AsyncClient, state: dict, query: dict) -> No
     if data.startswith(f"{SBCHAR_CB}:"):
         # Above the mode guard too: `/storyboard <บรีฟ>` asks this question with
         # the bot idle, and 📋 asks it from a review the human may have left.
-        await on_character_choice(client, state, data)
+        await on_character_choice(client, state, data, query)
+        return
+    if data.startswith(f"{WAIT_CB}:"):
+        # Above the mode guard: what these act on waits while the bot is idle.
+        await on_wait_callback(client, state, data, query)
         return
     if not data.startswith(UPLOAD_CB) and state.get("mode") != "review":
         return
@@ -2384,7 +2651,7 @@ async def on_callback(client: httpx.AsyncClient, state: dict, query: dict) -> No
         # after 🗑, or after another Topic has taken the live slots.
         await ask_character(client, state, {
             "kind": "script",
-            "token": f"{datetime.now():%Y%m%d%H%M%S%f}"[:-3],
+            "token": new_token(),
             "script": state["script"],
             "clip_id": state.get("clip_id"),
             # Snapshotted here, not read when the board is done: the Locale
@@ -2394,10 +2661,16 @@ async def on_callback(client: httpx.AsyncClient, state: dict, query: dict) -> No
             "locale": state.get("locale", locales.DEFAULT),
         })
     elif query.get("data") == FLOW_CB:
-        if state.get("parked"):
+        parked = state.get("parked")
+        if parked:
             # One at a time: two Parked Clips would need a queue to pick from,
             # and the human generating them in Flow is one person doing one.
-            await say(client, "ยังมีคลิปรอ footage อยู่ ส่ง footage ของอันนั้นก่อน (หรือรอให้หมดอายุ)")
+            await say(client, "ยังมีคลิปรอ footage อยู่: "
+                              f"{(parked.get('script') or {}).get('title', '')}\n"
+                              "ส่ง footage ของอันนั้นก่อน (หรือรอให้หมดอายุ) "
+                              "หรือทิ้งอันนั้นแล้วทำอันนี้แทน",
+                      **markup(swap_keyboard("park", parked.get("clip_id"),
+                                             state.get("clip_id"))))
             return
         spawn(on_flow(client, state), "on_flow")
     elif query.get("data") == STUDIO_CB:
@@ -2414,13 +2687,21 @@ async def on_callback(client: httpx.AsyncClient, state: dict, query: dict) -> No
         await say(client, note)
 
 
-async def on_character_choice(client: httpx.AsyncClient, state: dict, data: str) -> None:
+async def on_character_choice(client: httpx.AsyncClient, state: dict, data: str,
+                              query: dict | None = None) -> None:
     """🎭 answered: plan the board, or wait for the description to be typed."""
     _, _, rest = data.partition(":")
     choice, _, token = rest.partition(":")
     wait = state.get("storyboard_wait") or {}
     if not wait or not token or token != wait.get("token"):
         await say(client, "คำถามตัวละครอันนี้เก่าแล้ว กด 📋 หรือสั่ง /storyboard ใหม่นะ")
+        return
+    if choice == "cancel":
+        state.pop("storyboard_wait", None)
+        save_state(state)
+        await close_prompt(client, tapped(query), "↩️ ยกเลิก storyboard แล้ว")
+        if not await repost_review(client, state, wait.get("clip_id")):
+            await say(client, "↩️ ยกเลิก storyboard แล้ว")
         return
     if choice == storyboard.OWN:
         # The next line typed is the character, not the next Topic — said out

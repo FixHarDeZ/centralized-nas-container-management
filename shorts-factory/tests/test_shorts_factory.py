@@ -2025,7 +2025,7 @@ def test_storyboard_button_leaves_the_script_in_review(monkeypatch, tmp_path):
     monkeypatch.setattr(main, "say", _nothing)
     sent = []
 
-    async def fake_send(client, board):
+    async def fake_send(client, board, token=""):
         sent.append(board)
 
     monkeypatch.setattr(main, "send_storyboard", fake_send)
@@ -2137,7 +2137,8 @@ def test_the_character_question_comes_before_the_model_call(monkeypatch):
     assert wait["kind"] == "script" and wait["script"] is state["script"]
     choices = [b["callback_data"].split(":")[1]
                for row in sent["reply_markup"]["inline_keyboard"] for b in row]
-    assert choices == [storyboard.AUTO, storyboard.OWN, storyboard.NONE]
+    # The last row is the way out: ↩️ cancels the board, not a character.
+    assert choices == [storyboard.AUTO, storyboard.OWN, storyboard.NONE, "cancel"]
 
 
 def test_an_answer_to_a_question_that_is_gone_is_refused(monkeypatch):

@@ -401,7 +401,7 @@ def test_a_storyboard_over_a_live_pack_drops_it_out_loud(bot, monkeypatch):
     async def board(*args, **kwargs):
         return {"overview": {"title": "t"}, "scenes": []}
 
-    async def send(client, board):
+    async def send(client, board, token=""):
         return 555
 
     monkeypatch.setattr(storyboard, "for_script", board)
@@ -577,3 +577,146 @@ def test_a_duration_in_motion_never_reaches_a_speaking_prompt():
     assert storyboard.animate_prompt(scene, "Thai") == (
         'Speaks in Thai: "สวัสดี" Natural lip movement. Static camera. '
         "No subtitles, no on-screen text, no background music.")
+
+
+# --- changing your mind on a waiting Clip -------------------------------------
+
+NEW = "20261016-090000-000"
+
+
+def buttons(extra):
+    return [b["callback_data"] for row in (extra.get("reply_markup") or {}).get("inline_keyboard", [])
+            for b in row]
+
+
+def test_studio_refusal_offers_to_swap_the_old_pack(bot):
+    state = review_state()
+    run(main.on_studio(None, state))
+    other = {**review_state(), "clip_id": NEW, "clip_wait": state["clip_wait"]}
+    run(main.on_studio(None, other))
+    refusal = [item for item in bot if item[0] == "say" and "ค้างอยู่" in item[1]][-1]
+    assert f"wait:swap:studio:{CLIP}:{NEW}" in buttons(refusal[2])
+
+    run(main.on_wait_callback(None, other, f"wait:swap:studio:{CLIP}:{NEW}"))
+    assert other["clip_wait"]["clip_id"] == NEW and other["mode"] == "idle"
+    assert any("ทิ้ง Studio pack เดิม" in item[1] for item in bot if item[0] == "say")
+
+
+def test_a_stale_swap_drops_nothing(bot):
+    state = review_state()
+    run(main.on_studio(None, state))
+    # The review the refusal was for has moved on.
+    run(main.on_wait_callback(None, state, f"wait:swap:studio:{CLIP}:{NEW}"))
+    assert state["clip_wait"]["clip_id"] == CLIP
+
+
+def test_pack_back_button_returns_the_script_to_review(bot):
+    state = review_state()
+    state.update(research={"results": []}, style="hook-a")
+    run(main.on_studio(None, state))
+    assert f"stb:{CLIP}" in buttons({"reply_markup": main.studio_keyboard(state["clip_wait"])})
+    run(main.on_studio_callback(None, state, f"stb:{CLIP}"))
+    assert "clip_wait" not in state and state["mode"] == "review"
+    assert state["clip_id"] == CLIP and state["research"] == {"results": []}
+    assert state["style"] == "hook-a"
+    assert bot[-1][2]["reply_markup"] == main.REVIEW_KEYBOARD
+
+
+def test_pack_back_with_another_review_offers_to_drop_instead(bot):
+    state = review_state()
+    run(main.on_studio(None, state))
+    state.update(mode="review", clip_id=NEW, script=a_script())
+    run(main.on_studio_callback(None, state, f"stb:{CLIP}"))
+    assert state["clip_wait"]["clip_id"] == CLIP and state["clip_id"] == NEW
+    assert f"stq:{CLIP}" in buttons(bot[-1][2])
+
+    run(main.on_studio_callback(None, state, f"stq:{CLIP}"))
+    assert "clip_wait" not in state and state["clip_id"] == NEW
+    assert "เลิกทำคลิปนี้แล้ว" in bot[-1][1]
+
+
+def test_pack_drop_keeps_a_real_outcome(bot):
+    clip_id = main.manifest.start("หัวข้อ")
+    state = {**review_state(), "clip_id": clip_id}
+    run(main.on_studio(None, state))
+    main.manifest.update(clip_id, outcome="rendered")
+    run(main.on_studio_callback(None, state, f"stq:{clip_id}"))
+    assert main.manifest.load(clip_id)["outcome"] == "rendered"
+
+
+def test_pack_drop_writes_a_draft_off(bot):
+    clip_id = main.manifest.start("หัวข้อ")
+    state = {**review_state(), "clip_id": clip_id}
+    run(main.on_studio(None, state))
+    run(main.on_studio_callback(None, state, f"stq:{clip_id}"))
+    assert main.manifest.load(clip_id)["outcome"] == "abandoned"
+
+
+def test_pack_cancel_is_refused_while_its_footage_is_in_use(bot):
+    state = review_state()
+    run(main.on_studio(None, state))
+    state["clip_wait"]["working"] = True
+    run(main.on_studio_callback(None, state, f"stq:{CLIP}"))
+    assert state["clip_wait"]["clip_id"] == CLIP
+    state["clip_wait"].pop("working")
+    state.update(mode="rendering", clip_id=CLIP)
+    run(main.on_studio_callback(None, state, f"stq:{CLIP}"))
+    assert state["clip_wait"]["clip_id"] == CLIP
+
+
+def test_flow_prompt_can_go_back_to_review(bot, monkeypatch):
+    async def prompt(topic, card):
+        return "a prompt"
+    monkeypatch.setattr(main.script_gen, "flow_prompt", prompt)
+    state = {**review_state(), "research": {"results": []}, "pair": {"topic": "t"}}
+    run(main.on_flow(None, state))
+    assert state["mode"] == "idle" and state["parked"]["research"] == {"results": []}
+    flow = [item for item in bot if item[0] == "say" and "footage สำหรับ hook" in item[1]][-1]
+    assert f"wait:back:park:{CLIP}" in buttons(flow[2])
+
+    run(main.on_wait_callback(None, state, f"wait:back:park:{CLIP}"))
+    assert "parked" not in state and state["mode"] == "review"
+    assert state["research"] == {"results": []} and state["pair"] == {"topic": "t"}
+    assert bot[-1][2]["reply_markup"] == main.REVIEW_KEYBOARD
+
+
+def test_flow_refusal_swaps_the_parked_clip(bot, monkeypatch):
+    async def prompt(topic, card):
+        return "a prompt"
+    monkeypatch.setattr(main.script_gen, "flow_prompt", prompt)
+    state = review_state()
+    run(main.on_flow(None, state))
+    state.update(mode="review", clip_id=NEW, script=a_script(), message_id=7)
+    run(main.on_wait_callback(None, state, f"wait:swap:park:{CLIP}:{NEW}"))
+    assert state["parked"]["clip_id"] == NEW
+
+
+def test_storyboard_trailer_cancel_brings_the_review_back(bot, monkeypatch):
+    async def for_script(script, **kwargs):
+        return {"overview": {"title": "t"}}
+
+    async def send_prompt(*args, **kwargs):
+        return None
+    monkeypatch.setattr(storyboard, "for_script", for_script)
+    monkeypatch.setattr(storyboard, "messages", lambda board: [])
+    monkeypatch.setattr(main, "send_prompt", send_prompt)
+    state = review_state()
+    run(main.on_storyboard(None, state, script=state["script"], clip_id=CLIP))
+    wait = state["clip_wait"]
+    assert wait["clip_id"] == CLIP and wait["token"]
+    trailer = [item for item in bot if item[0] == "say" and "ประกอบเสร็จแล้ว" in item[1]][-1]
+    assert f"wait:back:board:{wait['token']}" in buttons(trailer[2])
+
+    run(main.on_wait_callback(None, state, f"wait:back:board:{wait['token']}"))
+    assert "clip_wait" not in state and state["mode"] == "review"
+    assert bot[-1][2]["reply_markup"] == main.REVIEW_KEYBOARD
+
+
+def test_character_question_can_be_cancelled(bot):
+    state = review_state()
+    run(main.ask_character(None, state, {"kind": "script", "token": "t1", "clip_id": CLIP,
+                                         "script": state["script"]}))
+    assert "sbchar:cancel:t1" in buttons(bot[-1][2])
+    run(main.on_character_choice(None, state, "sbchar:cancel:t1"))
+    assert "storyboard_wait" not in state and state["mode"] == "review"
+    assert bot[-1][2]["reply_markup"] == main.REVIEW_KEYBOARD

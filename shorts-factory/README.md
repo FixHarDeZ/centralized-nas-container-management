@@ -561,7 +561,31 @@ Details worth knowing:
   never filled from Pexels quietly. If the bot is busy when the footage is
   ready, it posts a 🎬 render Studio button instead.
 - **One pack at a time.** A second 🎞 on another script is refused while one
-  waits. 📋 shares the same slot (see above).
+  waits. 📋 shares the same slot (see above). The refusal carries **🗑 ทิ้ง
+  pack เดิม แล้วทำอันนี้**: it writes the old clip off and builds the pack for
+  the script in review. Both clip ids ride in the button, so a refusal tapped
+  after that review moved on drops nothing.
+
+### Changing your mind after 🎨, 📋 or 🎞
+
+Each of the three takes the script out to a wait, and each wait holds one
+slot for 24-72 hours. Each one now has a way out:
+
+| Where | ↩️ ยกเลิก (back) | 🗑 เลิกทำคลิปนี้ (drop) |
+|---|---|---|
+| 🎨 Flow prompt message (`wait:<back\|drop>:park:<clip_id>`) | Unparks the clip and posts the script again with the review buttons. The Fact sheet, hook variant and queued 🌏 half come back with it. | Writes the clip off. |
+| 📋 character question (`sbchar:cancel:<token>`) and storyboard trailer (`wait:back:board:<token>`) | Stops waiting for the clip. 📋 never left the review, so the script's buttons are re-posted at the bottom. That happens only if that same clip is still in review. The board's copy is never restored. | — |
+| 🎞 pack (`stb:` / `stq:`) | Deletes the pack files and returns the script to review, the same way ✂️ does. | Deletes the pack files and writes the clip off. |
+
+- **↩️ needs a free review slot.** If another script is in review, or the bot
+  is busy, the bot says why and offers 🗑 instead.
+- **The pack buttons are refused while its footage is in use**, meaning while
+  an export is being cut or that clip is rendering (`clip_wait.working`, or
+  the clip in a holding mode). After a render, ↩️ is refused.
+- **🗑 does not overwrite a real outcome.** It writes `abandoned` only to a
+  Manifest still at `drafting`.
+- A 🎨 refusal carries **🗑 ทิ้งอันเดิม แล้วทำอันนี้** (`wait:swap:park:…`),
+  which works the same way as the 🎞 swap.
 
 ### 🗣 The character speaks (`docs/adr/0017`)
 
