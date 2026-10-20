@@ -32,7 +32,8 @@ def test_shot_map_and_totals():
     shots = studio.shot_map([7.0, 9.0, 8.2], [0, 2])
     assert shots == {0: 1, 2: 2}
     assert studio.total_shots(shots) == 3
-    assert studio.credits(3) == 36
+    assert studio.credits({0: 1, 2: 2}) == 36
+    assert studio.credits({0: 1, 1: 1}, {0: 8.0, 1: 10.0}) == 27
 
 
 def test_fits_within_half_a_second():

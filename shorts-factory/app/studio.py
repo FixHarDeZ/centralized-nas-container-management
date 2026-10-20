@@ -34,9 +34,10 @@ TOLERANCE = 0.5    # export length vs shots × 8
 SPEAK_LONG_SHOT = 10.0
 VOICE_RATE = 24000  # the edge-tts take's own rate, so the concat needs no resample
 SPEAK_MAX_TAKE = float(os.environ.get("SPEAK_MAX_TAKE_SECONDS", "6.3"))
-# The longest take a 10s speaking shot holds, at the same edge. Exports of
-# 2026-10-20 agree from the other side: Veo covered 9.5-9.8s of take in its
-# 10s shot and cut the rest of the line off.
+# The longest take a 10s speaking shot holds, at the same edge. One clean
+# sample from the other side (2026-10-20, a 10s shot): Veo said ~70% of a
+# 13.5s take (~9.4s of it), then went quiet. Two more shots of that export
+# came out ~9s long, cause unknown, so they say nothing about the edge.
 SPEAK_FIT = SPEAK_MAX_TAKE * SPEAK_LONG_SHOT / SHOT_SECONDS
 # condense() aims under the edge, so the re-measured take lands inside it.
 SPEAK_AIM = 0.92
@@ -68,8 +69,11 @@ def total_shots(shots: dict[int, int]) -> int:
     return sum(shots.values())
 
 
-def credits(total: int) -> int:
-    return total * int(os.environ.get("FLOW_CREDITS_PER_SHOT", "12"))
+def credits(shots: dict[int, int], seconds: dict[int, float] | None = None) -> int:
+    """Flow credits, priced by shot length: 8s = 12, 10s = 15 (measured 2026-10-20)."""
+    per_shot = int(os.environ.get("FLOW_CREDITS_PER_SHOT", "12"))
+    return sum(n * round(per_shot * (seconds or {}).get(c, SHOT_SECONDS) / SHOT_SECONDS)
+               for c, n in shots.items())
 
 
 def new_token() -> str:

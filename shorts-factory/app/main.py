@@ -1718,7 +1718,7 @@ async def fit_speech(client: httpx.AsyncClient, state: dict, wait: dict,
         targets = {c: studio.speech_budget(script_gen.speech_units(cards[c]["spoken"], locale),
                                            wait["spans"][c]) for c in over}
         await say(client, f"✂️ บทพูดการ์ด {', '.join(str(c + 1) for c in over)} ยาวเกิน 10 วิ "
-                          "— กำลังย่อให้พูดทัน แล้วอัดเสียงวัดใหม่ (~2-4 นาที)")
+                          "— กำลังย่อให้พูดทัน แล้วอัดเสียงวัดใหม่ (~2-6 นาที)")
         try:
             shorter = await script_gen.condense(cards, targets, locale)
             script = json.loads(json.dumps(wait["script"]))
@@ -1779,7 +1779,7 @@ async def _publish_version(client: httpx.AsyncClient, state: dict, wait: dict,
         "created_at": datetime.now().isoformat(timespec="seconds"),
         "character": profile, "sources": list(wait["sources"]), "pending": pending,
         "shots": {str(k): v for k, v in shots.items()}, "total_shots": total,
-        "credits": studio.credits(total), "spans": card_spans,
+        "credits": studio.credits(shots, seconds), "spans": card_spans,
         "speak": speak, "seconds": {str(k): v for k, v in seconds.items()}, "length": length,
         "scenes": [{"n": i + 1, "card": s["card"], "image_prompt": s["image_gen_prompt"],
                     "motion": s["motion"], "narration": script["cards"][s["card"]]["narration"],

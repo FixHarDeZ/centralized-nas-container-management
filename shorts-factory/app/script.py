@@ -740,7 +740,9 @@ async def flow_prompt(topic: str, card: dict) -> str:
 
 # --- 🗣 lines that must fit one Flow shot (docs/adr/0017) -----------------------
 
-CONDENSE_BUDGET_SECONDS = float(os.environ.get("CONDENSE_TIMEOUT_SECONDS", "240"))
+# The same budget as a Script: six Thai lines rewritten is a Script's worth of
+# output, and 240s stalled on the first live try (2026-10-20).
+CONDENSE_BUDGET_SECONDS = float(os.environ.get("CONDENSE_TIMEOUT_SECONDS", str(BUDGET_SECONDS)))
 
 CONDENSE_PROMPT = """คุณย่อบทพูดของคลิป YouTube Shorts ให้ตัวละครพูดจบใน shot เดียว
 ตัวละครพูดเองบนกล้อง shot ยาวได้ 10 วินาที ประโยคที่ยาวเกินจะถูกตัดกลางคำ
@@ -799,7 +801,11 @@ async def condense(cards: list[dict], targets: dict[int, int],
         left = deadline - time.monotonic()
         if left < 30:
             break
-        raw = await _say(client, messages, temperature=0.4, budget=left)
+        try:
+            raw = await _say(client, messages, temperature=0.4, budget=left)
+        except TimeoutError as exc:
+            last = f"โมเดลเงียบ ({exc})"
+            break
         try:
             out = _condensed(_parse(raw), cards, targets, alphabet)
         except ScriptError as exc:

@@ -64,3 +64,13 @@ def test_condense_gives_up_after_two_bad_answers(monkeypatch):
     replies(monkeypatch, [bad, bad])
     with pytest.raises(script.ScriptError, match="ย่อบทพูดไม่สำเร็จ"):
         asyncio.run(script.condense(CARDS, {0: 3}, "th"))
+
+
+def test_a_silent_model_is_a_script_error_not_a_timeout(monkeypatch):
+    async def silent(client, messages, temperature, budget):
+        raise TimeoutError("mimo silent for 600s")
+
+    monkeypatch.setattr(script, "_say", silent)
+    monkeypatch.setattr(script, "_client", lambda: None)
+    with pytest.raises(script.ScriptError, match="โมเดลเงียบ"):
+        asyncio.run(script.condense(CARDS, {0: 20}, "th"))

@@ -619,8 +619,10 @@ needs a character (🚫 refuses it).
   ≤ 6.3 s (`SPEAK_MAX_TAKE_SECONDS`) gets an 8 s shot and a longer one a
   **10 s** shot. 6.3 s is the observed edge (speech ran to ~7.9 s of 8), not
   a margin, and the 10 s limit (7.875 s of take, `studio.SPEAK_FIT`) is scaled
-  from it. Exports of 2026-10-20 agree from the other side: Veo covered
-  9.5–9.8 s of take in its 10 s shot and cut the rest off mid-word. The pack
+  from it. One clean 10 s sample (2026-10-20) agrees from the other side:
+  Veo said ~70 % of a 13.5 s take, then went quiet. Two other shots of that
+  export came out ~9 s long (cause unknown), so a pack can still land as
+  uneven. The pack
   message lists which Cards to set to 10 s in Flow. The export length is the
   sum of those, not `shots × 8`.
 - **Lines too long for 10 s are shortened by the bot** (`main.fit_speech()`,
@@ -656,7 +658,8 @@ needs a character (🚫 refuses it).
   (`STORYBOARD_CLIP_HOURS`) runs out. A channel without YouTube credentials
   keeps them until then. Inbox files nobody claims go after 72 h. A restart
   puts back an export caught mid-cut so the next poll takes it again.
-- **Credits** shown are `shots × FLOW_CREDITS_PER_SHOT` (default 12), an
+- **Credits** shown are `FLOW_CREDITS_PER_SHOT` (default 12) per 8 s shot,
+  pro rata by shot length: a 10 s shot is 15 (Flow's price, 2026-10-20). An
   estimate, not read from Flow.
 - **Experiment**: a clip with any Studio Card (`footage_source:
   flow-studio`) is left out of `/experiment` and its category table. The
@@ -959,7 +962,7 @@ make secrets                    # render .env from vault + manifest
 | `FLOW_PROMPT_TIMEOUT_SECONDS` | `180` | cap on writing one Flow Prompt |
 | `STORYBOARD_TIMEOUT_SECONDS` | `300` | cap on planning one storyboard |
 | `STORYBOARD_CLIP_HOURS` | `72` | how long a storyboard waits for the clip you assemble from it |
-| `FLOW_CREDITS_PER_SHOT` | `12` | Flow credits per 8 s shot, for the estimate on a 🎞 Studio pack (bot only; written into the pack) |
+| `FLOW_CREDITS_PER_SHOT` | `12` | Flow credits per 8 s shot, for the estimate on a 🎞 Studio pack; a 10 s shot is priced pro rata (15) (bot only; written into the pack) |
 | `REVIEW_LIFETIME_HOURS` | `6` | how long a script waits for you to press a button before it is let go |
 | `TTS_VOICE_EN` | `en-US-AndrewNeural` | the English Locale's voice, used by `/en` and `/trends en` clips |
 | `TTS_ATTEMPTS` | `3` | tries per synthesis call; the endpoint drops whole calls at random (`No audio was received`) |
