@@ -2437,3 +2437,7 @@ pack page โชว์ `animate` + "ตั้ง Ns". render_studio: มี wav 
   การ์ด 3 ใน render ทดสอบแรกเป็นพื้นเปล่า = ตั้งใจเทสเคสผสม (🖼 + TTS) และเครื่องเทสไม่มี Pexels key → fallback gradient; export จริงมี 6 shot.
   re-render ทั้ง 6 การ์ดพูด → `~/Downloads/speaking-test-rendered-v2.mp4` 48.0 วิ (การ์ด 3-5 พูดเกิน 8 วิ ถูกตัดท้าย = เหตุผลของกฎ 10 วิ).
   sf-test 538 passed/2 skipped, ruff ไม่มีของใหม่. commit `d62d26f` deploy แล้ว (grep ในคอนเทนเนอร์เจอ `LOW_BOTTOM`/`low=speaking`, 5 Up, log ไม่มี error). ยังไม่ push.
+- **ปิดงาน 2026-10-20:** commit `daa0e86`..`d834521` อยู่บน origin/main แล้ว (push มาพร้อม `ed526ab` ai-deck จากอีก session), deploy ล่าสุด `d62d26f`.
+  ค้าง: ผู้ใช้ฟัง `~/Downloads/speaking-test-rendered-v2.mp4` (ไทยชัด/lip-sync/DCA) + v1 (เสียงสลับ Veo↔TTS);
+  ขนาดซับใต้คาง (การ์ดบรรทัดยาวเล็กลงเพราะกว้าง 800 px — ปรับ `LOW_WIDTH`/`LOW_BOTTOM` ตามจอมือถือจริง);
+  ขอบดำบน Pexels ฉากวุ่นๆ ยังไม่เห็นของจริง; เครดิต shot 10 วิ; กด 🗣 กับ pack จริง; Flow มี download 1080p ไหม (export 720p ถูกขยาย).
