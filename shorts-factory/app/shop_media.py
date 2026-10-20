@@ -9,7 +9,6 @@ from pathlib import Path
 
 from PIL import Image, ImageOps
 
-
 # A 7-shot pack of 10 s shots is 70 s; room for hand trims and a longer one.
 EXPORT_SECONDS = 180
 

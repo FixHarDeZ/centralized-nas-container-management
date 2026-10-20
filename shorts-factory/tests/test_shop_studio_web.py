@@ -193,7 +193,7 @@ def make_job(tmp_path, monkeypatch, beats, spans, condensed=None):
 
 def test_a_condensed_beat_still_passes_shop_validation(tmp_path, monkeypatch):
     line = 'แสงนวลสบายตา อ่านหนังสือได้นานค่ะ'
-    store, _, job = make_job(tmp_path, monkeypatch, 3, [12.0, 7.0], condensed=line)
+    _, _, job = make_job(tmp_path, monkeypatch, 3, [12.0, 7.0], condensed=line)
     assert job['plan_error'] is None and job['validated_plan_version'] == job['plan_version']
     assert [s['narration'] for s in job['plan']['scenes']] == [line] * 4
     assert all(s['seconds'] == 10.0 for s in job['plan']['scenes'])
