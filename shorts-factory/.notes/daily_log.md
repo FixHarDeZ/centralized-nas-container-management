@@ -2500,3 +2500,6 @@ pack page โชว์ `animate` + "ตั้ง Ns". render_studio: มี wav 
 - dashboard: การ์ดสินค้า + รูป (route read-only `/storyboard/<id>/refs/photoN.*`), Ingredients ต่อ shot, `/settings` มี select ตัวละคร 🛍
 - พลาด: เขียน tests ใหม่ทับ `tests/test_shop_studio.py` (เทสต์หน้า Creator Studio 4 ข้อ) → กู้คืนจาก HEAD~1 แล้วย้ายของใหม่ไป `tests/test_shop_studio_pack.py` (`ce0eafa`)
 - ตรวจ: sf-test 584 passed/2 skipped, root 64, ruff 55 = baseline
+- live dry-run บน NAS (โค้ดใหม่ใน /tmp, DATA_DIR scratch) ด้วย Brief จริง p261014152504 (ไม้เซลฟี่ขาตั้ง): narration 36 วิ 7 shot ยาว 2.8-6.1 วิ ไม่มีใบไหนต้องย่อ (8 วิทุก shot = 84 เครดิต), plan 🤖 123 วิ (มี title_en/product_en ดี), plan @Kim 248 วิ (retry 1, ไม่มี title_en/product_en → fallback "the product"). ทุกฉากมี @Product, Dialogue เป็นตัวเลขอารบิก ("270 บาท"). เจอ "Shot of @Lead" → เพิ่ม `shot` ใน LEAD
+- deploy 15:19 (idle, ไม่มี Brief เปิด, ไม่มี working, คิว Creator Studio done หมด) 5 containers restart=0, dashboard `/storyboard/...` 200, grep ในคอนเทนเนอร์เจอ `on_shop_studio`. ยังไม่ push
+- ค้าง: ผู้ใช้ลอง 🎞 Studio กับ /shop จริง 1 คลิป (ยังไม่ verify: 2 Asset Profile ใน scene เดียว, Veo อ่านตัวเลขราคา, ฉลากสินค้าเพี้ยน, เติมคำในบรรทัดสั้นใน shot 8 วิ); **phase 2 เว็บ Creator Studio** (เขียนแผนแยกก่อน); push
