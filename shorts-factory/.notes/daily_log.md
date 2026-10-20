@@ -2461,3 +2461,13 @@ pack page โชว์ `animate` + "ตั้ง Ns". render_studio: มี wav 
   ทุก cancel คืนสคริปต์/บอก drop ก่อนแล้วค่อยแก้ข้อความเก่า, ปุ่ม pack ปลดด้วย `retire_buttons()` (editMessageReplyMarkup — pack อาจเป็นเอกสาร script.md),
   `working` ครอบ export ตั้งแต่เจอ version (ไม่ใช่แค่ตอน cut). sf-test 550 passed. redeploy แล้ว ตรวจในคอนเทนเนอร์ผ่าน
 - ค้าง: ผู้ใช้กด 🎞 สคริปต์ใหม่ → กด 🗑 ทิ้ง pack เดิม แล้วทำอันนี้ (ข้อความ pack เก่าบนจอยังเป็นคีย์บอร์ดเดิม ไม่มี ↩️/🗑 — pack ใหม่ถึงมี); push
+
+### 2026-10-20 (2) ค่าเริ่มต้น Studio pack ตั้งจาก dashboard (`d21d62a`, deploy แล้ว ยังไม่ push)
+ผู้ใช้: ทุก pack ต้องกดเลือกตัวละคร/การ์ดใหม่ทุกรอบ แต่ละ tap = วาง pack ใหม่ ~1 นาที → อยากตั้ง default ได้
+- ของเดิมมีอยู่แล้วแต่ซ่อน: dropdown "ตัวละครเริ่มต้นช่อง TH/EN/SHOP" + กติกา footage ท้ายการ์ดตัวละคร (live ตั้งไว้ทุกช่อง = "" = 🤖, footage hook)
+- `/settings` แยกการ์ดใหม่ **ค่าเริ่มต้นของ Studio pack 🎞**: radio ⭐ ในแต่ละแถวตัวละคร (`default_th=row:<n>`, `from_form` แปลงเป็น id —
+  แถวที่เพิ่มรอบเดียวกันยังไม่มี id ในหน้า), radio 🤖 แต่งใหม่ (`""`) / 🚫 ไม่มีตัวละคร (`none` ใหม่), select EN (มี 🚫 ด้วย), footage rule,
+  checkbox 🗣 (`speak` ใหม่ใน characters.json). shop default ไม่มีใครอ่าน → hidden input เก็บค่าเดิม
+- `validate()`: รับ `none`, ปฏิเสธ `speak` + 🚫 (th/en). `default_for()` คืน `none` ได้, `default_speak()` ใหม่. `on_studio()` ใช้ speak เฉพาะช่องที่ไม่ใช่ 🚫
+- ตรวจ: sf-test 554 passed/2 skipped (+4), root 64, ruff ไม่มี finding ใหม่. Deploy ตอน mode=idle, 5 containers restart=0, `/settings` 200 มีการ์ดใหม่
+- ค้าง: ผู้ใช้ตั้ง ⭐ @Minjee (หรือ 🤖) + footage + 🗣 ใน `/settings` แล้วลอง 🎞; push
