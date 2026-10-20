@@ -1323,6 +1323,7 @@ def tapped(query: dict | None) -> int | None:
     return ((query or {}).get("message") or {}).get("message_id")
 
 
+
 def wait_keyboard(kind: str, key: str) -> dict:
     return {"inline_keyboard": [[
         {"text": "↩️ ยกเลิก เลือกวิธีใหม่", "callback_data": f"{WAIT_CB}:back:{kind}:{key}"},
@@ -1422,13 +1423,14 @@ async def cancel_parked(client: httpx.AsyncClient, state: dict, clip_id: str,
             return
     state.pop("parked", None)
     save_state(state)
-    await close_prompt(client, parked.get("prompt_message_id") or tapped(query),
-                       f"🎨 {title} — ยกเลิก footage แล้ว ไม่รับคลิปของ prompt นี้")
     if back:
         await restore_review(client, state, parked)
-        return
-    abandon(clip_id)
-    await say(client, f"🗑 เลิกทำคลิปนี้แล้ว: {title}" + (PAIR_NOTE if parked.get("pair") else ""))
+    else:
+        abandon(clip_id)
+        await say(client, f"🗑 เลิกทำคลิปนี้แล้ว: {title}"
+                          + (PAIR_NOTE if parked.get("pair") else ""))
+    await close_prompt(client, parked.get("prompt_message_id") or tapped(query),
+                       f"🎨 {title} — ยกเลิก footage แล้ว ไม่รับคลิปของ prompt นี้")
 
 
 async def cancel_board(client: httpx.AsyncClient, state: dict, token: str,
@@ -1439,11 +1441,11 @@ async def cancel_board(client: httpx.AsyncClient, state: dict, token: str,
         return
     state.pop("clip_wait", None)
     save_state(state)
+    if not await repost_review(client, state, wait.get("clip_id")):
+        await say(client, "↩️ ยกเลิก storyboard แล้ว")
     await close_prompt(client, tapped(query),
                        f"📋 {(wait.get('script') or {}).get('title', '')} — "
                        "ยกเลิก storyboard แล้ว ไม่รับคลิปของอันนี้")
-    if not await repost_review(client, state, wait.get("clip_id")):
-        await say(client, "↩️ ยกเลิก storyboard แล้ว")
 
 
 async def cancel_studio(client: httpx.AsyncClient, state: dict, wait: dict,
@@ -1454,7 +1456,9 @@ async def cancel_studio(client: httpx.AsyncClient, state: dict, wait: dict,
     if wait.get("working") or (state.get("clip_id") == clip_id and mode in st.HOLDING_MODES):
         await toast(client, query, "⏳ กำลังหั่น/render คลิปนี้อยู่ รอให้เสร็จก่อน")
         return
-    rendered = clip_id in (state.get("uploads") or {})
+    # The Manifest, not `uploads`: a channel with no YouTube credential never
+    # gets an upload entry, and a rendered Script back in review renders twice.
+    rendered = (manifest.load(clip_id) or {}).get("outcome") == "rendered"
     if back and rendered:
         await toast(client, query, "คลิปนี้ render ไปแล้ว")
         await say(client, "คลิปนี้ render ไปแล้ว กลับไปรีวิวไม่ได้ — ใช้ /redo หรือเริ่มหัวข้อใหม่")
@@ -1472,14 +1476,16 @@ async def cancel_studio(client: httpx.AsyncClient, state: dict, wait: dict,
     drop_studio_files(wait)
     save_state(state)
     title = wait["script"]["title"]
-    await close_prompt(client, tapped(query), f"🎞 {title} — ยกเลิก Studio pack แล้ว "
-                                              "ไม่รับคลิปจาก Flow ของ pack นี้")
+    # The Script first, the old buttons last: a failed edit costs a stale
+    # button, a failed restore after it would cost the Script.
     if back:
         await restore_review(client, state, wait)
-        return
-    abandon(clip_id)
-    await say(client, f"🗑 เลิกทำคลิปนี้แล้ว: {title}\nลบ pack และ footage ที่เก็บไว้แล้ว"
-                      + (PAIR_NOTE if wait.get("pair") else ""))
+    else:
+        abandon(clip_id)
+        await say(client, f"🗑 เลิกทำคลิปนี้แล้ว: {title}\nลบ pack และ footage ที่เก็บไว้แล้ว"
+                          + (PAIR_NOTE if wait.get("pair") else ""))
+    # Markup only: the pack may be the script.md document, which has no text to edit.
+    await retire_buttons(client, tapped(query))
 
 
 async def swap_wait(client: httpx.AsyncClient, state: dict, kind: str, old: str,
@@ -1963,6 +1969,10 @@ async def process_export(client: httpx.AsyncClient, state: dict, token: str, pat
             await say(client, "ได้ไฟล์มา แต่ pack นั้นเก่าแล้ว — ใช้ pack ล่าสุดนะ")
             return
         clip_id = wait["clip_id"]
+        # ↩️/🗑 on the pack delete the very files probed, cut and rendered here:
+        # refused from now until this export is done with.
+        wait["working"] = True
+        save_state(state)
         shots = {int(k): v for k, v in version["shots"].items()}
         total = studio.total_shots(shots)
         owned = studio.footage_seconds(
@@ -1987,8 +1997,6 @@ async def process_export(client: httpx.AsyncClient, state: dict, token: str, pat
                           "callback_data": f"ste:{clip_id}:{token}"}]]})
             return
         (wait.get("uneven") or {}).pop(token, None)
-        # ↩️/🗑 on the pack delete these very files: refused until the cut is done.
-        wait["working"] = True
         save_state(state)
         try:
             await asyncio.to_thread(studio.cut, path, version["pending"],
@@ -1997,13 +2005,13 @@ async def process_export(client: httpx.AsyncClient, state: dict, token: str, pat
         except RuntimeError as exc:
             await say(client, f"หั่นคลิปไม่สำเร็จ: {exc}\nส่งไฟล์ใหม่อีกครั้งได้")
             return
-        finally:
-            wait.pop("working", None)
-            save_state(state)
         path.unlink(missing_ok=True)
         await say(client, f"✂️ หั่น {total} shot แล้ว กำลัง render")
         await render_studio(client, state, clip_id)
     finally:
+        if wait.get("working"):
+            wait.pop("working", None)
+            save_state(state)
         if not keep:
             path.unlink(missing_ok=True)
 
@@ -2699,9 +2707,9 @@ async def on_character_choice(client: httpx.AsyncClient, state: dict, data: str,
     if choice == "cancel":
         state.pop("storyboard_wait", None)
         save_state(state)
-        await close_prompt(client, tapped(query), "↩️ ยกเลิก storyboard แล้ว")
         if not await repost_review(client, state, wait.get("clip_id")):
             await say(client, "↩️ ยกเลิก storyboard แล้ว")
+        await close_prompt(client, tapped(query), "↩️ ยกเลิก storyboard แล้ว")
         return
     if choice == storyboard.OWN:
         # The next line typed is the character, not the next Topic — said out

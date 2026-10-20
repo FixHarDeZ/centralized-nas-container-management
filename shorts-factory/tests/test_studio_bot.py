@@ -67,6 +67,7 @@ def bot(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "say", say)
     monkeypatch.setattr(main, "send_document", send_document)
     monkeypatch.setattr(main, "close_prompt", close)
+    monkeypatch.setattr(main, "api", close)
     monkeypatch.setattr(main, "save_state", lambda state: None)
     SPAWNED.clear()
     monkeypatch.setattr(main, "spawn", lambda coro, label: SPAWNED.append(coro))
@@ -720,3 +721,14 @@ def test_character_question_can_be_cancelled(bot):
     run(main.on_character_choice(None, state, "sbchar:cancel:t1"))
     assert "storyboard_wait" not in state and state["mode"] == "review"
     assert bot[-1][2]["reply_markup"] == main.REVIEW_KEYBOARD
+
+
+def test_pack_back_is_refused_once_the_clip_rendered_even_without_an_upload(bot):
+    clip_id = main.manifest.start("topic", "en")
+    state = {**review_state(), "clip_id": clip_id, "locale": "en"}
+    run(main.on_studio(None, state))
+    main.manifest.update(clip_id, outcome="rendered")
+    assert clip_id not in (state.get("uploads") or {})
+    run(main.on_studio_callback(None, state, f"stb:{clip_id}"))
+    assert state["clip_wait"]["clip_id"] == clip_id and state["mode"] == "idle"
+    assert "render ไปแล้ว" in bot[-1][1]
