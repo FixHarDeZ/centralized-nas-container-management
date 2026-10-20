@@ -140,3 +140,34 @@ def test_build_renders_each_shot_with_its_own_voice(tmp_path, monkeypatch):
     # Each shot runs as long as its voice with the tail silence trimmed (~0.3s kept).
     assert all(s["seconds"] < length for s, length in zip(details["shots"], (3, 3, 2)))
     assert 4.0 < details["seconds"] < 7.0
+
+
+def test_a_line_that_runs_to_the_end_of_its_shot_still_renders(tmp_path, monkeypatch):
+    """No tail silence to trim, footage no longer than the voice: the footage wins."""
+    monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setattr(shop_studio.render, "pick_music", lambda: None)
+    clip_id = "p261020150001"
+    one = {**PITCH, "beats": PITCH["beats"][:1]}
+    for i in range(2):
+        video = studio.segment_path(clip_id, i)
+        video.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i", "testsrc=size=720x1280:rate=24:duration=2",
+                        "-c:v", "libx264", "-preset", "ultrafast", str(video)], check=True, capture_output=True)
+        subprocess.run(["ffmpeg", "-y", "-f", "lavfi", "-i", "sine=frequency=300:duration=2.2",
+                        "-ac", "1", "-ar", "24000", str(studio.voice_path(clip_id, i))],
+                       check=True, capture_output=True)
+    clip, details = shop_studio.build(shop_studio.script_for(one), clip_id, tmp_path / "work")
+    assert clip.is_file() and all(s["seconds"] <= 2.0 for s in details["shots"])
+
+
+def test_a_lower_case_product_tag_is_fixed_not_refused(monkeypatch):
+    async def say(client, messages, temperature, budget):
+        data = board(3)
+        for scene in data["scenes"]:
+            scene["image_gen_prompt"] = scene["image_gen_prompt"].replace("@Product", "@product")
+        return json.dumps(data)
+
+    monkeypatch.setattr(storyboard, "_say", say)
+    monkeypatch.setattr(storyboard, "_client", lambda: None)
+    data = asyncio.run(shop_studio.plan(shop_studio.script_for(PITCH), {"text": BRIEF}, storyboard.AUTO))
+    assert all("@Product" in s["image_gen_prompt"] for s in data["scenes"])

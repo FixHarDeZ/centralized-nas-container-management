@@ -3453,6 +3453,9 @@ async def main() -> None:
         # A pack being planned when the bot died never finished; left set,
         # every button on the pack would answer "busy" until it expired.
         state["clip_wait"]["busy"] = False
+        # Same for a cut or render the restart killed: left set, ↩️/🗑 would be
+        # refused until the wait expires (a Product Clip's render holds no mode).
+        state["clip_wait"].pop("working", None)
         save_state(state)
         # An export claimed but not yet cut died with the process; without
         # this it sits as `.taken` until the wait expires and nobody is told.

@@ -8,10 +8,12 @@ ends share: the Telegram /shop Brief and, later, the Creator Studio job.
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from app import render, shop, shop_render, storyboard, studio
 from app.script import ScriptError
+from app.shop_media import probe
 
 MAX_LINES = 2
 PRODUCT_RULE = (
@@ -82,6 +84,10 @@ def _brief(script: dict, product: dict) -> str:
 def _finish(script: dict):
     def finish(data: dict) -> dict:
         for i, (scene, card) in enumerate(zip(data["scenes"], script["cards"]), 1):
+            # `@product` is the same tag in other clothes: fixed, not refused.
+            scene["image_gen_prompt"] = re.sub(re.escape(storyboard.PRODUCT_TAG),
+                                               storyboard.PRODUCT_TAG,
+                                               scene["image_gen_prompt"], flags=re.I)
             if storyboard.PRODUCT_TAG not in scene["image_gen_prompt"]:
                 raise ScriptError(f"ฉากที่ {i}: image_gen_prompt ต้องมี {storyboard.PRODUCT_TAG}")
             scene["card"] = i - 1
@@ -125,6 +131,15 @@ def copy_refs(clip_id: str, photos: list[str]) -> list[str]:
     return names
 
 
+FRAME_SLACK = 0.03  # under video_segment's 25 ms tolerance plus one rounding step
+
+
+def _trim(piece: Path, seconds: float, out: Path) -> Path:
+    render._run(["ffmpeg", "-y", "-i", str(piece), "-t", f"{seconds:.3f}",
+                 "-ac", "1", "-ar", str(studio.VOICE_RATE), "-c:a", "pcm_s16le", str(out)])
+    return out
+
+
 def build(script: dict, clip_id: str, workdir: Path) -> tuple[Path, dict]:
     """Every shot's own footage and own voice → mp4. Blocking: run off the loop.
 
@@ -140,6 +155,13 @@ def build(script: dict, clip_id: str, workdir: Path) -> tuple[Path, dict]:
             raise RuntimeError(f"shot {i + 1}: ไม่มี footage หรือเสียง — ส่ง export ใหม่")
         piece = studio.voice_piece(voice, workdir / f"v{i:02d}.wav")
         seconds = render.audio_seconds(piece)
+        # A line that runs to the very end of its shot has no tail to trim, and
+        # the re-encoded footage can be a frame short of the cut window (more
+        # so after ✂️ cut evenly): the shorter of the two sets the length.
+        room = probe(footage)["duration"] - FRAME_SLACK
+        if seconds > room:
+            seconds = room
+            piece = _trim(piece, seconds, workdir / f"v{i:02d}-cut.wav")
         text = shop_render.text_layer({"badge": card.get("badge") or "สินค้า", "lines": card["lines"]},
                                       workdir / f"text{i:02d}.png")
         segments.append(shop_render.video_segment(footage, text, seconds, workdir / f"seg{i:02d}.mp4",
