@@ -147,6 +147,8 @@ td { padding:15px 16px; border-top:1px solid var(--line); vertical-align:middle;
 .button { display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:44px; padding:8px 13px; border:1px solid var(--line); border-radius:10px; text-decoration:none; font-size:13px; }
 .primary { color:#25291f; background:var(--button); border-color:var(--button); font-weight:650; }
 .script-copy { margin-top:15px; }
+.studio-refs { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.studio-refs img { width:96px; height:96px; object-fit:cover; border-radius:8px; display:block; }
 .script-category { margin-top:7px; }
 .script-scene { padding:17px 0; border-bottom:1px solid var(--line); }
 .script-scene:last-child { border:0; }

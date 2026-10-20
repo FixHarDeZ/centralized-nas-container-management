@@ -19,7 +19,8 @@ import httpx
 
 from app import (analytics, backfill, characters, experiment, history, locales, manifest,
                  model_choice, pronunciation, research,
-                 render, retention, schedule, script as script_gen, shop, shop_render, snapshots,
+                 render, retention, schedule, script as script_gen, shop, shop_render, shop_studio,
+                 snapshots,
                  storyboard, studio, telegram, trends, youtube)
 from app.render_lock import render_slot
 from app import state as st
@@ -278,6 +279,7 @@ HELP = """🎬 shorts-factory
    ส่งรูป 1-6 รูป + ข้อความ (ลิงก์ ชื่อ ราคา รายละเอียด) แล้วกด ✅
    บอทพูดได้แค่ที่ให้มา ตัวเลขที่ไม่อยู่ในข้อความถูกตีกลับ ส่วนลด % คำนวณจากราคาให้เอง
    รีวิวเหมือนสคริปต์ปกติ: พิมพ์แก้ได้ · 🎬 render · 🗑 ทิ้ง
+   🎞 Studio = ทำใน Flow ทุก shot ตัวละครพูดเองถือสินค้า (@Product) ไม่มีการ์ดราคา
    ได้ mp4 + caption พร้อมโพสต์ (มีลิงก์ + #ad) ไฟล์อยู่ที่ /volume1/shorts/shop
    ไม่มีปุ่มอัป — โพสต์เองใน Shopee Video / Facebook / YouTube
    ไม่นับเข้า /stats /experiment และไม่ขึ้น dashboard
@@ -1456,6 +1458,9 @@ async def cancel_studio(client: httpx.AsyncClient, state: dict, wait: dict,
     if wait.get("working") or (state.get("clip_id") == clip_id and mode in st.HOLDING_MODES):
         await toast(client, query, "⏳ กำลังหั่น/render คลิปนี้อยู่ รอให้เสร็จก่อน")
         return
+    if wait.get("product"):
+        await cancel_product(client, state, wait, query, back)
+        return
     # The Manifest, not `uploads`: a channel with no YouTube credential never
     # gets an upload entry, and a rendered Script back in review renders twice.
     rendered = (manifest.load(clip_id) or {}).get("outcome") == "rendered"
@@ -1485,6 +1490,29 @@ async def cancel_studio(client: httpx.AsyncClient, state: dict, wait: dict,
         await say(client, f"🗑 เลิกทำคลิปนี้แล้ว: {title}\nลบ pack และ footage ที่เก็บไว้แล้ว"
                           + (PAIR_NOTE if wait.get("pair") else ""))
     # Markup only: the pack may be the script.md document, which has no text to edit.
+    await retire_buttons(client, tapped(query))
+
+
+async def cancel_product(client: httpx.AsyncClient, state: dict, wait: dict,
+                         query: dict | None, back: bool) -> None:
+    """↩️/🗑 on a Product Clip's pack: no Manifest to write off (ADR 0015)."""
+    if back and state.get("mode", "idle") != "idle":
+        await toast(client, query)
+        mode = state.get("mode", "idle")
+        busy = st.busy_note(mode) if mode in st.HOLDING_MODES else "ยังมีสคริปต์ค้างรีวิวอยู่"
+        await say(client, f"{busy}\nหรือจะเลิกทำคลิปนี้ไปเลยก็ได้",
+                  reply_markup={"inline_keyboard": [[
+                      {"text": "🗑 เลิกทำคลิปนี้", "callback_data": f"stq:{wait['clip_id']}"}]]})
+        return
+    await toast(client, query, "↩️ กลับไปรีวิว Pitch" if back else "🗑 เลิกทำคลิปนี้")
+    state.pop("clip_wait", None)
+    drop_studio_files(wait)
+    save_state(state)
+    if back:
+        await reopen_brief(client, state, wait)
+    else:
+        await say(client, f"🗑 เลิกทำคลิปสินค้านี้แล้ว: {wait['script']['title']}\n"
+                          "ลบ pack และ footage แล้ว (รูปสินค้ายังอยู่บน NAS)")
     await retire_buttons(client, tapped(query))
 
 
@@ -1559,6 +1587,8 @@ def drop_studio_files(wait: dict) -> None:
 
 def studio_keyboard(wait: dict) -> dict:
     clip_id = wait["clip_id"]
+    if wait.get("product"):
+        return product_keyboard(wait)
     toggles = [{"text": f"{i + 1} {'🎬' if s == characters.FLOW else '🖼'}",
                 "callback_data": f"stt:{clip_id}:{i}"} for i, s in enumerate(wait["sources"])]
     rows = [toggles[i:i + 3] for i in range(0, len(toggles), 3)]
@@ -1575,6 +1605,21 @@ def studio_keyboard(wait: dict) -> dict:
     rows.append([{"text": "✅ Pexels ทั้งหมด — render เลย", "callback_data": f"stp:{clip_id}"},
                  {"text": "✂️ ย่อการ์ดยาว", "callback_data": f"stx:{clip_id}"}])
     rows.append([{"text": "↩️ ยกเลิก เลือกวิธีใหม่", "callback_data": f"stb:{clip_id}"},
+                 {"text": "🗑 เลิกทำคลิปนี้", "callback_data": f"stq:{clip_id}"}])
+    return {"inline_keyboard": rows}
+
+
+def product_keyboard(wait: dict) -> dict:
+    """A Product Clip's pack: every shot Flow, the character speaking (ADR 0018),
+    so the only choice left is who."""
+    clip_id = wait["clip_id"]
+    people = [{"text": f"{c['tag']}{' ✓' if wait['choice'] == c['id'] else ''}",
+               "callback_data": f"stc:{clip_id}:{c['id']}"}
+              for c in characters.stored()["characters"]]
+    people.append({"text": f"🤖 แต่งใหม่{' ✓' if wait['choice'] == 'auto' else ''}",
+                   "callback_data": f"stc:{clip_id}:auto"})
+    rows = [people[i:i + 3] for i in range(0, len(people), 3)]
+    rows.append([{"text": "↩️ กลับไปรีวิว Pitch", "callback_data": f"stb:{clip_id}"},
                  {"text": "🗑 เลิกทำคลิปนี้", "callback_data": f"stq:{clip_id}"}])
     return {"inline_keyboard": rows}
 
@@ -1710,6 +1755,11 @@ async def fit_speech(client: httpx.AsyncClient, state: dict, wait: dict,
     """
     done: list[int] = []
     locale = wait["locale"]
+    product = wait.get("product")
+    # A Product Clip keeps Shop's rules: digits stay digits, every number from
+    # the Brief, the subtitle still the line word for word (docs/adr/0018).
+    rules = ({"spoken_rule": shop_studio.SPOKEN_RULE,
+              "check": shop_studio.condense_check(product["text"])} if product else {})
     for _ in range(2):
         over = [c for c in pending if studio.speak_too_long(wait["spans"][c])]
         if not over:
@@ -1720,15 +1770,19 @@ async def fit_speech(client: httpx.AsyncClient, state: dict, wait: dict,
         await say(client, f"✂️ บทพูดการ์ด {', '.join(str(c + 1) for c in over)} ยาวเกิน 10 วิ "
                           "— กำลังย่อให้พูดทัน แล้วอัดเสียงวัดใหม่ (~2-6 นาที)")
         try:
-            shorter = await script_gen.condense(cards, targets, locale)
+            shorter = await script_gen.condense(cards, targets, locale, **rules)
             script = json.loads(json.dumps(wait["script"]))
             for c, text in shorter.items():
                 card = script["cards"][c]
+                if product:
+                    shop_studio.apply_condensed(card, text)
+                    continue
                 card.update(text)
                 card["pronunciation_checks"] = [
                     check for check in card.get("pronunciation_checks") or []
                     if check.get("term") in card["narration"] and check.get("spoken") in card["spoken"]]
-            meta = await studio.prepare_narration(script, locale, wait["clip_id"])
+            meta = await studio.prepare_narration(script, locale, wait["clip_id"],
+                                                  voice=shop.VOICE if product else None)
         except Exception as exc:
             logger.exception("condensing speaking lines failed")
             await say(client, f"ย่อบทพูดไม่สำเร็จ: {exc}\nใช้บทเดิมไปก่อน (กด ✂️ ย่อเองได้)")
@@ -1741,6 +1795,7 @@ async def fit_speech(client: httpx.AsyncClient, state: dict, wait: dict,
 
 async def _publish_version(client: httpx.AsyncClient, state: dict, wait: dict,
                            pending: list[int]) -> None:
+    product = wait.get("product")
     speak = bool(wait.get("speak"))
     shortened = await fit_speech(client, state, wait, pending) if speak else []
     clip_id, script, card_spans = wait["clip_id"], wait["script"], wait["spans"]
@@ -1754,9 +1809,12 @@ async def _publish_version(client: httpx.AsyncClient, state: dict, wait: dict,
     language = storyboard.SPEAK_LANGUAGE.get(wait["locale"], "Thai")
     try:
         choice, text, fixed, profile = await _character_for(wait["choice"])
-        board = await storyboard.for_studio(script, pending, shots, choice=choice,
-                                            character=text, fixed_tag=fixed,
-                                            topic=wait.get("topic") or "", speak=speak)
+        if product:
+            board = await shop_studio.plan(script, product, choice, character=text, fixed_tag=fixed)
+        else:
+            board = await storyboard.for_studio(script, pending, shots, choice=choice,
+                                                character=text, fixed_tag=fixed,
+                                                topic=wait.get("topic") or "", speak=speak)
     except Exception as exc:
         logger.exception("studio plan failed")
         await say(client, f"วาง shot ไม่สำเร็จ: {exc}\nกดปุ่มบน pack อีกครั้งเพื่อลองใหม่",
@@ -1767,8 +1825,9 @@ async def _publish_version(client: httpx.AsyncClient, state: dict, wait: dict,
         person = board["overview"].get("master_character") or {}
         profile.update(locked=person.get("locked_prompt_tag", ""),
                        portrait=storyboard.portrait_prompt(person.get("locked_prompt_tag", "")))
+    product_name = shop_studio.product_name(board) if product else ""
     markdown = storyboard.studio_markdown(
-        board, tag, {"language": language, "seconds": seconds} if speak else None)
+        board, tag, {"language": language, "seconds": seconds} if speak else None, product_name)
     token = studio.new_token()
     total = studio.total_shots(shots)
     owned = studio.footage_seconds(shots, seconds)
@@ -1784,9 +1843,13 @@ async def _publish_version(client: httpx.AsyncClient, state: dict, wait: dict,
         "scenes": [{"n": i + 1, "card": s["card"], "image_prompt": s["image_gen_prompt"],
                     "motion": s["motion"], "narration": script["cards"][s["card"]]["narration"],
                     "span": round(card_spans[s["card"]], 2), "seconds": seconds[s["card"]],
-                    "animate": storyboard.animate_prompt(s, language) if speak else ""}
+                    "animate": storyboard.animate_prompt(s, language) if speak else "",
+                    "photo": s.get("photo")}
                    for i, s in enumerate(board["scenes"])],
     }
+    if product:
+        pack["product"] = {"name": product_name, "tag": storyboard.PRODUCT_TAG,
+                           "refs": product.get("refs") or []}
     studio.write_pack(clip_id, pack, markdown)
     # Registered the moment the pack is on disk: the dashboard page shows it
     # from then on, and an export whose token is missing here sits in the inbox
@@ -1826,9 +1889,13 @@ async def _publish_version(client: httpx.AsyncClient, state: dict, wait: dict,
         f"🎞 Studio pack v{pack['version']} — {script['title']}\n"
         + plan_line +
         f"หน้า copy + อัปไฟล์: {pack_url(clip_id)}\n"
-        "ไฟล์ ≤20MB reply ข้อความนี้ได้เลย · สลับ 🎬/🖼 หรือเปลี่ยนตัวละครด้วยปุ่มข้างล่าง\n"
-        "ปุ่มเลข = การ์ด (ประโยคพากย์) ไม่ใช่ฉาก · 🎬 ถ่ายใน Flow / 🖼 ใช้ Pexels · "
-        "กดแล้วรอ pack ใหม่ ~1 นาที",
+        + (f"🛍 สร้าง Asset Profile {storyboard.PRODUCT_TAG} จากรูปสินค้าในหน้าเว็บ · "
+           "ทุก shot แนบตัวละคร + สินค้า · export ต้องมีเสียง\n"
+           "ไฟล์ ≤20MB reply ข้อความนี้ได้เลย · เปลี่ยนตัวละครด้วยปุ่มข้างล่าง (รอ pack ใหม่ ~1 นาที)"
+           if product else
+           "ไฟล์ ≤20MB reply ข้อความนี้ได้เลย · สลับ 🎬/🖼 หรือเปลี่ยนตัวละครด้วยปุ่มข้างล่าง\n"
+           "ปุ่มเลข = การ์ด (ประโยคพากย์) ไม่ใช่ฉาก · 🎬 ถ่ายใน Flow / 🖼 ใช้ Pexels · "
+           "กดแล้วรอ pack ใหม่ ~1 นาที"),
         reply_markup=studio_keyboard(wait),
     )
     # Both messages take a reply: the human answers whichever is on screen.
@@ -1875,6 +1942,10 @@ async def on_studio_callback(client: httpx.AsyncClient, state: dict, data: str,
         await toast(client, query, "🎬 เริ่ม render แล้ว")
         # Spawned: a render runs for minutes and this is the poll loop.
         spawn(render_studio(client, state, clip_id), "render_studio")
+        return
+    if wait.get("product") and (kind in ("stt", "sts", "stp", "stx")
+                                or (kind == "stc" and arg == "none")):
+        await toast(client, query, "คลิปสินค้า: Flow + ตัวละครพูดเองทุก shot")
         return
     if wait.get("busy"):
         # A toast, not a chat line: the pack message already says it is working.
@@ -1990,6 +2061,10 @@ async def _render_studio(client: httpx.AsyncClient, state: dict, clip_id: str) -
     wait = _studio_wait(state, clip_id)
     if not wait:
         await say(client, "pack นี้เก่าแล้ว กด 🎞 ที่สคริปต์ใหม่นะ")
+        return
+    if wait.get("product"):
+        # Never the Topic path: no Manifest, no history, no upload button (ADR 0015).
+        await render_shop_studio(client, state, wait)
         return
     mode = state.get("mode", "idle")
     if mode != "idle":
@@ -3105,6 +3180,12 @@ async def on_shop_callback(client: httpx.AsyncClient, state: dict, data: str) ->
         st.shop_phase(state, "rendering")
         save_state(state)
         spawn(shop_render_job(client, state), "shop_render")
+    elif action == "studio" and phase == "review":
+        # Claimed before anything is awaited, like ✅: a second tap must not
+        # speak the take twice.
+        st.shop_phase(state, "writing")
+        save_state(state)
+        spawn(on_shop_studio(client, state), "on_shop_studio")
 
 
 async def shop_write(client: httpx.AsyncClient, state: dict, feedback: str = "") -> None:
@@ -3137,10 +3218,18 @@ async def shop_write(client: httpx.AsyncClient, state: dict, feedback: str = "")
     await _shop_review(client, state)
 
 
+def shop_review_keyboard(shop_id: str) -> dict:
+    keyboard = shop_keyboard("🎬 render (รูปสินค้า)", "render", shop_id)
+    # docs/adr/0018: the same Pitch made in Flow, the character speaking.
+    keyboard["inline_keyboard"].insert(0, [{"text": "🎞 Studio (Flow + ตัวละครพูด)",
+                                            "callback_data": f"{SHOP_CB}:studio:{shop_id}"}])
+    return keyboard
+
+
 async def _shop_review(client: httpx.AsyncClient, state: dict) -> None:
     brief = state["shop"]
     sent = await say(client, shop.format_pitch(brief["pitch"]),
-                     reply_markup=shop_keyboard("🎬 render", "render", brief["id"]))
+                     reply_markup=shop_review_keyboard(brief["id"]))
     brief["message_id"] = (sent or {}).get("message_id")
     save_state(state)
 
@@ -3189,6 +3278,120 @@ async def shop_render_job(client: httpx.AsyncClient, state: dict) -> None:
         "ข้อความข้างบนคือ caption พร้อมโพสต์ (กดค้างแล้วก๊อป)\n"
         f"Sub ID แนะนำถ้าทำลิงก์เองในเว็บ affiliate: {brief['id']}"
     ))
+
+
+async def on_shop_studio(client: httpx.AsyncClient, state: dict) -> None:
+    """🎞 on a Pitch: the Product Clip leaves the Brief for a Studio pack.
+
+    docs/adr/0018: every shot Flow, the character speaking. Like 🎞 on a
+    Script, the bot goes back to idle while Flow is being shot, and the pack
+    takes the one `clip_wait` slot, so the inbox, reply and expiry paths of
+    ADR 0016 carry it unchanged.
+    """
+    brief = state.get("shop") or {}
+    shop_id, pitch = brief.get("id"), brief.get("pitch")
+    if state.get("mode") != st.SHOP_MODE or not pitch:
+        return
+    live = state.get("clip_wait") or {}
+    if live.get("kind") == "studio" and live.get("clip_id") != shop_id:
+        st.shop_phase(state, "review")
+        save_state(state)
+        await say(client, f"ยังมี Studio pack ค้างอยู่: {live['script']['title']}\n"
+                          "ส่งคลิปของอันนั้นก่อน หรือกด 🗑 ที่ pack นั้น แล้วค่อยกด 🎞 อันนี้")
+        await _shop_review(client, state)
+        return
+    await close_prompt(client, brief.get("message_id"),
+                       f"🎞 {pitch['title']} — กำลังอัดเสียงและวาง shot")
+    brief["message_id"] = None
+    script = shop_studio.script_for(pitch)
+    try:
+        # The shop voice measures the pace each line is written for.
+        meta = await studio.prepare_narration(script, locales.DEFAULT, shop_id, voice=shop.VOICE)
+        refs = await asyncio.to_thread(shop_studio.copy_refs, shop_id, brief["photos"])
+    except Exception as exc:
+        logger.exception("shop studio narration failed")
+        studio.discard(shop_id)
+        st.shop_phase(state, "review")
+        save_state(state)
+        await say(client, f"อัดเสียงสำหรับ Studio ไม่สำเร็จ: {exc}")
+        await _shop_review(client, state)
+        return
+    replaced = state.get("clip_wait") or {}
+    if replaced and replaced.get("kind") != "studio":
+        await say(client, "📋 เลิกรอคลิปของ storyboard เดิมแล้ว (รอคลิปได้ทีละอัน): "
+                          f"{(replaced.get('script') or {}).get('title', '')}")
+    default = characters.default_for("shop")
+    state["clip_wait"] = {
+        "kind": "studio", "clip_id": shop_id, "script": script, "topic": None,
+        "locale": locales.DEFAULT, "spans": meta["spans"],
+        # Snapshotted: the Brief is closed below, and ↩️ reopens it from here.
+        "product": {"text": brief["text"], "link": shop.link_in(brief["text"]),
+                    "photos": list(brief["photos"]), "refs": refs, "pitch": pitch},
+        # Somebody has to say the lines: 🚫 is no choice here.
+        "choice": default if default and default != characters.NONE else "auto",
+        "sources": [characters.FLOW] * len(script["cards"]), "speak": True,
+        "versions": {}, "uneven": {}, "busy": False, "pair": None,
+        "created_at": datetime.now().isoformat(timespec="seconds"),
+    }
+    st.close_shop(state)
+    save_state(state)
+    await publish_pack(client, state)
+
+
+async def reopen_brief(client: httpx.AsyncClient, state: dict, wait: dict) -> None:
+    """↩️ on a Product Clip's pack: its Pitch back in review, buttons and all."""
+    product = wait["product"]
+    brief = st.open_shop(state, wait["clip_id"])
+    brief.update(text=product["text"], photos=list(product["photos"]),
+                 seq=len(product["photos"]))
+    st.shop_phase(state, "review", pitch=product["pitch"])
+    save_state(state)
+    await _shop_review(client, state)
+
+
+async def render_shop_studio(client: httpx.AsyncClient, state: dict, wait: dict) -> None:
+    """Every shot's own footage and voice → the Product Clip, filed like /shop's."""
+    shop_id, product, script = wait["clip_id"], wait["product"], wait["script"]
+    count = len(script["cards"])
+    missing = [i + 1 for i in range(count) if not studio.voice_path(shop_id, i).is_file()
+               or not studio.segment_path(shop_id, i).is_file()]
+    if missing:
+        await say(client, f"shot {', '.join(map(str, missing))} ยังไม่มี footage/เสียง — "
+                          "ส่ง export ของ pack ล่าสุด (ต้องมีเสียง)")
+        return
+    workdir = WORK_DIR / f"shop-studio-{shop_id}"
+    try:
+        async with render_slot():
+            clip, details = await asyncio.to_thread(shop_studio.build, script, shop_id, workdir)
+        out = SHOP_DIR / shop_id
+        out.mkdir(parents=True, exist_ok=True)
+        final = out / f"{shop_id}.mp4"
+        shutil.copy2(clip, final)
+        pitch = {**product["pitch"], "beats": script["cards"][:-1]}
+        caption = shop.caption_text(pitch, product["link"])
+        (out / "caption.txt").write_text(caption, encoding="utf-8")
+        (out / "shop.json").write_text(json.dumps({
+            "id": shop_id, "created_at": datetime.now().isoformat(timespec="seconds"),
+            "brief": product["text"], "link": product["link"], "photos": product["photos"],
+            "pitch": pitch, "shots": script["cards"], "render": details,
+        }, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception as exc:
+        logger.exception("shop studio render failed")
+        await say(client, f"render คลิปสินค้าไม่สำเร็จ: {exc}\nส่ง export เดิมใหม่อีกครั้งได้")
+        return
+    finally:
+        shutil.rmtree(workdir, ignore_errors=True)
+    # Filed and sent: nothing waits on Flow any more, and there is no
+    # YouTube upload to keep the pack for (ADR 0015).
+    if _studio_wait(state, shop_id) is wait:
+        state.pop("clip_wait", None)
+        drop_studio_files(wait)
+        save_state(state)
+    await send_video(client, final, product["pitch"]["title"])
+    await say(client, caption)
+    await say(client, f"✅ คลิปสินค้า (Studio) เสร็จแล้ว เก็บไว้ที่ {final}\n"
+                      "ข้อความข้างบนคือ caption พร้อมโพสต์ (กดค้างแล้วก๊อป)\n"
+                      f"Sub ID แนะนำถ้าทำลิงก์เองในเว็บ affiliate: {shop_id}")
 
 
 async def drop_shop(client: httpx.AsyncClient, brief: dict) -> None:

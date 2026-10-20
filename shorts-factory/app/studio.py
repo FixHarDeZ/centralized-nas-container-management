@@ -42,7 +42,11 @@ SPEAK_FIT = SPEAK_MAX_TAKE * SPEAK_LONG_SHOT / SHOT_SECONDS
 # condense() aims under the edge, so the re-measured take lands inside it.
 SPEAK_AIM = 0.92
 TOKEN = re.compile(r"^[a-f0-9]{12}$")
-CLIP_ID = re.compile(r"^\d{8}-\d{6}-\d{3}(-\d+)?$")  # manifest.start bumps a collision to `-<n>`
+# A Product Clip's photos copied beside its pack (shop_studio.copy_refs).
+REF_NAME = re.compile(r"^photo[1-9]\.(?:jpg|png|webp)$")
+# A Topic's clip id (manifest.start bumps a collision to `-<n>`), or a
+# Product Clip's shop id (shop.new_id, docs/adr/0018).
+CLIP_ID = re.compile(r"^(?:\d{8}-\d{6}-\d{3}(-\d+)?|p\d{12})$")
 
 
 def spans(starts: list[float], total: float, tail_pad: float) -> list[float]:
@@ -123,6 +127,12 @@ def root(clip_id: str) -> Path:
     return _base() / clip_id
 
 
+def ref_path(clip_id: str, name: str) -> Path:
+    if not REF_NAME.fullmatch(name or ""):
+        raise ValueError(f"ชื่อรูปไม่ถูกต้อง: {name!r}")
+    return root(clip_id) / "refs" / name
+
+
 def segment_path(clip_id: str, card: int) -> Path:
     return root(clip_id) / "segments" / f"c{card:02d}.mp4"
 
@@ -177,7 +187,8 @@ def say_digest() -> str:
         return ""
 
 
-async def prepare_narration(script: dict, locale: str, clip_id: str) -> dict:
+async def prepare_narration(script: dict, locale: str, clip_id: str,
+                            voice: str | None = None) -> dict:
     """Speak the Script once, keep the take, and report each Card's span.
 
     The same single edge-tts call the renderer makes, so the cut points the
@@ -187,7 +198,7 @@ async def prepare_narration(script: dict, locale: str, clip_id: str) -> dict:
     work = root(clip_id) / "tts"
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True)
-    audio, starts = await render._narration_track(script["cards"], work, locale)
+    audio, starts = await render._narration_track(script["cards"], work, locale, voice)
     total = render.audio_seconds(audio)
     meta = {"audio": str(audio), "starts": starts, "total": total,
             "spans": spans(starts, total, render.TAIL_PAD), "say": say_digest()}
@@ -260,40 +271,58 @@ def cut(export: Path, pending: list[int], seconds: dict[int, float], clip_id: st
     return made
 
 
+def voice_piece(voice: Path, out: Path) -> Path:
+    """A speaking shot's own audio, ready to splice: tail silence trimmed, levelled.
+
+    The head is kept, which is what keeps the lips in sync with the frames the
+    voice was cut with; only its tail silence goes, as tighten() trims the
+    take's. Loudness-normalised so a switch of voice does not also jump in level.
+    """
+    from app import render
+    pcm = ["-ac", "1", "-ar", str(VOICE_RATE), "-c:a", "pcm_s16le"]
+    raw = out.with_name(f"{out.stem}-raw.wav")
+    render._run(["ffmpeg", "-y", "-i", str(voice), "-af",
+                 "areverse,silenceremove=start_periods=1:start_duration=0"
+                 f":start_threshold={render.SILENCE_FLOOR}:start_silence={render.JOIN_SILENCE},"
+                 "areverse", *pcm, str(raw)])
+    return _loudnorm(raw, out)
+
+
+def _loudnorm(raw: Path, out: Path) -> Path:
+    from app import render
+    # A pass of its own: loudnorm in the same graph as areverse trips an
+    # ffmpeg 7.1 assertion (`best_input >= 0`) on real Flow audio.
+    render._run(["ffmpeg", "-y", "-i", str(raw), "-af", "loudnorm=I=-18:TP=-1.5:LRA=11",
+                 "-ac", "1", "-ar", str(VOICE_RATE), "-c:a", "pcm_s16le", str(out)])
+    return out
+
+
 def speaking_take(clip_id: str, sources: list[str], audio: Path,
                   starts: list[float]) -> tuple[Path, list[float]]:
     """The saved take with every speaking Flow Card's slice swapped for its own voice.
 
-    The Card's voice keeps its head, which is what keeps the lips in sync with
-    the frames it was cut with; only its tail silence is trimmed, as tighten()
-    trims the take's. Every piece is loudness-normalised so the switch between
-    the character and the edge-tts voice does not also jump in level.
+    Every piece is loudness-normalised, voice_piece() for a speaking Card and
+    the take's own slice for the rest, so the switch between the character and
+    the edge-tts voice does not also jump in level.
     """
     from app import render
     work = root(clip_id) / "speaking"
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True)
-    pcm = ["-ac", "1", "-ar", str(VOICE_RATE), "-c:a", "pcm_s16le"]
     pieces = []
     for i, start in enumerate(starts):
-        raw, out = work / f"raw{i:02d}.wav", work / f"p{i:02d}.wav"
+        out = work / f"p{i:02d}.wav"
         voice = voice_path(clip_id, i)
         if sources[i] == "flow" and voice.is_file():
-            args = ["ffmpeg", "-y", "-i", str(voice), "-af",
-                    "areverse,silenceremove=start_periods=1:start_duration=0"
-                    f":start_threshold={render.SILENCE_FLOOR}:start_silence={render.JOIN_SILENCE},"
-                    "areverse"]
-        else:
-            args = ["ffmpeg", "-y", "-ss", f"{start:.3f}"]
-            if i + 1 < len(starts):
-                args += ["-to", f"{starts[i + 1]:.3f}"]
-            args += ["-i", str(audio)]
-        render._run([*args, *pcm, str(raw)])
-        # A pass of its own: loudnorm in the same graph as areverse trips an
-        # ffmpeg 7.1 assertion (`best_input >= 0`) on real Flow audio.
-        render._run(["ffmpeg", "-y", "-i", str(raw), "-af", "loudnorm=I=-18:TP=-1.5:LRA=11",
-                     *pcm, str(out)])
-        pieces.append(out)
+            pieces.append(voice_piece(voice, out))
+            continue
+        raw = work / f"raw{i:02d}.wav"
+        args = ["ffmpeg", "-y", "-ss", f"{start:.3f}"]
+        if i + 1 < len(starts):
+            args += ["-to", f"{starts[i + 1]:.3f}"]
+        args += ["-i", str(audio), "-ac", "1", "-ar", str(VOICE_RATE), "-c:a", "pcm_s16le", str(raw)]
+        render._run(args)
+        pieces.append(_loudnorm(raw, out))
     joined = render.concat_audio(pieces, work / "take.wav")
     new_starts, clock = [], 0.0
     for piece in pieces:

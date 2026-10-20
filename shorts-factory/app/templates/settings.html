@@ -39,7 +39,8 @@
 <div class="field"><label for="default-en">ตัวละครเริ่มต้นช่อง EN</label><select id="default-en" name="default_en"><option value="">🤖 ให้บอทแต่ง</option><option value="none"{% if library.defaults.en == 'none' %} selected{% endif %}>🚫 ไม่มีตัวละคร</option>{% for c in library.characters %}<option value="{{ c.id }}"{% if library.defaults.en == c.id %} selected{% endif %}>{{ c.tag }}</option>{% endfor %}</select></div>
 <div class="field"><label for="footage-rule">แหล่งภาพเริ่มต้นของแต่ละการ์ด</label><select id="footage-rule" name="footage">{% for value, label in [('hook', '🎬 hook = Flow, ที่เหลือ 🖼 Pexels'), ('none', '🖼 Pexels ทั้งหมด'), ('all', '🎬 Flow ทั้งหมด')] %}<option value="{{ value }}"{% if library.footage == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
 </div>
-{% for ch in channels if ch not in ('th', 'en') %}<input type="hidden" name="default_{{ ch }}" value="{{ library.defaults[ch] }}">{% endfor %}
+<div class="field"><label for="default-shop">ตัวละครคลิปสินค้า 🛍 (🎞 Studio ของ /shop — ตัวละครพูดเองเสมอ)</label><select id="default-shop" name="default_shop"><option value="">🤖 ให้บอทแต่ง (ผู้หญิง)</option>{% for c in library.characters %}<option value="{{ c.id }}"{% if library.defaults.shop == c.id %} selected{% endif %}>{{ c.tag }}</option>{% endfor %}</select></div>
+{% for ch in channels if ch not in ('th', 'en', 'shop') %}<input type="hidden" name="default_{{ ch }}" value="{{ library.defaults[ch] }}">{% endfor %}
 <label class="toggle" for="studio-speak"><input id="studio-speak" type="checkbox" name="studio_speak"{% if library.speak %} checked{% endif %}><span>🗣 ตัวละครพูดเอง (เปิดไว้ตั้งแต่แรก — ใช้กับ 🚫 ไม่มีตัวละครไม่ได้)</span></label>
 </section>
 <div class="settings-actions"><button class="primary" type="submit">{{ icon('check') }} บันทึกการตั้งค่า</button><p>มีผลกับคำขอถัดไป · ไม่ต้อง restart</p></div>

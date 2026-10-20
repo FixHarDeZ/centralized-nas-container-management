@@ -437,7 +437,15 @@ def character_line(tag: str, locked: str) -> str:
     return f"{tag} is {who}."
 
 
-def studio_markdown(board: dict, tag: str, speak: dict | None = None) -> str:
+PRODUCT_TAG = "@Product"
+
+
+def product_line(name: str) -> str:
+    return (f"{PRODUCT_TAG} is {name}, exactly as in the attached product photos: keep its "
+            "shape, colours, labels and logo unchanged.")
+
+
+def studio_markdown(board: dict, tag: str, speak: dict | None = None, product: str = "") -> str:
     """What Storyboard Studio reads. English only, and nothing anyone says:
     Thai narration in here could make Veo animate speech.
 
@@ -445,7 +453,8 @@ def studio_markdown(board: dict, tag: str, speak: dict | None = None) -> str:
     point, and each scene carries its Card's narration word for word as its
     Dialogue, injected here after validate() so the model's own prompts still
     never hold Thai. Shot lengths are not in here: the pack message and page
-    say which Cards take a 10s shot.
+    say which Cards take a 10s shot. `product` (a Product Clip, docs/adr/0018)
+    adds a Products block for the `@Product` the scenes already name.
     """
     person = board["overview"].get("master_character") or None
     locked = (person or {}).get("locked_prompt_tag", "")
@@ -459,6 +468,8 @@ def studio_markdown(board: dict, tag: str, speak: dict | None = None) -> str:
         if speak:
             lines.append(SPEAK_VOICE.format(tag=tag, language=speak["language"]))
         lines.append("")
+    if product:
+        lines += ["Products:", product_line(product), ""]
     for i, scene in enumerate(board["scenes"], 1):
         lines += [f"Scene {i}:", scene_text(scene["image_gen_prompt"], locked, tag if named else "")]
         if speak:

@@ -781,7 +781,8 @@ def speech_units(spoken: str, locale: str = locales.DEFAULT) -> int:
 
 
 async def condense(cards: list[dict], targets: dict[int, int],
-                   locale: str = locales.DEFAULT) -> dict[int, dict]:
+                   locale: str = locales.DEFAULT, *, spoken_rule: str = "",
+                   check=None) -> dict[int, dict]:
     """Shorter `narration`/`spoken` for the Cards in `targets` (index → max units).
 
     For a speaking Studio pack only: there the character says the line on
@@ -789,10 +790,14 @@ async def condense(cards: list[dict], targets: dict[int, int],
     line that comes back over its budget, with a number its original did not
     have or in the wrong script is refused, and the model gets one retry told
     what broke. Raises ScriptError when no valid answer comes back in time.
+
+    A Product Clip brings its own rules (docs/adr/0018): `spoken_rule` replaces
+    the `spoken` clause (Shop keeps Arabic digits), and `check(narration,
+    spoken)` returns extra problems, such as a number the Brief never had.
     """
     spec = locales.get(locale)
     alphabet = spec["spoken_script"]
-    system = CONDENSE_PROMPT.format(spoken_rule=CONDENSE_SPOKEN_RULE[alphabet])
+    system = CONDENSE_PROMPT.format(spoken_rule=spoken_rule or CONDENSE_SPOKEN_RULE[alphabet])
     asked = [{"card": i + 1, "narration": cards[i]["narration"], "spoken": cards[i]["spoken"],
               "keep_percent": min(100, round(100 * targets[i] / max(1, speech_units(
                   cards[i]["spoken"], locale))))} for i in sorted(targets)]
@@ -811,7 +816,7 @@ async def condense(cards: list[dict], targets: dict[int, int],
             last = f"โมเดลเงียบ ({exc})"
             break
         try:
-            out = _condensed(_parse(raw), cards, targets, alphabet)
+            out = _condensed(_parse(raw), cards, targets, alphabet, check)
         except ScriptError as exc:
             last = str(exc)
             logger.warning("ย่อบทพูดไม่ผ่าน: %s", exc)
@@ -823,7 +828,7 @@ async def condense(cards: list[dict], targets: dict[int, int],
 
 
 def _condensed(data: dict, cards: list[dict], targets: dict[int, int],
-               alphabet: str) -> dict[int, dict]:
+               alphabet: str, check=None) -> dict[int, dict]:
     rows = data.get("cards") if isinstance(data, dict) else None
     if not isinstance(rows, list):
         raise ScriptError("ต้องมี cards เป็น list")
@@ -854,6 +859,8 @@ def _condensed(data: dict, cards: list[dict], targets: dict[int, int],
         made_up = research.unsourced_numbers(narration, cards[i]["narration"])
         if made_up:
             problems.append(f"card {i + 1}: ตัวเลข {made_up[:3]} ไม่มีในต้นฉบับ")
+        if check:
+            problems += [f"card {i + 1}: {problem}" for problem in check(narration, spoken)]
         out[i] = {"narration": narration, "spoken": spoken}
     if problems:
         raise ScriptError(" | ".join(problems))

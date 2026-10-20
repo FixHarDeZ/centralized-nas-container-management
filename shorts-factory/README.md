@@ -167,6 +167,56 @@ to Shopee Video / Facebook / YouTube is done by hand.
 
 A real run (2026-10-13): Pitch in 46s, render in 122s, 29.6s clip, 7 segments.
 
+### 🎞 Studio: the Pitch made in Flow (`docs/adr/0018`)
+
+The Pitch review also has **🎞 Studio (Flow + ตัวละครพูด)**: the same Studio
+pack flow as a Script's 🎞 (see Storyboard Studio packs below), with three things
+fixed by the owner:
+
+- **Every shot is Flow.** No Pexels and no photo segments.
+- **The character always speaks.** 🗣 is forced on and 🚫 is refused.
+- **There is no end card.** The closing line is the last shot.
+
+What happens:
+
+- **Shots.** One shot per beat, plus the closing line (`end_narration`) as the
+  last shot (`shop_studio.shots()`).
+- **Pace and fit.** The take is spoken with the shop voice to measure the pace.
+  A line too long for a 10 s shot is condensed with Shop's own rules
+  (`condense(spoken_rule=, check=)`):
+  - digits stay digits, with no ร้อย/พัน;
+  - every number comes from the Brief;
+  - no Latin, no "ครับ";
+  - the subtitle is rebuilt and stays at most two lines.
+- **The product is an Ingredient.** The scene prompts name it `@Product`, and
+  the model never describes its shape, colours, labels or brand. The pack
+  carries a `Products:` line, and the pack page shows the Brief's photos
+  (copied to `/data/studio/<shop_id>/refs/`, served by the read-only route
+  `/storyboard/<id>/refs/photoN.<ext>`). The human makes an `@Product` Asset
+  Profile from them and attaches the character + `@Product` to every shot.
+  Veo may still redraw packaging text. The page says so, and that shot is
+  regenerated.
+- **Character.** It comes from `/settings` (the 🛍 shop default) or 🤖. An
+  invented character must be a woman, because the Pitch says "ค่ะ".
+- **The Brief closes and the bot goes idle.** The pack takes the one
+  `clip_wait` slot (`kind: "studio"` + `product`: Brief text, link, photos,
+  Pitch). The inbox, reply, uneven/cut-evenly, expiry and adopt paths are
+  unchanged.
+- **Buttons.** The pack offers only the character choices, ↩️ (back to the
+  Pitch review; needs an idle bot) and 🗑. 🗑 writes no Manifest.
+- **Render** (`shop_studio.build`, off the loop, under the render lock). Each
+  shot uses its own Flow footage and its own voice (`studio.voice_piece`: head
+  kept, tail trimmed, loudnorm). It goes through `shop_render`'s video layout:
+  badge on top, subtitle at ~75 %. Segment length is the trimmed voice. BGM
+  is ducked under it, there is no TTS, and there is no end card.
+- **Filed like `/shop`.** Output goes to `/volume1/shorts/shop/<id>/` (mp4,
+  `caption.txt`, `shop.json` with `render.mode: "studio"`). The pack and its
+  files are dropped once the clip is sent, since there is no YouTube upload to
+  keep them for.
+
+The Creator Studio web `/shop` gets the same pack in phase 2 (spec
+`docs/superpowers/specs/2026-10-20-shop-studio-pack-design.md`).
+
 Step-by-step guide for the human (Thai, phone screenshots of the flow, where to
 post, why a Pitch gets sent back): [`docs/shop-guide.html`](docs/shop-guide.html).
 

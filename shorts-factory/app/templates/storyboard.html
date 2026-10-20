@@ -7,6 +7,13 @@
 <li>ตอน Animate: Video · Ingredients · 9:16 · 720p · <b>8s</b> · x1</li>
 <li>ใช้ project เดิมที่มี Asset Profile ตัวละครอยู่แล้ว</li></ul></section>
 
+{% if pack.product %}
+<section class="card"><div class="card-head"><h2>🛍 สินค้า {{ pack.product.tag }} — {{ pack.product.name }}</h2></div>
+<p class="small">โหลดรูปสินค้าแล้วสร้าง Asset Profile ชื่อ <b>{{ pack.product.tag }}</b> ใน Flow (เหมือนตัวละคร) · ทุก shot แนบตัวละคร + {{ pack.product.tag }}</p>
+<p class="muted small">Veo อาจวาดสินค้า/ตัวหนังสือบนกล่องเพี้ยน — เช็คทุก shot ก่อน export ถ้าเพี้ยนให้เจน shot นั้นใหม่</p>
+<div class="studio-refs">{% for name in pack.product.refs %}<a href="/storyboard/{{ pack.clip_id }}/refs/{{ name }}" download><img src="/storyboard/{{ pack.clip_id }}/refs/{{ name }}" alt="รูปสินค้า {{ loop.index }}" loading="lazy" width="96"></a>{% endfor %}</div>
+</section>{% endif %}
+
 {% if pack.character and pack.character.portrait %}
 <section class="card"><div class="card-head"><h2>1 · ตัวละคร {{ pack.character.tag }}</h2></div>
 {% if pack.character.flow_ready %}<details><summary>ใช้ {{ pack.character.tag }} ใน project เดิม (กดเพื่อดู prompt)</summary>{% endif %}
@@ -24,7 +31,7 @@
 <section class="card"><div class="card-head"><h2>4 · Animate ทีละ shot</h2></div>
 {% if pack.speak %}<p class="small">🗣 ตัวละครพูดเอง — ตั้งความยาว shot ใน Flow ตามที่บอกในแต่ละ shot, export ต้องมีเสียง</p>{% endif %}
 {% for s in pack.scenes %}<details class="disclosure"><summary>Shot {{ s.n }} · การ์ด {{ s.card + 1 }} · พูด {{ s.span }} วิ{% if pack.speak %} · ตั้ง {{ s.seconds|int }}s{% endif %}</summary>
-<p class="muted small">แนบ Ingredients: {% if pack.character %}(1) {{ pack.character.tag }} {% endif %}(2) frame ของ shot นี้ (3) frame ถัดไปของฉากเดียวกัน (ถ้ามี)</p>
+{% if pack.product %}<p class="muted small">แนบ Ingredients: (1) {{ pack.character.tag }} (2) {{ pack.product.tag }}{% if s.photo %} (เน้นรูป {{ s.photo }}){% endif %} (3) frame ของ shot นี้</p>{% else %}<p class="muted small">แนบ Ingredients: {% if pack.character %}(1) {{ pack.character.tag }} {% endif %}(2) frame ของ shot นี้ (3) frame ถัดไปของฉากเดียวกัน (ถ้ามี)</p>{% endif %}
 <p class="small">🔊 {{ s.narration }}</p>
 <pre id="motion-{{ s.n }}" class="script-copy">{% if s.animate %}{{ s.animate }}{% else %}{{ s.image_prompt }}, {{ s.motion }}{% endif %}</pre>
 <button class="copy-button" type="button" data-copy="motion-{{ s.n }}" data-feedback="motion-{{ s.n }}-result" hidden>{{ icon('copy') }} คัดลอก</button><p id="motion-{{ s.n }}-result" class="copy-feedback" role="status" aria-live="polite"></p>

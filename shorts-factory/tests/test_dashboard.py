@@ -463,3 +463,24 @@ def test_studio_default_can_be_nobody_but_not_with_speak(client, config_dir):
     reply = client.post("/settings", data=settings_form_data(default_th="none", studio_speak="on"))
     assert reply.status_code == 400
     assert json.loads((config_dir / "characters.json").read_text(encoding="utf-8"))["speak"] is False
+
+
+def test_product_pack_shows_photos_and_serves_only_ref_names(client, data_dir):
+    where = data_dir / "studio" / "p261020150000"
+    (where / "refs").mkdir(parents=True)
+    (where / "refs" / "photo1.jpg").write_bytes(b"jpg")
+    (where / "pack.json").write_text(json.dumps({
+        "clip_id": "p261020150000", "token": "a1b2c3d4e5f6", "version": 1, "title": "หูฟัง",
+        "character": {"id": "", "tag": "@Lead", "flow_ready": False, "portrait": "P"},
+        "pending": [0], "shots": {"0": 1}, "total_shots": 1, "credits": 12, "speak": True,
+        "length": 8.0, "seconds": {"0": 8.0},
+        "product": {"name": "earbuds", "tag": "@Product", "refs": ["photo1.jpg"]},
+        "scenes": [{"n": 1, "card": 0, "image_prompt": "P1", "motion": "M", "narration": "พูด",
+                    "span": 5.0, "seconds": 8.0, "animate": "A1", "photo": 1}]},
+        ensure_ascii=False), encoding="utf-8")
+    (where / "script.md").write_text("Story Title: x\n", encoding="utf-8")
+    text = client.get("/storyboard/p261020150000").text
+    assert "/storyboard/p261020150000/refs/photo1.jpg" in text and "(2) @Product (เน้นรูป 1)" in text
+    assert client.get("/storyboard/p261020150000/refs/photo1.jpg").content == b"jpg"
+    for bad in ("photo2.jpg", "pack.json", "..%2Fpack.json"):
+        assert client.get(f"/storyboard/p261020150000/refs/{bad}").status_code == 404

@@ -52,7 +52,7 @@ def bot(tmp_path, monkeypatch):
     async def close(*args, **kwargs):
         return None
 
-    async def narration(script, locale, clip_id):
+    async def narration(script, locale, clip_id, voice=None):
         # A line condense() shortened (" ย่อ") is spoken in 7.5s, not 9.0s.
         short = script["cards"][1]["narration"].endswith(" ย่อ")
         return {"audio": "x", "starts": [0.0, 7.0, 16.0], "total": 24.0,
@@ -810,3 +810,106 @@ def test_startup_adopts_a_pack_written_but_never_registered(bot):
     assert main.adopt_written_pack(wait) is True
     assert wait["versions"][token]["pending"] == [0] and wait["versions"][token]["shots"] == {"0": 1}
     assert main.adopt_written_pack(wait) is False
+
+
+# --- Product Clips as Studio packs (docs/adr/0018) -----------------------------
+
+SHOP_ID = "p261020150000"
+
+
+def shop_state(tmp_path):
+    photo = tmp_path / "p01.jpg"
+    photo.write_bytes(b"jpg")
+    pitch = {"title": "หูฟัง", "caption": "c", "hashtags": ["#h"], "end_badge": "กด",
+             "end_narration": "กดตะกร้าเลยค่ะ", "end_spoken": "กดตะกร้าเลยค่ะ",
+             "beats": [{"badge": "b", "lines": [f"พูด {i}"], "narration": f"พูด {i}",
+                        "spoken": f"พูด {i}", "photo": 1} for i in range(2)]}
+    return {"mode": "shop", "shop": {"id": SHOP_ID, "phase": "writing", "photos": [str(photo)],
+                                     "text": "หูฟัง 299 บาท https://shp.ee/x", "pitch": pitch,
+                                     "message_id": 5}}
+
+
+@pytest.fixture
+def shop_bot(bot, monkeypatch):
+    async def board(script, product, choice, character="", fixed_tag=""):
+        bot.append(("shop_board", choice, product["text"]))
+        scenes = [{"card": i, "image_gen_prompt": f"{LOCK} holds @Product, 9:16, no text",
+                   "motion": "Static camera", "sound_verbatim": c["spoken"], "photo": c["photo"]}
+                  for i, c in enumerate(script["cards"])]
+        return {"overview": {"title": "t", "product_en": "earbuds",
+                             "master_character": {"locked_prompt_tag": LOCK}},
+                "scenes": scenes, "ratio": "9:16"}
+
+    monkeypatch.setattr(main.shop_studio, "plan", board)
+    return bot
+
+
+def test_studio_on_a_pitch_parks_a_flow_only_speaking_pack(shop_bot, tmp_path):
+    state = shop_state(tmp_path)
+    run(main.on_shop_studio(None, state))
+    wait = state["clip_wait"]
+    assert state["mode"] == "idle"
+    assert wait["kind"] == "studio" and wait["speak"] is True and wait["product"]["link"] == "https://shp.ee/x"
+    assert wait["sources"] == ["flow"] * 3 and wait["choice"] == "auto"
+    pack = studio.read_pack(SHOP_ID)
+    assert pack["product"] == {"name": "earbuds", "tag": "@Product", "refs": ["photo1.jpg"]}
+    assert pack["shots"] == {"0": 1, "1": 1, "2": 1} and pack["speak"] is True
+    assert studio.ref_path(SHOP_ID, "photo1.jpg").is_file()
+    doc = [item for item in shop_bot if item[0] == "doc"][-1][1]
+    assert "Products:\n@Product is earbuds" in doc and 'Dialogue: "กดตะกร้าเลยค่ะ"' in doc
+    message = [item for item in shop_bot if item[0] == "say" and "Studio pack" in item[1]][-1]
+    assert "Asset Profile @Product" in message[1]
+    keys = buttons(message[2])
+    assert f"stb:{SHOP_ID}" in keys and f"stq:{SHOP_ID}" in keys
+    assert not any(k.startswith(("stt:", "sts:", "stp:", "stx:")) or k.endswith(":none") for k in keys)
+
+
+def test_shop_pack_refuses_pexels_speech_toggles_and_nobody(shop_bot, tmp_path, monkeypatch):
+    state = shop_state(tmp_path)
+    run(main.on_shop_studio(None, state))
+    calls = capture_api(monkeypatch)
+    for data in (f"stt:{SHOP_ID}:0", f"sts:{SHOP_ID}", f"stp:{SHOP_ID}", f"stc:{SHOP_ID}:none"):
+        asyncio.run(main.on_callback(None, state, a_tap(data)))
+    answers = [p["text"] for m, p in calls if m == "answerCallbackQuery"]
+    assert answers == ["คลิปสินค้า: Flow + ตัวละครพูดเองทุก shot"] * 4
+    assert state["clip_wait"]["sources"] == ["flow"] * 3 and not SPAWNED
+
+
+def test_shop_pack_back_reopens_the_pitch(shop_bot, tmp_path):
+    state = shop_state(tmp_path)
+    run(main.on_shop_studio(None, state))
+    run(main.on_studio_callback(None, state, f"stb:{SHOP_ID}"))
+    assert "clip_wait" not in state and state["mode"] == "shop"
+    assert state["shop"]["phase"] == "review" and state["shop"]["pitch"]["title"] == "หูฟัง"
+    assert not studio.root(SHOP_ID).exists()
+
+
+def test_shop_pack_renders_its_own_clip_without_a_manifest(shop_bot, tmp_path, monkeypatch):
+    state = shop_state(tmp_path)
+    run(main.on_shop_studio(None, state))
+    for i in range(3):
+        studio.segment_path(SHOP_ID, i).parent.mkdir(parents=True, exist_ok=True)
+        studio.segment_path(SHOP_ID, i).write_bytes(b"v")
+        studio.voice_path(SHOP_ID, i).write_bytes(b"a")
+    made = tmp_path / "made.mp4"
+    made.write_bytes(b"mp4")
+    built, sent = [], []
+
+    def build(script, clip_id, workdir):
+        built.append((len(script["cards"]), clip_id))
+        return made, {"mode": "studio"}
+
+    async def video(client, path, caption=""):
+        sent.append(path)
+
+    monkeypatch.setattr(main.shop_studio, "build", build)
+    monkeypatch.setattr(main, "send_video", video)
+    monkeypatch.setattr(main, "SHOP_DIR", tmp_path / "shop")
+    monkeypatch.setattr(main, "do_render", lambda *a, **k: (_ for _ in ()).throw(AssertionError("Topic path")))
+    monkeypatch.setattr(main.manifest, "update", lambda *a, **k: (_ for _ in ()).throw(AssertionError("Manifest")))
+    run(main.render_studio(None, state, SHOP_ID))
+    assert built == [(3, SHOP_ID)] and sent == [tmp_path / "shop" / SHOP_ID / f"{SHOP_ID}.mp4"]
+    record = json.loads((tmp_path / "shop" / SHOP_ID / "shop.json").read_text(encoding="utf-8"))
+    assert record["link"] == "https://shp.ee/x" and record["render"]["mode"] == "studio"
+    assert "#ad" in (tmp_path / "shop" / SHOP_ID / "caption.txt").read_text(encoding="utf-8")
+    assert "clip_wait" not in state and not studio.root(SHOP_ID).exists()

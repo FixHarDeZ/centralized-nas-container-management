@@ -14,7 +14,7 @@ from pathlib import Path
 from statistics import median
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, PlainTextResponse
+from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -321,6 +321,20 @@ def storyboard_markdown(clip_id: str):
     _pack_or_404(clip_id)
     return PlainTextResponse(studio.read_markdown(clip_id) or "", media_type="text/markdown",
                              headers={"Content-Disposition": f'attachment; filename="{clip_id}-script.md"'})
+
+
+@app.get("/storyboard/{clip_id}/refs/{name}")
+def storyboard_ref(clip_id: str, name: str):
+    """A Product Clip's photo, to make the `@Product` Asset Profile from (ADR 0018).
+    `studio.ref_path` refuses any name but `photoN.<jpg|png|webp>`."""
+    _pack_or_404(clip_id)
+    try:
+        path = studio.ref_path(clip_id, name)
+    except ValueError:
+        raise HTTPException(status_code=404) from None
+    if not path.is_file():
+        raise HTTPException(status_code=404)
+    return FileResponse(path, filename=f"{clip_id}-{name}")
 
 
 # --- the one writing route (docs/adr/0009) -----------------------------------
