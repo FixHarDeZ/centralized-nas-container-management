@@ -628,7 +628,10 @@ needs a character (🚫 refuses it).
 - **Lines too long for 10 s are shortened by the bot** (`main.fit_speech()`,
   `script.condense()`): before planning, every speaking Flow Card over the fit
   goes to mimo in one call with a budget of `units × 7.875 × 0.92 / span`
-  (Thai characters without spaces, English words). An answer over budget, with
+  (Thai characters without spaces, English words), asked as `keep_percent` of
+  the original: asked for "max N characters", flash reasoned past 600 s on one
+  card while a trivial call took 6 s; as a share it took 15 s. Six live cards
+  took 210 s (one retry), all in budget. An answer over budget by 15 %, with
   a number the original lacked, or with Latin/hyphen in Thai `spoken` is sent
   back once. The take is then re-spoken and re-measured, two rounds at most.
   The shorter `narration`/`spoken` replace the Card's in the waiting Script,

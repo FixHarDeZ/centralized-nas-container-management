@@ -41,12 +41,14 @@ def test_speech_units_count_thai_characters_and_english_words():
 def test_condense_returns_the_shorter_lines(monkeypatch):
     calls = replies(monkeypatch, [{"cards": [
         {"card": 1, "narration": "ดื่มน้ำวันละ 8 แก้ว ผิวจะอิ่มฟู", "spoken": "ดื่มน้ำวันละแปดแก้ว ผิวจะอิ่มฟู"}]}])
-    out = asyncio.run(script.condense(CARDS, {0: 30}, "th"))
+    out = asyncio.run(script.condense(CARDS, {0: 27}, "th"))
     assert out == {0: {"narration": "ดื่มน้ำวันละ 8 แก้ว ผิวจะอิ่มฟู",
                        "spoken": "ดื่มน้ำวันละแปดแก้ว ผิวจะอิ่มฟู"}}
     asked = json.loads(calls[0][1]["content"])["cards"]
+    # 27 of the original's 53 characters: a share, never a count to hit.
     assert asked == [{"card": 1, "narration": CARDS[0]["narration"], "spoken": CARDS[0]["spoken"],
-                      "lines": ["ดื่มน้ำ"], "max": 30}]
+                      "keep_percent": 51}]
+    assert "max" not in calls[0][0]["content"]
 
 
 def test_condense_refuses_a_long_line_a_new_number_or_latin_then_retries(monkeypatch):
@@ -56,7 +58,7 @@ def test_condense_refuses_a_long_line_a_new_number_or_latin_then_retries(monkeyp
     out = asyncio.run(script.condense(CARDS, {0: 20}, "th"))
     assert out[0]["spoken"] == "ดื่มน้ำวันละแปดแก้ว"
     feedback = calls[1][-1]["content"]
-    assert "เกิน max 20" in feedback and "'12'" in feedback and "water" in feedback
+    assert "ยังยาวไป" in feedback and "'12'" in feedback and "water" in feedback
 
 
 def test_condense_gives_up_after_two_bad_answers(monkeypatch):

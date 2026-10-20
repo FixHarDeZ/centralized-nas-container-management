@@ -744,29 +744,33 @@ async def flow_prompt(topic: str, card: dict) -> str:
 # output, and 240s stalled on the first live try (2026-10-20).
 CONDENSE_BUDGET_SECONDS = float(os.environ.get("CONDENSE_TIMEOUT_SECONDS", str(BUDGET_SECONDS)))
 
-CONDENSE_PROMPT = """คุณย่อบทพูดของคลิป YouTube Shorts ให้ตัวละครพูดจบใน shot เดียว
-ตัวละครพูดเองบนกล้อง shot ยาวได้ 10 วินาที ประโยคที่ยาวเกินจะถูกตัดกลางคำ
+# Phrased as a share of the original, never a character count: asked to hit
+# "max N characters", mimo-v2.6-flash reasoned past 600s on one card (twice,
+# 2026-10-20) while a trivial call answered in 6s; asked for "about 55% of
+# the original" it answered in 15s, within 3% of the budget.
+CONDENSE_PROMPT = """ย่อบทพูดของคลิป YouTube Shorts ให้ตัวละครพูดจบใน shot เดียว (ไม่เกิน 10 วินาที)
+ประโยคที่ยาวเกินจะถูกตัดกลางคำ
 
-แต่ละการ์ดที่ได้รับมี narration (ขึ้นซับ), spoken (คำอ่านที่ตัวละครพูด),
-lines (ข้อความบนจอ ห้ามแก้) และ max = ความยาวสูงสุดของ spoken ใหม่
-({unit})
+แต่ละการ์ดมี narration (ขึ้นซับ), spoken (คำอ่านที่ตัวละครพูด) และ keep_percent =
+ความยาวที่ต้องเหลือ เป็นเปอร์เซ็นต์ของ spoken เดิม — กะเอา ไม่ต้องนับตัวอักษร
 
 กติกา:
-- spoken ใหม่ต้องไม่เกิน max เด็ดขาด
-- เก็บใจความหลักของการ์ดและเรื่องที่ lines พูดถึง ตัดส่วนขยาย ตัวอย่างย่อย คำซ้ำ คำเชื่อมที่ไม่จำเป็น
-- ภาษาพูดเป็นธรรมชาติ ภาษาเดียวกับต้นฉบับ ฟังต่อจากการ์ดก่อนหน้าได้
-- **ห้ามเพิ่มข้อเท็จจริงหรือตัวเลขใหม่** ตัวเลขทุกตัวต้องมีอยู่ในต้นฉบับของการ์ดนั้น
+- ตัดส่วนขยาย ตัวอย่างย่อย คำซ้ำ คำเชื่อมที่ไม่จำเป็นออก เก็บใจความหลักของการ์ด
+- การ์ดที่เปิดด้วยคำถามหรือ hook ให้คงรูปคำถาม/hook นั้นไว้ ไปตัดส่วนอื่นแทน
+- ภาษาพูดเป็นธรรมชาติ ภาษาเดียวกับต้นฉบับ
+- **ห้ามเพิ่มข้อเท็จจริงหรือตัวเลขใหม่**
 - narration กับ spoken ต้องพูดเรื่องเดียวกันคำต่อคำ ต่างกันแค่การสะกดคำอ่าน
-- spoken ใช้กติกาเดิม: {spoken_rule}
+- spoken: {spoken_rule}
 
 ตอบเป็น JSON อย่างเดียว:
 {{"cards": [{{"card": 1, "narration": "...", "spoken": "..."}}]}}"""
 
-CONDENSE_UNITS = {"thai": "นับตัวอักษร ไม่นับช่องว่าง", "latin": "นับเป็นคำ"}
 CONDENSE_SPOKEN_RULE = {
-    "thai": "ไทยล้วน ห้ามมีอักษรละติน ห้ามมีขีดกลาง ตัวเลขเขียนเป็นคำอ่านไทย",
+    "thai": "ไทยล้วน ห้ามมีอักษรละติน ห้ามขีดกลาง ตัวเลขเขียนเป็นคำอ่านไทย",
     "latin": "English only, no Thai script, numbers and symbols written the way they are said",
 }
+# The model guesses lengths; the re-spoken take is the real check.
+CONDENSE_SLACK = 1.15
 
 
 def speech_units(spoken: str, locale: str = locales.DEFAULT) -> int:
@@ -788,10 +792,10 @@ async def condense(cards: list[dict], targets: dict[int, int],
     """
     spec = locales.get(locale)
     alphabet = spec["spoken_script"]
-    system = CONDENSE_PROMPT.format(unit=CONDENSE_UNITS[alphabet],
-                                    spoken_rule=CONDENSE_SPOKEN_RULE[alphabet])
+    system = CONDENSE_PROMPT.format(spoken_rule=CONDENSE_SPOKEN_RULE[alphabet])
     asked = [{"card": i + 1, "narration": cards[i]["narration"], "spoken": cards[i]["spoken"],
-              "lines": cards[i].get("lines") or [], "max": targets[i]} for i in sorted(targets)]
+              "keep_percent": min(100, round(100 * targets[i] / max(1, speech_units(
+                  cards[i]["spoken"], locale))))} for i in sorted(targets)]
     messages = [{"role": "system", "content": system},
                 {"role": "user", "content": json.dumps({"cards": asked}, ensure_ascii=False)}]
     client = _client()
@@ -839,8 +843,9 @@ def _condensed(data: dict, cards: list[dict], targets: dict[int, int],
             problems.append(f"card {i + 1}: ต้องมีทั้ง narration และ spoken")
             continue
         size = len(re.sub(r"\s", "", spoken)) if alphabet == "thai" else len(spoken.split())
-        if size > targets[i]:
-            problems.append(f"card {i + 1}: spoken ยาว {size} เกิน max {targets[i]}")
+        if size > targets[i] * CONDENSE_SLACK:
+            problems.append(f"card {i + 1}: ยังยาวไป ต้องสั้นลงอีกราว "
+                            f"{round(100 * (1 - targets[i] / size))}%")
         wrong = FORBIDDEN_IN_SPOKEN[alphabet].findall(spoken)
         if wrong:
             problems.append(f"card {i + 1}: spoken มีอักษรที่เสียงอ่านไม่ได้ {wrong[:3]}")
