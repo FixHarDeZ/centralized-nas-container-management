@@ -2441,3 +2441,20 @@ pack page โชว์ `animate` + "ตั้ง Ns". render_studio: มี wav 
   ค้าง: ผู้ใช้ฟัง `~/Downloads/speaking-test-rendered-v2.mp4` (ไทยชัด/lip-sync/DCA) + v1 (เสียงสลับ Veo↔TTS);
   ขนาดซับใต้คาง (การ์ดบรรทัดยาวเล็กลงเพราะกว้าง 800 px — ปรับ `LOW_WIDTH`/`LOW_BOTTOM` ตามจอมือถือจริง);
   ขอบดำบน Pexels ฉากวุ่นๆ ยังไม่เห็นของจริง; เครดิต shot 10 วิ; กด 🗣 กับ pack จริง; Flow มี download 1080p ไหม (export 720p ถูกขยาย).
+
+### 2026-10-20 ปุ่มเปลี่ยนใจ หลังกด 🎨 / 📋 / 🎞 (`4b6e061`, deploy แล้ว ยังไม่ push)
+ต้นเรื่อง: ผู้ใช้กด 🎞 กับสคริปต์ใหม่ แต่ติด "ยังมี Studio pack ค้างอยู่: อายุ 30-40 …" ไม่มีทางทิ้ง pack เดิมนอกจากรอหมด 72 ชม.
+และอยากให้หลังกด 🎨 / 📋 กลับมาเลือกวิธีใหม่ได้
+- **swap บนข้อความปฏิเสธ**: 🎞 / 🎨 ที่โดนปฏิเสธเพราะมีอันเดิมค้าง มีปุ่ม `wait:swap:<studio|park>:<old>:<new>` กดแล้วทิ้งอันเดิม (manifest `abandoned`)
+  แล้วทำ 🎞/🎨 ให้สคริปต์ที่รีวิวอยู่ทันที. เช็คว่า review ยังเป็น clip `<new>` ก่อนทิ้งอะไร (กดข้อความเก่าทีหลัง = ไม่ทิ้ง)
+- **🎨 prompt**: ปุ่ม ↩️ ยกเลิก เลือกวิธีใหม่ (unpark → สคริปต์กลับ review พร้อม research/style/pair) / 🗑 เลิกทำคลิปนี้.
+  `parked` เก็บ `research` เพิ่ม (เดิมไม่มี — กลับ review แล้วแก้สคริปต์จะไม่มี Fact sheet). record เก่าไม่มี = None
+- **📋**: คำถามตัวละครมีแถว ↩️ (`sbchar:cancel:<token>`), ท้าย storyboard มี ↩️ (`wait:back:board:<token>`) — board record เพิ่ม `token`+`clip_id`
+  (record เก่าไม่มี = ไม่มีปุ่ม). 📋 ไม่เคยเอาสคริปต์ออกจาก review → ยกเลิก = ลบ wait + โพสต์สคริปต์ใหม่พร้อมปุ่มล่างสุด (เฉพาะถ้ายังเป็น clip เดิม)
+- **🎞 pack**: แถวใหม่ ↩️ (`stb:`) = ลบไฟล์ pack + กลับ review แบบ ✂️ (refactor `shorten_cards` ใช้ `restore_review()` ร่วม), 🗑 (`stq:`) = ลบ + abandoned.
+  ห้ามระหว่างหั่น/render: `clip_wait.working` (ตั้งใน `process_export` รอบ cut และ `render_studio()` wrapper) หรือ clip นั้นอยู่ใน HOLDING_MODES; render แล้ว ↩️ ถูกปฏิเสธ
+- ↩️ ต้องมีช่อง review ว่าง ไม่งั้นบอกเหตุผล + เสนอ 🗑. `abandon()` เขียน `abandoned` เฉพาะ outcome `drafting`/None (ไม่ทับ `rendered`)
+- ตรวจ: sf-test 549 passed/2 skipped (+12 ข้อใหม่ใน test_studio_bot.py, แก้ 2 เทสต์เก่าตาม signature/ปุ่มใหม่); root `make test` 64; ruff ไม่มี finding ใหม่
+- Deploy `deploy.sh -s shorts-factory -y` ตอน mode=review (ไม่ใช่ holding) — grep ในคอนเทนเนอร์เจอโค้ดใหม่, 5 containers running restart=0, ไม่มี error.
+  state หลัง restart: review คงอยู่, clip_wait = pack เดิม `20261019-133610-434` (kind studio) → ปุ่ม swap ใช้กับ pack นี้ได้
+- ค้าง: ผู้ใช้กด 🎞 สคริปต์ใหม่ → กด 🗑 ทิ้ง pack เดิม แล้วทำอันนี้ (ข้อความ pack เก่าบนจอยังเป็นคีย์บอร์ดเดิม ไม่มี ↩️/🗑 — pack ใหม่ถึงมี); push
