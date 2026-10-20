@@ -178,7 +178,12 @@ class Worker:
                     for i, (scene, (_, video, voice)) in enumerate(zip(scenes, pieces))]
             self.store.set_export_result(job['id'], asset['id'], 'cut', duration=duration,
                                          expected=expected, cuts=cuts, **fence)
-        except (RuntimeError, MediaError) as exc:
+        except Conflict:
+            raise
+        except Exception as exc:
+            # Any failure must say so: left at `probed`, the page keeps its
+            # upload button disabled and the job has no way forward.
+            logger.exception('Studio export cut failed')
             self.store.set_export_result(job['id'], asset['id'], 'failed', duration=duration,
                                          expected=expected, error=str(exc)[:500], **fence)
         finally:
@@ -188,7 +193,8 @@ class Worker:
     def probe_asset(self, command, owner):
         asset = self.store.get_asset(command['payload']['asset_id'])
         try:
-            metadata = probe(self.store.asset_path(asset['id']), reference=asset['kind'] == 'reference')
+            metadata = probe(self.store.asset_path(asset['id']), reference=asset['kind'] == 'reference',
+                             export=asset['kind'] == 'export')
         except MediaError as exc:
             self.store.validate_asset(asset['id'], {}, valid=False, error=str(exc), **self._fence(command, owner))
             return

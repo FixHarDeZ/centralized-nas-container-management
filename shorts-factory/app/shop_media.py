@@ -10,6 +10,10 @@ from pathlib import Path
 from PIL import Image, ImageOps
 
 
+# A 7-shot pack of 10 s shots is 70 s; room for hand trims and a longer one.
+EXPORT_SECONDS = 180
+
+
 class MediaError(ValueError):
     pass
 
@@ -34,7 +38,9 @@ def _dimensions(width, height, *, video=False):
         raise MediaError('unsupported media dimensions: maximum 3840x2160 or portrait')
 
 
-def probe(path: Path, *, reference: bool = False) -> dict:
+def probe(path: Path, *, reference: bool = False, export: bool = False) -> dict:
+    """`export`: a whole Storyboard Studio export (ADR 0018), up to EXPORT_SECONDS
+    long and with the character's voice in it; a scene clip stays within 60 s."""
     path = Path(path)
     if not path.is_file() or path.stat().st_size == 0:
         raise MediaError('empty or missing media')
@@ -75,10 +81,13 @@ def probe(path: Path, *, reference: bool = False) -> dict:
         duration = float(video.get('duration') or data['format']['duration'])
         numerator, denominator = video['avg_frame_rate'].split('/')
         fps = float(numerator) / float(denominator)
-        if not math.isfinite(duration) or not .1 <= duration <= 60 or not 1 <= fps <= 60:
+        longest = EXPORT_SECONDS if export else 60
+        if not math.isfinite(duration) or not .1 <= duration <= longest or not 1 <= fps <= 60:
             raise MediaError('unsupported video duration or frame rate')
+        if export and not any(stream['codec_type'] == 'audio' for stream in streams):
+            raise MediaError('export has no audio: export from Scenes with the character speaking')
         # Decode the complete bounded source, catching truncated/corrupt frames.
-        run(['ffmpeg', '-v', 'error', '-xerror', '-threads', '2', '-protocol_whitelist', 'file,pipe', '-i', str(path), '-map', '0:v:0', '-an', '-f', 'null', '-'], timeout=60)
+        run(['ffmpeg', '-v', 'error', '-xerror', '-threads', '2', '-protocol_whitelist', 'file,pipe', '-i', str(path), '-map', '0:v:0', '-an', '-f', 'null', '-'], timeout=300 if export else 60)
         return {'type': 'video', 'width': width, 'height': height, 'duration': duration, 'fps': fps,
                 'has_audio': any(stream['codec_type'] == 'audio' for stream in streams)}
     except (KeyError, ValueError, TypeError, ZeroDivisionError) as exc:

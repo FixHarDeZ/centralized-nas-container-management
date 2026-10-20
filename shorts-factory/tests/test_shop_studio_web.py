@@ -153,3 +153,74 @@ def test_a_scenes_job_takes_no_export_and_switching_mode_drops_the_plan(tmp_path
     assert job['plan'] is None and job['mode'] == 'studio' and job['character'] == 'kim'
     with pytest.raises(Invalid):
         store.update_job(job['id'], job['revision'], {'mode': 'reels'})
+
+
+def make_job(tmp_path, monkeypatch, beats, spans, condensed=None):
+    store = Store(tmp_path)
+    job = store.create_job({'name': 'โคมไฟ', 'brief': 'โคมไฟตั้งโต๊ะ 299 399', 'mode': 'studio'})
+    data = io.BytesIO()
+    Image.new('RGB', (80, 80)).save(data, 'PNG')
+    data.seek(0)
+    store.add_asset(job['id'], job['revision'], 'reference', 'ref.png', data)
+    worker = shop_worker.Worker(store)
+    drain(worker)
+    pitch = sample_pitch()
+    pitch['beats'] = pitch['beats'][:1] * beats
+    measured = iter(spans)
+
+    async def generate(*args, **kwargs):
+        return json.loads(json.dumps(pitch))
+
+    async def measure(script, workdir):
+        return [next(measured)] * len(script['cards'])
+
+    async def plan(script, product, choice, character='', fixed_tag=''):
+        return shop_studio._finish(script)(board(len(script['cards'])))
+
+    async def condense(cards, targets, locale, **rules):
+        assert rules['check'](condensed, condensed) == []
+        return {c: {'narration': condensed, 'spoken': condensed} for c in targets}
+
+    monkeypatch.setattr(shop_worker.shop, 'generate', generate)
+    monkeypatch.setattr(shop_studio, 'measure', measure)
+    monkeypatch.setattr(shop_studio, 'plan', plan)
+    monkeypatch.setattr('app.script.condense', condense)
+    job = store.get_job(job['id'])
+    store.request_plan(job['id'], job['revision'])
+    drain(worker)
+    return store, worker, store.get_job(job['id'])
+
+
+def test_a_condensed_beat_still_passes_shop_validation(tmp_path, monkeypatch):
+    line = 'แสงนวลสบายตา อ่านหนังสือได้นานค่ะ'
+    store, _, job = make_job(tmp_path, monkeypatch, 3, [12.0, 7.0], condensed=line)
+    assert job['plan_error'] is None and job['validated_plan_version'] == job['plan_version']
+    assert [s['narration'] for s in job['plan']['scenes']] == [line] * 4
+    assert all(s['seconds'] == 10.0 for s in job['plan']['scenes'])
+
+
+def test_a_seventy_second_export_is_probed_and_cut(tmp_path, monkeypatch):
+    store, worker, job = make_job(tmp_path, monkeypatch, 6, [7.0])
+    assert len(job['plan']['scenes']) == 7 and job['plan']['studio']['length'] == 70.0
+    job = approved(store, worker, job)
+    path = tmp_path / 'long.mp4'
+    subprocess.run(['ffmpeg', '-y', '-f', 'lavfi', '-i', 'testsrc=size=720x1280:rate=24:duration=70',
+                    '-f', 'lavfi', '-i', 'sine=frequency=300:duration=70', '-shortest',
+                    '-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'aac', str(path)],
+                   check=True, capture_output=True)
+    store.add_asset(job['id'], job['revision'], 'export', 'flow.mp4', io.BytesIO(path.read_bytes()))
+    drain(worker)
+    job = store.get_job(job['id'])
+    assert job['export']['status'] == 'cut' and all(s.get('voice_id') for s in job['plan']['scenes'])
+
+
+def test_a_silent_export_is_refused_at_the_probe(studio_job, tmp_path):
+    store, worker, job = studio_job
+    job = approved(store, worker, job)
+    path = tmp_path / 'silent.mp4'
+    subprocess.run(['ffmpeg', '-y', '-f', 'lavfi', '-i', 'testsrc=size=360x640:rate=12:duration=32',
+                    '-c:v', 'libx264', '-preset', 'ultrafast', str(path)], check=True, capture_output=True)
+    store.add_asset(job['id'], job['revision'], 'export', 'flow.mp4', io.BytesIO(path.read_bytes()))
+    drain(worker)
+    export = store.get_job(job['id'])['export']
+    assert export['status'] == 'invalid' and 'no audio' in export['error']
