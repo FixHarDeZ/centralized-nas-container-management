@@ -191,7 +191,7 @@ footer{color:var(--muted);font-size:13px;padding:10px 0 40px}
     </tbody>
   </table></div>
   <div class="callout"><strong>เครดิตโดยประมาณ</strong>บอทคิด 12 เครดิตต่อ shot (วัดจาก Omni 1.1 Flash · 720p · 8 วิ · x1) ตัวเลขบน pack เป็นค่าประมาณ ของจริงดูใน Flow</div>
-  <div class="callout warn"><strong>บอทไม่แก้ข้อความที่อนุมัติแล้วเอง</strong>การ์ดยาวจะได้หลาย shot แทนที่จะถูกตัดคำ ถ้าอยากให้สั้นลงต้องกด ✂️ แล้วสั่งแก้เอง</div>
+  <div class="callout warn"><strong>บอทไม่แก้ข้อความที่อนุมัติแล้วเอง</strong>การ์ดยาวจะได้หลาย shot แทนที่จะถูกตัดคำ ถ้าอยากให้สั้นลงต้องกด ✂️ แล้วสั่งแก้เอง — <b>ยกเว้น 🗣 ตัวละครพูดเอง</b>: การ์ดที่พูดไม่ทันใน 10 วิ บอทย่อบทพูดให้เองแล้วอัดเสียงวัดใหม่ ซับเปลี่ยนตาม บรรทัดใหม่โชว์ในข้อความ pack</div>
 </section>
 
 <section class="section" id="page">
@@ -213,16 +213,14 @@ footer{color:var(--muted);font-size:13px;padding:10px 0 40px}
       <div class="mock-body">
         <div class="box"><b>สินเชื่อบ้าน 2.60% 40 ปี คุ้มไหม?</b><div class="lbl">1 shot × 8 วิ = 8 วิ · ≈ 12 เครดิต · การ์ด Flow: 1</div></div>
         <div class="box"><b>3 · Script สำหรับ Storyboard Studio</b> <span class="btn">คัดลอกทั้งหมด</span>
-<pre># Shot list (1 shots x 8 seconds)
+<pre>Story Title: First Home Loan Math
 
-STYLE: Photorealistic cinematic, vertical 9:16, …
-No dialogue, no voiceover, no on-screen text, …
+Characters:
+@Nong is a 28-year-old Thai woman …
 
-CHARACTERS: @Nong — the same 28-year-old Thai woman …
-
-[SCENE 1]
-@Nong: the same 28-year-old Thai woman … sits on a sofa holding a new house key …
-CAMERA: Slow push in from medium shot to her face, 8 seconds.</pre></div>
+Scene 1:
+@Nong sits on a sofa holding a new house key …
+Dialogue: none. No voiceover, no on-screen text.</pre></div>
         <div class="box"><b>4 · Animate ทีละ shot</b><div class="lbl">▸ Shot 1 · การ์ด 1 · พูด 6.8 วิ</div></div>
         <div class="box"><b>5 · Export แล้วอัปกลับ</b><div class="lbl">ไฟล์ควรยาว 8 วิ</div><span class="btn">อัปไฟล์ให้บอท</span></div>
       </div>
@@ -265,11 +263,12 @@ CAMERA: Slow push in from medium shot to her face, 8 seconds.</pre></div>
   <p>กดปุ่ม <strong>🗣 ตัวละครพูดเอง</strong> ใต้ pack (ต้องเลือกตัวละครก่อน) — การ์ด 🎬 ตัวละครพูดบทเองในคลิป Flow บอทเก็บเสียงนั้นไว้ การ์ด 🖼 Pexels ยังใช้เสียงพากย์ TTS เหมือนเดิม</p>
   <ol>
     <li>1 การ์ด = 1 shot. ข้อความ pack บอกว่าการ์ดไหน <strong>ตั้ง 10 วิ</strong> ที่เหลือ 8 วิ — ในหน้า pack แต่ละ shot มีป้าย "ตั้ง 8s/10s"</li>
-    <li>script.md มีบรรทัด <code>VOICE:</code> และ <code>DIALOGUE (Thai)</code> ทุกฉาก วางทั้งก้อนเหมือนเดิม</li>
+    <li>script.md มีประโยคเสียงพูดใต้ Characters และ <code>Dialogue: "…"</code> ทุกฉาก วางทั้งก้อนเหมือนเดิม</li>
+    <li>การ์ดที่บทยาวเกินพูดทันใน 10 วิ บอทย่อบทให้เองก่อนวาง pack (✂️ ย่อการ์ด N ในข้อความ pack) แล้วอัดเสียงวัดใหม่ ซับเปลี่ยนตามบทใหม่</li>
     <li>prompt ทีละ shot (ข้อ 4 ในหน้า pack) เหลือแค่บทพูด + กล้อง: <code>Speaks in Thai: "…" Natural lip movement. Gentle push in. …</code> หน้าตามาจาก Ingredients</li>
     <li>Export <strong>ต้องมีเสียง</strong> (ห้ามปิดเสียง) ไฟล์ควรยาว = ผลรวมความยาวทุก shot ตามที่หน้า pack บอก</li>
   </ol>
-  <div class="callout warn"><strong>ข้อควรรู้</strong>มี ⚠️ การ์ดยาวเกิน 10 วิ = กด ✂️ ย่อก่อนเจน (พูดไม่จบ) · <code>/say</code> ไม่มีผลกับการ์ดที่ตัวละครพูด คำเพี้ยน = เจน shot นั้นใหม่ · คลิปผสมจะได้ยินเสียงสลับคนระหว่างการ์ด 🎬 กับ 🖼</div>
+  <div class="callout warn"><strong>ข้อควรรู้</strong>ยังเห็น ⚠️ การ์ดยาวเกิน 10 วิ (บอทย่อไม่สำเร็จ) = กด ✂️ ย่อเองก่อนเจน (พูดไม่จบ) · <code>/say</code> ไม่มีผลกับการ์ดที่ตัวละครพูด คำเพี้ยน = เจน shot นั้นใหม่ · คลิปผสมจะได้ยินเสียงสลับคนระหว่างการ์ด 🎬 กับ 🖼</div>
   <div class="callout"><strong>ไฟล์ใหญ่แค่ไหน</strong>วัดจริง 3 shot (24 วิ) = 21.3 MB (~7 MB ต่อ shot) — pack ที่มีแค่ hook 1 shot ส่งใน Telegram ได้ ถ้า 3 shot ขึ้นไปมักเกิน 20 MB ต้องอัปทางเว็บ</div>
 </section>
 

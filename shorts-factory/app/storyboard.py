@@ -329,11 +329,8 @@ STUDIO_SCRIPT_RULE = (
     "the same order and the same number. Shots that belong to the same Card show the "
     "same beat from another angle, a closer framing or the next action — never a new "
     "story beat. Every shot is one continuous 8-second take. Leave `sound_verbatim` "
-    "and `on_screen_text` empty; they are filled in from the Script.")
-STUDIO_STYLE = (
-    "STYLE: Photorealistic cinematic, vertical 9:16, one shot per scene, each shot exactly 8 seconds.\n"
-    "No dialogue, no voiceover, no on-screen text, no subtitles, no watermark, no UI, no split-screen.\n"
-    "Keep clean negative space in the centre of the frame for captions added later.")
+    "and `on_screen_text` empty; they are filled in from the Script. Also give the "
+    "overview a `title_en`: the clip's title in English, 2-6 words.")
 # A speaking pack (docs/adr/0017): the character says each Card's narration on
 # camera in Flow, and that audio is kept. Every frame is planned for it, and
 # `motion` shrinks to the camera move alone: the per-shot prompt the human
@@ -345,8 +342,9 @@ STUDIO_SPEAK_RULE = (
     "or \"Static camera\" — no action, no duration, no graphics.")
 # The wording a real export held steady across six shots (2026-10-19), with
 # the gender left to the picture: the library has no field for it.
-SPEAK_VOICE = ("the voice of {tag} as pictured: warm, clear, medium pitch, fluent native "
-               "{language} with a natural local accent, friendly conversational pace")
+SPEAK_VOICE = ("{tag} speaks in a warm, clear, medium-pitch voice, fluent native {language} "
+               "with a natural local accent, at a friendly conversational pace, the same "
+               "voice in every scene.")
 SPEAK_LANGUAGE = {"th": "Thai", "en": "English"}
 # The motion rule asks for "~8 seconds", which a 10s CAMERA line contradicts.
 OVER_SECONDS = re.compile(r",?\s*\bover\s+(?:about\s+|~)?\d+(?:\.\d+)?\s*(?:seconds?|s)\b", re.I)
@@ -405,41 +403,69 @@ def portrait_prompt(locked: str) -> str:
             f"plain background, full body visible, {NEGATIVES}")
 
 
+# What Storyboard Studio's script box takes (2026-10-20): a title, who is in
+# it, and per scene what happens and what is said. The image prompt's own
+# boilerplate (lock, ratio, negatives, caption space) is Flow's project
+# settings and the Ingredients' job there, and made the script too long to paste.
+LEAD = re.compile(r"^(?:(?:a|an|photorealistic|cinematic|vertical|portrait|\d{1,2}:\d{1,2}|"
+                  r"frame|image|photo)\b[\s,]*)+(?:of\s+)?", re.I)
+RATIO = re.compile(r"\s*\b\d{1,2}:\d{1,2}\b(?:\s+(?:aspect\s+ratio|format))?", re.I)
+BOILERPLATE = re.compile(r",?\s*\b(?:no text|no watermark|no UI|no split-screen|"
+                         r"clean cent(?:er|re) composition for text overlay)\b\.?", re.I)
+
+
+def scene_text(prompt: str, locked: str, tag: str) -> str:
+    """One scene in a sentence: the image prompt without its lock and boilerplate."""
+    text = prompt
+    if locked and tag:
+        text = re.sub(re.escape(locked), tag, text, flags=re.I)
+    text = BOILERPLATE.sub("", text)
+    text = RATIO.sub("", text)
+    text = LEAD.sub("", text.strip())
+    if tag:
+        text = text.replace(f"{tag},", tag, 1)
+    text = re.sub(r",(?:\s*,)+", ",", re.sub(r"\s+,", ",", text))
+    text = re.sub(r"\s{2,}", " ", text).strip(" ,.")
+    return (text[:1].upper() + text[1:] + ".") if text else ""
+
+
+def character_line(tag: str, locked: str) -> str:
+    """`@Tag is a 28-year-old ...`: the lock reads "the same ..." to repeat across prompts."""
+    who = re.sub(r"^the same\s+", "", locked.strip(), flags=re.I).rstrip(".")
+    if not re.match(r"^(?:a|an|the)\b", who, re.I):
+        who = f"{'an' if who[:1].lower() in 'aeiou' else 'a'} {who}"
+    return f"{tag} is {who}."
+
+
 def studio_markdown(board: dict, tag: str, speak: dict | None = None) -> str:
     """What Storyboard Studio reads. English only, and nothing anyone says:
     Thai narration in here could make Veo animate speech.
 
-    Unless `speak` is given ({"language", "seconds": {card: s}}): then making
-    Veo speak is the point, and each scene carries its Card's narration word
-    for word as DIALOGUE, injected here after validate() so the model's own
-    prompts still never hold Thai.
+    Unless `speak` is given ({"language", ...}): then making Veo speak is the
+    point, and each scene carries its Card's narration word for word as its
+    Dialogue, injected here after validate() so the model's own prompts still
+    never hold Thai. Shot lengths are not in here: the pack message and page
+    say which Cards take a 10s shot.
     """
     person = board["overview"].get("master_character") or None
     locked = (person or {}).get("locked_prompt_tag", "")
-    if not speak:
-        lines = [f"# Shot list ({len(board['scenes'])} shots x 8 seconds)", "", STUDIO_STYLE, ""]
-    else:
-        language, seconds = speak["language"], speak["seconds"]
-        total = sum(seconds[s["card"]] for s in board["scenes"])
-        lines = [f"# Shot list ({len(board['scenes'])} shots, {total:g} seconds)", "",
-                 "STYLE: Photorealistic cinematic, vertical 9:16, one shot per scene, each shot "
-                 "exactly the length given on its CAMERA line.",
-                 f"{tag} speaks {language} directly to the camera in every scene. No subtitles, "
-                 "no on-screen text, no background music, no watermark, no UI, no split-screen.",
-                 "Keep clean negative space in the centre of the frame for captions added later.", ""]
-    if person and tag:
-        lines += [f"CHARACTERS: {tag} — {locked}", ""]
-    if speak:
-        lines += [f"VOICE: {SPEAK_VOICE.format(tag=tag or 'the speaker', language=language)}. "
-                  "The same voice in every scene.", ""]
-    for i, scene in enumerate(board["scenes"], 1):
-        prompt = scene["image_gen_prompt"]
-        lines += [f"[SCENE {i}]", f"{tag}: {prompt}" if person and tag else prompt]
+    named = bool(person and tag)
+    lines = []
+    title = str(board["overview"].get("title_en") or "").strip()
+    if title and not THAI.search(title):
+        lines += [f"Story Title: {title}", ""]
+    if named:
+        lines += ["Characters:", character_line(tag, locked)]
         if speak:
-            lines += [f'DIALOGUE ({language}): "{scene["sound_verbatim"]}"',
-                      f"CAMERA: {camera_move(scene['motion'])}, {seconds[scene['card']]:g} seconds.", ""]
+            lines.append(SPEAK_VOICE.format(tag=tag, language=speak["language"]))
+        lines.append("")
+    for i, scene in enumerate(board["scenes"], 1):
+        lines += [f"Scene {i}:", scene_text(scene["image_gen_prompt"], locked, tag if named else "")]
+        if speak:
+            lines.append(f'Dialogue: "{scene["sound_verbatim"]}"')
         else:
-            lines += [f"CAMERA: {scene['motion']}, 8 seconds.", ""]
+            lines.append("Dialogue: none. No voiceover, no on-screen text.")
+        lines.append("")
     return "\n".join(lines).rstrip() + "\n"
 
 

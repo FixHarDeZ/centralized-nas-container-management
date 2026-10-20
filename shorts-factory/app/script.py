@@ -736,3 +736,114 @@ async def flow_prompt(topic: str, card: dict) -> str:
     if not text:
         raise ScriptError("โมเดลไม่ได้ตอบ prompt กลับมา")
     return text[:1200]
+
+
+# --- 🗣 lines that must fit one Flow shot (docs/adr/0017) -----------------------
+
+CONDENSE_BUDGET_SECONDS = float(os.environ.get("CONDENSE_TIMEOUT_SECONDS", "240"))
+
+CONDENSE_PROMPT = """คุณย่อบทพูดของคลิป YouTube Shorts ให้ตัวละครพูดจบใน shot เดียว
+ตัวละครพูดเองบนกล้อง shot ยาวได้ 10 วินาที ประโยคที่ยาวเกินจะถูกตัดกลางคำ
+
+แต่ละการ์ดที่ได้รับมี narration (ขึ้นซับ), spoken (คำอ่านที่ตัวละครพูด),
+lines (ข้อความบนจอ ห้ามแก้) และ max = ความยาวสูงสุดของ spoken ใหม่
+({unit})
+
+กติกา:
+- spoken ใหม่ต้องไม่เกิน max เด็ดขาด
+- เก็บใจความหลักของการ์ดและเรื่องที่ lines พูดถึง ตัดส่วนขยาย ตัวอย่างย่อย คำซ้ำ คำเชื่อมที่ไม่จำเป็น
+- ภาษาพูดเป็นธรรมชาติ ภาษาเดียวกับต้นฉบับ ฟังต่อจากการ์ดก่อนหน้าได้
+- **ห้ามเพิ่มข้อเท็จจริงหรือตัวเลขใหม่** ตัวเลขทุกตัวต้องมีอยู่ในต้นฉบับของการ์ดนั้น
+- narration กับ spoken ต้องพูดเรื่องเดียวกันคำต่อคำ ต่างกันแค่การสะกดคำอ่าน
+- spoken ใช้กติกาเดิม: {spoken_rule}
+
+ตอบเป็น JSON อย่างเดียว:
+{{"cards": [{{"card": 1, "narration": "...", "spoken": "..."}}]}}"""
+
+CONDENSE_UNITS = {"thai": "นับตัวอักษร ไม่นับช่องว่าง", "latin": "นับเป็นคำ"}
+CONDENSE_SPOKEN_RULE = {
+    "thai": "ไทยล้วน ห้ามมีอักษรละติน ห้ามมีขีดกลาง ตัวเลขเขียนเป็นคำอ่านไทย",
+    "latin": "English only, no Thai script, numbers and symbols written the way they are said",
+}
+
+
+def speech_units(spoken: str, locale: str = locales.DEFAULT) -> int:
+    """Length of a line as condense() measures it: characters for Thai, words otherwise."""
+    if locales.get(locale)["spoken_script"] == "thai":
+        return len(re.sub(r"\s", "", spoken))
+    return len(spoken.split())
+
+
+async def condense(cards: list[dict], targets: dict[int, int],
+                   locale: str = locales.DEFAULT) -> dict[int, dict]:
+    """Shorter `narration`/`spoken` for the Cards in `targets` (index → max units).
+
+    For a speaking Studio pack only: there the character says the line on
+    camera in one 8-10s Flow shot, and Veo cuts off whatever does not fit. A
+    line that comes back over its budget, with a number its original did not
+    have or in the wrong script is refused, and the model gets one retry told
+    what broke. Raises ScriptError when no valid answer comes back in time.
+    """
+    spec = locales.get(locale)
+    alphabet = spec["spoken_script"]
+    system = CONDENSE_PROMPT.format(unit=CONDENSE_UNITS[alphabet],
+                                    spoken_rule=CONDENSE_SPOKEN_RULE[alphabet])
+    asked = [{"card": i + 1, "narration": cards[i]["narration"], "spoken": cards[i]["spoken"],
+              "lines": cards[i].get("lines") or [], "max": targets[i]} for i in sorted(targets)]
+    messages = [{"role": "system", "content": system},
+                {"role": "user", "content": json.dumps({"cards": asked}, ensure_ascii=False)}]
+    client = _client()
+    deadline = time.monotonic() + CONDENSE_BUDGET_SECONDS
+    last = "ไม่มีคำตอบ"
+    for _ in range(2):
+        left = deadline - time.monotonic()
+        if left < 30:
+            break
+        raw = await _say(client, messages, temperature=0.4, budget=left)
+        try:
+            out = _condensed(_parse(raw), cards, targets, alphabet)
+        except ScriptError as exc:
+            last = str(exc)
+            logger.warning("ย่อบทพูดไม่ผ่าน: %s", exc)
+            messages += [{"role": "assistant", "content": raw},
+                         {"role": "user", "content": f"ผิดกติกา: {exc} — ส่ง JSON ใหม่ให้ครบทุกการ์ด"}]
+            continue
+        return out
+    raise ScriptError(f"ย่อบทพูดไม่สำเร็จ: {last}")
+
+
+def _condensed(data: dict, cards: list[dict], targets: dict[int, int],
+               alphabet: str) -> dict[int, dict]:
+    rows = data.get("cards") if isinstance(data, dict) else None
+    if not isinstance(rows, list):
+        raise ScriptError("ต้องมี cards เป็น list")
+    found = {}
+    for row in rows:
+        if isinstance(row, dict) and isinstance(row.get("card"), int):
+            found[row["card"] - 1] = row
+    problems, out = [], {}
+    for i in sorted(targets):
+        row = found.get(i)
+        if row is None:
+            problems.append(f"card {i + 1}: ไม่มีในคำตอบ")
+            continue
+        narration = str(row.get("narration") or "").strip()
+        spoken = str(row.get("spoken") or "").strip()
+        if not narration or not spoken:
+            problems.append(f"card {i + 1}: ต้องมีทั้ง narration และ spoken")
+            continue
+        size = len(re.sub(r"\s", "", spoken)) if alphabet == "thai" else len(spoken.split())
+        if size > targets[i]:
+            problems.append(f"card {i + 1}: spoken ยาว {size} เกิน max {targets[i]}")
+        wrong = FORBIDDEN_IN_SPOKEN[alphabet].findall(spoken)
+        if wrong:
+            problems.append(f"card {i + 1}: spoken มีอักษรที่เสียงอ่านไม่ได้ {wrong[:3]}")
+        if alphabet == "thai" and "-" in spoken:
+            problems.append(f"card {i + 1}: spoken ห้ามมีขีดกลาง")
+        made_up = research.unsourced_numbers(narration, cards[i]["narration"])
+        if made_up:
+            problems.append(f"card {i + 1}: ตัวเลข {made_up[:3]} ไม่มีในต้นฉบับ")
+        out[i] = {"narration": narration, "spoken": spoken}
+    if problems:
+        raise ScriptError(" | ".join(problems))
+    return out

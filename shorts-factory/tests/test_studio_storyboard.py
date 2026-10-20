@@ -58,17 +58,61 @@ def test_a_board_with_the_wrong_shot_count_is_retried(monkeypatch):
     assert len(calls) == 2 and "3" in calls[1][-1]["content"]
 
 
-def test_markdown_is_english_with_tag_lock_and_no_narration(monkeypatch):
+def test_markdown_is_the_short_studio_shape(monkeypatch):
     fake_model(monkeypatch, [board(3)])
     result = asyncio.run(storyboard.for_studio(SCRIPT, [0, 2], {0: 1, 2: 2},
                                                choice=storyboard.OWN, character=LOCK, fixed_tag=LOCK))
+    result["overview"]["title_en"] = "Home Loan Math"
     text = storyboard.studio_markdown(result, "@Nong")
     assert not storyboard.THAI.search(text)
-    assert "9:16" in text and "8 seconds" in text and "No dialogue" in text
-    assert text.count("[SCENE ") == 3
-    for block in text.split("[SCENE ")[1:]:
-        assert "@Nong" in block and LOCK in block
-    assert "CHARACTERS: @Nong — " + LOCK in text
+    assert text.startswith("Story Title: Home Loan Math\n\nCharacters:\n"
+                           "@Nong is a 28-year-old Thai woman with a short black bob and round glasses.\n")
+    assert text.count("Scene ") == 3 and text.count("Dialogue: none.") == 3
+    for block in text.split("Scene ")[1:]:
+        assert "@Nong holds a key." in block and LOCK not in block and "9:16" not in block
+    assert "no watermark" not in text and "seconds" not in text
+
+
+def test_a_thai_or_missing_title_is_left_out(monkeypatch):
+    fake_model(monkeypatch, [board(1)])
+    result = asyncio.run(storyboard.for_studio(SCRIPT, [1], {1: 1},
+                                               choice=storyboard.OWN, character=LOCK, fixed_tag=LOCK))
+    assert storyboard.studio_markdown(result, "@Nong").startswith("Characters:")
+    result["overview"]["title_en"] = "ดอกเบี้ย"
+    assert storyboard.studio_markdown(result, "@Nong").startswith("Characters:")
+
+
+def test_speaking_markdown_carries_the_voice_and_each_line(monkeypatch):
+    fake_model(monkeypatch, [board(2)])
+    result = asyncio.run(storyboard.for_studio(SCRIPT, [0, 1], {0: 1, 1: 1},
+                                               choice=storyboard.OWN, character=LOCK, fixed_tag=LOCK))
+    text = storyboard.studio_markdown(result, "@Nong", {"language": "Thai"})
+    assert "@Nong speaks in a warm, clear, medium-pitch voice, fluent native Thai" in text
+    assert 'Dialogue: "สินเชื่อบ้านดอกเบี้ย"' in text and 'Dialogue: "โครงการนี้คือ"' in text
+
+
+# The scene-1 prompt of live pack 20261020-122900-391.
+LIVE = ("Photorealistic vertical 9:16 frame of the same 28-year-old Korean woman with long "
+        "straight dark hair, fair skin, a cute and cheerful face, small silver stud earrings, and a "
+        "soft mint green cardigan over a white blouse, standing in a bright minimalist bathroom "
+        "looking into a rounded wall mirror and speaking directly to camera with a curious, honest "
+        "expression, skincare bottles softly blurred on a stone shelf behind her, warm soft vanity "
+        "lighting, clean modern tile, natural skin texture, shallow depth of field, clean center "
+        "composition for text overlay, no text, no watermark, no UI, no split-screen")
+LIVE_LOCK = ("the same 28-year-old Korean woman with long straight dark hair, fair skin, a cute and "
+             "cheerful face, small silver stud earrings, and a soft mint green cardigan over a white blouse")
+
+
+def test_scene_text_cuts_a_real_prompt_to_one_sentence():
+    assert storyboard.scene_text(LIVE, LIVE_LOCK, "@Minjee") == (
+        "@Minjee standing in a bright minimalist bathroom looking into a rounded wall mirror and "
+        "speaking directly to camera with a curious, honest expression, skincare bottles softly "
+        "blurred on a stone shelf behind her, warm soft vanity lighting, clean modern tile, natural "
+        "skin texture, shallow depth of field.")
+    close = LIVE.replace("9:16 frame of", "9:16 close-up frame of")
+    assert storyboard.scene_text(close, LIVE_LOCK, "@Minjee").startswith("Close-up frame of @Minjee standing")
+    assert storyboard.character_line("@Minjee", LIVE_LOCK).startswith(
+        "@Minjee is a 28-year-old Korean woman with long straight dark hair")
 
 
 def test_markdown_without_a_character_has_no_tag(monkeypatch):
@@ -77,7 +121,7 @@ def test_markdown_without_a_character_has_no_tag(monkeypatch):
     fake_model(monkeypatch, [plain])
     result = asyncio.run(storyboard.for_studio(SCRIPT, [1], {1: 1}, choice=storyboard.NONE))
     text = storyboard.studio_markdown(result, "")
-    assert "CHARACTERS" not in text and "@" not in text
+    assert "Characters" not in text and "@" not in text and "Scene 1:\nBrass house key on a desk holds a key.\n" in text
 
 
 def test_english_character_rejects_thai(monkeypatch):

@@ -556,18 +556,30 @@ Details worth knowing:
   description, optional English, "created in Flow" tick, a default per
   channel). The bot translates the Thai once and caches the English in
   `/data/character_tags.json`, so the lock stays word for word across clips.
-  🤖 lets the model invent one, 🚫 means no person. `script.md` is English
-  only, holds no narration, and repeats the `@tag` and the full lock in every
-  scene.
+  🤖 lets the model invent one, 🚫 means no person. `script.md` is the short
+  shape Storyboard Studio's script box takes (2026-10-20; the old one, with the
+  full lock, ratio and negatives repeated in every scene, was too long to
+  paste): `Story Title:` (the model's `title_en`, left out if missing or Thai),
+  `Characters:` (`@Tag is a …`, the lock without "the same"), and per scene
+  `Scene N:`, one sentence cut from the image prompt (lock → `@tag`,
+  boilerplate stripped, `storyboard.scene_text()`) and `Dialogue: none. …`.
+  English only. Shot lengths are not in it; the pack message and page say them.
+  Face consistency rests on the Characters block and the `@tag` Asset Profile.
 - **✂️ ย่อการ์ดยาว** sends the script back to review with the long Cards
-  named. The bot never rewrites approved text; you type the feedback. The
-  Fact sheet and hook variant come back with it.
+  named; you type the feedback. The Fact sheet and hook variant come back with
+  it. Apart from 🗣 lines (below), the bot never rewrites approved text.
 - **The take is reused only while it still fits.** A `/say` change since 🎞,
   a missing file, or a script with another Card count means the renderer
   speaks again and says the cut may drift slightly.
 - **A 🎬 Card with no footage stops the render** and says which one. It is
   never filled from Pexels quietly. If the bot is busy when the footage is
   ready, it posts a 🎬 render Studio button instead.
+- **A pack is claimable once it is on disk.** Its token goes into
+  `clip_wait.versions` right after `pack.json` is written, before anything is
+  sent; a failed `script.md` send is logged and the pack message still goes
+  out. On 2026-10-20 a `ConnectTimeout` there left the page showing v3 while
+  the bot ignored its 55 MB export. Startup also re-registers a pack on disk
+  that the state lost (`adopt_written_pack()`).
 - **One pack at a time.** A second 🎞 on another script is refused while one
   waits. 📋 shares the same slot (see above). The refusal carries **🗑 ทิ้ง
   pack เดิม แล้วทำอันนี้**: it writes the old clip off and builds the pack for
@@ -606,12 +618,23 @@ needs a character (🚫 refuses it).
   (measured on a real 6-shot export, 2026-10-19). A Card whose take runs
   ≤ 6.3 s (`SPEAK_MAX_TAKE_SECONDS`) gets an 8 s shot and a longer one a
   **10 s** shot. 6.3 s is the observed edge (speech ran to ~7.9 s of 8), not
-  a margin, and the 10 s limit is scaled from it, never measured. The pack message lists which Cards to set to 10 s in Flow
-  and warns about any Card too long even for that (press ✂️ first). The
-  export length is the sum of those, not `shots × 8`.
-- **`script.md` changes shape**: a STYLE line that says the character speaks,
-  a `VOICE:` line, and a `DIALOGUE (Thai): "…"` line per scene, written in
-  from the Script after validation. The model's own prompts still never hold
+  a margin, and the 10 s limit (7.875 s of take, `studio.SPEAK_FIT`) is scaled
+  from it. Exports of 2026-10-20 agree from the other side: Veo covered
+  9.5–9.8 s of take in its 10 s shot and cut the rest off mid-word. The pack
+  message lists which Cards to set to 10 s in Flow. The export length is the
+  sum of those, not `shots × 8`.
+- **Lines too long for 10 s are shortened by the bot** (`main.fit_speech()`,
+  `script.condense()`): before planning, every speaking Flow Card over the fit
+  goes to mimo in one call with a budget of `units × 7.875 × 0.92 / span`
+  (Thai characters without spaces, English words). An answer over budget, with
+  a number the original lacked, or with Latin/hyphen in Thai `spoken` is sent
+  back once. The take is then re-spoken and re-measured, two rounds at most.
+  The shorter `narration`/`spoken` replace the Card's in the waiting Script,
+  so captions follow what the character says; `lines` stay. The pack message
+  shows each new line. A failure keeps the old lines with the ⚠️ / ✂️ warning.
+  Turning 🗣 off afterwards keeps the shorter lines.
+- **`script.md` carries the speech**: a voice sentence under Characters and
+  `Dialogue: "…"` per scene, written in from the Script after validation. The model's own prompts still never hold
   Thai, and `motion` is the camera move alone.
 - **The pack page's per-shot prompt** becomes just the line, lip sync and the
   camera: `Speaks in Thai: "…" Natural lip movement. Gentle push in. No

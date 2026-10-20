@@ -53,8 +53,15 @@ def bot(tmp_path, monkeypatch):
         return None
 
     async def narration(script, locale, clip_id):
+        # A line condense() shortened (" ย่อ") is spoken in 7.5s, not 9.0s.
+        short = script["cards"][1]["narration"].endswith(" ย่อ")
         return {"audio": "x", "starts": [0.0, 7.0, 16.0], "total": 24.0,
-                "spans": [7.0, 9.0, 8.2], "say": ""}
+                "spans": [7.0, 7.5 if short else 9.0, 8.2], "say": ""}
+
+    async def condense(cards, targets, locale):
+        sent.append(("condense", dict(targets)))
+        return {c: {"narration": cards[c]["narration"] + " ย่อ",
+                    "spoken": cards[c]["spoken"] + " ย่อ"} for c in targets}
 
     async def board(script, pending, shots, **kwargs):
         sent.append(("board", kwargs, pending))
@@ -73,6 +80,7 @@ def bot(tmp_path, monkeypatch):
     monkeypatch.setattr(main, "spawn", lambda coro, label: SPAWNED.append(coro))
     monkeypatch.setattr(studio, "prepare_narration", narration)
     monkeypatch.setattr(storyboard, "for_studio", board)
+    monkeypatch.setattr(main.script_gen, "condense", condense)
     return sent
 
 
@@ -92,7 +100,7 @@ def test_studio_button_builds_a_hook_pack_and_frees_the_bot(bot):
     pack = studio.read_pack(CLIP)
     assert pack["token"] == token and pack["total_shots"] == 1 and pack["credits"] == 12
     doc = next(item for item in bot if item[0] == "doc")
-    assert "[SCENE 1]" in doc[1] and "@Lead" in doc[1]
+    assert "Scene 1:\n@Lead at a desk." in doc[1] and LOCK not in doc[1].split("Scene 1:")[1]
     message = next(item for item in bot if item[0] == "say" and "Studio pack" in item[1])
     assert "https://nas.example/storyboard/" + CLIP in message[1]
 
@@ -517,19 +525,47 @@ def test_speak_toggle_plans_one_shot_per_card_with_a_10s_shot_for_long_cards(bot
     wait = state["clip_wait"]
     assert wait["speak"] is True
     assert [item for item in bot if item[0] == "board"][-1][1]["speak"] is True
+    # Card 2's 9.0s take is past the 7.875s a 10s shot holds: only it is
+    # condensed (Pexels card 3 at 8.2s is not), with a budget at its pace:
+    # 4 characters * 7.875 * 0.92 / 9.0.
+    assert [item[1] for item in bot if item[0] == "condense"] == [{1: 3}]
+    assert wait["script"]["cards"][1]["narration"] == "พูด 1 ย่อ" and wait["spans"][1] == 7.5
     pack = studio.read_pack(CLIP)
-    # spans 7.0 / 9.0: both over the 8s budget, card 2 past 10s too.
     assert pack["shots"] == {"0": 1, "1": 1} and pack["seconds"] == {"0": 10.0, "1": 10.0}
     assert pack["length"] == 20.0 and pack["speak"] is True
     assert pack["scenes"][0]["animate"] == (
         'Speaks in Thai: "พูด 0" Natural lip movement. slow push in. '
         "No subtitles, no on-screen text, no background music.")
+    assert pack["scenes"][1]["narration"] == "พูด 1 ย่อ"
     message = [item for item in bot if item[0] == "say" and "Studio pack" in item[1]][-1][1]
-    assert "🗣" in message and "ตั้ง shot 10 วิ" in message and "การ์ด 2 ยาวเกิน 10 วิ" in message
+    assert "🗣" in message and "ตั้ง shot 10 วิ" in message
+    assert "✂️ ย่อการ์ด 2 (7.5 วิ): พูด 1 ย่อ" in message and "น่าจะพูดไม่จบ" not in message
     doc = [item for item in bot if item[0] == "doc"][-1][1]
-    assert 'DIALOGUE (Thai): "พูด 0"' in doc and "10 seconds." in doc and "No dialogue" not in doc
+    assert 'Dialogue: "พูด 0"' in doc and 'Dialogue: "พูด 1 ย่อ"' in doc
+    assert "speaks in a warm, clear" in doc and "Dialogue: none" not in doc
     version = wait["versions"][pack["token"]]
     assert version["speak"] is True and version["seconds"] == {"0": 10.0, "1": 10.0}
+    # Replanning a fitted pack does not condense again.
+    run(main.publish_pack(None, state))
+    assert len([item for item in bot if item[0] == "condense"]) == 1
+    assert studio.read_pack(CLIP)["version"] == 3
+
+
+def test_a_failed_condense_keeps_the_lines_and_the_warning(bot, monkeypatch):
+    async def broken(cards, targets, locale):
+        raise main.script_gen.ScriptError("ย่อบทพูดไม่สำเร็จ: timeout")
+
+    monkeypatch.setattr(main.script_gen, "condense", broken)
+    state = review_state()
+    run(main.on_studio(None, state))
+    state["clip_wait"]["sources"] = ["flow", "flow", "pexels"]
+    run(main.on_studio_callback(None, state, f"sts:{CLIP}"))
+    wait = state["clip_wait"]
+    assert wait["script"]["cards"][1]["narration"] == "พูด 1" and wait["spans"][1] == 9.0
+    assert any("ย่อบทพูดไม่สำเร็จ" in item[1] for item in bot if item[0] == "say")
+    message = [item for item in bot if item[0] == "say" and "Studio pack" in item[1]][-1][1]
+    assert "การ์ด 2 ยาวเกิน 10 วิ" in message
+    assert studio.read_pack(CLIP)["speak"] is True
 
 
 def test_speak_needs_a_character(bot, monkeypatch):
@@ -750,3 +786,27 @@ def test_a_nobody_default_starts_the_pack_without_a_character(bot):
     state = review_state()
     run(main.on_studio(None, state))
     assert state["clip_wait"]["choice"] == "none" and state["clip_wait"]["speak"] is False
+
+
+def test_a_failed_script_md_send_still_registers_the_version(bot, monkeypatch):
+    async def timeout(client, path, caption="", **extra):
+        raise main.httpx.ConnectTimeout("")
+
+    monkeypatch.setattr(main, "send_document", timeout)
+    state = review_state()
+    run(main.on_studio(None, state))
+    pack = studio.read_pack(CLIP)
+    version = state["clip_wait"]["versions"][pack["token"]]
+    assert version["pending"] == [0] and version["message_ids"] == [version["message_id"]]
+    assert any("Studio pack" in item[1] for item in bot if item[0] == "say")
+
+
+def test_startup_adopts_a_pack_written_but_never_registered(bot):
+    state = review_state()
+    run(main.on_studio(None, state))
+    wait = state["clip_wait"]
+    token = studio.read_pack(CLIP)["token"]
+    wait["versions"].pop(token)
+    assert main.adopt_written_pack(wait) is True
+    assert wait["versions"][token]["pending"] == [0] and wait["versions"][token]["shots"] == {"0": 1}
+    assert main.adopt_written_pack(wait) is False

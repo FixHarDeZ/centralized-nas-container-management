@@ -34,6 +34,12 @@ TOLERANCE = 0.5    # export length vs shots × 8
 SPEAK_LONG_SHOT = 10.0
 VOICE_RATE = 24000  # the edge-tts take's own rate, so the concat needs no resample
 SPEAK_MAX_TAKE = float(os.environ.get("SPEAK_MAX_TAKE_SECONDS", "6.3"))
+# The longest take a 10s speaking shot holds, at the same edge. Exports of
+# 2026-10-20 agree from the other side: Veo covered 9.5-9.8s of take in its
+# 10s shot and cut the rest of the line off.
+SPEAK_FIT = SPEAK_MAX_TAKE * SPEAK_LONG_SHOT / SHOT_SECONDS
+# condense() aims under the edge, so the re-measured take lands inside it.
+SPEAK_AIM = 0.92
 TOKEN = re.compile(r"^[a-f0-9]{12}$")
 CLIP_ID = re.compile(r"^\d{8}-\d{6}-\d{3}(-\d+)?$")  # manifest.start bumps a collision to `-<n>`
 
@@ -76,7 +82,12 @@ def speak_seconds(span: float) -> float:
 
 
 def speak_too_long(span: float) -> bool:
-    return span > SPEAK_MAX_TAKE * SPEAK_LONG_SHOT / SHOT_SECONDS
+    return span > SPEAK_FIT + 1e-9
+
+
+def speech_budget(units: int, span: float) -> int:
+    """How much of a line one 10s shot holds, at the pace its take was spoken."""
+    return max(1, math.floor(units * SPEAK_FIT * SPEAK_AIM / span))
 
 
 def footage_seconds(shots: dict[int, int], seconds: dict[int, float] | None = None) -> dict[int, float]:

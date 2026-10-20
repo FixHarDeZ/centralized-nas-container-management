@@ -1696,13 +1696,57 @@ async def publish_pack(client: httpx.AsyncClient, state: dict) -> None:
         save_state(state)
 
 
+async def fit_speech(client: httpx.AsyncClient, state: dict, wait: dict,
+                     pending: list[int]) -> list[int]:
+    """Shorten every speaking Flow Card whose line will not fit one 10s shot.
+
+    Veo cuts a line off mid-word at the end of its shot (2026-10-20: all six
+    Cards of one pack, 9.4-13.5s takes, stopped two-thirds to three-quarters
+    in). So the bot rewrites those lines itself — the one place it changes an
+    approved Script — and re-speaks the take to measure them, two rounds at
+    most. The Script in `wait` is what renders, so captions follow the shorter
+    line. Pexels Cards keep the take and are never touched. A failure keeps the
+    old lines and the ✂️ warning. Returns the Cards it shortened.
+    """
+    done: list[int] = []
+    locale = wait["locale"]
+    for _ in range(2):
+        over = [c for c in pending if studio.speak_too_long(wait["spans"][c])]
+        if not over:
+            break
+        cards = wait["script"]["cards"]
+        targets = {c: studio.speech_budget(script_gen.speech_units(cards[c]["spoken"], locale),
+                                           wait["spans"][c]) for c in over}
+        await say(client, f"✂️ บทพูดการ์ด {', '.join(str(c + 1) for c in over)} ยาวเกิน 10 วิ "
+                          "— กำลังย่อให้พูดทัน แล้วอัดเสียงวัดใหม่ (~2-4 นาที)")
+        try:
+            shorter = await script_gen.condense(cards, targets, locale)
+            script = json.loads(json.dumps(wait["script"]))
+            for c, text in shorter.items():
+                card = script["cards"][c]
+                card.update(text)
+                card["pronunciation_checks"] = [
+                    check for check in card.get("pronunciation_checks") or []
+                    if check.get("term") in card["narration"] and check.get("spoken") in card["spoken"]]
+            meta = await studio.prepare_narration(script, locale, wait["clip_id"])
+        except Exception as exc:
+            logger.exception("condensing speaking lines failed")
+            await say(client, f"ย่อบทพูดไม่สำเร็จ: {exc}\nใช้บทเดิมไปก่อน (กด ✂️ ย่อเองได้)")
+            break
+        wait.update(script=script, spans=meta["spans"])
+        save_state(state)
+        done += [c for c in shorter if c not in done]
+    return done
+
+
 async def _publish_version(client: httpx.AsyncClient, state: dict, wait: dict,
                            pending: list[int]) -> None:
-    clip_id, script, card_spans = wait["clip_id"], wait["script"], wait["spans"]
     speak = bool(wait.get("speak"))
+    shortened = await fit_speech(client, state, wait, pending) if speak else []
+    clip_id, script, card_spans = wait["clip_id"], wait["script"], wait["spans"]
     if speak:
         # One shot per speaking Card: a line split across shots has no safe
-        # cut point in Thai, and a too-long Card is ✂️'s job.
+        # cut point in Thai, and fit_speech() already shortened what it could.
         shots = {c: 1 for c in pending}
         seconds = {c: studio.speak_seconds(card_spans[c]) for c in pending}
     else:
@@ -1744,8 +1788,24 @@ async def _publish_version(client: httpx.AsyncClient, state: dict, wait: dict,
                    for i, s in enumerate(board["scenes"])],
     }
     studio.write_pack(clip_id, pack, markdown)
-    doc = await send_document(client, studio.root(clip_id) / "script.md",
-                              f"script.md — pack v{pack['version']}")
+    # Registered the moment the pack is on disk: the dashboard page shows it
+    # from then on, and an export whose token is missing here sits in the inbox
+    # unclaimed. 2026-10-20: sendDocument hit ConnectTimeout after the write,
+    # the page showed v3, and its 55 MB export was ignored without a word.
+    wait["versions"][token] = {"message_id": None, "message_ids": [], "pending": pending,
+                               "shots": pack["shots"], "seconds": pack["seconds"], "speak": speak}
+    # Only the newest few versions can still be answered: an export of an
+    # older shot map would be cut on the wrong boundaries.
+    for stale in list(wait["versions"])[:-5]:
+        wait["versions"].pop(stale, None)
+    save_state(state)
+    try:
+        doc = await send_document(client, studio.root(clip_id) / "script.md",
+                                  f"script.md — pack v{pack['version']}")
+    except httpx.HTTPError:
+        # The page has the same file; the pack message below still goes out.
+        logger.exception("sending script.md failed")
+        doc = None
     flow_cards = ", ".join(str(c + 1) for c in pending)
     if speak:
         long_cards = [c for c in pending if seconds[c] > studio.SHOT_SECONDS]
@@ -1754,6 +1814,8 @@ async def _publish_version(client: httpx.AsyncClient, state: dict, wait: dict,
                      f"≈ {pack['credits']}+ เครดิต\n"
                      + (f"ตั้ง shot 10 วิ ใน Flow: การ์ด {', '.join(str(c + 1) for c in long_cards)} "
                         "(ที่เหลือ 8 วิ)\n" if long_cards else "ทุก shot 8 วิ\n")
+                     + "".join(f"✂️ ย่อการ์ด {c + 1} ({card_spans[c]:.1f} วิ): "
+                               f"{script['cards'][c]['narration']}\n" for c in shortened)
                      + (f"⚠️ การ์ด {', '.join(str(c + 1) for c in too_long)} ยาวเกิน 10 วิ "
                         "น่าจะพูดไม่จบ — กด ✂️ ย่อก่อนเจน\n" if too_long else ""))
     else:
@@ -1770,15 +1832,29 @@ async def _publish_version(client: httpx.AsyncClient, state: dict, wait: dict,
         reply_markup=studio_keyboard(wait),
     )
     # Both messages take a reply: the human answers whichever is on screen.
-    wait["versions"][token] = {"message_id": (sent or {}).get("message_id"),
-                               "message_ids": [m for m in ((doc or {}).get("message_id"),
-                                                           (sent or {}).get("message_id")) if m],
-                               "pending": pending, "shots": pack["shots"],
-                               "seconds": pack["seconds"], "speak": speak}
-    # Only the newest few versions can still be answered: an export of an
-    # older shot map would be cut on the wrong boundaries.
-    for stale in list(wait["versions"])[:-5]:
-        wait["versions"].pop(stale, None)
+    wait["versions"][token].update(
+        message_id=(sent or {}).get("message_id"),
+        message_ids=[m for m in ((doc or {}).get("message_id"), (sent or {}).get("message_id")) if m])
+
+
+def adopt_written_pack(wait: dict) -> bool:
+    """Re-register the pack on disk if the bot lost it between write and register.
+
+    The dashboard serves whatever pack.json holds, so its token must be
+    claimable; bots before 2026-10-20 registered it only after sending.
+    """
+    pack = studio.read_pack(wait.get("clip_id") or "") or {}
+    token = pack.get("token")
+    versions = wait.setdefault("versions", {})
+    if not token or token in versions or not pack.get("pending"):
+        return False
+    versions[token] = {"message_id": None, "message_ids": [], "pending": pack["pending"],
+                       "shots": pack["shots"], "seconds": pack.get("seconds") or {},
+                       "speak": bool(pack.get("speak"))}
+    for stale in list(versions)[:-5]:
+        versions.pop(stale, None)
+    logger.warning("adopted unregistered studio pack %s v%s", token, pack.get("version"))
+    return True
 
 
 async def on_studio_callback(client: httpx.AsyncClient, state: dict, data: str,
@@ -1869,7 +1945,11 @@ async def mark_pack_busy(client: httpx.AsyncClient, query: dict | None, wait: di
 
 
 async def shorten_cards(client: httpx.AsyncClient, state: dict, wait: dict) -> None:
-    """✂️: back to review with the long Cards named. The bot never rewrites approved text."""
+    """✂️: back to review with the long Cards named, for the human to rewrite.
+
+    The one rewrite the bot makes itself is fit_speech(), for 🗣 lines a Flow
+    shot would cut off; everything else stays the human's words.
+    """
     if state.get("mode", "idle") != "idle":
         await say(client, st.busy_note(state.get("mode", "idle"))
                   if state.get("mode") in st.HOLDING_MODES
@@ -3174,6 +3254,8 @@ async def main() -> None:
         # An export claimed but not yet cut died with the process; without
         # this it sits as `.taken` until the wait expires and nobody is told.
         wait = state["clip_wait"]
+        adopt_written_pack(wait)
+        save_state(state)
         studio.unclaim_inbox(set(wait.get("versions") or {}) - set(wait.get("uneven") or {}))
     shop_recovered = st.recover_shop(state)
     if shop_recovered:
