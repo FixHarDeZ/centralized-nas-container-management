@@ -520,8 +520,16 @@ assembles the Short itself. `docs/adr/0016` has the reasoning.
 2. It posts a **pack**: `script.md` as a document, and a message with the shot
    count, the estimated credits and a link to the pack page. Under it, one
    toggle per Card (🎬 Flow / 🖼 Pexels), a character row, ✅ Pexels ทั้งหมด
-   and ✂️ ย่อการ์ดยาว. The default is the hook on Flow and everything else on
-   Pexels; the rule (`hook`, `none` or `all`) is set in `/settings`.
+   and ✂️ ย่อการ์ดยาว. Every tap replans the pack (about a minute), so the
+   starting point comes from the **ค่าเริ่มต้นของ Studio pack 🎞** card on
+   `/settings`:
+   - **Character.** Set ⭐ on a library row, or pick 🤖 (invent a new one) or
+     🚫 (nobody). TH is set with these radios and EN has its own select.
+     Stored as `defaults.<channel>`: an id, `none`, or `""`.
+   - **Footage rule.** `hook` (hook on Flow, the rest on Pexels, the
+     default), `none`, or `all`.
+   - **🗣 on from the start** (`speak`). Saving it together with a 🚫 default
+     is rejected, and a 🚫 channel starts with it off.
 3. Each Flow Card gets `ceil((span + 0.5) / 8)` shots of 8 s. Every tap
    publishes a new pack version with its own token; only the newest 5 still
    accept an export, because an older shot map cuts on the wrong boundaries.

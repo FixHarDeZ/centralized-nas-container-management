@@ -732,3 +732,21 @@ def test_pack_back_is_refused_once_the_clip_rendered_even_without_an_upload(bot)
     run(main.on_studio_callback(None, state, f"stb:{clip_id}"))
     assert state["clip_wait"]["clip_id"] == clip_id and state["mode"] == "idle"
     assert "render ไปแล้ว" in bot[-1][1]
+
+
+def test_a_pack_starts_from_the_dashboard_defaults(bot):
+    characters.save({"characters": [{"id": "nong", "tag": "@Nong", "thai": "ผู้หญิงไทย",
+                                     "english": LOCK}],
+                     "defaults": {"th": "nong"}, "footage": "all", "speak": True})
+    state = review_state()
+    run(main.on_studio(None, state))
+    wait = state["clip_wait"]
+    assert wait["choice"] == "nong" and wait["speak"] is True
+    assert wait["sources"] == ["flow", "flow", "flow"]
+
+
+def test_a_nobody_default_starts_the_pack_without_a_character(bot):
+    characters.save({"characters": [], "defaults": {"th": "none"}, "footage": "hook"})
+    state = review_state()
+    run(main.on_studio(None, state))
+    assert state["clip_wait"]["choice"] == "none" and state["clip_wait"]["speak"] is False

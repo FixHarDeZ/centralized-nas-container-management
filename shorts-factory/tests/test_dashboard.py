@@ -441,3 +441,25 @@ def test_the_pack_page_upload_script_is_served(client):
     got = client.get("/static/studio.js")
     assert got.status_code == 200
     assert "/shop/api/studio-inbox/" in got.text
+
+
+def test_star_on_a_row_makes_it_the_studio_default(client, config_dir):
+    # row:<n> — a row added on this very save has no id in the page yet.
+    reply = client.post("/settings", data=settings_form_data(
+        char_1_id="mint", char_1_tag="@Mint", char_1_thai="ผู้ชายไทย 30 ปี",
+        default_th="row:1", studio_speak="on", footage="all"))
+    assert reply.status_code == 200
+    saved = json.loads((config_dir / "characters.json").read_text(encoding="utf-8"))
+    assert saved["defaults"]["th"] == "mint"
+    assert saved["speak"] is True and saved["footage"] == "all"
+    page = client.get("/settings").text
+    assert 'value="row:1" checked' in page and 'name="studio_speak" checked' in page
+
+
+def test_studio_default_can_be_nobody_but_not_with_speak(client, config_dir):
+    assert client.post("/settings", data=settings_form_data(default_th="none")).status_code == 200
+    saved = json.loads((config_dir / "characters.json").read_text(encoding="utf-8"))
+    assert saved["defaults"]["th"] == "none"
+    reply = client.post("/settings", data=settings_form_data(default_th="none", studio_speak="on"))
+    assert reply.status_code == 400
+    assert json.loads((config_dir / "characters.json").read_text(encoding="utf-8"))["speak"] is False

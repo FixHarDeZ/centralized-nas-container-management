@@ -19,6 +19,8 @@ from pathlib import Path
 CHANNELS = ("th", "en", "shop")
 FLOW, PEXELS = "flow", "pexels"
 RULES = ("hook", "none", "all")
+# A channel default meaning "nobody on camera" — the pack's 🚫 button.
+NONE = "none"
 MAX_CHARACTERS = 10
 
 ID = re.compile(r"^[a-z0-9][a-z0-9_-]{0,19}$")
@@ -35,7 +37,8 @@ def _cache_path() -> Path:
 
 
 def _empty() -> dict:
-    return {"characters": [], "defaults": {c: "" for c in CHANNELS}, "footage": "hook"}
+    return {"characters": [], "defaults": {c: "" for c in CHANNELS}, "footage": "hook",
+            "speak": False}
 
 
 def validate(payload: dict) -> dict:
@@ -72,12 +75,16 @@ def validate(payload: dict) -> dict:
                     "flow_ready": bool(row.get("flow_ready"))})
     defaults = {c: str((payload.get("defaults") or {}).get(c, "") or "") for c in CHANNELS}
     for channel, cid in defaults.items():
-        if cid and cid not in seen:
+        if cid and cid != NONE and cid not in seen:
             raise ValueError(f"ค่าเริ่มต้นช่อง {channel} ชี้ตัวละคร '{cid}' ที่ไม่มีอยู่")
     rule = str(payload.get("footage", "hook") or "hook")
     if rule not in RULES:
         raise ValueError(f"กติกา footage '{rule}' ไม่รู้จัก")
-    return {"characters": out, "defaults": defaults, "footage": rule}
+    speak = bool(payload.get("speak"))
+    if speak and NONE in (defaults["th"], defaults["en"]):
+        # 🗣 needs someone on camera to say the line; the pack refuses the pair too.
+        raise ValueError("🗣 ตัวละครพูดเอง ใช้กับ 🚫 ไม่มีตัวละครไม่ได้ — เลือกตัวละครหรือปิด 🗣")
+    return {"characters": out, "defaults": defaults, "footage": rule, "speak": speak}
 
 
 def stored() -> dict:
@@ -110,8 +117,13 @@ def get(cid: str) -> dict | None:
 
 
 def default_for(channel: str) -> str:
+    """A library id, NONE, or "" for a character the model invents."""
     cid = stored()["defaults"].get(channel, "")
-    return cid if cid and get(cid) else ""
+    return cid if cid == NONE or (cid and get(cid)) else ""
+
+
+def default_speak() -> bool:
+    return stored()["speak"]
 
 
 def default_sources(count: int) -> list[str]:
@@ -129,7 +141,7 @@ def from_form(form) -> dict:
     A row with text but no id is kept, so `validate()` rejects it ("ต้องใส่ id")
     and the page redraws it: dropping it would lose a typed character silently.
     """
-    rows, n = [], 0
+    rows, n, ids = [], 0, {}
     while f"char_{n}_id" in form:
         row = {"id": str(form.get(f"char_{n}_id", "")).strip(),
                "tag": str(form.get(f"char_{n}_tag", "")).strip(),
@@ -138,10 +150,17 @@ def from_form(form) -> dict:
                "flow_ready": bool(form.get(f"char_{n}_ready"))}
         if row["id"] or row["tag"] or row["thai"] or row["english"]:
             rows.append(row)
+        ids[f"row:{n}"] = row["id"]
         n += 1
-    return {"characters": rows,
-            "defaults": {c: str(form.get(f"default_{c}", "")) for c in CHANNELS},
-            "footage": str(form.get("footage", "hook"))}
+    # ⭐ on a row posts `row:<n>`, not the id: the row being added has no id
+    # in the page yet, and a renamed one would point at its old id.
+    defaults = {}
+    for c in CHANNELS:
+        value = str(form.get(f"default_{c}", ""))
+        defaults[c] = ids.get(value, "") if value.startswith("row:") else value
+    return {"characters": rows, "defaults": defaults,
+            "footage": str(form.get("footage", "hook")),
+            "speak": bool(form.get("studio_speak"))}
 
 
 def _key(character: dict) -> str:

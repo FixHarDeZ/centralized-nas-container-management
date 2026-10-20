@@ -25,9 +25,22 @@
 <div class="field"><label for="char-{{ loop.index0 }}-thai">ลักษณะ (ไทย)</label><input id="char-{{ loop.index0 }}-thai" name="char_{{ loop.index0 }}_thai" value="{{ c.thai }}" placeholder="ผู้หญิงไทย 28 ปี ผมบ๊อบสีดำ แว่นกลม เสื้อเชิ้ตลินินสีเบจ"></div>
 <div class="field"><label for="char-{{ loop.index0 }}-english">English (ไม่บังคับ)</label><input id="char-{{ loop.index0 }}-english" name="char_{{ loop.index0 }}_english" value="{{ c.english }}"></div>
 <label class="toggle" for="char-{{ loop.index0 }}-ready"><input id="char-{{ loop.index0 }}-ready" type="checkbox" name="char_{{ loop.index0 }}_ready"{% if c.flow_ready %} checked{% endif %}><span>สร้าง Asset Profile ใน Flow แล้ว</span></label>
+<label class="toggle" for="char-{{ loop.index0 }}-default"><input id="char-{{ loop.index0 }}-default" type="radio" name="default_th" value="row:{{ loop.index0 }}"{% if c.id and library.defaults.th == c.id %} checked{% endif %}><span>⭐ ตัวละครเริ่มต้นของ Studio pack ใหม่</span></label>
 </fieldset>{% endfor %}
-<div class="form-grid">{% for ch in channels %}<div class="field"><label for="default-{{ ch }}">ตัวละครเริ่มต้นช่อง {{ ch|upper }}</label><select id="default-{{ ch }}" name="default_{{ ch }}"><option value="">🤖 ให้บอทแต่ง</option>{% for c in library.characters %}<option value="{{ c.id }}"{% if library.defaults[ch] == c.id %} selected{% endif %}>{{ c.tag }}</option>{% endfor %}</select></div>{% endfor %}
-<div class="field"><label for="footage-rule">แหล่งภาพเริ่มต้นของแต่ละการ์ด</label><select id="footage-rule" name="footage">{% for value, label in [('hook', 'hook = Flow, ที่เหลือ Pexels'), ('none', 'Pexels ทั้งหมด'), ('all', 'Flow ทั้งหมด')] %}<option value="{{ value }}"{% if library.footage == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div></div>
+</section>
+<section class="card model-settings" id="studio-defaults"><div class="card-head"><h2>ค่าเริ่มต้นของ Studio pack 🎞</h2>{{ icon('check') }}</div>
+<p class="muted small">ใช้ตอนกด 🎞 ทุกครั้ง — ตั้งให้ตรงกับที่ใช้บ่อย จะได้ไม่ต้องกดเปลี่ยนบน pack (กดแต่ละครั้ง = วาง pack ใหม่ ~1 นาที)</p>
+<fieldset class="card channel-settings"><legend>ตัวละคร (ช่อง TH)</legend>
+<p class="muted small">⭐ ที่แถวตัวละครด้านบน = ใช้คนนั้นทุกครั้ง หรือเลือกอย่างใดอย่างหนึ่งข้างล่าง</p>
+<label class="toggle" for="default-th-auto"><input id="default-th-auto" type="radio" name="default_th" value=""{% if not library.defaults.th %} checked{% endif %}><span>🤖 ให้บอทแต่งตัวละครใหม่ทุกครั้ง</span></label>
+<label class="toggle" for="default-th-none"><input id="default-th-none" type="radio" name="default_th" value="none"{% if library.defaults.th == 'none' %} checked{% endif %}><span>🚫 ไม่มีตัวละคร</span></label>
+</fieldset>
+<div class="form-grid">
+<div class="field"><label for="default-en">ตัวละครเริ่มต้นช่อง EN</label><select id="default-en" name="default_en"><option value="">🤖 ให้บอทแต่ง</option><option value="none"{% if library.defaults.en == 'none' %} selected{% endif %}>🚫 ไม่มีตัวละคร</option>{% for c in library.characters %}<option value="{{ c.id }}"{% if library.defaults.en == c.id %} selected{% endif %}>{{ c.tag }}</option>{% endfor %}</select></div>
+<div class="field"><label for="footage-rule">แหล่งภาพเริ่มต้นของแต่ละการ์ด</label><select id="footage-rule" name="footage">{% for value, label in [('hook', '🎬 hook = Flow, ที่เหลือ 🖼 Pexels'), ('none', '🖼 Pexels ทั้งหมด'), ('all', '🎬 Flow ทั้งหมด')] %}<option value="{{ value }}"{% if library.footage == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+</div>
+{% for ch in channels if ch not in ('th', 'en') %}<input type="hidden" name="default_{{ ch }}" value="{{ library.defaults[ch] }}">{% endfor %}
+<label class="toggle" for="studio-speak"><input id="studio-speak" type="checkbox" name="studio_speak"{% if library.speak %} checked{% endif %}><span>🗣 ตัวละครพูดเอง (เปิดไว้ตั้งแต่แรก — ใช้กับ 🚫 ไม่มีตัวละครไม่ได้)</span></label>
 </section>
 <div class="settings-actions"><button class="primary" type="submit">{{ icon('check') }} บันทึกการตั้งค่า</button><p>มีผลกับคำขอถัดไป · ไม่ต้อง restart</p></div>
 </form>

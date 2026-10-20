@@ -1652,12 +1652,16 @@ async def on_studio(client: httpx.AsyncClient, state: dict) -> None:
         # to_idle() clears both, and ✂️ sends the Script back to review: a
         # rewrite there must keep its Fact sheet and its hook Variant.
         "research": state.get("research"), "style": state.get("style", ""),
+        # The dashboard's Studio defaults (/settings): every tap on the pack
+        # replans it for about a minute, so a pack should start the way most
+        # clips end up.
         "choice": characters.default_for(locale) or "auto",
         "sources": characters.default_sources(len(script["cards"])),
         "versions": {}, "uneven": {}, "busy": False,
         # 🗣: the character says each Flow Card's line on camera and that
         # audio is kept (docs/adr/0017). Off = the take speaks every Card.
-        "speak": False,
+        "speak": characters.default_speak()
+                 and characters.default_for(locale) != characters.NONE,
         # A queued 🌏 half belongs to this clip, not to whatever renders next
         # while Flow is being shot — same reason on_flow() parks it.
         "pair": state.pop("pair", None),
