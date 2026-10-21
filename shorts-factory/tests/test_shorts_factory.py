@@ -3160,6 +3160,32 @@ def test_each_finished_clip_keeps_its_own_upload_button(monkeypatch, tmp_path):
     assert first["locale"] == "th" and first["script"]["title"] == "ทดสอบ"
 
 
+def test_a_clip_telegram_refuses_still_gets_its_upload_button(monkeypatch, tmp_path):
+    """A 62-second clip came out at 57 MB, over the bot API's 50 MB, and the
+    button rode on the video message that never arrived (21/10)."""
+    sent = []
+
+    class RefusingBot:
+        async def send_video(self, path, caption, **kw):
+            return None
+
+        async def say(self, text, **kw):
+            sent.append((text, kw.get("reply_markup")))
+            return {"message_id": 7}
+
+    monkeypatch.setattr(main, "_bot", lambda client: RefusingBot())
+    clip = tmp_path / "big.mp4"
+    clip.write_bytes(b"x" * 2048)
+
+    reply = asyncio.run(main.send_video(
+        None, clip, "caption", reply_markup=main.upload_keyboard("clip-th")))
+
+    assert reply == {"message_id": 7}
+    (text, keyboard), = sent
+    assert "NAS" in text
+    assert keyboard["inline_keyboard"][0][0]["callback_data"] == "upload:clip-th"
+
+
 def test_an_upload_button_without_an_id_still_means_the_last_clip():
     """Buttons sent before ids travelled in the callback data are still live."""
     state = {"last_clip": "/tmp/a.mp4", "last_script": a_script(),

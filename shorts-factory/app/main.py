@@ -351,9 +351,19 @@ async def say(client: httpx.AsyncClient, text: str, **extra):
 
 async def send_video(client: httpx.AsyncClient, path: Path, caption: str, **extra) -> dict | None:
     sent = await _bot(client).send_video(path, caption, **extra)
-    if sent is None:
-        await say(client, "ส่งไฟล์เข้า Telegram ไม่ผ่าน แต่คลิปอยู่บน NAS แล้ว")
-    return sent
+    if sent is not None:
+        return sent
+    # Bots cannot send over 50 MB, and a long Clip gets there (62 s = 57 MB).
+    # Any buttons meant for the video go on this note instead, so the caller
+    # still gets a message id to retire them by — an upload button that rode
+    # on the refused video would otherwise be gone for good.
+    size = path.stat().st_size / 1_000_000 if path.exists() else 0
+    return await say(
+        client,
+        f"ส่งไฟล์เข้า Telegram ไม่ผ่าน ({size:.0f} MB, บอทส่งได้ไม่เกิน 50 MB)"
+        " แต่คลิปอยู่บน NAS แล้ว",
+        **({"reply_markup": extra["reply_markup"]} if "reply_markup" in extra else {}),
+    )
 
 
 async def send_document(client: httpx.AsyncClient, path: Path, caption: str = "", **extra) -> dict | None:
