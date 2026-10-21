@@ -237,3 +237,36 @@ Use `./scripts/deploy.sh -y`.
 - Verified: `bash -n` OK, dirty-guard passes on the pending `v0.21.6` bump. Not run end-to-end (would deploy).
 - Open: working tree still has uncommitted `HERMES_REF: v2026.9.24 -> v0.21.6` from an earlier run — not committed here.
 - Status: committed `803c63b` + pushed to `origin/main`. Not deployed (script-only change, no container impact).
+
+## 2026-10-21 — Chat tab "connection interrupted. Reconnecting..." loop
+
+**Symptom:** dashboard Chat tab stuck on "Chat connection interrupted. Reconnecting..." + side panel
+"could not connect". Opened via DSM RP `https://<domain>:15063`.
+
+**Root cause:** DSM Reverse Proxy entry "Hermes Dashboard" (15063 → localhost:5063) has
+`customize_headers: []` — no `Upgrade`/`Connection` headers, so every WebSocket (`/api/pty`,
+`/api/ws`, `/api/events`) arrives at hermes as a plain GET. HTTP side works (ws tickets minted
+dozens of times in `/opt/data/logs/dashboard-auth.log`) but no WS ever reaches the gate (zero
+`ws_ticket_rejected`). AI Desk entry has the headers; this one never did.
+
+**Proof (from NAS):** WS handshake to `localhost:5063/api/pty` → 403 (app gate, no ticket = expected);
+same handshake via `--resolve <domain>:15063:127.0.0.1` → 401 = identical to plain GET → upgrade stripped.
+
+**Fix (DSM UI, not file edit):** Control Panel → Login Portal → Advanced → Reverse Proxy →
+Hermes Dashboard → Edit → Custom Header → Create ▸ WebSocket; Advanced Settings → raise
+read/send timeout from 60 (idle PTY socket otherwise cut every 60 s). No repo change.
+- User applied WebSocket header + 86400 timeouts in DSM → side panel (`/api/ws`) went `live`.
+
+**Second cause — terminal still reconnects every ~3 s:** log shows `pty accepted ... cred=ticket`
+every 3 s then nothing. Spawn path: our Dockerfile never set `HERMES_TUI_DIR`, so
+`_make_tui_argv` runs `source_product_current()` with **PM's Node** (`/opt/data/tools/node-26.7.0`,
+downloaded into the volume per `pm/lock.json`), while the bundle receipt says node `22.23.2` →
+`scripts/build/freshness.mjs` prints `false` (with `/usr/local/bin/node` it prints `true`) → launcher
+runs `npm ci` in `/opt/hermes` → `EACCES` (tree owned by 10000, runtime hermes remapped to uid 1000
+via `HERMES_UID`) → uncaught `CalledProcessError` → socket dies → browser reconnects.
+
+**Fix (Dockerfile):** `ENV HERMES_TUI_DIR=/opt/hermes/ui-tui HERMES_NODE=/usr/local/bin/node` —
+upstream's own Dockerfile sets `HERMES_TUI_DIR` for exactly this (prebuilt-bundle fast path).
+Verified in new container: `_resolve_chat_argv` → `['/usr/local/bin/node','--expose-gc',
+'/opt/hermes/ui-tui/dist/entry.js']` instantly. Deployed (`deploy.sh -s hermes-agent -y`, ENV-only,
+all layers cached). User confirmed in browser: Chat tab terminal works, no reconnect loop. Committed + pushed to `main`.

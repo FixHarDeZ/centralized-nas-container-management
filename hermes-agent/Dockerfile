@@ -122,6 +122,16 @@ VOLUME /opt/data
 ENV PATH="/opt/hermes/bin:/opt/hermes/.venv/bin:/opt/data/.local/bin:${PATH}"
 ENV HERMES_HOME=/opt/data
 
+# Dashboard Chat tab (/api/pty) runs the TUI bundle built above. Without
+# HERMES_TUI_DIR the launcher re-checks freshness with PM's own Node (a newer
+# version downloaded into /opt/data/tools), always decides the node-22 bundle is
+# stale, then tries `npm ci` in /opt/hermes as the remapped hermes user — which
+# fails, so every chat socket dies right after accept (reconnect loop every ~3 s).
+# Upstream's Dockerfile sets the same two vars; HERMES_NODE keeps the bundle on
+# the Node that built it.
+ENV HERMES_TUI_DIR=/opt/hermes/ui-tui \
+    HERMES_NODE=/usr/local/bin/node
+
 # /init (s6-overlay) is PID 1 — runs cont-init.d, starts s6-rc.d services,
 # then execs main-wrapper.sh as the container's main program (CMD passthrough).
 ENTRYPOINT ["/init", "/opt/hermes/docker/main-wrapper.sh"]
