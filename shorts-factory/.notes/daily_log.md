@@ -2521,3 +2521,21 @@ pack page โชว์ `animate` + "ตั้ง Ns". render_studio: มี wav 
 - ค้าง: ผู้ใช้ลองจริงทั้ง 2 ทาง (Telegram 🎞 บน Pitch / เว็บ mode Studio) — ยังไม่เคยมี export จริงผ่าน (2 Asset Profile ใน scene เดียว, Veo อ่านราคา, ฉลากเพี้ยน), คลิปสินค้า 7 shot อาจยาวเกิน 60 วิ (Shopee Video?), push
 - เช็คเพดาน Shopee Video (web search): Seller Centre ทางการ SG/MY = **3–60 วิ** ไฟล์ ≤1GB (อัปผ่าน PC), 9:16, แท็กสินค้าได้ 6 ชิ้น; หน้าไทยแนะนำ 15–60 วิ (เป็นคำแนะนำ); วิดีโอหน้าสินค้า/API = 10–60 วิ ≤30MB (ไม่เกี่ยว). คลิป Studio สินค้า = ผลรวมเสียงที่พูดจริงต่อ shot (ไม่ใช่ความยาว export) dry-run ~25-35 วิ → ปกติไม่ชน 60 วิ; กรณี 6-7 shot บทยาวทุกใบอาจเกิน — เสนอเตือนตอน render ถ้า >60 วิ (ผู้ใช้ยังไม่ได้สั่งทำ)
 - **ปิดงาน 2026-10-20 ("จบงาน")**: push ทั้งหมดขึ้น origin/main, NAS รัน `a7d11f5` (deploy 15:5x, 5 containers restart=0). ไม่มีงานโค้ดค้าง. ค้างฝั่งผู้ใช้: ลอง 🎞 Studio คลิปสินค้าจริง (Telegram/เว็บ) ด้วย export จริง, ลอง script.md ทรงใหม่ + บทที่บอทย่อเองของคลิป Shorts, ตัดสินใจเรื่องเตือนคลิป >60 วิ
+
+## 2026-10-21 — ส่อง MoneyPrinterTurbo (harry0703, MIT, 133k★) ว่าช่วย Shopee affiliate ได้ไหม — ตอบอย่างเดียว ไม่แก้โค้ด
+- MPT = topic → LLM script → stock footage (Pexels/Pixabay/Coverr) หรือ text-to-video จ่ายเงิน (Seedance/MiniMax H3/MuAPI/WaveSpeed) → TTS (edge-tts ฯลฯ) → ซับ+BGM → moviepy. **ไม่มีอะไรเฉพาะสินค้า** (grep price/product/商品 = 0), video gen เป็น text-to-video ล้วน ไม่มี image-to-video = สินค้าในคลิปไม่ใช่ของจริง
+- `video_count` (≤5) = สคริปต์เดิมสุ่ม footage ใหม่ ไม่ใช่ hook variant
+- `upload_post.py` = SaaS Upload-Post โพสต์ TikTok/IG/YT Shorts เท่านั้น **ไม่มี Shopee Video / Facebook**
+- `twelvelabs.py` = Marengo rerank search terms + Pegasus QA คลิปว่าตรงสคริปต์ไหม (จ่ายเงิน, ต้อง public URL)
+- สรุปให้ผู้ใช้: ไม่ต้อง deploy/ย้ายไปใช้ (Shop ของเราเลยจุดนั้นแล้ว + moviepy แนะนำ RAM 8GB บนเครื่องที่ OOM มา 2 ครั้ง); ไอเดียที่คุ้มขโมย = hook variant หลายเวอร์ชันต่อสินค้า ผูก Sub ID ต่อ variant แล้วให้ CSV revenue ตัดสิน; รองลงมา = QA footage อัตโนมัติ, Pixabay เป็นแหล่งสำรองของ Pexels (เส้น Shorts). ไม่แนะนำ Upload-Post (ไม่ถึง Shopee + ขัดหลักกดอัปเอง)
+- ค้าง: รอผู้ใช้เลือกว่าจะทำ variant A/B ไหม
+
+## 2026-10-21 (2) — คลิปเกิน 50 MB แล้วปุ่มอัป YouTube หาย (`7e4f6dc`, deploy + push แล้ว)
+- ผู้ใช้: คลิป 08:11 (เปแอสเช vs บาร์ซ่า) ขึ้น "ส่งไฟล์เข้า Telegram ไม่ผ่าน แต่คลิปอยู่บน NAS แล้ว" แล้วไม่มีปุ่มอัป
+- ต้นเหตุ: คลิป 62.2 วิ @ 7.3 Mbps = 57 MB เกินเพดาน bot API 50 MB → `sendVideo` 413 `Request Entity Too Large`; ปุ่ม `upload:<clip_id>` ผูกกับข้อความวิดีโอที่ส่งไม่ถึง. `state["uploads"]` บันทึก entry ไว้แล้วแต่ `message_id=None` = ไม่มีปุ่มบนจอ
+- แก้: `main.send_video()` ส่งไม่ผ่าน = ข้อความแจ้ง (บอกขนาด MB) **พก `reply_markup` ของผู้เรียกไปด้วย** และคืนข้อความนั้นเป็น sent (message_id ไว้ retire ปุ่มหลังอัป). shop callers ไม่ส่งปุ่ม = เหมือนเดิม. เทสต์ `test_a_clip_telegram_refuses_still_gets_its_upload_button`
+- คลิปเช้านี้: ส่งปุ่มให้ด้วยมือหลัง deploy (msg 4016) + เขียน message_id ลง `uploads["20261021-080635-412"]`
+- ตรวจ: sf-test 595 passed/2 skipped. deploy ตอน idle, 5 containers Up, grep ในคอนเทนเนอร์เจอโค้ดใหม่
+- เห็นระหว่างทาง: snapshot ช่อง en 10:00 พัง `invalid_grant` "Account has been deleted" — refresh token ช่องอังกฤษตาย (บัญชีถูกลบ) ยังไม่ได้แตะ
+- ค้าง: push; คลิปยาว >~55 วิ ยังดูในแชทไม่ได้ (ถ้าอยากได้ preview ต้อง encode สำเนาเล็กส่งแทน — ยังไม่ทำ); ตัดสินใจเรื่องช่อง en
+- **ปิดงาน 2026-10-21 ("จบงาน")**: commit notes + push ขึ้น origin/main, NAS รัน `7e4f6dc` (5 containers Up). sf-test 595 passed/2 skipped. ค้างฝั่งผู้ใช้: กดปุ่มอัปคลิป 08:11 (msg 4016), ตัดสินใจช่อง en (refresh token ตาย — ต้อง `scripts/youtube_auth.py` ใหม่ถ้าจะใช้), อยากได้ preview เล็กในแชทไหม
