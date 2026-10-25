@@ -1,7 +1,7 @@
 ## 2026-10-25 — desk-latest Error 255 recovered (`8fb5457` pushed, 2.1.310 live)
 
 - `make desk-latest` failed `Error 255` = ssh dropped mid-build (NAS swap full). `deploy.sh` does `down` before `up --build` → ai-deck had zero containers. Rebuilt on NAS under `nohup`; all 3 containers up, both report `2.1.310 (Claude Code)`, `nginx -t` ok. Pins commit `8fb5457` pushed, `refs/deploy/ai-deck` updated.
-- Open: reorder deploy.sh to `compose build` before `down` so an ssh drop can't cause an outage (not done, awaiting user).
+- deploy.sh reorder done `d737070` (build → down → up; `--down-first` = old order).
 
 ## 2026-10-09 — Chat context chip + "looks frozen" fixes (commit `b29cace` pushed + deployed)
 

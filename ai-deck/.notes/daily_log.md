@@ -4,7 +4,7 @@
 - Impact: `deploy.sh` runs `compose down` **before** `up -d --build`, so the dropped session left ai-deck with zero containers (outage until rebuilt).
 - Recovery: rebuilt on NAS detached (`nohup sudo -n docker compose ... up -d --build > /tmp/ai-deck-up.log`) so ssh drop can't kill it. All 3 containers up, `claude --version` = 2.1.310 in `ai-deck` + `ai-deck-ai-deck-code-1`, `nginx -t` ok. No ops-bot maintenance window written (ran outside deploy.sh) → Kuma DOWN alerts possible.
 - Finished the make steps by hand: commit `8fb5457` (pins) pushed, `refs/deploy/ai-deck` updated.
-- Open: deploy.sh down-then-build ordering turns any ssh drop into an outage — fix candidate: `compose build` first, then `down`/`up -d`. NAS has no `pgrep`.
+- Fixed in `d737070`: deploy.sh now `build` → `down --remove-orphans` → `up -d`; build fail/ssh drop = exit 1, old containers stay up. `--down-first` = old order. Verified with stub ssh (4 paths) + image-only `compose build` exits 0 on NAS. NAS has no `pgrep`.
 
 ## 2026-10-02 — Local bundle sync closed
 
