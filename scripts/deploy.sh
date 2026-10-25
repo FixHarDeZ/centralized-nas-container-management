@@ -27,6 +27,7 @@ elapsed() { echo "$(( $(date +%s) - START_TS ))s"; }
 STACKS_ARG=""
 UPLOAD_ONLY=false
 RESTART_ONLY=false
+DOWN_FIRST=false
 DRY_RUN=false
 AUTO_YES=false
 
@@ -38,7 +39,9 @@ Options:
   -s, --stacks STACKS   Comma-separated stacks to restart, or "all"
       --upload-only     Upload files only, skip restart
       --restart-only    Restart stacks only, skip upload
-      --dry-run         Show what would happen without doing it
+      --down-first      Stop each stack before building it (frees its RAM for
+                        the build; the stack is down for the whole build)
+      --dry-run        Show what would happen without doing it
   -y, --yes             Skip upload confirmation prompt
   -h, --help            Show this help
 
@@ -56,7 +59,8 @@ while [[ $# -gt 0 ]]; do
     -s|--stacks)     STACKS_ARG="$2"; shift 2 ;;
     --upload-only)   UPLOAD_ONLY=true; shift ;;
     --restart-only)  RESTART_ONLY=true; shift ;;
-    --dry-run)       DRY_RUN=true; shift ;;
+    --down-first)    DOWN_FIRST=true; shift ;;
+    --dry-run)      DRY_RUN=true; shift ;;
     -y|--yes)        AUTO_YES=true; shift ;;
     -h|--help)       usage; exit 0 ;;
     *) err "Unknown option: $1"; usage; exit 1 ;;
@@ -331,6 +335,21 @@ set_maintenance() {
     || warn "Could not write ops-bot maintenance window — expect alerts"
 }
 
+# Run `docker compose <args>` for one stack on the NAS.
+# Pass the entire command as ONE quoted string so SSH sends it verbatim to the
+# remote shell. Splitting into bash/-l/-c/cmd as separate ssh args causes the
+# remote shell to parse the pipe incorrectly (password never reaches sudo -S).
+# --project-directory makes compose resolve the stack's own .env for both
+# variable interpolation and env_file: .env inside docker-compose.yml.
+stack_compose() {
+  local stack="$1"; shift
+  ssh $SSH_OPTS "${SSH_DEST}" \
+    "bash -lc \"echo '${NAS_SUDO_PASSWORD}' | sudo -S -p '' docker compose \
+      --project-directory '${NAS_TARGET_PATH}/${stack}' \
+      -f '${NAS_TARGET_PATH}/${stack}/docker-compose.yml' \
+      $* 2>&1\"" </dev/null
+}
+
 echo ""
 set_maintenance "${MAINT_BUILD_SECONDS}"
 log "Restarting: ${STACKS_TO_RESTART[*]}"
@@ -339,25 +358,25 @@ DEPLOYED_SHA="$( { git -C "${PROJECT_ROOT}" stash create 2>/dev/null | grep . ||
 for stack in "${STACKS_TO_RESTART[@]}"; do
   echo ""
   printf "${C_BOLD}── %s ──${C_RESET}\n" "$stack"
-  # Pass the entire command as ONE quoted string so SSH sends it verbatim to the
-  # remote shell. Splitting into bash/-l/-c/cmd as separate ssh args causes the
-  # remote shell to parse the pipe incorrectly (password never reaches sudo -S).
-  # --project-directory makes compose resolve the stack's own .env for both
-  # variable interpolation and env_file: .env inside docker-compose.yml.
-  # Down first: deterministic removal of all containers managed by this compose file.
+  # Build while the old containers keep serving. The build is the slow part, and
+  # an ssh drop (exit 255) or a broken build used to land after `down`, leaving
+  # the stack with no containers at all (ai-deck 2026-10-25). Now either one
+  # stops the deploy here with the old stack still up. --down-first restores
+  # the old order for builds too big to run beside the running stack's RAM.
+  if [[ "$DOWN_FIRST" == true ]]; then
+    stack_compose "$stack" down --remove-orphans
+  fi
+  if ! stack_compose "$stack" build; then
+    err "$stack build failed — nothing restarted"
+    [[ "$DOWN_FIRST" == false ]] && echo "  Old containers are still running."
+    exit 1
+  fi
+  # Down: deterministic removal of all containers managed by this compose file.
   # --remove-orphans also cleans up containers from the same project that are no
   # longer in the compose config (e.g. removed service).
-  ssh $SSH_OPTS "${SSH_DEST}" \
-    "bash -lc \"echo '${NAS_SUDO_PASSWORD}' | sudo -S -p '' docker compose \
-      --project-directory '${NAS_TARGET_PATH}/${stack}' \
-      -f '${NAS_TARGET_PATH}/${stack}/docker-compose.yml' \
-      down --remove-orphans 2>&1\"" </dev/null
-  # Up fresh: rebuild image and start containers.
-  ssh $SSH_OPTS "${SSH_DEST}" \
-    "bash -lc \"echo '${NAS_SUDO_PASSWORD}' | sudo -S -p '' docker compose \
-      --project-directory '${NAS_TARGET_PATH}/${stack}' \
-      -f '${NAS_TARGET_PATH}/${stack}/docker-compose.yml' \
-      up -d --build 2>&1\"" </dev/null
+  [[ "$DOWN_FIRST" == false ]] && stack_compose "$stack" down --remove-orphans
+  # Up fresh from the images built above.
+  stack_compose "$stack" up -d
   ok "$stack restarted"
   # Local record for the nas-rails band: refs/deploy/<stack> points at what was
   # uploaded (the worktree via `git stash create`, HEAD when clean). Restart-only
