@@ -1,4 +1,5 @@
 ## 2026-10-25 — `make desk-latest` died with Error 255 mid-build (recovered, 2.1.310 live)
+- Closed 2026-10-25: all work pushed (`8fb5457` pins, `d737070` deploy.sh, notes). ai-deck live on 2.1.310. Pending: nothing in scope; first real deploy with new build-first order not yet run; NAS swap still full (2047/2047 MB).
 
 - Symptom: build log stopped at `Setting up python3.11-minimal`, then `make: *** [desk-latest] Error 255`. 255 = ssh exit code (session dropped), not a build failure. NAS swap was full (2047/2047 MB) at the time.
 - Impact: `deploy.sh` runs `compose down` **before** `up -d --build`, so the dropped session left ai-deck with zero containers (outage until rebuilt).

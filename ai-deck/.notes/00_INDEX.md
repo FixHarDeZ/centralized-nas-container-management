@@ -1,4 +1,5 @@
 ## 2026-10-25 — desk-latest Error 255 recovered (`8fb5457` pushed, 2.1.310 live)
+- Closed 2026-10-25: all work pushed (`8fb5457` pins, `d737070` deploy.sh, notes). ai-deck live on 2.1.310. Pending: nothing in scope; first real deploy with new build-first order not yet run; NAS swap still full (2047/2047 MB).
 
 - `make desk-latest` failed `Error 255` = ssh dropped mid-build (NAS swap full). `deploy.sh` does `down` before `up --build` → ai-deck had zero containers. Rebuilt on NAS under `nohup`; all 3 containers up, both report `2.1.310 (Claude Code)`, `nginx -t` ok. Pins commit `8fb5457` pushed, `refs/deploy/ai-deck` updated.
 - deploy.sh reorder done `d737070` (build → down → up; `--down-first` = old order).
