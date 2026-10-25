@@ -1,3 +1,8 @@
+## 2026-10-25 — desk-latest Error 255 recovered (`8fb5457` pushed, 2.1.310 live)
+
+- `make desk-latest` failed `Error 255` = ssh dropped mid-build (NAS swap full). `deploy.sh` does `down` before `up --build` → ai-deck had zero containers. Rebuilt on NAS under `nohup`; all 3 containers up, both report `2.1.310 (Claude Code)`, `nginx -t` ok. Pins commit `8fb5457` pushed, `refs/deploy/ai-deck` updated.
+- Open: reorder deploy.sh to `compose build` before `down` so an ssh drop can't cause an outage (not done, awaiting user).
+
 ## 2026-10-09 — Chat context chip + "looks frozen" fixes (commit `b29cace` pushed + deployed)
 
 - **Context chip** `#chat-ctx` on chat bar: `ctx 84k/200k · 42%`, warn ≥60%, hot ≥80%. Claude = last main-thread `assistant.usage` (input+cache_read+cache_creation, skip `parent_tool_use_id`); **`result.usage` sums every call in the turn** (probe: 69.7k vs 30.9k real) — old per-turn `ctx` meter was inflated, now uses same number. Window = `result.modelUsage[main model].contextWindow` (cached in `chat.WINDOWS`). Codex: rollout `token_count.last_token_usage.input_tokens` + `model_context_window` (`turn.completed` = thread running total, 19.1M). MiMo: last step input, no window. Resume: `last_context()` reads transcript tail 1 MB (skips `isSidechain`). Carried in `turn`/`reset`/snapshot/`/chat/state` as `context`+`window`.

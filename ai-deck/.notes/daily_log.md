@@ -1,3 +1,11 @@
+## 2026-10-25 — `make desk-latest` died with Error 255 mid-build (recovered, 2.1.310 live)
+
+- Symptom: build log stopped at `Setting up python3.11-minimal`, then `make: *** [desk-latest] Error 255`. 255 = ssh exit code (session dropped), not a build failure. NAS swap was full (2047/2047 MB) at the time.
+- Impact: `deploy.sh` runs `compose down` **before** `up -d --build`, so the dropped session left ai-deck with zero containers (outage until rebuilt).
+- Recovery: rebuilt on NAS detached (`nohup sudo -n docker compose ... up -d --build > /tmp/ai-deck-up.log`) so ssh drop can't kill it. All 3 containers up, `claude --version` = 2.1.310 in `ai-deck` + `ai-deck-ai-deck-code-1`, `nginx -t` ok. No ops-bot maintenance window written (ran outside deploy.sh) → Kuma DOWN alerts possible.
+- Finished the make steps by hand: commit `8fb5457` (pins) pushed, `refs/deploy/ai-deck` updated.
+- Open: deploy.sh down-then-build ordering turns any ssh drop into an outage — fix candidate: `compose build` first, then `down`/`up -d`. NAS has no `pgrep`.
+
 ## 2026-10-02 — Local bundle sync closed
 
 - Delivered: `f9acdc0` (feature) + `161588a` (email-only author fix) pushed to main and deployed with `scripts/deploy.sh -s ai-deck -y`; containers verified running new code + nginx routes. Live round trip through `:15072` passed (304 MB bundle, 39 s). Smoke task, cache and temp files removed.
