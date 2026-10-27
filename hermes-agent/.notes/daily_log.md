@@ -270,3 +270,15 @@ upstream's own Dockerfile sets `HERMES_TUI_DIR` for exactly this (prebuilt-bundl
 Verified in new container: `_resolve_chat_argv` → `['/usr/local/bin/node','--expose-gc',
 '/opt/hermes/ui-tui/dist/entry.js']` instantly. Deployed (`deploy.sh -s hermes-agent -y`, ENV-only,
 all layers cached). User confirmed in browser: Chat tab terminal works, no reconnect loop. Committed + pushed to `main`.
+
+## 2026-10-27 — n8n → Hermes push path review (Claude)
+
+Hermes (ไอยู) built the n8n → `/webhooks/clip` push path today; review + fix logged in
+`n8n/.notes/daily_log.md`. Hermes-side state that is **volume-only, not in git**: `/opt/data/webhook_subscriptions.json`
+(route `clip`, hand-added `toolsets: [hermes-cli]`, its own HMAC secret), `TELEGRAM_BOT_TOKEN` hand-copied into
+`/opt/data/.env` (drifts on rotation), symlink `/opt/data/.config/sops/age/keys.txt` → `/opt/data/home/...`
+(Hermes can decrypt the whole vault), `/opt/data/n8n-bridge/` (retired poller, `poller.env.json` still holds a
+key — delete after first real clip via push). Open decision for the user: webhook-triggered sessions now share a
+box that holds the age key + NAS root path + all `.env`s; consider a separate profile/box without them.
+`HERMES_WEBHOOK_SECRET` (static route, removed) is still in both manifests — leave until the gateway config's
+`platforms.webhook.secret` no longer references it.

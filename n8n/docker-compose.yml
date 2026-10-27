@@ -35,6 +35,8 @@ services:
       - NODE_FUNCTION_ALLOW_BUILTIN=${NODE_FUNCTION_ALLOW_BUILTIN:-crypto,http,https}
       - HERMES_WEBHOOK_SECRET=${HERMES_WEBHOOK_SECRET}
       - HERMES_CLIP_WEBHOOK_SECRET=${HERMES_CLIP_WEBHOOK_SECRET}
+      # Clip Intake rejects /webhook/clip-request without X-Clip-Token == this (fail closed if empty)
+      - CLIP_INTAKE_TOKEN=${CLIP_INTAKE_TOKEN}
     # Workflows reach other stacks over the host's published LAN ports
     # (http://host.docker.internal:5065/query, ...) instead of a shared docker
     # network. Every stack already publishes its port, so nothing else has to

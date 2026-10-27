@@ -259,3 +259,28 @@ Live n8n workflow `4uYGddwteUuqsb6j` (Shop Flow Studio) imported via public API 
 Release regression: 408 passed, 2 repository-wiring skips covered by 2 passing local tests, 1 live TTS deselection. Browser visual acceptance and a real Flow clip with live TTS remain untested; synthetic HTTP/worker/render/restart/download integration passed. No test Telegram messages or automatic publishing performed. Prior closed/uncommitted/inactive entries above describe earlier states and are superseded by this release entry.
 
 Scheduler verification: successful GET /shop/automation/pending requests increased from 2 to 3 while no additional smoke requests were sent, with workflow active and queue empty. Worker logs contained no traceback. Successful executions are not retained by configured policy, so an empty executions list is expected. Real Flow/video/TTS production acceptance still remains.
+
+## 2026-10-27 — Clip Intake (Hermes) security review (Claude)
+
+Reviewed the push path Hermes built today (n8n `/webhook/clip-request` → HMAC → Hermes `/webhooks/clip`).
+
+**Critical, found live:** `Clip Request` webhook had no auth; `/webhook/` is public (homepage nginx skips
+basic auth for Telegram, `:15678` hits n8n directly). n8n HMAC-signed whatever arrived → Hermes route `clip`
+with `toolsets: [hermes-cli]` (terminal) and `{product}/{note}/{link}/{images}` pasted into the prompt =
+unauthenticated prompt-injection to a shell that holds the NAS SSH key (NOPASSWD sudo docker), the vault age
+key and every stack's `.env`. Audit of all 15 executions (Clip Intake 13 + Bridge Probe 2): every one is Hermes'
+own `Python-urllib` ping via 192.168.50.1 — no outside hits found.
+
+**Fix (repo, verified locally with a node harness, 17/17 cases):** `Record job` requires `X-Clip-Token` ==
+`CLIP_INTAKE_TOKEN` (vault `stacks.secretary.n8n.clip_intake_token`, constant-time, fail closed) and bounds
+every field (shopee-only https link, images under `/opt/data/cache/scratch/`, length caps, control chars
+flattened). Rejections answer 401/400 via `Respond accepted` and `Sign for Hermes` skips — no throw, so
+strangers cannot spam the Error Alerter. `Sign for Hermes` now retries 3× (20 s socket timeout); workflow
+`errorWorkflow` = Secretary Error Alerter. Repo `Clip_Intake.json` re-based on the live export (repo copy had
+drifted to the old `/webhooks/clip-request` + `HERMES_WEBHOOK_SECRET`). `scripts/n8n_import.sh` now keeps the
+settings keys the API accepts (it dropped everything but `executionOrder`, which would have erased
+`errorWorkflow`/`saveDataSuccessExecution`). `docs/clip-intake.md` rewritten to the live route/secret.
+
+**Not done by Claude (auto mode blocked vault write + live n8n changes):** deactivate, vault key, `make
+secrets`, `deploy.sh -s n8n`, import, re-activate, 401 check — handed to the user as one script. Hermes must
+`git pull && make secrets` in its clone and send `X-Clip-Token`. Status: pending user run; not committed.

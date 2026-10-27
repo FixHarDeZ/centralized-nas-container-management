@@ -106,11 +106,21 @@ for workflow_file in "${IMPORT_FILES[@]}"; do
     python3 -c "
 import json, sys
 d = json.load(open('${workflow_file}'))
+# Settings keys the public API accepts; anything else (e.g. binaryMode) is a 400.
+# Copying only executionOrder silently dropped errorWorkflow/timeouts/save-data on every import.
+SETTINGS_KEYS = ('executionOrder', 'errorWorkflow', 'executionTimeout', 'timezone',
+                 'saveDataErrorExecution', 'saveDataSuccessExecution',
+                 'saveManualExecutions', 'saveExecutionProgress', 'callerPolicy')
+def settings(d):
+    s = d.get('settings', {})
+    out = {k: s[k] for k in SETTINGS_KEYS if k in s}
+    out.setdefault('executionOrder', 'v1')
+    return out
 minimal = {
     'name': d['name'],
     'nodes': d['nodes'],
     'connections': d['connections'],
-    'settings': {'executionOrder': d.get('settings',{}).get('executionOrder','v1')},
+    'settings': settings(d),
 }
 json.dump(minimal, open('${PAYLOAD_FILE}','w'), ensure_ascii=False)
 "
@@ -131,11 +141,21 @@ json.dump(minimal, open('${PAYLOAD_FILE}','w'), ensure_ascii=False)
     python3 -c "
 import json, sys
 d = json.load(open('${workflow_file}'))
+# Settings keys the public API accepts; anything else (e.g. binaryMode) is a 400.
+# Copying only executionOrder silently dropped errorWorkflow/timeouts/save-data on every import.
+SETTINGS_KEYS = ('executionOrder', 'errorWorkflow', 'executionTimeout', 'timezone',
+                 'saveDataErrorExecution', 'saveDataSuccessExecution',
+                 'saveManualExecutions', 'saveExecutionProgress', 'callerPolicy')
+def settings(d):
+    s = d.get('settings', {})
+    out = {k: s[k] for k in SETTINGS_KEYS if k in s}
+    out.setdefault('executionOrder', 'v1')
+    return out
 minimal = {
     'name': d['name'],
     'nodes': d['nodes'],
     'connections': d['connections'],
-    'settings': {'executionOrder': d.get('settings', {}).get('executionOrder', 'v1')},
+    'settings': settings(d),
 }
 if 'pinData' in d:
     minimal['pinData'] = d['pinData']

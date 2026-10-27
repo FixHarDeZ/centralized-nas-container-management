@@ -117,10 +117,26 @@ Tracker: `docs/superpowers/specs/2026-06-02-hermes-token-tuning-verification.md`
 
 ---
 
+## Webhook platform (n8n push path, 2026-10-27)
+
+Gateway publishes `8644:8644`; `platforms.webhook` enabled in `/opt/data/config.yaml`. Route = dynamic
+subscription `clip` in `/opt/data/webhook_subscriptions.json` (hot-reloaded; **volume only, not in git**):
+skill `flow-shopee-clips`, hand-added `toolsets: [hermes-cli]` (CLI refuses to set it), deliver telegram.
+Don't edit that file while a delivery is in flight (route digest check drops the reply). Files go out via
+`HOME=/opt/data /opt/hermes/.venv/bin/hermes send`, which needs `TELEGRAM_BOT_TOKEN` hand-copied into
+`/opt/data/.env` (drifts on rotation). Calls into n8n need `X-Clip-Token` from the clone's `n8n/.env`.
+Docs: `n8n/docs/clip-intake.md`.
+
+⚠️ This box holds the NAS SSH key (NOPASSWD sudo docker), the vault age key (symlinked to
+`/opt/data/.config/sops/age/keys.txt`) and a clone with every stack's `.env`, and webhook sessions get a
+terminal. Anything that can reach a webhook route can try to steer that shell — keep every route behind
+an authenticated caller.
+
 ## Change Log
 
 | วันที่ | เรื่อง |
 |--------|--------|
+| 2026-10-27 | n8n → Hermes webhook push path (route `clip`, port 8644). Claude review: n8n intake was unauthenticated → token gate added on the n8n side. |
 | 2026-10-21 | Chat tab reconnect loop: (1) DSM RP `:15063` missing WebSocket headers (fixed in DSM UI); (2) Dockerfile missing `HERMES_TUI_DIR`/`HERMES_NODE` → TUI rebuild attempt EACCES (fixed + deployed). |
 | 2026-10-09 | `scripts/update-hermes.sh <tag>` now commits the `HERMES_REF` bump to `main` and pushes after deploy (guards: must be on `main`, not behind origin, compose file has no non-`HERMES_REF` changes). Runs from any cwd. (`803c63b`) Pending: uncommitted `HERMES_REF: v0.21.6` bump in compose — verify tag before running script. |
 | 2026-08-19 | Bump to `v2026.8.18`; fix exit-126 crash loop by moving the uv-managed CPython 3.11 out of `/root` via `UV_PYTHON_INSTALL_DIR=/opt/uv-python` |

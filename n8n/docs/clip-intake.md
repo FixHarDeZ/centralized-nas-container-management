@@ -7,10 +7,36 @@ Purpose: Fix (or anything) POSTs a clip job to n8n; Hermes picks it up and runs 
 ## Endpoint
 
 ```
-POST https://fixhardez.synology.me/webhook/clip-request     # production (workflow must be active)
-POST https://fixhardez.synology.me/webhook-test/clip-request # test URL while listening in the editor
+POST https://<NAS_DOMAIN>/webhook/clip-request     # production (workflow must be active)
+POST https://<NAS_DOMAIN>/webhook-test/clip-request # test URL while listening in the editor
 Content-Type: application/json
+X-Clip-Token: <CLIP_INTAKE_TOKEN>
 ```
+
+**The token is mandatory.** `/webhook/` is public (homepage nginx skips basic auth there for
+Telegram, and `:15678` reaches n8n directly), and everything that passes is HMAC-signed and handed
+to a Hermes agent that has a terminal, the NAS SSH key and the vault age key. Without the token the
+URL was an unauthenticated prompt-injection path to a shell (found and closed 2026-10-27).
+
+- Value: vault `stacks.secretary.n8n.clip_intake_token` → `CLIP_INTAKE_TOKEN` in `n8n/.env`.
+  Hermes reads it from its own clone (`/opt/data/centralized-nas-container-management/n8n/.env`
+  after `git pull && make secrets`), the same way it reads the HMAC secret.
+- `Record job` compares it in constant time; missing/empty env = every request rejected.
+- `Record job` also bounds every field before it reaches the agent prompt:
+
+| Field | Rule |
+|---|---|
+| `product` | required, ≤200 chars |
+| `link` | `https://` on `shopee.co.th`, `*.shopee.co.th` or `shope.ee` only |
+| `duration_s` | 5–60 (default 10) |
+| `category` | `[a-z0-9_-]`, ≤30 (default `gadget`) |
+| `images` | ≤6 paths, each under `/opt/data/cache/scratch/`, no `..` |
+| `note` / `requested_by` | ≤500 / ≤40 chars |
+
+Control characters (newlines included) are flattened to spaces. Rejections are **not** errors:
+`Respond accepted` answers `401`/`400 {"status":"rejected","reason":...}` and `Sign for Hermes`
+returns `skipped` — so strangers hitting the URL cannot spam the Error Alerter, but every attempt
+is still kept in the execution log.
 
 Body:
 
@@ -26,7 +52,7 @@ Body:
 }
 ```
 
-Response is immediate: `200 {"status":"accepted","job":{...}}` (`Respond accepted` runs before the
+Response is immediate: `200 {"status":"accepted","job":{...}}` (or `401`/`400` rejected) (`Respond accepted` runs before the
 rest of the workflow). The workflow stores the job in its own execution data —
 `saveDataSuccessExecution: all` is required, otherwise a successful run stores nothing to read back.
 
@@ -40,25 +66,35 @@ POST /webhook/clip-request
 
 The `Sign for Hermes` Code node signs the job and POSTs it to Hermes' **webhook platform**:
 
-- Gateway side: `platforms.webhook` in `/opt/data/config.yaml` — binds `0.0.0.0:8644`, route
-  `clip-request`, secret `${HERMES_WEBHOOK_SECRET}` (from `hermes-agent/.env`).
+- Gateway side: `platforms.webhook` in `/opt/data/config.yaml` binds `0.0.0.0:8644`; the route is
+  the **dynamic subscription `clip`** in `/opt/data/webhook_subscriptions.json` (hot-reloaded). The
+  old static `clip-request` route in config.yaml was removed.
 - Network: the hermes-agent stack publishes `8644:8644`; homepage nginx proxies
-  `https://fixhardez.synology.me/webhooks/*` -> `http://host.docker.internal:8644/webhooks/*`.
+  `https://<NAS_DOMAIN>/webhooks/*` -> `http://host.docker.internal:8644/webhooks/*`. n8n posts to `/webhooks/clip`.
 - Auth: `X-Webhook-Timestamp` = unix seconds, `X-Webhook-Signature-V2` =
   `hex(HMAC_SHA256(secret, "<timestamp>.<body>"))`. Replay window 300 s.
-- Secret: vault `stacks.secretary.n8n.hermes_webhook_secret`, rendered into **both** `n8n/.env`
-  (signing) and `hermes-agent/.env` (validation) by the two stack manifests.
+- Secret: vault `stacks.secretary.n8n.hermes_clip_webhook_secret` → `HERMES_CLIP_WEBHOOK_SECRET`
+  in `n8n/.env` (signing). The gateway validates with the `secret` stored inside the `clip`
+  subscription, so the two must match by hand. `HERMES_WEBHOOK_SECRET` (the platform-level secret
+  of the removed static route) is no longer used by n8n.
 - On accept the gateway answers `202 {"status":"accepted", ...}` and runs the route's agent turn in
-  the background (`deliver: telegram` chat `8663614341`, `mirror_to_session: true`), so n8n is never
-  blocked by the length of the clip run and failures surface in n8n's execution log + Error Alerter.
+  the background (`deliver: telegram` + `deliver_extra.chat_id`), so n8n is never blocked by the
+  length of the clip run.
+- Failure handling: `Sign for Hermes` retries 3× (5 s apart, 20 s socket timeout) and the workflow's
+  `errorWorkflow` is **Secretary Error Alerter** (`SzcBUowHn6PKGUlF`, Telegram). That only covers
+  *handing the job to Hermes*: once Hermes answers 202, n8n knows nothing more — a gateway restart
+  mid-run still loses the job without any alert.
 
-## n8n env requirements (all three mandatory)
+## n8n env requirements (all mandatory)
 
 Set in `n8n/docker-compose.yml` `environment:` (the stack has **no** `env_file`, so values must be
 interpolated from `n8n/.env`):
 
-- `HERMES_WEBHOOK_SECRET=${HERMES_WEBHOOK_SECRET}` — the HMAC secret
-- `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` — Code node `$env` is blocked by default
+- `HERMES_CLIP_WEBHOOK_SECRET=${HERMES_CLIP_WEBHOOK_SECRET}` — the HMAC secret
+- `CLIP_INTAKE_TOKEN=${CLIP_INTAKE_TOKEN}` — caller token (empty = reject everything)
+- `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` — Code node `$env` is blocked by default. Trade-off: every
+  Code node and expression in every workflow can now read all of n8n's env, including
+  `N8N_BASIC_AUTH_PASSWORD`.
 - `NODE_FUNCTION_ALLOW_BUILTIN=crypto,http,https` — `require('crypto')` is disallowed by default
 
 ## Why the Code node POSTs the request itself
@@ -75,29 +111,33 @@ use them; only allow-listed builtins are.
 
 ## Testing
 
-Signed ping (works from anywhere that can reach the NAS, or from the Hermes box itself):
+End-to-end ping through n8n (from the Hermes box, after `make secrets` in its clone):
 
 ```python
-import hmac, hashlib, json, time, urllib.request
-secret = open('/opt/data/centralized-nas-container-management/n8n/.env').read().split('HERMES_WEBHOOK_SECRET=')[1].split()[0]
-body = json.dumps({"product": "PING (ห้ามทำคลิป แค่ตอบว่า PONG)", "link": "https://example.invalid",
+import json, urllib.request
+env = dict(l.split('=', 1) for l in open('/opt/data/centralized-nas-container-management/n8n/.env').read().split()
+           if '=' in l)
+body = json.dumps({"product": "PING (ห้ามทำคลิป แค่ตอบว่า PONG)", "link": "https://s.shopee.co.th/ping",
                    "duration_s": 10, "category": "gadget", "images": [], "note": "test"}, ensure_ascii=False)
-ts = str(int(time.time()))
-sig = hmac.new(secret.encode(), f"{ts}.{body}".encode(), hashlib.sha256).hexdigest()
-req = urllib.request.Request("http://127.0.0.1:8644/webhooks/clip-request", data=body.encode(), method="POST",
-    headers={"Content-Type": "application/json", "X-Webhook-Timestamp": ts, "X-Webhook-Signature-V2": sig})
+req = urllib.request.Request("https://<NAS_DOMAIN>/webhook/clip-request", data=body.encode(), method="POST",
+    headers={"Content-Type": "application/json", "X-Clip-Token": env["CLIP_INTAKE_TOKEN"]})
 print(urllib.request.urlopen(req, timeout=30).read().decode())   # -> {"status": "accepted", ...}
 ```
 
+Negative check (safe — rejected before anything reaches Hermes): the same POST without the header
+must answer `401`, on both `https://<NAS_DOMAIN>/webhook/clip-request` and
+`https://<NAS_DOMAIN>:15678/webhook/clip-request`.
+
 Then check the n8n execution (`GET /api/v1/executions/{id}?includeData=true`) — `Sign for Hermes`
 must return `hermes_status: 202` — and `/opt/data/logs/gateway.log` for
-`[webhook] POST ... route=clip-request` + `delivery mirrored into telegram:8663614341 session`.
+`[webhook] POST ... route=clip` + `delivery mirrored into telegram:8663614341 session`.
 
 ## Diagnostics workflow (kept)
 
-`Hermes Bridge Probe` (`0vwF1zobUF4FmYbR`, active) — `POST /webhook/hermes-probe` → HTTP GET a
-health URL → responds with the HTTP result. Useful to re-test n8n's outbound connectivity after any
-network or gateway change; it is harmless and holds no credentials.
+`Hermes Bridge Probe` (`0vwF1zobUF4FmYbR`) — `POST /webhook/hermes-probe` → HTTP GET a fixed
+health URL → responds with the result. The URL is hardcoded (no SSRF) but points at the old
+container IP `192.168.112.2:8645`, which is gone after recreate — it only ever times out now.
+Not in git; delete it or repoint it at `host.docker.internal:8644`.
 
 ## Retired: pull-model bridge
 
@@ -114,7 +154,13 @@ once this push path has carried a real clip order.
 2. Workflow updates go through `PUT /api/v1/workflows/{id}` (deactivate first, then activate) —
    `PATCH` is not allowed by the public API.
 3. No bridge process to start anymore: the push path is gateway + nginx + n8n only.
-4. Fire a signed ping (snippet above) and watch the n8n execution + `/opt/data/logs/gateway.log`.
+4. Fire the ping (snippet above) plus the no-token negative check, and watch the n8n execution +
+   `/opt/data/logs/gateway.log`.
+5. Hermes-side state that lives **only in the volume** (not in git): `/opt/data/webhook_subscriptions.json`
+   (route `clip`: `skills: [flow-shopee-clips]`, `toolsets: [hermes-cli]`, `deliver: telegram`,
+   its own `secret`, and the prompt template) and the `TELEGRAM_BOT_TOKEN` line hand-copied into
+   `/opt/data/.env` for `hermes send`. Losing the volume = rebuild both by hand; rotating the bot
+   token in the vault does **not** update the copy in `/opt/data/.env`.
 
 ## Pitfalls worth remembering
 

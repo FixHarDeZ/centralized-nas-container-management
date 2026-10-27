@@ -2,13 +2,13 @@
   "id": "IYayiImdn0Jd5yMS",
   "name": "Clip Intake (Hermes)",
   "description": null,
-  "active": true,
-  "activeVersionId": "0375378f-c012-4036-979b-cc7e72ab1233",
+  "active": false,
+  "activeVersionId": "28638012-719d-4675-9128-77e4603c5312",
   "createdAt": "2026-10-27T04:00:18.047Z",
-  "updatedAt": "2026-10-27T08:02:11.871Z",
+  "updatedAt": "2026-10-27T08:13:55.138Z",
   "isArchived": false,
-  "versionId": "0375378f-c012-4036-979b-cc7e72ab1233",
-  "versionCounter": 7,
+  "versionId": "28638012-719d-4675-9128-77e4603c5312",
+  "versionCounter": 8,
   "sourceWorkflowId": null,
   "triggerCount": 1,
   "nodes": [
@@ -40,7 +40,7 @@
       ],
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const b = $input.first().json.body || $input.first().json;\nreturn [{json: {job_id: 'clip_' + Date.now(), product: b.product || '', link: b.link || '',\n  duration_s: Number(b.duration_s) || 10, category: b.category || 'gadget',\n  images: Array.isArray(b.images) ? b.images : [], note: b.note || '',\n  requested_by: b.requested_by || 'n8n', received_at: new Date().toISOString()}}];"
+        "jsCode": "// Gate + normalise a clip order. Anyone on the internet can reach this webhook\n// (/webhook/ bypasses nginx basic auth for Telegram), and whatever passes is\n// HMAC-signed and handed to a Hermes agent that has a terminal. So: caller must\n// present X-Clip-Token, and every field is bounded before it reaches the prompt.\n// Rejections return ok:false (answered 401/400 by \"Respond accepted\") instead of\n// throwing, so a stranger hammering the URL cannot spam the Error Alerter.\nconst { createHash, timingSafeEqual } = require('crypto');\nconst item = $input.first().json;\nconst b = item.body || {};\nconst h = item.headers || {};\nconst reject = (code, reason) => [{ json: { ok: false, code, reason } }];\nconst digest = (s) => createHash('sha256').update(String(s)).digest();\n\nconst want = $env.CLIP_INTAKE_TOKEN;\nif (!want) return reject(401, 'intake token is not configured');   // fail closed\nif (!timingSafeEqual(digest(h['x-clip-token'] || ''), digest(want))) return reject(401, 'bad token');\n\nconst str = (v, max) => String(v ?? '').replace(/[\\u0000-\\u001f\\u007f]/g, ' ').trim().slice(0, max);\n\nconst product = str(b.product, 200);\nif (!product) return reject(400, 'product is required');\n\nconst link = str(b.link, 300);\nconst m = /^https:\\/\\/([a-z0-9.-]+)(?::443)?(?:[/?#]|$)/i.exec(link);\nconst host = m ? m[1].toLowerCase() : '';\nif (!(host === 'shopee.co.th' || host.endsWith('.shopee.co.th') || host === 'shope.ee')) {\n  return reject(400, 'link must be an https shopee.co.th / shope.ee URL');\n}\n\nconst duration_s = Math.round(Number(b.duration_s ?? 10));\nif (!(duration_s >= 5 && duration_s <= 60)) return reject(400, 'duration_s must be 5-60');\n\nconst category = str(b.category || 'gadget', 30);\nif (!/^[a-z0-9_-]+$/i.test(category)) return reject(400, 'category must be [a-z0-9_-]');\n\n// Images are paths on the Hermes box; only the scratch area is allowed.\nconst IMAGE_DIR = '/opt/data/cache/scratch/';\nconst raw = Array.isArray(b.images) ? b.images : [];\nif (raw.length > 6) return reject(400, 'at most 6 images');\nconst images = [];\nfor (const p of raw) {\n  const s = str(p, 300);\n  if (!s.startsWith(IMAGE_DIR) || s.split('/').includes('..')) {\n    return reject(400, 'images must be under ' + IMAGE_DIR);\n  }\n  images.push(s);\n}\n\nreturn [{ json: { ok: true, job_id: 'clip_' + Date.now(), product, link, duration_s, category,\n  images, note: str(b.note, 500), requested_by: str(b.requested_by || 'n8n', 40),\n  received_at: new Date().toISOString() } }];\n"
       }
     },
     {
@@ -54,7 +54,10 @@
       ],
       "parameters": {
         "respondWith": "json",
-        "responseBody": "={{ JSON.stringify({status:'accepted', job: $('Record job').item.json}) }}"
+        "responseBody": "={{ JSON.stringify($json.ok ? {status:'accepted', job:$json} : {status:'rejected', reason:$json.reason}) }}",
+        "options": {
+          "responseCode": "={{ $json.ok ? 200 : $json.code }}"
+        }
       }
     },
     {
@@ -79,8 +82,11 @@
       ],
       "parameters": {
         "mode": "runOnceForAllItems",
-        "jsCode": "const job = $('Record job').item.json;\nconst body = JSON.stringify(job);\nconst ts = Math.floor(Date.now() / 1000).toString();\nconst secret = $env.HERMES_WEBHOOK_SECRET;\nif (!secret) throw new Error('HERMES_WEBHOOK_SECRET is not in the n8n container env');\nconst { createHmac } = require('crypto');\nconst https = require('https');\nconst sig = createHmac('sha256', secret).update(ts + '.' + body).digest('hex');\nconst result = await new Promise((resolve, reject) => {\n  const req = https.request({ hostname: 'fixhardez.synology.me', port: 443,\n      path: '/webhooks/clip-request', method: 'POST', headers: {\n      'Content-Type': 'application/json',\n      'X-Webhook-Timestamp': ts,\n      'X-Webhook-Signature-V2': sig,\n      'Content-Length': Buffer.byteLength(body) } }, (resp) => {\n    let data = '';\n    resp.on('data', (c) => data += c);\n    resp.on('end', () => resolve({ status: resp.statusCode, text: data }));\n  });\n  req.on('error', reject);\n  req.write(body);\n  req.end();\n});\nif (result.status !== 202 && result.status !== 200) {\n  throw new Error('Hermes responded ' + result.status + ': ' + result.text.slice(0, 200));\n}\nreturn [{ json: { job_id: job.job_id, hermes_status: result.status, hermes_response: result.text.slice(0, 200) } }];"
-      }
+        "jsCode": "const job = $('Record job').item.json;\nif (!job.ok) return [{ json: { skipped: true, code: job.code, reason: job.reason } }];\nconst { ok, ...payload } = job;\nconst body = JSON.stringify(payload);\nconst ts = Math.floor(Date.now() / 1000).toString();\nconst secret = $env.HERMES_CLIP_WEBHOOK_SECRET;\nif (!secret) throw new Error('HERMES_CLIP_WEBHOOK_SECRET is not in the n8n container env');\nconst { createHmac } = require('crypto');\nconst https = require('https');\nconst sig = createHmac('sha256', secret).update(ts + '.' + body).digest('hex');\nconst result = await new Promise((resolve, reject) => {\n  const req = https.request({ hostname: 'fixhardez.synology.me', port: 443,\n      path: '/webhooks/clip', method: 'POST', headers: {\n      'Content-Type': 'application/json',\n      'X-Webhook-Timestamp': ts,\n      'X-Webhook-Signature-V2': sig,\n      'Content-Length': Buffer.byteLength(body) } }, (resp) => {\n    let data = '';\n    resp.on('data', (c) => data += c);\n    resp.on('end', () => resolve({ status: resp.statusCode, text: data }));\n  });\n  req.setTimeout(20000, () => req.destroy(new Error('Hermes did not answer within 20 s')));\n  req.on('error', reject);\n  req.write(body);\n  req.end();\n});\nif (result.status !== 202 && result.status !== 200) {\n  throw new Error('Hermes responded ' + result.status + ': ' + result.text.slice(0, 200));\n}\nreturn [{ json: { job_id: job.job_id, hermes_status: result.status, hermes_response: result.text.slice(0, 200) } }];\n"
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000
     }
   ],
   "connections": {
@@ -140,34 +146,15 @@
     "saveDataSuccessExecution": "all",
     "executionTimeout": 240,
     "timezone": "Asia/Bangkok",
-    "executionOrder": "v1"
+    "executionOrder": "v1",
+    "errorWorkflow": "SzcBUowHn6PKGUlF"
   },
   "staticData": null,
   "pinData": null,
   "meta": null,
   "tags": [],
-  "shared": [
-    {
-      "role": "workflow:owner",
-      "workflowId": "IYayiImdn0Jd5yMS",
-      "projectId": "GNTPzE3LcG1I1VJU",
-      "project": {
-        "id": "GNTPzE3LcG1I1VJU",
-        "name": "Peerawat Ujaiyen <fixkychicky@gmail.com>",
-        "type": "personal",
-        "icon": null,
-        "description": null,
-        "customTelemetryTags": [],
-        "creatorId": "53b2f3d7-9f8a-4316-a15e-8db0e12e1066",
-        "createdAt": "2026-05-27T16:01:42.043Z",
-        "updatedAt": "2026-05-28T02:01:22.704Z"
-      },
-      "createdAt": "2026-10-27T04:00:18.051Z",
-      "updatedAt": "2026-10-27T04:00:18.051Z"
-    }
-  ],
   "activeVersion": {
-    "versionId": "0375378f-c012-4036-979b-cc7e72ab1233",
+    "versionId": "28638012-719d-4675-9128-77e4603c5312",
     "workflowId": "IYayiImdn0Jd5yMS",
     "nodes": [
       {
@@ -237,7 +224,7 @@
         ],
         "parameters": {
           "mode": "runOnceForAllItems",
-          "jsCode": "const job = $('Record job').item.json;\nconst body = JSON.stringify(job);\nconst ts = Math.floor(Date.now() / 1000).toString();\nconst secret = $env.HERMES_WEBHOOK_SECRET;\nif (!secret) throw new Error('HERMES_WEBHOOK_SECRET is not in the n8n container env');\nconst { createHmac } = require('crypto');\nconst https = require('https');\nconst sig = createHmac('sha256', secret).update(ts + '.' + body).digest('hex');\nconst result = await new Promise((resolve, reject) => {\n  const req = https.request({ hostname: 'fixhardez.synology.me', port: 443,\n      path: '/webhooks/clip-request', method: 'POST', headers: {\n      'Content-Type': 'application/json',\n      'X-Webhook-Timestamp': ts,\n      'X-Webhook-Signature-V2': sig,\n      'Content-Length': Buffer.byteLength(body) } }, (resp) => {\n    let data = '';\n    resp.on('data', (c) => data += c);\n    resp.on('end', () => resolve({ status: resp.statusCode, text: data }));\n  });\n  req.on('error', reject);\n  req.write(body);\n  req.end();\n});\nif (result.status !== 202 && result.status !== 200) {\n  throw new Error('Hermes responded ' + result.status + ': ' + result.text.slice(0, 200));\n}\nreturn [{ json: { job_id: job.job_id, hermes_status: result.status, hermes_response: result.text.slice(0, 200) } }];"
+          "jsCode": "const job = $('Record job').item.json;\nconst body = JSON.stringify(job);\nconst ts = Math.floor(Date.now() / 1000).toString();\nconst secret = $env.HERMES_CLIP_WEBHOOK_SECRET;\nif (!secret) throw new Error('HERMES_CLIP_WEBHOOK_SECRET is not in the n8n container env');\nconst { createHmac } = require('crypto');\nconst https = require('https');\nconst sig = createHmac('sha256', secret).update(ts + '.' + body).digest('hex');\nconst result = await new Promise((resolve, reject) => {\n  const req = https.request({ hostname: 'fixhardez.synology.me', port: 443,\n      path: '/webhooks/clip', method: 'POST', headers: {\n      'Content-Type': 'application/json',\n      'X-Webhook-Timestamp': ts,\n      'X-Webhook-Signature-V2': sig,\n      'Content-Length': Buffer.byteLength(body) } }, (resp) => {\n    let data = '';\n    resp.on('data', (c) => data += c);\n    resp.on('end', () => resolve({ status: resp.statusCode, text: data }));\n  });\n  req.on('error', reject);\n  req.write(body);\n  req.end();\n});\nif (result.status !== 202 && result.status !== 200) {\n  throw new Error('Hermes responded ' + result.status + ': ' + result.text.slice(0, 200));\n}\nreturn [{ json: { job_id: job.job_id, hermes_status: result.status, hermes_response: result.text.slice(0, 200) } }];"
         }
       }
     ],
@@ -297,16 +284,16 @@
     "name": null,
     "description": null,
     "autosaved": false,
-    "createdAt": "2026-10-27T08:02:11.872Z",
-    "updatedAt": "2026-10-27T08:02:11.872Z",
+    "createdAt": "2026-10-27T08:13:55.144Z",
+    "updatedAt": "2026-10-27T08:13:55.144Z",
     "workflowPublishHistory": [
       {
-        "id": 46,
+        "id": 48,
         "workflowId": "IYayiImdn0Jd5yMS",
-        "versionId": "0375378f-c012-4036-979b-cc7e72ab1233",
+        "versionId": "28638012-719d-4675-9128-77e4603c5312",
         "event": "activated",
         "userId": "53b2f3d7-9f8a-4316-a15e-8db0e12e1066",
-        "createdAt": "2026-10-27T08:02:12.267Z"
+        "createdAt": "2026-10-27T08:13:55.645Z"
       }
     ]
   }

@@ -178,3 +178,20 @@ Live n8n workflow `4uYGddwteUuqsb6j` (Shop Flow Studio) imported via public API 
 Release regression: 408 passed, 2 repository-wiring skips covered by 2 passing local tests, 1 live TTS deselection. Browser visual acceptance and a real Flow clip with live TTS remain untested; synthetic HTTP/worker/render/restart/download integration passed. No test Telegram messages or automatic publishing performed. Prior closed/uncommitted/inactive entries above describe earlier states and are superseded by this release entry.
 
 Scheduler verification: successful GET /shop/automation/pending requests increased from 2 to 3 while no additional smoke requests were sent, with workflow active and queue empty. Worker logs contained no traceback. Successful executions are not retained by configured policy, so an empty executions list is expected. Real Flow/video/TTS production acceptance still remains.
+
+## Clip Intake (Hermes) — `IYayiImdn0Jd5yMS` (2026-10-27)
+
+`POST /webhook/clip-request` (public path) → `Record job` gate → `Respond accepted` → `Sign for Hermes`
+(HMAC `HERMES_CLIP_WEBHOOK_SECRET`, POST `https://<domain>/webhooks/clip` → homepage nginx →
+`host.docker.internal:8644`). Caller (Hermes) must send `X-Clip-Token` = `CLIP_INTAKE_TOKEN`
+(vault `stacks.secretary.n8n.clip_intake_token`); empty env = reject all. Field rules + full flow:
+`docs/clip-intake.md`. Error workflow = Secretary Error Alerter. n8n env now has
+`N8N_BLOCK_ENV_ACCESS_IN_NODE=false` + `NODE_FUNCTION_ALLOW_BUILTIN=crypto,http,https` (every Code node
+can read all env). `scripts/n8n_import.sh` now preserves accepted settings keys (was executionOrder only).
+
+⚠️ Without the token check this URL is an unauthenticated prompt-injection path to a Hermes terminal
+(found live 2026-10-27). Never import a Clip Intake JSON without the `Record job` gate.
+
+Gaps: once Hermes answers 202 n8n tracks nothing — a gateway restart mid-run loses the job silently.
+`Hermes Bridge Probe` (`0vwF1zobUF4FmYbR`, not in git) points at a dead container IP — delete or repoint.
+`HERMES_WEBHOOK_SECRET` in n8n env/manifest is unused. Uptime Kuma monitor id 28 still open (see above).
