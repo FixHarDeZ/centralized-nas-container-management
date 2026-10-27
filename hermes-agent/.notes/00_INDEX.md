@@ -125,7 +125,10 @@ skill `flow-shopee-clips`, hand-added `toolsets: [hermes-cli]` (CLI refuses to s
 Don't edit that file while a delivery is in flight (route digest check drops the reply). Files go out via
 `HOME=/opt/data /opt/hermes/.venv/bin/hermes send`, which needs `TELEGRAM_BOT_TOKEN` hand-copied into
 `/opt/data/.env` (drifts on rotation). Calls into n8n need `X-Clip-Token` from the clone's `n8n/.env`.
-Docs: `n8n/docs/clip-intake.md`.
+Docs: `n8n/docs/clip-intake.md`. Verified 2026-10-27 (ping, token gate on). Skills
+`flow-shopee-clips` + `webhook-subscriptions` updated by Hermes for the token. ⚠️ `flow-shopee-clips`
+SKILL.md ~101 k chars (over the 100 k `skill_manage` limit) and is injected whole into every webhook run
+(`prompt_len=103079` for a ping) — split Pitfalls into `references/` (prompt sent to Hermes, not done yet).
 
 ⚠️ This box holds the NAS SSH key (NOPASSWD sudo docker), the vault age key (symlinked to
 `/opt/data/.config/sops/age/keys.txt`) and a clone with every stack's `.env`, and webhook sessions get a

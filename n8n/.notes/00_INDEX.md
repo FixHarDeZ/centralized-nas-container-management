@@ -192,6 +192,9 @@ can read all env). `scripts/n8n_import.sh` now preserves accepted settings keys 
 ⚠️ Without the token check this URL is an unauthenticated prompt-injection path to a Hermes terminal
 (found live 2026-10-27). Never import a Clip Intake JSON without the `Record job` gate.
 
+Status 2026-10-27: deployed + verified end to end (ping 21229 → 202 route `clip`; no-token 21231 → 401
+skipped; 401 also on `:15678`). No real clip through this path yet.
+
 Gaps: once Hermes answers 202 n8n tracks nothing — a gateway restart mid-run loses the job silently.
-`Hermes Bridge Probe` (`0vwF1zobUF4FmYbR`, not in git) points at a dead container IP — delete or repoint.
-`HERMES_WEBHOOK_SECRET` in n8n env/manifest is unused. Uptime Kuma monitor id 28 still open (see above).
+`Hermes Bridge Probe` is deactivated (not deleted). `HERMES_WEBHOOK_SECRET` in n8n env/manifest is unused
+(drop + redeploy n8n). Domain is hardcoded in `Sign for Hermes` (could derive from `$env.N8N_WEBHOOK_URL`). Uptime Kuma monitor id 28 still open (see above).

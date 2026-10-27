@@ -282,3 +282,11 @@ key — delete after first real clip via push). Open decision for the user: webh
 box that holds the age key + NAS root path + all `.env`s; consider a separate profile/box without them.
 `HERMES_WEBHOOK_SECRET` (static route, removed) is still in both manifests — leave until the gateway config's
 `platforms.webhook.secret` no longer references it.
+
+### 2026-10-27 — close
+
+Gate verified end to end with Hermes' own ping (n8n exec 21229 → 202 route `clip`, 21231 no token → 401).
+Hermes pulled `c7a809a`, ran `make secrets`, updated `flow-shopee-clips` + `webhook-subscriptions` for
+`X-Clip-Token` (did not touch n8n). Open, deferred by the user: split the ~101 k-char `flow-shopee-clips`
+SKILL.md (every webhook run carries ~103 k chars of prompt); decide whether this box should keep the age key,
+NAS SSH key and all `.env` files; delete `/opt/data/n8n-bridge/` after the first real clip via push.

@@ -297,3 +297,10 @@ with the gate is verified end to end (ping only — no real clip yet).
 Cost note: gateway logs `prompt_len=103079` for that 1-line ping — the whole `flow-shopee-clips` SKILL.md
 (~101 k chars, now over Hermes' 100 k skill_manage limit) is injected into every webhook run. Splitting
 its Pitfalls into `references/` would cut every clip job's input substantially.
+
+### 2026-10-27 — close
+
+Done: gate live + verified, commits `c7a809a`, `81a48d9`, `87ef0c5` on main, n8n deployed. Deferred by the
+user: drop unused `HERMES_WEBHOOK_SECRET` from n8n manifest/compose (needs n8n redeploy), delete the
+deactivated `Hermes Bridge Probe`, derive the hardcoded domain in `Sign for Hermes` from env, old Uptime Kuma
+monitor id 28 + `secretary_n8n_data` volume.
