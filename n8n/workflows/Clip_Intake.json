@@ -1,9 +1,21 @@
 {
+  "id": "IYayiImdn0Jd5yMS",
   "name": "Clip Intake (Hermes)",
+  "description": null,
+  "active": true,
+  "activeVersionId": "0375378f-c012-4036-979b-cc7e72ab1233",
+  "createdAt": "2026-10-27T04:00:18.047Z",
+  "updatedAt": "2026-10-27T08:02:11.871Z",
+  "isArchived": false,
+  "versionId": "0375378f-c012-4036-979b-cc7e72ab1233",
+  "versionCounter": 7,
+  "sourceWorkflowId": null,
+  "triggerCount": 1,
   "nodes": [
     {
       "id": "wh",
       "name": "Clip Request",
+      "webhookId": "a39615b2-2a74-4f84-b2b9-fb7fc66e1e8e",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 4.5,
       "position": [
@@ -15,8 +27,7 @@
         "path": "clip-request",
         "responseMode": "responseNode",
         "options": {}
-      },
-      "webhookId": "a39615b2-2a74-4f84-b2b9-fb7fc66e1e8e"
+      }
     },
     {
       "id": "rec",
@@ -56,6 +67,20 @@
         0
       ],
       "parameters": {}
+    },
+    {
+      "id": "sign",
+      "name": "Sign for Hermes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        780,
+        -140
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const job = $('Record job').item.json;\nconst body = JSON.stringify(job);\nconst ts = Math.floor(Date.now() / 1000).toString();\nconst secret = $env.HERMES_WEBHOOK_SECRET;\nif (!secret) throw new Error('HERMES_WEBHOOK_SECRET is not in the n8n container env');\nconst { createHmac } = require('crypto');\nconst https = require('https');\nconst sig = createHmac('sha256', secret).update(ts + '.' + body).digest('hex');\nconst result = await new Promise((resolve, reject) => {\n  const req = https.request({ hostname: 'fixhardez.synology.me', port: 443,\n      path: '/webhooks/clip-request', method: 'POST', headers: {\n      'Content-Type': 'application/json',\n      'X-Webhook-Timestamp': ts,\n      'X-Webhook-Signature-V2': sig,\n      'Content-Length': Buffer.byteLength(body) } }, (resp) => {\n    let data = '';\n    resp.on('data', (c) => data += c);\n    resp.on('end', () => resolve({ status: resp.statusCode, text: data }));\n  });\n  req.on('error', reject);\n  req.write(body);\n  req.end();\n});\nif (result.status !== 202 && result.status !== 200) {\n  throw new Error('Hermes responded ' + result.status + ': ' + result.text.slice(0, 200));\n}\nreturn [{ json: { job_id: job.job_id, hermes_status: result.status, hermes_response: result.text.slice(0, 200) } }];"
+      }
     }
   ],
   "connections": {
@@ -85,6 +110,22 @@
       "main": [
         [
           {
+            "node": "Sign for Hermes",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sign for Hermes": {
+      "main": [
+        [
+          {
             "node": "Log",
             "type": "main",
             "index": 0
@@ -93,6 +134,7 @@
       ]
     }
   },
+  "nodeGroups": [],
   "settings": {
     "saveDataErrorExecution": "all",
     "saveDataSuccessExecution": "all",
@@ -100,5 +142,172 @@
     "timezone": "Asia/Bangkok",
     "executionOrder": "v1"
   },
-  "active": true
+  "staticData": null,
+  "pinData": null,
+  "meta": null,
+  "tags": [],
+  "shared": [
+    {
+      "role": "workflow:owner",
+      "workflowId": "IYayiImdn0Jd5yMS",
+      "projectId": "GNTPzE3LcG1I1VJU",
+      "project": {
+        "id": "GNTPzE3LcG1I1VJU",
+        "name": "Peerawat Ujaiyen <fixkychicky@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "customTelemetryTags": [],
+        "creatorId": "53b2f3d7-9f8a-4316-a15e-8db0e12e1066",
+        "createdAt": "2026-05-27T16:01:42.043Z",
+        "updatedAt": "2026-05-28T02:01:22.704Z"
+      },
+      "createdAt": "2026-10-27T04:00:18.051Z",
+      "updatedAt": "2026-10-27T04:00:18.051Z"
+    }
+  ],
+  "activeVersion": {
+    "versionId": "0375378f-c012-4036-979b-cc7e72ab1233",
+    "workflowId": "IYayiImdn0Jd5yMS",
+    "nodes": [
+      {
+        "id": "wh",
+        "name": "Clip Request",
+        "webhookId": "a39615b2-2a74-4f84-b2b9-fb7fc66e1e8e",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 4.5,
+        "position": [
+          0,
+          0
+        ],
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "clip-request",
+          "responseMode": "responseNode",
+          "options": {}
+        }
+      },
+      {
+        "id": "rec",
+        "name": "Record job",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          260,
+          0
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const b = $input.first().json.body || $input.first().json;\nreturn [{json: {job_id: 'clip_' + Date.now(), product: b.product || '', link: b.link || '',\n  duration_s: Number(b.duration_s) || 10, category: b.category || 'gadget',\n  images: Array.isArray(b.images) ? b.images : [], note: b.note || '',\n  requested_by: b.requested_by || 'n8n', received_at: new Date().toISOString()}}];"
+        }
+      },
+      {
+        "id": "resp",
+        "name": "Respond accepted",
+        "type": "n8n-nodes-base.respondToWebhook",
+        "typeVersion": 1.1,
+        "position": [
+          520,
+          0
+        ],
+        "parameters": {
+          "respondWith": "json",
+          "responseBody": "={{ JSON.stringify({status:'accepted', job: $('Record job').item.json}) }}"
+        }
+      },
+      {
+        "id": "log",
+        "name": "Log",
+        "type": "n8n-nodes-base.noOp",
+        "typeVersion": 1,
+        "position": [
+          780,
+          0
+        ],
+        "parameters": {}
+      },
+      {
+        "id": "sign",
+        "name": "Sign for Hermes",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [
+          780,
+          -140
+        ],
+        "parameters": {
+          "mode": "runOnceForAllItems",
+          "jsCode": "const job = $('Record job').item.json;\nconst body = JSON.stringify(job);\nconst ts = Math.floor(Date.now() / 1000).toString();\nconst secret = $env.HERMES_WEBHOOK_SECRET;\nif (!secret) throw new Error('HERMES_WEBHOOK_SECRET is not in the n8n container env');\nconst { createHmac } = require('crypto');\nconst https = require('https');\nconst sig = createHmac('sha256', secret).update(ts + '.' + body).digest('hex');\nconst result = await new Promise((resolve, reject) => {\n  const req = https.request({ hostname: 'fixhardez.synology.me', port: 443,\n      path: '/webhooks/clip-request', method: 'POST', headers: {\n      'Content-Type': 'application/json',\n      'X-Webhook-Timestamp': ts,\n      'X-Webhook-Signature-V2': sig,\n      'Content-Length': Buffer.byteLength(body) } }, (resp) => {\n    let data = '';\n    resp.on('data', (c) => data += c);\n    resp.on('end', () => resolve({ status: resp.statusCode, text: data }));\n  });\n  req.on('error', reject);\n  req.write(body);\n  req.end();\n});\nif (result.status !== 202 && result.status !== 200) {\n  throw new Error('Hermes responded ' + result.status + ': ' + result.text.slice(0, 200));\n}\nreturn [{ json: { job_id: job.job_id, hermes_status: result.status, hermes_response: result.text.slice(0, 200) } }];"
+        }
+      }
+    ],
+    "connections": {
+      "Clip Request": {
+        "main": [
+          [
+            {
+              "node": "Record job",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Record job": {
+        "main": [
+          [
+            {
+              "node": "Respond accepted",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Respond accepted": {
+        "main": [
+          [
+            {
+              "node": "Sign for Hermes",
+              "type": "main",
+              "index": 0
+            },
+            {
+              "node": "Log",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      },
+      "Sign for Hermes": {
+        "main": [
+          [
+            {
+              "node": "Log",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
+      }
+    },
+    "nodeGroups": [],
+    "authors": "Peerawat Ujaiyen",
+    "name": null,
+    "description": null,
+    "autosaved": false,
+    "createdAt": "2026-10-27T08:02:11.872Z",
+    "updatedAt": "2026-10-27T08:02:11.872Z",
+    "workflowPublishHistory": [
+      {
+        "id": 46,
+        "workflowId": "IYayiImdn0Jd5yMS",
+        "versionId": "0375378f-c012-4036-979b-cc7e72ab1233",
+        "event": "activated",
+        "userId": "53b2f3d7-9f8a-4316-a15e-8db0e12e1066",
+        "createdAt": "2026-10-27T08:02:12.267Z"
+      }
+    ]
+  }
 }
