@@ -32,7 +32,7 @@ services:
       # POSTs to the Hermes webhook platform (gateway /webhooks/clip-request).
       - N8N_BLOCK_ENV_ACCESS_IN_NODE=${N8N_BLOCK_ENV_ACCESS_IN_NODE:-false}
       # Code node HMAC signing uses require('crypto')
-      - NODE_FUNCTION_ALLOW_BUILTIN=${NODE_FUNCTION_ALLOW_BUILTIN:-crypto}
+      - NODE_FUNCTION_ALLOW_BUILTIN=${NODE_FUNCTION_ALLOW_BUILTIN:-crypto,http,https}
       - HERMES_WEBHOOK_SECRET=${HERMES_WEBHOOK_SECRET}
     # Workflows reach other stacks over the host's published LAN ports
     # (http://host.docker.internal:5065/query, ...) instead of a shared docker
