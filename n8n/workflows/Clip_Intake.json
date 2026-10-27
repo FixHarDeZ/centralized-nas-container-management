@@ -1,0 +1,104 @@
+{
+  "name": "Clip Intake (Hermes)",
+  "nodes": [
+    {
+      "id": "wh",
+      "name": "Clip Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 4.5,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "clip-request",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "webhookId": "a39615b2-2a74-4f84-b2b9-fb7fc66e1e8e"
+    },
+    {
+      "id": "rec",
+      "name": "Record job",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const b = $input.first().json.body || $input.first().json;\nreturn [{json: {job_id: 'clip_' + Date.now(), product: b.product || '', link: b.link || '',\n  duration_s: Number(b.duration_s) || 10, category: b.category || 'gadget',\n  images: Array.isArray(b.images) ? b.images : [], note: b.note || '',\n  requested_by: b.requested_by || 'n8n', received_at: new Date().toISOString()}}];"
+      }
+    },
+    {
+      "id": "resp",
+      "name": "Respond accepted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        520,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({status:'accepted', job: $('Record job').item.json}) }}"
+      }
+    },
+    {
+      "id": "log",
+      "name": "Log",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        780,
+        0
+      ],
+      "parameters": {}
+    }
+  ],
+  "connections": {
+    "Clip Request": {
+      "main": [
+        [
+          {
+            "node": "Record job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record job": {
+      "main": [
+        [
+          {
+            "node": "Respond accepted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond accepted": {
+      "main": [
+        [
+          {
+            "node": "Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all",
+    "executionTimeout": 240,
+    "timezone": "Asia/Bangkok",
+    "executionOrder": "v1"
+  },
+  "active": true
+}
