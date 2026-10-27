@@ -28,6 +28,10 @@ services:
       # and keys every request on the proxy's IP, so all callers share one
       # rate-limit bucket.
       - N8N_PROXY_HOPS=2
+      # Code nodes read HERMES_WEBHOOK_SECRET via $env to HMAC-sign clip-job
+      # POSTs to the Hermes webhook platform (gateway /webhooks/clip-request).
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=${N8N_BLOCK_ENV_ACCESS_IN_NODE:-false}
+      - HERMES_WEBHOOK_SECRET=${HERMES_WEBHOOK_SECRET}
     # Workflows reach other stacks over the host's published LAN ports
     # (http://host.docker.internal:5065/query, ...) instead of a shared docker
     # network. Every stack already publishes its port, so nothing else has to
