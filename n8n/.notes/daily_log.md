@@ -281,6 +281,13 @@ drifted to the old `/webhooks/clip-request` + `HERMES_WEBHOOK_SECRET`). `scripts
 settings keys the API accepts (it dropped everything but `executionOrder`, which would have erased
 `errorWorkflow`/`saveDataSuccessExecution`). `docs/clip-intake.md` rewritten to the live route/secret.
 
-**Not done by Claude (auto mode blocked vault write + live n8n changes):** deactivate, vault key, `make
-secrets`, `deploy.sh -s n8n`, import, re-activate, 401 check — handed to the user as one script. Hermes must
-`git pull && make secrets` in its clone and send `X-Clip-Token`. Status: pending user run; not committed.
+**Rollout (user-authorised, same day):** deactivated Clip Intake + dead `Hermes Bridge Probe` → vault key
+added (`sops --set`; a bare `sops` call needs `SOPS_AGE_KEY_FILE` exported, the Makefile does that for make
+targets only) → `sync-test-vault`, `make check` rc=0, `make secrets` → commit `c7a809a` pushed to main →
+`deploy.sh -s n8n -y` → import (first try died at "Fetching existing workflows" because n8n was still
+booting; rerun after `/healthz` 200 worked) → re-activated; live settings now carry `errorWorkflow`.
+Verified: `CLIP_INTAKE_TOKEN` present in the n8n container env; POST without / with a wrong token on
+`https://<domain>/webhook/clip-request` **and** `:15678` → `401 {"status":"rejected","reason":"bad token"}`
+(so `responseCode` as an expression works on respondToWebhook 1.1); executions 21203-21207 show
+`Sign for Hermes` → `skipped`, nothing reached Hermes. Not yet verified: a real accepted job with the right
+token — needs Hermes to `git pull && make secrets` in its clone and send `X-Clip-Token`.
