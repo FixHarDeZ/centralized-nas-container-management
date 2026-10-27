@@ -254,6 +254,8 @@ Two sets in `~/.claude/skills` on the desk, both symlinks made by `entrypoint.sh
 
 Allowlist, not a mirror: `notebooklm/` alone is 196 MB and carries a live Google session (`data/auth_info.json` + a logged-in Chrome profile), so `scripts/desk_skills.py` refuses any skill holding a credential-shaped file, and `tests/test_skills.py` re-checks the copy. Browser-driven skills, vault/SSH-key skills, and coding-flow skills are out by design; plugin skills (`~/.claude/plugins`) are a different mechanism and not covered.
 
+**Tracker config for `to-prd`/`to-spec`/`to-issues`/`to-tickets`/`triage`** lives in `work/CLAUDE.md` (section "Issue tracker and triage labels", 2026-10-27) instead of `/setup-matt-pocock-skills`, which is not vendored: local md files flat in `out/` (drawer shows top-level files only), `**Status:**`/`**Type:**` lines with canonical label names, edited in place.
+
 Changing a skill means a rebuild, but a cheap one — the `COPY` sits after apt/npm/pip and the `anthropics/skills` clone, so only it and the sanity check re-run. `archify visual-check` cannot run here — no system Chrome in the image.
 
 ## Architecture

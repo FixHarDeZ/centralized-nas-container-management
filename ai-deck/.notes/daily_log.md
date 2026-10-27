@@ -1,3 +1,8 @@
+## 2026-10-27 — Tracker config for to-*/triage skills on the desk (commit pushed to main; NOT deployed)
+- User wanted `/setup-matt-pocock-skills` on the desk. It's not installed here (cloud session) or in `ai-deck/skills/`; `make desk-skills` can only copy it from the Mac's `~/.claude/skills`. So the config it would write went straight into `work/CLAUDE.md` (also copied to `/work/AGENTS.md`): tracker = local md files **flat in `out/`** (`YYYY-MM-DD-<feature>-NN-<slug>.md`) because the drawer (`ui/app.js` render) lists only top-level files of `out/` — `.scratch/<feature>/issues/` would be invisible on the phone. Labels = `**Status:**`/`**Type:**` lines using canonical role names; tracker files may be edited in place (the one exception to never-overwrite); `.out-of-scope/` at `/work/.out-of-scope/`; no PRs.
+- Not added: the setup skill itself (not in `skills.list`). If wanted later: install on Mac → add line to `skills.list` → `make desk-skills` → deploy.
+- Pending: `./scripts/deploy.sh -s ai-deck -y` (rebuild bakes the new `work/CLAUDE.md`; entrypoint copies it on start). Coding workspaces untouched — repos carry their own CLAUDE.md.
+
 ## 2026-10-25 — `make desk-latest` died with Error 255 mid-build (recovered, 2.1.310 live)
 - Closed 2026-10-25: all work pushed (`8fb5457` pins, `d737070` deploy.sh, notes). ai-deck live on 2.1.310. Pending: nothing in scope; first real deploy with new build-first order not yet run; NAS swap still full (2047/2047 MB).
 
