@@ -289,5 +289,11 @@ booting; rerun after `/healthz` 200 worked) → re-activated; live settings now 
 Verified: `CLIP_INTAKE_TOKEN` present in the n8n container env; POST without / with a wrong token on
 `https://<domain>/webhook/clip-request` **and** `:15678` → `401 {"status":"rejected","reason":"bad token"}`
 (so `responseCode` as an expression works on respondToWebhook 1.1); executions 21203-21207 show
-`Sign for Hermes` → `skipped`, nothing reached Hermes. Not yet verified: a real accepted job with the right
-token — needs Hermes to `git pull && make secrets` in its clone and send `X-Clip-Token`.
+`Sign for Hermes` → `skipped`, nothing reached Hermes. Then Hermes pulled, ran `make secrets`, updated its
+skills and pinged: execution 21229 (right token) → `Sign for Hermes` `hermes_status: 202`, route `clip`,
+gateway `[Webhook] Sending response` 10 s later; execution 21231 (no token) → 401 `skipped`. Push path
+with the gate is verified end to end (ping only — no real clip yet).
+
+Cost note: gateway logs `prompt_len=103079` for that 1-line ping — the whole `flow-shopee-clips` SKILL.md
+(~101 k chars, now over Hermes' 100 k skill_manage limit) is injected into every webhook run. Splitting
+its Pitfalls into `references/` would cut every clip job's input substantially.
