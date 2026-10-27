@@ -128,3 +128,25 @@ once this push path has carried a real clip order.
 - `sops` looks for age keys at `$HOME/.config/sops/age/keys.txt`; in this box `$HOME=/opt/data` but
   the key lives under `/opt/data/home/...` — a symlink at `/opt/data/.config/sops/age/keys.txt`
   fixes every `make secrets`/`make check` call.
+
+## What makes the push path actually work (hard-won, 2026-10-27)
+
+- **The route must grant tools.** A webhook session starts with a tiny toolset (clarify, vision,
+  web_extract, web_search) — no terminal, no file tools — because the webhook adapter's
+  `toolsets_for_source()` override wins over `platform_toolsets`. Set `"toolsets": ["hermes-cli"]`
+  **manually** in `/opt/data/webhook_subscriptions.json` (the CLI deliberately refuses to set it, so
+  an agent-created subscription cannot self-grant). The file is hot-reloaded on the next request —
+  no gateway restart.
+- **Never edit the subscription file while a delivery is in flight.** The reply leg re-validates the
+  receipt against a digest of the *current* route; a mid-run edit makes it answer
+  `Destination unavailable for webhook:v2:...` and the response (and any Telegram delivery) is
+  dropped. Edit between runs only.
+- **The text reply is delivered for you** (`deliver: telegram` + `deliver_extra.chat_id`), so the
+  prompt must tell the agent *not* to send the summary itself — only files.
+- **Files need `hermes send`.** `HOME=/opt/data /opt/hermes/.venv/bin/hermes send --to
+  telegram:8663614341 'MEDIA:<path>'`. It only works once `TELEGRAM_BOT_TOKEN` is in
+  `/opt/data/.env` (the token lives in the NAS vault as `stacks.hermes_agent.telegram.bot_token`,
+  rendered as `HERMES_TELEGRAM_BOT_TOKEN` in `hermes-agent/.env` and mapped to `TELEGRAM_BOT_TOKEN`
+  by compose — copy that value into `/opt/data/.env`, mode 600, keep one line).
+- `execute_code` is BLOCKED in webhook sessions; `terminal`, `write_file`, `skills_*`, `web_*`,
+  `vision_analyze`, `session_search` work.
