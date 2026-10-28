@@ -181,6 +181,7 @@ html, body {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 .tw-status-badge {
@@ -193,6 +194,7 @@ html, body {
   padding: 4px 11px;
   font-variant-numeric: tabular-nums;
   max-width: 180px;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   font-weight: 500;
@@ -309,12 +311,18 @@ html, body {
   flex-shrink: 0;
 }
 .tw-pagetitle-eyebrow {
-  font-size: 10.5px;
+  font-size: 11.5px;
   font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
   color: var(--text-dim);
   margin-bottom: 8px;
+  line-height: 1.2;
+}
+/* Tracking only for Latin eyebrows: spacing pulls Thai vowels and tone
+   marks off their base letters (ร อ บ ท ำ ง า น). */
+.tw-pagetitle-eyebrow[lang="en"] {
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
   line-height: 1;
 }
 .tw-pagetitle-row {
@@ -1440,6 +1448,12 @@ html, body {
   gap: 8px;
   padding: 6px 14px 4px;
 }
+/* Card counts differ per panel (3/4/5) — 3 fixed columns left an orphan
+   card on its own row. 4 → 2×2, 5 → 3 + 2 on a 6-track grid. */
+.tw-stats-grid:has(> :nth-child(4):last-child) { grid-template-columns: repeat(2, 1fr); }
+.tw-stats-grid:has(> :nth-child(5):last-child) { grid-template-columns: repeat(6, 1fr); }
+.tw-stats-grid:has(> :nth-child(5):last-child) > * { grid-column: span 2; }
+.tw-stats-grid:has(> :nth-child(5):last-child) > :nth-child(n+4) { grid-column: span 3; }
 .tw-stat-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -1541,6 +1555,19 @@ html, body {
   flex-shrink: 0;
   font-weight: 600;
 }
+/* Category names share long prefixes (หนังชุด/ซีรีส์ [ฝรั่ง] / [จีน] / …) —
+   an 84px inline label truncated them to identical text. Label and count
+   on one line, bar full width underneath. */
+.tw-stats-bars--stacked { gap: 11px; }
+.tw-stats-bars--stacked .tw-stats-bar-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  row-gap: 5px;
+  column-gap: 10px;
+}
+.tw-stats-bars--stacked .tw-stats-bar-label { width: auto; grid-row: 1; grid-column: 1; }
+.tw-stats-bars--stacked .tw-stats-bar-count { width: auto; grid-row: 1; grid-column: 2; }
+.tw-stats-bars--stacked .tw-stats-bar-track { grid-row: 2; grid-column: 1 / -1; height: 6px; }
 .tw-stats-empty {
   font-size: 12px;
   color: var(--text-dim);
@@ -1667,6 +1694,13 @@ html, body {
 @media (max-width: 430px) {
   .tw-nav-item { padding: 8px 9px; }
   .tw-bottom-nav { gap: 0; }
+}
+/* 360px phones: logo + status badge + 2 buttons overflowed the header by
+   a few px and clipped the refresh button. */
+@media (max-width: 380px) {
+  .tw-header-inner { padding: 0 12px; }
+  .tw-header-actions { gap: 6px; }
+  .tw-status-badge { padding: 4px 9px; }
 }
 
 .tw-badge-uploader { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }

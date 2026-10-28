@@ -1,6 +1,6 @@
 # TorrentWatch — Project Index (Memory Blueprint)
 
-> อัปเดตล่าสุด: 2026-10-10 (แท็บประวัติ: ปุ่มกรอง KW) — ก่อนหน้า 2026-06-24 (notify transport → shared Notifier)
+> อัปเดตล่าสุด: 2026-10-28 (UI polish: eyebrow ไทยไม่ tracking, stats grid ตามจำนวนการ์ด, แท่งหมวดหมู่ซ้อนชั้น, header 360px) — ก่อนหน้า 2026-10-10 (แท็บประวัติ: ปุ่มกรอง KW)
 > ใช้ไฟล์นี้เป็น cold-start memory ก่อนเริ่มงานทุกครั้ง
 
 > **2026-06-24 — Notifier:** `line_notify._push` / `telegram_notify._send` สลับ body เป็น
@@ -15,6 +15,10 @@
 TorrentWatch เป็น FastAPI app สำหรับ monitor torrent ใหม่จาก bearbit.org โดยอัตโนมัติ — scrape ตามตารางเวลา, filter ตาม seed/leech threshold และ keyword, แสดงผ่าน dark-theme web UI, ดาวน์โหลดได้ทั้งไปที่ browser และ NAS watch folder รันเป็น Docker container บน Synology DS925+
 
 ---
+
+> **2026-10-28 — UI conventions:** eyebrow ภาษาไทยห้าม `letter-spacing` (สระ/วรรณยุกต์หลุด) — eyebrow ละตินใส่ `lang="en"` แล้วได้ tracking+uppercase เอง.
+> `.tw-stats-grid` จัดคอลัมน์ตามจำนวนการ์ดด้วย `:has()` (3/4=2×2/5=3+2) เพิ่มการ์ดแล้วเช็คว่ามีกฎรองรับ.
+> label ยาวที่ prefix ซ้ำกัน (หมวดหมู่) ใช้ `.tw-stats-bars--stacked`. Verify หน้าตา: mock server + fixture จาก container + iframe 390/360 (ดู daily_log 2026-10-28).
 
 ## Tech Stack
 

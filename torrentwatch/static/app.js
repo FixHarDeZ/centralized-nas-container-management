@@ -720,7 +720,7 @@ function renderSourcesList(sources) {
         <button class="tw-btn-icon src-reorder" data-src-id="${s.id}" data-direction="up" title="ขึ้น"${i === 0 ? " disabled" : ""}><i class="bi bi-chevron-up"></i></button>
         <button class="tw-btn-icon src-reorder" data-src-id="${s.id}" data-direction="down" title="ลง"${i === sources.length - 1 ? " disabled" : ""}><i class="bi bi-chevron-down"></i></button>
       </div>
-      <label class="tw-toggle-row" style="flex:1;gap:8px;margin:0">
+      <label class="tw-toggle-row" style="flex:none;gap:8px;margin:0">
         <input type="checkbox" class="tw-toggle src-toggle" data-src-id="${s.id}" ${s.enabled ? "checked" : ""}>
       </label>
       <div class="tw-source-label-wrap">
@@ -965,6 +965,7 @@ async function updateStatusBadge() {
       label = `⟳ ${srcPart} — หน้า ${(prog.page ?? 0) + 1} พบ ${prog.found ?? 0} รายการ`;
     }
     el.textContent = "● " + label;
+    el.title = label;
     el.classList.add("running");
     el.style.color = "";
     if (btn) btn.classList.add("spinning");
@@ -977,7 +978,11 @@ async function updateStatusBadge() {
       _wasRunning = false;
       loadToday();
     }
-    el.textContent = status.last_scrape ? "◉ " + status.last_scrape : "◉ idle";
+    // "2026-10-28 15:00" → "28/10 15:00": same form as the card dates, and the
+    // full stamp pushed the refresh button off a 360px header.
+    const m = /^\d{4}-(\d{2})-(\d{2}) (\d{2}:\d{2})/.exec(status.last_scrape || "");
+    el.textContent = "◉ " + (m ? `${m[2]}/${m[1]} ${m[3]}` : (status.last_scrape || "idle"));
+    el.title = status.last_scrape ? `scrape ล่าสุด ${status.last_scrape}` : "";
     el.classList.remove("running");
     el.style.color = "";
     if (btn) btn.classList.remove("spinning");
@@ -1088,7 +1093,7 @@ async function loadStats() {
 
     <div class="tw-stats-section">
       <div class="tw-stats-header"><i class="bi bi-tag"></i> หมวดหมู่</div>
-      <div class="tw-stats-bars">
+      <div class="tw-stats-bars tw-stats-bars--stacked">
         ${stats.by_category.length ? stats.by_category.map(c => _statsBar(c.category, c.count, maxCat)).join("") : '<div class="tw-stats-empty">ไม่มีข้อมูล</div>'}
       </div>
     </div>

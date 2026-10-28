@@ -1023,3 +1023,16 @@ Deploy `-s torrentwatch -y` แล้ว force `check_hr` → 5 แถวเป�
 - Verify: `node --check` ผ่าน; deploy `-s torrentwatch -y` 2 รอบ, grep ในคอนเทนเนอร์เจอ `data-hfilter`/`historyFilter`/`min-width: 128px`. นับ `keyword_match` จาก DB จริงในคอนเทนเนอร์ (Lounge 10-08 = 7/244, 10-05 = 0/177) แล้วเสิร์ฟ static ใหม่ + ข้อมูลชุดนั้นผ่าน mock server บน localhost (dashboard จริงติด basic auth) ขับ Chrome: badge KW 7 / list 7 ใบทุกใบ `keyword-match`, 10-05 ขึ้น empty state, `state.filter` ของ Today ไม่ขยับ
 - สถานะ: deployed, commit+push `3b11d64` (main)
 - ปิดงาน 2026-10-10: งานค้าง = ไม่มี (ยังไม่ได้เปิด dashboard จริงหลัง basic auth ด้วยตา — verify ผ่าน mock + grep ในคอนเทนเนอร์). หากต้องการ match ตาม keyword ของวันนั้นจริง ต้องเริ่มเก็บประวัติ keyword ก่อน (ยังไม่ทำ). อัปเดต notes ชุดนี้ยังไม่ commit
+
+### 2026-10-28 — UI polish (ความสวยงาม)
+- ขอ: มีตรงไหนปรับความสวยงามได้อีก. ดูของจริงก่อน: ดึง JSON จริงจากคอนเทนเนอร์ (python ใน container + basic auth จาก env `NGINX_BASIC_AUTH_*`) → mock server บน localhost เสิร์ฟ static ของ repo (cover แทนด้วยกล่องเทา, H&R ตอนนั้นว่างเลยใส่แถวตัวอย่าง) → headless Chrome ถ่ายทุกแท็บ light/dark, ความกว้างจริง 390/360 ผ่าน `<iframe>` (Chrome headless บน Mac ไม่ยอมต่ำกว่า ~500px)
+- แก้ (frontend ล้วน ไม่แตะ backend):
+  - **eyebrow ภาษาไทยไม่ letter-spacing แล้ว** — `.16em` ดึงสระ/วรรณยุกต์หลุดจากพยัญชนะ (`ร อ บ ท ำ ง า น`). tracking/uppercase ย้ายไป `.tw-pagetitle-eyebrow[lang="en"]` ใส่ `lang="en"` ที่ `Hit & Run`/`Keyword` (ทั้งเอกสารเป็น `lang=th` ใช้ `:lang(th)` แยกไม่ได้)
+  - **การ์ดสถิติไม่มีใบกำพร้า** — `.tw-stats-grid` 3 คอลัมน์ตายตัว แต่ runs/H&R มี 4 ใบ stats มี 5 ใบ → `:has()` ตามจำนวน: 4 = 2×2, 5 = 3+2 บน grid 6 track (4 คอลัมน์ที่ 360px การ์ด ~77px `โดน hit (cap 18)` ตัดบรรทัด)
+  - **แท่งหมวดหมู่ซ้อนชั้น** (`.tw-stats-bars--stacked` เฉพาะหมวดหมู่): ชื่อ+จำนวนบรรทัดบน แท่งเต็มกว้างข้างล่าง — label 84px เดิมตัด `หนังชุด/ซีรีส์ [ฝรั่ง]/[จีน]/[เกาหลี]` เหลือข้อความเดียวกันหมด แยกไม่ออก
+  - **แถว Source ใน Settings**: label ของ toggle มี inline `flex:1` แย่งที่กับชื่อ → ช่องว่างกลางแถว ชื่อลอยกลาง. เปลี่ยนเป็น `flex:none`
+  - **header 360px**: badge `◉ 2026-10-28 15:00` + ปุ่ม 2 อันล้น ปุ่ม refresh โดนตัด → badge ตอน idle แสดง `28/10 15:00` (รูปเดียวกับวันที่บนการ์ด, เวลาเต็มอยู่ใน `title`), `.tw-header-actions`/badge `min-width:0`, `@media (max-width:380px)` ลด padding/gap header. ตอน scrape อยู่ `title` = label เต็ม (ข้อความยาวโดน ellipsis)
+- bump `?v=20261028a` ทั้ง css/js
+- Verify: `node --check` ผ่าน; ถ่ายหลังแก้ที่ 390/360 light+dark (stats 3+2, H&R/runs 2×2, หมวดหมู่อ่านครบ, header ไม่ล้น); deploy `-s torrentwatch -y`, grep ในคอนเทนเนอร์เจอ `v=20261028a`/`tw-stats-bars--stacked`/`max-width: 380px`/`lang="en"` ×2, `/api/status` 200
+- ไม่ได้แก้ (เสนอ user): แท็บประวัติเปิดมาเป็น empty state (ยังไม่เลือกวัน) — เป็นพฤติกรรมไม่ใช่หน้าตา; h1 `Run Detail` ภาษาอังกฤษท่ามกลาง h1 ไทย
+- ยังไม่ได้เปิด dashboard จริงหลัง basic auth ด้วยตา (verify ผ่าน mock + grep ในคอนเทนเนอร์)
