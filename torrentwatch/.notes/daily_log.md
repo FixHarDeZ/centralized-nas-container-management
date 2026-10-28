@@ -1042,3 +1042,4 @@ Deploy `-s torrentwatch -y` แล้ว force `check_hr` → 5 แถวเป�
 - option ว่างเปลี่ยนชื่อ `เลือกวันที่...` → `ทุกวัน (ค้นหา)` (ตอนนี้เป็นตัวเลือกที่มีความหมาย = global search), placeholder ช่องค้นหา `(ทุกวัน = ค้นทั้งหมด)`, empty state `พิมพ์ชื่อเพื่อค้นหาทุกวัน หรือเลือกวันที่`
 - h1 แท็บรอบทำงาน `Run Detail` → `ประวัติการทำงาน`
 - bump `?v=20261028b`. Verify: `node --check`, mock 390/360 แท็บประวัติเปิดมาที่ 2026-10-27 (67 รายการ), deploy + grep ในคอนเทนเนอร์เจอครบ
+- ปิดงาน 2026-10-28: deployed ทั้งสองรอบ (UI polish + ประวัติ auto-pick/h1 ไทย), commit+push `5a10b36`/`a41137d` (main). งานค้าง = ไม่มี. ยังไม่ได้เปิด dashboard จริงหลัง basic auth ด้วยตา (verify ผ่าน mock + grep ในคอนเทนเนอร์). ไฟล์ ai-deck/ink-reader ที่ค้าง uncommitted ใน repo เป็นของ session อื่น ไม่ได้แตะ

@@ -1,6 +1,6 @@
 # TorrentWatch — Project Index (Memory Blueprint)
 
-> อัปเดตล่าสุด: 2026-10-28 (UI polish: eyebrow ไทยไม่ tracking, stats grid ตามจำนวนการ์ด, แท่งหมวดหมู่ซ้อนชั้น, header 360px) — ก่อนหน้า 2026-10-10 (แท็บประวัติ: ปุ่มกรอง KW)
+> อัปเดตล่าสุด: 2026-10-28 (UI polish + แท็บประวัติเปิดวันล่าสุดก่อนวันนี้เอง + h1 รอบทำงาน "ประวัติการทำงาน"; deployed, `a41137d`) — ก่อนหน้า 2026-10-10 (แท็บประวัติ: ปุ่มกรอง KW)
 > ใช้ไฟล์นี้เป็น cold-start memory ก่อนเริ่มงานทุกครั้ง
 
 > **2026-06-24 — Notifier:** `line_notify._push` / `telegram_notify._send` สลับ body เป็น
