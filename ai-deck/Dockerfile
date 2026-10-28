@@ -10,9 +10,11 @@
 
 # Node 22 LTS — copied out of the official image rather than installed from
 # NodeSource, same trick hermes-agent uses.
-FROM node:22-bookworm-slim AS node_source
+# Base images pinned by digest (tag kept for reading): the NAS only ever
+# built from whatever it happened to have cached. `make desk-latest` bumps them.
+FROM node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 AS node_source
 
-FROM debian:bookworm-slim AS desk_runtime
+FROM debian:bookworm-slim@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07ea4171 AS desk_runtime
 
 ARG CODEX_VERSION=0.165.0
 ARG CLAUDE_VERSION=2.1.272

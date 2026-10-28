@@ -357,12 +357,14 @@ So updating is: bump the pin, rebuild. From the repo root:
 
 ```bash
 make desk-latest ARGS=-n     # what is behind, changes nothing
-make desk-latest             # rewrite the pins (Claude Code, Codex, MiMoCode, skills)
+make desk-latest             # rewrite the pins (Claude Code, Codex, MiMoCode, skills, base images)
 git diff                     # one line per bump
 ./scripts/deploy.sh -s ai-deck -y
 ```
 
 `scripts/desk_latest.py` reads the npm registry's own `latest` dist-tag and `anthropics/skills@main`, then edits exactly one pin per file and refuses to write if a file's shape has changed. ttyd and rtk are left out: they are pinned by sha256 as well as version, so bumping them means downloading the artefact to hash it, and they move about once a year.
+
+Base images are pinned by digest too (`node:22-bookworm-slim@sha256:…`, `debian:bookworm-slim@…`, `nginx:alpine@…`; the tag is only there to read), and `desk_latest.py` bumps them from Docker Hub. Before the pin, deploy never pulled, so the NAS built from whatever base it had cached (node/debian dated 2026-08-25 at pin time). A new base digest invalidates every layer after it, so that bump means a full apt/npm/pip rebuild on the NAS. Watch memory: a cold build on a swap-full NAS is what dropped ssh on 2026-10-25.
 
 A version rather than `@latest` on purpose. `@latest` in the Dockerfile would also need a cache-bust argument — the `npm install -g` layer is keyed by the command string, so without one a rebuild quietly reinstalls the same old version — and more importantly this desk is a working tool reached from a phone. A release that breaks the TUI (the copy path, the status line) leaves you with no way to roll back from a phone; a pin in git is one `git revert` away.
 

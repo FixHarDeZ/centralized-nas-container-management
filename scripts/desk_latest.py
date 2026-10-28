@@ -16,6 +16,9 @@ that is finding the number. This does that part. The pin stays in git, so a
 release that breaks the phone UI is one `git revert` from being undone —
 which is why this writes a version rather than `@latest`.
 
+Base images (node, debian, nginx) are pinned by digest and bumped here too.
+A new base digest invalidates every layer, so that rebuild is the slow one.
+
 Not covered: ttyd and rtk, which are pinned by sha256 as well as version, so
 bumping them means downloading the artefact to hash it. They also change once
 a year, unlike the agents.
@@ -32,6 +35,16 @@ ROOT = Path(__file__).resolve().parents[1]
 TIMEOUT = 20
 
 NPM = "https://registry.npmjs.org/{}/latest"
+HUB_TOKEN = "https://auth.docker.io/token?service=registry.docker.io&scope=repository:library/{}:pull"
+HUB_MANIFEST = "https://registry-1.docker.io/v2/library/{}/manifests/{}"
+# The multi-arch index first: its digest is what `docker pull <tag>` records,
+# so a pin taken from here matches a locally cached image.
+MANIFEST_TYPES = ", ".join([
+    "application/vnd.oci.image.index.v1+json",
+    "application/vnd.docker.distribution.manifest.list.v2+json",
+    "application/vnd.oci.image.manifest.v1+json",
+    "application/vnd.docker.distribution.manifest.v2+json",
+])
 GITHUB_HEAD = "https://api.github.com/repos/{}/commits/{}"
 
 
@@ -89,6 +102,33 @@ def github_head(repo: str, branch: str = "main"):
     return lambda: _get(GITHUB_HEAD.format(repo, branch))["sha"]
 
 
+def docker_hub(image: str, tag: str):
+    """Digest a Docker Hub official image's tag points at right now."""
+    def fetch():
+        token = _get(HUB_TOKEN.format(image))["token"]
+        request = urllib.request.Request(
+            HUB_MANIFEST.format(image, tag), method="HEAD",
+            headers={"Authorization": "Bearer " + token, "Accept": MANIFEST_TYPES})
+        try:
+            with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+                digest = response.headers.get("Docker-Content-Digest", "")
+        except (urllib.error.URLError, TimeoutError) as exc:
+            raise SystemExit(f"could not read {image}:{tag} from Docker Hub: {exc}") from exc
+        if not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
+            raise SystemExit(f"{image}:{tag}: registry sent no digest")
+        return digest
+    return fetch
+
+
+def base_image(label: str, path: str, image: str, tag: str) -> "Pin":
+    return Pin(
+        label, path,
+        r"(FROM " + re.escape(f"{image}:{tag}") + r"@)(sha256:[0-9a-f]{64})(\s)",
+        docker_hub(image, tag),
+        note=f"{image}:{tag}; a new base = cold apt/npm build",
+    )
+
+
 PINS = [
     Pin(
         "Codex",
@@ -117,6 +157,9 @@ PINS = [
         github_head("anthropics/skills"),
         note="anthropics/skills@main",
     ),
+    base_image("Node base", "ai-deck/Dockerfile", "node", "22-bookworm-slim"),
+    base_image("Debian base", "ai-deck/Dockerfile", "debian", "bookworm-slim"),
+    base_image("nginx base", "ai-deck/nginx/Dockerfile", "nginx", "alpine"),
 ]
 
 

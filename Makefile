@@ -39,7 +39,7 @@ sync-shared:    ## Copy each shared/*.py over its existing vendored copies (disc
 desk-skills:    ## Vendor the workstation skills named in ai-deck/skills.list into ai-deck/skills (ARGS=-n to only report)
 	@$(PY) scripts/desk_skills.py $(ARGS)
 
-DESK_PINS = ai-deck/Dockerfile ai-deck/docker-compose.yml
+DESK_PINS = ai-deck/Dockerfile ai-deck/nginx/Dockerfile ai-deck/docker-compose.yml
 
 desk-latest:    ## Bump ai-deck's pins, deploy ai-deck, commit + push the pins (ARGS=-n to only report)
 	@$(PY) scripts/desk_latest.py $(ARGS)
