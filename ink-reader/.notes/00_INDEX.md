@@ -1,6 +1,6 @@
 # ink-reader — Project Index (Memory Blueprint)
 
-> อัปเดตล่าสุด: 2026-10-28 (polish: Thai serif Trirong, SVG icons, styled dialog, cover fade, HTML no-cache — commit 5532062, NOT deployed yet)
+> อัปเดตล่าสุด: 2026-10-28 (polish: Thai serif Trirong, SVG icons, styled dialog, cover fade, HTML no-cache — deployed 5532062)
 > ใช้ไฟล์นี้เป็น cold-start memory ก่อนเริ่มงานทุกครั้ง
 
 ---
@@ -176,7 +176,9 @@ Dashboard/OPDS credentials are nginx-only: vault
 
 ## Deploy Status
 
-- Last deploy: 2026-07-13 ~12:58 (+07) — includes multi-source, dashboard
+- Last deploy: 2026-10-28 — visual polish `5532062` (Trirong Thai serif, SVG icons,
+  styled dialog, HTML no-cache). Verified in container.
+- Earlier deploy: 2026-07-13 ~12:58 (+07) — includes multi-source, dashboard
   redesign, runtime settings, kept-removal, and the cross-page listing dedup
   fix. Verified live: scrape cycle id=37 (13:03) clean, no UNIQUE errors.
 - Port 5068 is intentionally LAN-only.

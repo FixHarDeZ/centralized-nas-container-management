@@ -389,6 +389,9 @@ Added 2 new scraper sources and multi-page listing support.
   unlike→เก็บไว้ keeps title with fresh 30-day expiry, delete→Esc keeps,
   unlike→ลบทิ้ง deletes, reader dialog centered + backdrop tap keeps.
   Headless note: covers looked blank in an iframe screenshot = lazy-load artifact, fine in real Chrome.
-- Commit `5532062` pushed to main. **Not deployed** — `deploy.sh` blocked by
-  auto-mode permission; pending `./scripts/deploy.sh -s ink-reader -y`, then
-  verify in container (`grep trirong static/index.html`, `curl /fonts/trirong-400-thai.woff2` 200).
+- Commit `5532062` pushed to main, deployed 2026-10-28 (`deploy.sh -s ink-reader -y`);
+  verified in container: new markup has `trirong`, `/fonts/trirong-400-thai.woff2`
+  200 `font/woff2`, `/` sends `Cache-Control: no-cache`.
+- **Session closed 2026-10-28.** Pending: phone check of styled dialogs on real
+  iPhone. Open idea: page-number placeholder in reader while a page loads.
+  `test_scrape_log` pre-existing fail still unfixed.
