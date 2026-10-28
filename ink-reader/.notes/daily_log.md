@@ -367,3 +367,25 @@ Added 2 new scraper sources and multi-page listing support.
   Not browser-tested on phone yet (confirm dialog path).
 - **Session closed 2026-09-29.** Pending: phone check of unlike confirm dialog
   (OK→delete, Cancel→fresh window). `test_scrape_log` pre-existing fail still unfixed.
+
+## 2026-10-28 — Visual polish pass
+
+- **Thai serif**: titles were serif for Latin only — Thai fell back to sans
+  (`Noto Serif Thai` listed but never loaded). Self-hosted **Trirong** 400/500
+  Thai-subset woff2 (~9 KB each, OFL, `static/fonts/OFL.txt`) with Thai-only
+  `unicode-range`; new route `/fonts/{name}` (listdir allowlist, 1-year cache).
+- **Icons**: ⚙ ↻ ↑ (dashboard) and ‹ (reader) glyphs → inline SVG matching card icons.
+- **Dialogs**: all 3 native `confirm()` → styled `<dialog id="ask">` with explicit
+  buttons (ลบทิ้ง / เก็บไว้|ยกเลิก). Esc/backdrop = no (same as old Cancel).
+  Heart disabled while dialog/request in flight. Fixed un-centered dialogs
+  (incl. pre-existing settings dialog): `* {margin:0}` killed `margin:auto`.
+- **Covers**: gradient placeholder + fade-in on load; missing cover hides the
+  broken-image glyph.
+- **Cache**: `/` and `/read/{id}` now `Cache-Control: no-cache` — caught Chrome
+  serving stale index.html from heuristic cache during verification.
+- Tests +3 (font served/rejects, HTML no-cache); suite 61 pass / 1 pre-existing
+  fail (`test_scrape_log`).
+- Verified locally in Chrome (seeded demo): Thai serif renders, covers fade in,
+  unlike→เก็บไว้ keeps title with fresh 30-day expiry, delete→Esc keeps,
+  unlike→ลบทิ้ง deletes, reader dialog centered + backdrop tap keeps.
+  Headless note: covers looked blank in an iframe screenshot = lazy-load artifact, fine in real Chrome.

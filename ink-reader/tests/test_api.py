@@ -158,3 +158,21 @@ def test_like_toggle_and_filter(client):
     client.post(f"/api/titles/{tid}/like", json={"liked": False})
     assert db.get_title(tid)["liked"] == 0
     assert client.post("/api/titles/999/like", json={"liked": True}).status_code == 404
+
+
+def test_font_served_with_long_cache(client):
+    r = client.get("/fonts/trirong-400-thai.woff2")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "font/woff2"
+    assert "max-age=31536000" in r.headers["cache-control"]
+
+
+def test_font_route_rejects_other_files(client):
+    assert client.get("/fonts/missing.woff2").status_code == 404
+    assert client.get("/fonts/..%2Findex.html").status_code == 404
+
+
+def test_html_pages_revalidate(client):
+    tid = _seed_real_cbz()
+    for path in ("/", f"/read/{tid}"):
+        assert client.get(path).headers["cache-control"] == "no-cache"

@@ -31,9 +31,13 @@ app = FastAPI(title="ink-reader", lifespan=lifespan)
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 
 
+# Revalidate every load, or a deploy keeps showing the old UI on the phone.
+HTML_NO_CACHE = {"Cache-Control": "no-cache"}
+
+
 @app.get("/")
 def index():
-    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+    return FileResponse(os.path.join(STATIC_DIR, "index.html"), headers=HTML_NO_CACHE)
 
 
 @app.get("/api/titles")
@@ -124,7 +128,7 @@ def api_pages(tid: int):
 
 @app.get("/read/{tid}")
 def reader(tid: int):
-    return FileResponse(os.path.join(STATIC_DIR, "reader.html"))
+    return FileResponse(os.path.join(STATIC_DIR, "reader.html"), headers=HTML_NO_CACHE)
 
 
 @app.get("/read/{tid}/{n}")
@@ -138,6 +142,18 @@ def read_page(tid: int, n: int):
     # CBZ content never changes under a given id; let the phone cache it.
     return Response(data, media_type=IMAGE_TYPES[os.path.splitext(name)[1].lower()],
                     headers={"Cache-Control": "private, max-age=604800"})
+
+
+FONTS_DIR = os.path.join(STATIC_DIR, "fonts")
+
+
+@app.get("/fonts/{name}")
+def get_font(name: str):
+    # Only names that exist in static/fonts — no path joins on user input.
+    if name not in os.listdir(FONTS_DIR) or not name.endswith(".woff2"):
+        raise HTTPException(404)
+    return FileResponse(os.path.join(FONTS_DIR, name), media_type="font/woff2",
+                        headers={"Cache-Control": "public, max-age=31536000, immutable"})
 
 
 @app.get("/covers/{tid}.jpg")

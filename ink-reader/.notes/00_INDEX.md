@@ -1,6 +1,6 @@
 # ink-reader — Project Index (Memory Blueprint)
 
-> อัปเดตล่าสุด: 2026-09-29 (liked titles exempt from expiry, unlike → confirm delete; deployed cab7736)
+> อัปเดตล่าสุด: 2026-10-28 (polish: Thai serif Trirong self-hosted, SVG icons, styled confirm dialog, cover fade, HTML no-cache)
 > ใช้ไฟล์นี้เป็น cold-start memory ก่อนเริ่มงานทุกครั้ง
 
 ---
@@ -37,7 +37,7 @@ and set `needs_episode_fetch = True`.
 | Scraper | httpx client + BeautifulSoup4 (multi-source plugins) |
 | Dedup | Pillow (cover average-hash) — title-normalize match + image confirm |
 | Scheduler | APScheduler `BackgroundScheduler` |
-| Frontend | Vanilla JS, no build step, Thai UI (mobile-first black–cream/gold serif theme, redesigned 2026-09-28; tap cover/title → `/read/{id}` web reader with reading-progress strip on card), tabs ทั้งหมด/หน้าเยอะ, `<dialog>` settings modal, client-side pagination (60/page), go-to-top button |
+| Frontend | Vanilla JS, no build step, Thai UI (mobile-first black–cream/gold serif theme, redesigned 2026-09-28; Thai serif = **Trirong** woff2 Thai-subset self-hosted in `static/fonts/` via `/fonts/{name}` (unicode-range Thai only, Latin stays Iowan/Georgia; OFL.txt alongside); all icons inline SVG 1.6 stroke; `confirm()` replaced by styled `<dialog id="ask">` (Esc/backdrop = no; dialogs need `margin:auto` because of the `* {margin:0}` reset); tap cover/title → `/read/{id}` web reader with reading-progress strip on card), tabs ทั้งหมด/หน้าเยอะ, `<dialog>` settings modal, client-side pagination (60/page), go-to-top button |
 | Auth | nginx sidecar basic auth (not in-app) |
 
 ## DB Schema
@@ -142,6 +142,7 @@ Dashboard/OPDS credentials are nginx-only: vault
 | `/read/{id}` | GET | Mobile web reader (vertical scroll, resumes last page via localStorage) |
 | `/read/{id}/{n}` | GET | Page `n` (1-based) streamed straight out of the CBZ, cached 7 days |
 | `/api/status` | GET | Stats + per-source counts + last scrape |
+| `/fonts/{name}` | GET | Self-hosted woff2 from `static/fonts/` (listdir allowlist, 1-year immutable cache) |
 | `/opds` · `/opds/new` · `/opds/long` · `/opds/liked` | GET | OPDS feeds (`long` = pages ≥ `min_pages`, `liked` = liked=1) |
 
 ## Gaps / Known Risk
@@ -152,7 +153,8 @@ Dashboard/OPDS credentials are nginx-only: vault
 - `tests/test_db.py::test_scrape_log` fails since that pre-format change
   (asserts raw ISO) — pre-existing, not yet fixed.
 - Reading position is per-browser localStorage, not synced across devices.
-- Liked titles are **exempt from expiry** (2026-09-29). Unlike → UI confirm "ลบทันที?"; Cancel resets `expires_at` = now + `retention_days`.
+- `/` and `/read/{id}` send `Cache-Control: no-cache` (2026-10-28) — without it Chrome heuristically cached index.html and showed the pre-deploy UI.
+- Liked titles are **exempt from expiry** (2026-09-29). Unlike → styled dialog ลบทิ้ง / เก็บไว้ (Esc/backdrop = เก็บไว้); เก็บไว้ resets `expires_at` = now + `retention_days`. Browser-verified 2026-10-28 (dashboard + reader), not yet on a real iPhone.
 
 - `_scrape_source` dedups slugs across listing pages (2026-07-13) — required
   because `DoujintSource.listing_url()` ignores `page` (site has no listing
