@@ -1,6 +1,6 @@
 # ink-reader — Project Index (Memory Blueprint)
 
-> อัปเดตล่าสุด: 2026-10-28 (polish: Thai serif Trirong self-hosted, SVG icons, styled confirm dialog, cover fade, HTML no-cache)
+> อัปเดตล่าสุด: 2026-10-28 (polish: Thai serif Trirong, SVG icons, styled dialog, cover fade, HTML no-cache — commit 5532062, NOT deployed yet)
 > ใช้ไฟล์นี้เป็น cold-start memory ก่อนเริ่มงานทุกครั้ง
 
 ---
