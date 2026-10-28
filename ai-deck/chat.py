@@ -94,6 +94,9 @@ MAX_LINE = 64 << 10     # one record can be megabytes; readline(size) bounds it
 # Past this much idle time it is closed; the next message resumes the session.
 # 0 = never.
 IDLE_MINUTES = float(os.environ.get("CHAT_IDLE_MINUTES", "30"))
+# Coding-chat uploads are read by the turn they were sent with and then only
+# take space. Older than this are deleted (hourly). 0 = keep forever.
+ATTACHMENT_DAYS = float(os.environ.get("CHAT_ATTACHMENT_DAYS", "30"))
 UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 
@@ -780,16 +783,26 @@ def park_idle(idle: float, now=None) -> int:
     return sum(agent.park_if_idle(idle, now) for agent in agents)
 
 
-def _park_loop() -> None:
+def housekeeping_pass(minute: int) -> None:
+    """One minute's worth: idle children every time, old uploads hourly."""
+    closed = park_idle(IDLE_MINUTES * 60) if IDLE_MINUTES > 0 else 0
+    if closed:
+        sys.stderr.write("[chat] closed %d idle agent(s)\n" % closed)
+    if ATTACHMENT_DAYS > 0 and minute % 60 == 1 and workspace_api.enabled():
+        gone = chat_attachments.prune(workspace_api.store().root, ATTACHMENT_DAYS)
+        if gone:
+            sys.stderr.write("[chat] removed %d old attachment(s)\n" % gone)
+
+
+def _housekeeping() -> None:
+    minute = 0
     while True:
         time.sleep(60)
+        minute += 1
         try:
-            closed = park_idle(IDLE_MINUTES * 60)
-        except Exception as error:  # noqa: BLE001 - the sweep must outlive one bad agent
-            sys.stderr.write("[chat] idle sweep failed: %r\n" % (error,))
-            continue
-        if closed:
-            sys.stderr.write("[chat] closed %d idle agent(s)\n" % closed)
+            housekeeping_pass(minute)
+        except Exception as error:  # noqa: BLE001 - housekeeping must outlive one bad pass
+            sys.stderr.write("[chat] housekeeping failed: %r\n" % (error,))
 
 
 class TaskMoved(Exception):
@@ -1062,6 +1075,5 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    if IDLE_MINUTES > 0:
-        threading.Thread(target=_park_loop, daemon=True).start()
+    threading.Thread(target=_housekeeping, daemon=True).start()
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()

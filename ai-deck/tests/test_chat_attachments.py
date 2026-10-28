@@ -225,3 +225,65 @@ def test_double_encoded_extension_stays_literal(api):
     code, body = api[0]('/chat/attachments/photo', b'img', headers={'X-Upload-Ext': '.%252F'})
     assert code == 200, body
     assert json.loads(body)['name'] == 'photo.%2F'
+
+
+def _stored(root, owner, ws, ident, name, age_days, now):
+    folder = root / 'attachments' / owner / ws / ident
+    folder.mkdir(parents=True)
+    path = folder / name
+    path.write_bytes(b'x')
+    stamp = now - age_days * 86400
+    import os
+    os.utime(path, (stamp, stamp))
+    return path
+
+
+def test_old_attachments_are_pruned_and_recent_ones_kept(tmp_path):
+    import chat_attachments
+    now = 2_000_000_000
+    old = _stored(tmp_path, 'alice', 'a' * 32, 'b' * 32, 'old.png', 31, now)
+    new = _stored(tmp_path, 'alice', 'a' * 32, 'c' * 32, 'new.png', 2, now)
+    alone = _stored(tmp_path, 'bob', 'd' * 32, 'e' * 32, 'x.pdf', 40, now)
+    assert chat_attachments.prune(str(tmp_path), days=30, now=now) == 2
+    assert not old.exists() and not old.parent.exists()
+    assert new.exists()
+    # A workspace folder left empty goes too; the owner folder with it.
+    assert not (tmp_path / 'attachments' / 'bob').exists()
+    assert (tmp_path / 'attachments' / 'alice' / ('a' * 32)).exists()
+
+
+def test_pruning_never_follows_a_link_out_of_the_volume(tmp_path):
+    import chat_attachments
+    import os
+    now = 2_000_000_000
+    outside = tmp_path / 'outside'
+    outside.mkdir()
+    victim = outside / 'keep.txt'
+    victim.write_text('keep')
+    os.utime(victim, (0, 0))
+    root = tmp_path / 'root'
+    ws = root / 'attachments' / 'alice' / ('a' * 32)
+    ws.mkdir(parents=True)
+    (ws / ('b' * 32)).symlink_to(outside, target_is_directory=True)
+    (root / 'attachments' / 'mallory').symlink_to(outside, target_is_directory=True)
+    chat_attachments.prune(str(root), days=1, now=now)
+    assert victim.read_text() == 'keep'
+
+
+def test_pruning_with_no_attachments_folder_is_a_no_op(tmp_path):
+    import chat_attachments
+    assert chat_attachments.prune(str(tmp_path), days=30) == 0
+
+
+def test_housekeeping_prunes_hourly_in_the_coding_worker(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(chat, 'park_idle', lambda idle: 0)
+    monkeypatch.setattr(chat.workspace_api, 'enabled', lambda: True)
+    monkeypatch.setattr(chat.workspace_api, 'store', lambda: type('S', (), {'root': str(tmp_path)})())
+    monkeypatch.setattr(chat.chat_attachments, 'prune', lambda root, days: calls.append((root, days)) or 0)
+    for minute in range(1, 122):
+        chat.housekeeping_pass(minute)
+    assert calls == [(str(tmp_path), chat.ATTACHMENT_DAYS)] * 3     # minutes 1, 61, 121
+    monkeypatch.setattr(chat.workspace_api, 'enabled', lambda: False)
+    chat.housekeeping_pass(1)
+    assert len(calls) == 3

@@ -6,7 +6,7 @@ Files live in the coding volume at `attachments/<owner>/<workspace>/<random-id>/
 
 The page sends `PUT /chat/attachments/<name without last extension>` with the extension in `X-Upload-Ext` (e.g. `.png`) and the body as `application/octet-stream`; `chat_attachments.receive` joins the raw segment and header, unquotes once, and stores the real filename, so the user only ever sees real names. Header shape is `.` + 1–15 chars with no dot, slash, backslash or control character, otherwise 400; no header = the URL name as-is. `ui/attachments.js` `DeskUploadTarget()` is the one splitter, shared with the Documents drawer upload.
 
-Removing a chip removes it from the pending message, not from disk. Uploaded files remain in the persistent coding volume for conversation references; no automatic Git staging or deletion. Pending attachments remain in the current page only; refreshing clears the pending list. A separate file browser, Documents attachments and retention management are outside this change.
+Removing a chip removes it from the pending message, not from disk. Uploaded files remain in the persistent coding volume for conversation references and are never staged in Git. `chat.py` deletes uploads older than `CHAT_ATTACHMENT_DAYS` (default 30, `0` = keep) once an hour. A resumed conversation that names an older path will find it gone. Deleting a task still removes its uploads immediately. Pending attachments remain in the current page only; refreshing clears the pending list. A separate file browser and Documents attachments are outside this change.
 
 ## Implementation plan
 
