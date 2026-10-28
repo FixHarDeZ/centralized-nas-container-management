@@ -1,0 +1,90 @@
+<!doctype html><meta charset="utf-8"><title>Phone rendering checks</title>
+<pre id="result">pending</pre>
+<!-- 390px is a real phone. A headless window on macOS will not go below
+     ~500px, so the page is measured inside frames of the size that matters. -->
+<iframe id="chat" style="width:390px;height:844px;border:0" src="../ui/index.html?demo=1&mobile=1&chat=1&theme=light"></iframe>
+<iframe id="welcome" style="width:390px;height:844px;border:0" src="../ui/index.html?demo=1&mobile=1&chat=1&welcome=1&theme=light"></iframe>
+<iframe id="term" style="width:390px;height:844px;border:0" src="../ui/index.html?demo=1&mobile=1&theme=light"></iframe>
+<script>
+window.onerror = message => { document.getElementById('result').textContent = JSON.stringify({failures: [message]}); };
+// Polled, not the load event: a frame starts as about:blank, which already
+// reads as "complete", and its load can fire before a listener is attached.
+const loaded = id => new Promise(resolve => {
+  const frame = document.getElementById(id);
+  const ready = () => {
+    try {
+      const win = frame.contentWindow;
+      if (win.location.pathname.endsWith('/ui/index.html') && win.document.readyState === 'complete' && win._term) return resolve(frame);
+    } catch (_) { /* not ours yet */ }
+    setTimeout(ready, 20);
+  };
+  ready();
+});
+const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+(async () => {
+  const failures = [];
+  const check = (ok, label) => { if (!ok) failures.push(label); };
+  try {
+    // ── markdown ──────────────────────────────────────────
+    const chat = await loaded('chat');
+    await chat.contentDocument.fonts.ready;
+    await pause(200);
+    const win = chat.contentWindow, doc = chat.contentDocument;
+    win._chat.clear();
+    win._chat.feed({t: 'say_start'});
+    win._chat.feed({t: 'say', text: [
+      '## Summary', '',
+      'Intro with **bold** and `code`.', '', '',
+      '- first', '  - nested', '1. one', '',
+      '| a | b |', '|---|---|', '| 1 | 2 |', '',
+      '---', 'after <b>not markup</b>',
+      '```js', 'const x = 1;', '```', 'tail',
+    ].join('\n')});
+    win._chat.feed({t: 'say_end'});
+    await pause(300);
+    const answer = doc.querySelector('.bubble.them.md');
+    check(answer, 'answer rendered with markdown');
+    if (answer) {
+      check(answer.querySelector('.md-h.md-h2')?.textContent === 'Summary', 'heading');
+      check(answer.querySelector('strong')?.textContent === 'bold', 'bold');
+      check(answer.querySelector('.md-p code')?.textContent === 'code', 'inline code');
+      const items = answer.querySelectorAll('.md-li');
+      check(items.length === 3, 'three list items, got ' + items.length);
+      check(items[1] && items[1].style.getPropertyValue('--depth') === '1', 'nested item indented');
+      check(items[2] && items[2].querySelector('.md-mark').textContent === '1.', 'numbered marker kept');
+      check(![...answer.querySelectorAll('.md-body')].some(n => n.textContent.startsWith('- ')), 'no literal dash');
+      const table = answer.querySelector('.md-table');
+      check(table && table.children.length === 2, 'table rows without the divider');
+      check(answer.querySelector('hr.md-hr'), 'rule');
+      check(!answer.querySelector('b') && answer.textContent.includes('<b>not markup</b>'), 'agent text never becomes markup');
+      check(answer.querySelector('pre code')?.textContent === 'const x = 1;\n', 'fenced block');
+      check(answer.querySelectorAll('.md-gap').length <= 4, 'blank lines collapse to one gap each');
+      const gap = answer.querySelector('.md-gap');
+      const line = parseFloat(win.getComputedStyle(answer).lineHeight);
+      check(gap && gap.getBoundingClientRect().height < line / 2, 'a blank line is shorter than half a line');
+    }
+    // ── composer: input and send button sit level ─────────
+    const box = doc.getElementById('chat-input').getBoundingClientRect();
+    const send = doc.getElementById('chat-send').getBoundingClientRect();
+    check(Math.abs(box.height - send.height) <= 1, `send ${send.height}px vs input ${box.height}px`);
+    check(Math.abs(box.bottom - send.bottom) <= 1, 'send button bottom-aligned with the input');
+
+    // ── welcome screen: nothing to jump to ────────────────
+    const welcome = await loaded('welcome');
+    await pause(400);
+    check(welcome.contentDocument.getElementById('chat-jump').hidden, 'jump pill hidden on the welcome screen');
+
+    // ── terminal keys fit at 390px ────────────────────────
+    const term = await loaded('term');
+    await term.contentDocument.fonts.ready;
+    await pause(200);
+    for (const button of term.contentDocument.querySelectorAll('#toolbar .row button')) {
+      const label = button.textContent.trim() || button.getAttribute('aria-label');
+      check(button.scrollWidth <= button.clientWidth + 1, `key "${label}" clipped (${button.scrollWidth} > ${button.clientWidth})`);
+    }
+    const toolbar = term.contentDocument.getElementById('toolbar').getBoundingClientRect();
+    check(toolbar.right <= 390.5, 'toolbar inside the screen');
+  } catch (error) { failures.push(String(error && error.stack || error)); }
+  document.getElementById('result').textContent = JSON.stringify({failures});
+})();
+</script>

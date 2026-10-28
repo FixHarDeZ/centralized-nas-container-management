@@ -18,7 +18,7 @@ class BrowserServer(http.server.ThreadingHTTPServer):
     request_queue_size = 64
 
 
-@pytest.mark.parametrize('harness', ['attachments_harness.html', 'connection_harness.html', 'workspace_harness.html', 'quota_harness.html', 'starter_prompts_harness.html', 'coding_harness.html', 'terminal_layout_harness.html', 'bundle_harness.html', 'claude_login_harness.html'])
+@pytest.mark.parametrize('harness', ['attachments_harness.html', 'connection_harness.html', 'workspace_harness.html', 'quota_harness.html', 'starter_prompts_harness.html', 'coding_harness.html', 'terminal_layout_harness.html', 'bundle_harness.html', 'claude_login_harness.html', 'chat_render_harness.html'])
 def test_workspace_controls_and_mobile_layout(tmp_path, harness):
     chrome = find_chrome()
     if not chrome:

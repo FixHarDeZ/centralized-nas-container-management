@@ -424,6 +424,25 @@ body.chat-view #terminal, body.chat-view #toolbar { display: none; }
   overflow-x: auto; white-space: pre;
 }
 .bubble pre code { padding: 0; background: none; border: 0; font-size: 12px; }
+/* Rendered answers (app.js markdown()). A blank line is a short gap rather
+   than a full 1.8-line row, and list items hang so a wrapped Thai line lines
+   up under its text instead of under the bullet. */
+.bubble.md > .md-gap { height: 0.55em; }
+.bubble strong { font-weight: 700; }
+.md-h { font-weight: 700; margin: 0.35em 0 0.1em; line-height: 1.5; }
+.md-h1 { font-size: 1.2em; }
+.md-h2 { font-size: 1.1em; }
+.md-li { display: flex; gap: 0.5em; padding-left: calc(var(--depth, 0) * 1.1em); }
+.md-mark { flex: 0 0 auto; min-width: 0.9em; color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; }
+.md-body { flex: 1 1 auto; min-width: 0; }
+.md-table {
+  margin: 6px 0; padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background: var(--panel);
+  font-family: var(--mono); font-size: 12px; line-height: 1.6;
+  white-space: pre; overflow-x: auto;
+}
+.md-hr { border: 0; border-top: 1px solid var(--line); margin: 10px 0; }
 
 /* One line per tool call, the way the transcript shows it: what ran, and
    whether it came back clean. */
@@ -564,6 +583,14 @@ body.kb-open #toolbar { padding-bottom: 8px; }   /* keyboard covers the home bar
 .row button.svg-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .row button[data-key="up"], .row button[data-key="down"],
 .row button[data-key="left"], .row button[data-key="right"] { font-size: 16px; font-weight: 500; }
+/* Nine keys share ~374px on a 390px phone. Equal shares clipped ⇧Tab and
+   ↵ NL; the arrows are one glyph and give the labels the room. Same for
+   Copy/Paste against the one- and two-character keys below them. */
+.row.keys button { flex-grow: 1.3; letter-spacing: 0; }
+.row.keys button[data-key="up"], .row.keys button[data-key="down"],
+.row.keys button[data-key="left"], .row.keys button[data-key="right"] { flex-grow: 0.7; }
+.row.utils button { flex-grow: 0.84; }
+.row.utils #copy-btn, .row.utils #paste-btn { flex-grow: 1.4; }
 
 /* ── Side sheets: files drawer and sessions ─────────── */
 /* Two panels, one geometry and one scrim. They are mutually exclusive — the

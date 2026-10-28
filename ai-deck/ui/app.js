@@ -1236,7 +1236,8 @@
 
   const jumpBtn = document.getElementById('chat-jump');
   const follower = Stream.createFollower(chatLog, {
-    onChange: function (pinned) { jumpBtn.hidden = pinned; },
+    // Nothing to jump to on the welcome screen, which is taller than a phone.
+    onChange: function (pinned) { jumpBtn.hidden = pinned || !chatLog.querySelector('.bubble, .pill'); },
   });
   jumpBtn.addEventListener('click', function () { follower.toBottom(); });
   const stream = Stream.createStream({
@@ -1253,11 +1254,75 @@
     return node;
   }
 
-  // Just enough markdown for what an agent writes: fenced blocks, inline
-  // code. Everything else stays literal — a full parser is a dependency and
-  // an escaping bug, and the text is already pre-wrapped by CSS.
+  // Just enough markdown for what an agent writes: fenced blocks, inline code
+  // and bold, headings, bullet and numbered lists, tables and rules. Built
+  // from DOM nodes, never innerHTML, so the agent's text cannot become markup.
+  // Anything else stays literal: a full parser is a dependency and an escaping
+  // bug, and a phone mostly needs lists that hang and blank lines that do not
+  // cost a whole line.
+  function inline(target, text) {
+    text.split(/(`[^`\n]+`)/).forEach((piece) => {
+      if (piece.startsWith('`') && piece.endsWith('`') && piece.length > 2) {
+        target.appendChild(el('code', null, piece.slice(1, -1)));
+        return;
+      }
+      piece.split(/(\*\*[^*\n]+\*\*)/).forEach((bit) => {
+        if (bit.length > 4 && bit.startsWith('**') && bit.endsWith('**')) {
+          target.appendChild(el('strong', null, bit.slice(2, -2)));
+        } else if (bit) {
+          target.appendChild(document.createTextNode(bit));
+        }
+      });
+    });
+  }
+  function prose(target, text) {
+    let para = null;
+    let table = null;
+    const gap = () => {
+      if (target.lastChild && !target.lastChild.classList.contains('md-gap')) {
+        target.appendChild(el('div', 'md-gap'));
+      }
+    };
+    text.split('\n').forEach((line) => {
+      if (!/^\s*\|/.test(line)) table = null;
+      if (!line.trim()) { para = null; gap(); return; }
+      let m;
+      if (/^\s*\|/.test(line)) {
+        para = null;
+        if (/^\s*\|[\s:|-]+\|\s*$/.test(line)) return;   // the |---| divider row
+        if (!table) table = target.appendChild(el('div', 'md-table'));
+        table.appendChild(el('div', null, line.trim()));
+        return;
+      }
+      if ((m = line.match(/^(#{1,4})\s+(.*)$/))) {
+        para = null;
+        inline(target.appendChild(el('div', 'md-h md-h' + m[1].length)), m[2]);
+        return;
+      }
+      if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) {
+        para = null;
+        target.appendChild(el('hr', 'md-hr'));
+        return;
+      }
+      if ((m = line.match(/^(\s*)([-*+]|\d+[.)])\s+(.*)$/))) {
+        para = null;
+        const item = target.appendChild(el('div', 'md-li'));
+        item.style.setProperty('--depth', Math.min(4, Math.floor(m[1].replace(/\t/g, '  ').length / 2)));
+        item.appendChild(el('span', 'md-mark', /^\d/.test(m[2]) ? m[2] : '•'));
+        inline(item.appendChild(el('span', 'md-body')), m[3]);
+        return;
+      }
+      if (para) para.appendChild(document.createTextNode('\n'));
+      else para = target.appendChild(el('div', 'md-p'));
+      inline(para, line);
+    });
+    while (target.lastChild && target.lastChild.classList && target.lastChild.classList.contains('md-gap')) {
+      target.removeChild(target.lastChild);
+    }
+  }
   function markdown(target, text) {
     target.textContent = '';
+    target.classList.add('md');
     const parts = text.split(/```/);
     parts.forEach((part, i) => {
       if (i % 2) {
@@ -1267,13 +1332,7 @@
         target.appendChild(pre);
         return;
       }
-      part.split(/(`[^`\n]+`)/).forEach((piece) => {
-        if (piece.startsWith('`') && piece.endsWith('`') && piece.length > 2) {
-          target.appendChild(el('code', null, piece.slice(1, -1)));
-        } else if (piece) {
-          target.appendChild(document.createTextNode(piece));
-        }
-      });
+      prose(target, part.replace(/^\n+|\n+$/g, ''));
     });
   }
 
