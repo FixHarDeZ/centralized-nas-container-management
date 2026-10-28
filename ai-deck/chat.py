@@ -681,6 +681,8 @@ class Agent:
         if kind == "result":
             with self.lock:
                 self.busy = False
+                # Idle time starts when the answer lands, not when it was asked.
+                self.last_used = time.monotonic()
             # Nothing of this turn is unwritten any more.
             self.partial = ""
             self.open_tools = []

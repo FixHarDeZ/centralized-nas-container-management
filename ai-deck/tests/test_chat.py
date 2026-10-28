@@ -841,3 +841,14 @@ def test_a_replaced_child_does_not_end_the_new_turn(agent):
     time.sleep(0.3)
     events = drain(channel, "turn")
     assert not any(e["t"] == "gone" for e in events)
+
+
+def test_idle_time_counts_from_the_end_of_the_turn_not_the_send(agent):
+    """A 40-minute turn must not be parked a minute after its answer lands."""
+    channel = agent.subscribe()
+    sent = time.monotonic()
+    agent.send("hello")
+    agent.last_used = sent - 3600          # as if the send was an hour ago
+    drain(channel, "turn")                 # the turn ends now
+    assert not agent.park_if_idle(idle=60, now=time.monotonic() + 10)
+    assert agent.running()
