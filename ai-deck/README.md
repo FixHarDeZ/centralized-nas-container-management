@@ -126,6 +126,14 @@ xterm.js would break every time Claude Code changed how it draws, and would put
 the working half of the desk at the mercy of a cosmetic upstream change. See
 [ADR 0013](../docs/adr/0013-claude-desk-chat-is-a-second-view-not-a-wrapper.md).
 
+The Claude child starts on the first message and stays up between turns, so the
+next answer starts fast. There is one per (user, agent, workspace) and each holds
+a few hundred MB, so a child left idle for `CHAT_IDLE_MINUTES` (default 30, `0`
+= never) is closed. The session is kept: the next message starts a new child
+with `--resume`, which costs a few seconds once. Closing an idle child on purpose
+is not announced to the page as `gone`. Neither is closing one for a model change
+or New session; before, the old child's reader could end the turn that replaced it.
+
 What the page gets, over server-sent events:
 
 - text token by token, from `content_block_delta`, so a bubble fills in;

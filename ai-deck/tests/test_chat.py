@@ -783,3 +783,61 @@ def test_a_failure_carries_the_reason_it_ended_with(agent):
     # Something to show under the failure and to put in a bug report; the
     # bare word "ทำงานไม่สำเร็จ" leaves nothing to act on.
     assert turn["reason"]
+
+
+def test_an_idle_child_is_parked_and_the_next_message_resumes_it(agent):
+    """A Claude child left open after a turn holds hundreds of MB; one per
+    (user, provider, workspace) adds up inside the worker's cap."""
+    channel = agent.subscribe()
+    agent.send("hello")
+    drain(channel, "turn")
+    time.sleep(0.2)
+    _flush(channel)                                  # the turn's own busy=False
+    agent.session_id = "11111111-2222-3333-4444-555555555555"
+    assert not agent.park_if_idle(idle=60)          # used just now
+    assert agent.park_if_idle(idle=60, now=time.monotonic() + 61)
+    assert not agent.running()
+    assert agent.session_id == "11111111-2222-3333-4444-555555555555"
+    # Parking is not the child dying: the page must not be told it is gone.
+    time.sleep(0.3)
+    assert not any(e["t"] in ("gone", "busy") for e in _flush(channel))
+    spawned = []
+    real_start = agent.start
+    agent.start = lambda resume="": (spawned.append(resume), real_start(resume=resume))
+    assert agent.send("again")[0] == 200
+    assert spawned == ["11111111-2222-3333-4444-555555555555"]
+
+
+def test_a_busy_or_stopped_child_is_not_parked(agent):
+    agent.send("hello")
+    agent.busy = True
+    assert not agent.park_if_idle(idle=0, now=time.monotonic() + 3600)
+    assert agent.running()
+    agent.busy = False
+    agent.stop_child()
+    assert not agent.park_if_idle(idle=0, now=time.monotonic() + 3600)
+
+
+def test_parking_sweeps_every_registered_agent(agent, monkeypatch):
+    monkeypatch.setattr(chat, "AGENTS", {("u", "claude", ""): agent})
+    monkeypatch.setattr(chat, "AGENT", chat.Agent(command=agent.command, cwd=agent.cwd))
+    channel = agent.subscribe()
+    agent.send("hello")
+    drain(channel, "turn")
+    assert chat.park_idle(idle=60, now=time.monotonic() + 61) == 1
+    assert not agent.running()
+
+
+def test_a_replaced_child_does_not_end_the_new_turn(agent):
+    """Changing model restarts the child mid-send; the old reader finishing
+    afterwards must not announce busy=False/gone over the new turn."""
+    channel = agent.subscribe()
+    agent.send("hello")
+    drain(channel, "turn")
+    _flush(channel)
+    old = agent.proc
+    agent.send("again", model="opus")
+    old.wait(timeout=5)
+    time.sleep(0.3)
+    events = drain(channel, "turn")
+    assert not any(e["t"] == "gone" for e in events)

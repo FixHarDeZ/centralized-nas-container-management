@@ -89,6 +89,11 @@ TOOL_DETAIL = 90        # characters of tool argument shown on a pill
 HISTORY_ITEMS = 300     # bubbles and pills kept from a past conversation
 HISTORY_BUDGET = 8 << 20  # bytes read from one transcript
 MAX_LINE = 64 << 10     # one record can be megabytes; readline(size) bounds it
+# A Claude child stays up between turns so the next one answers fast, but it
+# holds a few hundred MB, and there is one per (user, provider, workspace).
+# Past this much idle time it is closed; the next message resumes the session.
+# 0 = never.
+IDLE_MINUTES = float(os.environ.get("CHAT_IDLE_MINUTES", "30"))
 UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 
 
@@ -346,6 +351,7 @@ class Agent:
         self.ring = collections.deque(maxlen=RING)
         self.partial = ""
         self.open_tools = []
+        self.last_used = time.monotonic()
 
     # ── fan-out ───────────────────────────────────────────────────────────
     def subscribe(self) -> queue.Queue:
@@ -422,6 +428,7 @@ class Agent:
         """Spawn the child. Caller holds the lock."""
         self.session_id = resume or None
         self.spent = 0.0
+        self.last_used = time.monotonic()
         self.proc = subprocess.Popen(
             self.command + (["--model", self.model] if self.model else [])
             + (["--effort", self.effort] if self.effort else [])
@@ -450,6 +457,19 @@ class Agent:
             proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
             proc.kill()
+
+    def park_if_idle(self, idle: float, now=None) -> bool:
+        """Close a child nobody has used for `idle` seconds; keep the session.
+
+        `send()` starts a child with `--resume <session_id>` whenever none is
+        running, so the next message carries on where this one left off.
+        """
+        now = time.monotonic() if now is None else now
+        with self.lock:
+            if self.busy or not self.running() or now - self.last_used < idle:
+                return False
+            self.stop_child()
+            return True
 
     def _write(self, payload: dict) -> bool:
         """Caller holds the lock."""
@@ -484,6 +504,7 @@ class Agent:
             if not ok:
                 return 503, "agent not accepting input"
             self.busy = True
+            self.last_used = time.monotonic()
         self.emit(t="busy", on=True)
         return 200, "ok"
 
@@ -563,13 +584,18 @@ class Agent:
                 self._translate(event)
             except Exception:  # noqa: BLE001 - one bad event must not end the stream
                 continue
-        # stdout closed: the child is gone, whatever the reason.
+        # stdout closed. Only news when it was the current child: one closed
+        # on purpose (parked, new session, model change) has already been
+        # replaced, and saying "gone" then would end the turn that replaced it.
         with self.lock:
-            if proc is self.proc:
+            current = proc is self.proc
+            if current:
                 self.proc = None
                 self.busy = False
-        self.emit(t="busy", on=False)
-        self.emit(t="gone")
+            self.last_used = time.monotonic()
+        if current:
+            self.emit(t="busy", on=False)
+            self.emit(t="gone")
 
     def _translate(self, event: dict) -> None:
         kind = event.get("type")
@@ -745,6 +771,25 @@ def agent_for(user, provider, workspace_id="", cwd=None):
         if agent is None:
             agent = AGENTS[key] = PROVIDERS.get(provider, Agent)(cwd=cwd)
         return agent
+
+
+def park_idle(idle: float, now=None) -> int:
+    """Close every idle child; returns how many were closed."""
+    with AGENTS_LOCK:
+        agents = [AGENT, *AGENTS.values()]
+    return sum(agent.park_if_idle(idle, now) for agent in agents)
+
+
+def _park_loop() -> None:
+    while True:
+        time.sleep(60)
+        try:
+            closed = park_idle(IDLE_MINUTES * 60)
+        except Exception as error:  # noqa: BLE001 - the sweep must outlive one bad agent
+            sys.stderr.write("[chat] idle sweep failed: %r\n" % (error,))
+            continue
+        if closed:
+            sys.stderr.write("[chat] closed %d idle agent(s)\n" % closed)
 
 
 class TaskMoved(Exception):
@@ -1017,4 +1062,6 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    if IDLE_MINUTES > 0:
+        threading.Thread(target=_park_loop, daemon=True).start()
     ThreadingHTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
