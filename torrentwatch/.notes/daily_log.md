@@ -1034,5 +1034,11 @@ Deploy `-s torrentwatch -y` แล้ว force `check_hr` → 5 แถวเป�
   - **header 360px**: badge `◉ 2026-10-28 15:00` + ปุ่ม 2 อันล้น ปุ่ม refresh โดนตัด → badge ตอน idle แสดง `28/10 15:00` (รูปเดียวกับวันที่บนการ์ด, เวลาเต็มอยู่ใน `title`), `.tw-header-actions`/badge `min-width:0`, `@media (max-width:380px)` ลด padding/gap header. ตอน scrape อยู่ `title` = label เต็ม (ข้อความยาวโดน ellipsis)
 - bump `?v=20261028a` ทั้ง css/js
 - Verify: `node --check` ผ่าน; ถ่ายหลังแก้ที่ 390/360 light+dark (stats 3+2, H&R/runs 2×2, หมวดหมู่อ่านครบ, header ไม่ล้น); deploy `-s torrentwatch -y`, grep ในคอนเทนเนอร์เจอ `v=20261028a`/`tw-stats-bars--stacked`/`max-width: 380px`/`lang="en"` ×2, `/api/status` 200
-- ไม่ได้แก้ (เสนอ user): แท็บประวัติเปิดมาเป็น empty state (ยังไม่เลือกวัน) — เป็นพฤติกรรมไม่ใช่หน้าตา; h1 `Run Detail` ภาษาอังกฤษท่ามกลาง h1 ไทย
+- (รอบถัดมา user สั่งทำทั้งสองอย่าง — ดูหัวข้อถัดไป)
 - ยังไม่ได้เปิด dashboard จริงหลัง basic auth ด้วยตา (verify ผ่าน mock + grep ในคอนเทนเนอร์)
+
+### 2026-10-28 (ต่อ) — แท็บประวัติเปิดวันล่าสุดเอง + h1 รอบทำงานเป็นไทย
+- `state.historyDate` เริ่มเป็น `null` (= ยังไม่เลือก) ต่างจาก `""` (= user เลือก "ทุกวัน (ค้นหา)" เอง ต้องคงไว้). `loadHistoryDates()` ถ้า `null` หรือวันที่เดิมไม่อยู่ใน list ของ source ใหม่ → เลือก **วันใหม่สุดที่ก่อนวันนี้** (วันนี้ = แท็บวันนี้อยู่แล้ว) วันที่ Bangkok จาก `toLocaleDateString("en-CA", {timeZone:"Asia/Bangkok"})`, ไม่มีวันเก่ากว่า = `dates[0]`, ไม่มีเลย = ทุกวัน
+- option ว่างเปลี่ยนชื่อ `เลือกวันที่...` → `ทุกวัน (ค้นหา)` (ตอนนี้เป็นตัวเลือกที่มีความหมาย = global search), placeholder ช่องค้นหา `(ทุกวัน = ค้นทั้งหมด)`, empty state `พิมพ์ชื่อเพื่อค้นหาทุกวัน หรือเลือกวันที่`
+- h1 แท็บรอบทำงาน `Run Detail` → `ประวัติการทำงาน`
+- bump `?v=20261028b`. Verify: `node --check`, mock 390/360 แท็บประวัติเปิดมาที่ 2026-10-27 (67 รายการ), deploy + grep ในคอนเทนเนอร์เจอครบ

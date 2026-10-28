@@ -23,7 +23,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Geist+Mono:wght@500;600;700&family=IBM+Plex+Sans+Thai+Looped:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-  <link rel="stylesheet" href="/static/style.css?v=20261028a">
+  <link rel="stylesheet" href="/static/style.css?v=20261028b">
 </head>
 <body>
   <div id="app">
@@ -90,7 +90,7 @@
       <div class="tw-source-bar" id="source-chips-history"></div>
       <div class="tw-toolbar">
         <select class="tw-date-select" id="history-date-select">
-          <option value="">เลือกวันที่...</option>
+          <option value="">ทุกวัน (ค้นหา)</option>
         </select>
         <div class="tw-sort-group">
           <button class="tw-sort-btn active" data-sort="seeds"><i class="bi bi-arrow-up-circle-fill tw-seed-icon"></i> Seed</button>
@@ -106,7 +106,7 @@
       <div class="tw-search-row">
         <div class="tw-search-wrap">
           <i class="bi bi-search tw-search-icon"></i>
-          <input class="tw-search-input" id="history-search-input" type="search" placeholder="ค้นหาชื่อ (ไม่เลือกวัน = ค้นทั้งหมด)..." autocomplete="off">
+          <input class="tw-search-input" id="history-search-input" type="search" placeholder="ค้นหาชื่อ (ทุกวัน = ค้นทั้งหมด)..." autocomplete="off">
         </div>
       </div>
       <div class="tw-list" id="list-history"></div>
@@ -131,7 +131,7 @@
       <div class="tw-pagetitle">
         <div class="tw-pagetitle-eyebrow">รอบทำงาน</div>
         <div class="tw-pagetitle-row">
-          <h1>Run Detail</h1>
+          <h1>ประวัติการทำงาน</h1>
           <button class="tw-btn-secondary tw-run-refresh" id="btn-runs-refresh" title="โหลดใหม่">
             <i class="bi bi-arrow-clockwise"></i>
           </button>
@@ -500,6 +500,6 @@
     })();
   </script>
 
-  <script src="/static/app.js?v=20261028a"></script>
+  <script src="/static/app.js?v=20261028b"></script>
 </body>
 </html>

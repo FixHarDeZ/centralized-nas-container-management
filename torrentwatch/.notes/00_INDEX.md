@@ -18,7 +18,8 @@ TorrentWatch เป็น FastAPI app สำหรับ monitor torrent ให�
 
 > **2026-10-28 — UI conventions:** eyebrow ภาษาไทยห้าม `letter-spacing` (สระ/วรรณยุกต์หลุด) — eyebrow ละตินใส่ `lang="en"` แล้วได้ tracking+uppercase เอง.
 > `.tw-stats-grid` จัดคอลัมน์ตามจำนวนการ์ดด้วย `:has()` (3/4=2×2/5=3+2) เพิ่มการ์ดแล้วเช็คว่ามีกฎรองรับ.
-> label ยาวที่ prefix ซ้ำกัน (หมวดหมู่) ใช้ `.tw-stats-bars--stacked`. Verify หน้าตา: mock server + fixture จาก container + iframe 390/360 (ดู daily_log 2026-10-28).
+> label ยาวที่ prefix ซ้ำกัน (หมวดหมู่) ใช้ `.tw-stats-bars--stacked`.
+> แท็บประวัติ: `state.historyDate` `null` = auto-pick วันใหม่สุดก่อนวันนี้, `""` = ทุกวัน (global search) ที่ user เลือกเอง — อย่ารวมสองค่านี้. Verify หน้าตา: mock server + fixture จาก container + iframe 390/360 (ดู daily_log 2026-10-28).
 
 ## Tech Stack
 

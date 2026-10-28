@@ -8,7 +8,7 @@ const state = {
   sort: { today: "seeds", history: "seeds", hr: "slack" },
   filter: "all",
   showSticky: true,
-  historyDate: "",
+  historyDate: null,  // null = not chosen yet (auto-pick), "" = ทุกวัน
   historyFilter: "all",
   settings: {},
   search: "",
@@ -232,18 +232,22 @@ async function loadHistoryDates() {
   const dates = await api("GET", `/history/dates?source_id=${sid}`).catch(() => []);
   const sel = document.getElementById("history-date-select");
   const prev = state.historyDate;
-  sel.innerHTML = '<option value="">เลือกวันที่...</option>';
+  sel.innerHTML = '<option value="">ทุกวัน (ค้นหา)</option>';
   dates.forEach(d => {
     const opt = document.createElement("option");
     opt.value = d; opt.textContent = d;
     sel.appendChild(opt);
   });
-  if (prev && dates.includes(prev)) {
-    sel.value = prev;
-    loadHistory(prev);
-  } else {
-    loadHistory(null);
+  // Keep the user's pick ("" = ทุกวัน counts as a pick). Otherwise open on the
+  // newest day before today — today itself is what the วันนี้ tab shows.
+  let date = prev;
+  if (date === null || (date && !dates.includes(date))) {
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Bangkok" });
+    date = dates.find(d => d < today) || dates[0] || "";
   }
+  state.historyDate = date;
+  sel.value = date;
+  loadHistory(date || null);
 }
 
 async function loadHistory(date) {
@@ -265,7 +269,7 @@ async function loadHistory(date) {
       }
     } else {
       _updateHistoryFilterCounts([]);
-      document.getElementById("list-history").innerHTML = `<div class="tw-empty"><i class="bi bi-search"></i>เลือกวันที่ หรือพิมพ์ชื่อเพื่อค้นหาทั้งหมด</div>`;
+      document.getElementById("list-history").innerHTML = `<div class="tw-empty"><i class="bi bi-search"></i>พิมพ์ชื่อเพื่อค้นหาทุกวัน หรือเลือกวันที่</div>`;
     }
     return;
   }
