@@ -404,3 +404,4 @@ Added 2 new scraper sources and multi-page listing support.
   pages would show it. Verified in Chrome: pending page shows "1", loaded pages
   have no background. (Headless `imagesEnabled=false` also hides CSS
   backgrounds — not a usable check.)
+- Commit `6e5b295` pushed + deployed; verified `pageMark` in container reader.html.
