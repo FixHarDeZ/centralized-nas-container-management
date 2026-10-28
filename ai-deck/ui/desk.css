@@ -116,3 +116,71 @@ button:disabled { cursor: wait; opacity: .55; }
   .top-actions { min-width: 0; flex-wrap: wrap; justify-content: flex-end; }
   #top { height: auto; }
 }
+
+/* ── Phone layout ─────────────────────────────────────── */
+.control-bar { display: contents; }
+.btn-ico { display: none; }
+.chat-gear { display: none; }
+@media (max-width: 600px) {
+  /* Agent + workspace in one row: the two bars and their groups dissolve so
+     their controls are siblings of one flex row. */
+  .control-bar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--panel-glass);
+  }
+  .control-bar > nav, .control-bar .agent-controls, .control-bar .project-picker { display: contents; }
+  .control-bar .workspace-label, .control-bar .agent-controls label, .control-bar .project-picker label { display: none; }
+  .control-bar select, .control-bar button { height: 38px; min-height: 38px; }
+  .control-bar #provider-select { order: 1; flex: 0 0 auto; min-width: 0; max-width: 40%; padding: 0 26px 0 10px; font: 600 13px var(--ui); }
+  .control-bar #project-select { order: 2; flex: 1 1 0; width: auto; min-width: 0; font-size: 13px; border-radius: 9px; }
+  .control-bar #agent-start { order: 3; }
+  .control-bar #project-manage { order: 4; margin: 0; }
+  .control-bar #agent-start, .control-bar #project-manage {
+    flex: 0 0 38px; width: 38px; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .control-bar .btn-ico, .control-bar #project-manage svg {
+    display: block; width: 18px; height: 18px;
+    fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round;
+  }
+  .control-bar .btn-label {
+    position: absolute; width: 1px; height: 1px; overflow: hidden;
+    clip: rect(0 0 0 0); white-space: nowrap;
+  }
+  /* Signing in is the one control that needs words, so it gets its own row;
+     once signed in there is nothing to do and it steps aside. */
+  .control-bar #agent-login { order: 5; flex: 1 1 100%; }
+  .control-bar #agent-login.signed-in { display: none; }
+
+  .chat-gear {
+    display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
+    width: 30px; height: 26px; padding: 0;
+    border: 1px solid var(--line); border-radius: 999px;
+    background: var(--btn); color: var(--muted); cursor: pointer;
+  }
+  .chat-gear svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+  .chat-gear.on { color: var(--accent); border-color: var(--accent-line); background: var(--accent-soft); }
+  body:not(.chat-options-open) .chat-options { display: none; }
+  /* The bar packs to the right. The provider line only repeats the agent
+     picker above, so it shows only when it carries a warning. */
+  .chat-bar { justify-content: flex-end; }
+  .chat-bar .chat-state:not(.warn) { display: none; }
+  .chat-bar .chat-state.warn { margin-right: auto; }
+  .chat-bar .chat-ctx { margin-left: 0; }
+
+  /* Typing: the keyboard takes half the screen, so the controls step out and
+     the conversation keeps what is left. They come back with the keyboard. */
+  body.chat-view.kb-open .control-bar,
+  body.chat-view.kb-open .chat-options { display: none; }
+
+  /* Starter cards: edit is a corner icon, not a row of its own. */
+  .starter-card { position: relative; }
+  .starter-grid .starter-card .starter-use { padding-right: 48px; }
+  .starter-edit {
+    position: absolute; top: 8px; right: 8px; margin: 0;
+    width: 34px; height: 34px; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 0; border-radius: 9px;
+  }
+  .starter-edit::before { content: "✎"; font-size: 16px; line-height: 1; }
+}

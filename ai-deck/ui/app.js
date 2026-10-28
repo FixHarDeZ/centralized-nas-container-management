@@ -1989,12 +1989,25 @@
       modelSelect.disabled = modelOptions.length < 2;
       optionsNote.textContent = modelOptions.length < 2 ? 'Model list unavailable. Default remains available.' : 'Applies to your next message';
       optionsLoaded = true;
+      paintSettings();
     } catch (_) {
       optionsNote.textContent = 'Could not refresh models. Try returning to this tab.';
     } finally { optionsPending = false; }
   }
-  modelSelect.addEventListener('change', () => { paintEfforts(effortSelect.value); saveOptions(); });
-  effortSelect.addEventListener('change', saveOptions);
+  // The phone folds Model/Effort behind a button; it lights up whenever
+  // something other than Default is chosen, so a folded choice is not a
+  // forgotten one.
+  const settingsBtn = document.getElementById('chat-settings');
+  function paintSettings() {
+    settingsBtn.classList.toggle('on', !!(modelSelect.value || effortSelect.value));
+  }
+  settingsBtn.addEventListener('click', () => {
+    const open = !document.body.classList.contains('chat-options-open');
+    document.body.classList.toggle('chat-options-open', open);
+    settingsBtn.setAttribute('aria-expanded', String(open));
+  });
+  modelSelect.addEventListener('change', () => { paintEfforts(effortSelect.value); saveOptions(); paintSettings(); });
+  effortSelect.addEventListener('change', () => { saveOptions(); paintSettings(); });
   const optionsReady = refreshOptions();
   refreshAuth();
   window.addEventListener('focus', () => { refreshAuth(); refreshOptions(); });

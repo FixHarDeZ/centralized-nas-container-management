@@ -78,7 +78,6 @@
   .project-picker label span { display:none; }
   .project-bar select { width:100%; }
   #project-manage { font-size:11px; padding:0 8px; }
-  #project-manage svg { display:none; }
   #project-dialog { width:calc(100vw - 24px); max-height:calc(100dvh - 32px); border-radius:15px; }
   #project-dialog .project-heading { padding:20px 18px 16px; }
   #project-dialog .project-tabs { padding:0 18px; }

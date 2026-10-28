@@ -75,13 +75,16 @@
     </div>
   </header>
 
+  <!-- One row on a phone (agent, workspace, two icon buttons); on a wide
+       screen display: contents leaves the two bars exactly as they were. -->
+  <div class="control-bar">
   <nav class="workspace-bar" aria-label="Workspace and agent">
     <div class="workspace-label"><span class="workspace-mark" aria-hidden="true">✦</span><div><strong>Your workspace</strong><span>Documents, ideas &amp; a little help</span></div></div>
     <div class="agent-controls">
       <label for="provider-select">Agent</label>
       <select id="provider-select" aria-label="Choose agent"><option value="claude">Claude</option><option value="codex">Codex</option><option value="mimo">MiMo</option></select>
       <button id="agent-login" type="button" hidden disabled aria-live="polite">Checking sign-in…</button>
-      <button id="agent-start" type="button">Open in Terminal</button>
+      <button id="agent-start" type="button" aria-label="Open in Terminal"><svg class="btn-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 7 5 5-5 5M12 18h7"/></svg><span class="btn-label">Open in Terminal</span></button>
     </div>
   </nav>
   <nav class="project-bar" aria-label="Projects">
@@ -89,8 +92,9 @@
       <label for="project-select"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h7l2 2h9v11H3zM3 7V4h7l2 3"/></svg><span>Workspace</span></label>
       <select id="project-select"><option value="">Documents</option></select>
     </div>
-    <button id="project-manage" type="button" aria-haspopup="dialog"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM9 5v14M13 10h4M13 14h4"/></svg>Projects &amp; deploy</button>
+    <button id="project-manage" type="button" aria-haspopup="dialog" aria-label="Projects &amp; deploy"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v14H4zM9 5v14M13 10h4M13 14h4"/></svg><span class="btn-label">Projects &amp; deploy</span></button>
   </nav>
+  </div>
   <dialog id="project-dialog" aria-labelledby="project-title" aria-describedby="project-description">
     <header class="project-heading">
       <div><h2 id="project-title">Projects &amp; deploy</h2><p id="project-description">Your repositories, tasks and releases.</p></div>
@@ -198,9 +202,14 @@
       <span id="chat-state" class="chat-state"></span>
       <span id="chat-ctx" class="chat-ctx" hidden></span>
       <span id="chat-spent" class="chat-spent"></span>
+      <!-- Phone only: Model/Effort fold behind this, they cost a 70px row
+           for a choice made once in a while. -->
+      <button id="chat-settings" class="chat-gear" type="button" aria-expanded="false" aria-controls="chat-options" aria-label="Model and effort" title="Model and effort">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+      </button>
       <button id="chat-new" class="chat-new" type="button">New chat</button>
     </div>
-    <div class="chat-options" aria-label="Chat settings">
+    <div id="chat-options" class="chat-options" aria-label="Chat settings">
       <label for="chat-model">Model</label>
       <select id="chat-model" disabled><option value="">Default</option></select>
       <label for="chat-effort">Effort</label>

@@ -2,9 +2,10 @@
 <pre id="result">pending</pre>
 <!-- 390px is a real phone. A headless window on macOS will not go below
      ~500px, so the page is measured inside frames of the size that matters. -->
-<iframe id="chat" style="width:390px;height:844px;border:0" src="../ui/index.html?demo=1&mobile=1&chat=1&theme=light"></iframe>
+<iframe id="chat" style="width:390px;height:844px;border:0" src="../ui/index.html?demo=1&mobile=1&chat=1&theme=light&auth=signed_in"></iframe>
 <iframe id="welcome" style="width:390px;height:844px;border:0" src="../ui/index.html?demo=1&mobile=1&chat=1&welcome=1&theme=light"></iframe>
 <iframe id="term" style="width:390px;height:844px;border:0" src="../ui/index.html?demo=1&mobile=1&theme=light"></iframe>
+<iframe id="wide" style="width:1280px;height:820px;border:0" src="../ui/index.html?demo=1&chat=1&theme=light"></iframe>
 <script>
 window.onerror = message => { document.getElementById('result').textContent = JSON.stringify({failures: [message]}); };
 // Polled, not the load event: a frame starts as about:blank, which already
@@ -69,10 +70,44 @@ const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
     check(Math.abs(box.height - send.height) <= 1, `send ${send.height}px vs input ${box.height}px`);
     check(Math.abs(box.bottom - send.bottom) <= 1, 'send button bottom-aligned with the input');
 
+    // ── phone controls: one row, settings folded ──────────
+    const row = ['provider-select', 'project-select', 'agent-start', 'project-manage'].map(id => doc.getElementById(id).getBoundingClientRect());
+    check(row.every(r => Math.abs(r.top - row[0].top) < 1 && r.height > 0), 'agent, workspace and both buttons share one row');
+    check(row[3].right <= 390.5, 'control row fits the screen');
+    const gear = doc.getElementById('chat-settings'), options = doc.getElementById('chat-options');
+    check(gear.getBoundingClientRect().width > 0, 'settings button shown on a phone');
+    check(options.getBoundingClientRect().height === 0, 'model/effort folded by default');
+    gear.click();
+    check(options.getBoundingClientRect().height > 0 && gear.getAttribute('aria-expanded') === 'true', 'settings button opens model/effort');
+    const model = doc.getElementById('chat-model');
+    model.selectedIndex = 1; model.dispatchEvent(new win.Event('change'));
+    check(gear.classList.contains('on'), 'a non-default model lights the settings button');
+    gear.click();
+    check(options.getBoundingClientRect().height === 0, 'settings button folds them again');
+    const logTop = doc.getElementById('chat-log').getBoundingClientRect().top;
+    check(logTop < 170, 'conversation starts within 170px of the top, at ' + logTop);
+    doc.body.classList.add('kb-open');
+    check(doc.querySelector('.control-bar').getBoundingClientRect().height === 0, 'controls step aside while typing');
+    doc.body.classList.remove('kb-open');
+
     // ── welcome screen: nothing to jump to ────────────────
     const welcome = await loaded('welcome');
     await pause(400);
     check(welcome.contentDocument.getElementById('chat-jump').hidden, 'jump pill hidden on the welcome screen');
+    for (const card of welcome.contentDocument.querySelectorAll('.starter-card')) {
+      const edit = card.querySelector('.starter-edit').getBoundingClientRect(), box = card.getBoundingClientRect();
+      check(box.height < 100, 'starter card is one compact block, ' + box.height + 'px');
+      check(edit.top - box.top < 12 && box.right - edit.right < 12, 'edit is a corner button');
+    }
+
+    // ── wide screen keeps its two bars and inline options ─
+    const wide = await loaded('wide');
+    await pause(200);
+    const wdoc = wide.contentDocument;
+    check(wdoc.getElementById('chat-settings').getBoundingClientRect().width === 0, 'no settings button on a wide screen');
+    check(wdoc.getElementById('chat-options').getBoundingClientRect().height > 0, 'model/effort inline on a wide screen');
+    check(wdoc.querySelector('.btn-label').getBoundingClientRect().width > 20, 'buttons keep their words on a wide screen');
+    check(wdoc.querySelector('.workspace-bar').getBoundingClientRect().top < wdoc.querySelector('.project-bar').getBoundingClientRect().top, 'two bars stacked on a wide screen');
 
     // ── terminal keys fit at 390px ────────────────────────
     const term = await loaded('term');
