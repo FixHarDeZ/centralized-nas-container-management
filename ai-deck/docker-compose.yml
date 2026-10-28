@@ -44,6 +44,15 @@ services:
     # free and has been OOM-killed twice — this cap still means a runaway
     # deck kills this container, not the NAS. cpus: is a no-op on DSM.
     mem_limit: 3g
+    # Every process the page talks to, not just ttyd (PID 1): upload.py,
+    # chat.py and the other desks run in respawn loops. Unhealthy = Kuma's
+    # docker monitor reports DOWN.
+    healthcheck:
+      test: ["CMD", "python3", "/opt/ai-deck/healthcheck.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     labels:
       - "com.centurylinklabs.watchtower.enable=false"
 
@@ -75,6 +84,13 @@ services:
       - code-workspaces:/workspaces
     networks: [coding]
     mem_limit: 1536m
+    # Same check as the desk: upload.py, chat.py, both terminals.
+    healthcheck:
+      test: ["CMD", "python3", "/opt/ai-deck/healthcheck.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     labels:
       - "com.centurylinklabs.watchtower.enable=false"
 
@@ -98,8 +114,16 @@ services:
       - ${CLAUDE_WORK_DIR}:/files:ro
     environment:
       - TZ=Asia/Bangkok
+    # nginx resolves the static ai-deck upstreams at start, so it waits for
+    # the desk to answer rather than for its container to exist.
     depends_on:
-      - ai-deck
+      ai-deck:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/nginx-health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
     labels:
       - "com.centurylinklabs.watchtower.enable=false"
 

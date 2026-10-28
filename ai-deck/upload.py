@@ -398,6 +398,10 @@ class Handler(BaseHTTPRequestHandler):
         return provider
 
     def do_GET(self):
+        if self.path == "/api/health":
+            # Container healthcheck: the process answers. Nothing else read.
+            self._json({"status": "ready"})
+            return
         provider = self._provider()
         if provider is None:
             return
