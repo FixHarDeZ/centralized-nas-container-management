@@ -36,6 +36,7 @@ def test_compose_preserves_explicit_external_home():
     compose = yaml.safe_load((ROOT / 'docker-compose.yml').read_text())
     assert compose['name'] == 'ai-deck'
     assert compose['services']['ai-deck']['container_name'] == 'ai-deck'
+    assert compose['services']['ai-deck']['image'] == 'ai-deck:latest'
     assert compose['volumes']['home']['external'] is True
     assert compose['volumes']['home']['name'] == '${AI_DECK_HOME_VOLUME:-claude-desk_claude_desk_home}'
     assert 'home:/home/claude' in compose['services']['ai-deck']['volumes']

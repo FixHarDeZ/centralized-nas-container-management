@@ -9,6 +9,8 @@ def test_coding_worker_has_separate_storage_and_no_deploy_credentials():
     worker = compose['services']['ai-deck-code']
     assert worker['profiles'] == ['coding']
     assert worker['build']['target'] == 'coding'
+    assert worker['container_name'] == 'ai-deck-code'
+    assert worker['image'] == 'ai-deck-code:latest'
     assert 'env_file' not in worker
     assert worker['networks'] == ['coding']
     assert not worker.get('ports')
