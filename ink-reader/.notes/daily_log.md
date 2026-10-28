@@ -395,3 +395,12 @@ Added 2 new scraper sources and multi-page listing support.
 - **Session closed 2026-10-28.** Pending: phone check of styled dialogs on real
   iPhone. Open idea: page-number placeholder in reader while a page loads.
   `test_scrape_log` pre-existing fail still unfixed.
+
+## 2026-10-28 (2) — Reader page-number placeholder
+
+- Unloaded reader pages show a faint italic page number (inline SVG data-URI
+  `background-image` on the `<img>`, centered on the `#14120e` placeholder);
+  cleared in `onload` because the inline style outlives `.ok` and transparent
+  pages would show it. Verified in Chrome: pending page shows "1", loaded pages
+  have no background. (Headless `imagesEnabled=false` also hides CSS
+  backgrounds — not a usable check.)

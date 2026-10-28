@@ -108,7 +108,7 @@ ink-reader/
 ├── scheduler.py         — APScheduler jobs: scrape / expiry / backup
 ├── sqlite_backup.py     — verbatim copy of torrentwatch/sqlite_backup.py
 ├── static/index.html    — curation dashboard (black–cream UI, vanilla JS)
-├── static/reader.html   — mobile web reader: vertical scroll, auto-hide bars, resume via localStorage `ink-pos-<id>`
+├── static/reader.html   — mobile web reader: vertical scroll, auto-hide bars, resume via localStorage `ink-pos-<id>`, faint page-number placeholder while a page loads
 ├── Dockerfile
 ├── docker-compose.yml
 ├── nginx/nginx.conf     — basic-auth reverse proxy → ink-reader:8000
