@@ -405,3 +405,6 @@ Added 2 new scraper sources and multi-page listing support.
   have no background. (Headless `imagesEnabled=false` also hides CSS
   backgrounds — not a usable check.)
 - Commit `6e5b295` pushed + deployed; verified `pageMark` in container reader.html.
+- **Session closed 2026-10-28.** All ink-reader work committed, pushed and
+  deployed (`5532062`, `6e5b295`). Pending: real-iPhone check of styled dialogs
+  + page-number placeholder. `test_scrape_log` pre-existing fail still unfixed.

@@ -1,6 +1,6 @@
 # ink-reader — Project Index (Memory Blueprint)
 
-> อัปเดตล่าสุด: 2026-10-28 (polish: Thai serif Trirong, SVG icons, styled dialog, cover fade, HTML no-cache — deployed 5532062)
+> อัปเดตล่าสุด: 2026-10-28 (polish: Trirong Thai serif, SVG icons, styled dialog, cover fade, HTML no-cache, reader page-number placeholder — deployed 5532062 + 6e5b295)
 > ใช้ไฟล์นี้เป็น cold-start memory ก่อนเริ่มงานทุกครั้ง
 
 ---
