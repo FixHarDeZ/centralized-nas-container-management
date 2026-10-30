@@ -19,7 +19,7 @@ from pathlib import Path
 import httpx
 
 from app import (analytics, backfill, characters, experiment, history, locales, manifest,
-                 model_choice, pronunciation, research,
+                 model_choice, pronunciation, prune, research,
                  render, retention, schedule, script as script_gen, shop, shop_render, shop_studio,
                  snapshots,
                  storyboard, studio, telegram, trends, youtube)
@@ -3510,6 +3510,12 @@ async def main() -> None:
             # thread: getUpdates already wakes every 30s. See app/snapshots.py.
             if snapshots.due(state):
                 await take_snapshots(client, state)
+            # Same ride as the snapshots: a few unlinks, inline. Stamped first
+            # so a file that cannot be removed is retried tomorrow, not every 30s.
+            if prune.due(state):
+                state["last_prune"] = datetime.now().date().isoformat()
+                save_state(state)
+                prune.run(keep=prune.held(state))
             # The dashboard's model dropdown is this list; it has no key to
             # fetch it itself. Off the loop so a slow endpoint never stalls polling.
             if model_choice.refresh_due():

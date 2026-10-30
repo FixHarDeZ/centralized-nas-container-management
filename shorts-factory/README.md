@@ -1053,6 +1053,14 @@ The `/volume1/shorts` shared folder must exist on the NAS before first run;
 create it in DSM (Control Panel → Shared Folder), it is not created by the
 stack.
 
+**The mp4 of an uploaded Clip is deleted after 7 days** (`app/prune.py`,
+`CLIP_KEEP_DAYS`, once a day off the poll loop). Only the mp4 and its cover
+JPEG go, only in the Locale folders (`/output`, `/output/en` — never `shop/`,
+`footage/`, `bgm/`), only when the `.txt` title is in `history.json`, and never
+while an upload button still points at the file. The `.txt`/`.srt` stay:
+`app/backfill.py` rebuilds Manifests from them. A Clip that was never uploaded
+by the bot (every English Clip, today) is kept however old.
+
 ## Dashboard
 
 A Creator Studio view of everything the bot has already written down, served at
