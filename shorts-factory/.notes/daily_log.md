@@ -2559,3 +2559,5 @@ pack page โชว์ `animate` + "ตั้ง Ns". render_studio: มี wav 
 - เทสต์ `tests/test_prune.py` 7 ข้อ. sf-test 604 passed/2 skipped, root 68, `make check` ผ่าน
 - dry-run บน NAS ก่อน deploy (stub unlink): 313 ไฟล์เกิน 7 วัน → ลบ 261 (3.23 GB), เก็บ 52 ที่ไม่อยู่ใน history (คลิปแรกๆ 26/08 ที่อัปก่อนมี history + ที่ไม่ได้อัป), held 8. history 281 uploads/279 title, ไฟล์ที่ title ตรง 283 = re-render ชื่อซ้ำโดนด้วยแค่ ~4
 - deploy (idle) → รอบแรกตอน startup 12:17:57 "ลบ … 261 ไฟล์", `/volume1/shorts` 4.6 → 1.6 GB, เหลือ mp4 63 ใน root, `.txt` 248 ครบ, 5 containers Up
+- **ปิดงาน 2026-10-30 ("จบงาน")**: main = origin/main, NAS รัน `96e7c4f` (fix render ซ้ำ `b7c2df4` + prune) 5 containers Up. sf-test 604 passed/2 skipped, root 68, `make check` ผ่าน. ไม่มีงานโค้ดค้าง
+  ค้าง/ข้อสังเกต: mp4 เก่า 52 ไฟล์ที่ไม่อยู่ใน history ไม่ถูก prune (ผู้ใช้ลบเองได้); `do_render` ยังอ่าน `state["clip_id"]` ตอนท้ายแทน snapshot (ไม่มีผลแล้วหลัง guard); ช่อง en token ตาย (เดิม); backup `*.bak-20261030` ใน `/data` ลบได้เมื่อมั่นใจ
