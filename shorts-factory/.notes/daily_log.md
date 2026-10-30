@@ -2553,3 +2553,9 @@ pack page โชว์ `animate` + "ตั้ง Ns". render_studio: มี wav 
 - ไฟล์ที่อัปจริง = `20261030-0833-…mp4` (ยืนยันจาก YouTube `fileDetails.fileSize` 17508422). `0832` กับ `0834` (+srt/txt) ผู้ใช้สั่งลบ → ลบแล้วผ่าน `docker exec rm` (ไฟล์เป็นของ root, `sudo rm` ต้องใช้รหัส)
 - ผู้ใช้ถาม rotation: **ไม่มี** — โค้ดไม่ลบอะไรใน `/output` เอง (ลบแค่ workdir, pack Studio, inbox). `/volume1/shorts` 4.6 GB (mp4 ไทย 248 ไฟล์ 3.3 GB, en 927 MB, bgm 232 MB, footage 161 MB), ~100 คลิป/เดือน ≈ 1.7 GB/เดือน, volume1 ว่าง 5.5 TB. ถ้าจะทำ: ลบเฉพาะ mp4 ของคลิปที่อัปแล้วเกิน N วัน เก็บ .txt/.srt (backfill อ่าน) — รอผู้ใช้ตัดสินใจ
 - ไม่ได้แก้: `to_idle()` ของรอบหนึ่งล้าง `clip_id` ที่รอบอื่นใช้ (หายไปพร้อม guard แล้ว แต่ do_render ยังอ่าน `state["clip_id"]` ตอนท้าย ไม่ได้ snapshot)
+
+## 2026-10-30 (2) — ลบ mp4 ของคลิปที่อัปแล้วเกิน 7 วันเอง (`app/prune.py`)
+- ผู้ใช้: "ทำเลย เก็บ 7 วัน". `prune.run()` วันละครั้งใน poll loop (stamp `state["last_prune"]` ก่อนลบ): mp4 (+ปก `.jpg`) ใน `/output` + `/output/en` แบบ non-recursive, mtime > `CLIP_KEEP_DAYS` (7), title บรรทัดแรก `.txt` อยู่ใน `history.json`, ไม่อยู่ใน `prune.held(state)` (uploads ที่ `message_id` ยังอยู่ + `last_clip` เมื่อ `upload_message_id`). `.txt`/`.srt` เก็บ (backfill)
+- เทสต์ `tests/test_prune.py` 7 ข้อ. sf-test 604 passed/2 skipped, root 68, `make check` ผ่าน
+- dry-run บน NAS ก่อน deploy (stub unlink): 313 ไฟล์เกิน 7 วัน → ลบ 261 (3.23 GB), เก็บ 52 ที่ไม่อยู่ใน history (คลิปแรกๆ 26/08 ที่อัปก่อนมี history + ที่ไม่ได้อัป), held 8. history 281 uploads/279 title, ไฟล์ที่ title ตรง 283 = re-render ชื่อซ้ำโดนด้วยแค่ ~4
+- deploy (idle) → รอบแรกตอน startup 12:17:57 "ลบ … 261 ไฟล์", `/volume1/shorts` 4.6 → 1.6 GB, เหลือ mp4 63 ใน root, `.txt` 248 ครบ, 5 containers Up
