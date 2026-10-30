@@ -3052,6 +3052,50 @@ def test_a_delivered_clip_queues_the_other_half(monkeypatch, tmp_path):
     assert spawned == ["continue_pair"]
 
 
+def test_render_taps_queued_during_an_outage_start_one_render(monkeypatch):
+    """Telegram holds taps while its API is down and hands them over in one
+    batch (30/10: four 🎬 at 08:31:42 after 12 minutes of Bad Gateway). The
+    mode must be claimed before the render task first yields, or every tap in
+    the batch passes the review guard and renders the same Script again."""
+    spawned = []
+    monkeypatch.setattr(main, "api", _nothing)
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+    monkeypatch.setattr(main, "spawn", lambda coro, label: spawned.append(label) or coro.close())
+
+    state = {"mode": "review", "script": a_script(), "clip_id": "c1", "message_id": 5}
+
+    async def batch():
+        for i in range(4):
+            await main.on_callback(None, state, {"id": str(i), "data": main.RENDER_CB})
+
+    asyncio.run(batch())
+    assert spawned == ["do_render"]
+    assert state["mode"] == "rendering"
+
+
+def test_renders_started_in_the_same_second_get_their_own_workdir(monkeypatch, tmp_path):
+    """A failed render deletes its workdir in `finally`; a second render that
+    shared the name lost narration.mp3 mid-encode (30/10)."""
+    monkeypatch.setenv("OUTPUT_DIR", str(tmp_path))
+    monkeypatch.setattr(main, "WORK_DIR", tmp_path / "work")
+    workdirs = []
+
+    async def boom(script, workdir, supplied=None, locale="th"):
+        workdirs.append(workdir)
+        raise RuntimeError("stop")
+
+    monkeypatch.setattr(main.render, "build", boom)
+    monkeypatch.setattr(main, "close_prompt", _nothing)
+    monkeypatch.setattr(main, "say", _nothing)
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+    monkeypatch.setattr(main.manifest, "update", lambda *a, **kw: None)
+
+    for _ in range(2):
+        asyncio.run(main.do_render(None, {"script": a_script(), "locale": "th"}))
+    assert len(set(workdirs)) == 2
+    assert all(w.parent == tmp_path / "work" for w in workdirs)
+
+
 def test_a_failed_render_cancels_the_other_half(monkeypatch, tmp_path):
     monkeypatch.setenv("OUTPUT_DIR", str(tmp_path))
     said = []

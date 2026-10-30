@@ -11,6 +11,7 @@ import os
 import html
 import random
 import re
+import secrets
 import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -744,7 +745,9 @@ async def do_render(client: httpx.AsyncClient, state: dict,
     state.update(mode="rendering", message_id=None)
     save_state(state)
 
-    workdir = WORK_DIR / datetime.now().strftime("%Y%m%d-%H%M%S")
+    # Unique even within a second: the `finally` below deletes it, and a
+    # second render sharing the name loses its files mid-encode.
+    workdir = WORK_DIR / f"{datetime.now():%Y%m%d-%H%M%S}-{secrets.token_hex(3)}"
     delivered = False
     try:
         async with render_slot():
@@ -2822,6 +2825,10 @@ async def on_callback(client: httpx.AsyncClient, state: dict, query: dict) -> No
         spawn(do_upload(client, state, clip_id), "do_upload")
         return
     if query.get("data") == RENDER_CB:
+        # Claimed here, not inside do_render: its first line runs only after
+        # this handler yields, and taps Telegram held through an outage arrive
+        # in one batch — each would pass the guard above and render again.
+        state["mode"] = "rendering"
         spawn(do_render(client, state), "do_render")
     elif query.get("data") == STORYBOARD_CB:
         # The Script is snapshotted into the question: answering it may come

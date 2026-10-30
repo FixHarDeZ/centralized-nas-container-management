@@ -2539,3 +2539,11 @@ pack page โชว์ `animate` + "ตั้ง Ns". render_studio: มี wav 
 - เห็นระหว่างทาง: snapshot ช่อง en 10:00 พัง `invalid_grant` "Account has been deleted" — refresh token ช่องอังกฤษตาย (บัญชีถูกลบ) ยังไม่ได้แตะ
 - ค้าง: push; คลิปยาว >~55 วิ ยังดูในแชทไม่ได้ (ถ้าอยากได้ preview ต้อง encode สำเนาเล็กส่งแทน — ยังไม่ทำ); ตัดสินใจเรื่องช่อง en
 - **ปิดงาน 2026-10-21 ("จบงาน")**: commit notes + push ขึ้น origin/main, NAS รัน `7e4f6dc` (5 containers Up). sf-test 595 passed/2 skipped. ค้างฝั่งผู้ใช้: กดปุ่มอัปคลิป 08:11 (msg 4016), ตัดสินใจช่อง en (refresh token ตาย — ต้อง `scripts/youtube_auth.py` ใหม่ถ้าจะใช้), อยากได้ preview เล็กในแชทไหม
+
+## 2026-10-30 — "render ล้มเหลว: ffmpeg … narration.mp3 No such file" 08:33: สืบสวนอย่างเดียว ยังไม่แก้โค้ด
+- ต้นเหตุ: Telegram API ล่ม (Bad Gateway) 08:19–08:31 → 🎬 ที่ผู้ใช้กดซ้ำระหว่างนั้นค้างคิว แล้วมาพร้อมกันใน getUpdates เดียว 08:31:42 = 4 callback
+- `on_callback` เช็ค `mode != "review"` แล้ว `spawn(do_render)` แต่ `do_render` ตั้ง `mode="rendering"` **หลัง** `await close_prompt()` (network) → ทั้ง 4 ผ่านด่านก่อนตัวไหนตั้ง mode = render ซ้ำ 4 รอบ (editMessageText fail 4 ครั้ง = หลักฐาน)
+- workdir ชื่อละเอียดแค่วินาที → 2 รอบได้ `20261030-083142` ร่วมกัน. `render_slot` กันการ encode ซ้อนแต่ไม่กัน workdir: รอบ A render เสร็จ 08:32:47 แล้ว `sendVideo` ReadError (Telegram ยังแกว่ง) → "render ล้มเหลว:" ข้อความว่าง → `finally` rmtree workdir ขณะรอบ C ใช้ dir เดียวกันอยู่ → footage/narration.mp3 หาย → ffmpeg error ที่ผู้ใช้เห็น
+- `st.to_idle()` ใน finally ของ A ล้าง `clip_id` ของ state ที่แชร์กัน → manifest.update ของรอบหลังๆ + do_upload เป็น no-op: manifest `20261030-081303-552` ค้าง `render_failed`/`published=False` ไม่มี video_id ทั้งที่อัปแล้ว `6EtAvFfTuCE` 08:35:35 (mtime manifest 08:33:55). history topic ว่าง
+- ไฟล์บน NAS: 3 mp4 (`20261030-0832/0833/0834-ดาวโจนส์…`) render สำเร็จ 3 จาก 4
+- เสนอแก้: ตั้ง mode=rendering แบบ sync ก่อน spawn (หรือก่อน await แรก), workdir ไม่ซ้ำ (mkdtemp/clip_id), ซ่อม manifest ด้วยมือ. รอผู้ใช้ตัดสินใจ
