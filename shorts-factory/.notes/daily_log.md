@@ -2546,4 +2546,9 @@ pack page โชว์ `animate` + "ตั้ง Ns". render_studio: มี wav 
 - workdir ชื่อละเอียดแค่วินาที → 2 รอบได้ `20261030-083142` ร่วมกัน. `render_slot` กันการ encode ซ้อนแต่ไม่กัน workdir: รอบ A render เสร็จ 08:32:47 แล้ว `sendVideo` ReadError (Telegram ยังแกว่ง) → "render ล้มเหลว:" ข้อความว่าง → `finally` rmtree workdir ขณะรอบ C ใช้ dir เดียวกันอยู่ → footage/narration.mp3 หาย → ffmpeg error ที่ผู้ใช้เห็น
 - `st.to_idle()` ใน finally ของ A ล้าง `clip_id` ของ state ที่แชร์กัน → manifest.update ของรอบหลังๆ + do_upload เป็น no-op: manifest `20261030-081303-552` ค้าง `render_failed`/`published=False` ไม่มี video_id ทั้งที่อัปแล้ว `6EtAvFfTuCE` 08:35:35 (mtime manifest 08:33:55). history topic ว่าง
 - ไฟล์บน NAS: 3 mp4 (`20261030-0832/0833/0834-ดาวโจนส์…`) render สำเร็จ 3 จาก 4
-- เสนอแก้: ตั้ง mode=rendering แบบ sync ก่อน spawn (หรือก่อน await แรก), workdir ไม่ซ้ำ (mkdtemp/clip_id), ซ่อม manifest ด้วยมือ. รอผู้ใช้ตัดสินใจ
+- เสนอแก้: ตั้ง mode=rendering แบบ sync ก่อน spawn (หรือก่อน await แรก), workdir ไม่ซ้ำ (mkdtemp/clip_id), ซ่อม manifest ด้วยมือ
+- **ผู้ใช้สั่งทำ → แก้แล้ว (`b7c2df4`)**: `on_callback` ตั้ง `state["mode"]="rendering"` ก่อน `spawn(do_render)` (render_parked ปลอดภัยอยู่แล้ว pop `parked` ก่อน await แรก); workdir = `%Y%m%d-%H%M%S-<token_hex(3)>`. เทสต์ใหม่ 2 ข้อ (4 tap ใน batch = spawn 1, 2 render วินาทีเดียว = 2 dir) แดงก่อนแก้. sf-test 597 passed/2 skipped
+- deploy (bot idle) 5 containers Up, grep ในคอนเทนเนอร์เจอโค้ดใหม่, log ไม่มี error
+- ซ่อมข้อมูล (stop bot → temp container `--volumes-from` → start, backup `*.bak-20261030` ข้างไฟล์): manifest `20261030-081303-552` → `rendered`/`published=True`/`video_id=6EtAvFfTuCE`/public/08:35:35, history entry ใส่ topic, ลบ `uploads[20261030-081303-552]` (ปุ่ม msg 4338 ไม่มีอยู่แล้ว — editMessageReplyMarkup ตอบ not modified)
+- ไฟล์ที่อัปจริง = `20261030-0833-…mp4` (ยืนยันจาก YouTube `fileDetails.fileSize` 17508422). `0832` กับ `0834` (+srt/txt) ยังอยู่ใน `/volume1/shorts` — รอผู้ใช้ตัดสินใจลบ
+- ไม่ได้แก้: `to_idle()` ของรอบหนึ่งล้าง `clip_id` ที่รอบอื่นใช้ (หายไปพร้อม guard แล้ว แต่ do_render ยังอ่าน `state["clip_id"]` ตอนท้าย ไม่ได้ snapshot)
