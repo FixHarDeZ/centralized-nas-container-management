@@ -8,3 +8,4 @@
 - Tests: 14 passed (py3.12, fake Shopee server ตรวจ signature). Repo: doc drift สะอาด, `make check` ผ่าน
 - Deploy: `deploy.sh -s shopee-analyst -y` → healthy, `--telegram-test` ส่งถึง, `--once` = skip (exit 0)
 - ค้าง: Shopee App ID/Secret (ผู้ใช้), verify ฟิลด์ไทยด้วย `--probe`
+- ต่อมา: ผู้ใช้เปิดหน้า open_api แล้วเจอว่าบัญชีไม่ได้รับสิทธิ์ (AppID `--`) → แนะนำขอสิทธิ์ผ่าน 'ติดต่อเรา'; ระหว่างนี้ไม่ scrape

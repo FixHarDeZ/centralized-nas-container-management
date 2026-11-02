@@ -4,6 +4,7 @@
 
 ## สถานะ
 - **2026-11-02 สร้าง + deploy แล้ว** (no port): container `shopee-analyst` healthy บน NAS, `--telegram-test` ส่งถึงจริง (bot news-feed), loop รอรอบ 06:00
+- **❌ บัญชีไม่มีสิทธิ์ Open API** (02/11 หน้า affiliate.shopee.co.th/open_api: AppID/ความลับ = `--`, ปุ่ม 'ใช้' กดไม่ได้, "คุณไม่ได้รับสิทธิ์ในการเข้าถึง Shopee Affiliate Open API Platform" → ต้องขอผ่านลิงก์ 'ติดต่อเรา'). Stack รอเงียบได้ ไม่เปลือง
 - **⏳ รอ Shopee App ID/Secret** — vault ยังไม่มี `stacks.shopee_analyst.shopee.*`, manifest คอมเมนต์ไว้; ตอนนี้ทุกรอบ log `skipping run` ไม่ส่งอะไร
 - Shopee data path **ยังไม่ verify** กับบัญชีจริง: ยืนยันแค่ endpoint ไทยตอบ (คีย์ปลอม → `error [10035]` no Open API access, ยิงจากใน container บน NAS ได้). Signature/ฟิลด์/sortType ตรงกับ SDK บุคคลที่สาม (`saapi` sortType 2 = ITEM_SOLD_DESC) แต่ยังไม่ผ่านบัญชีไทย
 - Bot token ที่วางในแชท claude.ai **ไม่ได้ใช้** (chat_id ตรงกับ news-feed อยู่แล้ว) — ต้อง /revoke ใน BotFather
