@@ -1,0 +1,12 @@
+{
+  "keywords": [],
+  "sort_type": 2,
+  "pages_per_search": 4,
+  "page_size": 50,
+  "top_n": 5,
+  "min_rating": 4.5,
+  "min_commission_rate": 0.03,
+  "min_total_sales": 50,
+  "repeat_cooldown_hours": 72,
+  "retention_days": 30
+}

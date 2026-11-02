@@ -1,0 +1,22 @@
+services:
+  shopee-analyst:
+    build: .
+    container_name: shopee-analyst
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - TZ=Asia/Bangkok
+    mem_limit: 128m
+    # No HTTP: the scheduler loop touches /data/heartbeat every minute.
+    # 900 s covers a slow run (4 pages x 30 s timeout x 3 attempts).
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,sys,time; sys.exit(time.time()-os.path.getmtime('/data/heartbeat')>900)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    volumes:
+      - shopee_analyst_data:/data
+
+volumes:
+  shopee_analyst_data:
