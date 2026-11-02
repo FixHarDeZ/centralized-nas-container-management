@@ -277,6 +277,11 @@ def build_messages(
             f"ร้าน: {html.escape(product['shop'][:50])}\n"
             f'<a href="{link}">เปิดสินค้า</a>'
         )
+    return pack(header, blocks)
+
+
+def pack(header: str, blocks: list[str]) -> list[str]:
+    """Header + blocks into messages under TELEGRAM_LIMIT, never splitting a block."""
     messages, current = [], header
     for block in blocks:
         if len(current) + len(block) + 2 > TELEGRAM_LIMIT:

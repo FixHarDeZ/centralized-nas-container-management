@@ -9,10 +9,11 @@ No HTTP, no port. A missed slot (container down) is skipped, not caught up:
 three late recommendations in a row are noise. The loop touches
 DATA_DIR/heartbeat every minute for the compose healthcheck.
 
-Missing Shopee credentials skip the run with a log line and no Telegram —
-otherwise the error notifier would fire three times a day until access is
-granted. Any other failure is reported to Telegram so a silent morning cannot
-look like "no picks".
+Two sources, each skipped with a log line when its credentials are missing
+(no Telegram — otherwise the error notifier would fire three times a day):
+YouTube TH product clips (`app/clips.py`, always on) and the Shopee Affiliate
+Open API (`app/analyst.py`, dormant until the account gets access). Any other
+failure is reported to Telegram so a silent morning cannot look like "no picks".
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ import sys
 import time
 from datetime import datetime, timedelta
 
-from app import analyst
+from app import analyst, clips
 
 log = logging.getLogger("shopee-analyst")
 HEARTBEAT_SECONDS = 60
@@ -52,22 +53,31 @@ def next_slot(now: datetime, times: list[tuple[int, int]]) -> datetime:
     raise ValueError("SLOTS is empty")
 
 
-def run_once() -> int:
-    if not analyst.shopee_configured():
-        log.warning("SHOPEE_APP_ID/SHOPEE_APP_SECRET not set — skipping run")
-        return 0
+def _attempt(label: str, job) -> int:
     try:
-        analyst.run()
+        job()
         return 0
     except Exception as exc:
-        log.error("run failed: %s", exc)
+        log.error("%s failed: %s", label, exc)
         try:
-            analyst.send_telegram(
-                f"❌ ระบบแนะนำสินค้าทำงานไม่สำเร็จ\n{html.escape(str(exc))}"
-            )
+            analyst.send_telegram(f"❌ {label} ทำงานไม่สำเร็จ\n{html.escape(str(exc))}")
         except Exception as notify_error:
             log.error("notify failed: %s", notify_error)
         return 1
+
+
+def run_once() -> int:
+    """Each source on its own: one failing never silences the other."""
+    status = 0
+    if clips.configured():
+        status |= _attempt("คลิปสินค้ากำลังมา (YouTube)", clips.run)
+    else:
+        log.warning("YOUTUBE_* not set — skipping YouTube clips")
+    if analyst.shopee_configured():
+        status |= _attempt("ระบบแนะนำสินค้า Shopee", analyst.run)
+    else:
+        log.warning("SHOPEE_APP_ID/SHOPEE_APP_SECRET not set — skipping Shopee run")
+    return status
 
 
 def heartbeat() -> None:

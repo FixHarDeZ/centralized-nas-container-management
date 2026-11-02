@@ -163,6 +163,7 @@ def test_baseline_prefers_about_a_day_old(tmp_path):
 def test_missing_shopee_keys_skip_silently(monkeypatch, telegram, tmp_path):
     monkeypatch.delenv("SHOPEE_APP_ID", raising=False)
     monkeypatch.delenv("SHOPEE_APP_SECRET", raising=False)
+    monkeypatch.delenv("YOUTUBE_CLIENT_ID", raising=False)
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "TOKEN")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "1")
     monkeypatch.setenv("DATA_DIR", str(tmp_path))

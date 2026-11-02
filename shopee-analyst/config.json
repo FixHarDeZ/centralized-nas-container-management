@@ -8,5 +8,24 @@
   "min_commission_rate": 0.03,
   "min_total_sales": 50,
   "repeat_cooldown_hours": 72,
-  "retention_days": 30
+  "retention_days": 30,
+  "youtube": {
+    "keywords": [
+      "ป้ายยา",
+      "ของดีบอกต่อ",
+      "รีวิว shopee",
+      "ของใช้ในบ้าน"
+    ],
+    "max_keywords": 4,
+    "per_keyword": 25,
+    "lookback_days": 7,
+    "track_days": 7,
+    "max_tracked": 200,
+    "min_views": 1000,
+    "min_thai_ratio": 0.4,
+    "candidates": 12,
+    "top_n": 5,
+    "repeat_cooldown_hours": 72,
+    "mimo_seconds": 180
+  }
 }
