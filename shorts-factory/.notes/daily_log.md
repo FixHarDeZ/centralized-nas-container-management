@@ -2561,3 +2561,6 @@ pack page โชว์ `animate` + "ตั้ง Ns". render_studio: มี wav 
 - deploy (idle) → รอบแรกตอน startup 12:17:57 "ลบ … 261 ไฟล์", `/volume1/shorts` 4.6 → 1.6 GB, เหลือ mp4 63 ใน root, `.txt` 248 ครบ, 5 containers Up
 - **ปิดงาน 2026-10-30 ("จบงาน")**: main = origin/main, NAS รัน `96e7c4f` (fix render ซ้ำ `b7c2df4` + prune) 5 containers Up. sf-test 604 passed/2 skipped, root 68, `make check` ผ่าน. ไม่มีงานโค้ดค้าง
   ค้าง/ข้อสังเกต: mp4 เก่า 52 ไฟล์ที่ไม่อยู่ใน history ไม่ถูก prune (ผู้ใช้ลบเองได้); `do_render` ยังอ่าน `state["clip_id"]` ตอนท้ายแทน snapshot (ไม่มีผลแล้วหลัง guard); ช่อง en token ตาย (เดิม); backup `*.bak-20261030` ใน `/data` ลบได้เมื่อมั่นใจ
+
+## 2026-11-03 — ไอเดีย Browser Use / Mobile Use กับ `/shop`: ตอบอย่างเดียว ไม่มีโค้ด
+- รายละเอียดที่ `shopee-analyst/.notes/daily_log.md` 03/11. ส่วนที่แตะ stack นี้ (ข้อเสนอ ยังไม่ทำ): ให้ shopee-analyst ส่งคำแนะนำผ่าน bot shorts-factory (sendMessage ไม่ชน getUpdates) + callback เปิด Brief `/shop` prefill ชื่อสินค้า/มุมคลิป; บรรทัดเตือนเปิดป้าย AI ใน caption คลิป 🎞 Studio สินค้า. ไม่ automate Flow/การโพสต์ (เหมือนเดิม). ไม่มี commit/deploy

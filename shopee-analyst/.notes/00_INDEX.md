@@ -3,6 +3,7 @@
 แนะนำสินค้า Shopee Affiliate น่าทำคลิป → Telegram 06:00/12:00/16:00. รายละเอียดเต็ม: `../README.md`
 
 ## สถานะ
+- **2026-11-03 ประเมินไอเดีย Browser Use/Mobile Use: ตอบอย่างเดียว ไม่มีโค้ด.** ไม่ใช้ (มีแล้ว 3/4 ขั้น, โพสต์ตั้งใจให้คนกด, scrape affiliate หลัง login = เสี่ยงบัญชี). รอผู้ใช้ตัดสินใจ: สะพาน → `/shop` ผ่าน bot shorts-factory, CSV conversion จริง, เตือนป้าย AI ใน caption Studio
 - **2026-11-02 เพิ่มแหล่ง YouTube TH** (`app/clips.py`) เพราะไม่ได้ Open API: คลิปป้ายยา/รีวิวไทยที่วิวขึ้น + mimo แยกชื่อสินค้า (grounded). Dry-run กับ API จริงจาก Mac ผ่าน (97 คลิป → 76 ผ่านกรอง, mimo-v2.6-flash 37 วิ, 5/5 ชื่อ grounded). ดูสถานะ deploy ใน daily_log
 - โควตา YouTube แชร์กับ shorts-factory (OAuth เดียวกัน) ≈402 units/วัน — ถ้าอัปคลิปเจอ `quotaExceeded` ดูตรงนี้ก่อน
 - `mimo-v2.5-pro` ถูกปลด → ใช้ `mimo-v2.6-flash`; lotto-picker ยังฟิก v2.5 (สรุป AI ถอยไป template)

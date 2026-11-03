@@ -18,3 +18,9 @@
 - พลาด: `ruff format .` ในโฟลเดอร์ stack ไปแก้ vendored `mimo.py` — คืนด้วย cp จาก shared/ ก่อน commit
 - commit `a9a3467` push แล้ว; deploy → healthy; `--once` บน NAS: tracked 97 / ranked 76 / sent 5, mimo 50 วิ, units 402, ส่ง Telegram สำเร็จ. deploy record = `0df3343` (tree มี ai-deck pin bump ของ session อื่นค้าง ไม่ได้แตะ)
 - ค้าง: ผู้ใช้ยืนยันเห็นข้อความใน chat bot news-feed, CSV รายงาน conversion, bot แยกสำหรับวางลิงก์จากมือถือ, แก้ MIMO_MODEL ของ lotto-picker
+
+## 2026-11-03 — ประเมินไอเดีย Browser Use / Mobile Use (โพสต์ affiliate): ตอบอย่างเดียว ไม่มีโค้ด
+- ผู้ใช้ถามว่าไอเดีย agent คลิกแทนคน (Browser Use หาสินค้า, Mobile Use โพสต์) ใช้กับ stack เราได้ไหม. คำตอบเดิมใน claude.ai ไม่เห็นรูปโพสต์ = เดาทั้งหมด
+- สรุปที่ตอบ: ไม่ใช้. 4 ขั้นของโพสต์ เรามีแล้ว 3 (หาสินค้า = stack นี้ผ่าน YouTube API, สคริปต์ = `/shop` Pitch, คลิป = `/shop` render + 🎞 Studio), ขั้นโพสต์ตั้งใจให้คนกด. Browser Use บน affiliate.shopee = scrape หลัง login บัญชีที่ได้เงิน (ทางถูกคือ Open API ที่รออยู่), Mobile Use รองรับแค่ Android
+- เสนอแทน (รอผู้ใช้ตัดสินใจ): (1) CSV รายงาน conversion จริง (header + 1 แถว) ให้ `shop_report.py` alias ถูก — ไม่มีอันนี้ไม่รู้ว่าสินค้า/hook/Sub ID ไหนขายได้; (2) สะพาน shopee-analyst → `/shop`: ส่งคำแนะนำผ่าน bot ของ shorts-factory แทน news-feed (news-feed send-only ปุ่ม callback ไปไม่ถึงใคร) + ปุ่มเปิด Brief พร้อมชื่อสินค้า/มุมคลิป ผู้ใช้แค่ส่ง screenshot จากแอป Shopee; (3) caption คลิป 🎞 Studio เตือนเปิดป้าย AI (กติกา AIGC ที่อ้างเป็นของ Shopee SG ไทยยังไม่ verify) + `@Product` จาก Veo อาจเปลี่ยนรูปทรง/สีสินค้า ทาง Ken Burns รูปจริงไม่มีปัญหานี้
+- ไม่มี commit/deploy
