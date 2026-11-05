@@ -2,7 +2,7 @@
 
 **สร้าง:** 2026-05-24  
 **Port:** 5063 (external Nginx basic auth) → 9119 (dashboard internal)  
-**Status:** Updated ✅ (2026-10-21) — running `HERMES_REF=v0.21.6`; Chat tab verified working via DSM RP `:15063`
+**Status:** 2026-11-05 — compose `HERMES_REF=v0.22.7`; model `claude-opus-5-5[1m]` via provider `claude-subscription-directsdk-experimental`; gateway fenced `mem_limit`/`memswap_limit` 4g (live via `docker update`, compose committed, not yet redeployed)
 
 ---
 
@@ -113,6 +113,7 @@ Tracker: `docs/superpowers/specs/2026-06-02-hermes-token-tuning-verification.md`
 - **v2026.7.1+ requires auth providers** for non-loopback dashboard binds — `--insecure` no longer bypasses. Fixed via `inject-dashboard-auth.sh` wrapper + vault-seeded env vars
 - **DSM RP `:15063` needs the WebSocket custom header** — Chat tab (`/api/pty`, `/api/ws`, `/api/events`) is all WebSocket; entry without `Upgrade`/`Connection` = endless "Chat connection interrupted. Reconnecting..." while HTTP pages work. Also raise RP read timeout above 60 s. Verify: WS handshake via RP must give 403 (app gate), not 401 (plain GET)
 - **Dockerfile must set `HERMES_TUI_DIR=/opt/hermes/ui-tui` (+ `HERMES_NODE=/usr/local/bin/node`)** — without it the Chat tab terminal checks bundle freshness with PM's Node in `/opt/data/tools` (newer than the image's node 22), decides the bundle is stale, runs `npm ci` in `/opt/hermes` as uid 1000 → EACCES → `/api/pty` dies right after `pty accepted`, reconnect every ~3 s. Upstream Dockerfile sets the same var; re-check upstream's `ENV` block on every `HERMES_REF` bump
+- **hermes-gateway must stay memory-fenced (`mem_limit` + `memswap_limit` equal, 4g)** — every tool process (`claude -p` children, ffmpeg, faster-whisper) lives in its cgroup. 2026-11-05 a 3-task async delegation swap-thrashed the whole 12 GB NAS: no oom-kill in kern.log, ping/TCP alive but SSH banner + nginx dead, power cycle needed. Early warning in `agent.log`: `kanban dispatch: system memory pressure is elevated/critical`. `mem_limit` alone is not enough (overflow goes to swap). DSM cgroup v1 honours memsw — verify via `/sys/fs/cgroup/memory/docker/<id>/memory.memsw.limit_in_bytes`
 - **Old sessions store model per-session** — sessions created before config fix have empty model; new sessions use config
 
 ---
@@ -139,6 +140,7 @@ an authenticated caller.
 
 | วันที่ | เรื่อง |
 |--------|--------|
+| 2026-11-05 | NAS-wide hang (swap thrash from 3-way hermes delegation, no OOM kill) → gateway 4g / dashboard 1g mem+swap fence, applied live via `docker update`, compose committed, redeploy pending. |
 | 2026-10-27 | n8n → Hermes webhook push path (route `clip`, port 8644). Claude review: n8n intake was unauthenticated → token gate added on the n8n side. |
 | 2026-10-21 | Chat tab reconnect loop: (1) DSM RP `:15063` missing WebSocket headers (fixed in DSM UI); (2) Dockerfile missing `HERMES_TUI_DIR`/`HERMES_NODE` → TUI rebuild attempt EACCES (fixed + deployed). |
 | 2026-10-09 | `scripts/update-hermes.sh <tag>` now commits the `HERMES_REF` bump to `main` and pushes after deploy (guards: must be on `main`, not behind origin, compose file has no non-`HERMES_REF` changes). Runs from any cwd. (`803c63b`) Pending: uncommitted `HERMES_REF: v0.21.6` bump in compose — verify tag before running script. |

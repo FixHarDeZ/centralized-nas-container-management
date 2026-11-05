@@ -290,3 +290,32 @@ Hermes pulled `c7a809a`, ran `make secrets`, updated `flow-shopee-clips` + `webh
 `X-Clip-Token` (did not touch n8n). Open, deferred by the user: split the ~101 k-char `flow-shopee-clips`
 SKILL.md (every webhook run carries ~103 k chars of prompt); decide whether this box should keep the age key,
 NAS SSH key and all `.env` files; delete `/opt/data/n8n-bridge/` after the first real clip via push.
+
+## 2026-11-05 — Telegram bot เงียบ = NAS ค้างทั้งเครื่อง (hermes swap thrash)
+
+**Symptom:** bot ไม่ตอบ. ping NAS ได้, TCP 2222/443/15xxx connect ได้ แต่ SSH ค้าง `banner exchange`, ทุก HTTP timeout
+(ทั้ง public และ LAN `192.168.50.200`). ผู้ใช้ power cycle → boot 14:50.
+
+**Root cause (หลักฐาน):**
+- 13:16:11 hermes `Dispatched async delegation batch deleg_43d104e2 (3 task(s))` — 3 subagent ขนาน + main session
+  + `background_review` ทุกตัวรัน `claude -p` (~200 MB/ตัว) + ffmpeg / numpy / vision / faster-whisper (งาน lego-batman, presenter-post-test).
+- hermes เองเตือน: 13:22 `kanban dispatch: system memory pressure is elevated` → 13:25:20 `critical` → log สุดท้าย 13:25:26
+  (gateway rss 1.2 GB ตอนนั้น). `/var/log/messages` เงียบหลัง 12:54, ไม่มีอะไรจน boot.
+- **ไม่มี oom-kill ใน kern.log** (ตัวล่าสุด 08/09) = kernel ไม่ได้ฆ่าใคร แต่ swap (2 GB บน HDD) thrash จน userspace ตาย.
+- stack อื่น (shorts-factory, shop-worker, secretary-query, n8n, jellyfin, ai-deck) idle ช่วงนั้น.
+- container hermes-gateway **ไม่มี mem_limit** → tool process ทุกตัวกิน RAM host ได้ไม่จำกัด.
+- หลัง boot 4 นาที hermes ทำงานเดิมต่อ: gateway 2 GiB CPU 500%, swap 1021 → 1750/2047 MB.
+
+**Fix:**
+- Live (ไม่ restart): `docker update --memory 4g --memory-swap 4g hermes-gateway`, `1g/1g` dashboard. ตรวจ cgroup v1 จริง:
+  `memory.limit_in_bytes` = `memory.memsw.limit_in_bytes` = 4294967296 (DSM kernel รองรับ memsw).
+- Compose: `mem_limit: 4g` + `memswap_limit: 4g` (gateway), `1g/1g` (dashboard). memswap = mem → container ใช้ swap ไม่ได้
+  → เกินแล้ว cgroup OOM-kill child แทน host ค้าง. mem_limit อย่างเดียวไม่พอ (ล้นไป swap แล้ว host thrash เหมือนเดิม).
+- ไม่แตะ `delegation.max_concurrent_children` (ยัง 10 ใน `/opt/data/config.yaml`) — cgroup คือรั้วจริง.
+
+**Corrections to earlier note today:** ข้อสงสัย `mimo-v2.5-pro` ผิด — model จริงคือ `claude-opus-5-5[1m]` ผ่าน
+provider `claude-subscription-directsdk-experimental`, Telegram ตอบปกติ 12:32–13:17. `sudo -n` ไม่ได้พังหลัง reboot —
+พังเพราะใส่ `timeout` นำหน้า (sudoers อนุญาตแค่ `/usr/local/bin/docker`).
+
+**Status:** limit live แล้ว. compose แก้ + commit แต่ **ยังไม่ deploy** (deploy = recreate hermes-gateway ตัดงานที่กำลังรัน);
+deploy ครั้งหน้า `deploy.sh -s hermes-agent -y` แล้วเช็ค `docker inspect -f '{{.HostConfig.Memory}} {{.HostConfig.MemorySwap}}'`.

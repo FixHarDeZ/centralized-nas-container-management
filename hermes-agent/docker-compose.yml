@@ -3,7 +3,7 @@ services:
     build:
       context: .
       args:
-        HERMES_REF: v0.22.5
+        HERMES_REF: v0.22.7
     image: hermes-agent
     container_name: hermes-gateway
     restart: unless-stopped
@@ -20,6 +20,14 @@ services:
       - "com.centurylinklabs.watchtower.enable=false"
     ports:
       - "8644:8644"
+    # Every tool process (claude -p children, ffmpeg, faster-whisper, numpy)
+    # runs inside this cgroup. Unfenced, a 3-way async delegation on
+    # 2026-11-05 drove the 12 GB host into swap thrash (no OOM kill, sshd and
+    # nginx stopped answering, needed a power cycle). memswap_limit == mem_limit
+    # = no swap for this container, so the cgroup OOM-kills a child instead of
+    # the host livelocking. Keep below half of host RAM.
+    mem_limit: 4g
+    memswap_limit: 4g
 
     command: ["gateway", "run"]
 
@@ -45,6 +53,8 @@ services:
       - ./scripts/inject-dashboard-auth.sh:/opt/inject-dashboard-auth.sh:ro
     labels:
       - "com.centurylinklabs.watchtower.enable=false"
+    mem_limit: 1g
+    memswap_limit: 1g
     entrypoint: ["/opt/inject-dashboard-auth.sh", "/init", "/opt/hermes/docker/main-wrapper.sh"]
     command: ["dashboard", "--host", "0.0.0.0", "--no-open"]
 
