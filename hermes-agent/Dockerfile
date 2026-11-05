@@ -60,13 +60,13 @@ RUN set -eu; \
 # uv — from official uv image (faster + pinned version)
 COPY --chmod=0755 --from=uv_source /usr/local/bin/uv /usr/local/bin/uvx /usr/local/bin/
 
-# Node 22 LTS — copy binary + npm + corepack from upstream image
+# Copy node binary + npm from upstream image. Node 25+ no longer bundles
+# corepack (node:26 image has only npm under /usr/local/lib/node_modules),
+# and hermes installs with npm only, so corepack is not copied.
 COPY --chmod=0755 --from=node_source /usr/local/bin/node /usr/local/bin/
 COPY --from=node_source /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
-COPY --from=node_source /usr/local/lib/node_modules/corepack /usr/local/lib/node_modules/corepack
 RUN ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
-    ln -sf /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx && \
-    ln -sf /usr/local/lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack
+    ln -sf /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 
 # Non-root user — uid 10000, home = HERMES_HOME (/opt/data on the volume)
 RUN useradd -u 10000 -m -d /opt/data -s /bin/bash hermes
