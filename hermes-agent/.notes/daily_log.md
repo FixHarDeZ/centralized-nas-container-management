@@ -350,3 +350,17 @@ re-dispatched the interrupted delegation batch (`deleg_4f32a528`) — expect the
   (`platforms.telegram.extra.drop_pending_on_cold_boot: true`) — messages sent while the box was down are
   discarded, never answered; user must resend. Part of "bot เงียบ".
 - Status: deployed + committed (`7d10c55` + notes). secretary memswap fence committed, not redeployed (live via docker update).
+
+### 2026-11-05 — was the claude-subscription plugin the cause?
+
+Plugin `claude-subscription-directsdk-experimental` v0.3.4 installed by Hermes at **11:30**, hang **13:25**.
+- README: "Each `chat.completions.create` starts a fresh process" — every API call of every agent spawns a
+  `claude` node process (measured 200–225 MB RSS) that replays the whole history, then exits. mimo was plain HTTP.
+- agent.log: 11-03/11-04/11-05 morning = 100% `mimo-v2.6-flash`, **0** async delegations. After the switch:
+  `claude-opus-5-5[1m]` + `claude-haiku-5-5[1m]` (aux) via the plugin, and the first async delegation (3 tasks).
+  13:16–13:25 four sessions called Claude concurrently + 35 vision calls routed to the plugin.
+- Verdict: contributing, not sole — ~5 concurrent node processes ≈ 1 GB on top of gateway 1.2 GB and the
+  subagents' whisper/ffmpeg/numpy work. "memory pressure elevated" already appeared on 11-03/04 under mimo.
+- Levers (config keys present in live config.yaml): cgroup 4g (done, hard fence);
+  `delegation.max_concurrent_children` (10); `delegation.provider/model` (subagents off the plugin);
+  `auxiliary.vision.provider` (auto → main provider = plugin). None changed yet — waiting on user.
