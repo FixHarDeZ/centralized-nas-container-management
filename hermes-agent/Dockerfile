@@ -1,6 +1,11 @@
 FROM ghcr.io/astral-sh/uv:0.11.6-python3.13-trixie AS uv_source
-# Node 22 LTS — bookworm-slim binary is glibc-compatible with our trixie runtime
-FROM node:22-bookworm-slim AS node_source
+# Node — bookworm-slim binary is glibc-compatible with our trixie runtime.
+# Pinned to upstream's pm/lock.json node version. v0.22.7 dropped node 22/24
+# from package.json "engines" and .npmrc has engine-strict=true, so a node
+# older than the tag's engines range fails `npm install` with EBADENGINE.
+# Bundled npm must also satisfy engines.npm ("<11.10.0 || >=11.17.0");
+# node 26.12.1 ships npm 11.20.0. Re-check both on every HERMES_REF bump.
+FROM node:26.12.1-bookworm-slim AS node_source
 
 FROM debian:13.4
 
@@ -109,6 +114,10 @@ RUN mkdir -p /opt/hermes/bin && \
     cp /opt/hermes/docker/hermes-exec-shim.sh /opt/hermes/bin/hermes && \
     chmod +x /opt/hermes/bin/hermes
 
+# Login shells (the terminal tool runs `bash -lic`) re-read /etc/profile, which
+# resets PATH; upstream (v0.22.7+) re-adds /opt/hermes/bin + venv via profile.d.
+RUN install -m 0644 /opt/hermes/docker/profile-hermes-path.sh /etc/profile.d/hermes.sh
+
 # Permissions: world-readable tree; hermes owns write-critical subdirs
 # uv downloads its own CPython when requires-python doesn't match the system one;
 # keep it out of /root (mode 0700) so the non-root hermes user can exec it.
@@ -124,7 +133,7 @@ ENV HERMES_HOME=/opt/data
 
 # Dashboard Chat tab (/api/pty) runs the TUI bundle built above. Without
 # HERMES_TUI_DIR the launcher re-checks freshness with PM's own Node (a newer
-# version downloaded into /opt/data/tools), always decides the node-22 bundle is
+# version downloaded into /opt/data/tools), always decides the image-built bundle is
 # stale, then tries `npm ci` in /opt/hermes as the remapped hermes user — which
 # fails, so every chat socket dies right after accept (reconnect loop every ~3 s).
 # Upstream's Dockerfile sets the same two vars; HERMES_NODE keeps the bundle on

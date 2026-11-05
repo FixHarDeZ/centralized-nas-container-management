@@ -71,6 +71,38 @@ if echo "$HTTP_STATUS" | grep -q "Not Found"; then
 fi
 echo "    ✔ s6-overlay present — safe to use"
 
+# The tag's .npmrc sets engine-strict=true, so a node_source image older than
+# package.json "engines.node" fails `npm install` with EBADENGINE mid-build
+# (v0.22.7 dropped node 22). Catch it here instead of after upload + 45 s of build.
+echo "==> Checking node engines for '${TARGET_TAG}' ..."
+ENGINES_NODE=$(gh api "repos/${UPSTREAM_REPO}/contents/package.json?ref=${TARGET_TAG}" \
+    --jq '.content' | base64 --decode | python3 -c 'import json,sys; print(json.load(sys.stdin).get("engines",{}).get("node",""))')
+NODE_IMAGE=$(grep -Eo 'FROM node:[^ ]+' hermes-agent/Dockerfile | head -1 | cut -d: -f2)
+NODE_MAJOR=${NODE_IMAGE%%[.-]*}
+# Every range clause's lower bound major; the image passes if it meets any clause.
+if ! python3 - "$ENGINES_NODE" "$NODE_MAJOR" <<'PY'
+import re, sys
+rng, major = sys.argv[1], int(sys.argv[2])
+if not rng:
+    sys.exit(0)
+ok = False
+for clause in rng.split("||"):
+    m = re.search(r"(\d+)", clause)
+    if not m:
+        continue
+    lo = int(m.group(1))
+    # ^N / N.x / ~N pin the major; >=N is open-ended.
+    ok |= (major >= lo) if ">=" in clause else (major == lo)
+sys.exit(0 if ok else 1)
+PY
+then
+    echo "ERROR: '${TARGET_TAG}' needs node '${ENGINES_NODE}', Dockerfile uses node:${NODE_IMAGE}."
+    echo "       Bump node_source in hermes-agent/Dockerfile (match upstream pm/lock.json node)"
+    echo "       and check its bundled npm against engines.npm."
+    exit 1
+fi
+echo "    ✔ node:${NODE_IMAGE} satisfies '${ENGINES_NODE}'"
+
 CURRENT_TAG=$(grep 'HERMES_REF:' "$COMPOSE_FILE" | awk '{print $2}')
 echo "==> Updating HERMES_REF: ${CURRENT_TAG} -> ${TARGET_TAG} in ${COMPOSE_FILE}"
 sed -i.bak "s/HERMES_REF: .*/HERMES_REF: ${TARGET_TAG}/" "$COMPOSE_FILE" && rm -f "${COMPOSE_FILE}.bak"
