@@ -364,3 +364,7 @@ Plugin `claude-subscription-directsdk-experimental` v0.3.4 installed by Hermes a
 - Levers (config keys present in live config.yaml): cgroup 4g (done, hard fence);
   `delegation.max_concurrent_children` (10); `delegation.provider/model` (subagents off the plugin);
   `auxiliary.vision.provider` (auto → main provider = plugin). None changed yet — waiting on user.
+- 15:43 user approved: `hermes config set delegation.max_concurrent_children 2` (was 10) inside hermes-gateway.
+  Backup `/opt/data/config.yaml.bak-20261105`. No restart needed — `load_config_readonly()` cache is keyed on
+  the file's (mtime_ns, size), and delegation reads it on every `get_definitions()`. Volume-only, not in git.
+  Not changed: `delegation.provider/model` (subagents still on the plugin), `auxiliary.vision.provider: auto`.

@@ -75,7 +75,14 @@ memory:
 
 compression:
   threshold: 0.80              # was 0.50 — delay context rewrite
+
+delegation:
+  max_concurrent_children: 2   # was 10 — 2026-11-05: each subagent call spawns a claude node process
+                               # (subscription plugin) + heavy tool work; 3-way fan-out hung the NAS
 ```
+
+Set via `hermes config set <key> <value>` in the container — hot-reloaded (cache keyed on file mtime/size).
+Backup before the 2026-11-05 change: `/opt/data/config.yaml.bak-20261105`.
 
 Live backup: `/opt/data/config.yaml.bak-20260602` (volume-persistent).
 Verification window: 2026-06-02 → 2026-06-05.
