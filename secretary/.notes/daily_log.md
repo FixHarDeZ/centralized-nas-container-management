@@ -362,3 +362,15 @@ This was the path used to backfill the User-Password page. The standalone contai
 - **แก้แล้ว:** `secretary-ingest` **มี `limits.memory` อยู่แล้ว = 6G** (ที่รายงานตอนแรกว่า "ไม่มี limit" ผิด) แต่เพดานครึ่งเครื่องบนเครื่อง 12 GB = host ตายก่อน cgroup จะทำงาน — แพตเทิร์นเดียวกับ `secretary-query` ตอน 19/08 → ลดเป็น **4G** เท่ากับ query
 - **Trade-off ที่รับไว้:** คอมเมนต์เดิมในไฟล์บันทึกว่า 2026-06-01 เพดาน 4 GB เคย OOM-kill container นี้มาแล้ว ถ้าเกิดซ้ำให้ลด batch size ของ `upsert_chunks` ห้ามดันกลับ 6G — ingest ตายรันใหม่ได้ host ตายไม่ได้
 - **หมายเหตุ:** ฟิลด์ `"pingpong":"DISCONNECTED"` ใน `get_server_info` ของ QuickConnect ไม่ใช่ตัวบอกอาการ — มันคือผลตรวจเส้น direct (port forward) ซึ่ง router forward แค่ 443 + 15xxx ไม่เคย forward 5001 (`ext_port: 0`) จึงขึ้น DISCONNECTED ทั้งตอนพังและตอนปกติ ให้ดูที่ relay pingpong แทน
+
+## 2026-11-05 — secretary-query swapping inside its own cgroup (post power-cycle)
+
+After the NAS power cycle (hang caused by hermes, see `hermes-agent/.notes/daily_log.md`) the host sat at
+load ~16 / IO ~16 with swap full 2045/2047 MB. Per-cgroup `memory.stat`: **secretary-query rss 1946 MB +
+swap 1715 MB** (n8n-triggered ingest after boot), every other container ~0 swap. Cause: compose set only
+`deploy.resources.limits.memory: 4G`; docker then defaults RAM+swap to 2× (`MemorySwap=8589934592`), so at
+its 4 GB ceiling the cgroup swaps on the HDD-backed md1 instead of OOM-killing — the whole host pays the IO.
+
+Fix: `docker update --memory 4g --memory-swap 4g secretary-query` (live, IO load 16 → 2.2 within minutes) +
+compose `memswap_limit: 4G` on secretary-query and secretary-ingest. Measured no-swap peak 3.70 GB (08/19)
+fits. **Compose committed, not redeployed** (live value holds until the next recreate, which will then use compose).

@@ -49,6 +49,12 @@ services:
       - ./ingest/ingest.py:/ingest/ingest.py:ro
     depends_on:
       - qdrant
+    # RAM+swap ceiling = the RAM ceiling. Without it docker defaults to 2x
+    # (8 GB), so at its 4 GB limit the cgroup swaps instead of OOM-killing:
+    # 2026-11-05 after a power cycle it held 1.9 GB rss + 1.7 GB in swap
+    # during an n8n-triggered ingest and kept the host at IO load ~16.
+    # Measured peak without swap is 3.70 GB, so this fits normal work.
+    memswap_limit: 4G
     deploy:
       resources:
         limits:
@@ -85,6 +91,9 @@ services:
       - hf_cache:/root/.cache/huggingface
     depends_on:
       - qdrant
+    # Same as secretary-query: no swap beyond the RAM ceiling, so an oversized
+    # batch is a cgroup OOM kill (re-runnable) rather than host swap thrash.
+    memswap_limit: 4G
     deploy:
       resources:
         limits:
