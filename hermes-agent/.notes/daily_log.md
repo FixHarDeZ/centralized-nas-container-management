@@ -319,3 +319,34 @@ provider `claude-subscription-directsdk-experimental`, Telegram ตอบปก�
 
 **Status:** limit live แล้ว. compose แก้ + commit แต่ **ยังไม่ deploy** (deploy = recreate hermes-gateway ตัดงานที่กำลังรัน);
 deploy ครั้งหน้า `deploy.sh -s hermes-agent -y` แล้วเช็ค `docker inspect -f '{{.HostConfig.Memory}} {{.HostConfig.MemorySwap}}'`.
+
+## 2026-11-05 (cont.) — bump v0.22.5 → v0.22.7 broke the build
+
+User ran `scripts/update-hermes.sh v0.22.7`: build died at `npm install` with `EBADENGINE`
+(`Required: {"node":">=26"} Actual: v22.23.2`). v0.22.7 narrowed `engines.node` from
+`^22.22.0 || ^24.11.0 || >=26.0.0` to `>=26`; tag `.npmrc` keeps `engine-strict=true`.
+Old containers kept running (build-before-down).
+
+- **My mistake:** commit `7b39eca` (memory fence) swept up the script's uncommitted `HERMES_REF: v0.22.7`
+  compose edit, so `main` pointed at an unbuildable tag until `fea4bf1`.
+- `fea4bf1`: `node_source` → `node:26.12.1-bookworm-slim` (= upstream `pm/lock.json`; bundled npm 11.20.0
+  satisfies `engines.npm` `<11.10.0 || >=11.17.0` — node 26.0–26.3 ship npm 11.12–11.16 and would fail),
+  + upstream `docker/profile-hermes-path.sh` → `/etc/profile.d/hermes.sh` (login shells reset PATH; terminal
+  tool uses `bash -lic`). `update-hermes.sh` preflight: tag `engines.node` vs Dockerfile node major, before upload.
+- Checked `docker/` blobs v0.22.5→v0.22.7: only `stage2-hook.sh` changed among files we copy (config-backend
+  check + chromium path file renamed to `/etc/hermes/chromium-executable-path`, absent file = quiet). Safe.
+- 2nd build attempt (`--down-first`, waited for hermes idle): failed `"/usr/local/lib/node_modules/corepack": not found`
+  — node 25+ no longer bundles corepack. Stack was down → restored with `compose up -d --no-build` (old image)
+  within minutes. `7d10c55` drops the corepack COPY/symlink.
+- 3rd deploy (normal order) ✅ 337 s: gateway/dashboard `restarts=0`, `node v26.12.1`, `git describe v0.22.7`,
+  `bash -lc 'command -v hermes'` = `/opt/hermes/bin/hermes`, Memory/MemorySwap 4g/4g + 1g/1g from compose.
+
+Also seen post power-cycle: host load ~16 from **secretary-query swapping in its own cgroup** (fixed there, see
+`secretary/.notes/daily_log.md`). Hermes held 2.3/4 GB and 0 swap during that. After reboot hermes auto
+re-dispatched the interrupted delegation batch (`deleg_4f32a528`) — expect the same after any restart.
+- Post-deploy: Telegram connected 15:20:05 on v0.22.7, dashboard `:5063` 302 (auth), `_resolve_chat_argv` →
+  `['/usr/local/bin/node','--expose-gc','/opt/hermes/ui-tui/dist/entry.js']` (fast path, no npm ci).
+- Note: gateway logs `Cold boot: dropping Telegram updates queued while offline`
+  (`platforms.telegram.extra.drop_pending_on_cold_boot: true`) — messages sent while the box was down are
+  discarded, never answered; user must resend. Part of "bot เงียบ".
+- Status: deployed + committed (`7d10c55` + notes). secretary memswap fence committed, not redeployed (live via docker update).
