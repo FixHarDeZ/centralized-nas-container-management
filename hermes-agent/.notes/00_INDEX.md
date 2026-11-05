@@ -2,7 +2,7 @@
 
 **สร้าง:** 2026-05-24  
 **Port:** 5063 (external Nginx basic auth) → 9119 (dashboard internal)  
-**Status:** 2026-11-05 — running `HERMES_REF=v0.22.7` on node 26.12.1 (deployed `7d10c55`); model `claude-opus-5-5[1m]` via provider `claude-subscription-directsdk-experimental`; gateway mem+swap 4g, dashboard 1g (from compose)
+**Status:** 2026-11-05 (closed) ✅ — running `HERMES_REF=v0.22.7` on node 26.12.1 (deployed `7d10c55`); `delegation.max_concurrent_children: 2`; model `claude-opus-5-5[1m]` via provider `claude-subscription-directsdk-experimental`; gateway mem+swap 4g, dashboard 1g (from compose)
 
 ---
 
@@ -148,6 +148,7 @@ an authenticated caller.
 
 | วันที่ | เรื่อง |
 |--------|--------|
+| 2026-11-05 | `delegation.max_concurrent_children` 10 → 2 (volume config, hot-reload). Plugin `claude-subscription-directsdk-experimental` spawns one `claude` node process (~200 MB) per API call — contributing factor in the hang. Open: move subagents/vision off the plugin if pressure persists. |
 | 2026-11-05 | Bump v0.22.5 → v0.22.7: node 22 → 26.12.1, drop corepack, profile.d PATH fix, engines preflight in `update-hermes.sh`. Deployed `7d10c55`. |
 | 2026-11-05 | NAS-wide hang (swap thrash from 3-way hermes delegation, no OOM kill) → gateway 4g / dashboard 1g mem+swap fence, now persisted via compose (deployed). |
 | 2026-10-27 | n8n → Hermes webhook push path (route `clip`, port 8644). Claude review: n8n intake was unauthenticated → token gate added on the n8n side. |

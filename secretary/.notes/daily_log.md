@@ -374,3 +374,10 @@ its 4 GB ceiling the cgroup swaps on the HDD-backed md1 instead of OOM-killing �
 Fix: `docker update --memory 4g --memory-swap 4g secretary-query` (live, IO load 16 → 2.2 within minutes) +
 compose `memswap_limit: 4G` on secretary-query and secretary-ingest. Measured no-swap peak 3.70 GB (08/19)
 fits. **Compose committed, not redeployed** (live value holds until the next recreate, which will then use compose).
+
+### 2026-11-05 — close
+
+Status: secretary-query running with Memory/MemorySwap 4g/4g (live `docker update`, verified via inspect);
+compose fence committed + pushed `34cab18`, **not deployed** — takes effect on the next `deploy.sh -s secretary -y`
+(will cold-load BGE-M3). secretary-ingest is one-shot, picks up `memswap_limit` on its next `compose run`.
+Open: verify `MemorySwap` = 4294967296 after that next deploy.

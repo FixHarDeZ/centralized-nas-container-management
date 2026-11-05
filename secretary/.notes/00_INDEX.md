@@ -155,7 +155,7 @@ task_memcg=/docker/ea61abdd49af...`) container โดน kill (Exited 137)
 ที่คิด dense + sparse + colbert พร้อมกัน spike เกิน 4 GB) ถ้าโดน kill ซ้ำ **ห้ามดันกลับเป็น 6G**
 ให้ลด batch size ของ `upsert_chunks` แทน — ingest ตายรันใหม่ได้ (`restart: "no"`) host ตายไม่ได้
 
-## Swap Ceiling (2026-11-05)
+## Swap Ceiling (2026-11-05) — status: live via `docker update` on secretary-query; compose (`34cab18`) applies on next recreate/deploy
 `memswap_limit: 4G` = RAM limit on secretary-query + secretary-ingest. Without it docker's default RAM+swap
 is 2× (8 GB) and the cgroup swaps at its 4 GB limit instead of OOM-killing — 2026-11-05 query held 1.7 GB in
 swap and kept the host at IO load ~16. Verify with `docker inspect -f '{{.HostConfig.MemorySwap}}'`

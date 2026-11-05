@@ -368,3 +368,15 @@ Plugin `claude-subscription-directsdk-experimental` v0.3.4 installed by Hermes a
   Backup `/opt/data/config.yaml.bak-20261105`. No restart needed — `load_config_readonly()` cache is keyed on
   the file's (mtime_ns, size), and delegation reads it on every `get_definitions()`. Volume-only, not in git.
   Not changed: `delegation.provider/model` (subagents still on the plugin), `auxiliary.vision.provider: auto`.
+
+### 2026-11-05 — close
+
+Done: NAS hang root-caused (hermes 3-way delegation → host swap thrash, no OOM kill); gateway 4g / dashboard 1g
+mem+swap fence (compose, deployed); v0.22.5 → v0.22.7 on node 26.12.1 (deployed `7d10c55`, restarts 0, Telegram
+connected 15:20, Chat tab fast path OK); `update-hermes.sh` engines preflight; `delegation.max_concurrent_children`
+10 → 2 (volume config, hot-reloaded); plugin memory analysis logged.
+Commits pushed to `main`: `7b39eca` `fea4bf1` `7d10c55` `81b5cb6` `dd6ff95` `deaceb3` + this close.
+Not verified by me: real Telegram round-trip after the v0.22.7 deploy, dashboard Chat tab in a browser.
+Open: if memory pressure warnings persist, move `delegation.provider/model` and/or `auxiliary.vision.provider`
+off the subscription plugin (user's call — quality trade-off); `update-hermes.sh` preflight checks node only,
+not bundled npm vs `engines.npm`.
