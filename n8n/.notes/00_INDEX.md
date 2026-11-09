@@ -208,4 +208,4 @@ reserves (all jobs; `test-*` separate clock), shot k needs k−1 rendered, 2nd a
 regen, assemble only when all approved. Client: Hermes `flow-shopee-clips/scripts/shotboard.py`.
 Source of truth = `presenter-shots/core.js` → `build_workflow.py` → JSON; drift test in `tests/`.
 Settings: saveDataSuccessExecution none. Doc: `docs/presenter-shots.md`. Status: verified live with
-test jobs; no real clip yet; `test-sb` left open for Fix to try the buttons.
+test jobs; no real clip yet; all test jobs cancelled (no open jobs as of 2026-11-09 close).

@@ -335,3 +335,11 @@ writes static data so it cannot clobber a webhook execution.
 Open: test job `test-sb` left open with shot 2 `in_review` so Fix can try the buttons (no alerts for
 in_review). No real presenter clip through shotboard yet. Webhook executions run concurrently in theory
 — one agent drives it sequentially, so a lost update is not expected but not prevented either.
+
+### 2026-11-09 — close (จบงาน)
+
+Committed + pushed `760524e` (main). Live workflow `yd3FsdXVEHSADE0D` active, settings back to
+saveDataSuccessExecution none, live Code nodes == repo. Test jobs cancelled at close (`test-sb`,
+`test-tick`, `test-tick2`, `test-live-1`) — `status` lists no open jobs. No deploy/restart needed.
+Remaining: first real multi-shot presenter clip through shotboard; concurrent webhook writes are not
+locked (single agent assumed).
