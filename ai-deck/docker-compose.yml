@@ -7,8 +7,8 @@ services:
     build:
       context: .
       args:
-        CLAUDE_VERSION: "2.1.318"
-        SKILLS_REF: "ca45fc496a3436251f191354091d557da31c15b5"
+        CLAUDE_VERSION: "2.1.319"
+        SKILLS_REF: "2c5958ecac7cee2b583967a2c4981d0f4a75c579"
     # Explicit names: Compose defaults to <project>-<service>, which is
     # ai-deck-ai-deck (image) and ai-deck-ai-deck-code-1 (container) here.
     image: ai-deck:latest
@@ -63,8 +63,8 @@ services:
       context: .
       target: coding
       args:
-        CLAUDE_VERSION: "2.1.318"
-        SKILLS_REF: "ca45fc496a3436251f191354091d557da31c15b5"
+        CLAUDE_VERSION: "2.1.319"
+        SKILLS_REF: "2c5958ecac7cee2b583967a2c4981d0f4a75c579"
     # Same string as the service name, so nginx's ai-deck-code:<port> resolves either way.
     image: ai-deck-code:latest
     container_name: ai-deck-code
