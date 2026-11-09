@@ -1,6 +1,6 @@
 # n8n — Project Index (Memory Blueprint)
 
-> อัปเดตล่าสุด: 2026-09-08 (แยกออกจาก secretary เป็น stack ของตัวเอง)
+> อัปเดตล่าสุด: 2026-11-09 (Presenter Shots workflow live)
 > ใช้ไฟล์นี้เป็น cold-start memory ก่อนเริ่มงานทุกครั้ง
 
 ---
@@ -198,3 +198,14 @@ skipped; 401 also on `:15678`). No real clip through this path yet.
 Gaps: once Hermes answers 202 n8n tracks nothing — a gateway restart mid-run loses the job silently.
 `Hermes Bridge Probe` is deactivated (not deleted). `HERMES_WEBHOOK_SECRET` in n8n env/manifest is unused
 (drop + redeploy n8n). Domain is hardcoded in `Sign for Hermes` (could derive from `$env.N8N_WEBHOOK_URL`). Uptime Kuma monitor id 28 still open (see above).
+
+## Presenter Shots — `yd3FsdXVEHSADE0D` (2026-11-09, active)
+
+`POST /webhook/presenter-shots` (`X-Clip-Token` = `CLIP_INTAKE_TOKEN`) → `Apply event` (core.js
+`apply`, state in workflow static data, rejected events never persist) → `Respond`. `Every 5 min` →
+`Find stalls` (read-only `stalls`) → `Alert Fix` (Secretary Bot, chat Fix). Rules: ≥300 s between
+reserves (all jobs; `test-*` separate clock), shot k needs k−1 rendered, 2nd attempt only after Fix's
+regen, assemble only when all approved. Client: Hermes `flow-shopee-clips/scripts/shotboard.py`.
+Source of truth = `presenter-shots/core.js` → `build_workflow.py` → JSON; drift test in `tests/`.
+Settings: saveDataSuccessExecution none. Doc: `docs/presenter-shots.md`. Status: verified live with
+test jobs; no real clip yet; `test-sb` left open for Fix to try the buttons.

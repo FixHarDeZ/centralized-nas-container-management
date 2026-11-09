@@ -304,3 +304,34 @@ Done: gate live + verified, commits `c7a809a`, `81a48d9`, `87ef0c5` on main, n8n
 user: drop unused `HERMES_WEBHOOK_SECRET` from n8n manifest/compose (needs n8n redeploy), delete the
 deactivated `Hermes Bridge Probe`, derive the hardcoded domain in `Sign for Hermes` from env, old Uptime Kuma
 monitor id 28 + `secretary_n8n_data` volume.
+
+### 2026-11-09 — Presenter Shots (per-shot state + clock for multi-shot Flow clips)
+
+Fix asked whether moving part of the Shopee clip pipeline into n8n helps quality, then approved the
+hybrid design ("ทำโครงการที่ไอยูเสนอมาได้เลย"): n8n owns state, rules and the clock; Hermes keeps
+driving Flow and runs the gates where the files are.
+
+Done:
+- `n8n/presenter-shots/core.js` — pure state machine (create_job/reserve/submitted/submit_failed/ready/
+  decide/status/assemble_check/close/cancel) + read-only `stalls()`; 18 node tests (core + generated
+  Code nodes with mocked n8n globals).
+- `build_workflow.py` → `workflows/Presenter_Shots.json` (Code nodes embed core.js verbatim);
+  `tests/test_presenter_shots_workflow.py` drift test. Repo suite: 71 passed. ruff clean.
+- Live: created + activated workflow `yd3FsdXVEHSADE0D` via public API (no n8n restart, no deploy —
+  reuses `CLIP_INTAKE_TOKEN` and the Secretary Bot credential).
+- Hermes side: `flow-shopee-clips/scripts/shotboard.py` (+ unit tests) and `references/shotboard.md`;
+  SKILL.md multi-scene gate points at it.
+
+Verified live: 401 without/with wrong token; chaining 409, credit guard 409, pacing 429 `wait_s`;
+CTA gate caught "ลิงก์อยู่ใต้คลิป" in a non-final shot (ASR spelling "ลิ้งอยู่ต้ายคลิป" — first
+pattern set missed it, fixed + test added); review message + reply keyboard delivered (msg 8080);
+stall alert delivered by tick 09:20:15 UTC (Secretary Bot msg 135). saveDataSuccessExecution was set to
+`all` only for that check, then the committed JSON (none) was PUT back; live code == repo code.
+
+Design notes: review buttons are a reply keyboard (Hermes gateway drops foreign inline callbacks; a
+reply-keyboard tap arrives as a normal DM message and wakes the agent with context). The tick never
+writes static data so it cannot clobber a webhook execution.
+
+Open: test job `test-sb` left open with shot 2 `in_review` so Fix can try the buttons (no alerts for
+in_review). No real presenter clip through shotboard yet. Webhook executions run concurrently in theory
+— one agent drives it sequentially, so a lost update is not expected but not prevented either.

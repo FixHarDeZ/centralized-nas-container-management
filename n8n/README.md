@@ -93,6 +93,13 @@ Workflow JSON files in `workflows/` are git-tracked.
 ```
 
 
+## Presenter Shots
+
+`workflows/Presenter_Shots.json` (active) holds per-shot state, Flow submit pacing and Fix's per-shot
+review decisions for multi-shot presenter clips; Hermes drives it through
+`flow-shopee-clips/scripts/shotboard.py`. Generated from `presenter-shots/core.js` — see
+[docs/presenter-shots.md](docs/presenter-shots.md).
+
 ## Shop Flow Studio
 
 `workflows/Shop_Flow_Studio.json` is an inactive scheduled reconciliation workflow for shorts-factory Shop. It dispatches approved render IDs, checks progress and requests worker-owned notifications, using Basic Auth plus a scoped token. See [credential setup and bring-up](docs/shop-flow-studio.md). No video binaries, Google session or Telegram Trigger are stored in this workflow.
