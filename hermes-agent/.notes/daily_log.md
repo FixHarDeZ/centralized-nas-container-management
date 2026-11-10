@@ -563,3 +563,19 @@ Open:
 - Other new boot warning: none besides the two above (Discord no-token is expected).
 - Not verified: a real model reply through `claude-subscription-directsdk-experimental` (plugin 0.3.4 enabled,
   no load errors in the log); Chat tab in a browser.
+- **SQLite WAL-reset fixed** (`0d3ec6c`, deployed 11:28). Root cause: the venv ran on uv's downloaded cpython
+  3.14.4 (python-build-standalone), which links SQLite 3.50.4 **statically**, so upstream's fix (a rebuilt
+  `libsqlite3.so.0` + ldconfig) would not reach it. Fix: build the venv on the Python pinned in upstream's
+  `pm/lock.json` (3.14.9+20261021, bundles SQLite 3.53.1).
+  - The interpreter is staged by pm into `/opt/pm-build` → symlink `/opt/hermes-python`;
+    `UV_PYTHON_DOWNLOADS=never uv sync --python /opt/hermes-python/bin/python3`.
+  - A build-time check refuses SQLite <3.51.3 or a failing FTS5 trigram self-test.
+  - Debian's system python3 (3.13 / SQLite 3.46.1) is untouched.
+  - Test-built under `hermes-agent:sqlite-test` first; the venv imports as the hermes user.
+- After deploy:
+  - venv SQLite 3.53.1; the WAL-reset warning is gone. response_store / runs_idempotency / cron executions DBs
+    log "switched back to WAL" (informational: the 3.50.4 run had held them in delete mode as a mitigation).
+  - Telegram connected; dashboard 302; restarts 0; locks intact; check_delivery 0; `session-reset-policy v0.3.0 armed`.
+  - The pre-deploy busy check showed 2 matching processes, but the log has no turns since 11:18 and the shutdown
+    drain took 0.00 s, so nothing was interrupted.
+- Login shells now resolve `python3` to the venv's 3.14.9 (profile.d puts the venv first), as before with 3.14.4.
