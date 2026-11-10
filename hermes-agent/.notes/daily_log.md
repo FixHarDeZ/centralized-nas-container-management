@@ -497,3 +497,27 @@ Status: no code/config changed, nothing deployed.
     - Many brand uploads are vertical `/shorts/`. v5 expects 16:9, so build from shorts with `product_build.py`.
     - One VITURE short title carries a `$` price.
   - Not yet run end to end on a real product clip.
+
+### 2026-11-10 — close
+Done:
+- Webhook path off (`ef2e806`).
+- Shopee clip skills rebuilt as repo-owned + locked: `shopee-clip` router + `clipjob.py`, `flow-driver`,
+  `gameplay-clips` (`c0d4a57` … `36908e5`).
+- 🎬 footage mode extended to brand product films (`f7f643f`, `9219b32`, `88ef3ed`).
+- All pushed to `main`, synced via `make hermes-skills` (last sync `88ef3ed`, 41 tests pass in the container).
+- No container restart needed after the deploy at 09:43.
+
+Open:
+- Acceptance = real clips through Telegram, after `/new`:
+  - 🧑 via 📝 (cheapest: 10 s, 1 shot)
+  - 🧑 via 🤖 or a fallback
+  - 📦
+  - 🎬 game
+  - 🎬 product (VITURE Pro 2)
+- Unverified:
+  - the clarify buttons, and `reply_to_text` reaching the session;
+  - whether an agent session may run `sync.sh` under the lock;
+  - presenter `ready` gates on real audio;
+  - 📦 graphics placement.
+- Then deactivate n8n Presenter Shots.
+- edge-tts flaky from the NAS (voice-A fallback risk).

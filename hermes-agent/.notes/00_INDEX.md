@@ -2,7 +2,7 @@
 
 **สร้าง:** 2026-05-24  
 **Port:** 5063 (external Nginx basic auth) → 9119 (dashboard internal)  
-**Status:** 2026-11-05 (closed) ✅ — running `HERMES_REF=v0.22.7` on node 26.12.1 (deployed `7d10c55`); `delegation.max_concurrent_children: 2`; model `claude-opus-5-5[1m]` via provider `claude-subscription-directsdk-experimental`; gateway mem+swap 4g, dashboard 1g (from compose)
+**Status:** 2026-11-10 (closed) ✅ — `HERMES_REF=v0.22.7`; webhook platform OFF (Telegram only); Shopee clip skills repo-owned + locked (`make hermes-skills`, last sync `88ef3ed`); acceptance clips pending (start with `/new`)
 
 ---
 
