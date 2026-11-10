@@ -77,8 +77,26 @@ RUN git clone --depth 1 --branch ${HERMES_REF} \
 
 WORKDIR /opt/hermes
 
+# Interpreter for the venv = the Python upstream pins in pm/lock.json, staged by
+# its sha256-verifying pm provisioner. uv's own download (cpython 3.14.4) bundles
+# SQLite 3.50.4 statically, which has the WAL-reset corruption bug
+# (https://sqlite.org/wal.html#walresetbug) — and gateway + dashboard share
+# state.db. pm's 3.14.9+20261021 bundles SQLite 3.53.x. Debian's python3
+# (3.46.1, also vulnerable) stays as the system python3 for scripts only.
+RUN HERMES_HOME=/opt/pm-build python3 -c 'from pathlib import Path; from pm import ensure, installed_package; ensure("python", explicit=True); Path("/opt/hermes-python").symlink_to(installed_package("python").binary.parent.parent)' && \
+    chmod -R a+rX /opt/pm-build && \
+    /opt/hermes-python/bin/python3 --version
+
 # Python deps — messaging + web extras cover gateway, Discord/Telegram, and dashboard
-RUN uv sync --extra messaging --extra web
+RUN UV_PYTHON_DOWNLOADS=never uv sync --python /opt/hermes-python/bin/python3 --extra messaging --extra web && \
+    .venv/bin/python -c "import sqlite3, sys; \
+v = sqlite3.sqlite_version_info; \
+sys.exit(f'venv SQLite {sqlite3.sqlite_version} still has the WAL-reset bug') if v < (3, 51, 3) else None; \
+db = sqlite3.connect(':memory:'); \
+db.execute(\"CREATE VIRTUAL TABLE docs USING fts5(content, tokenize='trigram')\"); \
+db.execute(\"INSERT INTO docs VALUES ('hermes')\"); \
+sys.exit('SQLite FTS5 trigram self-test failed') if db.execute(\"SELECT count(*) FROM docs WHERE docs MATCH 'erm'\").fetchone()[0] != 1 else None; \
+print('venv python', sys.version.split()[0], 'sqlite', sqlite3.sqlite_version)"
 
 # v0.23.1+: npm is refused (engines.npm) and the root preinstall only accepts
 # the exact pnpm pinned in pm/lock.json. Stage it with upstream's stdlib-only
@@ -133,10 +151,11 @@ RUN mkdir -p /opt/hermes/bin && \
 # resets PATH; upstream (v0.22.7+) re-adds /opt/hermes/bin + venv via profile.d.
 RUN install -m 0644 /opt/hermes/docker/profile-hermes-path.sh /etc/profile.d/hermes.sh
 
-# Permissions: world-readable tree; hermes owns write-critical subdirs
-# uv downloads its own CPython when requires-python doesn't match the system one;
-# keep it out of /root (mode 0700) so the non-root hermes user can exec it.
-RUN chmod -R a+rX /opt/hermes /opt/uv-python && \
+# Permissions: world-readable tree; hermes owns write-critical subdirs.
+# The venv's interpreter lives in /opt/pm-build (pm-staged, see above) — keep it
+# out of /root (mode 0700) so the non-root hermes user can exec it.
+# (UV_PYTHON_INSTALL_DIR=/opt/uv-python stays set for any uv download at runtime.)
+RUN chmod -R a+rX /opt/hermes /opt/pm-build && \
     chown -R hermes:hermes /opt/hermes/.venv /opt/hermes/ui-tui /opt/hermes/node_modules
 
 RUN mkdir -p /opt/data
