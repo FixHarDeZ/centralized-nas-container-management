@@ -18,8 +18,9 @@ services:
       - hermes_agent_data:/opt/data
     labels:
       - "com.centurylinklabs.watchtower.enable=false"
-    ports:
-      - "8644:8644"
+    # No published ports: the webhook platform (8644, n8n Clip Intake → Hermes) was
+    # switched off 2026-11-10 — never carried real traffic, and it fed outside input
+    # into a session with a terminal on the box that holds the NAS key + age key.
     # Every tool process (claude -p children, ffmpeg, faster-whisper, numpy)
     # runs inside this cgroup. Unfenced, a 3-way async delegation on
     # 2026-11-05 drove the 12 GB host into swap thrash (no OOM kill, sshd and

@@ -380,3 +380,20 @@ Not verified by me: real Telegram round-trip after the v0.22.7 deploy, dashboard
 Open: if memory pressure warnings persist, move `delegation.provider/model` and/or `auxiliary.vision.provider`
 off the subscription plugin (user's call — quality trade-off); `update-hermes.sh` preflight checks node only,
 not bundled npm vs `engines.npm`.
+
+### 2026-11-10 — Shopee clip flow review (advice only, no changes)
+User: presenter clips keep failing (product images, Flow UI hang, Flow reject); "n8n flow didn't run".
+Findings (read live skill + state.db sessions 11-09/11-10):
+- n8n `Presenter Shots` (`760524e`, live `yd3FsdXVEHSADE0D`) is a passive state store; Hermes must
+  choose to call `shotboard.py`. Skipped on both real runs (shelf 11-09 21:25, shelf304 11-10 07:45).
+  Hermes's fix after the first miss = more prose in SKILL.md. Telegram never passes through n8n.
+- `flow-shopee-clips/SKILL.md` 109 KB (> 100 K skill_manage limit) + refs pitfalls 55 KB,
+  product-image-prep 41 KB, flow-browser-env 37 KB. `related_skills` is metadata only
+  (`tools/skills_tool.py`), the agent loads a linked skill itself.
+- Unusual-activity notes: same prompt + ref passed when Fix submitted in his own browser (one run).
+- 11-10 run stopped at picker/chip verification, 0 credits, user cancelled ("ไม่โอเค").
+Recommended (pending user answers): mode pick at start (gameplay / presenter+graphic / graphic only),
+then for Flow modes prompt-pack vs auto with auto→prompt fallback; gates in code not prose;
+split skill into router + per-mode skills; consider deactivating Clip Intake → Hermes webhook (8644)
+if Telegram-only; overlap with shorts-factory ADR 0018 Studio product pack flagged.
+Status: no code/config changed, nothing deployed.

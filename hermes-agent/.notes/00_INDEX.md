@@ -148,6 +148,7 @@ an authenticated caller.
 
 | วันที่ | เรื่อง |
 |--------|--------|
+| 2026-11-10 | Shopee clip flow review: Presenter Shots (n8n) never called on real runs (passive store, agent-optional); SKILL.md 109 KB; proposed mode-first Telegram flow + prompt-pack fallback. Advice only, nothing changed. |
 | 2026-11-05 | `delegation.max_concurrent_children` 10 → 2 (volume config, hot-reload). Plugin `claude-subscription-directsdk-experimental` spawns one `claude` node process (~200 MB) per API call — contributing factor in the hang. Open: move subagents/vision off the plugin if pressure persists. |
 | 2026-11-05 | Bump v0.22.5 → v0.22.7: node 22 → 26.12.1, drop corepack, profile.d PATH fix, engines preflight in `update-hermes.sh`. Deployed `7d10c55`. |
 | 2026-11-05 | NAS-wide hang (swap thrash from 3-way hermes delegation, no OOM kill) → gateway 4g / dashboard 1g mem+swap fence, now persisted via compose (deployed). |
