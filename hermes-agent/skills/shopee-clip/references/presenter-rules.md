@@ -1,0 +1,38 @@
+# Presenter clip rules: graphics, post-production, per-shot review
+
+> Moved intact from the retired `flow-shopee-clips` SKILL.md on 2026-11-10. Script paths here mean
+> `/opt/data/skills/shopee-clip/scripts/` (Flow browser helpers: `/opt/data/skills/flow-driver/scripts/`).
+> Orders come only from Telegram now; the n8n intake route is off. Shot state lives in `clipjob.py`, not shotboard/n8n.
+> Runtime paths (outside the locked skill dirs): `logs/` = `/opt/data/clips/logs/` (clip-log, delivery-log, perf-log);
+> `state/<project-id>.json` (Flow project: known edit ids, roster, last character) = `/opt/data/clips/flow-state/`.
+
+## Presenter graphics v2 is mandatory on presenter clips (see references/presenter-graphics-lessons.md)
+
+
+## Presenter post-production = DEFAULT (run gate: read `report.json` and every `FLAG:` line before any send — see `references/presenter-post.md` → Run gate) (Fix อนุมัติ 2026-11-05: *"รีวิวแล้วเอาตามนี้เลย"*)
+- **Multi-scene presenter clip = post_presenter.py is the ONLY delivered build.** The ffmpeg xfade snippet in the assembly mechanics is for the pre-review check only; a plain stitch ships without Thai subs or EN pills, which Fix treats as a missed step. Feed the raw scenes (in order) to `post_presenter.py` with a plan.json (absolute or workdir-relative paths), then verify the `out.mp4` it writes (not the xfade file) with `verify-clip.py` and a 3-frame vision sheet (subs readable, pill text, no price).
+- **ทุกคลิป presenter (และ preset อื่นที่ gen ใน Flow): วาง prompt block "ON-SCREEN TEXT: NONE" จาก `references/presenter-post.md` ลงทุก scene แทนคำสั่ง caption/ป้ายเดิม → Flow gen แบบไม่มีตัวหนังสือ → ประกอบด้วย `scripts/post_presenter.py`** (ป้าย EN + ซับไทยจับเวลาจากเสียงพากย์ Flow ด้วย whisper small + บทเป็น initial_prompt, ตัดเฟรมค้างหัว, xfade, whoosh, master, encode FB-safe). กฎ caption เดิมใน style card/templates (ให้ Flow วาดป้าย EN เอง) ถูกแทนที่ด้วยข้อนี้ — ป้าย EN ≤2 คำ/beat, CTA `Link below!` เฉพาะ scene สุดท้าย ยังบังคับเหมือนเดิมแต่เราใส่เองใน plan.json. frame check เพิ่ม: ถ้า Flow ยังแอบใส่ตัวหนังสือ = defect → gen scene นั้นใหม่ (ตาม review gate)
+- **ซับไทย (ทั้ง presenter + gameplay) = Itim 48 เหลืองพาสเทล ขอบน้ำตาลเข้ม ไม่มีกล่อง (`BorderStyle=1`)** — ฟิกปฏิเสธกล่องดำตัวขาว เพราะไม่น่ารักและบังสินค้า; ห้ามกลับไปใช้ `BorderStyle=3`. burn ด้วย `ass=…:shaping=complex` เสมอ (ไม่งั้นวรรณยุกต์ซ้อนสระบนพัง). จะเปลี่ยน look ซับ/ป้าย: render variant ลงเฟรมจริงที่ไม่มีตัวหนังสือ → แผ่นเทียบส่ง Telegram → `clarify` ปุ่ม (สูตรใน `references/presenter-post.md` → Changing the subtitle look)
+- **บทพากย์ต้องยาวพอเต็มฉาก ไม่งั้น Flow พูดซ้ำเอง (เจอ 2026-11-06 ทั้ง 2 ฉากของคลิปตู้เสื้อเด็ก KENZZO):** 10 วิ ต้องมีบท ~30–38 พยางค์ (พูดจริง ≥70% ของความยาวฉาก) + ต่อท้ายบรรทัด Audio ด้วย `พูดตามนี้ทุกคำ ไม่เพิ่ม ไม่ตัด ห้ามพูดประโยคใดซ้ำสอง พูดจบแล้วเงียบจนจบคลิป` ทุกครั้ง — และ **ห้ามเชื่อ CER ของ `post_presenter.py` ว่าฉากสะอาด** (initial_prompt กลบการพูดซ้ำ: ฉาก 1 รายงาน CER 0.0 ทั้งที่ซ้ำทั้งประโยค) ให้รัน `scripts/detect_repeats.py <scene_raw.mp4> --script <prompt> --cut <scene_cut.mp4>` บนเสียงดิบทุกฉากก่อนต่อคลิป (unprompted word-level ASR หาคำซ้ำติดกัน แล้วตัดให้เอง 0 เครดิต exit 3 = ตัดแล้ว → ใช้ไฟล์ cut ต่อ และบอกคำ/วินาทีที่ตัดใน delivery) — บทยาวพอ (33 พยางค์) ก็ยังเจอซ้ำได้ จึงเป็น gate บังคับทุกฉาก ไม่ใช่แค่ตอนสงสัย — รายละเอียดใน `references/presenter-graphics.md` → 0a, กับดัก PyAV ใน `references/presenter-post.md` → Looped voiceover
+- รัน whisper ทีละงานเท่านั้น (RAM NAS น้อย — OOM 2026-11-05). ปก: `scripts/make_cover.py` (1080x1920, safe zone) ใช้ไฟล์ก่อนเผาซับ/pill เป็น source
+
+
+## Multi-scene review gate — show EVERY scene to Fix BEFORE stitching (his standing rule, 2026-10-27)
+> **SUPERSEDED 2026-11-10 (mechanics only):** send each shot for review with `clipjob.py ready` (sends the clip + ✅/🔁
+> keyboard) and record taps with `clipjob.py decide`. Do not hand-send `scene<N>_review`. The rule itself, the
+> overlap and the defect classes below still hold.
+- His exact ask: *"บางคลิปต้องการการ gen ใหม่ ต้องส่งให้ผม review ทุกคลิปก่อนที่จะนำมารวมให้ผมเสมอ"* — so for any clip longer than one generation: generate scene(s) → **send EACH raw scene clip to Fix through `scripts/send_clip.py` (one message per scene, `label` = `scene<N>_review`, same `ok` + `message_id` + byte-size assertion as a final delivery — never a bare `MEDIA:` line, which can leave the attachment behind while reporting success) → STOP and wait** → stitch only after he approves → deliver the final assembled clip. Never hand him an assembled clip whose scenes he has not seen.
+- **Send scene 1 for review WHILE scene 2 is still rendering.** The render is the long pole and a review message costs nothing, so overlap them: submit scene 2 (start-frame chained from scene 1's last frame), then send scene 1's clip plus its frame-check verdict immediately — by the time he answers, scene 2 is usually already downloadable. The gate stays intact (nothing is stitched before his OK) and the wall clock drops by most of one render. **Exception — do NOT chain scene N+1 while scene N already carries a defect you found yourself:** if your own pre-review frame check of scene 1 came back with reportable defects (wrong on-screen spec, drifted product), a chained scene 2 is built on a scene he is likely to reject, and both renders are then spent. Send scene 1 alone with the findings and the one-line choice (ผ่าน / gen ใหม่), chain only after he approves — the extra wall clock is cheaper than a discarded render, and that trade-off is one sentence in the delivery, never silence.
+- **A scene that carries a zero-credit-repairable defect (a looped phrase): ask with `clarify` buttons (cut it / keep it / re-gen with the credit cost in the text).** If he does not answer, apply the zero-spend repair (the cut) and stitch. Name the repair in the delivery and offer the re-gen as his call. An unanswered defect question must never stall the run or spend credits.
+- If he rejects a scene, re-gen ONLY that scene (keep the accepted ones), send the replacement for review again; stitch after his OK. State in each review message which scene number it is and what the fix was.
+- This overrides "run end-to-end without per-step confirmation" for multi-scene orders — the review gate IS the confirmation he wants.
+- **Defect classes seen on 2026-10-27 (Zelda run, both scenes rejected) and the prompt fix for each:**
+  - **จอยซ้อน / duplicated controllers** — the model spawns a second overlapping Joy-Con pair. Fix: state the controller count explicitly, e.g. *"exactly one pair of Joy-Cons attached to the console — no duplicate, overlapping or floating controllers anywhere in frame"*, and vision-check a frame at the controller beat before you send the scene for review.
+  - **State teleport (ของโผล่กลับมาเอง)** — console is pulled out of its dock, then reappears seated in the dock with no action. Fix: forbid the prop's return — *"once the console leaves the dock the dock never appears again; camera stays on the console in hand"* — and prefer making the removal the scene's last beat so there is no later frame where the dock can creep back in.
+- Same gate applies to the pixel checks: a scene that fails your own frame sampling gets re-gen'd BEFORE it reaches Fix, so what he reviews is only ever gen-correct material (he is reviewing continuity/meaning, not policing crashes).
+
+
+
+## Lessons from the 2026-11-08 Pureen run → `references/pureen-run-lessons.md`
+Narrow-layout, two-scene presenter lessons. Read it when a run comes up at ~800 px or chains two presenter scenes.
+

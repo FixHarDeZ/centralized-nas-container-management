@@ -1,0 +1,32 @@
+# Hermes skills owned by this repo
+
+The live copies live in the `hermes_agent_data` volume at `/opt/data/skills/<name>/`. This directory is
+the source of truth since 2026-11-10. Edit here, commit and push, then sync.
+
+| Skill | Role |
+|---|---|
+| `shopee-clip` | Router for every Shopee clip order (Telegram only). Asks the mode, intake, photo gate, storyboard, prompt pack, per-shot review, post, single `deliver`. Holds the shared scripts and templates. |
+| `flow-driver` | Mode 🤖: drives Google Flow over CDP, wrapped by `clipjob.py` (pacing, fallback to the prompt pack). |
+| `gameplay-clips` | Mode 🎮: footage + TTS clips, 0 credits. Body unchanged from Hermes' own skill; paths re-pointed. |
+
+The retired `flow-shopee-clips` is archived at `/opt/data/skills-archive/flow-shopee-clips` (outside the scan path).
+
+## Sync
+```
+make hermes-skills        # ssh → container: git pull --ff-only in Hermes' clone, then sync.sh
+make hermes-skills ARGS=-n   # dry run
+```
+`sync.sh` copies tracked files only. It never touches runtime data (that lives in `/opt/data/clips/`), and it
+removes files that were synced before but are no longer tracked.
+
+## Rules
+- `sync.sh` pins and **locks** the three skills (`hermes curator pin|lock`). The agent and the curator then
+  cannot edit them in place: skill_manage, write_file, patch and terminal writes are refused. To change one,
+  Hermes edits its clone, commits and pushes, then asks Fix to run `make hermes-skills`.
+- Runtime data lives outside the skills: `/opt/data/clips/jobs` (clipjob), `/opt/data/clips/logs`
+  (clip-log, delivery-log, perf-log), `/opt/data/clips/flow-state` (Flow project state).
+- `shopee-clip/SKILL.md` stays ≤15 KB (`tests/test_hermes_skills.py`). A missed gate is fixed in
+  `clipjob.py` with a test, not by adding prose.
+- File names are unique across the three skills (also tested), so a reference mentioned in one skill
+  is found in exactly one place.
+- Tests: `uv run --with pytest pytest -q hermes-agent/skills/shopee-clip/scripts tests/test_hermes_skills.py`

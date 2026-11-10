@@ -2,7 +2,7 @@ AGE_KEY ?= $(HOME)/.config/sops/age/keys.txt
 export SOPS_AGE_KEY_FILE = $(AGE_KEY)
 PY = .venv/bin/python
 
-.PHONY: secrets check edit-vault sync-test-vault rotate-key clean-env test sync-shared desk-skills desk-latest lint format help
+.PHONY: secrets check edit-vault sync-test-vault rotate-key clean-env test sync-shared desk-skills desk-latest hermes-skills lint format help
 
 help:           ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*?##' $(MAKEFILE_LIST) | awk -F':.*?## ' '{printf "  %-14s %s\n", $$1, $$2}'
@@ -38,6 +38,10 @@ sync-shared:    ## Copy each shared/*.py over its existing vendored copies (disc
 
 desk-skills:    ## Vendor the workstation skills named in ai-deck/skills.list into ai-deck/skills (ARGS=-n to only report)
 	@$(PY) scripts/desk_skills.py $(ARGS)
+
+hermes-skills:  ## Pull Hermes' clone on the NAS and sync hermes-agent/skills into its live skills dir (ARGS=-n = dry run; push first)
+	@dry=$$(case " $(ARGS) " in *" -n "*) echo 1;; esac); \
+	ssh nas "sudo -n /usr/local/bin/docker exec -u hermes -e DRY=$$dry hermes-gateway bash -lc 'cd /opt/data/centralized-nas-container-management && git pull --ff-only -q && bash hermes-agent/skills/sync.sh'"
 
 DESK_PINS = ai-deck/Dockerfile ai-deck/nginx/Dockerfile ai-deck/docker-compose.yml
 

@@ -26,3 +26,8 @@ __pycache__/
 # nas-rails mod: engine-written type stubs
 .claude/skills/nas-rails/.claude-plugin/types/
 .claude/skills/nas-rails/tsconfig.json
+
+# Hermes skills: runtime data lives only in the volume
+hermes-agent/skills/*/logs/
+hermes-agent/skills/*/state/
+hermes-agent/skills/**/.pytest_cache/
