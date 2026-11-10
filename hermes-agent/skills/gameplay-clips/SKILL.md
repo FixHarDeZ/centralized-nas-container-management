@@ -1,6 +1,6 @@
 ---
 name: gameplay-clips
-description: Mode 🎮 of shopee-clip — load only after the shopee-clip router picked gameplay footage. Not an entry point for clip orders.
+description: Mode 🎬 of shopee-clip — footage clips cut from official videos (game trailers, and brand product films via references/product-footage.md). Load only after the shopee-clip router picked 🎬. Not an entry point for clip orders.
 version: 1.1.0
 author: Hermes (IU)
 license: MIT
@@ -11,6 +11,8 @@ metadata:
 ---
 
 # Gameplay / footage clip pipeline (preset `gameplay`, 0 credits, no Flow)
+> **Not a game (washer, TV, XR glasses …)? Read `references/product-footage.md` first** — same steps, with deltas for
+> research, source gating (`scripts/source_check.py`), burned-in text, the product cutout sticker and `pft-N` hooks.
 
 ## Voiceover rule — no countdown or dates (Fix 2026-11-07)
 - ห้ามพูดหรือขึ้นจอนับถอยหลัง/จำนวนวันถึงวันวางขาย (เช่น "อีก 118 วัน", ป้าย D-N) และห้ามวันที่ในเสียงพากย์ เพราะคลิปอาจถูกดูหลายเดือนหลังทำ แล้ววันจะผิด — ใช้ hook แบบไม่มีวันที่แทน (`gph-1/3/4/5/6/8/9` ไม่ใช่ `gph-2`/`gph-10`). ไม่ต้องใส่ release_date/release_pill ใน plan.json
@@ -18,7 +20,7 @@ metadata:
 ## When to use
 - Fix orders a clip แบบฟุตเทจ / gameplay / "ตัดฟุตเตจเกม" / "ฟุตเทจ" — any game product where real footage sells better than a generated presenter. Duration is per order (20 s typical).
 - **ถ้าหาฟุตเทจเกมเพลย์จริงไม่ได้ (ไม่มี gameplay trailer / มีแต่คนพากย์ / ช่วงสะอาดไม่พอ) ให้ใช้ cinematic cutscene หรือ trailer ทางการมาทำได้เลย — ฟิกสั่งไว้ 2026-11-07: «ถ้าหาคลิปเกมเพลแล้วไม่มี หา cinematic cutscene หรือ trailer มาทำได้เลย»** → ไม่ต้องถาม ไม่ต้องย่อคลิปให้สั้นลงเพราะ "ไม่ใช่เกมเพลย์"; เกณฑ์ที่ยังบังคับเหมือนเดิมคือช่วงต้องไร้เสียงพูด + ไร้ตัวหนังสือ/โลโก้ (รอย Watermark/credit ที่ครอปออกได้ = ครอป ไม่ใช่เหตุผลปฏิเสธ) แล้วบอกฟิกใน delivery ว่าฟุตเทจเป็นแนว cinematic/trailer ไม่ใช่เกมเพลย์จริง
-- This is mode 🎮 of `shopee-clip` (the router asked the mode question and ran intake). **House rules live in `/opt/data/skills/shopee-clip/references/house-rules.md`.** Quick recap: ห้ามราคา/สกุลเงิน/ส่วนลด ทั้งพูดและบนจอ (วันที่ pre-order/วางขายพูดได้ — ไม่ใช่ราคา), on-screen caption = EN ล้วน ≤2 คำต่อ beat, ไม่มีชื่อร้าน/watermark, soft CTA เฉพาะช็อตสุดท้าย (`Link below!`), hashtags gate ≤150 chars + zero CJK + ไม่มีแท็กราคา, deliver ผ่าน `/opt/data/skills/shopee-clip/scripts/send_clip.py` + hashtags block + basket-link block (ลิงก์ที่ฟิกส่งมา ส่งกลับ verbatim) — **บล็อก hashtags กับบล็อกลิงก์ แยกกันคนละ fenced code block เสมอ** **+ ส่งปุ่ม copy ด้วย `/opt/data/skills/shopee-clip/scripts/send_copy_buttons.py "<hashtags>" "<link>"` ทุกครั้งหลังส่งคลิป** (Telegram ไม่มีปุ่ม copy ให้ลิงก์ใน code block — ปุ่ม inline `copy_text` คือแบบที่ฟิกเลือก).
+- This is mode 🎬 of `shopee-clip` (the router asked the mode question and ran intake). **House rules live in `/opt/data/skills/shopee-clip/references/house-rules.md`.** Quick recap: ห้ามราคา/สกุลเงิน/ส่วนลด ทั้งพูดและบนจอ (วันที่ pre-order/วางขายพูดได้ — ไม่ใช่ราคา), on-screen caption = EN ล้วน ≤2 คำต่อ beat, ไม่มีชื่อร้าน/watermark, soft CTA เฉพาะช็อตสุดท้าย (`Link below!`), hashtags gate ≤150 chars + zero CJK + ไม่มีแท็กราคา, deliver ผ่าน `/opt/data/skills/shopee-clip/scripts/send_clip.py` + hashtags block + basket-link block (ลิงก์ที่ฟิกส่งมา ส่งกลับ verbatim) — **บล็อก hashtags กับบล็อกลิงก์ แยกกันคนละ fenced code block เสมอ** **+ ส่งปุ่ม copy ด้วย `/opt/data/skills/shopee-clip/scripts/send_copy_buttons.py "<hashtags>" "<link>"` ทุกครั้งหลังส่งคลิป** (Telegram ไม่มีปุ่ม copy ให้ลิงก์ใน code block — ปุ่ม inline `copy_text` คือแบบที่ฟิกเลือก).
 - **Multi-scene review gate ไม่บังคับ** (ไม่มี scene ไหนถูก gen ใน Flow) — ส่งครั้งเดียวพร้อม frame-check verdict.
 - **0 เครดิต / ไม่ต้องเปิด Chrome / ไม่ต้องแตะ Flow เลย** ทั้งคลิปคือ yt-dlp + ffmpeg + TTS + PIL
 - **ฟิกแนบคลิปอ้างอิง (ref) มาด้วย = เสียงคลิปเราต้องประมาณคลิปนั้น** → วัดเทียบ F0/ย่านความถี่/ความดัง/ดนตรีใต้พากย์ก่อนจูน แล้วส่ง 2 โทนเสียงให้ฟิกฟังเลือกในรอบเดียว: `references/audio-reference-matching.md`; สคริปต์วัด: `scripts/measure_audio.py`

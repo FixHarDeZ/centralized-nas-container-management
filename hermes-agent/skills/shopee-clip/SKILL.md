@@ -41,14 +41,16 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    one vision pass on the sheet. You need the product name and the basket link. A missing link is
    asked for in the same message as Q1.
 2. **Q1 — mode** (`clarify`, one question, buttons):
-   `["🎮 gameplay footage", "🧑 presenter + graphic", "📦 graphic ล้วน (ภาพสินค้า ไม่มีคน)"]`.
-   Do not guess from the product type. A game can still be 🧑.
+   `["🎬 footage จากวิดีโอทางการ (เกม/สินค้า, 0 เครดิต)", "🧑 presenter + graphic", "📦 graphic ล้วน (ภาพสินค้า ไม่มีคน)"]`.
+   Do not guess from the product type: a game can be 🧑, and a washer can be 🎬.
 3. **Q2 — length** (`clarify`, one question): `["10 วิ (แนะนำ)", "20 วิ", "30 วิ", "40 วิ"]`.
    One shot = one Flow generation of 10 s (Omni 1.1 Flash, ≈15 credits; `house-rules.md` → Duration).
    N = length / 10: 10 s→1, 20 s→2, 30 s→3, 40 s→4. A shot can hold several storyboard beats.
-4. **🎮 → load skill `gameplay-clips` and follow it.** Its own steps cover footage, VO and delivery.
-   No clipjob for 🎮 (nothing to pace or review per shot). Stop reading here for 🎮.
-5. **Photo gate (🧑/📦).** References must be clean product photos: no price, promo text, rating, UI,
+4. **🎬 → load skill `gameplay-clips` and follow it.** Its own steps cover footage, VO and delivery. A game
+   uses the steps as written. Any other product reads its `references/product-footage.md` first
+   (official brand video of the exact model only, gated by `source_check.py`). No clipjob for 🎬 (nothing to
+   pace or review per shot). Stop reading here for 🎬.
+5. **Photo gate (🧑/📦; 🎬 product needs one clean photo for the sticker).** References must be clean product photos: no price, promo text, rating, UI,
    person or hands, and the product in the state the shot needs. Ad graphics and review screenshots
    are storyboard input only. Crop and cutout recipes: `references/product-image-prep.md`.
    With no clean photo, ask Fix for one and stop at zero spend. Never fill the gap with a guessed product.

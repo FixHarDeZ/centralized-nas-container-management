@@ -7,7 +7,7 @@ the source of truth since 2026-11-10. Edit here, commit and push, then sync.
 |---|---|
 | `shopee-clip` | Router for every Shopee clip order (Telegram only). Asks the mode, intake, photo gate, storyboard, prompt pack, per-shot review, post, single `deliver`. Holds the shared scripts and templates. |
 | `flow-driver` | Mode 🤖: drives Google Flow over CDP, wrapped by `clipjob.py` (pacing, fallback to the prompt pack). |
-| `gameplay-clips` | Mode 🎮: footage + TTS clips, 0 credits. Body unchanged from Hermes' own skill; paths re-pointed. |
+| `gameplay-clips` | Mode 🎬: footage + TTS clips from official videos (game trailers; brand product films via `references/product-footage.md` + `scripts/source_check.py`), 0 credits. |
 
 The retired `flow-shopee-clips` is archived at `/opt/data/skills-archive/flow-shopee-clips` (outside the scan path).
 

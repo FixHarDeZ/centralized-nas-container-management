@@ -44,6 +44,24 @@ EN pill = the caption for the hook beat (≤2 words, EN only).
 
 Notes: `gph-10`'s `<วันวางขาย>` is spoken as words ("สิบห้าพฤศจิกายน"); on the pill use `DAY ONE` or `25 FEB` style (≤2 words), never the full date with year. `gph-1`/`gph-4`/`gph-7` without a confirmed `<เกมที่คล้าย>`/`<แนวเกม>` → choose another id rather than guessing.
 
+## สินค้า — footage จากวิดีโอทางการ (preset `footage` — `pft-N`, added 2026-11-10)
+For 🎬 product clips cut from the brand's own film (gameplay-clips `references/product-footage.md`). Pick with
+`perf.py pick-hook --category <product category> --prefix pft-`; LRU / 5-row rule as above over rows of that
+category. Hooks describe what the footage SHOWS — never a personal-use claim ("ใช้มาหนึ่งสัปดาห์") because
+nobody used it, and never price/ถูก/คุ้ม/ลด. Placeholders: `<สินค้า>` = short Thai product noun ("แว่น XR",
+"เครื่องซักผ้า"); `<ฟีเจอร์>` = ONE feature stated on the brand page (skip the hook if none).
+
+| id | Thai spoken opener | type | EN pill |
+|---|---|---|---|
+| `pft-1` | "ดูช็อตนี้ก่อน แล้วจะรู้ว่าทำไมคนพูดถึง<สินค้า>ตัวนี้" | pattern-interrupt (hero shot) | `WATCH THIS` |
+| `pft-2` | "<สินค้า>ทำแบบนี้ได้ด้วยเหรอ" | curiosity | `NO WAY` |
+| `pft-3` | "ใครกำลังหา<สินค้า>อยู่ ดูตัวนี้ก่อนตัดสินใจ" | callout | `WATCH FIRST` |
+| `pft-4` | "<ฟีเจอร์> ฟีเจอร์เดียวที่ทำให้ตัวนี้ไม่เหมือนใคร" | feature | `ONE FEATURE` |
+| `pft-5` | "สามอย่างที่<สินค้า>ตัวนี้ทำได้ ดูให้จบ" | list | `TOP 3` |
+| `pft-6` | "ดูการทำงานจริงของมันกันเลย" | demo | `SEE IT` |
+| `pft-7` | "บ้านไหนยังใช้แบบเดิมอยู่ ลองดูอันนี้" | upgrade | `UPGRADE` |
+| `pft-8` | "หน้าตาของจริงเป็นแบบนี้ ไม่ใช่แค่ในรูป" | reveal | `REAL LOOK` |
+
 ## อิเล็กทรอนิกส์ / แก็ดเจ็ต (`gadget`)
 - `gadget-1` — "ของชิ้นเล็กที่ทำให้โต๊ะทำงานดูแพงขึ้นทันที"
 - `gadget-2` — "ใช้มาสักพักแล้ว ขอยอมรับตรงๆ ว่าติด"
