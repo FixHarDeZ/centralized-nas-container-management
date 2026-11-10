@@ -3,7 +3,7 @@
 > Moved intact from the retired `flow-shopee-clips` SKILL.md on 2026-11-10. Script paths here mean
 > `/opt/data/skills/shopee-clip/scripts/` (Flow browser helpers: `/opt/data/skills/flow-driver/scripts/`).
 > Orders come only from Telegram now; the n8n intake route is off. Shot state lives in `clipjob.py`, not shotboard/n8n.
-> Runtime paths (outside the locked skill dirs): `/opt/data/clips/logs/` = `/opt/data/clips/logs/` (clip-log, delivery-log, perf-log);
+> Runtime paths (outside the skill dirs, which every sync overwrites): `/opt/data/clips/logs/` = `/opt/data/clips/logs/` (clip-log, delivery-log, perf-log);
 > `/opt/data/clips/flow-state/<project-id>.json` (Flow project: known edit ids, roster, last character) = `/opt/data/clips/flow-state/`.
 
 ## Environment, layout detection, download → `references/flow-browser-env.md`
@@ -90,7 +90,7 @@ Cut mid-run is not a Flow failure and loses no credits: report the resume point,
     - **Never delete:** `hermes_kernel_*` / `hermes_rpc_*` / `hermes-snap-*` / `pulse-*` (runtime of THIS session), `org.chromium.*` dirs while any `browser_harness.daemon` is alive, the two log files (`clip-log.jsonl`, `delivery-log.jsonl` — the only record of what shipped + the hook-rotation source), or any work dir modified in the last ~40 min (another run may be live — check `find <scratch> -type f -mmin -40` first).
     - **uv caches are the big win:** three roots, prune only entries **older than 7 days** so hot packages stay warm: `/opt/data/.cache/uv/{archive-v0,git-v0,sdists-v9,simple-v21}`, `/opt/data/home/.cache/uv`, `/opt/data/cache/uv` (measured 16.75 GB freed; `uv cache prune` alone frees ~0.9 GB because it targets a different root than `du` shows). Safe: uv re-resolves on next run, worst case one re-download.
     - **Order matters:** patch `check_delivery.py` FIRST (see below), run it to exit 0, THEN delete — otherwise the 2 h watchdog cron reports every deleted file for the next 7 days.
-    - **`check_delivery.py` retention semantics (source = repo `hermes-agent/skills/shopee-clip/scripts/check_delivery.py`; `sync.sh` copies it to the skill AND to `/opt/data/scripts/` for the cron — change it in the repo, never in place: the skill is locked):** a row that already verified (`ok` + `message_id` + size match) proves the bytes reached Telegram → the local file is NOT required on disk anymore, so "missing on disk" only flags **unverified** rows ≤7 days old; and a failed attempt superseded by a **later successful send of the same file** is stale history → skipped. Without those two rules the watchdog alarms forever after any cleanup (measured: 8 problems → 0 after the patch, exit 0).
+    - **`check_delivery.py` retention semantics (source = repo `hermes-agent/skills/shopee-clip/scripts/check_delivery.py`; `sync.sh` copies it to the skill AND to `/opt/data/scripts/` for the cron — change it in the repo, never in place: the next sync overwrites it):** a row that already verified (`ok` + `message_id` + size match) proves the bytes reached Telegram → the local file is NOT required on disk anymore, so "missing on disk" only flags **unverified** rows ≤7 days old; and a failed attempt superseded by a **later successful send of the same file** is stale history → skipped. Without those two rules the watchdog alarms forever after any cleanup (measured: 8 problems → 0 after the patch, exit 0).
 
 
 ## Pitfalls → `references/pitfalls.md`

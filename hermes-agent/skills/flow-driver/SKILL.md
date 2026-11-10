@@ -13,7 +13,7 @@ metadata:
 
 The browser mechanics from the retired `flow-shopee-clips` skill are kept intact in `references/`.
 This file covers only how a 🤖 run is wrapped by `clipjob.py` (S = `/opt/data/skills/shopee-clip/scripts`).
-The source of truth is the repo (`hermes-agent/skills/`), and this skill is locked. Flow project state:
+The source of truth is the repo (`hermes-agent/skills/`); every sync overwrites this skill. Flow project state:
 `/opt/data/clips/flow-state/<project-id>.json` (read it in step 0, write it during the run).
 
 ## Before anything

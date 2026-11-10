@@ -83,6 +83,7 @@ docker compose -f hermes-agent/docker-compose.yml up -d
 
 `hermes-agent/skills/` is the source of truth for the `shopee-clip` (router), `flow-driver` (🤖 Flow over
 CDP) and `gameplay-clips` (🎬 footage: games + brand product films) skills. Push, then run `make hermes-skills`: it pulls Hermes' clone
-inside the container and runs `skills/sync.sh`, which copies the tracked files and **locks** the skills
-(`hermes curator lock`), so neither the agent nor the curator can edit them in place. Runtime data lives
+inside the container and runs `skills/sync.sh`, which copies the tracked files, pins the skills, and saves
+any in-place edit (agent or curator) to `/opt/data/clips/skill-drift/` before overwriting it. The skills are not
+locked: the lock's terminal heuristic blocked legit pipeline commands. Runtime data lives
 in `/opt/data/clips/` (`jobs/`, `logs/`, `flow-state/`). Details: `skills/README.md`.

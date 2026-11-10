@@ -20,8 +20,12 @@ make hermes-skills ARGS=-n   # dry run
 removes files that were synced before but are no longer tracked.
 
 ## Rules
-- `sync.sh` pins and **locks** the three skills (`hermes curator pin|lock`). The agent and the curator then
-  cannot edit them in place: skill_manage, write_file, patch and terminal writes are refused. To change one,
+- `sync.sh` **pins** the three skills (`hermes curator pin`: the curator never archives or merges them). They are
+  NOT locked: `hermes curator lock`'s terminal check is a heuristic, and on 2026-11-10 it refused a legit pipeline
+  command (an inline python writing `vo_plan.json` in the work dir, chained with a gameplay script path), which
+  stalled a real clip. Instead, sync **captures drift**: any live file that differs from what the last sync wrote
+  (agent or curator edit) is saved with a diff under `/opt/data/clips/skill-drift/<ts>/`, then overwritten. Agent-
+  created extra files are reported and kept. Review the drift dir after syncs and port what is worth keeping. To change one,
   Hermes edits its clone, commits and pushes, then runs `bash hermes-agent/skills/sync.sh` from the clone (or Fix
   runs `make hermes-skills`). `sync.sh` runs the tests first and syncs nothing if they fail.
 - Runtime data lives outside the skills: `/opt/data/clips/jobs` (clipjob), `/opt/data/clips/logs`
