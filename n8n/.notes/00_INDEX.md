@@ -213,3 +213,8 @@ regen, assemble only when all approved. Client: Hermes `flow-shopee-clips/script
 Source of truth = `presenter-shots/core.js` → `build_workflow.py` → JSON; drift test in `tests/`.
 Settings: saveDataSuccessExecution none. Doc: `docs/presenter-shots.md`. Status: verified live with
 test jobs; no real clip yet; all test jobs cancelled (no open jobs as of 2026-11-09 close).
+
+
+## Presenter Shots — SUPERSEDED by clipjob (2026-11-10)
+Hermes now keeps shot state locally (`hermes-agent/skills/shopee-clip/scripts/clipjob.py`). Workflow stays active until
+the new path delivers one real clip, then deactivate. `CLIP_INTAKE_TOKEN` is only used by it after that.

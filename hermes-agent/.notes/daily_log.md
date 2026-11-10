@@ -411,3 +411,57 @@ Status: no code/config changed, nothing deployed.
   A (graphic-only voice), B (skill source in repo vs volume), C (retire Presenter Shots). Nothing built.
   Checked: gateway passes `reply_to_text` to agent; inbound video cap 20 MB; `layout_probe` is face +
   pastel-wall specific (needs a product-frame variant for graphic-only).
+- Decisions from Fix: A = TTS in post using the gameplay voice recipe; B = skills owned by the repo;
+  C = local state (no n8n).
+- **Built + deployed the Shopee clip skills from the repo** (`c0d4a57`, fix `3a2ad0a`): `hermes-agent/skills/`
+  - `shopee-clip`: router SKILL.md 8.5 KB (budget 15 KB, tested). Flow: Q1 mode 🎮/🧑/📦 → Q2 length →
+    photo gate → storyboard → Q3 📝/🤖. Shared scripts and templates. House rules moved intact into
+    `references/house-rules.md`; the old one-call question menu is marked SUPERSEDED (tested).
+  - `scripts/clipjob.py`: local job state in `/opt/data/clips/jobs`.
+    - Pacing ≥300 s, chaining, credit ledger.
+    - Fallback auto→📝 on the first `unusual activity`, the 2nd submit failure, or the 2nd `trouble` on the same step.
+    - `pack` sends tagged prompts `[ช็อต K · job]`; `ingest --reply-text` maps a reply by its tag.
+    - `ready` runs the gates and sends the review keyboard; `decide`, `assemble-check`.
+    - `deliver` is the single send. It refuses unapproved shots, empty graphics, bad hashtags, a failed
+      verify-clip, or a report flag Fix has not decided on (`--ack "<flag>=<his call>"`, logged).
+      Retry is idempotent.
+    - 23 unit tests.
+  - `scripts/product_build.py` (📦): approved Flow b-roll + gen_vo_natural VO (Gemini Leda, edge fallback +
+    warm EQ) + Flow ambient as the bed with the gameplay sidechain duck + Itim subs + pills → master.sh.
+  - `flow-driver`: the Flow CDP references moved intact (`flow-steps.md` = old Steps/Env/Pitfalls), wrapped by clipjob.
+  - `gameplay-clips`: body unchanged. Only the description is narrowed ("not an entry point"), and
+    `flow-shopee-clips` paths are re-pointed.
+  - One shot = one 10 s Omni 1.1 Flash generation (15 credits), N = length/10. I first wrote 8 s; corrected
+    from house-rules → Duration.
+- Live migration (as user hermes in the container):
+  - copied `flow-shopee-clips/{logs,state}` → `/opt/data/clips/{logs,flow-state}` (sha identical);
+  - ran `sync.sh`;
+  - moved `flow-shopee-clips` → `/opt/data/skills-archive/flow-shopee-clips`;
+  - patched the pointers in `memories/MEMORY.md` and `devops/disk-housekeeping/SKILL.md` (backups `.bak-20261110`);
+  - `/opt/data/scripts/check_delivery.py` now reads `/opt/data/clips/logs`.
+- **Skills locked + pinned** (`hermes curator lock|pin` via sync.sh). The curator had been auto-patching
+  `flow-shopee-clips` (ledger 11-10 08:01) and `gameplay-clips` (199 patches). Neither can drift now.
+  Changes go repo → `make hermes-skills`.
+- Verified:
+  - `hermes skills list` shows shopee-clip / flow-driver / gameplay-clips, and flow-shopee-clips is gone;
+  - `curator status` shows all three locked + pinned;
+  - `check_delivery.py` exit 0;
+  - `perf.py pick-hook` still sees the history (gph-8 / gph-6 excluded).
+- Synthetic in-container run (3 testsrc 10 s shots, one silent, prebuilt VO):
+  - clipjob new → production prompt → pack --no-send → ingest by reply tag → ready → decide → assemble-check;
+  - product_build: v 14.6 s / a 14.57 s; it caught a real bug (subs.ass truncated by open('w') before the read);
+  - graphics_layer --check + render OK; frames show Thai subs shaped, headline, sticker, pill;
+  - deliver refused on the undecided flag and on empty gfx, passed with --ack, wrote 1 clip-log row, and the
+    rerun was refused with no 2nd row.
+  - Test files removed.
+- edge-tts (7.3.1, unpinned via uv) from the NAS returned `NoAudioReceived` intermittently this morning:
+  a plain request OK, then +15 Hz fail, +11 Hz OK, then even +9 Hz fail a minute later = throttling/flaky,
+  not a parameter limit. It hits the gameplay voice-A fallback too. gen_vo_natural retries 5× with no backoff.
+- NOT verified (needs Fix):
+  - real Telegram round-trips: the Q1/Q2/Q3 clarify buttons, a reply carrying `reply_to_text` into the session,
+    and a video sent as a file;
+  - `ready` on a real presenter shot (detect_repeats/CTA);
+  - 📦 graphics placement on real b-roll;
+  - any 🤖 run;
+  - acceptance = 4 real clips (🧑 via 📝, 🧑 via 🤖 or fallback, 📦, 🎮 via Q1).
+  - n8n `Presenter Shots` stays active until the new path ships one real clip, then deactivate it (decision C).

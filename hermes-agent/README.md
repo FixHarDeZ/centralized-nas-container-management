@@ -78,3 +78,11 @@ To pull a newer version, update `HERMES_REF` in `docker-compose.yml`:
 docker compose -f hermes-agent/docker-compose.yml build --no-cache
 docker compose -f hermes-agent/docker-compose.yml up -d
 ```
+
+## Repo-owned skills (Shopee clips)
+
+`hermes-agent/skills/` is the source of truth for the `shopee-clip` (router), `flow-driver` (🤖 Flow over
+CDP) and `gameplay-clips` (🎮) skills. Push, then run `make hermes-skills`: it pulls Hermes' clone
+inside the container and runs `skills/sync.sh`, which copies the tracked files and **locks** the skills
+(`hermes curator lock`), so neither the agent nor the curator can edit them in place. Runtime data lives
+in `/opt/data/clips/` (`jobs/`, `logs/`, `flow-state/`). Details: `skills/README.md`.

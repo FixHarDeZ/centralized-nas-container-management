@@ -1,6 +1,8 @@
 # Shopee clip modes — Telegram-only, mode-first, prompt-pack fallback (Hermes)
 
-Status: DRAFT — waiting on Fix's answers to the three open decisions at the bottom. Nothing built.
+Status: BUILT + DEPLOYED 2026-11-10 (`c0d4a57`, `3a2ad0a`). Decisions: A = TTS in post (gameplay recipe), B = repo,
+C = local state. Shot length corrected to 10 s (one Omni 1.1 Flash generation, 15 credits). Acceptance (four real
+clips) NOT done yet.
 
 ## Problem (observed, 2026-11-09 / 2026-11-10)
 

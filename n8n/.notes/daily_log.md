@@ -349,3 +349,5 @@ Hermes webhook platform switched off (see hermes-agent notes, `ef2e806`): `IYayi
 API, homepage `/webhooks/` proxy removed. JSON kept in `workflows/Clip_Intake.json`. `HERMES_WEBHOOK_SECRET` /
 `HERMES_CLIP_WEBHOOK_SECRET` env now fully unused (not removed — would need an n8n redeploy).
 `CLIP_INTAKE_TOKEN` still used by Presenter Shots.
+- Presenter Shots (`yd3FsdXVEHSADE0D`) superseded by Hermes-local `clipjob.py` (decision C, 2026-11-10). It stays
+  ACTIVE until the new path ships one real clip, then deactivate (keep the JSON + core.js in the repo).

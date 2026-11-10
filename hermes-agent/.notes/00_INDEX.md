@@ -126,6 +126,20 @@ Tracker: `docs/superpowers/specs/2026-06-02-hermes-token-tuning-verification.md`
 
 ---
 
+## Shopee clip skills — repo-owned since 2026-11-10
+
+`hermes-agent/skills/{shopee-clip,flow-driver,gameplay-clips}` → `make hermes-skills` (pull clone in container
++ `skills/sync.sh`: copy tracked files, `hermes curator pin|lock`). Locked = the agent/curator cannot edit
+in place; never `hermes curator unlock` for a quick fix, change the repo instead. Runtime data:
+`/opt/data/clips/jobs` (clipjob state), `/opt/data/clips/logs` (clip-log, delivery-log, perf-log),
+`/opt/data/clips/flow-state` (Flow project roster/edit ids). Old skill archived at
+`/opt/data/skills-archive/flow-shopee-clips`. Flow: Q1 mode (🎮 gameplay / 🧑 presenter+graphic / 📦 graphic ล้วน)
+→ Q2 length (N = length/10 s shots) → photo gate → storyboard → Q3 📝 prompt pack / 🤖 auto (auto falls back
+to 📝 itself) → `clipjob.py ready/decide` per shot → post (graphics always) → `clipjob.py deliver` (only send
+path). Tests: `uv run --with pytest pytest -q hermes-agent/skills/shopee-clip/scripts tests/test_hermes_skills.py`.
+Plan: `docs/superpowers/plans/2026-11-10-shopee-clip-modes.md`. Acceptance (4 real clips) pending.
+edge-tts from NAS intermittently `NoAudioReceived` (2026-11-10) — Gemini Leda is the default VO anyway.
+
 ## Webhook platform — OFF since 2026-11-10
 
 n8n Clip Intake → Hermes `clip` route never carried real traffic (only 10 setup/test POSTs on 2026-10-27).
@@ -144,6 +158,7 @@ registered, `presenter-shots` still registered, Telegram reconnected. Re-enablin
 
 | วันที่ | เรื่อง |
 |--------|--------|
+| 2026-11-10 | Shopee clip skills rebuilt + repo-owned + locked (`c0d4a57`, `3a2ad0a`): mode-first router, local clipjob, prompt-pack fallback, 📦 product_build. Acceptance pending. |
 | 2026-11-10 | Webhook platform off (route `clip`, port 8644, homepage `/webhooks/`, n8n Clip Intake inactive) — unused since 10-27 tests. |
 | 2026-11-10 | Shopee clip flow review: Presenter Shots (n8n) never called on real runs (passive store, agent-optional); SKILL.md 109 KB; proposed mode-first Telegram flow + prompt-pack fallback. Advice only, nothing changed. |
 | 2026-11-05 | `delegation.max_concurrent_children` 10 → 2 (volume config, hot-reload). Plugin `claude-subscription-directsdk-experimental` spawns one `claude` node process (~200 MB) per API call — contributing factor in the hang. Open: move subagents/vision off the plugin if pressure persists. |
