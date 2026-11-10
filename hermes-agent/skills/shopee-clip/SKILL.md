@@ -29,7 +29,7 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
 ## Hard rules (every mode)
 - No price, currency, discount or % anywhere: voiceover, subs, pills, cover, hashtags.
 - CTA words (ลิงก์ / ใต้คลิป / ตะกร้า) only in the last shot or beat.
-- Hashtags ≤150 characters, no CJK (`templates/hashtags.md`). Lead with 2–4 product-benefit hook tags (`#` + Thai phrase, no spaces) before the pool tags; drop pool tags, never hook tags, to fit. Basket link = an https Shopee link, sent with the hashtags in the same delivery message (🛒 ปักตะกร้า).
+- Hashtags ≤150 characters, no CJK (`templates/hashtags.md`). Basket link = an https Shopee link, sent with the hashtags in the same delivery message (🛒 ปักตะกร้า).
 - EN pills ≤2 words. Flow must draw no on-screen text (the block in `references/presenter-post.md`).
 - One heavy job at a time (whisper, render, ffmpeg): the NAS has 12 GB, and the gateway is fenced at 4 GB.
 - Details and the reasons behind them: `references/house-rules.md`. Read it once per session before the first order.
