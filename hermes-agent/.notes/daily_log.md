@@ -598,3 +598,19 @@ Open:
 - edge-tts flaky from the NAS (voice-A fallback).
 
 All committed and pushed.
+
+### 2026-11-10 — skill lock removed (it stalled the first real 🎬 clip)
+- First real order (VITURE Pro 2, 🎬 20 s) went well up to the VO, then Hermes stopped. The terminal tool returned
+  `Blocked: Skill 'gameplay-clips' is locked …` twice (11:46, 11:47) for
+  `cd <workdir> && python3 - <<EOF … json.dump(... open('vo_plan.json','w')) … EOF; uv run … /opt/data/skills/gameplay-clips/scripts/gen_vo_natural.py …`.
+  That is a false positive: the lock heuristic sees inline write-ish code plus the skill path in one command, even
+  though the write targets the work dir. Fix tapped "ปลดล็อกแล้ว" in clarify, but that unlocks nothing (the agent may
+  not run `curator unlock`), so the job stayed stuck. My miss: I never ran a real pipeline command against the lock.
+- Unlocked all 3 (`hermes curator unlock`); pins kept. `sync.sh` (`74367f4`) no longer locks:
+  - it **captures drift**: a live file differing from the last-synced commit (baseline now on the manifest's first
+    line, `#commit <sha>`; `SYNC_BASE` for older manifests) is copied with a diff to
+    `/opt/data/clips/skill-drift/<ts>/`, then overwritten;
+  - agent-created extra files are reported and kept.
+  - Tested live with an in-place edit + an extra file: both caught, edit restored; test files removed.
+- Docs updated (router, flow-driver, README ×2, CLAUDE.md row). Fix to tell Hermes "ทำต่อ" to resume the VITURE job
+  (VO needed trimming to ≤18.4 s; footage segs 2.3–14.5 s + 18.0–25.8 s from "Sleek on Every Face").
