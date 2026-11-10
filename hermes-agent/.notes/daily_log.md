@@ -397,3 +397,12 @@ then for Flow modes prompt-pack vs auto with auto→prompt fallback; gates in co
 split skill into router + per-mode skills; consider deactivating Clip Intake → Hermes webhook (8644)
 if Telegram-only; overlap with shorts-factory ADR 0018 Studio product pack flagged.
 Status: no code/config changed, nothing deployed.
+- User answers: graphic-only = Flow product b-roll with no presenter; rebuild in Hermes (not shorts-factory);
+  close the n8n → Hermes path if unused.
+- Webhook path OFF: gateway log shows only 10 POSTs on route `clip`, all 2026-10-27 setup/tests. Removed
+  `clip` subscription (hot-reload, LAN POST → 404 at once), `platforms.webhook.enabled: false`, dropped
+  `8644:8644` from compose, removed homepage nginx `/webhooks/` location, deactivated n8n `Clip Intake (Hermes)`
+  via API. Deployed hermes-agent + homepage. Verified: 8644 refused, `/webhooks/clip` 401, `nginx -t` ok,
+  `clip-request` not registered, `presenter-shots` still registered, Telegram connected 09:43:39.
+  Commit `ef2e806`. Skill `flow-shopee-clips` still describes the n8n intake contract; harmless (404) until
+  the rebuild.

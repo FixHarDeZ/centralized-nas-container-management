@@ -179,7 +179,11 @@ Release regression: 408 passed, 2 repository-wiring skips covered by 2 passing l
 
 Scheduler verification: successful GET /shop/automation/pending requests increased from 2 to 3 while no additional smoke requests were sent, with workflow active and queue empty. Worker logs contained no traceback. Successful executions are not retained by configured policy, so an empty executions list is expected. Real Flow/video/TTS production acceptance still remains.
 
-## Clip Intake (Hermes) — `IYayiImdn0Jd5yMS` (2026-10-27)
+## Clip Intake (Hermes) — `IYayiImdn0Jd5yMS` (2026-10-27) — ⛔ INACTIVE since 2026-11-10
+
+Deactivated with the Hermes webhook platform (route `clip`, port 8644, homepage `/webhooks/` all gone) —
+never carried real traffic. Re-activating alone does nothing: the Hermes side no longer listens.
+
 
 `POST /webhook/clip-request` (public path) → `Record job` gate → `Respond accepted` → `Sign for Hermes`
 (HMAC `HERMES_CLIP_WEBHOOK_SECRET`, POST `https://<domain>/webhooks/clip` → homepage nginx →

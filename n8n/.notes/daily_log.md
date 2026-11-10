@@ -343,3 +343,9 @@ saveDataSuccessExecution none, live Code nodes == repo. Test jobs cancelled at c
 `test-tick`, `test-tick2`, `test-live-1`) — `status` lists no open jobs. No deploy/restart needed.
 Remaining: first real multi-shot presenter clip through shotboard; concurrent webhook writes are not
 locked (single agent assumed).
+
+### 2026-11-10 — Clip Intake (Hermes) deactivated
+Hermes webhook platform switched off (see hermes-agent notes, `ef2e806`): `IYayiImdn0Jd5yMS` deactivated via
+API, homepage `/webhooks/` proxy removed. JSON kept in `workflows/Clip_Intake.json`. `HERMES_WEBHOOK_SECRET` /
+`HERMES_CLIP_WEBHOOK_SECRET` env now fully unused (not removed — would need an n8n redeploy).
+`CLIP_INTAKE_TOKEN` still used by Presenter Shots.

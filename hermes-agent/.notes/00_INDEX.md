@@ -126,28 +126,25 @@ Tracker: `docs/superpowers/specs/2026-06-02-hermes-token-tuning-verification.md`
 
 ---
 
-## Webhook platform (n8n push path, 2026-10-27)
+## Webhook platform — OFF since 2026-11-10
 
-Gateway publishes `8644:8644`; `platforms.webhook` enabled in `/opt/data/config.yaml`. Route = dynamic
-subscription `clip` in `/opt/data/webhook_subscriptions.json` (hot-reloaded; **volume only, not in git**):
-skill `flow-shopee-clips`, hand-added `toolsets: [hermes-cli]` (CLI refuses to set it), deliver telegram.
-Don't edit that file while a delivery is in flight (route digest check drops the reply). Files go out via
-`HOME=/opt/data /opt/hermes/.venv/bin/hermes send`, which needs `TELEGRAM_BOT_TOKEN` hand-copied into
-`/opt/data/.env` (drifts on rotation). Calls into n8n need `X-Clip-Token` from the clone's `n8n/.env`.
-Docs: `n8n/docs/clip-intake.md`. Verified 2026-10-27 (ping, token gate on). Skills
-`flow-shopee-clips` + `webhook-subscriptions` updated by Hermes for the token. ⚠️ `flow-shopee-clips`
-SKILL.md ~101 k chars (over the 100 k `skill_manage` limit) and is injected whole into every webhook run
-(`prompt_len=103079` for a ping) — split Pitfalls into `references/` (prompt sent to Hermes, not done yet).
+n8n Clip Intake → Hermes `clip` route never carried real traffic (only 10 setup/test POSTs on 2026-10-27).
+Switched off: `clip` removed from `/opt/data/webhook_subscriptions.json` (backup `.bak-20261110`),
+`platforms.webhook.enabled: false` in `/opt/data/config.yaml` (backup `config.yaml.bak-20261110`), port
+8644 no longer published (compose), homepage nginx `/webhooks/` proxy removed, n8n `Clip Intake (Hermes)`
+deactivated. Verified: LAN 8644 refused, `/webhooks/clip` → 401 (homepage basic auth), `clip-request` not
+registered, `presenter-shots` still registered, Telegram reconnected. Re-enabling = undo all five.
+`CLIP_INTAKE_TOKEN` stays — Presenter Shots uses the same `X-Clip-Token`.
+`/opt/data/n8n-bridge/` (poller from 2026-10-27) is dead code, left in place.
 
-⚠️ This box holds the NAS SSH key (NOPASSWD sudo docker), the vault age key (symlinked to
-`/opt/data/.config/sops/age/keys.txt`) and a clone with every stack's `.env`, and webhook sessions get a
-terminal. Anything that can reach a webhook route can try to steer that shell — keep every route behind
-an authenticated caller.
+⚠️ This box holds the NAS SSH key (NOPASSWD sudo docker), the vault age key and a clone with every stack's
+`.env`. Never reopen an outside → Hermes session path without an authenticated caller.
 
 ## Change Log
 
 | วันที่ | เรื่อง |
 |--------|--------|
+| 2026-11-10 | Webhook platform off (route `clip`, port 8644, homepage `/webhooks/`, n8n Clip Intake inactive) — unused since 10-27 tests. |
 | 2026-11-10 | Shopee clip flow review: Presenter Shots (n8n) never called on real runs (passive store, agent-optional); SKILL.md 109 KB; proposed mode-first Telegram flow + prompt-pack fallback. Advice only, nothing changed. |
 | 2026-11-05 | `delegation.max_concurrent_children` 10 → 2 (volume config, hot-reload). Plugin `claude-subscription-directsdk-experimental` spawns one `claude` node process (~200 MB) per API call — contributing factor in the hang. Open: move subagents/vision off the plugin if pressure persists. |
 | 2026-11-05 | Bump v0.22.5 → v0.22.7: node 22 → 26.12.1, drop corepack, profile.d PATH fix, engines preflight in `update-hermes.sh`. Deployed `7d10c55`. |
