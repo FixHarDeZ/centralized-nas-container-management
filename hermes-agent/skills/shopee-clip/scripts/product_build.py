@@ -34,7 +34,7 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-GP = os.path.normpath(os.path.join(HERE, "..", "..", "gameplay-clips"))
+GP = os.environ.get("GAMEPLAY_SKILL", os.path.normpath(os.path.join(HERE, "..", "..", "gameplay-clips")))
 FONTS = os.path.join(GP, "fonts")
 MASTER = os.path.join(GP, "scripts", "master.sh")
 GEN_VO = os.path.join(GP, "scripts", "gen_vo_natural.py")
@@ -48,7 +48,10 @@ MONEY = re.compile(r"฿|\$|%|\d+\s*(บาท|baht)|\b(price|sale|off|discount|
 
 
 def sh(cmd, **kw):
-    return subprocess.run(cmd, check=True, capture_output=True, text=True, **kw)
+    r = subprocess.run(cmd, capture_output=True, text=True, **kw)
+    if r.returncode:
+        sys.exit(f"command failed ({r.returncode}): {' '.join(cmd[:3])} …\n{r.stderr[-1500:]}")
+    return r
 
 
 def ffdur(path, stream="v:0"):
@@ -163,7 +166,12 @@ def main():
         shutil.copy2(tl_src, os.path.join(wd, "subs.timeline.json"))
     timeline = json.load(open(os.path.splitext(vo_ass)[0] + ".timeline.json", encoding="utf-8"))
     vo_end = float(timeline[-1]["end"])
-    open(vo_ass, "w", encoding="utf-8").write(set_marginv(open(vo_ass, encoding="utf-8").read(), SUB_MARGINV))
+    with open(vo_ass, encoding="utf-8") as f:     # read fully BEFORE reopening for write (w truncates)
+        ass_text = f.read()
+    if "Dialogue:" not in ass_text:
+        sys.exit(f"{vo_ass} has no Dialogue lines")
+    with open(vo_ass, "w", encoding="utf-8") as f:
+        f.write(set_marginv(ass_text, SUB_MARGINV))
     if engine == "edge":    # voice A fallback: warm EQ, level-matched (gameplay pitfall "เสียงเหมือน AI")
         warm = os.path.join(wd, "vo_warm.mp3")
         before = mean_db(vo_mp3)
