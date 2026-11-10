@@ -132,8 +132,9 @@ Tracker: `docs/superpowers/specs/2026-06-02-hermes-token-tuning-verification.md`
 ## Shopee clip skills — repo-owned since 2026-11-10
 
 `hermes-agent/skills/{shopee-clip,flow-driver,gameplay-clips}` → `make hermes-skills` (pull clone in container
-+ `skills/sync.sh`: copy tracked files, `hermes curator pin|lock`). Locked = the agent/curator cannot edit
-in place; never `hermes curator unlock` for a quick fix, change the repo instead. Runtime data:
++ `skills/sync.sh`: copy tracked files, `hermes curator pin`). **Not locked**: `hermes curator lock`'s terminal
+heuristic refused a legit pipeline command and stalled a real clip (2026-11-10). In-place edits are saved to
+`/opt/data/clips/skill-drift/<ts>/` (+diff) on the next sync, then overwritten; review that dir and port fixes to the repo. Runtime data:
 `/opt/data/clips/jobs` (clipjob state), `/opt/data/clips/logs` (clip-log, delivery-log, perf-log),
 `/opt/data/clips/flow-state` (Flow project roster/edit ids), `/opt/data/clips/work/<job>` (durable job workdir — scratch is pruned ~24 h). `sync.sh` is test-gated; Hermes may run it from its clone. Old skill archived at
 `/opt/data/skills-archive/flow-shopee-clips`. Flow: Q1 mode (🎬 footage from official videos — games + brand product films, `gameplay-clips` + `references/product-footage.md` + `source_check.py` / 🧑 presenter+graphic / 📦 graphic ล้วน)
