@@ -2,7 +2,7 @@
 
 **สร้าง:** 2026-05-24  
 **Port:** 5063 (external Nginx basic auth) → 9119 (dashboard internal)  
-**Status:** 2026-11-10 (closed) ✅ — running `HERMES_REF=v0.23.1` (pnpm build, deployed `0bb3b82`); rollback image `hermes-agent:v0.22.7-rollback` + backups `/opt/data/backups/pre-v0.23.1-20261110/`; webhook OFF; clip skills repo-owned + pinned (not locked; sync captures drift); session resets via plugin `hermes-session-reset-policy`; venv = pm-pinned Python 3.14.9 / SQLite 3.53.1 (`0d3ec6c`)
+**Status:** 2026-11-10 (closed) ✅ — VITURE 🎬 clip paused at VO trim (resume with "ทำต่อ"); running `HERMES_REF=v0.23.1` (pnpm build, deployed `0bb3b82`); rollback image `hermes-agent:v0.22.7-rollback` + backups `/opt/data/backups/pre-v0.23.1-20261110/`; webhook OFF; clip skills repo-owned + pinned (not locked; sync captures drift); session resets via plugin `hermes-session-reset-policy`; venv = pm-pinned Python 3.14.9 / SQLite 3.53.1 (`0d3ec6c`)
 
 ---
 
@@ -162,6 +162,7 @@ registered, `presenter-shots` still registered, Telegram reconnected. Re-enablin
 
 | วันที่ | เรื่อง |
 |--------|--------|
+| 2026-11-10 | Session closed (3): skills unlocked, VITURE 🎬 job awaiting "ทำต่อ". |
 | 2026-11-10 | Skill lock removed (false-positive block stalled the VITURE 🎬 clip); sync.sh captures in-place drift instead (`74367f4`). |
 | 2026-11-10 | Session closed: v0.23.1 + SQLite fix live; open = real model reply after /new, Chat tab, acceptance clips, drop rollback image after a few clean days. |
 | 2026-11-10 | SQLite WAL-reset fix: venv on pm-pinned Python 3.14.9 / SQLite 3.53.1 (`0d3ec6c`, deployed). |

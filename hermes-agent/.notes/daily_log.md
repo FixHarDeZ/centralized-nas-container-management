@@ -614,3 +614,22 @@ All committed and pushed.
   - Tested live with an in-place edit + an extra file: both caught, edit restored; test files removed.
 - Docs updated (router, flow-driver, README ×2, CLAUDE.md row). Fix to tell Hermes "ทำต่อ" to resume the VITURE job
   (VO needed trimming to ≤18.4 s; footage segs 2.3–14.5 s + 18.0–25.8 s from "Sleek on Every Face").
+
+### 2026-11-10 — close (3)
+Live:
+- v0.23.1 (pnpm build) + venv Python 3.14.9 / SQLite 3.53.1.
+- Session resets via the `hermes-session-reset-policy` plugin.
+- Webhook off.
+- Clip skills repo-owned + pinned, **not locked**; sync.sh captures drift to `/opt/data/clips/skill-drift/`.
+
+Open:
+- VITURE Pro 2 🎬 20 s job paused at VO trim (≤18.4 s); Fix says "ทำต่อ" in Telegram to resume. This is
+  the first real acceptance clip.
+- Remaining acceptance: 🧑 📝, 🧑 🤖, 📦, 🎬 game.
+- Then deactivate n8n Presenter Shots.
+- Drop the rollback image `hermes-agent:v0.22.7-rollback` + `/opt/data/backups/pre-v0.23.1-20261110/` after a few
+  clean days.
+- Chat tab in a browser not verified.
+- edge-tts flaky from the NAS.
+
+All committed and pushed.
