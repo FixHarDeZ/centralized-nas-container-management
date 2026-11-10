@@ -56,7 +56,10 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    (official brand video of the exact model only, gated by `source_check.py`). No clipjob for 🎬 (nothing to
    pace or review per shot). Stop reading here for 🎬.
 5. **Photo gate (🧑/📦; 🎬 product needs one clean photo for the sticker).** References must be clean product photos: no price, promo text, rating, UI,
-   person or hands, and the product in the state the shot needs. Ad graphics and review screenshots
+   person or hands, and the product in the state the shot needs. "Clean" means no text/UI/people — NOT
+   a plain background: a styled room photo (a rack holding clothes, a shelf with items) is a valid
+   reference, attached whole (`references/product-image-prep.md` "Lifestyle photos"); never ask Fix for a
+   plain-background photo because of props alone. Ad graphics and review screenshots
    are storyboard input only. Crop and cutout recipes: `references/product-image-prep.md`.
    With no clean photo, ask Fix for one and stop at zero spend. Never fill the gap with a guessed product.
    A reference under ~1000 px is high-risk for product identity: Flow drew a different frame shape and

@@ -4,6 +4,14 @@ Fix's screenshot is always the primary ingredient (the Shopee listing itself is 
 
 **Decision before any salvage — vision-read the source once, then branch.** ONE read on the FULL image asking for every readable text plus any price / currency / discount / coupon / QR / shop wordmark. Any of those present → run the salvage recipe below. NONE present → attach the ORIGINAL file un-cropped: the no-price rule bans price / promo / wordmark TEXT, not ad layout, and cropping a clean ad only throws away product context (branding, spec badges, feature icons) the model can use as reference. Name the branch in the delivery — which file was attached, and that the source was checked clean.
 
+## Lifestyle photos — a styled room is a valid reference
+Shop photos often show the product set up in a real room: a clothes rack holding clothes and a bag, a shelf with jars, a desk with a lamp. When the photo has no text/UI/people, it passes the photo gate AS IS. Do not refuse it, do not ask Fix for a plain-background photo, and do not try to cut the product out (thin white frames on a pale wall do not survive a cutout, and the props show what the product is for). (2026-11-10: a clothes rack in a bedroom was refused as "not product-only" and stalled the order.)
+- The ~1000 px floor in `house-rules.md` is for ad screenshots where the product is a small part of the frame. A lifestyle photo where the product fills most of the frame is fine at Shopee's usual ~750–800 px.
+- Attach the whole photo. Crop only when a test shot shows the model merging an edge object (bed, vase) into the product.
+- In the clip prompt, name the product precisely ("the white clothes rack with a wheeled basket") and list the props as allowed set dressing that is NOT part of the product ("clothes, bag and baskets are styling, not included"). This replaces the single-product stray-prop line in `templates/clip-prompt.md` for this case.
+- The risk is the structure warping, not the background: keep the product static, use a slow push-in or pan, and have the presenter stand beside it and point. No rolling the product and no handling the items on it.
+- Narration and pills talk about the product only. Never imply the props come with it.
+
 ## Use-context gate for review and listing screenshots
 A crop from a buyer's review photo or a listing thumbnail often shows the product as shipped: loose parts, a tray on cardboard, the item unassembled beside its screws. That crop is not a valid shelf, rack or appliance reference, because the model then invents the installed form. Before offering any such crop as the reference, vision-read it once and require that the product appears assembled and in its use context (on or beside the appliance it is meant for). When only loose-part crops exist, say so in the question to Fix, with the options (wait for a clean installed photo, or accept the structure risk), and spend no credits until he picks.
 
