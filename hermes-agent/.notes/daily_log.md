@@ -406,3 +406,8 @@ Status: no code/config changed, nothing deployed.
   `clip-request` not registered, `presenter-shots` still registered, Telegram connected 09:43:39.
   Commit `ef2e806`. Skill `flow-shopee-clips` still describes the n8n intake contract; harmless (404) until
   the rebuild.
+- Plan drafted: `docs/superpowers/plans/2026-11-10-shopee-clip-modes.md` (router skill + local `clipjob.py`
+  + prompt pack via reply tag + auto with fallback + single `deliver` choke point). Waiting on decisions
+  A (graphic-only voice), B (skill source in repo vs volume), C (retire Presenter Shots). Nothing built.
+  Checked: gateway passes `reply_to_text` to agent; inbound video cap 20 MB; `layout_probe` is face +
+  pastel-wall specific (needs a product-frame variant for graphic-only).
