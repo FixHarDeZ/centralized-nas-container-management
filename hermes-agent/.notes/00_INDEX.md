@@ -132,12 +132,12 @@ Tracker: `docs/superpowers/specs/2026-06-02-hermes-token-tuning-verification.md`
 + `skills/sync.sh`: copy tracked files, `hermes curator pin|lock`). Locked = the agent/curator cannot edit
 in place; never `hermes curator unlock` for a quick fix, change the repo instead. Runtime data:
 `/opt/data/clips/jobs` (clipjob state), `/opt/data/clips/logs` (clip-log, delivery-log, perf-log),
-`/opt/data/clips/flow-state` (Flow project roster/edit ids). Old skill archived at
+`/opt/data/clips/flow-state` (Flow project roster/edit ids), `/opt/data/clips/work/<job>` (durable job workdir — scratch is pruned ~24 h). `sync.sh` is test-gated; Hermes may run it from its clone. Old skill archived at
 `/opt/data/skills-archive/flow-shopee-clips`. Flow: Q1 mode (🎮 gameplay / 🧑 presenter+graphic / 📦 graphic ล้วน)
 → Q2 length (N = length/10 s shots) → photo gate → storyboard → Q3 📝 prompt pack / 🤖 auto (auto falls back
 to 📝 itself) → `clipjob.py ready/decide` per shot → post (graphics always) → `clipjob.py deliver` (only send
 path). Tests: `uv run --with pytest pytest -q hermes-agent/skills/shopee-clip/scripts tests/test_hermes_skills.py`.
-Plan: `docs/superpowers/plans/2026-11-10-shopee-clip-modes.md`. Acceptance (4 real clips) pending.
+Plan: `docs/superpowers/plans/2026-11-10-shopee-clip-modes.md`. Acceptance (4 real clips) pending — start the first one after `/new` in Telegram.
 edge-tts from NAS intermittently `NoAudioReceived` (2026-11-10) — Gemini Leda is the default VO anyway.
 
 ## Webhook platform — OFF since 2026-11-10

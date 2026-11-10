@@ -465,3 +465,15 @@ Status: no code/config changed, nothing deployed.
   - any 🤖 run;
   - acceptance = 4 real clips (🧑 via 📝, 🧑 via 🤖 or fallback, 📦, 🎮 via Q1).
   - n8n `Presenter Shots` stays active until the new path ships one real clip, then deactivate it (decision C).
+- Review round 2 (`36908e5`):
+  - job workdirs moved to `/opt/data/clips/work/<job>`: cache/scratch is pruned after ~24 h idle
+    (3 dirs removed 09:43 today), so a 📝 job could lose its refs and prompts;
+  - `ingest` copies Fix's file in as `shot<k>_a<n>.mp4`;
+  - prompts over 4096 characters split into tagged parts;
+  - relative `logs/` and `state/` in the moved docs rewritten to absolute `/opt/data/clips/...`;
+  - the check_delivery "both copies" step now says change it in the repo;
+  - `sync.sh` runs the tests first and refuses on failure (36 passed in the container). Hermes may run
+    `bash hermes-agent/skills/sync.sh` from its clone. Untested: whether the lock's terminal check lets an agent
+    session run it. Fallback: Fix runs `make hermes-skills`.
+- **First real order must start in a fresh session**: send `/new` (or `/reset`) in Telegram. The 07:44 session
+  still has `flow-shopee-clips` in context. Cheapest first test: 🧑, 10 s (1 shot, ≈15 credits), 📝.
