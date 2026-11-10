@@ -152,7 +152,8 @@ def test_tag_round_trip_and_ingest_flow():
     assert cj.parse_tag(text) == ("t-1", 2)
     assert cj.parse_tag("random caption") is None
     j["shots"][1]["state"] = "packed"
-    cj.ingest(j, 2, "/tmp/s2.mp4")
+    dst = cj.ingest(j, 2, "/tmp/s2.mp4")
+    assert dst.startswith(j["workdir"] + "/") and dst.endswith("shot2_a1.mp4")
     assert cj.shot(j, 2)["state"] == "submitted"
     cj.mark_ready(j, 2, "/tmp/s2.mp4", {"probe": {"ok": True}})
     with pytest.raises(cj.Refused, match="already has a file"):
@@ -160,6 +161,20 @@ def test_tag_round_trip_and_ingest_flow():
     cj.decide(j, 2, "regen")
     cj.ingest(j, 2, "/tmp/s2b.mp4")
     assert [a["via"] for a in cj.shot(j, 2)["attempts"]] == ["prompt", "prompt"]
+
+
+def test_default_workdir_is_durable():
+    j = cj.new_job("w-1", "product", "x", shots=1, refs=["r"])
+    assert j["workdir"].startswith(cj.WORK) and "scratch" not in j["workdir"]
+
+
+def test_long_prompt_splits_and_every_part_is_tagged():
+    short = cj.prompt_messages("t-1", 1, 2, "สั้น <b>", 10)
+    assert len(short) == 1 and "&lt;b&gt;" in short[0] and "reply" in short[0]
+    long = cj.prompt_messages("t-1", 2, 2, "ก" * 8000, 10, "\nเฟรมเริ่ม: x")
+    assert len(long) == 3
+    assert all(cj.parse_tag(m) == ("t-1", 2) and len(m) <= 4096 for m in long)
+    assert "ส่วน 1/3" in long[0] and "reply" in long[0] and "reply" not in long[1]
 
 
 def test_probe_verdict_flags_telegram_reencode():
@@ -254,5 +269,7 @@ def test_cli_new_status_cancel(tmp_path, monkeypatch, capsys):
     assert cj.main(["ingest", "c-1", str(ref), "--reply-text", "[ช็อต 2 · c-1] ช็อต 2/2"]) == 0
     saved = json.load(open(tmp_path / "jobs" / "c-1.json"))
     assert [s["state"] for s in saved["shots"]] == ["packed", "submitted"]
+    kept = saved["shots"][1]["attempts"][-1]["file_in"]
+    assert kept == str(wd / "shot2_a1.jpg") and (wd / "shot2_a1.jpg").exists()
     assert cj.main(["cancel", "c-1", "--reason", "test"]) == 0
     assert cj.main(["reserve", "c-1", "1"]) == 1

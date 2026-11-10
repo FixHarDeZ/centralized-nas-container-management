@@ -75,4 +75,4 @@ SHOWCASE MODE (จัดเต็มอลังการที่สุด — 
 - กดข้าม / ไม่ตอบ / timeout → ใช้ `presenter` (default ตามที่ฟิกสั่ง 2026-10-31) ห้ามถามซ้ำรอบสอง
 - ฟิกตอบแนวใน clarify → ใช้ preset นั้นทันที ไม่ต้องถามยืนยันซ้ำ
 - สั่งสั้นมาก / ระบุแนวเองในข้อความ → ใช้ที่เขียนไว้ ไม่ต้องถามข้อที่มีคำตอบแล้ว
-- บันทึก `style` ลง `logs/clip-log.jsonl` (`"style": "hands"`) และ `state/<project-id>.json` → `last_clip.style` เพื่อให้รันถัดไปรู้ว่าใช้อะไรไปแล้ว
+- บันทึก `style` ลง `/opt/data/clips/logs/clip-log.jsonl` (`"style": "hands"`) และ `/opt/data/clips/flow-state/<project-id>.json` → `last_clip.style` เพื่อให้รันถัดไปรู้ว่าใช้อะไรไปแล้ว

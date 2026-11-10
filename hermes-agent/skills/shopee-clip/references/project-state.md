@@ -4,7 +4,7 @@ Both live inside the skill so they survive sessions, browser restarts and
 workspace churn (the browser `workspace/` path changes every session — never
 store state there).
 
-## 1. Per-project state: `state/<project-id>.json`
+## 1. Per-project state: `/opt/data/clips/flow-state/<project-id>.json`
 
 Read it in **step 0**, before touching the browser. Write it back after any
 change (new opened `/edit` id, new character used, new settings saved).
@@ -41,7 +41,7 @@ Rules
   (เนย, คอรัล, มิลค์, มุก, ออม, มิรา), the rolled น้องพลอย came back
   `NOTFOUND`, and re-rolling over the visible six silently shrank the pool to
   half the roster — which biases later clips toward whoever happens to be
-  listed. Roll over the roster in `state/<project-id>.json`; when that name is
+  listed. Roll over the roster in `/opt/data/clips/flow-state/<project-id>.json`; when that name is
   not in the picker, SCROLL the list and cross-check the sidebar's Characters
   page (a short picker list is stale, not a missing character) before
   substituting anyone, and say in the delivery that a substitution happened.
@@ -59,7 +59,7 @@ Rules
   element name, so it returns `[]` while a toggle IS selected and reads as
   "nothing checked".**
 
-## 2. Clip log: `logs/clip-log.jsonl` (one JSON object per line, append-only)
+## 2. Clip log: `/opt/data/clips/logs/clip-log.jsonl` (one JSON object per line, append-only)
 
 Append a row **in the delivery step** (step 9), before sending the message.
 It is the basis for hook rotation (which `hook_id` is least-recently-used for

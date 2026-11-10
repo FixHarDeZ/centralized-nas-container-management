@@ -2,7 +2,8 @@
 # Copy the repo-owned Hermes skills into the live skills dir. Runs INSIDE hermes-gateway, from the clone:
 #   docker exec -u hermes hermes-gateway bash -lc \
 #     'cd /opt/data/centralized-nas-container-management && git pull --ff-only && bash hermes-agent/skills/sync.sh'
-# (`make hermes-skills` on the workstation does exactly that over ssh.)
+# (`make hermes-skills` on the workstation does exactly that over ssh. Hermes can run the same two
+#  commands from its own terminal, so a change made from the phone does not need the Mac.)
 #
 # - Only git-tracked files are copied (no __pycache__, no local junk).
 # - Runtime data lives OUTSIDE the skills: /opt/data/clips/{jobs,logs,flow-state} (created here if missing).
@@ -11,13 +12,23 @@
 # - A file that was synced before and is no longer tracked is deleted (manifest .repo-synced).
 # - shopee-clip/scripts/check_delivery.py is also copied to /opt/data/scripts/ (the watchdog cron
 #   can only run scripts from there).
-# DRY=1 prints what would change.
+# DRY=1 prints what would change. SKIP_TESTS=1 skips the test gate (emergencies only).
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 SRC=hermes-agent/skills
 DST=${HERMES_SKILLS_DIR:-/opt/data/skills}
 SKILLS=(shopee-clip flow-driver gameplay-clips)
 run() { if [ "${DRY:-}" = 1 ]; then echo "DRY: $*"; else "$@"; fi; }
+
+# Tests gate the sync: router size budget, unique file names, clipjob/product_build behaviour.
+if [ "${SKIP_TESTS:-}" != 1 ]; then
+  if ! uv run -q --with pytest pytest -q -p no:cacheprovider tests/test_hermes_skills.py "$SRC/shopee-clip/scripts" >/tmp/hermes-skills-tests.log 2>&1; then
+    tail -30 /tmp/hermes-skills-tests.log >&2
+    echo "REFUSED: tests failed — nothing synced (fix in the repo, push, rerun)" >&2
+    exit 1
+  fi
+  echo "tests: $(tail -1 /tmp/hermes-skills-tests.log)"
+fi
 
 for s in "${SKILLS[@]}"; do
   mapfile -t files < <(git ls-files "$SRC/$s" | sed "s#^$SRC/$s/##")

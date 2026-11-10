@@ -17,7 +17,9 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
 ## Ground rules for this skill
 - **Source of truth is the repo**: `centralized-nas-container-management/hermes-agent/skills/`. The three skills
   (shopee-clip, flow-driver, gameplay-clips) are **locked**: in-place edits are refused. To change one, edit the
-  clone, commit and push, then ask Fix to run `make hermes-skills`. Runtime data lives in `/opt/data/clips/`.
+  clone, commit and push, then run `cd /opt/data/centralized-nas-container-management && bash hermes-agent/skills/sync.sh`.
+  It runs the tests first and refuses on failure. If the lock blocks that command, ask Fix for `make hermes-skills`.
+  Runtime data lives in `/opt/data/clips/` (job workdirs in `/opt/data/clips/work/<job>`).
 - **A missed gate is fixed in code, not in prose.** If you skipped a rule, add the check to `clipjob.py`
   (with a test) instead of adding another paragraph here. This file has a 15 KB budget, enforced by a test.
 - File names are unique across shopee-clip, flow-driver and gameplay-clips. A file named in `references/` or
@@ -35,7 +37,7 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
 0. `python3 S/clipjob.py status` lists open jobs. Resume one if this message is about it (a reply
    with a video, a ✅/🔁 tap, "ต่อ"). Do not reconstruct state from memory.
 1. **Intake** (before any question that costs time). Run
-   `uv run --with pillow python S/intake_images.py <first image> /opt/data/cache/scratch/<job>`, then do
+   `uv run --with pillow python S/intake_images.py <first image> /opt/data/clips/work/<job>`, then do
    one vision pass on the sheet. You need the product name and the basket link. A missing link is
    asked for in the same message as Q1.
 2. **Q1 — mode** (`clarify`, one question, buttons):
@@ -64,7 +66,7 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
 7. **Prompts → files.** Write `<workdir>/shot<K>.txt` for every shot. Build them from
    `templates/clip-prompt.md` + `templates/style-card.md` + a hook from `templates/hooks.md`
    (`S/perf.py pick-hook --category <cat>`), plus the no-on-screen-text block. Then:
-   `clipjob.py new <job> --mode presenter|product --product "…" --link <url> --shots N --ref <workdir>/ref1.jpg [--ref …] [--character <name>]`
+   `clipjob.py new <job> --mode presenter|product --product "…" --link <url> --shots N --ref <workdir>/ref1.jpg [--ref …] --character <name>` (required for 🧑; omit for 📦). workdir = `/opt/data/clips/work/<job>`
 8. **Q3 — who drives Flow** (`clarify`, one question, cost in the text):
    `["📝 เตรียม prompt ทีละช็อตให้ (ฟิกกดใน Flow เอง)", "🤖 ให้ไอยูลองทำใน Flow ให้เลย (≈<N×15> เครดิต ถ้าติดจะสลับเป็นโหมด prompt ให้เอง)"]`.
    An unanswered or timed-out question means 📝 (zero spend). Record the answer: `clipjob.py production <job> prompt|auto`.

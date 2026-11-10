@@ -5,8 +5,8 @@ views/clicks/orders turn rotation into selection. Applies to every style (presen
 gameplay, broll, …).
 
 ## Data
-- `logs/perf-log.jsonl` — append-only, one row per stats reading, joined to
-  `logs/clip-log.jsonl` by `sha256`. Never write perf numbers into clip-log rows
+- `/opt/data/clips/logs/perf-log.jsonl` — append-only, one row per stats reading, joined to
+  `/opt/data/clips/logs/clip-log.jsonl` by `sha256`. Never write perf numbers into clip-log rows
   (clip-log is the append-only record of what shipped; rewriting it breaks audits).
 - Latest reading per clip+platform wins; platforms are summed in reports.
 

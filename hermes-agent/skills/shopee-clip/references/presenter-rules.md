@@ -3,8 +3,8 @@
 > Moved intact from the retired `flow-shopee-clips` SKILL.md on 2026-11-10. Script paths here mean
 > `/opt/data/skills/shopee-clip/scripts/` (Flow browser helpers: `/opt/data/skills/flow-driver/scripts/`).
 > Orders come only from Telegram now; the n8n intake route is off. Shot state lives in `clipjob.py`, not shotboard/n8n.
-> Runtime paths (outside the locked skill dirs): `logs/` = `/opt/data/clips/logs/` (clip-log, delivery-log, perf-log);
-> `state/<project-id>.json` (Flow project: known edit ids, roster, last character) = `/opt/data/clips/flow-state/`.
+> Runtime paths (outside the locked skill dirs): `/opt/data/clips/logs/` = `/opt/data/clips/logs/` (clip-log, delivery-log, perf-log);
+> `/opt/data/clips/flow-state/<project-id>.json` (Flow project: known edit ids, roster, last character) = `/opt/data/clips/flow-state/`.
 
 ## Presenter graphics v2 is mandatory on presenter clips (see references/presenter-graphics-lessons.md)
 

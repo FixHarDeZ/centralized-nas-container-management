@@ -1,7 +1,7 @@
 # Hook rotation — vary the opener per clip without inventing one each time
 
 Pick ONE hook per clip by category, choosing the LEAST-RECENTLY-USED entry of
-that category in `logs/clip-log.jsonl` (look at `hook_id` of the last few rows
+that category in `/opt/data/clips/logs/clip-log.jsonl` (look at `hook_id` of the last few rows
 with the same `category`). Write the chosen `hook_id` into the log row.
 
 Rule: never reuse a `hook_id` for the same category within 5 consecutive rows.
@@ -20,11 +20,11 @@ a tie-break matter: prefer the id whose wording the product actually fits.
 - `game-2` — "เบื่อเกมเดิมๆ ที่เล่นยังไงก็จำเจอยู่ไหม?" (hook กลาง ไม่แตะชั้นวาง ไม่แตะเพื่อน)
 - `game-3` — "<แนวเกม>ที่เล่นแล้ววางจอยไม่ลง ตัวนี้ต้องมี" (id เดิม เนื้อหาใหม่ — แทน hook "เพื่อนทักทุกครั้ง" ที่ถูกยกเลิก)
 - `game-4` — "ของมันต้องมีสำหรับคนที่รอเกมแนวนี้อยู่"
-- **ก่อนค้น ให้สแกน `logs/clip-log.jsonl` หาชื่อเกมเดียวกันก่อน** (อีกแพลตฟอร์ม / อีกรุ่นของเกมที่เคยทำคลิปไว้) — แถว log มีแนวเกม + วันวางจำหน่าย + ภาษาที่ยืนยันจากแหล่งทางการติดไว้แล้ว ใช้ซ้ำได้เลยและข้าม `web_search` ไปได้ (เกมเดียวกันเพิ่งทำคลิป Switch แล้วมาทำ PS5 = ข้อมูลชุดเดียวกัน ไม่ต้องค้นใหม่)
+- **ก่อนค้น ให้สแกน `/opt/data/clips/logs/clip-log.jsonl` หาชื่อเกมเดียวกันก่อน** (อีกแพลตฟอร์ม / อีกรุ่นของเกมที่เคยทำคลิปไว้) — แถว log มีแนวเกม + วันวางจำหน่าย + ภาษาที่ยืนยันจากแหล่งทางการติดไว้แล้ว ใช้ซ้ำได้เลยและข้าม `web_search` ไปได้ (เกมเดียวกันเพิ่งทำคลิป Switch แล้วมาทำ PS5 = ข้อมูลชุดเดียวกัน ไม่ต้องค้นใหม่)
 - **ถ้าไม่แน่ใจว่าเกมเป็นแนวไหน** ให้ `web_search` ชื่อเกมก่อน (หนึ่งครั้งพอ) — ถ้ายังไม่มีแหล่งยืนยันแนว อย่าเดา ใช้ hook กลาง `game-2` แล้วเว้นการอ้างแนวเกมในเสียงพากย์ไว้ 1 จุดแทน
 
 ## เกมเพลย์ / trailer footage (preset `gameplay` — `gph-N`)
-**New ids `gph-1`..`gph-10` (2026-11-05).** Do **not** reuse or extend `gameplay-N` — those are old per-clip counters already in `logs/clip-log.jsonl`; from now on log `hook_id:"gph-N"` for gameplay clips. LRU / 5-row rule / same-date tie-break exactly as above, looked up over rows with `style:"gameplay"`.
+**New ids `gph-1`..`gph-10` (2026-11-05).** Do **not** reuse or extend `gameplay-N` — those are old per-clip counters already in `/opt/data/clips/logs/clip-log.jsonl`; from now on log `hook_id:"gph-N"` for gameplay clips. LRU / 5-row rule / same-date tie-break exactly as above, looked up over rows with `style:"gameplay"`.
 Placeholders: `<แนวเกม>` (genre from the one `web_search`), `<เกมที่คล้าย>` (a well-known game in the same genre/series — must be a real, obvious comparison; skip the hook if none), `<จำนวนวัน>` (days from post date to release, written as a word for TTS).
 **📅 = needs a day-level release date confirmed by two sources** (store page = search result, per gameplay-clips step 1). If only month-level is safe, do NOT pick a 📅 hook — take the next LRU one. All hooks are price-free; never pair them with "ถูก/คุ้ม/ลด" wording.
 EN pill = the caption for the hook beat (≤2 words, EN only).
@@ -85,7 +85,7 @@ Notes: `gph-10`'s `<วันวางขาย>` is spoken as words ("สิบ
 - `food-6` — "รสชาติที่ต้องลองเองถึงจะเข้าใจ"
 
 ## hook_id selection with performance (when data exists)
-Perf numbers live in `logs/perf-log.jsonl` (one row per stats reading, joined to `logs/clip-log.jsonl` by `sha256`) — **never inside clip-log rows**. Details: `references/performance-tracking.md`.
+Perf numbers live in `/opt/data/clips/logs/perf-log.jsonl` (one row per stats reading, joined to `/opt/data/clips/logs/clip-log.jsonl` by `sha256`) — **never inside clip-log rows**. Details: `references/performance-tracking.md`.
 Pick with the script instead of by hand:
 `python3 scripts/perf.py pick-hook --category <cat>` (gameplay: `--category game --prefix gph-`, or `--candidates gph-1,gph-3,...` to pass only ids whose 📅/placeholder needs are met).
 - It excludes ids used in the last 3 rows of the category, ranks the rest by Bayesian-smoothed CTR (prior 2% over 500 views, so unseen hooks still get explored), and falls back to plain LRU when no perf data exists.

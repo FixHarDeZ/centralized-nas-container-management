@@ -37,6 +37,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -45,6 +46,8 @@ import urllib.request
 HERE = os.path.dirname(os.path.abspath(__file__))
 SKILL = os.path.dirname(HERE)
 DIR = os.environ.get("CLIPJOB_DIR", "/opt/data/clips/jobs")
+WORK = os.environ.get("CLIPJOB_WORK", "/opt/data/clips/work")   # durable: cache/scratch is pruned after ~24 h idle
+PROMPT_CHUNK = 3500        # Telegram text cap is 4096; leave room for the tag line and HTML
 CHAT = os.environ.get("CLIPJOB_CHAT", "8663614341")
 CLIP_LOG = os.environ.get("CLIP_LOG", "/opt/data/clips/logs/clip-log.jsonl")
 PACING_S = 300
@@ -102,7 +105,7 @@ def new_job(job, mode, product, link="", shots=0, refs=(), workdir=None, charact
     t = now()
     return {"job": job, "mode": mode, "product": product, "link": link, "status": "open",
             "production": None, "character": character, "refs": [os.path.abspath(r) for r in refs],
-            "workdir": workdir or f"/opt/data/cache/scratch/{job}",
+            "workdir": workdir or os.path.join(WORK, job),
             "created": iso(t), "updated": iso(t), "fallback": None, "trouble": {},
             "shots": [{"k": k, "state": "pending", "attempts": [], "raw": None, "file": None,
                        "gates": None, "pack_msg": None} for k in range(1, shots + 1)] if mode in FLOW_MODES else [],
@@ -212,6 +215,23 @@ def spent_shots(j):
     return out
 
 
+def prompt_messages(job, k, total, prompt, seconds, chain=""):
+    """Telegram texts for one shot. Every part carries the tag, so a reply to any part maps back."""
+    parts = [prompt[i:i + PROMPT_CHUNK] for i in range(0, len(prompt), PROMPT_CHUNK)] or [""]
+    out = []
+    for i, part in enumerate(parts, 1):
+        head = f"{shot_tag(job, k)} ช็อต {k}/{total} · 9:16 · {seconds} วิ"
+        if len(parts) > 1:
+            head += f" · ส่วน {i}/{len(parts)} (ก๊อปทุกส่วนต่อกัน)"
+        if i == 1:
+            head += f"{chain}\nreply ข้อความนี้พร้อมแนบ mp4 ของช็อตนี้"
+        text = f"{head}\n\n<pre>{html_escape(part)}</pre>"
+        if len(text) > 4096:
+            raise Refused(f"shot {k} prompt part {i} is {len(text)} chars after HTML escaping (> 4096)")
+        out.append(text)
+    return out
+
+
 def pack_targets(j, only=None):
     need_open(j); need_flow(j)
     if j["production"] != "prompt":
@@ -234,15 +254,20 @@ def parse_tag(text):
 
 
 def ingest(j, k, path):
+    """Record Fix's file for shot k. -> the durable copy's path inside the job workdir (inbound media
+    caches are pruned by age; a 📝 job can wait a day for Fix)."""
     need_open(j); need_flow(j)
     s = shot(j, k)
     if s["state"] not in ("pending", "packed", "regen_approved", "in_review"):
         raise Refused(f"shot {k} is {s['state']}; cannot take a file for it")
     if s["state"] == "in_review":
         raise Refused(f"shot {k} already has a file in review — Fix taps 🔁 first, then sends the new one")
+    n = len(s["attempts"]) + 1
+    dst = os.path.join(j["workdir"], f"shot{k}_a{n}{os.path.splitext(path)[1] or '.mp4'}")
     s["state"] = "submitted"
-    s["attempts"].append({"via": "prompt", "submitted_at": iso(), "file_in": os.path.abspath(path)})
-    log(j, f"ingest shot {k}: {os.path.basename(path)}")
+    s["attempts"].append({"via": "prompt", "submitted_at": iso(), "file_in": dst, "source": os.path.abspath(path)})
+    log(j, f"ingest shot {k}: {os.path.basename(path)} -> {os.path.basename(dst)}")
+    return dst
 
 
 def probe_verdict(info):
@@ -530,9 +555,11 @@ def cmd_pack(j, only, no_send):
                 chain = "\nเฟรมเริ่ม: แนบรูปเฟรมท้ายช็อตก่อนหน้าที่ส่งไปเมื่อกี้เป็น start frame"
         elif prev:
             chain = f"\nเฟรมเริ่ม: ถ้าทำช็อต {k - 1} เสร็จแล้ว ใช้เฟรมท้ายของมันเป็น start frame ภาพจะต่อเนื่อง"
-        text = (f"{shot_tag(j['job'], k)} ช็อต {k}/{len(j['shots'])} · 9:16 · {SHOT_SECONDS} วิ{chain}\n"
-                f"reply ข้อความนี้พร้อมแนบ mp4 ของช็อตนี้\n\n<pre>{html_escape(prompt)}</pre>")
-        mid = None if no_send else tg("sendMessage", {"chat_id": CHAT, "text": text[:4096], "parse_mode": "HTML"})["message_id"]
+        mid = None
+        for text in prompt_messages(j["job"], k, len(j["shots"]), prompt, SHOT_SECONDS, chain):
+            if not no_send:
+                r = tg("sendMessage", {"chat_id": CHAT, "text": text, "parse_mode": "HTML"})
+                mid = mid or r["message_id"]
         s = shot(j, k)
         s.update({"state": "packed", "pack_msg": mid})
         sent.append({"shot": k, "message_id": mid})
@@ -791,8 +818,12 @@ def main(argv=None):
                 if tag[0] != a.job:
                     raise Refused(f"reply belongs to job {tag[0]}, not {a.job}")
                 k = tag[1]
-            ingest(j, k, a.file); save(j)
-            return out({**summary(j), "next": f"vision-check frames, then clipjob.py ready {a.job} {k} --raw {a.file} --frame …"})
+            dst = ingest(j, k, a.file)
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.copy2(a.file, dst)
+            save(j)
+            return out({**summary(j), "file": dst,
+                        "next": f"vision-check frames, then clipjob.py ready {a.job} {k} --raw {dst} --frame …"})
         if a.cmd == "ready":
             res = cmd_ready(j, a.shot, a.raw, a.frame, a.no_send); save(j)
             return out(res)

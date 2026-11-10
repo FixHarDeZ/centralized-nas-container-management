@@ -22,7 +22,8 @@ removes files that were synced before but are no longer tracked.
 ## Rules
 - `sync.sh` pins and **locks** the three skills (`hermes curator pin|lock`). The agent and the curator then
   cannot edit them in place: skill_manage, write_file, patch and terminal writes are refused. To change one,
-  Hermes edits its clone, commits and pushes, then asks Fix to run `make hermes-skills`.
+  Hermes edits its clone, commits and pushes, then runs `bash hermes-agent/skills/sync.sh` from the clone (or Fix
+  runs `make hermes-skills`). `sync.sh` runs the tests first and syncs nothing if they fail.
 - Runtime data lives outside the skills: `/opt/data/clips/jobs` (clipjob), `/opt/data/clips/logs`
   (clip-log, delivery-log, perf-log), `/opt/data/clips/flow-state` (Flow project state).
 - `shopee-clip/SKILL.md` stays ≤15 KB (`tests/test_hermes_skills.py`). A missed gate is fixed in
