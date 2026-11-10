@@ -521,3 +521,8 @@ Open:
   - 📦 graphics placement.
 - Then deactivate n8n Presenter Shots.
 - edge-tts flaky from the NAS (voice-A fallback risk).
+- At close: the working tree has an **uncommitted `HERMES_REF: v0.22.7 → v0.23.1`** in `docker-compose.yml`
+  (mtime 11:03, not from this session). Left untouched: not committed, not deployed, tag not verified. Ship it
+  with `scripts/update-hermes.sh v0.23.1` (preflights node engines, deploys, commits the bump). After the
+  rebuild, run `make hermes-skills` once more (it re-applies the lock) and check `hermes curator status` still
+  lists the 3 skills as locked.

@@ -2,7 +2,7 @@
 
 **สร้าง:** 2026-05-24  
 **Port:** 5063 (external Nginx basic auth) → 9119 (dashboard internal)  
-**Status:** 2026-11-10 (closed) ✅ — `HERMES_REF=v0.22.7`; webhook platform OFF (Telegram only); Shopee clip skills repo-owned + locked (`make hermes-skills`, last sync `88ef3ed`); acceptance clips pending (start with `/new`)
+**Status:** 2026-11-10 (closed) ✅ — `HERMES_REF=v0.22.7`; webhook platform OFF (Telegram only); Shopee clip skills repo-owned + locked (`make hermes-skills`, last sync `88ef3ed`); acceptance clips pending (start with `/new`). ⚠️ Uncommitted `HERMES_REF: v0.23.1` bump in the working tree (not deployed) — use `scripts/update-hermes.sh v0.23.1`
 
 ---
 
