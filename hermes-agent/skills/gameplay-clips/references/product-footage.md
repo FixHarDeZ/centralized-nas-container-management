@@ -22,6 +22,19 @@ and `hook_id: "pft-N"`.
 - Search with yt-dlp: `ytsearch8:<brand> <exact model>`, plus `official` / `film` / `introducing` /
   `TVC`. Brand channels, the brand's Thai channel, and the brand's own site (CDN mp4s download
   directly with `curl`) are the only sources.
+- **Search the brand's own channel first.** A plain `ytsearch` is dominated by reviewers: on 2026-11-10 the top
+  10 for "VITURE Pro 2 XR official" were all third-party. The channel search lists the brand films directly:
+  ```
+  uv tool run yt-dlp --flat-playlist --no-warnings --playlist-end 15 -j "https://www.youtube.com/@<Brand>/search?query=<model>"
+  ```
+  For example, `@VITURE … query=pro%202` → "Introducing VITURE Pro 2 …" (50 s, 1080p) and "Sleek on Every Face"
+  (32 s, 4K), both 16:9 and both passing the gate.
+- **Prefer 16:9 `watch?v=` films.** `/shorts/` uploads are vertical. The v5 layout puts the source in a 16:9
+  window, so a vertical short ends up tiny with bars. When only shorts exist, cut segments from them and build
+  with `/opt/data/skills/shopee-clip/scripts/product_build.py` (full-frame 9:16 + the same VO recipe) instead
+  of build_v5.
+- **Check titles and supers for prices.** One VITURE short is titled "…now available for $…". A price in the
+  title often means a price card in the film.
 - **Gate every candidate before downloading:**
   ```
   python3 <skill_dir>/scripts/source_check.py --search "ytsearch8:VITURE Pro 2 XR official" --model "Pro 2 XR" --brand VITURE

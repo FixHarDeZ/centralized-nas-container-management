@@ -477,3 +477,23 @@ Status: no code/config changed, nothing deployed.
     session run it. Fallback: Fix runs `make hermes-skills`.
 - **First real order must start in a fresh session**: send `/new` (or `/reset`) in Telegram. The 07:44 session
   still has `flow-shopee-clips` in context. Cheapest first test: 🧑, 10 s (1 shot, ≈15 credits), 📝.
+- **🎬 footage mode now covers products** (`f7f643f`, `9219b32`). Fix asked whether the gameplay recipe works
+  for washers, TVs and VITURE Pro 2 XR.
+  - Router Q1: 🎮 → `🎬 footage จากวิดีโอทางการ (เกม/สินค้า, 0 เครดิต)`.
+  - gameplay-clips: new `references/product-footage.md` with the deltas (specs from the brand page instead of a
+    release date; official video of the exact model only; burned-in price/% text; product cutout sticker;
+    `pft-N` hooks). Log rows use `style:"footage"`.
+  - New code gate `scripts/source_check.py`: model tokens (space/case-insensitive) in title or description +
+    channel contains the brand; 5 tests; part of the sync test gate (41 tests).
+  - 8 `pft-` hooks in `shopee-clip/templates/hooks.md`, with no personal-use claims.
+  - Live checks:
+    - `ytsearch10` "VITURE Pro 2 XR official" → 10/10 third-party, all rejected (exit 3).
+    - Channel search `@VITURE/search?query=pro 2` → official films.
+    - `krVTpj0873Y` (50 s 1080p) and `h5D-2BRjFow` (32 s 4K) pass.
+    - Gameplay download command fetched krVTpj0873Y (1920x1080, 49.8 s).
+    - yt-dlp metadata calls need `--ignore-no-formats-error`: without it they abort with "Requested format is
+      not available" (no JS runtime).
+  - Notes for real runs:
+    - Many brand uploads are vertical `/shorts/`. v5 expects 16:9, so build from shorts with `product_build.py`.
+    - One VITURE short title carries a `$` price.
+  - Not yet run end to end on a real product clip.

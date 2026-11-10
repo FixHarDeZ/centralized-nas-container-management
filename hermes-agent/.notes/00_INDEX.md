@@ -133,7 +133,7 @@ Tracker: `docs/superpowers/specs/2026-06-02-hermes-token-tuning-verification.md`
 in place; never `hermes curator unlock` for a quick fix, change the repo instead. Runtime data:
 `/opt/data/clips/jobs` (clipjob state), `/opt/data/clips/logs` (clip-log, delivery-log, perf-log),
 `/opt/data/clips/flow-state` (Flow project roster/edit ids), `/opt/data/clips/work/<job>` (durable job workdir — scratch is pruned ~24 h). `sync.sh` is test-gated; Hermes may run it from its clone. Old skill archived at
-`/opt/data/skills-archive/flow-shopee-clips`. Flow: Q1 mode (🎮 gameplay / 🧑 presenter+graphic / 📦 graphic ล้วน)
+`/opt/data/skills-archive/flow-shopee-clips`. Flow: Q1 mode (🎬 footage from official videos — games + brand product films, `gameplay-clips` + `references/product-footage.md` + `source_check.py` / 🧑 presenter+graphic / 📦 graphic ล้วน)
 → Q2 length (N = length/10 s shots) → photo gate → storyboard → Q3 📝 prompt pack / 🤖 auto (auto falls back
 to 📝 itself) → `clipjob.py ready/decide` per shot → post (graphics always) → `clipjob.py deliver` (only send
 path). Tests: `uv run --with pytest pytest -q hermes-agent/skills/shopee-clip/scripts tests/test_hermes_skills.py`.
@@ -158,6 +158,7 @@ registered, `presenter-shots` still registered, Telegram reconnected. Re-enablin
 
 | วันที่ | เรื่อง |
 |--------|--------|
+| 2026-11-10 | 🎬 footage mode extended to brand product films (`source_check.py` gate, `pft-N` hooks); VITURE Pro 2 official films verified downloadable. |
 | 2026-11-10 | Shopee clip skills rebuilt + repo-owned + locked (`c0d4a57`, `3a2ad0a`): mode-first router, local clipjob, prompt-pack fallback, 📦 product_build. Acceptance pending. |
 | 2026-11-10 | Webhook platform off (route `clip`, port 8644, homepage `/webhooks/`, n8n Clip Intake inactive) — unused since 10-27 tests. |
 | 2026-11-10 | Shopee clip flow review: Presenter Shots (n8n) never called on real runs (passive store, agent-optional); SKILL.md 109 KB; proposed mode-first Telegram flow + prompt-pack fallback. Advice only, nothing changed. |
