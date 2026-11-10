@@ -29,7 +29,7 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
 ## Hard rules (every mode)
 - No price, currency, discount or % anywhere: voiceover, subs, pills, cover, hashtags.
 - CTA words (ลิงก์ / ใต้คลิป / ตะกร้า) only in the last shot or beat.
-- Hashtags ≤150 characters, no CJK (`templates/hashtags.md`). Basket link = an https Shopee link.
+- Hashtags ≤150 characters, no CJK (`templates/hashtags.md`). Lead with 2–4 product-benefit hook tags (`#` + Thai phrase, no spaces) before the pool tags; drop pool tags, never hook tags, to fit. Basket link = an https Shopee link, sent with the hashtags in the same delivery message (🛒 ปักตะกร้า).
 - EN pills ≤2 words. Flow must draw no on-screen text (the block in `references/presenter-post.md`).
 - One heavy job at a time (whisper, render, ffmpeg): the NAS has 12 GB, and the gateway is fenced at 4 GB.
 - Details and the reasons behind them: `references/house-rules.md`. Read it once per session before the first order.
@@ -48,7 +48,8 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    One shot = one Flow generation of 10 s (Omni 1.1 Flash, ≈15 credits; `house-rules.md` → Duration).
    N = length / 10: 10 s→1, 20 s→2, 30 s→3, 40 s→4. A shot can hold several storyboard beats.
 4. **🎬 → load skill `gameplay-clips` and follow it.** Its own steps cover footage, VO and delivery. A game
-   uses the steps as written. Any other product reads its `references/product-footage.md` first
+   uses the steps as written. Before any 🎬 final goes to Fix, check its delivery step: a plain MEDIA send in chat
+   skips the clip-log row and the copy buttons, so if that is what was done, say so in the reply. Any other product reads its `references/product-footage.md` first
    (official brand video of the exact model only, gated by `source_check.py`). No clipjob for 🎬 (nothing to
    pace or review per shot). Stop reading here for 🎬.
 5. **Photo gate (🧑/📦; 🎬 product needs one clean photo for the sticker).** References must be clean product photos: no price, promo text, rating, UI,
