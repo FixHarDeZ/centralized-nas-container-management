@@ -103,6 +103,30 @@ then
 fi
 echo "    ✔ node:${NODE_IMAGE} satisfies '${ENGINES_NODE}'"
 
+# v0.23.1 switched the repo to pnpm: engines.npm became "npm is refused here …"
+# and package-lock.json disappeared, so a Dockerfile still running `npm install`
+# in the repo fails with EBADENGINE mid-build (2026-11-10). Catch it here.
+echo "==> Checking package manager for '${TARGET_TAG}' ..."
+PKG_JSON=$(gh api "repos/${UPSTREAM_REPO}/contents/package.json?ref=${TARGET_TAG}" --jq '.content' | base64 --decode)
+ENGINES_NPM=$(printf '%s' "$PKG_JSON" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("engines",{}).get("npm",""))')
+USES_PNPM=0
+if gh api "repos/${UPSTREAM_REPO}/contents/pnpm-lock.yaml?ref=${TARGET_TAG}" --jq '.name' &>/dev/null; then USES_PNPM=1; fi
+DOCKERFILE_NPM_INSTALL=0
+if grep -Ev '^[[:space:]]*#' hermes-agent/Dockerfile | grep -Eq '(^|[^x])npm (install|ci)'; then DOCKERFILE_NPM_INSTALL=1; fi
+DOCKERFILE_PNPM=0
+if grep -q 'node-deps.mjs' hermes-agent/Dockerfile; then DOCKERFILE_PNPM=1; fi
+if [[ "$USES_PNPM" == 1 && "$DOCKERFILE_PNPM" == 0 ]] || { [[ "$ENGINES_NPM" == *refused* ]] && [[ "$DOCKERFILE_NPM_INSTALL" == 1 ]]; }; then
+    echo "ERROR: '${TARGET_TAG}' installs with pnpm (engines.npm: '${ENGINES_NPM}'),"
+    echo "       but hermes-agent/Dockerfile still installs the repo with npm."
+    echo "       Port the install/build steps (see the pnpm block in the Dockerfile)."
+    exit 1
+fi
+if [[ "$USES_PNPM" == 0 && "$DOCKERFILE_PNPM" == 1 ]]; then
+    echo "ERROR: '${TARGET_TAG}' has no pnpm-lock.yaml but the Dockerfile builds with pnpm (node-deps.mjs)."
+    exit 1
+fi
+echo "    ✔ package manager matches ($( [[ $USES_PNPM == 1 ]] && echo pnpm || echo npm ))"
+
 CURRENT_TAG=$(grep 'HERMES_REF:' "$COMPOSE_FILE" | awk '{print $2}')
 echo "==> Updating HERMES_REF: ${CURRENT_TAG} -> ${TARGET_TAG} in ${COMPOSE_FILE}"
 sed -i.bak "s/HERMES_REF: .*/HERMES_REF: ${TARGET_TAG}/" "$COMPOSE_FILE" && rm -f "${COMPOSE_FILE}.bak"

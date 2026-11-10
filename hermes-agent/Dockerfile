@@ -2,9 +2,9 @@ FROM ghcr.io/astral-sh/uv:0.11.6-python3.13-trixie AS uv_source
 # Node — bookworm-slim binary is glibc-compatible with our trixie runtime.
 # Pinned to upstream's pm/lock.json node version. v0.22.7 dropped node 22/24
 # from package.json "engines" and .npmrc has engine-strict=true, so a node
-# older than the tag's engines range fails `npm install` with EBADENGINE.
-# Bundled npm must also satisfy engines.npm ("<11.10.0 || >=11.17.0");
-# node 26.12.1 ships npm 11.20.0. Re-check both on every HERMES_REF bump.
+# older than the tag's engines range fails the install with EBADENGINE.
+# v0.23.1 moved the repo to pnpm (pinned in pm/lock.json) and engines.npm now
+# refuses npm outright — see the pnpm block below. Re-check on every bump.
 FROM node:26.12.1-bookworm-slim AS node_source
 
 FROM debian:13.4
@@ -15,7 +15,6 @@ ENV PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \
     PLAYWRIGHT_BROWSERS_PATH=/opt/hermes/.playwright \
     HERMES_WEB_DIST=/opt/hermes/hermes_cli/web_dist \
-    npm_config_install_links=false \
     UV_PYTHON_INSTALL_DIR=/opt/uv-python
 
 # System packages — no tini/gosu; s6-overlay takes over as PID 1
@@ -61,8 +60,8 @@ RUN set -eu; \
 COPY --chmod=0755 --from=uv_source /usr/local/bin/uv /usr/local/bin/uvx /usr/local/bin/
 
 # Copy node binary + npm from upstream image. Node 25+ no longer bundles
-# corepack (node:26 image has only npm under /usr/local/lib/node_modules),
-# and hermes installs with npm only, so corepack is not copied.
+# corepack. npm stays only for `npx playwright` (run outside the repo); the
+# repo itself installs with the pnpm that pm stages below.
 COPY --chmod=0755 --from=node_source /usr/local/bin/node /usr/local/bin/
 COPY --from=node_source /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
 RUN ln -sf /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
@@ -81,16 +80,32 @@ WORKDIR /opt/hermes
 # Python deps — messaging + web extras cover gateway, Discord/Telegram, and dashboard
 RUN uv sync --extra messaging --extra web
 
-# Node deps + Playwright Chromium + web/ui-tui frontend deps
-RUN npm install --prefer-offline --no-audit && \
-    npx playwright install --with-deps chromium --only-shell && \
-    (cd web && npm install --prefer-offline --no-audit) && \
-    (cd ui-tui && npm install --prefer-offline --no-audit) && \
+# v0.23.1+: npm is refused (engines.npm) and the root preinstall only accepts
+# the exact pnpm pinned in pm/lock.json. Stage it with upstream's stdlib-only
+# pm provisioner (sha256-verified), the same one-liner upstream's Dockerfile uses.
+RUN python3 -c 'from pathlib import Path; from pm import ensure, installed_package; ensure("pnpm", explicit=True); Path("/usr/local/bin/pnpm").symlink_to(installed_package("pnpm").binary)' && \
+    pnpm --version
+
+# Workspace deps (root + web + ui-tui) through upstream's own installer
+RUN node scripts/build/node-deps.mjs --source /opt/hermes --workspace ui-tui --workspace web
+
+# Playwright Chromium for the browser tool. playwright is not a repo dependency
+# (it never was): npx fetches it — run from /tmp because npm is refused inside the repo.
+RUN cd /tmp && npx --yes playwright install --with-deps chromium --only-shell && \
     npm cache clean --force
 
-# Build web dashboard and terminal UI assets
-RUN cd web && npm run build && \
-    cd ../ui-tui && npm run build
+# Frontend products, as upstream's frontend_build stage does: icons -> web
+# dashboard (hermes_cli/web_dist) and the self-contained TUI bundle (ui-tui/,
+# dist/entry.js is what HERMES_TUI_DIR points at). The products replace the
+# source dirs, exactly like upstream's COPY --from=frontend_build.
+RUN /opt/hermes/.venv/bin/python -I scripts/generate_icons.py --source /opt/hermes --out /tmp/hermes-icons && \
+    node scripts/build/tui.mjs --source /opt/hermes --out /opt/products/tui && \
+    node scripts/build/web.mjs --source /opt/hermes --icons /tmp/hermes-icons --out /opt/products/web && \
+    test -f /opt/products/tui/dist/entry.js && \
+    rm -rf /opt/hermes/ui-tui /opt/hermes/hermes_cli/web_dist && \
+    mv /opt/products/tui /opt/hermes/ui-tui && \
+    mv /opt/products/web /opt/hermes/hermes_cli/web_dist && \
+    rm -rf /opt/products /tmp/hermes-icons
 
 # Editable install so hermes CLI is properly importable
 RUN uv pip install --no-cache-dir --no-deps -e "."
