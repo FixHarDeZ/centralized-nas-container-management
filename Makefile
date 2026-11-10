@@ -40,8 +40,7 @@ desk-skills:    ## Vendor the workstation skills named in ai-deck/skills.list in
 	@$(PY) scripts/desk_skills.py $(ARGS)
 
 hermes-skills:  ## Pull Hermes' clone on the NAS and sync hermes-agent/skills into its live skills dir (ARGS=-n = dry run; push first)
-	@dry=$$(case " $(ARGS) " in *" -n "*) echo 1;; esac); \
-	ssh nas "sudo -n /usr/local/bin/docker exec -u hermes -e DRY=$$dry hermes-gateway bash -lc 'cd /opt/data/centralized-nas-container-management && git pull --ff-only -q && bash hermes-agent/skills/sync.sh'"
+	@ssh nas "sudo -n /usr/local/bin/docker exec -u hermes -e DRY=$(if $(filter -n,$(ARGS)),1,) hermes-gateway bash -lc 'cd /opt/data/centralized-nas-container-management && git pull --ff-only -q && bash hermes-agent/skills/sync.sh'"
 
 DESK_PINS = ai-deck/Dockerfile ai-deck/nginx/Dockerfile ai-deck/docker-compose.yml
 
