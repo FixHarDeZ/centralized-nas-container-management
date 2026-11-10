@@ -2,7 +2,7 @@
 
 **สร้าง:** 2026-05-24  
 **Port:** 5063 (external Nginx basic auth) → 9119 (dashboard internal)  
-**Status:** 2026-11-10 (closed) ✅ — `HERMES_REF=v0.22.7`; webhook platform OFF (Telegram only); Shopee clip skills repo-owned + locked (`make hermes-skills`, last sync `88ef3ed`); acceptance clips pending (start with `/new`). ⚠️ Uncommitted `HERMES_REF: v0.23.1` bump in the working tree (not deployed) — use `scripts/update-hermes.sh v0.23.1`
+**Status:** 2026-11-10 ✅ — running `HERMES_REF=v0.23.1` (pnpm build, deployed `0bb3b82`); rollback image `hermes-agent:v0.22.7-rollback` + backups `/opt/data/backups/pre-v0.23.1-20261110/`; webhook OFF; clip skills repo-owned + locked; session resets via plugin `hermes-session-reset-policy`; ⚠️ SQLite 3.50.4 WAL-reset warning open
 
 ---
 
@@ -122,6 +122,9 @@ Tracker: `docs/superpowers/specs/2026-06-02-hermes-token-tuning-verification.md`
 - **Dockerfile must set `HERMES_TUI_DIR=/opt/hermes/ui-tui` (+ `HERMES_NODE=/usr/local/bin/node`)** — without it the Chat tab terminal checks bundle freshness with PM's Node in `/opt/data/tools` (newer than the image's node 22), decides the bundle is stale, runs `npm ci` in `/opt/hermes` as uid 1000 → EACCES → `/api/pty` dies right after `pty accepted`, reconnect every ~3 s. Upstream Dockerfile sets the same var; re-check upstream's `ENV` block on every `HERMES_REF` bump
 - **hermes-gateway must stay memory-fenced (`mem_limit` + `memswap_limit` equal, 4g)** — every tool process (`claude -p` children, ffmpeg, faster-whisper) lives in its cgroup. 2026-11-05 a 3-task async delegation swap-thrashed the whole 12 GB NAS: no oom-kill in kern.log, ping/TCP alive but SSH banner + nginx dead, power cycle needed. Early warning in `agent.log`: `kanban dispatch: system memory pressure is elevated/critical`. `mem_limit` alone is not enough (overflow goes to swap). DSM cgroup v1 honours memsw — verify via `/sys/fs/cgroup/memory/docker/<id>/memory.memsw.limit_in_bytes`
 - **Node version follows upstream `engines`** — tag `.npmrc` has `engine-strict=true`; v0.22.7 needs node ≥26 (`node_source` pinned to upstream `pm/lock.json` node). Node 25+ images have **no corepack** (only npm). `update-hermes.sh` preflights `engines.node`; check bundled npm vs `engines.npm` by hand
+- **v0.23.1+ builds with pnpm, not npm**: `engines.npm` refuses npm; the root preinstall accepts only the pnpm pinned in `pm/lock.json`. Our Dockerfile stages it via upstream's `pm` one-liner, then `scripts/build/node-deps.mjs` → `tui.mjs`/`web.mjs` (products replace `ui-tui/` and `hermes_cli/web_dist`). `update-hermes.sh` preflights a package-manager mismatch. Test-build a new tag through a throwaway compose project (`docker build` on DSM is the legacy builder, no `COPY --chmod`)
+- **v0.23.1 core ignores `session_reset`** (only /new or /reset end a conversation). Our idle-15 policy lives on through the catalog plugin `hermes-session-reset-policy` (keep it enabled after rebuilds; the volume keeps it in `/opt/data/plugins/`)
+- **SQLite WAL-reset bug warning**: the venv's uv CPython links SQLite 3.50.4 (needs ≥3.51.3 or 3.50.7). Gateway + dashboard share state.db. Upstream builds SQLite from source; not ported yet
 - **Old sessions store model per-session** — sessions created before config fix have empty model; new sessions use config
 
 ---
@@ -158,6 +161,7 @@ registered, `presenter-shots` still registered, Telegram reconnected. Re-enablin
 
 | วันที่ | เรื่อง |
 |--------|--------|
+| 2026-11-10 | Bump v0.22.7 → v0.23.1: Dockerfile ported to pnpm (`9a7e3b3`), deployed `0bb3b82`; session resets restored via `hermes-session-reset-policy`; SQLite WAL warning open. |
 | 2026-11-10 | 🎬 footage mode extended to brand product films (`source_check.py` gate, `pft-N` hooks); VITURE Pro 2 official films verified downloadable. |
 | 2026-11-10 | Shopee clip skills rebuilt + repo-owned + locked (`c0d4a57`, `3a2ad0a`): mode-first router, local clipjob, prompt-pack fallback, 📦 product_build. Acceptance pending. |
 | 2026-11-10 | Webhook platform off (route `clip`, port 8644, homepage `/webhooks/`, n8n Clip Intake inactive) — unused since 10-27 tests. |

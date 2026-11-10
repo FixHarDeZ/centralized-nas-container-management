@@ -526,3 +526,40 @@ Open:
   with `scripts/update-hermes.sh v0.23.1` (preflights node engines, deploys, commits the bump). After the
   rebuild, run `make hermes-skills` once more (it re-applies the lock) and check `hermes curator status` still
   lists the 3 skills as locked.
+
+### 2026-11-10 — v0.22.7 → v0.23.1
+- Fix's own `update-hermes.sh v0.23.1` failed at build: `EBADENGINE`. Upstream moved the repo to **pnpm**:
+  package-lock.json is gone; `engines.npm` = "npm is refused here: run pnpm install --frozen-lockfile";
+  the root preinstall only accepts the pnpm pinned in `pm/lock.json` (12.15.0). Build-before-down kept v0.22.7 running.
+- Port (`9a7e3b3`):
+  - stage pnpm via upstream's `pm` one-liner;
+  - `node scripts/build/node-deps.mjs --source /opt/hermes --workspace ui-tui --workspace web`;
+  - `npx playwright install` run from /tmp (npm is refused inside the repo);
+  - generate_icons → `tui.mjs`/`web.mjs` → products replace `ui-tui/` and `hermes_cli/web_dist`, like upstream's
+    COPY --from=frontend_build.
+  - Boot scripts (stage2-hook, main-wrapper, browser_runtime, cont-init.d) are byte-identical between the tags,
+    so no runtime change was needed.
+- `update-hermes.sh` now has a package-manager preflight: it refuses when the tag ships pnpm-lock.yaml or
+  engines.npm refuses npm while the Dockerfile still installs the repo with npm, and the reverse.
+- Test build first under the tag `hermes-agent:v0.23.1-test` via a throwaway compose project. The plain
+  `docker build` on DSM 24.0.2 is the legacy builder (no buildx) and cannot handle `COPY --chmod`, so test
+  through compose. Checked: v0.23.1, ui-tui/dist/entry.js, web_dist/index.html, ffmpeg, ssh, node 26.12.1,
+  chromium headless shell, rg.
+- Rollback ready: image `hermes-agent:v0.22.7-rollback` (2e0c3511b937, kept), backups in
+  `/opt/data/backups/pre-v0.23.1-20261110/` (config.yaml, skills/.usage.json, webhook_subscriptions.json,
+  state.db + kanban.db via sqlite3 backup API).
+- Deployed with `update-hermes.sh v0.23.1` (`0bb3b82`; all layers cached from the test build, 21 s).
+  - Gateway + dashboard: restarts 0, mem fences 4g/4g + 1g/1g.
+  - Telegram connected at 11:18:02; dashboard 302.
+  - 3 clip skills still locked + pinned; `make hermes-skills` test gate 41 passed in the new container;
+    check_delivery exit 0.
+- **v0.23.1 dropped timed session resets from core.** Our `session_reset: both / idle 15` was ignored
+  ("conversations reset only on /new or /reset"). Restored with the curated catalog plugin
+  `hermes-session-reset-policy` 0.3.0 (installed + enabled, hot-reloaded). It reads the existing block unchanged.
+- **Open — SQLite WAL-reset bug warning:** the uv-managed CPython in the venv links SQLite 3.50.4, which is
+  vulnerable to https://sqlite.org/wal.html#walresetbug. Gateway and dashboard both open state.db. Same python
+  as v0.22.7, so not new, just newly reported. Upstream builds SQLite 3.53.4 from source in its Dockerfile.
+  Porting that stage (or a python linked to ≥3.51.3 / 3.50.7) is the fix — not done, Fix to decide.
+- Other new boot warning: none besides the two above (Discord no-token is expected).
+- Not verified: a real model reply through `claude-subscription-directsdk-experimental` (plugin 0.3.4 enabled,
+  no load errors in the log); Chat tab in a browser.
