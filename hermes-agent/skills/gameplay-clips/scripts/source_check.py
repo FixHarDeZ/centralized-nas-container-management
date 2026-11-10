@@ -39,8 +39,10 @@ def verdict(meta, models, brand=None):
 
 
 def fetch(target, many=False):
-    cmd = ["uv", "tool", "run", "yt-dlp", "--skip-download", "--no-warnings", "-J" if not many else "-j",
-           "--extractor-args", "youtube:player_client=tv_embedded,web", target]
+    # metadata only: without --ignore-no-formats-error yt-dlp aborts on "Requested format is not available"
+    # (no JS runtime in the container) before printing anything (seen 2026-11-10)
+    cmd = ["uv", "tool", "run", "yt-dlp", "--skip-download", "--no-warnings", "--ignore-no-formats-error",
+           "-J" if not many else "-j", target]
     r = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
     if r.returncode and not r.stdout.strip():
         raise SystemExit(json.dumps({"ok": False, "error": r.stderr.strip()[-400:]}))
