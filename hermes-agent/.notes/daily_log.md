@@ -633,3 +633,21 @@ Open:
 - edge-tts flaky from the NAS.
 
 All committed and pushed.
+
+## 2026-11-10 (4) — photo gate accepts lifestyle photos
+
+Fix asked (after a Gemini consult) how to handle non-clean product photos for Flow. Hermes refused a
+text-free clothes-rack-in-a-bedroom photo for a 🧑 20 s order as "not product-only" and asked for a
+plain-background photo. The repo gate only bans text/UI/people; Hermes read "clean" as plain background.
+
+- `shopee-clip/SKILL.md` step 5: "clean" = no text/UI/people, not plain background; never ask for a
+  plain-background photo because of props alone.
+- `references/product-image-prep.md` new "Lifestyle photos" section: attach whole; crop only if a test shot
+  merges an edge object; prompt names the product and lists props as styling; keep the structure static
+  (slow push-in/pan, presenter beside it, no rolling); the ~1000 px floor is for ad screenshots, a
+  frame-filling ~750–800 px photo is fine.
+- Gemini's rembg idea rejected: thin white frame on pale wall segments badly, ONNX in a 4g-fenced gateway.
+- Commit `898b735` (rebased over 5 remote skill-doc commits), pushed, `make hermes-skills` synced (41 tests pass).
+
+Open: Fix re-sends the rack order (reply that the photo is OK, or `/new` + re-order); first shot is the
+real test of lifestyle refs in Flow (structure warping, props merging).
