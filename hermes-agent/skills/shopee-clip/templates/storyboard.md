@@ -6,7 +6,9 @@ Why: two 10 s takes of "hold it up / press / set down" read as filler (vacuum-ba
 - Arc: problem -> product doing its job (step by step) -> result. Every shot = ONE visible action where the product performs its function. "Holds it up to camera" alone is not a shot.
 - Source the beats from the listing's own how-to / feature / before-after images (gathered by `intake_images.py`). They are storyboard material even when they cannot be attached as references.
 - Pace submits ≥5 min apart (Fix 2026-11-09, quality over speed), so a 5-shot board adds ~20 min of wall clock. Say so in the board.
-- 20 s = 4-6 shots of 4-6 s (Omni offers 4/6/8/10 s; cost is per second, ~7 cr per 4 s, so a 20 s board is ~30-35 cr either way).
+- Shot length: a Flow generation is 10 s for 🧑 presenter boards (N = length / 10, router step 3). The 4-6 s
+  mix below applies only to a 📦 graphic board with explicitly shorter shots. Cost: 10 s ≈ 15 cr (measured);
+  4 s = 7 cr (measured); 6 s ≈ 10 cr (estimate, mark it as such).
 - Mix shot types:
   - `P` presenter to camera (hook, reaction, result) - character chip attached, Flow voiceover.
   - `H` hands close-up doing the action (no face, NO character chip - also avoids the prominent-person refusal).

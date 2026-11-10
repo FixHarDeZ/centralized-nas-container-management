@@ -49,6 +49,14 @@ and `hook_id: "pft-N"`.
   (footage-sourcing.md), exactly as for trailers. Music-only brand films and "design" films work best.
   When no source has enough gap for the length Fix picked, stop and tell him, and offer 📦 (Flow b-roll)
   or a shorter clip. Do not lay Thai VO over English narration.
+- **Measure the text-free runs before committing to a length (brand films are caption-heavy).** Run a 1 fps
+  contact sheet over the whole source and count the longest continuous run with no on-screen text and no
+  people. A 50 s 16:9 brand film had only a ~6 s clean run; a 60 s vertical short had a 9 s one. If the longest
+  clean run is shorter than the ordered length, stop and offer Fix a shorter clip or another source (shorts are
+  often the cleaner option). Do not paper over it with brand captions.
+- **Shorts are vertical: use `product_build.py` directly.** They are 9:16 already, so skip the 16:9 window
+  path. A short can yield a clean run with zero speech while ASR reports one segment; that is a music-only
+  film, not a failed ASR.
 - Shopee listing videos sit behind a WAF. Same as games: tell Fix and use the brand video.
 
 ## Step 4 — shots: watch for burned-in text
@@ -66,6 +74,11 @@ and `hook_id: "pft-N"`.
   background removed (`/opt/data/skills/shopee-clip/references/product-image-prep.md` covers the cutout).
   Use the same `image_stickers` plan and placement rules as the game cover. The thumbnail uses the
   cutout too.
+- **A clean product photo on a plain white studio background needs no ad salvage — cut it out in one PIL pass:**
+  `ImageDraw.floodfill(work, seed, MARK, thresh=32)` from all four corners with a marker colour, build the
+  alpha from where the marker landed, then `alpha.getbbox()` to crop. Flood fill from the corners rather than
+  a global "near-white" threshold, or white areas INSIDE the product (labels, highlights, screen bezel) turn
+  transparent too. Vision-check the result for clipped parts and a white halo before it goes into `gfx.json`.
 
 ## Step 7 — VO
 - Same voice and recipe (Gemini Leda, edge fallback). Write the script as a friend explaining what it

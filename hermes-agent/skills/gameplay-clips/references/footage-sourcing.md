@@ -64,6 +64,17 @@ Measured on a 2:50 PS5 gameplay trailer: vision tiles gave roughly 5–8 s of ga
 - **Corner-overlay check.** Read the four corners of 3–4 frames at full resolution (a 1920×1080 frame cropped to each 400-px corner, one vision call for all four). Publisher/hardware FPS, DLSS or RTX panels live in the top-right and bottom-right corners and are not HUD. Crop them out in the master encode (keep the crop x below the panel's left edge), not in the hero.
 - **Sanity-check the master's black pad.** The master is 720×1280 with the picture at y 320..725, so a whole-frame mean includes black bars. Judge brightness only inside the picture band (crop y 330..680), otherwise every frame looks dimmer than it is.
 
+## 5d. Whole-source OCR text map — run it BEFORE locking segs
+- Contact-sheet vision cannot answer "is there text in this window": it returns a paragraph instead of the requested per-tile lines, repeats one string across tiles that never contained it, and misses a legal micro-caption ~18 px tall at 1080p. A fixed-bbox bright-pixel probe is not a substitute either — dark/gold product art inside the probe box counts as "bright" and false-positives as text.
+- Objective alternative: OCR every frame at 1 fps and keep `{t: [{text, box}]}` as JSON.
+  ```
+  uv run --with rapidocr-onnxruntime --with numpy --with pillow python ocr_scan.py
+  # loop: ffmpeg -ss T -i src.mp4 -frames:v 1 -update 1 f_T.jpg  ->  RapidOCR()(f_T.jpg)
+  ```
+  `rapidocr-onnxruntime` lands in an ephemeral uv env (nothing installed on the host), about 1 s per frame.
+- Read the map, not the pictures: contamination falls out as a time range (legal micro-caption, date/availability card), while text printed ON the product (device logos, cartridge-slot labels, HUD) appears the same way — keep those, drop only supers. Place every seg in/out outside the supers, then re-run OCR at the planned in points as the final check.
+- OCR still misses low-contrast or heavily stylised titles, so keep the contact-sheet pass for cards and logos; OCR is the gate for small body text and for anything whose presence you would otherwise be guessing.
+
 ## 6. Load and CPU limits on the NAS
 - Keep only one heavy job (ASR, encode, build) running at a time; ASR plus ffmpeg encode together left about 600 MB free and swap full during one run.
 - Run long jobs with `subprocess.Popen` writing to a log file, then poll the log in short sleeps.

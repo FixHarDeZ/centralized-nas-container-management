@@ -37,6 +37,9 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
 ## Flow of an order
 0. `python3 S/clipjob.py status` lists open jobs. Resume one if this message is about it (a reply
    with a video, a ✅/🔁 tap, "ต่อ"). Do not reconstruct state from memory.
+   Also grep `/opt/data/clips/logs/clip-log.jsonl` and `delivery-log.jsonl` for the product name before
+   starting a new job: a clip for the same product may already be delivered, and a duplicate order should be
+   confirmed with Fix (which clip, what changes) before any spend.
 1. **Intake** (before any question that costs time). Run
    `uv run --with pillow python S/intake_images.py <first image> /opt/data/clips/work/<job>`, then do
    one vision pass on the sheet. You need the product name and the basket link. A missing link is
@@ -56,6 +59,9 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    person or hands, and the product in the state the shot needs. Ad graphics and review screenshots
    are storyboard input only. Crop and cutout recipes: `references/product-image-prep.md`.
    With no clean photo, ask Fix for one and stop at zero spend. Never fill the gap with a guessed product.
+   A reference under ~1000 px is high-risk for product identity: Flow drew a different frame shape and
+   added a fake on-lens graphic when the attached photo was ~700 px. If Fix accepts a small photo anyway, say
+   the drift risk in the storyboard and run the product-identity frame check before the second shot's submit.
    Save the references as `<workdir>/ref1.jpg …`.
 6. **Storyboard** from `templates/storyboard.md`: N shots of 10 s, the hook in shot 1, CTA in the last shot.
    Shots after the first chain from the previous shot's last frame, with the continuity block repeated.

@@ -30,6 +30,20 @@ Read this BEFORE starting Chrome or touching any Flow DOM. Not needed for the `g
 - **`browser_exec` gives a fresh interpreter on every call**, so variables such as `before = set(glob…)` do not survive to the next call. Take any before/after snapshot with the terminal (`find -mmin`), not with Python state.
 
 ## Desktop (~1280 px) upload and attach — verified 2026-11-09
+- **Two `More options` buttons exist in the desktop editor; only the clip-level one is safe.** The project-level
+  `More options` in the top bar opens a `Download project?` dialog that zips every item in the project (hundreds of
+  files). Cancel it at once. The clip download is the `Download media` button in the editor top bar (aria-label
+  `Download media`, ≈(938,21) at 1280 px); its `[role=menuitem]` list is `720p / Original size` at ≈(1000,123).
+  Verify the menu item text before clicking any coordinate.
+- **`Add to prompt` only exists after its card is selected.** Click the card's leaf text first (inside
+  `flow-add-menu-popover-content`), then query `button` with text `Add to prompt` in that popover. Climbing
+  ancestors from the leaf without a prior select returns no button, and climbing from a neighbour card can attach
+  the wrong asset (a `Video ingredient image` chip appeared for an image pick). Read chip `alt`s after every attach
+  and remove a wrong chip with its `cancel` mat-icon inside the live box.
+- **Reopening the picker can silently fail.** If the overlay text length stays 0 after a click, the picker is closed
+  and the next click toggles it shut again. Click once, wait ~2 s, read the popover, and only retry when it is empty.
+- **Give every upload a unique filename** (product slug + role, e.g. `<slug>_ref1.jpg`). The project Uploads list
+  keeps files from earlier jobs, and a generic `ref1.jpg` makes the card you pick ambiguous.
 - Open the picker by clicking the `Add ingredients to the prompt box` button (≈(359,700) with an empty box). Re-read its rect before each click; it moves as chips are added.
 - **Upload:** in the picker, `Upload media` is a SPAN with exact text, not a button with an aria-label. Find it with a leaf query (`childElementCount === 0` and `innerText.trim() === 'Upload media'`), enable `Page.setInterceptFileChooserDialog`, click its centre, then `DOM.getDocument(depth=-1, pierce=True)` → `DOM.querySelector` for `input[type=file]` → `DOM.setFileInputFiles` with absolute paths. The `Add media menu` → `Upload` item did NOT create a file input (nodeId 0). Use the picker path.
 - **Do the whole upload inside ONE CDP websocket connection.** A stateless `cdp()`/`browser_cdp` call opens a new connection per call, so `Page.setInterceptFileChooserDialog` is gone by the next call and the transient input is not found. `scripts/flow_upload_ref.py` (run via `uv run --with websocket-client python -I`) does enable → click `Upload media` → poll `DOM.getDocument`/`querySelector` → `setFileInputFiles` → disable, on one connection, and prints the picker overlay so the filename can be confirmed. Verified 2026-11-10: the crop appeared in Uploads on the first run. Its verdict is the filename in the printed overlay, not the empty `{}` reply.
