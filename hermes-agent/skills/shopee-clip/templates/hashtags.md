@@ -1,15 +1,5 @@
 # Hashtag pools by category — mix 4 product + 3 vibe + 1 platform tag
 
-## Hook tags come FIRST (Fix 2026-11-10)
-Before the pools, put 2–4 punchy hashtags written for THIS product's benefit, each one a
-short Thai phrase with the `#` in front and the spaces removed, e.g.
-`#แว่นตาที่เหมือนได้ดูโรงหนัง #เล่นเกมจอใหญ่ #ไม่รบกวนใคร #ต้องอันนี้เลยเด็ดมาก`
-(VITURE PRO 2, 146 chars). Then the pool tags. Hook tags describe a benefit the clip shows —
-no price, no discount, no spec numbers that are not verified.
-Keep the total ≤150 chars: drop the weakest pool tag first, never the hook tags.
-Delivery message = hashtags string + 🛒 ปักตะกร้า basket link, in the same message
-(`send_copy_buttons.py` already sends both with copy buttons).
-
 Gate BEFORE delivery (unchanged, hard):
 - `len(tag_string) <= 150` including spaces
 - zero CJK/full-width codepoints:
