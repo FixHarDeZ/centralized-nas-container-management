@@ -579,3 +579,22 @@ Open:
   - The pre-deploy busy check showed 2 matching processes, but the log has no turns since 11:18 and the shutdown
     drain took 0.00 s, so nothing was interrupted.
 - Login shells now resolve `python3` to the venv's 3.14.9 (profile.d puts the venv first), as before with 3.14.4.
+
+### 2026-11-10 — close (2)
+Live state:
+- `HERMES_REF=v0.23.1` with the pnpm build (`9a7e3b3`, `0bb3b82`).
+- venv on pm-pinned Python 3.14.9 / SQLite 3.53.1 (`0d3ec6c`).
+- `hermes-session-reset-policy` 0.3.0 enabled (idle-15 resets restored).
+- Webhook platform off.
+- Clip skills repo-owned + locked (last sync `88ef3ed`, test gate 41 passed in the new container).
+- Rollback: image `hermes-agent:v0.22.7-rollback` + `/opt/data/backups/pre-v0.23.1-20261110/`. Drop both once
+  v0.23.1 has run clean for a few days.
+
+Open:
+- A real model reply via `claude-subscription-directsdk-experimental` after `/new`.
+- The Chat tab in a browser.
+- Acceptance clips (🧑 📝, 🧑 🤖, 📦, 🎬 game, 🎬 product).
+- After the first real clip: deactivate n8n Presenter Shots.
+- edge-tts flaky from the NAS (voice-A fallback).
+
+All committed and pushed.
