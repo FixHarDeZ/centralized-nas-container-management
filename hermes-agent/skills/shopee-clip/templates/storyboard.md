@@ -20,7 +20,7 @@ Why: two 10 s takes of "hold it up / press / set down" read as filler (vacuum-ba
 - No price, no unverified claims (%, seconds, certifications) in any line.
 
 ## Running an approved board
-- Each shot is its own independent generation (Settings: Video, Ingredients, 9:16, 720p, the shot's seconds, x1). Shots are hard-cut in post, so they need no start-frame chaining. Repeat one continuity block (presenter look, backdrop, lighting) verbatim in every shot prompt.
+- Each shot is its own independent generation (Settings: Video, Ingredients, 9:16, 720p, the shot's seconds, x1). Shot 2 onward starts from the previous shot's last frame (router step 6; `clipjob.py pack` sends that frame and `reserve` enforces the order). Repeat one continuity block (presenter look, backdrop, lighting) verbatim in every shot prompt.
 - Chips per shot type: `H` = product crops only. `P`/`R` = product crops plus the character. Re-attach before each submit, because the box clears its chips on submit.
 - A 4 s 720p shot rendered in about 40-120 s. Overlap the work: submit shot N+1, then QC shot N and send it for review. Do not chain past a shot that carries a defect you found yourself.
 - Pace the submits. Firing the next one the moment each render lands tripped `unusual activity` by the fifth shot (`references/flow-browser-env.md`), so leave a gap between submits rather than a back-to-back burst.
@@ -28,6 +28,10 @@ Why: two 10 s takes of "hold it up / press / set down" read as filler (vacuum-ba
 - In the post plan, mark every speechless `H` shot `"silent": true` (`references/presenter-post.md`). Otherwise the script tries to align an empty voiceover and crashes.
 - An `H` shot that lands on skin (blush on a cheek, cream on a hand) renders a stranger's face part because it has no character chip. "Cheek and jaw only, eyes out of frame" was ignored and the eye and brow showed. When the shot must stay faceless, frame it on the product plus fingertip. When it needs skin, make it a `P`/`R` shot with the character chip, so the face at least matches the presenter.
 - For a R/result shot the voiceover lists, write each on-screen touch or prop state into the prompt as its own numbered action (open the compact, touch the cheek, then the eyelid, then the lips). A single sentence that bundles them lets the model skip some of them.
+- **Product-identity checklist (one line per board, under the shots):** the parts a viewer could count or
+  measure: tiers/drawers/doors/wheels, colour, proportions against a person (height ≈ waist / chest / head).
+  Every shot prompt carries those counts as exact numbers, and every per-shot frame verdict answers each item;
+  one miss = `--frame flag:<item>`. Rigid products drifted on both 🧑 jobs that had none (2026-11-10/11).
 - **Lock the product's structure in every P/R prompt.** Flow fills a "shelf in a wardrobe" scene from its own prior and drifts the attached product (a single black unit came back as a wood wardrobe with two black tiers, one empty). Name the tier count and say "ONE single unit, no other shelving, no extra tiers, no wooden shelves in frame". The product must stay fully visible and un-occluded by clothes or the presenter in the frame check, or the shot is a defect and goes back for re-gen.
 
 ## Format sent to Fix (Telegram text, then STOP and wait)
@@ -46,6 +50,7 @@ Why: two 10 s takes of "hold it up / press / set down" read as filler (vacuum-ba
 💳 เครดิตรวม ≈ <sum> (ถ้าต้อง gen ช็อตเสี่ยงใหม่ 1 ครั้ง +<c>)
 🔁 กด gen ทั้งหมด <N> ครั้ง (≥5 ครั้ง = ต้องเว้นระยะ ใช้เวลานานขึ้น)
 ⚠️ ช็อตเสี่ยง: <n> (<why>) สำรอง: <alt>
+🔎 เช็คสินค้า: <ชั้น/ลิ้นชัก/ล้อ N> · <สี> · <สูงประมาณ เอว/อก/หัว>
 ```
 **Shot count, seconds per shot, per-shot credits and the total are MANDATORY lines (Fix 2026-11-09).** Credit table, Omni 1.1 Flash 720p x1: 4 s = 7 (measured), 8 s = 12 (measured), 10 s = 15 (measured), 6 s ≈ 10 (estimate - mark it `≈` and say it is an estimate). Before each submit read the Settings panel `Generating will use N credits`; if it differs from the board, tell Fix before generating.
 Then ask with `clarify`: `["ผ่าน เริ่ม gen (≈X เครดิต)", "แก้ storyboard", "ยกเลิก"]`. Unanswered = zero spend, no generation.

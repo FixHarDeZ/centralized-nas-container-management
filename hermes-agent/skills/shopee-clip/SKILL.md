@@ -29,7 +29,7 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
 ## Hard rules (every mode)
 - No price, currency, discount or % anywhere: voiceover, subs, pills, cover, hashtags.
 - CTA words (ลิงก์ / ใต้คลิป / ตะกร้า) only in the last shot or beat.
-- Hashtags ≤150 characters, no CJK (`templates/hashtags.md`). Basket link = an https Shopee link, sent with the hashtags in the same delivery message (🛒 ปักตะกร้า).
+- Hashtags ≤150 characters, no CJK (`templates/hashtags.md`). Basket link = an https Shopee link. Both go out as ONE message with tap-to-copy buttons (`send_copy_buttons.py`, run by `deliver`); no fenced code blocks, in every mode.
 - EN pills ≤2 words. Flow must draw no on-screen text (the block in `references/presenter-post.md`).
 - One heavy job at a time (whisper, render, ffmpeg): the NAS has 12 GB, and the gateway is fenced at 4 GB.
 - Details and the reasons behind them: `references/house-rules.md`. Read it once per session before the first order.
@@ -52,16 +52,20 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    you dropped in the delivery.
 2. **Q1 — mode** (`clarify`, one question, buttons):
    `["🎬 footage จากวิดีโอทางการ (เกม/สินค้า, 0 เครดิต)", "🧑 presenter + graphic", "📦 graphic ล้วน (ภาพสินค้า ไม่มีคน)"]`.
-   Do not guess from the product type: a game can be 🧑, and a washer can be 🎬.
+   Do not guess from the product type: a game can be 🧑, and a washer can be 🎬. For a rigid product
+   (rack, shelf, cabinet, device) add one line to the question: in 🧑 Flow redrew its parts/size in 2 of 2
+   jobs (2026-11-10/11, 30 credits each); 🎬/📦 hold the shape better. Fix still picks.
 3. **Q2 — length** (`clarify`, one question): `["10 วิ (แนะนำ)", "20 วิ", "30 วิ", "40 วิ"]`.
    One shot = one Flow generation of 10 s (Omni 1.1 Flash, ≈15 credits; `house-rules.md` → Duration).
    N = length / 10: 10 s→1, 20 s→2, 30 s→3, 40 s→4. A shot can hold several storyboard beats.
    If the order message already names the mode and/or length, do not ask that question again: take it as the answer. Ask only the questions still open (Q3, storyboard approval).
-4. **🎬 → load skill `gameplay-clips` and follow it.** Its own steps cover footage, VO and delivery. A game
-   uses the steps as written. Before any 🎬 final goes to Fix, check its delivery step: a plain MEDIA send in chat
-   skips the clip-log row and the copy buttons, so if that is what was done, say so in the reply. Any other product reads its `references/product-footage.md` first
-   (official brand video of the exact model only, gated by `source_check.py`). No clipjob for 🎬 (nothing to
-   pace or review per shot). Stop reading here for 🎬.
+4. **🎬 → `clipjob.py new <job> --mode gameplay --product "…" --link <url>`, then load skill
+   `gameplay-clips` and follow it.** The job has no shots; it holds the state across session resets
+   (`clipjob.py note <job> "<done; next>"` at each stage) and ends with the same `deliver` as step 12
+   (`--report` may be omitted). A game uses the steps as written. Any other product reads its
+   `references/product-footage.md` first (official brand video of the exact model only, gated by
+   `source_check.py`). A revision of a delivered clip: `clipjob.py reopen <job> --reason …`, then
+   `deliver` again (it logs a REVISED row). Stop reading here for 🎬.
 5. **Photo gate (🧑/📦; 🎬 product needs one clean photo for the sticker).** References must be clean product photos: no price, promo text, rating, UI,
    person or hands, and the product in the state the shot needs. "Clean" means no text/UI/people — NOT
    a plain background: a styled room photo (a rack holding clothes, a shelf with items) is a valid
@@ -100,12 +104,15 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
      1. Stop driving Flow and close Chrome (CDP `Browser.close`).
      2. Tell Fix in one line: the reason, credits spent, shots left.
      3. Run `clipjob.py pack <job>` and continue as 📝.
+     A shot that failed after spending credits gets its own 🔁 button from `submit-failed`; wait for the tap.
 10. **Per-shot review.** After each file arrives (downloaded or ingested), vision-check 3 frames — one inside the first 2 s, since a caption can live only in the hook window — for Flow text,
     product drift (shape AND real-world scale against the presenter), and whether the planned action happened. Then run
     `clipjob.py ready <job> K --raw <file> --frame pass|flag:<what you saw>`. That runs ffprobe and, for 🧑,
-    the repeats and CTA gates, then sends the shot with the ✅/🔁 keyboard. Fix's tap arrives as text →
+    the repeats and CTA gates, then sends the shot with the ✅/🔁 keyboard. If that send fails the checks are
+    kept: `clipjob.py ready <job> K --resend` (no re-check). Fix's tap arrives as text →
     `clipjob.py decide --text "<text>"`. On 🔁: in 📝 run `pack <job> --shot K`; in 🤖 regenerate via flow-driver.
-    Send shot 1 for review while shot 2 renders.
+    A 🔁 on shot K also asks Fix keep/regen for an already rendered shot K+1 (its start frame is gone); wait
+    for that tap too. Shot 2 may render while shot 1 is reviewed only when shot 1 passed every gate.
 11. **Post-production (graphics always).** `clipjob.py assemble-check <job>` prints the approved files in order.
     - 🧑: `references/presenter-rules.md` + `references/presenter-graphics.md`:
       `layout_probe` → `presenter_fx` → `post_presenter` → `graphics_layer --report … --check`, then render.
@@ -120,7 +127,8 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
     between "ส่งแบบนี้" and regenerating. If he chooses as-is, pass `--ack "<flag text>=<his call>"`; it goes into
     the clip-log. Never edit `report.json` to clear a flag. If a send fails mid-way, rerun the same command:
     finished steps are skipped and the clip is logged once. On success it has run verify-clip, the
-    clip-log row, the clip, copy buttons, cover and check_delivery. Then do the cleanup
+    clip-log row, the clip, copy buttons, cover and check_delivery. Send no extra MEDIA or hashtag text in the
+    reply (it would duplicate them). Then do the cleanup
     (`/opt/data/skills/flow-driver/references/flow-steps.md` step 13).
 13. Fix calls it off (`เลิกทำ` / `หยุด` / `พอแล้ว`) → `clipjob.py cancel <job> --reason …`, close Chrome, report
     the credits actually spent (`spent_shots`). No clip-log row.
