@@ -22,6 +22,7 @@ Outputs: `subs.ass`, `pills.txt`, `out.mp4` (mastered, FB-safe High/yuv420p, fas
 
 ## Run gate (read before any send)
 - A run prints `FLAG:` lines and writes `report.json`. Read both before sending. `FLAG: ... not in script` means Flow's voiceover spoke words the script does not contain: the burned subs still follow the script, so the audio can be wrong while the subs look right. Report it to Fix with the frame time, and let him choose between delivering as-is and regenerating that scene.
+- **Not every FLAG is a defect.** `clipjob.py deliver` matches flags against `INFO_FLAGS` (anything containing `auto-added`, e.g. the auto `Link below!` pill) and ships without an `--ack`. Only real defects — words not in script, a skipped phrase, `pause_err` max well past ~1.5 s — need Fix's call passed as `--ack "<flag>=<his call>"`. Never stall a finished clip waiting for him to ratify an auto-added pill.
 - A `phrases_matched` count below total, or an `onset_err` over ~1 s, means the subs may lag the audio. Check it before delivery, not after.
 - The run can yield to background in the terminal. Poll it to exit before reading its output; never send `final.mp4` while the run is still writing.
 

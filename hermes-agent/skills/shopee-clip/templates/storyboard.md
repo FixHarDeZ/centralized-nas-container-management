@@ -50,6 +50,7 @@ Why: two 10 s takes of "hold it up / press / set down" read as filler (vacuum-ba
 **Shot count, seconds per shot, per-shot credits and the total are MANDATORY lines (Fix 2026-11-09).** Credit table, Omni 1.1 Flash 720p x1: 4 s = 7 (measured), 8 s = 12 (measured), 10 s = 15 (measured), 6 s ≈ 10 (estimate - mark it `≈` and say it is an estimate). Before each submit read the Settings panel `Generating will use N credits`; if it differs from the board, tell Fix before generating.
 Then ask with `clarify`: `["ผ่าน เริ่ม gen (≈X เครดิต)", "แก้ storyboard", "ยกเลิก"]`. Unanswered = zero spend, no generation.
 Put the whole board inside the `clarify` question text and the buttons in `choices`, so the board and the approval arrive as one message. When the source images show two colourways, make the approval buttons carry the colour choice, so the same tap approves the board and resolves the colour.
+Router Q3 (who drives Flow, step 8) may ride as the SECOND question in that same call: its default is 📝 (zero spend), so a second entry that gets lost costs nothing and is re-asked at most once.
 
 ## Example: vacuum bag 20 s
 1. [P 4s] presenter points at an overflowing pile of blankets, tired face - "ผ้าห่มเยอะจนตู้ปิดไม่ลงใช่ไหม?"

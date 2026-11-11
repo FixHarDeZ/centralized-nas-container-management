@@ -240,8 +240,16 @@ def ass_sec(t):
     h, m, s = t.split(":"); return int(h) * 3600 + int(m) * 60 + float(s)
 
 
+# v5 layout default (safe-zones.md): subs must sit in y700-835, the band graphics_layer
+# checks stickers against. A source .ass carrying the old v4 MarginV 290 (y~945-1014)
+# silently lands the subs OUTSIDE that band, so a game-cover sticker placed "below the
+# subs" overlaps them (Ratatan 2026-11-11). Default here; plan.sub_style overrides.
+SUB_STYLE_V5 = {"MarginV": 465, "MarginL": 60, "MarginR": 140}
+
+
 def write_subs(src, dst, plan, shifts):
-    st = plan.get("sub_style", {})
+    st = dict(SUB_STYLE_V5)
+    st.update(plan.get("sub_style", {}))
     over = {int(k): v for k, v in plan.get("sub_text", {}).items()}
     fmt, out, ev, k = None, [], [], 0
     for ln in open(src, encoding="utf-8").read().splitlines():

@@ -33,6 +33,9 @@ One JSON line per window:
 
 It is CONSERVATIVE: the mottled wall makes it reserve more than vision does, e.g. h 94 where vision allowed ~240. When it says too small but you need the overlay, one vision read of that window may overrule it. Still vision-check one frame of the final render.
 
+- **Sample only times strictly inside the scene**: keep the window END ~0.5 s under the duration (`--window 0 9.5` on a 10 s scene). A sample at or past the duration returns an empty frame and the run dies with `ValueError: cannot reshape array of size 0 into shape (1280,720,3)` — that is a window problem, not a broken video.
+- **When it answers `no empty side big enough`, do not go hunting for the rect with vision reads.** Build the free-rect map instead (Lessons → *Free-rect map*); spend vision on checking the render, not on locating empty wall.
+
 ### 1. `scripts/presenter_fx.py scene_raw.mp4 fx.json scene_fx.mp4`
 Run once per RAW scene, BEFORE post_presenter. It touches video only and copies audio, so duration, ASR and sub timing are unchanged.
 - `hook_card` (`"mode": "overlay"`, ~1.4 s): a cut-out product sticker appears beside the presenter from frame 0.
@@ -97,6 +100,7 @@ Text-bearing elements are the headline, callout labels and badges.
   - they stay out of the pill band y186–262 while a pill shows;
   - they stay out of the sub band y700–835 while a sub shows.
 - They stay off `avoid` zones.
+- **Compute a headline's rect before running `--check`.** `text_rect()` takes `y` as the box TOP and returns `h = lines*size*1.3 + 12`, width = longest line + 12, centred at x360 — so a face-avoid hit is nearly always the second line or those 12 px of padding, not a bad placement: drop to one line, shrink `size`, or lift `y` until `bottom < face_top`. A headline may sit inside the pill band (y186–262) **only while no pill shows at that time**, so timing it to end before the first pill is the cheapest way to buy the space above her head.
 - A callout's leader LINE may not cross the sub band while a sub shows. Product parts below y≈700 (label art at the bottle base) cannot take a callout, so point at the pump or cap instead.
 
 Practical slots:
@@ -127,6 +131,7 @@ Practical slots:
   - The chip shows no filename, so verify it from the thumbnail.
 - **Never guess coordinates.** Guessed coordinates put headlines on faces and rings on empty space.
   - Faces and empty sides come from `layout_probe.py`.
-  - A callout TARGET (pump, cap, label part) still needs a gridded frame sheet: cyan lines every 100 px on the real frame at the element's time, then ask vision for the part's point.
+  - A callout TARGET (pump, cap, label part) still needs a point on the real frame at the element's time — but **budget exactly ONE coordinate ask** (gridded frame, cyan lines every 100 px, labels carrying parent-frame coords). Vision replying with prose instead of numbers happens often enough that a second rephrasing burns the run: when the answer carries no `(x,y)`, drop the geometry-dependent element (callout ring, endcard) and keep headlines + stickers + pills + subs. That is still a complete graphics pass; a ring on a guessed point is a defect Fix sends back.
+- **Free-rect map — the fallback when `layout_probe` reports `no empty side big enough`.** Sample 6–7 frames across the scene (`ffmpeg -ss <t> -i <scene> -frames:v 1 -f rawvideo -pix_fmt rgb24 -`, 720×1280), take each frame's wall as the median of the outermost 8 px of the left and right edge columns over rows 100–1200, mark a 20×20 cell busy when the median per-pixel `|px − wall|` summed over RGB exceeds ~26, and print the grid as ASCII with x labelled every 100 px (`.` <20 free, `:` <45, `*` <90, `#` busy). The largest `.`/`:` block that lies outside y186–262 and y700–835 is your overlay/insert rect — then vision-check one frame of the render as usual. `numpy` is not in the `execute_code` kernel: keep the probe as a file under the scratch dir and run it with `uv run --with numpy python <file>`.
 - **The `--report` timeline moves when a scene's trim changes** (e.g. hook overlay → `trim: 0`). Re-read `report.json` pills/subs and shift every gfx time after each post_presenter re-run, before `--check`.
 - **Close-up product shots (no face) are the slot for the headline and callout.** On presenter shots the face takes the centre column, and the pill and sub bands take the top and bottom.

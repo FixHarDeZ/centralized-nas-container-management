@@ -43,13 +43,18 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
 1. **Intake** (before any question that costs time). Run
    `uv run --with pillow python S/intake_images.py <first image> /opt/data/clips/work/<job>`, then do
    one vision pass on the sheet. You need the product name and the basket link. A missing link is
-   asked for in the same message as Q1.
+   asked for in the same message as Q1. The sheet read can misattribute images across tiles, and one
+   listing often carries SEVERAL models (a toy rack, a kitchen box set, a pet rack under one link):
+   when a tile's description disagrees with what the image plainly shows, re-read that image on its own
+   before deciding, build the clip around the product the order text leads with, and name every image
+   you dropped in the delivery.
 2. **Q1 — mode** (`clarify`, one question, buttons):
    `["🎬 footage จากวิดีโอทางการ (เกม/สินค้า, 0 เครดิต)", "🧑 presenter + graphic", "📦 graphic ล้วน (ภาพสินค้า ไม่มีคน)"]`.
    Do not guess from the product type: a game can be 🧑, and a washer can be 🎬.
 3. **Q2 — length** (`clarify`, one question): `["10 วิ (แนะนำ)", "20 วิ", "30 วิ", "40 วิ"]`.
    One shot = one Flow generation of 10 s (Omni 1.1 Flash, ≈15 credits; `house-rules.md` → Duration).
    N = length / 10: 10 s→1, 20 s→2, 30 s→3, 40 s→4. A shot can hold several storyboard beats.
+   If the order message already names the mode and/or length, do not ask that question again: take it as the answer. Ask only the questions still open (Q3, storyboard approval).
 4. **🎬 → load skill `gameplay-clips` and follow it.** Its own steps cover footage, VO and delivery. A game
    uses the steps as written. Before any 🎬 final goes to Fix, check its delivery step: a plain MEDIA send in chat
    skips the clip-log row and the copy buttons, so if that is what was done, say so in the reply. Any other product reads its `references/product-footage.md` first
@@ -93,8 +98,8 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
      1. Stop driving Flow and close Chrome (CDP `Browser.close`).
      2. Tell Fix in one line: the reason, credits spent, shots left.
      3. Run `clipjob.py pack <job>` and continue as 📝.
-10. **Per-shot review.** After each file arrives (downloaded or ingested), vision-check 3 frames: Flow text,
-    product drift, and whether the planned action happened. Then run
+10. **Per-shot review.** After each file arrives (downloaded or ingested), vision-check 3 frames — one inside the first 2 s, since a caption can live only in the hook window — for Flow text,
+    product drift (shape AND real-world scale against the presenter), and whether the planned action happened. Then run
     `clipjob.py ready <job> K --raw <file> --frame pass|flag:<what you saw>`. That runs ffprobe and, for 🧑,
     the repeats and CTA gates, then sends the shot with the ✅/🔁 keyboard. Fix's tap arrives as text →
     `clipjob.py decide --text "<text>"`. On 🔁: in 📝 run `pack <job> --shot K`; in 🤖 regenerate via flow-driver.
@@ -121,4 +126,9 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
 ## Talking to Fix
 - One status line when something blocks, sent at that moment, not at the end. Put the credit cost inside
   any question that spends credits. Short "ok/ได้" to your own go/no-go question = yes.
+- **A long silent stretch also needs a line, not just a blocker.** Post-production (whisper, ffmpeg,
+  graphics) can run 15+ min with nothing to ask — and so can the 🤖 browser drive (Chrome launch → prompt →
+  attach → submit), which is where the silence actually builds up. Send one short line at each stage
+  transition anyway ("Chrome ขึ้นแล้ว → กำลังแปะ chip", "ผ่านทั้ง 2 ช็อต → กำลังทำซับ/กราฟิก"). Silence on
+  his phone reads as the run having died, and he will ping to ask whether it is still going.
 - He reads on the phone: buttons over typing, no walls of text, never ask him to check a UI.

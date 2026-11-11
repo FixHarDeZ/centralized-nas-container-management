@@ -47,6 +47,10 @@ Flow, download it and `ready` it.
 
 Retrying by hand after a fallback, outside clipjob, is exactly what produced the rejects. Do not do it.
 
+## Verifying a submitted render
+- A submit is confirmed by the editor opening on a NEW `/edit/<id>` holding that shot's own phrase, found by enumerating the project tiles (see `references/flow-browser-env.md` → Desktop). Never conclude "not rendered" from a tile count, the first tile, or a 15-minute poll alone.
+- Record `submitted` with the real edit id once the tile is opened. Use a placeholder only to unblock pacing, and replace it as soon as the id is known — clipjob has no subcommand for that replacement, so patch `attempts[-1].edit_id` in `/opt/data/clips/jobs/<job>.json` directly (plain state, re-read on every call).
+
 ## Pace and memory
 - clipjob enforces ≥300 s between submits across all jobs. Fill the wait with the review of the previous shot.
 - Chrome plus Flow in this 4 GB container: close every other tab, and run no whisper or render while Chrome
