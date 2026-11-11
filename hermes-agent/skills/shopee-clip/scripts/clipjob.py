@@ -9,7 +9,8 @@ This CLI is the only sanctioned way to move a Flow-mode clip forward. It refuses
   clipjob.py status [JOB]
   # auto (IU drives Flow)
   clipjob.py reserve JOB K [--wait]                 # BEFORE clicking Start generation; exit 4 = pacing
-  clipjob.py submitted JOB K --edit-id ID [--credits N]
+  clipjob.py submitted JOB K [--edit-id ID] [--credits N]
+  clipjob.py edit-id JOB K ID                       # record the real Flow edit id once the tile is opened
   clipjob.py submit-failed JOB K --reason "..." [--credits-spent]   # unusual activity -> auto fallback
   clipjob.py trouble JOB --step NAME --reason "..."  # picker/chip/CDP failure; 2nd on a step -> fallback
   clipjob.py fallback JOB --reason "..."            # switch to prompt pack from the first shot not rendered
@@ -18,12 +19,15 @@ This CLI is the only sanctioned way to move a Flow-mode clip forward. It refuses
   clipjob.py ingest JOB FILE (--reply-text "<replied-to message text>" | --shot K)
   # both
   clipjob.py ready JOB K --raw FILE --frame pass|flag:<what you saw> [--no-send]
+  clipjob.py ready JOB K --resend                   # the review message failed to send: send it again (no re-check)
   clipjob.py decide (--text "<Fix's button text>" | JOB K approve|regen)
   clipjob.py assemble-check JOB                     # approved files in shot order, exit 0 only when all approved
   clipjob.py deliver JOB --final F.mp4 --report report.json --gfx gfx.json --hashtags "..." --cover C.jpg \
                          --caption "..." [--hook-id ID] [--category C] [--notes "..."] [--ack "<flag text>=<Fix's call>" ...]
                          # a re-run after a failed send skips the steps already done and logs the clip once
   clipjob.py cancel JOB --reason "..."
+  clipjob.py note JOB "..."                         # stage marker in the job's events (🎬: what is done, what is next)
+  clipjob.py reopen JOB --reason "..."              # a delivered job gets a revision; the next deliver logs a REVISED row
 
 Exit codes: 0 ok · 1 refused by a rule (message printed) · 2 setup/usage error · 4 pacing (wait_s printed).
 Shot states: pending -> submitting -> submitted -> in_review -> approved
@@ -51,6 +55,7 @@ PROMPT_CHUNK = 3500        # Telegram text cap is 4096; leave room for the tag l
 CHAT = os.environ.get("CLIPJOB_CHAT", "8663614341")
 CLIP_LOG = os.environ.get("CLIP_LOG", "/opt/data/clips/logs/clip-log.jsonl")
 PACING_S = 300
+WAIT_CAP_S = 150           # one `reserve --wait` sleeps at most this long: the Hermes terminal tool times out at 180 s
 SHOT_SECONDS = 10          # one Omni 1.1 Flash generation (house-rules.md -> Duration)
 INFO_FLAGS = [re.compile(r"auto-added")]   # report flags that only inform (post_presenter adds the CTA pill itself)
 FLOW_MODES = ("presenter", "product")
@@ -152,8 +157,13 @@ def reserve(j, k, last_reserve, t=None):
     s = shot(j, k)
     if s["state"] not in ("pending", "regen_approved"):
         raise Refused(f"shot {k} is {s['state']}; a rendered or failed shot needs Fix's 🔁 first")
-    if k > 1 and shot(j, k - 1)["state"] not in ("in_review", "approved"):
-        raise Refused(f"shot {k - 1} has not rendered yet (its last frame is shot {k}'s start frame)")
+    if k > 1:
+        prev = shot(j, k - 1)
+        if prev["state"] not in ("in_review", "approved"):
+            raise Refused(f"shot {k - 1} has not rendered yet (its last frame is shot {k}'s start frame)")
+        if prev["state"] == "in_review" and not gates_passed(prev.get("gates") or {}):
+            raise Refused(f"shot {k - 1} is in review with a failed gate — its last frame may be thrown away. "
+                          f"Wait for Fix's ✅/🔁 on shot {k - 1} before spending credits on shot {k}")
     if last_reserve and t - last_reserve < PACING_S:
         raise Pacing(int(PACING_S - (t - last_reserve)) + 1)
     s["state"] = "submitting"
@@ -162,12 +172,28 @@ def reserve(j, k, last_reserve, t=None):
     return t
 
 
-def submitted(j, k, edit_id, credits=None):
+def real_edit_id(edit_id):
+    """A placeholder ('pending-…', empty) is not an id."""
+    e = (edit_id or "").strip()
+    return e if e and not e.lower().startswith("pending") else None
+
+
+def set_edit_id(j, k, edit_id):
+    s = shot(j, k)
+    if not s["attempts"]:
+        raise Refused(f"shot {k} has no attempt to attach an edit id to")
+    if not real_edit_id(edit_id):
+        raise Refused("that is a placeholder, not a Flow edit id")
+    s["attempts"][-1]["edit_id"] = edit_id.strip()
+    log(j, f"edit id shot {k} = {edit_id.strip()}")
+
+
+def submitted(j, k, edit_id=None, credits=None):
     s = shot(j, k)
     if s["state"] != "submitting":
         raise Refused(f"shot {k} is {s['state']}, not submitting (reserve first)")
     s["state"] = "submitted"
-    s["attempts"][-1].update({"submitted_at": iso(), "edit_id": edit_id, "credits": credits})
+    s["attempts"][-1].update({"submitted_at": iso(), "edit_id": real_edit_id(edit_id), "credits": credits})
     log(j, f"submitted shot {k} edit_id={edit_id}")
 
 
@@ -307,6 +333,8 @@ def mark_ready(j, k, file, gates):
     if s["state"] != "submitted":
         raise Refused(f"shot {k} is {s['state']}, not submitted")
     s.update({"state": "in_review", "file": os.path.abspath(file), "gates": gates})
+    if s.get("chain_stale"):
+        s["chain_stale"] = "review"          # rendered from a start frame that was regenerated since
     s["attempts"][-1]["ready_at"] = iso()
     log(j, f"ready shot {k} pass={gates_passed(gates)}")
 
@@ -321,17 +349,39 @@ def parse_decision_text(text):
 def decide(j, k, decision):
     need_open(j)
     s = shot(j, k)
+    stale = bool(s.get("chain_stale"))
     if decision == "approve":
-        if s["state"] != "in_review":
+        if s["state"] != "in_review" and not (stale and s["state"] == "approved"):
             raise Refused(f"shot {k} is {s['state']}; only a shot in review can be approved")
         s["state"] = "approved"
+        s.pop("chain_stale", None)           # Fix keeps it despite the regenerated start frame
     elif decision == "regen":
-        if s["state"] not in ("in_review", "failed"):
+        if s["state"] not in ("in_review", "failed") and not (stale and s["state"] == "approved"):
             raise Refused(f"shot {k} is {s['state']}; nothing to regenerate")
         s["state"] = "regen_approved"
+        s.pop("chain_stale", None)
     else:
         raise Refused("decision must be approve or regen")
     log(j, f"decide shot {k}: {decision}")
+    return mark_chain_stale(j, k) if decision == "regen" else None
+
+
+def mark_chain_stale(j, k):
+    """Shot k is being regenerated, so shot k+1 (which starts on k's last frame) no longer chains.
+    -> None, or {"shot", "state", "ask"}; ask=True when Fix must choose keep/regen for k+1 now."""
+    if k >= len(j["shots"]):
+        return None
+    n = j["shots"][k]
+    if n["state"] == "submitting":           # reserved, not sent: just take the reservation back
+        n["state"] = "pending"
+        n["attempts"][-1]["abandoned"] = f"shot {k} regenerated"
+        log(j, f"shot {k + 1} reservation dropped (shot {k} regenerated)")
+        return {"shot": k + 1, "state": "pending", "ask": False}
+    if n["state"] in ("submitted", "in_review", "approved"):
+        n["chain_stale"] = "review" if n["state"] != "submitted" else "rendering"
+        log(j, f"shot {k + 1} chain is stale (shot {k} regenerated)")
+        return {"shot": k + 1, "state": n["state"], "ask": n["state"] != "submitted"}
+    return None
 
 
 def assemble_files(j):
@@ -339,6 +389,9 @@ def assemble_files(j):
     bad = [f"{s['k']}:{s['state']}" for s in j["shots"] if s["state"] != "approved"]
     if bad:
         raise Refused("not every shot is approved: " + ", ".join(bad))
+    stale = [str(s["k"]) for s in j["shots"] if s.get("chain_stale")]
+    if stale:
+        raise Refused("Fix has not chosen keep/regen for shot(s) " + ", ".join(stale) + " (start frame regenerated)")
     return [s["file"] for s in j["shots"]]
 
 
@@ -391,6 +444,10 @@ def deliver_problems(j, report, gfx, tags, acks=()):
         bad = [f"{s['k']}:{s['state']}" for s in j["shots"] if s["state"] != "approved"]
         if bad:
             probs.append("shots not approved: " + ", ".join(bad))
+        stale = [str(s["k"]) for s in j["shots"] if s.get("chain_stale")]
+        if stale:
+            probs.append("shot(s) " + ", ".join(stale) + " start on a frame that was regenerated — Fix has not "
+                         "chosen keep/regen for them yet")
         if gfx_elements(gfx) == 0:
             probs.append("graphics plan is empty — graphics are mandatory on Flow-mode clips")
     flags = open_flags(report.get("flags") or [], acks)
@@ -450,6 +507,21 @@ def ffprobe(path):
             "has_audio": any(s.get("codec_type") == "audio" for s in js.get("streams", []))}
 
 
+def av_durations(path):
+    """-> (video_s, audio_s) from the streams, None for a missing stream."""
+    p = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=codec_type,duration", "-of", "json", path],
+                       capture_output=True, text=True)
+    if p.returncode:
+        return None, None
+    d = {}
+    for st in json.loads(p.stdout).get("streams", []):
+        try:
+            d.setdefault(st.get("codec_type"), float(st.get("duration")))
+        except (TypeError, ValueError):
+            pass
+    return d.get("video"), d.get("audio")
+
+
 def repeats_gate(raw, script):
     """detect_repeats on a presenter shot -> (gate, file_to_use, asr_text)."""
     cut = os.path.splitext(raw)[0] + "_cut.mp4"
@@ -497,9 +569,25 @@ def html_escape(s):
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def review_keyboard(job, k):
-    return {"keyboard": [[{"text": f"{APPROVE} ช็อต {k} · {job}"}, {"text": f"{REGEN} ช็อต {k} · {job}"}]],
-            "one_time_keyboard": True, "resize_keyboard": True}
+def review_keyboard(job, k, approve=True):
+    row = ([{"text": f"{APPROVE} ช็อต {k} · {job}"}] if approve else []) + [{"text": f"{REGEN} ช็อต {k} · {job}"}]
+    return {"keyboard": [row], "one_time_keyboard": True, "resize_keyboard": True}
+
+
+def notify(text, keyboard=None):
+    """Best-effort message to Fix. -> True when sent."""
+    try:
+        tg("sendMessage", {"chat_id": CHAT, "text": text,
+                           "reply_markup": keyboard or {"remove_keyboard": True}})
+        return True
+    except (Refused, OSError, ValueError):
+        return False
+
+
+def stale_text(j, k):
+    return (f"⚠️ ช็อต {k} · {j['product']}\nช็อตนี้เริ่มจากเฟรมท้ายของช็อต {k - 1} ชุดเดิม ซึ่งกำลัง gen ใหม่ "
+            f"ภาพตรงรอยต่ออาจไม่ต่อเนื่อง\nผ่าน = เก็บช็อต {k} ไว้ · gen ใหม่ = ทำช็อต {k} ใหม่ต่อจากช็อต {k - 1} ชุดใหม่"
+            + (" (เสียเครดิต)" if j["production"] == "auto" else ""))
 
 
 def run(cmd):
@@ -567,7 +655,33 @@ def cmd_pack(j, only, no_send):
     return sent
 
 
-def cmd_ready(j, k, raw, frame_arg, no_send):
+def send_review(j, k):
+    """Send shot k's file and its gate verdict with the ✅/🔁 keyboard. Raises Refused when a send fails."""
+    s = shot(j, k)
+    gates, file, total = s["gates"], s["file"], len(j["shots"])
+    cap = f"รีวิวช็อต {k}/{total} · {j['product']}"[:1000]
+    rc, out, err = run(["python3", os.path.join(HERE, "send_clip.py"), file, cap, CHAT, f"{j['job']}_shot{k}_review"])
+    if rc:
+        raise Refused(f"shot send FAILED: {out[-300:]} {err[-300:]}")
+    lines = [f"🎬 รีวิวช็อต {k}/{total} · {j['product']}", ""]
+    for name, g in gates.items():
+        lines.append(("✅ " if g.get("ok") else "❌ ") + name + (f" — {g['note']}" if g.get("note") else ""))
+    lines += ["", "ผ่านทุกข้อ" if gates_passed(gates) else "⚠️ มีข้อไม่ผ่าน ไอยูแนะนำ gen ใหม่",
+              "ผ่าน = ล็อกช็อตนี้ · gen ใหม่ = " + ("เสียเครดิต" if j["production"] == "auto" else "ฟิกทำใน Flow ใหม่")]
+    if s.get("chain_stale"):
+        lines += ["", f"⚠️ ช็อตนี้เริ่มจากเฟรมท้ายของช็อต {k - 1} ชุดเดิม (ช็อต {k - 1} กำลัง gen ใหม่) รอยต่ออาจไม่ต่อเนื่อง"]
+    tg("sendMessage", {"chat_id": CHAT, "text": "\n".join(lines), "reply_markup": review_keyboard(j["job"], k)})
+    s["review_sent"] = iso()
+
+
+def cmd_ready(j, k, raw, frame_arg, no_send, resend=False):
+    if resend:
+        if shot(j, k)["state"] != "in_review":
+            raise Refused(f"shot {k} is {shot(j, k)['state']}; --resend is for a shot already in review")
+        send_review(j, k)
+        return {"shot": k, "resent": True, "pass": gates_passed(shot(j, k)["gates"])}
+    if not raw or not frame_arg:
+        raise Refused("ready needs --raw FILE and --frame pass|flag:<what you saw>")
     frame = parse_frame(frame_arg)
     if not os.path.exists(raw):
         raise Refused(f"no such file: {raw}")
@@ -588,24 +702,26 @@ def cmd_ready(j, k, raw, frame_arg, no_send):
             gates["probe"] = {"ok": False, "note": "ไม่มีเสียง — presenter ต้องมีเสียงพากย์จาก Flow"}
     gates["frame"] = frame
     mark_ready(j, k, file, gates)
+    res = {"shot": k, "pass": gates_passed(gates), "file": os.path.abspath(file), "gates": gates}
     if not no_send:
-        total = len(j["shots"])
-        cap = f"รีวิวช็อต {k}/{total} · {j['product']}"[:1000]
-        rc, out, err = run(["python3", os.path.join(HERE, "send_clip.py"), os.path.abspath(file), cap, CHAT,
-                            f"{j['job']}_shot{k}_review"])
-        if rc:
-            raise Refused(f"shot send FAILED (state is in_review; rerun send_clip.py): {out[-300:]} {err[-300:]}")
-        lines = [f"🎬 รีวิวช็อต {k}/{total} · {j['product']}", ""]
-        for name, g in gates.items():
-            lines.append(("✅ " if g.get("ok") else "❌ ") + name + (f" — {g['note']}" if g.get("note") else ""))
-        lines += ["", "ผ่านทุกข้อ" if gates_passed(gates) else "⚠️ มีข้อไม่ผ่าน ไอยูแนะนำ gen ใหม่",
-                  "ผ่าน = ล็อกช็อตนี้ · gen ใหม่ = " + ("เสียเครดิต" if j["production"] == "auto" else "ฟิกทำใน Flow ใหม่")]
-        tg("sendMessage", {"chat_id": CHAT, "text": "\n".join(lines), "reply_markup": review_keyboard(j["job"], k)})
-    return {"shot": k, "pass": gates_passed(gates), "file": os.path.abspath(file), "gates": gates}
+        save(j)                              # the checks are done: keep them even when the send fails
+        try:
+            send_review(j, k)
+        except Refused as e:
+            raise Refused(f"{e} — the shot IS in review; send it with: clipjob.py ready {j['job']} {k} --resend") from None
+    return res
 
 
 def cmd_deliver(j, a):
-    report = json.load(open(a.report, encoding="utf-8"))
+    if a.report:
+        report = json.load(open(a.report, encoding="utf-8"))
+    elif j["mode"] == "gameplay" and os.path.exists(a.final):
+        v, au = av_durations(a.final)        # build_v5 writes no report; its --check and the gates ran before
+        if v is None or au is None:
+            raise Refused(f"deliver refused: {a.final} has no {'video' if v is None else 'audio'} stream")
+        report = {"v_dur": round(v, 2), "a_dur": round(au, 2), "flags": []}
+    else:
+        raise Refused("deliver needs --report report.json (only 🎬 gameplay may omit it)")
     gfx = json.load(open(a.gfx, encoding="utf-8")) if a.gfx else {}
     acks = parse_acks(a.ack)
     probs = deliver_problems(j, report, gfx, a.hashtags, acks)
@@ -631,9 +747,10 @@ def cmd_deliver(j, a):
         prev = {}
     done = dict(prev.get("partial") or {})
     if not prev.get("logged"):
-        edit_ids = [at.get("edit_id") for s in j["shots"] for at in s["attempts"] if at.get("edit_id")]
+        edit_ids = [at["edit_id"] for s in j["shots"] for at in s["attempts"] if real_edit_id(at.get("edit_id"))]
         credits = [at.get("credits") for s in j["shots"] for at in s["attempts"] if at.get("submitted_at")]
-        notes = (a.notes or "") + f" | job {j['job']} production={j['production']}"
+        notes = (f"REVISED: {j['revision']} | " if j.get("revision") else "") + (a.notes or "")
+        notes += f" | job {j['job']} production={j['production']}"
         if j.get("fallback"):
             notes += f" fallback: {j['fallback']['reason']}"
         if acks:
@@ -643,15 +760,17 @@ def cmd_deliver(j, a):
                "style": j["mode"], "character": j.get("character"), "edit_id": edit_ids[-1] if edit_ids else None,
                "sha256": digest, "hook_id": a.hook_id, "hashtags": a.hashtags,
                "duration_s": round(float(report.get("v_dur") or 0), 2),
-               "credits": (sum(c for c in credits if c) if credits and all(c is not None for c in credits) else None),
+               "credits": (0 if j["mode"] == "gameplay" else
+                           sum(c for c in credits if c) if credits and all(c is not None for c in credits) else None),
                "notes": notes.strip(" |")}
         os.makedirs(os.path.dirname(CLIP_LOG), exist_ok=True)
         with open(CLIP_LOG, "a", encoding="utf-8") as f:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
     j["delivery"] = {"sha256": digest, "logged": True, "partial": done}
-    steps = [("clip", ["python3", os.path.join(HERE, "send_clip.py"), final, a.caption[:1000], CHAT, j["job"]]),
+    label = j["job"] + ("-rev" if j.get("revision") else "")
+    steps = [("clip", ["python3", os.path.join(HERE, "send_clip.py"), final, a.caption[:1000], CHAT, label]),
              ("copy_buttons", ["python3", os.path.join(HERE, "send_copy_buttons.py"), a.hashtags, j["link"], CHAT, j["product"]]),
-             ("cover", ["python3", os.path.join(HERE, "send_photo.py"), a.cover, "ปกคลิป", CHAT, f"{j['job']}_cover"])]
+             ("cover", ["python3", os.path.join(HERE, "send_photo.py"), a.cover, "ปกคลิป", CHAT, f"{label}_cover"])]
     for name, cmd in steps:
         if done.get(name) == "ok":
             continue
@@ -669,12 +788,10 @@ def cmd_deliver(j, a):
         j["delivery"]["partial"] = done
         save(j)
     j["status"] = "delivered"
+    j.pop("revision", None)
     j["delivery"] = {"at": iso(), "sha256": digest, "file": final, "sent": done, "logged": True}
     log(j, "delivered")
-    try:   # clear the review reply keyboard
-        tg("sendMessage", {"chat_id": CHAT, "text": f"ส่งงาน {j['job']} ครบแล้วค่ะ", "reply_markup": {"remove_keyboard": True}})
-    except (Refused, OSError, ValueError):
-        pass
+    notify(f"ส่งงาน {j['job']} ครบแล้วค่ะ")        # also clears the review reply keyboard
     return j["delivery"]
 
 
@@ -699,7 +816,8 @@ def main(argv=None):
     s = sub.add_parser("reserve"); s.add_argument("job"); s.add_argument("shot", type=int)
     s.add_argument("--wait", action="store_true")
     s = sub.add_parser("submitted"); s.add_argument("job"); s.add_argument("shot", type=int)
-    s.add_argument("--edit-id", required=True); s.add_argument("--credits", type=int)
+    s.add_argument("--edit-id"); s.add_argument("--credits", type=int)
+    s = sub.add_parser("edit-id"); s.add_argument("job"); s.add_argument("shot", type=int); s.add_argument("edit_id")
     s = sub.add_parser("submit-failed"); s.add_argument("job"); s.add_argument("shot", type=int)
     s.add_argument("--reason", required=True); s.add_argument("--credits-spent", action="store_true")
     s = sub.add_parser("trouble"); s.add_argument("job"); s.add_argument("--step", required=True)
@@ -710,17 +828,19 @@ def main(argv=None):
     s = sub.add_parser("ingest"); s.add_argument("job"); s.add_argument("file")
     s.add_argument("--reply-text"); s.add_argument("--shot", type=int)
     s = sub.add_parser("ready"); s.add_argument("job"); s.add_argument("shot", type=int)
-    s.add_argument("--raw", required=True); s.add_argument("--frame", required=True)
-    s.add_argument("--no-send", action="store_true")
+    s.add_argument("--raw"); s.add_argument("--frame")
+    s.add_argument("--no-send", action="store_true"); s.add_argument("--resend", action="store_true")
     s = sub.add_parser("decide"); s.add_argument("job", nargs="?"); s.add_argument("shot", nargs="?", type=int)
     s.add_argument("decision", nargs="?", choices=["approve", "regen"]); s.add_argument("--text")
     s = sub.add_parser("assemble-check"); s.add_argument("job")
     s = sub.add_parser("deliver"); s.add_argument("job")
-    for k in ("--final", "--report", "--hashtags", "--cover", "--caption"):
+    for k in ("--final", "--hashtags", "--cover", "--caption"):
         s.add_argument(k, required=True)
-    s.add_argument("--gfx"); s.add_argument("--hook-id"); s.add_argument("--category")
+    s.add_argument("--report"); s.add_argument("--gfx"); s.add_argument("--hook-id"); s.add_argument("--category")
     s.add_argument("--notes"); s.add_argument("--ack", action="append", default=[])
     s = sub.add_parser("cancel"); s.add_argument("job"); s.add_argument("--reason", required=True)
+    s = sub.add_parser("note"); s.add_argument("job"); s.add_argument("text")
+    s = sub.add_parser("reopen"); s.add_argument("job"); s.add_argument("--reason", required=True)
     a = ap.parse_args(argv)
 
     def out(obj):
@@ -759,16 +879,14 @@ def main(argv=None):
                     print("decide JOB K approve|regen  (or --text)", file=sys.stderr)
                     return 2
                 job, k, dec = a.job, a.shot, a.decision
-            j = load(job); decide(j, k, dec); save(j)
-            try:
-                tg("sendMessage", {"chat_id": CHAT, "text": f"รับทราบ ช็อต {k} · {'ผ่าน' if dec == 'approve' else 'gen ใหม่'}",
-                                   "reply_markup": {"remove_keyboard": True}})
-            except (Refused, OSError, ValueError):
-                pass
+            j = load(job); stale = decide(j, k, dec); save(j)
+            notify(f"รับทราบ ช็อต {k} · {'ผ่าน' if dec == 'approve' else 'gen ใหม่'}")
+            if stale and stale["ask"]:
+                notify(stale_text(j, stale["shot"]), review_keyboard(job, stale["shot"]))
             nxt = ("next: all shots approved -> post-production" if all(s["state"] == "approved" for s in j["shots"])
                    else ("next: " + ("reserve + regenerate in Flow" if j["production"] == "auto" else f"clipjob.py pack {job} --shot {k}"))
                    if dec == "regen" else "next: wait for the remaining shots")
-            return out({**summary(j), "next": nxt})
+            return out({**summary(j), "next": nxt, **({"next_shot_chain": stale} if stale else {})})
 
         j = load(a.job)
         if a.cmd == "production":
@@ -781,26 +899,49 @@ def main(argv=None):
                 if not a.wait:
                     print(json.dumps({"pacing": True, "wait_s": p.wait_s}))
                     return 4
-                w = min(p.wait_s + 2, PACING_S + 30)
+                w = min(p.wait_s + 2, WAIT_CAP_S)
                 print(f"pacing: sleeping {w}s", file=sys.stderr)
                 time.sleep(w)
                 j = load(a.job)
-                t = reserve(j, a.shot, pacing_get())
+                try:
+                    t = reserve(j, a.shot, pacing_get())
+                except Pacing as p2:             # the cap is shorter than the pacing window: call again
+                    print(json.dumps({"pacing": True, "wait_s": p2.wait_s, "next": "run the same reserve --wait again"}))
+                    return 4
             pacing_set(t); save(j)
             return out({"ok": True, "shot": a.shot, "next": "click Start generation, then clipjob.py submitted"})
         if a.cmd == "submitted":
             submitted(j, a.shot, a.edit_id, a.credits); save(j)
+            return out({**summary(j), **({} if real_edit_id(a.edit_id) else
+                                         {"next": f"once the tile is open: clipjob.py edit-id {a.job} {a.shot} <id>"})})
+        if a.cmd == "edit-id":
+            set_edit_id(j, a.shot, a.edit_id); save(j)
             return out(summary(j))
+        if a.cmd == "note":
+            need_open(j); log(j, f"note: {a.text}"); save(j)
+            return out({**summary(j), "events": j["events"][-5:]})
+        if a.cmd == "reopen":
+            if j["status"] != "delivered":
+                raise Refused(f"job {a.job} is {j['status']}; only a delivered job is reopened for a revision")
+            j["status"] = "open"; j["revision"] = a.reason; log(j, f"reopened for a revision: {a.reason}"); save(j)
+            return out({**summary(j), "next": "rebuild, rerun the gates, then the same deliver command with the new final"})
         if a.cmd in ("submit-failed", "trouble"):
             fb = (submit_failed(j, a.shot, a.reason, a.credits_spent) if a.cmd == "submit-failed"
                   else trouble(j, a.step, a.reason))
+            asked = None
+            if a.cmd == "submit-failed" and shot(j, a.shot)["state"] == "failed":
+                save(j)
+                asked = notify(f"❌ ช็อต {a.shot} · {j['product']}\nFlow ล้มหลังเสียเครดิตไปแล้ว: {a.reason[:300]}\n"
+                               "gen ใหม่ = เสียเครดิตอีกรอบ · ไม่ทำต่อพิมพ์ \"เลิกทำ\"",
+                               review_keyboard(a.job, a.shot, approve=False))
             if fb:
                 todo = fallback(j, a.reason); save(j)
                 return out({**summary(j), "FALLBACK": True, "pack_shots": todo,
+                            **({"asked_fix_regen": asked} if asked is not None else {}),
                             "next": f"stop driving Flow; tell Fix in one line (reason, credits spent, shots left); "
                                     f"close Chrome; clipjob.py pack {a.job}"})
             save(j)
-            return out({**summary(j), "FALLBACK": False})
+            return out({**summary(j), "FALLBACK": False, **({"asked_fix_regen": asked} if asked is not None else {})})
         if a.cmd == "fallback":
             todo = fallback(j, a.reason); save(j)
             return out({**summary(j), "pack_shots": todo, "next": f"clipjob.py pack {a.job}"})
@@ -825,7 +966,7 @@ def main(argv=None):
             return out({**summary(j), "file": dst,
                         "next": f"vision-check frames, then clipjob.py ready {a.job} {k} --raw {dst} --frame …"})
         if a.cmd == "ready":
-            res = cmd_ready(j, a.shot, a.raw, a.frame, a.no_send); save(j)
+            res = cmd_ready(j, a.shot, a.raw, a.frame, a.no_send, a.resend); save(j)
             return out(res)
         if a.cmd == "assemble-check":
             files = assemble_files(j)
@@ -838,10 +979,7 @@ def main(argv=None):
         if a.cmd == "cancel":
             need_open(j)
             j["status"] = "cancelled"; log(j, f"cancelled: {a.reason}"); save(j)
-            try:
-                tg("sendMessage", {"chat_id": CHAT, "text": f"ยกเลิกงาน {a.job} แล้วค่ะ", "reply_markup": {"remove_keyboard": True}})
-            except (Refused, OSError, ValueError):
-                pass
+            notify(f"ยกเลิกงาน {a.job} แล้วค่ะ")
             return out({**summary(j), "spent_shots": spent_shots(j)})
     except Refused as e:
         print(f"REFUSED: {e}", file=sys.stderr)

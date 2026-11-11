@@ -18,6 +18,10 @@
 #   line records the synced commit, the baseline for drift detection).
 # - shopee-clip/scripts/check_delivery.py is also copied to /opt/data/scripts/ (the watchdog cron
 #   can only run scripts from there).
+# `sync.sh --pull` (or PULL=1) goes the other way for in-place edits: each drifted live file is copied INTO
+#   the clone's working tree and nothing live is touched. Review with git diff, commit, push, then sync.
+#   This is how a lesson written into a live skill reaches the repo. A plain sync refuses while the
+#   clone has uncommitted skill changes (it would copy them live under the wrong baseline commit).
 # DRY=1 prints what would change. SKIP_TESTS=1 skips the test gate (emergencies only).
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
@@ -27,8 +31,19 @@ SKILLS=(shopee-clip flow-driver gameplay-clips)
 run() { if [ "${DRY:-}" = 1 ]; then echo "DRY: $*"; else "$@"; fi; }
 
 # Tests gate the sync: router size budget, unique file names, clipjob/product_build behaviour.
-if [ "${SKIP_TESTS:-}" != 1 ]; then
-  if ! uv run -q --with pytest pytest -q -p no:cacheprovider tests/test_hermes_skills.py "$SRC/shopee-clip/scripts" "$SRC/gameplay-clips/scripts/test_source_check.py" "$SRC/gameplay-clips/scripts/test_build_v5_substyle.py" >/tmp/hermes-skills-tests.log 2>&1; then
+[ "${1:-}" = "--pull" ] && PULL=1
+PULL=${PULL:-}
+
+# A dirty tree would be copied live while the manifest records HEAD, which breaks the drift baseline.
+if [ -z "$PULL" ] && [ "${ALLOW_DIRTY:-}" != 1 ] && [ -n "$(git status --porcelain -- "$SRC")" ]; then
+  git status --short -- "$SRC" >&2
+  echo "REFUSED: uncommitted changes under $SRC — commit and push them first (ALLOW_DIRTY=1 overrides)" >&2
+  exit 1
+fi
+
+# Tests gate the sync: router size budget, unique file names, clipjob/product_build/build_v5 behaviour.
+if [ -z "$PULL" ] && [ "${SKIP_TESTS:-}" != 1 ]; then
+  if ! uv run -q --with pytest --with numpy --with pillow pytest -q -p no:cacheprovider tests/test_hermes_skills.py "$SRC/shopee-clip/scripts" "$SRC/gameplay-clips/scripts" >/tmp/hermes-skills-tests.log 2>&1; then
     tail -30 /tmp/hermes-skills-tests.log >&2
     echo "REFUSED: tests failed — nothing synced (fix in the repo, push, rerun)" >&2
     exit 1
@@ -54,6 +69,12 @@ for s in "${SKILLS[@]}"; do
     if [ -n "$base" ] && git cat-file -e "$base:$SRC/$s/$f" 2>/dev/null; then
       git show "$base:$SRC/$s/$f" | cmp -s - "$live" && continue      # untouched since last sync = repo change
     fi
+    if [ -n "$PULL" ]; then
+      run cp -p "$live" "$SRC/$s/$f"
+      echo "PULLED: $s/$f (live edit copied into the clone)"
+      drift_n=$((drift_n + 1))
+      continue
+    fi
     out="$DRIFT_ROOT/$TS/$s/$f"
     run mkdir -p "$(dirname "$out")"
     run cp -p "$live" "$out"
@@ -67,6 +88,7 @@ for s in "${SKILLS[@]}"; do
     printf '%s\n' "${files[@]}" | grep -qxF -- "$rel" && continue
     echo "EXTRA (not in repo, kept): $s/$rel"
   done < <(find "$DST/$s" -type f ! -name .repo-synced ! -path '*/__pycache__/*' ! -path '*/.pytest_cache/*' 2>/dev/null)
+  [ -n "$PULL" ] && continue
   if [ -f "$man" ]; then
     while IFS= read -r old; do
       [ -n "$old" ] || continue
@@ -87,6 +109,10 @@ for s in "${SKILLS[@]}"; do
   [ "${DRY:-}" = 1 ] || { echo "#commit $(git rev-parse HEAD)"; printf '%s\n' "${files[@]}"; } > "$man"
   echo "$s: ${#files[@]} tracked, $n updated"
 done
+if [ -n "$PULL" ]; then
+  echo "pulled $drift_n live edit(s) into the clone — review with git diff, commit, push, then sync"
+  exit 0
+fi
 run mkdir -p /opt/data/clips/jobs /opt/data/clips/logs /opt/data/clips/flow-state
 HERMES=${HERMES_BIN:-/opt/hermes/.venv/bin/hermes}
 for s in "${SKILLS[@]}"; do

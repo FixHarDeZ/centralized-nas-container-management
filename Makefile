@@ -39,8 +39,8 @@ sync-shared:    ## Copy each shared/*.py over its existing vendored copies (disc
 desk-skills:    ## Vendor the workstation skills named in ai-deck/skills.list into ai-deck/skills (ARGS=-n to only report)
 	@$(PY) scripts/desk_skills.py $(ARGS)
 
-hermes-skills:  ## Pull Hermes' clone on the NAS and sync hermes-agent/skills into its live skills dir (ARGS=-n = dry run; push first)
-	@ssh nas "sudo -n /usr/local/bin/docker exec -u hermes -e DRY=$(if $(filter -n,$(ARGS)),1,) hermes-gateway bash -lc 'cd /opt/data/centralized-nas-container-management && git pull --ff-only -q && bash hermes-agent/skills/sync.sh'"
+hermes-skills:  ## Pull Hermes' clone on the NAS and sync hermes-agent/skills into its live skills dir (ARGS=-n = dry run; ARGS=--pull = copy live in-place edits into Hermes' clone instead; push first)
+	@ssh nas "sudo -n /usr/local/bin/docker exec -u hermes -e DRY=$(if $(filter -n,$(ARGS)),1,) -e PULL=$(if $(filter --pull,$(ARGS)),1,) hermes-gateway bash -lc 'cd /opt/data/centralized-nas-container-management && git pull --ff-only -q && bash hermes-agent/skills/sync.sh && git status --short -- hermes-agent/skills'"
 
 DESK_PINS = ai-deck/Dockerfile ai-deck/nginx/Dockerfile ai-deck/docker-compose.yml
 

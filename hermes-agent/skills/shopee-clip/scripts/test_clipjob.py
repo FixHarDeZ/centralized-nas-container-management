@@ -76,7 +76,10 @@ def test_pacing_and_chaining():
     cj.submitted(j, 1, "e1")
     with pytest.raises(cj.Refused, match="has not rendered"):
         cj.reserve(j, 2, t, 2000)
-    cj.mark_ready(j, 1, "/tmp/s1.mp4", {"probe": {"ok": True}})
+    cj.mark_ready(j, 1, "/tmp/s1.mp4", {"probe": {"ok": True}, "frame": {"ok": False, "note": "drift"}})
+    with pytest.raises(cj.Refused, match="failed gate"):       # baan-toyshelf 2026-11-11: shot 2 fired anyway
+        cj.reserve(j, 2, t, t + 300)
+    cj.shot(j, 1)["gates"] = {"probe": {"ok": True}}
     with pytest.raises(cj.Pacing) as p:
         cj.reserve(j, 2, t, t + 100)
     assert p.value.wait_s == 201
@@ -273,3 +276,135 @@ def test_cli_new_status_cancel(tmp_path, monkeypatch, capsys):
     assert kept == str(wd / "shot2_a1.jpg") and (wd / "shot2_a1.jpg").exists()
     assert cj.main(["cancel", "c-1", "--reason", "test"]) == 0
     assert cj.main(["reserve", "c-1", "1"]) == 1
+
+
+# ---------------------------------------------------------------- 2026-11-11 hardening
+def test_failed_gate_shot_unblocks_next_once_fix_approves():
+    j = job(prod="auto")
+    cj.reserve(j, 1, None, 1000); cj.submitted(j, 1)
+    cj.mark_ready(j, 1, "/tmp/s1.mp4", {"frame": {"ok": False, "note": "x"}})
+    cj.decide(j, 1, "approve")
+    cj.reserve(j, 2, None, 5000)
+
+
+def test_placeholder_edit_id_is_not_an_id():
+    j = job(prod="auto")
+    cj.reserve(j, 1, None, 1000)
+    cj.submitted(j, 1, "pending-shot1", 15)
+    assert cj.shot(j, 1)["attempts"][-1]["edit_id"] is None
+    with pytest.raises(cj.Refused, match="placeholder"):
+        cj.set_edit_id(j, 1, "pending-x")
+    cj.set_edit_id(j, 1, "abc123")
+    assert cj.shot(j, 1)["attempts"][-1]["edit_id"] == "abc123"
+
+
+def test_regen_drops_the_next_shots_unsent_reservation():
+    j = job(prod="auto")
+    render(j, 1, 1000)
+    cj.reserve(j, 2, None, 5000)
+    assert cj.decide(j, 1, "regen") == {"shot": 2, "state": "pending", "ask": False}
+    assert cj.shot(j, 2)["state"] == "pending"
+
+
+def test_regen_flags_a_rendered_next_shot_and_fix_decides():
+    j = job(shots=2, prod="auto")
+    render(j, 1, 1000); render(j, 2, 5000)
+    cj.decide(j, 2, "approve")
+    st = cj.decide(j, 1, "regen")
+    assert st == {"shot": 2, "state": "approved", "ask": True}
+    cj.reserve(j, 1, None, 9000); cj.submitted(j, 1)
+    cj.mark_ready(j, 1, "/tmp/s1b.mp4", {"probe": {"ok": True}}); cj.decide(j, 1, "approve")
+    with pytest.raises(cj.Refused, match="keep/regen"):
+        cj.assemble_files(j)
+    assert any("keep/regen" in p for p in cj.deliver_problems(j, {}, {"headlines": [1]}, "#a"))
+    cj.decide(j, 2, "approve")                 # keep it
+    assert cj.assemble_files(j) == ["/tmp/s1b.mp4", "/tmp/s2.mp4"]
+    # the other choice: regenerate the stale shot although it was approved
+    j2 = job(shots=2, prod="auto")
+    render(j2, 1, 1000); render(j2, 2, 5000); cj.decide(j2, 2, "approve"); cj.decide(j2, 1, "regen")
+    cj.decide(j2, 2, "regen")
+    assert cj.shot(j2, 2)["state"] == "regen_approved" and "chain_stale" not in cj.shot(j2, 2)
+
+
+def test_stale_shot_still_rendering_is_flagged_at_review():
+    j = job(shots=2, prod="auto")
+    render(j, 1, 1000)
+    cj.reserve(j, 2, None, 5000); cj.submitted(j, 2)
+    assert cj.decide(j, 1, "regen") == {"shot": 2, "state": "submitted", "ask": False}
+    cj.mark_ready(j, 2, "/tmp/s2.mp4", {"probe": {"ok": True}})
+    assert cj.shot(j, 2)["chain_stale"] == "review"
+
+
+def test_approved_shot_without_stale_chain_cannot_be_regenerated():
+    j = job(shots=1, prod="auto")
+    render(j, 1, 1000); cj.decide(j, 1, "approve")
+    with pytest.raises(cj.Refused):
+        cj.decide(j, 1, "regen")
+
+
+def test_failed_paid_shot_can_be_regenerated_by_fix():
+    j = job(prod="auto")
+    cj.reserve(j, 1, None, 1000); cj.submitted(j, 1)
+    cj.submit_failed(j, 1, "Failed card", credits_spent=True)
+    assert cj.shot(j, 1)["state"] == "failed"
+    assert cj.review_keyboard("t-1", 1, approve=False)["keyboard"] == [[{"text": "🔁 gen ใหม่ ช็อต 1 · t-1"}]]
+    assert cj.parse_decision_text("🔁 gen ใหม่ ช็อต 1 · t-1") == ("t-1", 1, "regen")
+    cj.decide(j, 1, "regen")
+    cj.reserve(j, 1, None, 9000)
+
+
+def test_cli_ready_keeps_state_when_send_fails_then_resend(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(cj, "DIR", str(tmp_path)); monkeypatch.setenv("CLIPJOB_NO_TG", "1")
+    j = job(shots=1, mode="product", prod="prompt"); j["workdir"] = str(tmp_path)
+    cj.shot(j, 1)["state"] = "submitted"; cj.shot(j, 1)["attempts"].append({"via": "prompt"})
+    cj.save(j)
+    raw = tmp_path / "s.mp4"; raw.write_bytes(b"x")
+    monkeypatch.setattr(cj, "ffprobe", lambda p: {"w": 720, "h": 1280, "dur": 10.0, "kbps": 3000, "has_audio": True})
+    calls = []
+    monkeypatch.setattr(cj, "run", lambda cmd: (calls.append(cmd) or ((1, "", "boom") if len(calls) == 1 else (0, "", ""))))
+    assert cj.main(["ready", "t-1", "1", "--raw", str(raw), "--frame", "pass"]) == 1
+    assert "--resend" in capsys.readouterr().err
+    assert cj.load("t-1")["shots"][0]["state"] == "in_review"
+    assert cj.main(["ready", "t-1", "1", "--resend"]) == 0
+    assert cj.load("t-1")["shots"][0].get("review_sent")
+
+
+def test_cli_gameplay_job_note_deliver_reopen(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(cj, "DIR", str(tmp_path)); monkeypatch.setenv("CLIPJOB_NO_TG", "1")
+    log = tmp_path / "clip-log.jsonl"; monkeypatch.setattr(cj, "CLIP_LOG", str(log))
+    assert cj.main(["new", "g-1", "--mode", "gameplay", "--product", "Game", "--link", "https://s.shopee.co.th/x",
+                    "--workdir", str(tmp_path / "w")]) == 0
+    assert cj.main(["note", "g-1", "vo done; next: build_v5"]) == 0
+    assert "vo done" in json.dumps(cj.load("g-1")["events"], ensure_ascii=False)
+    final = tmp_path / "f.mp4"; final.write_bytes(b"a"); cover = tmp_path / "c.jpg"; cover.write_bytes(b"c")
+    monkeypatch.setattr(cj, "av_durations", lambda p: (20.0, 20.0))
+    monkeypatch.setattr(cj, "run", lambda cmd: (0, json.dumps({"ok": True}), ""))
+    args = ["deliver", "g-1", "--final", str(final), "--hashtags", "#game", "--cover", str(cover), "--caption", "c",
+            "--hook-id", "gph-1", "--category", "game"]
+    assert cj.main(args) == 0
+    row = json.loads(log.read_text(encoding="utf-8").splitlines()[-1])
+    assert row["style"] == "gameplay" and row["credits"] == 0 and row["duration_s"] == 20.0 and row["edit_id"] is None
+    assert cj.main(args) == 1                                   # delivered: closed
+    assert cj.main(["reopen", "g-1", "--reason", "ฟิก: ซับทับ sticker"]) == 0
+    final.write_bytes(b"b")
+    assert cj.main(args) == 0
+    rows = log.read_text(encoding="utf-8").splitlines()
+    assert len(rows) == 2 and json.loads(rows[1])["notes"].startswith("REVISED: ฟิก")
+
+
+def test_flow_mode_still_needs_a_report(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(cj, "DIR", str(tmp_path)); monkeypatch.setenv("CLIPJOB_NO_TG", "1")
+    j = job(shots=1, mode="product", prod="prompt"); cj.save(j)
+    assert cj.main(["deliver", "t-1", "--final", "/nope.mp4", "--hashtags", "#a", "--cover", "/c.jpg", "--caption", "c"]) == 1
+    assert "--report" in capsys.readouterr().err
+
+
+def test_old_job_files_still_load(tmp_path, monkeypatch, capsys):
+    """Jobs written before the hardening (placeholder edit ids, no chain_stale/review_sent keys)."""
+    monkeypatch.setattr(cj, "DIR", str(tmp_path)); monkeypatch.setenv("CLIPJOB_NO_TG", "1")
+    j = job(shots=2, prod="auto")
+    render(j, 1, 1000); j["shots"][0]["attempts"][-1]["edit_id"] = "pending-shot1"
+    cj.save(j)
+    assert cj.main(["status", "t-1"]) == 0 and cj.main(["decide", "t-1", "1", "approve"]) == 0
+    assert cj.main(["edit-id", "t-1", "1", "real-id-9"]) == 0
+    assert cj.load("t-1")["shots"][0]["attempts"][-1]["edit_id"] == "real-id-9"
