@@ -49,6 +49,7 @@ Retrying by hand after a fallback, outside clipjob, is exactly what produced the
 
 ## Verifying a submitted render
 - A submit is confirmed by the editor opening on a NEW `/edit/<id>` holding that shot's own phrase, found by enumerating the project tiles (see `references/flow-browser-env.md` → Desktop). Never conclude "not rendered" from a tile count, the first tile, or a 15-minute poll alone.
+- **A placeholder edit id that was never replaced means the submit is UNVERIFIED, not rendered.** Prove it against the payload, not the grid: the media-list RPC check in `references/flow-browser-env.md` (grep the captured project list for the shot's own phrase). When the phrase is nowhere in it, the shot never became an item — reset with `clipjob.py submit-failed <job> K --reason "…"` and NO `--credits-spent`, which returns the shot to `pending` and leaves `production=auto`, so the run can be re-driven. `reserve` refuses a shot still reading `submitted`, so an abandoned placeholder deadlocks the job; and do not run `fallback` just to hand over a pack you can send by message — once a job records a fallback it can never go back to `auto`.
 - Record `submitted` with the real edit id once the tile is opened. Use a placeholder only to unblock pacing, and replace it as soon as the id is known — clipjob has no subcommand for that replacement, so patch `attempts[-1].edit_id` in `/opt/data/clips/jobs/<job>.json` directly (plain state, re-read on every call).
 
 ## Pace and memory

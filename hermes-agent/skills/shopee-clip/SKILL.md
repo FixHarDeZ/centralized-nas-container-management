@@ -35,8 +35,10 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
 - Details and the reasons behind them: `references/house-rules.md`. Read it once per session before the first order.
 
 ## Flow of an order
-0. `python3 S/clipjob.py status` lists open jobs. Resume one if this message is about it (a reply
-   with a video, a ✅/🔁 tap, "ต่อ"). Do not reconstruct state from memory.
+0. `python3 S/clipjob.py status` lists open jobs — run it BEFORE inspecting any bare video from Fix
+   (a clip with no caption is a shot coming back until `status` says otherwise, not a new order).
+   Resume the job that message is about (a reply with a video, a ✅/🔁 tap, "ต่อ"). Do not reconstruct
+   state from memory.
    Also grep `/opt/data/clips/logs/clip-log.jsonl` and `delivery-log.jsonl` for the product name before
    starting a new job: a clip for the same product may already be delivered, and a duplicate order should be
    confirmed with Fix (which clip, what changes) before any spend.
@@ -87,7 +89,7 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    `clipjob.py new <job> --mode presenter|product --product "…" --link <url> --shots N --ref <workdir>/ref1.jpg [--ref …] --character <name>` (required for 🧑; omit for 📦). workdir = `/opt/data/clips/work/<job>`
 8. **Q3 — who drives Flow** (`clarify`, one question, cost in the text):
    `["📝 เตรียม prompt ทีละช็อตให้ (ฟิกกดใน Flow เอง)", "🤖 ให้ไอยูลองทำใน Flow ให้เลย (≈<N×15> เครดิต ถ้าติดจะสลับเป็นโหมด prompt ให้เอง)"]`.
-   An unanswered or timed-out question means 📝 (zero spend). Record the answer: `clipjob.py production <job> prompt|auto`.
+   An unanswered or timed-out question means 📝 (zero spend) — for ANY question that would spend credits, not just this one. Record the answer: `clipjob.py production <job> prompt|auto`, using `production prompt` rather than `fallback` (a fallback locks that job out of `auto` for good; the hand-off message format is in `flow-driver` → Manual hand-off).
 9. **Shots.**
    - 📝: `clipjob.py pack <job>` sends the reference photos and one tagged prompt per shot. Then wait.
      Each video from Fix: if the message replies to a prompt, run

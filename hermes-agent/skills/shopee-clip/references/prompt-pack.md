@@ -21,6 +21,11 @@ not proof that 🤖 cannot work.
   maps the file to its shot.
 - A video with no reply context means ask which shot it is (buttons `ช็อต 1 … ช็อต N`), then run `--shot K`.
   Never guess from the order or the file name: a wrong guess puts a good shot in the wrong slot.
+  **Exception: a job with ONE shot has exactly one slot** — ingest the bare video with `--shot 1` and ask
+  nothing; with N>1 the ask stands, because only then can a guess land in the wrong slot.
+- The ✅/🔁 tap comes back as plain text and `clipjob.py decide --text` accepts ONLY the button label
+  verbatim: `✅ ผ่าน ช็อต K · <job>` / `🔁 gen ใหม่ ช็อต K · <job>`. A paraphrase (`✅ ช็อต K · <job>`)
+  is REFUSED — copy the label off the keyboard message, don't retype it from memory.
 - `ready` flags anything below 720×1280 or a low bitrate. That means Telegram re-encoded a "video" send.
   Tell Fix once to send shots as a **file** (📎 → File); a file keeps Flow's original 720p.
 - The Bot API download cap is 20 MB. A 10 s 720p shot is far below it. A bigger file fails to download,

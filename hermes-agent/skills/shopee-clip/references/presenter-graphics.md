@@ -79,6 +79,8 @@ Elements:
    - The title box can cover the bottle's label (measured on a Pureen cover: the box took the label's middle, and the vision check failed label visibility). Before sending, check the label is readable; if not, keep the box clear of the label area with a shorter title or a lower `--cy` and re-check. Untested alternative: move `--cy` lower, not verified yet.
    - Pick a box colour that contrasts with the wall (pink-on-pink blends in).
 2. Vision-check: face clear, label mostly visible, no price.
+   - **Check the printed `main WxH` line too:** when `W > 1080` the title runs off the canvas and the vision
+     check reads it as truncated text — shorten the title and re-run before sending.
 3. `python3 scripts/send_photo.py cover.jpg "<caption>" 8663614341 <label>` → ok + message_id. Ledger rows are `kind: photo`; check_delivery stays clean.
 - make_cover now uses `FredokaSB-Static.ttf`: the variable Fredoka loads a thin default instance in PIL.
 
@@ -105,6 +107,16 @@ Text-bearing elements are the headline, callout labels and badges.
 
 Practical slots:
 - Headline at y≈200–260, but only while NO pill shows. Otherwise put it beside the head at size 46–50.
+- **When pills + subs saturate the timeline (one 10 s scene, 4 pills, subs edge-to-edge), y≈200–260 and
+  "beside the head" are both unusable** — the headline is centred at x360, so there is no side column — and
+  the only slot left is face_bottom → sub_top: take `face` from step 0b and the first sub start from
+  `report.json`, set `y = face_bottom + ~20` with `bottom < sub_top` (face bottom 525 + subs from 700 →
+  y 545, size 42, 2 lines ≈ 121 px). It lands on the product she holds, which is allowed: only `avoid`
+  (the face) is hard.
+- **`--check` prints a text element's ACTUAL rect — read it and shift, don't re-guess.** A callout label is
+  CENTRED on (lx, ly) with width ≈ its own text (~240 px for a 2-word label), so a 2-word label needs
+  lx ≥ ~201 to stay inside x80 and ly ≥ face_bottom + ~10 to clear `avoid`; the printed rect is the answer,
+  not a second vision ask.
 - Callout labels go beside the product.
 - Badges go in the left column, x≈120.
 
