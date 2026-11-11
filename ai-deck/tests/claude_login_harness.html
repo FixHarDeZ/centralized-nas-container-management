@@ -5,7 +5,7 @@
   const failures = [];
   const check = (value, label) => { if (!value) failures.push(label); };
   const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
-  const url = 'https://claude.com/ai/oauth/authorize?code=true&client_id=fixture&response_type=code'
+  const url = 'https://claude.com/cai/oauth/authorize?code=true&client_id=fixture&response_type=code'
     + '&redirect_uri=https%3A%2F%2Fplatform.claude.com%2Foauth%2Fcode%2Fcallback'
     + '&scope=org%3Acreate_api_key+user%3Aprofile+user%3Ainference+user%3Asessions'
     + '&code_challenge=' + 'fixture'.repeat(20) + '&code_challenge_method=S256&state=fixture%2Bstate';

@@ -150,10 +150,11 @@
     for (const match of text.matchAll(/https:\/\/[^\s]+/g)) {
       try {
         const url = new URL(match[0]);
-        const endpoint = url.hostname + url.pathname;
         if (url.username || url.password || url.port) continue;
-        if (!['claude.com/ai/oauth/authorize', 'claude.ai/oauth/authorize',
-          'console.anthropic.com/oauth/authorize', 'platform.claude.com/oauth/authorize'].includes(endpoint)) continue;
+        // Trust the host, not the exact path: Claude Code moved the page from
+        // claude.com/ai/... to claude.com/cai/... and the panel went silent.
+        if (!['claude.com', 'claude.ai', 'console.anthropic.com', 'platform.claude.com'].includes(url.hostname)) continue;
+        if (!/^(\/[a-z]+)?\/oauth\/authorize$/.test(url.pathname)) continue;
         if (url.searchParams.has('client_id') && url.searchParams.has('state') && url.searchParams.has('code_challenge')) {
           found = match[0];
         }
