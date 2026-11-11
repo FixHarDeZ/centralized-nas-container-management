@@ -651,3 +651,21 @@ plain-background photo. The repo gate only bans text/UI/people; Hermes read "cle
 
 Open: Fix re-sends the rack order (reply that the photo is OK, or `/new` + re-order); first shot is the
 real test of lifestyle refs in Flow (structure warping, props merging).
+
+## 2026-11-11 — clip skills review + hardening (stopped part-way: usage limit)
+
+Plan: `docs/superpowers/plans/2026-11-11-shopee-clip-hardening.md` (D1–D4 answered by Fix).
+
+Done, committed and pushed, **NOT synced to the live skills yet**:
+- `2741cdc` ported Hermes' 10 in-place live edits + its uncommitted clone work (build_v5 v5 sub band + test).
+  Live snapshot before the port: `/opt/data/clips/skill-drift/pre-hardening-20261111-164044/`.
+- `3b9b3c7` clipjob: reserve refuses after a failed-gate shot; regen flags/drops the next shot (chain_stale);
+  optional `--edit-id` + `edit-id`; failed paid shot gets a 🔁 button; `ready --resend`; `reserve --wait` capped
+  at 150 s (terminal timeout is 180 s); gameplay `deliver` without a report, `note`, `reopen`.
+  sync.sh: `--pull`, dirty-tree refusal, numpy/pillow in the test gate. 55 tests pass on the workstation.
+
+Left:
+- `make hermes-skills` (Hermes' clone is still dirty with the now-ported edits: reset them first, Fix confirms).
+- Docs still describe the old behaviour: router + flow-driver (edit-id, --resend, chain flag, failed-shot button),
+  gameplay-clips steps 0/10/11 (clipjob new/note/deliver/reopen, durable workdir, D-N pill, copy buttons only).
+- Phase 4 (slim gameplay SKILL.md 76 KB and house-rules 36 KB, size tests) and Phase 5 (🧑 drift warning in Q1).
