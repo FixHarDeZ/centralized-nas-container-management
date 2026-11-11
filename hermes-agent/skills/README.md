@@ -15,6 +15,7 @@ The retired `flow-shopee-clips` is archived at `/opt/data/skills-archive/flow-sh
 ```
 make hermes-skills        # ssh → container: git pull --ff-only in Hermes' clone, then sync.sh
 make hermes-skills ARGS=-n   # dry run
+make hermes-skills ARGS=--pull   # copy live in-place edits INTO Hermes' clone (nothing live changes); review, commit, push, sync
 ```
 `sync.sh` copies tracked files only. It never touches runtime data (that lives in `/opt/data/clips/`), and it
 removes files that were synced before but are no longer tracked.
@@ -27,11 +28,14 @@ removes files that were synced before but are no longer tracked.
   (agent or curator edit) is saved with a diff under `/opt/data/clips/skill-drift/<ts>/`, then overwritten. Agent-
   created extra files are reported and kept. Review the drift dir after syncs and port what is worth keeping. To change one,
   Hermes edits its clone, commits and pushes, then runs `bash hermes-agent/skills/sync.sh` from the clone (or Fix
-  runs `make hermes-skills`). `sync.sh` runs the tests first and syncs nothing if they fail.
+  runs `make hermes-skills`). `sync.sh` runs the tests first and syncs nothing if they fail. It also refuses while the clone has uncommitted
+  skill changes (they would go live under the wrong baseline); `--pull` is the way to bring live edits back.
 - Runtime data lives outside the skills: `/opt/data/clips/jobs` (clipjob), `/opt/data/clips/logs`
   (clip-log, delivery-log, perf-log), `/opt/data/clips/flow-state` (Flow project state).
-- `shopee-clip/SKILL.md` stays ≤15 KB (`tests/test_hermes_skills.py`). A missed gate is fixed in
+- Size budgets (`tests/test_hermes_skills.py` → `DOC_BUDGETS`): router ≤15 KB, `house-rules.md` ≤20 KB,
+  `gameplay-clips/SKILL.md` ≤30 KB, `flow-driver/SKILL.md` ≤8 KB. Long versions live in references
+  (`house-rules-history.md`, `gameplay-pitfalls.md`, `cover-sticker.md`, `flow-production-notes.md`). A missed gate is fixed in
   `clipjob.py` with a test, not by adding prose.
 - File names are unique across the three skills (also tested), so a reference mentioned in one skill
   is found in exactly one place.
-- Tests: `uv run --with pytest pytest -q hermes-agent/skills/shopee-clip/scripts tests/test_hermes_skills.py`
+- Tests: `uv run --with pytest --with numpy --with pillow pytest -q tests/test_hermes_skills.py hermes-agent/skills/shopee-clip/scripts hermes-agent/skills/gameplay-clips/scripts`

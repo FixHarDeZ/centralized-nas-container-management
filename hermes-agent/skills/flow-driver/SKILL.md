@@ -24,7 +24,8 @@ The source of truth is the repo (`hermes-agent/skills/`); every sync overwrites 
   - Its delivery steps 9–12 are **replaced by `clipjob.py deliver`**.
   - Its multi-scene review is **replaced by `clipjob.py ready`/`decide`**.
 - Picker DOM recipes: `references/flow-picker-dom.md`, `templates/picker-attach-helpers.md`. Failure catalogue:
-  `references/pitfalls.md`. Tool-call cap: `references/session-cuts.md`.
+  `references/pitfalls.md`. Tool-call cap: `references/session-cuts.md`. Flow-UI production facts moved from the
+  house rules: `references/flow-production-notes.md`.
 
 ## The wrap — each step has its clipjob call
 | Flow step | clipjob call |

@@ -6,6 +6,16 @@ Fix's complaint (2026-11-05): the gameplay VO "ยังไม่ธรรมช
 A/B demo sent 2026-11-05 (LEGO Batman, msg 6244 = edge, 6245 = Gemini).
 **Fix's call: B (Gemini) is the default. A (edge) is the fallback only when Gemini hits its limit.**
 
+## Run rules from SKILL.md step 7 (moved 2026-11-12, read every run)
+- บทเป็น **ภาษาพูด** (นะ/เลย/อะ/สุดๆ, ตัดภาษาโฆษณา), ตัวเลขใน `say` เป็นคำ, ใน `sub` เป็นเลขได้; gap ไม่เท่ากัน (0.22 ในเรื่องเดียว, 0.30–0.50 เปลี่ยนเรื่อง); ≥4 gaps >0.25 วิ ต่อ 20 วิ
+- **plan.json ต้องมี edge `rate/pitch` ต่อวลีด้วยเสมอ** — Gemini ฟรี 10 req/วัน/โมเดล, หมดทุกโมเดลสคริปต์ fallback เป็น **เสียง A (edge Premwadee, hook `+5%/+15Hz`, body `-2..+3%/+11..+14Hz`, CTA `-6%/+9Hz`)** เอง → stdout `engine used: edge` = ใส่ warm EQ chain (pitfall "เสียงเหมือน AI") และแจ้งฟิกใน delivery ว่าใช้เสียง A เพราะติด limit
+- **จำนวนวลี + ช่วงที่ยอมรับของ `vo_end`**: ต้องจบในช่วง `DUR−3 … DUR−1.6` (20 วิ = 17.0–18.4 วิ) — สั้นกว่านั้นทิ้งหางดนตรีเปล่าท้ายคลิปเกิน 3 วิ, เกินนั้นซับล้นเฟรมสุดท้าย. Gemini พูดบทไทยได้ 10–16 อักขระ/วิ ต่อวลี แล้วแต่ take → **อย่าเชื่อสูตร "กี่วลี = กี่วิ"**: เขียน 5–6 วลี รัน แล้วแก้จาก stdout `vo_end` เท่านั้น. จบช้า → รัน `--from-take <take.wav>` (0 request) ตามลำดับใน pitfall «ฟิต VO เข้าเดดไลน์»; จบเร็ว/หางดนตรีเปล่าเกิน → เพิ่มประโยค (ต้อง gen take ใหม่ = กินโควตา)
+- **โควตา 2.5 หมดได้เร็ว** → สคริปต์ไล่ไป 3.8 เอง (stdout `engine used: gemini`); ดู stdout ทุกครั้ง
+- **ASR ทุก take ก่อน build** (Gemini อาจอ่านคำสั่งออกเสียง/เติมคำ) — **ต้องเป็น ASR ภาษาไทย**: `uv run --with faster-whisper --with numpy python <skill_dir>/scripts/asr_th.py vo.mp3` (raw array path, `language='th'`) แล้วเทียบทีละวลีกับบท. **`scripts/asr_speech_spans.py` hardcode `language="en"`** → รันกับ vo.mp3 ได้ขยะ (คำไทยถูกถอดเป็น ASCII ซ้ำ ๆ ทุกบรรทัด) ห้ามใช้ตรวจ VO; เช็คคำลงท้ายด้วยหู/whisper medium (whisper small หลอนคำลงท้ายไทย)
+- **เส้นตาย VO**: `end ≤ DUR − 1.5` และจบก่อนเซกการ์ดท้ายที่มีเสียงประกาศ ≥0.3 วิ; Gemini พูดช้ากว่า → ใช้ `max_inner_pause` + `tempo ≤1.07`, เกินนั้น **ตัดคำ** อย่าเร่ง
+- เก็บ raw take ไว้ (`--take-out`) → จูน gap/ตัดใหม่ด้วย `--from-take` ไม่เสียโควตา
+- ถ้ามี REF clip ของฟิก: ส่ง 2 โทน (`+30Hz` = A ที่ฟิกเลือกกับ REF, `+50Hz`) ตาม `references/audio-reference-matching.md`
+
 ## Default run (B with automatic A fallback)
 ```
 uv run --with edge-tts --with faster-whisper --with numpy python <skill_dir>/scripts/gen_vo_natural.py plan.json

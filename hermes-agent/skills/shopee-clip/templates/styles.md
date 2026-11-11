@@ -5,7 +5,9 @@
 
 Fix: *"แนวคิดของช่องผมยังเป็นแนวเดียวอยู่คือตัวละครพูดอธิบายสินค้า สามารถทำให้มีแนวอื่นด้วยได้ไหมแล้วเรามี Option เลือกในตอนทำคลิป"*
 
-So every clip order now asks TWO things in one clarify call: **กี่วิ?** and **แนวไหน?** (see `SKILL.md` → Duration selection). Each preset below is a drop-in variant of `templates/clip-prompt.md`: same house rules (no price, EN-only on-screen captions, soft CTA last, 9:16, Thai voiceover), different sequence + whether the character chip is attached.
+> **SUPERSEDED 2026-11-10:** the router asks Q1 mode (🎬/🧑/📦), Q2 length, Q3 📝/🤖; this style menu is not offered any more. The presets below are prompt-writing material only.
+
+Originally every clip order asked TWO things in one clarify call: **กี่วิ?** and **แนวไหน?**. Each preset below is a drop-in variant of `templates/clip-prompt.md`: same house rules (no price, EN-only on-screen captions, soft CTA last, 9:16, Thai voiceover), different sequence + whether the character chip is attached.
 
 ## `presenter` — พรีเซนเตอร์พูดอธิบาย (DEFAULT, ปัจจุบัน)
 - Attach the random character chip; 4-beat sequence (hook → โชว์ปก → ชี้จุดเด่น → ชี้ลง CTA).

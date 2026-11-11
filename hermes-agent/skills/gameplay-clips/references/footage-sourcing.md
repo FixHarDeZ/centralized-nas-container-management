@@ -2,6 +2,15 @@
 
 Use this when picking the source video and the silent windows for a footage clip. The SKILL.md step 2 rules still apply; this file is the method.
 
+## 0. Speech table from auto-subs — the step 2 rules (moved from SKILL.md 2026-11-12)
+- ดึง body ต้องกินทั้งบรรทัด header (timestamp + `align:start position:0%`) ไม่งั้น `align/start/position` หลุดเข้า text แล้ว cue เปล่าทุกใบนับเป็นเสียงพูด → ช่วงว่างหายทั้งไฟล์
+- cue ที่มี tag `<c>` = word timestamp ใน tag คือ ground truth; auto-subs ซ้อน cue (repeat ข้อความก่อน) → strip tag + merge/dedupe ก่อนหา gap
+- cue มีแต่ `[music]` = ช่วงว่าง, มี `>>` = เสียงพูด. เพลงที่มีเนื้อร้องตลอดแต่ไม่มี `>>` = เพลง ให้ duck จัดการ ใช้ได้ทุกช่วง. cue เดียว `[music]` คลุมทั้งเรื่อง = ไม่มีเสียงพูด เลือกได้ทุกช่วง
+- **ทุก seg ต้องอยู่ในช่วงว่าง** (อังกฤษใต้พากย์ไทย = สองภาษาทับกัน ข้อห้ามแรก; การ์ดท้ายที่ประกาศชื่อเกมเป็นข้อยกเว้นเดียว เพราะ VO จบก่อนแล้ว). เว้นขอบ ≥0.1 วิ จากเสียงพูด
+- **อย่าเชื่อ gap จาก VTT ล้วนกับ trailer ยาว/reveal**: auto-subs มักไม่มี cue ช่วงต้นหรือช่วงบทในเกม (เห็นเป็นช่วงว่างหลายสิบวิทั้งที่มีบทพูด) → ยืนยันด้วย ASR (faster-whisper small, `vad_filter=False`) บนเสียงช่วงที่จะใช้ แล้วเขียน speech VTT จาก ASR ให้ build_v5 ใช้เป็น `vtt`. วิธีเต็มใน `references/footage-sourcing.md`
+- trailer บางเรื่องไม่มี auto-subs → เช็ค `--list-subs` ก่อนโหลด; **ซับโหลดติด `HTTP 429` = rate limit ของ YouTube → retry ครั้งเดียวแล้วพอ ข้ามไป ASR ตรง ๆ** (ASR คือ ground truth อยู่แล้ว); มีหลายตัว → โหลดเฉพาะซับทุกตัว (`--skip-download`) นับช่วงว่าง ≥1.5 วิ แล้วเลือกตัวที่ช่วงว่างพอ plan คลิป
+- ผลรวม seg ≥ DUR; **ใช้ trailer เรื่องเดียวทั้งคลิป** (คนละเรื่อง = เพลงกระโดดที่ seam); จำเป็นจริงใช้เรื่องที่สองเฉพาะเซกท้ายแล้วบอกใน delivery
+
 ## 1. Getting the source
 - Default: `uv tool run yt-dlp -f '299+ba/bv*[height<=1080]+ba' --merge-output-format mp4 -o <name>.mp4 <url>`.
 - `Sign in to confirm your age` (age-gated trailers, common on violent titles): retry with `--extractor-args 'youtube:player_client=tv_embedded'`. This client needs no cookies and returns the 1080p mp4 formats. Check with `--list-formats` first.

@@ -390,6 +390,10 @@ def test_cli_gameplay_job_note_deliver_reopen(tmp_path, monkeypatch, capsys):
     assert cj.main(args) == 0
     rows = log.read_text(encoding="utf-8").splitlines()
     assert len(rows) == 2 and json.loads(rows[1])["notes"].startswith("REVISED: ฟิก")
+    assert cj.main(["reopen", "g-1", "--reason", "product film"]) == 0
+    final.write_bytes(b"c")
+    assert cj.main(args + ["--style", "footage"]) == 0
+    assert json.loads(log.read_text(encoding="utf-8").splitlines()[-1])["style"] == "footage"
 
 
 def test_flow_mode_still_needs_a_report(tmp_path, monkeypatch, capsys):

@@ -4,7 +4,7 @@ Fix 2026-11-10: "แบบ gameplay footage … อยากทำกับค�
 ให้ไปหา video trailer มาทำคล้ายๆแบบเดียวกับเกม".
 
 Follow SKILL.md steps -1 … 11 as for a game. **Only the deltas below change.** It costs 0 credits and needs
-no Flow. Log rows use `style: "footage"`, `category` = the product's (`gadget` / `home` / `beauty` / …),
+no Flow. Log rows use `style: "footage"` (`clipjob.py deliver … --style footage`), `category` = the product's (`gadget` / `home` / `beauty` / …),
 and `hook_id: "pft-N"`.
 
 ## Step 1 — research: specs, not a release date
@@ -87,5 +87,5 @@ and `hook_id: "pft-N"`.
   `python3 /opt/data/skills/shopee-clip/scripts/perf.py pick-hook --category <cat> --prefix pft-`.
 
 ## Steps 9–10 — gates, log, delivery
-Gates unchanged. Log row: `style:"footage"`, `category:<cat>`, `hook_id:"pft-N"`. In `notes`, record the
+Gates unchanged. Log row (written by `deliver --style footage`): `style:"footage"`, `category:<cat>`, `hook_id:"pft-N"`. In `notes`, record the
 source URL + channel and the source_check verdict.

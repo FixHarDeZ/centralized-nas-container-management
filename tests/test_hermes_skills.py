@@ -11,6 +11,14 @@ import re
 ROOT = pathlib.Path(__file__).resolve().parents[1] / "hermes-agent" / "skills"
 SKILLS = ["shopee-clip", "flow-driver", "gameplay-clips"]
 ROUTER_BUDGET = 15 * 1024
+# Docs read on every order of their mode. The old 109 KB router skipped gates; the same happened to
+# gameplay-clips at 76 KB. Move detail to references/ (read per step) instead of raising a budget.
+DOC_BUDGETS = {
+    "shopee-clip/SKILL.md": ROUTER_BUDGET,
+    "shopee-clip/references/house-rules.md": 20 * 1024,
+    "gameplay-clips/SKILL.md": 30 * 1024,
+    "flow-driver/SKILL.md": 8 * 1024,
+}
 
 
 def frontmatter(path):
@@ -23,6 +31,11 @@ def frontmatter(path):
 def test_router_size_budget():
     size = (ROOT / "shopee-clip" / "SKILL.md").stat().st_size
     assert size <= ROUTER_BUDGET, f"shopee-clip/SKILL.md is {size} B > {ROUTER_BUDGET} B — move detail to references/"
+
+
+def test_doc_size_budgets():
+    over = {p: (ROOT / p).stat().st_size for p, cap in DOC_BUDGETS.items() if (ROOT / p).stat().st_size > cap}
+    assert not over, f"over budget (bytes): {over} — move detail to references/"
 
 
 def test_frontmatter_names():
@@ -78,5 +91,4 @@ def test_old_question_menu_stays_retired():
     for old in ("hands มือล้วน", "skit สถานการณ์", "broll สินค้าล้วน หมุนช้า"):
         assert old not in router, old
     house = (ROOT / "shopee-clip" / "references" / "house-rules.md").read_text(encoding="utf-8")
-    i = house.index("- **ASK FIRST")
-    assert "SUPERSEDED" in house[max(0, i - 400):i], "the old one-call duration+style question must stay marked superseded"
+    assert "ASK FIRST" not in house, "the old one-call duration+style question belongs in house-rules-history.md only"

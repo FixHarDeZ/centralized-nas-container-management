@@ -1,6 +1,6 @@
 # Queue mode — several clip orders in one sitting
 
-Standing depth for SKILL.md's "Execution mode → queue" rule. SKILL.md owns WHEN to overlap the pipelines; this file owns the asset mechanics that make the overlap cheap.
+Standing depth for `house-rules.md` → Running an order → "A queue of clips". SKILL.md owns WHEN to overlap the pipelines; this file owns the asset mechanics that make the overlap cheap.
 
 ## Asset order — one upload cycle serves the whole queue
 - Cut EVERY queued clip's crop BEFORE clip 1's attach, then send all crops in ONE `DOM.setFileInputFiles` call (files=[all]) while the picker's `Uploads` category is active. Uploaded files persist server-side and stay listed under Uploads, so clip N+1's attach later is a plain card click → read the chip count back, with no second upload and no file-chooser-interception cycle. WHY: each upload cycle costs the full interception recipe (`Page.setInterceptFileChooserDialog` → `DOM.getDocument` → `DOM.setFileInputFiles` → change dispatch → 10–15 s wait); one call per queue instead of one per clip removes whole rounds from the run.

@@ -24,6 +24,7 @@ This CLI is the only sanctioned way to move a Flow-mode clip forward. It refuses
   clipjob.py assemble-check JOB                     # approved files in shot order, exit 0 only when all approved
   clipjob.py deliver JOB --final F.mp4 --report report.json --gfx gfx.json --hashtags "..." --cover C.jpg \
                          --caption "..." [--hook-id ID] [--category C] [--notes "..."] [--ack "<flag text>=<Fix's call>" ...]
+                         # 🎬 only: --report may be omitted; --style footage for a brand product film
                          # a re-run after a failed send skips the steps already done and logs the clip once
   clipjob.py cancel JOB --reason "..."
   clipjob.py note JOB "..."                         # stage marker in the job's events (🎬: what is done, what is next)
@@ -725,6 +726,8 @@ def cmd_deliver(j, a):
     gfx = json.load(open(a.gfx, encoding="utf-8")) if a.gfx else {}
     acks = parse_acks(a.ack)
     probs = deliver_problems(j, report, gfx, a.hashtags, acks)
+    if a.style and not (j["mode"] == "gameplay" and a.style in ("gameplay", "footage")):
+        probs.append("--style is only for 🎬 jobs: gameplay (a game) or footage (a brand product film)")
     if not os.path.exists(a.final):
         probs.append(f"no final file {a.final}")
     if not os.path.exists(a.cover):
@@ -757,7 +760,7 @@ def cmd_deliver(j, a):
             notes += " | flags accepted by Fix: " + "; ".join(f"{k} -> {v}" for k, v in acks)
         notes += "".join(f" | {n}" for n in report.get("notes") or [])
         row = {"date": dt.date.today().isoformat(), "product": j["product"], "category": a.category,
-               "style": j["mode"], "character": j.get("character"), "edit_id": edit_ids[-1] if edit_ids else None,
+               "style": a.style or j["mode"], "character": j.get("character"), "edit_id": edit_ids[-1] if edit_ids else None,
                "sha256": digest, "hook_id": a.hook_id, "hashtags": a.hashtags,
                "duration_s": round(float(report.get("v_dur") or 0), 2),
                "credits": (0 if j["mode"] == "gameplay" else
@@ -836,7 +839,7 @@ def main(argv=None):
     s = sub.add_parser("deliver"); s.add_argument("job")
     for k in ("--final", "--hashtags", "--cover", "--caption"):
         s.add_argument(k, required=True)
-    s.add_argument("--report"); s.add_argument("--gfx"); s.add_argument("--hook-id"); s.add_argument("--category")
+    s.add_argument("--report"); s.add_argument("--style"); s.add_argument("--gfx"); s.add_argument("--hook-id"); s.add_argument("--category")
     s.add_argument("--notes"); s.add_argument("--ack", action="append", default=[])
     s = sub.add_parser("cancel"); s.add_argument("job"); s.add_argument("--reason", required=True)
     s = sub.add_parser("note"); s.add_argument("job"); s.add_argument("text")

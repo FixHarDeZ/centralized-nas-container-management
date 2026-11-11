@@ -29,3 +29,7 @@ gameplay, broll, …).
   Ask for a weekly screenshot when reporting a delivery; don't block a clip on it.
 - Test the script against a COPY of the logs (temp dir with scripts/ logs/ templates/)
   when changing it — a test `add` against the real dir pollutes perf-log permanently.
+
+## From house-rules.md (moved 2026-11-12)
+- **When Fix asks what can be improved, ground the answer in the logs before proposing anything.** Count styles in `/opt/data/clips/logs/clip-log.jsonl`, read the latest rows' `notes`, and check that `perf-log.jsonl` holds data. If it is empty, say so, because every suggestion is then a guess until he sends stats. Rank each suggestion by credit cost (post-production = 0) and offer an A/B instead of switching the default.
+- **`scripts/perf.py` + `/opt/data/clips/logs/perf-log.jsonl` — performance tracking (2026-11-05).** When Fix sends Affiliate/Shopee Video stats (screenshot or numbers), record each clip with `perf.py add --match … --views N --clicks N --orders N`; pick hooks with `perf.py pick-hook --category <cat>` (CTR-ranked when data exists, LRU otherwise). Detail: `references/performance-tracking.md`. Covers: `scripts/make_cover.py` (1080x1920 EN cover inside the safe zone) — feed it the PRE-subtitle/pill render, otherwise the clip's own pills and subs show through and the title can land on faces; vision-check the cover before sending.
