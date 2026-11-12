@@ -750,7 +750,7 @@ Not done / open:
 - Shot 2 frame gate failed (label read "OMEGA DAILY", no "TRIPLE"), `ready` sent pass=False, Fix approved. As designed.
 - Bug fixed: clip-log `credits` counted the shot-2 card that Flow refunded (logged 45, real 30). `billed_credits()`
   skips a failed attempt without `--credits-spent`. The blackmores row in clip-log.jsonl still says 45.
-- Vision setting has no effect: 502 "model not found on xiaomi" lines today, still at 15:03. Cause in
+- Vision setting has no effect: 108 vision calls on 11-12 hit "model not found on xiaomi", the last at 15:03. Cause in
   `/opt/hermes/agent/auxiliary_client.py` `_vision_main_provider_client`: with `provider: auto` a non-nous main
   provider uses `_PROVIDER_VISION_MODELS` (`mimo-v2.5`) and never reads `auxiliary.vision.model`. Cost per call is
   one 400 (~0.4 s), then it falls back to `mimo-v2.6-flash`, so vision works. Not changed. Untested option:
@@ -759,11 +759,15 @@ Not done / open:
   "always" on an exec approval (allowlist gained `overwrite project env/config file`) while the session ran on
   `claude-haiku-5-5` (12:47–13:13). Which command wrote the value was not traced.
 - Still slow: gen+รีวิว 94 min. Shot 1 render→ready 31 min (Flow grid Download did nothing, editor dblclick failed),
-  shot 2 policy fail + resubmit, one `vision_analyze` timeout 14:21. Post 39 min holds only 2.2 min of
-  post_presenter; the rest is LLM rounds.
+  shot 2 policy fail + resubmit, one `vision_analyze` timeout 14:21. Post 14:27–15:05 by agent.log: 9 `vision_analyze` = 968 s
+  (~108 s each), 44 `execute_code` = 193 s, terminal 190 s (post_presenter twice, 2.2 min), 70 LLM calls take the
+  remaining ~15 min.
 - The sync at `e6bc568` overwrote 3 in-place edits Hermes wrote during the blackmores job (captured in
   `/opt/data/clips/skill-drift/20261112-153748`). Ported: router step 9/10 (take the only waiting shot without
   asking, Fix-sent mp4 in 🤖 goes straight to `ready`, `decide` fallback by shot number), frame-check (a reference
   word absent from every read is a flag), flow-browser-env (picker coordinates from the overlay, `browser_cdp`
   routing, verified insert/submit, **grid Download on desktop unresolved → ask Fix for the mp4**). Run
   `make hermes-skills ARGS=-n` before every sync.
+- Checked on the live job: `billed_credits` = [15, 15]. Skills live at `31f3bfd`. The command behind the 12:50
+  approval is not in agent.log (untraced). `command_allowlist` keeps `overwrite project env/config file` until
+  someone removes it.
