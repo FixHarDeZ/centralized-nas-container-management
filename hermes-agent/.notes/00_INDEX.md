@@ -2,7 +2,7 @@
 
 **สร้าง:** 2026-05-24  
 **Port:** 5063 (external Nginx basic auth) → 9119 (dashboard internal)  
-**Status:** 2026-11-10 (closed) ✅ — VITURE 🎬 clip paused at VO trim (resume with "ทำต่อ"); running `HERMES_REF=v0.23.1` (pnpm build, deployed `0bb3b82`); rollback image `hermes-agent:v0.22.7-rollback` + backups `/opt/data/backups/pre-v0.23.1-20261110/`; webhook OFF; clip skills repo-owned + pinned (not locked; sync captures drift); session resets via plugin `hermes-session-reset-policy`; venv = pm-pinned Python 3.14.9 / SQLite 3.53.1 (`0d3ec6c`)
+**Status:** 2026-11-12 ✅ — clip skills hardened (clipjob chain gate, 🎬 through clipjob, docs split under size budgets); running `HERMES_REF=v0.23.1` (pnpm build, deployed `0bb3b82`); rollback image `hermes-agent:v0.22.7-rollback` + backups `/opt/data/backups/pre-v0.23.1-20261110/`; webhook OFF; clip skills repo-owned + pinned (not locked; `make hermes-skills ARGS=--pull` brings live edits back); session resets via plugin `hermes-session-reset-policy`; venv = pm-pinned Python 3.14.9 / SQLite 3.53.1 (`0d3ec6c`)
 
 ---
 
@@ -134,14 +134,27 @@ Tracker: `docs/superpowers/specs/2026-06-02-hermes-token-tuning-verification.md`
 `hermes-agent/skills/{shopee-clip,flow-driver,gameplay-clips}` → `make hermes-skills` (pull clone in container
 + `skills/sync.sh`: copy tracked files, `hermes curator pin`). **Not locked**: `hermes curator lock`'s terminal
 heuristic refused a legit pipeline command and stalled a real clip (2026-11-10). In-place edits are saved to
-`/opt/data/clips/skill-drift/<ts>/` (+diff) on the next sync, then overwritten; review that dir and port fixes to the repo. Runtime data:
-`/opt/data/clips/jobs` (clipjob state), `/opt/data/clips/logs` (clip-log, delivery-log, perf-log),
-`/opt/data/clips/flow-state` (Flow project roster/edit ids), `/opt/data/clips/work/<job>` (durable job workdir — scratch is pruned ~24 h). `sync.sh` is test-gated; Hermes may run it from its clone. Old skill archived at
-`/opt/data/skills-archive/flow-shopee-clips`. Flow: Q1 mode (🎬 footage from official videos — games + brand product films, `gameplay-clips` + `references/product-footage.md` + `source_check.py` / 🧑 presenter+graphic / 📦 graphic ล้วน)
-→ Q2 length (N = length/10 s shots) → photo gate → storyboard → Q3 📝 prompt pack / 🤖 auto (auto falls back
-to 📝 itself) → `clipjob.py ready/decide` per shot → post (graphics always) → `clipjob.py deliver` (only send
-path). Tests: `uv run --with pytest pytest -q hermes-agent/skills/shopee-clip/scripts tests/test_hermes_skills.py`.
-Plan: `docs/superpowers/plans/2026-11-10-shopee-clip-modes.md`. Acceptance (4 real clips) pending — start the first one after `/new` in Telegram.
+`/opt/data/clips/skill-drift/<ts>/` (+diff) on the next sync, then overwritten. **To keep them:
+`make hermes-skills ARGS=--pull`** (copies live drift into Hermes' clone, changes nothing live) → review, commit,
+push → sync. Hermes also ports its own edits (it pushed `ff2a98f` itself on 2026-11-12). `sync.sh` refuses a dirty
+clone and is test-gated (`DOC_BUDGETS`: router ≤15 KB, house-rules ≤20 KB, gameplay SKILL ≤30 KB, flow-driver ≤8 KB).
+Runtime data: `/opt/data/clips/jobs` (clipjob state), `/opt/data/clips/logs` (clip-log, delivery-log, perf-log),
+`/opt/data/clips/flow-state` (Flow project roster/edit ids), `/opt/data/clips/work/<job>` (durable job workdir —
+scratch is pruned ~24 h). Old skill archived at `/opt/data/skills-archive/flow-shopee-clips`.
+Flow: Q1 mode (🎬 footage from official videos — games + brand product films / 🧑 presenter+graphic / 📦 graphic ล้วน;
+rigid products get a drift warning) → Q2 length (N = length/10 s shots) → photo gate → storyboard (+ product-identity
+checklist) → Q3 📝 prompt pack / 🤖 auto (auto falls back to 📝 itself) → `clipjob.py ready/decide` per shot → post
+(graphics always) → `clipjob.py deliver` (only send path; clip + ONE copy-button message + cover). **🎬 also runs
+through clipjob since 2026-11-12**: `new --mode gameplay`, `note` per stage, `deliver` (no report needed;
+`--style footage` for brand films), `reopen` for a revision (REVISED row).
+clipjob rules (2026-11-12): `reserve K` refuses while K-1 is in review with a failed gate; 🔁 on K drops K+1's unsent
+reservation or flags a rendered K+1 (`chain_stale`, Fix picks keep/regen; assemble/deliver wait); `submitted` needs no
+id, `edit-id` records the real one; a failed paid shot sends its own 🔁 button; `ready --resend`; `reserve --wait`
+sleeps ≤150 s (terminal tool timeout 180 s) then exit 4.
+Long docs moved to references: `house-rules-history.md`, `gameplay-pitfalls.md`, `cover-sticker.md`,
+`flow-production-notes.md`. Tests: `uv run --with pytest --with numpy --with pillow pytest -q tests/test_hermes_skills.py hermes-agent/skills/shopee-clip/scripts hermes-agent/skills/gameplay-clips/scripts`.
+Plans: `docs/superpowers/plans/2026-11-10-shopee-clip-modes.md`, `…/2026-11-11-shopee-clip-hardening.md`.
+Delivered so far: bao-jin-rack 🧑 (11-10), Ratatan 🎬 + rev (11-11); two 🧑 jobs cancelled for product drift.
 edge-tts from NAS intermittently `NoAudioReceived` (2026-11-10) — Gemini Leda is the default VO anyway.
 
 ## Webhook platform — OFF since 2026-11-10
@@ -162,6 +175,7 @@ registered, `presenter-shots` still registered, Telegram reconnected. Re-enablin
 
 | วันที่ | เรื่อง |
 |--------|--------|
+| 2026-11-12 | Clip skills hardening (review 11-11 items 1–5): clipjob chain/edit-id/resend/gameplay deliver, `sync.sh --pull`, gameplay SKILL 76→27 KB, house-rules 36→9 KB, size budgets (`3b9b3c7`, `8229ca7`, `f3c2959`). |
 | 2026-11-10 | Session closed (3): skills unlocked, VITURE 🎬 job awaiting "ทำต่อ". |
 | 2026-11-10 | Skill lock removed (false-positive block stalled the VITURE 🎬 clip); sync.sh captures in-place drift instead (`74367f4`). |
 | 2026-11-10 | Session closed: v0.23.1 + SQLite fix live; open = real model reply after /new, Chat tab, acceptance clips, drop rollback image after a few clean days. |
