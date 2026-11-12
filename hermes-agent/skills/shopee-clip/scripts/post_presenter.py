@@ -136,6 +136,11 @@ _MODELS = {}
 def asr(audio, model_name, prompt=None):
     from faster_whisper import WhisperModel
     if model_name not in _MODELS:
+        # one model in RAM at a time: small + medium together reached ~3.5 GB and the gateway's
+        # 4 GB cgroup killed the run twice (2026-11-12). A reload costs seconds.
+        _MODELS.clear()
+        import gc
+        gc.collect()
         _MODELS[model_name] = WhisperModel(model_name, device="cpu", compute_type="int8")
     segs, _ = _MODELS[model_name].transcribe(audio, language="th", word_timestamps=True,
                                               beam_size=5, vad_filter=False, initial_prompt=prompt)
