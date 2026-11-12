@@ -2,7 +2,7 @@
 
 **สร้าง:** 2026-05-24  
 **Port:** 5063 (external Nginx basic auth) → 9119 (dashboard internal)  
-**Status:** 2026-11-12 ✅ — clip skills hardened (clipjob chain gate, 🎬 through clipjob, docs split under size budgets); running `HERMES_REF=v0.23.1` (pnpm build, deployed `0bb3b82`); rollback image `hermes-agent:v0.22.7-rollback` + backups `/opt/data/backups/pre-v0.23.1-20261110/`; webhook OFF; clip skills repo-owned + pinned (not locked; `make hermes-skills ARGS=--pull` brings live edits back); session resets via plugin `hermes-session-reset-policy`; venv = pm-pinned Python 3.14.9 / SQLite 3.53.1 (`0d3ec6c`)
+**Status:** 2026-11-12 ✅ (closed, skills synced at `323abc3`) — clip skills hardened (clipjob chain gate, 🎬 through clipjob, docs split under size budgets); 🎬 length 15–50 s; stage timing + `heavylock.py`; post OOM fixed; live `auxiliary.vision.model: mimo-v2.6-flash`; running `HERMES_REF=v0.23.1` (pnpm build, deployed `0bb3b82`); rollback image `hermes-agent:v0.22.7-rollback` + backups `/opt/data/backups/pre-v0.23.1-20261110/`; webhook OFF; clip skills repo-owned + pinned (not locked; `make hermes-skills ARGS=--pull` brings live edits back); session resets via plugin `hermes-session-reset-policy`; venv = pm-pinned Python 3.14.9 / SQLite 3.53.1 (`0d3ec6c`)
 
 ---
 
@@ -151,6 +151,14 @@ clipjob rules (2026-11-12): `reserve K` refuses while K-1 is in review with a fa
 reservation or flags a rendered K+1 (`chain_stale`, Fix picks keep/regen; assemble/deliver wait); `submitted` needs no
 id, `edit-id` records the real one; a failed paid shot sends its own 🔁 button; `ready --resend`; `reserve --wait`
 sleeps ≤150 s (terminal tool timeout 180 s) then exit 4.
+Added later on 2026-11-12: 🎬 skips Q2 and picks 15–50 s from the usable footage; photo-gate crop budget = 2 vision
+checks (candidates on one sheet, then ask Fix); `post_presenter.py` keeps one whisper model in RAM (peak 1.95 GB);
+`heavylock.py` = one heavy script at a time (exit 75 `BUSY`), `/opt/data/clips/logs/heavy-log.jsonl` has seconds +
+peak MB per run (start with no end = killed); `clipjob deliver` reports ⏱ time per stage (`timing` in job + clip-log).
+**Open:** none of today's rules has run on a real order yet; confirm the vision model change in `agent.log` (no
+"model not found on xiaomi"); six OOM kills of 11-11 untraced; ideas not started: fewer LLM rounds in prep (helper
+scripts), perf-log feedback check, 4 s test shot for rigid products in 🧑, sync stops on drift, budget for
+`product-image-prep.md` (44 KB); bao-jin-rack 1.5 h post never investigated.
 Long docs moved to references: `house-rules-history.md`, `gameplay-pitfalls.md`, `cover-sticker.md`,
 `flow-production-notes.md`. Tests: `uv run --with pytest --with numpy --with pillow pytest -q tests/test_hermes_skills.py hermes-agent/skills/shopee-clip/scripts hermes-agent/skills/gameplay-clips/scripts`.
 Plans: `docs/superpowers/plans/2026-11-10-shopee-clip-modes.md`, `…/2026-11-11-shopee-clip-hardening.md`.

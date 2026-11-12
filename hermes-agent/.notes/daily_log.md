@@ -731,3 +731,14 @@ Not done / open:
   a start with no end = killed. `clipjob ready` refuses (no failed gate) when detect_repeats is BUSY.
 - The six 11-11 kills (19:18–20:46) stay untraced: no session transcript, no work files in that window. The log
   above identifies the next one.
+
+### 2026-11-12 — session closed
+- Shipped today (all on `main`, pushed, skills synced at `323abc3`, tests 63 passed): hardening items 1–5,
+  🎬 length 15–50 s (`e7dc029`), post OOM fix (`3d90a33`), crop budget + intake re-read rule (`e0a52c0`), port of
+  Hermes' lessons (`8349fe9`), stage timing + heavylock (`323abc3`). Live-only change: `auxiliary.vision.model`
+  (backup `/opt/data/config.yaml.bak-20261112`).
+- Verified on the NAS: whisper small→medium peak 1.95 GB; timeline on anttermite = 3 h 22 (เตรียม 96 / gen+รีวิว 52 /
+  post 54); second concurrent ASR refused with BUSY, heavy-log rows written.
+- Not verified: any of it on a real order; the vision model setting.
+- Next: watch the first real 🎬 and 🧑 orders (⏱ line, no Q2 for 🎬, crop rounds), then decide on the open ideas
+  listed in 00_INDEX.
