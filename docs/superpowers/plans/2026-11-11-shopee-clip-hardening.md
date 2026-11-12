@@ -1,6 +1,6 @@
 # Shopee clip skills — hardening pass (review items 1–5)
 
-Status: **decisions D1–D4 answered 2026-11-11, waiting for Fix's go signal.** Nothing below has been run.
+Status: **done 2026-11-12** — commits `2741cdc` `3b9b3c7` `8229ca7` `f3c2959`, synced at `c92c2c4` (see hermes-agent/.notes/daily_log.md).
 Source: the 2026-11-11 review (hermes-agent session). Stack memory: `hermes-agent/.notes/`.
 
 ## Decisions (filled before the run)
