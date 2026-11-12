@@ -761,3 +761,9 @@ Not done / open:
 - Still slow: gen+รีวิว 94 min. Shot 1 render→ready 31 min (Flow grid Download did nothing, editor dblclick failed),
   shot 2 policy fail + resubmit, one `vision_analyze` timeout 14:21. Post 39 min holds only 2.2 min of
   post_presenter; the rest is LLM rounds.
+- The sync at `e6bc568` overwrote 3 in-place edits Hermes wrote during the blackmores job (captured in
+  `/opt/data/clips/skill-drift/20261112-153748`). Ported: router step 9/10 (take the only waiting shot without
+  asking, Fix-sent mp4 in 🤖 goes straight to `ready`, `decide` fallback by shot number), frame-check (a reference
+  word absent from every read is a flag), flow-browser-env (picker coordinates from the overlay, `browser_cdp`
+  routing, verified insert/submit, **grid Download on desktop unresolved → ask Fix for the mp4**). Run
+  `make hermes-skills ARGS=-n` before every sync.

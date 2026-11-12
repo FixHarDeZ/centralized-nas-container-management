@@ -108,8 +108,11 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    - 📝: `clipjob.py pack <job>` sends the reference photos and one tagged prompt per shot. Then wait.
      Each video from Fix: if the message replies to a prompt, run
      `clipjob.py ingest <job> <file> --reply-text "<replied-to text>"`. If it has no reply context, ask
-     which shot it is (buttons ช็อต 1…N). Never guess, then run `--shot K`. Full rules: `references/prompt-pack.md`.
+     which shot it is (buttons ช็อต 1…N), then run `--shot K`. Do not ask when the job state answers it: exactly one
+     shot is submitted with no file yet. Full rules: `references/prompt-pack.md`.
    - 🤖: load skill `flow-driver` and follow it. It calls `reserve`/`submitted`/`submit-failed`/`trouble`.
+     🤖, Flow download fails and Fix sends the mp4: copy it to the workdir as `shotK_raw.mp4` and run
+     step 10's `ready` on it. 🤖 has no `ingest` step.
      When a command prints `"FALLBACK": true`:
      1. Stop driving Flow and close Chrome (CDP `Browser.close`).
      2. Tell Fix in one line: the reason, credits spent, shots left.
@@ -120,7 +123,8 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
     `clipjob.py ready <job> K --raw <file> --frame pass|flag:<what you saw>`. That runs ffprobe and, for 🧑,
     the repeats and CTA gates, then sends the shot with the ✅/🔁 keyboard. If that send fails the checks are
     kept: `clipjob.py ready <job> K --resend` (no re-check). Fix's tap arrives as text →
-    `clipjob.py decide --text "<text>"`. On 🔁: in 📝 run `pack <job> --shot K`; in 🤖 regenerate via flow-driver.
+    `clipjob.py decide --text "<text>"`; if it prints `REFUSED: text is not a review button`, run
+    `clipjob.py decide <job> K approve|regen`. Never hand-edit the job JSON. On 🔁: in 📝 run `pack <job> --shot K`; in 🤖 regenerate via flow-driver.
     A 🔁 on shot K also asks Fix keep/regen for an already rendered shot K+1 (its start frame is gone); wait
     for that tap too. Shot 2 may render while shot 1 is reviewed only when shot 1 passed every gate.
 11. **Post-production (graphics always).** `clipjob.py assemble-check <job>` prints the approved files in order.
