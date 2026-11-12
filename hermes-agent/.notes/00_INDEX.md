@@ -2,7 +2,7 @@
 
 **สร้าง:** 2026-05-24  
 **Port:** 5063 (external Nginx basic auth) → 9119 (dashboard internal)  
-**Status:** 2026-11-12 ✅ (closed, skills synced at `31f3bfd`) — clip skills hardened (clipjob chain gate, 🎬 through clipjob, docs split under size budgets); 🎬 length 15–50 s; stage timing + `heavylock.py`; post OOM fixed; vision model setting ineffective (open); running `HERMES_REF=v0.23.1` (pnpm build, deployed `0bb3b82`); rollback image `hermes-agent:v0.22.7-rollback` + backups `/opt/data/backups/pre-v0.23.1-20261110/`; webhook OFF; clip skills repo-owned + pinned (not locked; `make hermes-skills ARGS=--pull` brings live edits back); session resets via plugin `hermes-session-reset-policy`; venv = pm-pinned Python 3.14.9 / SQLite 3.53.1 (`0d3ec6c`)
+**Status:** 2026-11-12 ✅ (closed, skills synced at `31f3bfd`) — clip skills hardened (clipjob chain gate, 🎬 through clipjob, docs split under size budgets); 🎬 length 15–50 s; stage timing + `heavylock.py`; post OOM fixed; live vision = `provider: xiaomi` + `mimo-v2.6-flash`; running `HERMES_REF=v0.23.1` (pnpm build, deployed `0bb3b82`); rollback image `hermes-agent:v0.22.7-rollback` + backups `/opt/data/backups/pre-v0.23.1-20261110/`; webhook OFF; clip skills repo-owned + pinned (not locked; `make hermes-skills ARGS=--pull` brings live edits back); session resets via plugin `hermes-session-reset-policy`; venv = pm-pinned Python 3.14.9 / SQLite 3.53.1 (`0d3ec6c`)
 
 ---
 
@@ -155,7 +155,7 @@ Added later on 2026-11-12: 🎬 skips Q2 and picks 15–50 s from the usable foo
 checks (candidates on one sheet, then ask Fix); `post_presenter.py` keeps one whisper model in RAM (peak 1.95 GB);
 `heavylock.py` = one heavy script at a time (exit 75 `BUSY`), `/opt/data/clips/logs/heavy-log.jsonl` has seconds +
 peak MB per run (start with no end = killed); `clipjob deliver` reports ⏱ time per stage (`timing` in job + clip-log).
-**Open: Flow grid Download on desktop does nothing (Fix sends the mp4 meanwhile); `command_allowlist` gained `overwrite project env/config file` on 2026-11-12 12:50 (Fix pressed always) — remove unless wanted; vision calls ~108 s each;** none of today's rules has run on a real order yet; confirm the vision model change in `agent.log` (no
+**Open: Flow grid Download on desktop does nothing (Fix sends the mp4 meanwhile); `command_allowlist` has `overwrite project env/config file` (Fix keeps it, 2026-11-12); vision `reasoning_effort: low` untested;** none of today's rules has run on a real order yet; confirm the vision model change in `agent.log` (no
 "model not found on xiaomi"); six OOM kills of 11-11 untraced; ideas not started: fewer LLM rounds in prep (helper
 scripts), perf-log feedback check, 4 s test shot for rigid products in 🧑, sync stops on drift, budget for
 `product-image-prep.md` (44 KB); bao-jin-rack 1.5 h post never investigated.
@@ -185,7 +185,7 @@ registered, `presenter-shots` still registered, Telegram reconnected. Re-enablin
 |--------|--------|
 | 2026-11-12 | Stage timing in clipjob (`timing` in job + clip-log, ⏱ line on delivery) and `heavylock.py` (one heavy script at a time, `logs/heavy-log.jsonl` with peak MB per run). |
 | 2026-11-12 | First real order checked (blackmores 137 min, เตรียม 4, no OOM). clip-log `credits` no longer counts a refunded failed card (`billed_credits`). Vision model setting found ineffective, open. |
-| 2026-11-12 | Post OOM fix (one whisper model in RAM, `3d90a33`); photo-gate crop budget = 2 vision checks; live `auxiliary.vision.model` set but **ignored** under `provider: auto` (code uses the built-in xiaomi default; value now reads `claude-haiku-5-5`, see daily_log 2026-11-12 check) (built-in xiaomi default `mimo-v2.5` is retired; re-check after a HERMES_REF bump). |
+| 2026-11-12 | Post OOM fix (one whisper model in RAM, `3d90a33`); photo-gate crop budget = 2 vision checks; live `auxiliary.vision.provider: xiaomi` + `model: mimo-v2.6-flash` (verified; `model` alone is ignored under `provider: auto`) (built-in xiaomi default `mimo-v2.5` is retired; re-check after a HERMES_REF bump). |
 | 2026-11-12 | 🎬 length flexible 15–50 s from the footage, no Q2 (Fix's named length still wins). |
 | 2026-11-12 | Clip skills hardening (review 11-11 items 1–5): clipjob chain/edit-id/resend/gameplay deliver, `sync.sh --pull`, gameplay SKILL 76→27 KB, house-rules 36→9 KB, size budgets (`3b9b3c7`, `8229ca7`, `f3c2959`). |
 | 2026-11-10 | Session closed (3): skills unlocked, VITURE 🎬 job awaiting "ทำต่อ". |

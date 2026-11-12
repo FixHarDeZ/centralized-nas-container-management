@@ -771,3 +771,17 @@ Not done / open:
 - Checked on the live job: `billed_credits` = [15, 15]. Skills live at `31f3bfd`. The command behind the 12:50
   approval is not in agent.log (untraced). `command_allowlist` keeps `overwrite project env/config file` until
   someone removes it.
+
+### 2026-11-12 — vision config fixed, slow vision traced
+- Live config now `auxiliary.vision.provider: xiaomi` + `model: mimo-v2.6-flash` (backup
+  `/opt/data/config.yaml.bak-20261112b`). Verified on real calls after 16:00: 0 "model not found on xiaomi",
+  8 `vision_analyze` calls 12–100 s (before: 15–299 s and one 420 s tool timeout).
+- Fix decided to keep `overwrite project env/config file` in `command_allowlist` (Hermes may update itself; quality
+  gets reviewed afterwards).
+- Slow vision: the two worst calls (259 s for a 9-character answer, 299 s) ran on the fallback path
+  ("falling back to main agent model") after the 400. The same image + prompt through `call_llm(task="vision")` on
+  the new config: 16 s default, 6 s with `reasoning_effort: low`, ~25 tokens/s. Why the fallback path was that slow
+  was not proven (it is no longer used). The rest of the time is answer length: the tool prefixes every question
+  with "Fully describe and explain everything about this image", answers run 700–3,000 characters.
+- Not done: `auxiliary.vision.reasoning_effort: low` (key exists in `auxiliary_client.py`); may cost label-reading
+  accuracy in the frame gate, so it needs an A/B on real frames first.
