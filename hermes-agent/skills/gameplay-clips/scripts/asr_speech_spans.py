@@ -34,6 +34,10 @@ ap.add_argument("--out-vtt", default="speech.vtt")
 ap.add_argument("--model", default="small")
 ap.add_argument("--gap-min", type=float, default=1.5)
 args = ap.parse_args()
+import os, sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "shopee-clip", "scripts"))
+import heavylock
+heavylock.acquire("asr_speech_spans")
 
 raw = subprocess.run(["ffmpeg", "-v", "error", "-ss", str(args.start), "-t", str(args.dur), "-i", args.src,
                       "-vn", "-ac", "1", "-ar", "16000", "-f", "f32le", "-"],

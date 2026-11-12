@@ -125,6 +125,8 @@ def main():
     ap.add_argument("--workdir")
     ap.add_argument("--out", default="out.mp4")
     a = ap.parse_args()
+    import heavylock
+    heavylock.acquire("product_build")
     plan = json.load(open(a.plan, encoding="utf-8"))
     wd = os.path.abspath(a.workdir or os.path.dirname(os.path.abspath(a.plan)))
     os.makedirs(wd, exist_ok=True)

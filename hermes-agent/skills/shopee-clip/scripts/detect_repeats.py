@@ -82,6 +82,8 @@ def main():
     ap.add_argument("--cut"); ap.add_argument("--fps", type=float, default=24.0)
     ap.add_argument("--min", type=int, default=4)
     a = ap.parse_args()
+    import heavylock
+    heavylock.acquire("detect_repeats")
     wd = tempfile.mkdtemp(prefix="rep_", dir=os.environ.get("TMPDIR", "/opt/data/cache/scratch"))
     wav = os.path.join(wd, "a.wav")
     subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", a.video, "-ac", "1", "-ar", "16000", wav], check=True)

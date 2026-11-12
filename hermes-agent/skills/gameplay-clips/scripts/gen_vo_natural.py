@@ -167,6 +167,9 @@ def align_bounds(fr):
     cumulative script-character proportion, then snapped to the quietest 20 ms inside +-0.35 s."""
     import numpy as np
     from faster_whisper import WhisperModel
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "shopee-clip", "scripts"))
+    import heavylock
+    heavylock.acquire("gen_vo_natural")
     st = np.frombuffer(fr, np.int16).reshape(-1, 2).mean(1)
     mono16 = st[::3].astype(np.float32) / 32768.0           # 48k -> 16k
     words = []

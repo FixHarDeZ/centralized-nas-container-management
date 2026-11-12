@@ -31,8 +31,10 @@ metadata:
   hashtag gate). Delivery = `clipjob.py deliver` (clip + one copy-button message for hashtags and the basket link).
 - **Fix attached a reference clip = our audio must sound like it:** measure F0/band/loudness/music-under-VO first,
   then send 2 voice tones in one round (`references/audio-reference-matching.md`, `scripts/measure_audio.py`).
-- **Heavy work one at a time** (whisper, build, gates): parallel subagents running them OOM'd the gateway (children
-  die silently). If a child goes silent, check its files on disk and continue serially.
+- **Heavy work one at a time** (whisper, build, post): enforced by `heavylock.py` since 2026-11-12. A second heavy
+  script waits 120 s, then exits 75 with `BUSY: …` naming the holder: rerun the same command later, do not work
+  around it. A run that dies with no output was OOM-killed (4 GB fence): `/opt/data/clips/logs/heavy-log.jsonl` has
+  a `start` row with no `end`, and each finished run's `peak_mb`.
 - **Footage sourcing can be silent for 15–20 min** (downloads + ASR + vision sheets): send one short status line
   midway (what is done / what is next) and `clipjob.py note <job> "…"`.
 

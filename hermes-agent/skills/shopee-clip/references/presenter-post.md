@@ -20,7 +20,9 @@ Outputs: `subs.ass`, `pills.txt`, `out.mp4` (mastered, FB-safe High/yuv420p, fas
   empty failure: the container is cgroup-fenced at 4 GB. Cause on 2026-11-12: `auto` loaded whisper medium
   while small was still cached (~3.6 GB). Fixed in the script since (one model in RAM, measured peak 1.95 GB
   for small → medium), so `"model": "auto"` is safe again. If it still gets killed, run with
-  `CT2_CPU_THREADS=2 OMP_NUM_THREADS=2` and `"model": "small"`, and never run two heavy jobs at once.
+  `CT2_CPU_THREADS=2 OMP_NUM_THREADS=2` and `"model": "small"`. Heavy scripts take one shared lock
+  (`heavylock.py`): exit 75 `BUSY: …` = another one is running, rerun later. Peak RAM per run is in
+  `/opt/data/clips/logs/heavy-log.jsonl`.
 
 - **Silent H / B-roll shots:** set `"silent": true` on the scene and leave out `script`/`prompt`. It gets no ASR and no subs, only pills, and still joins the xfade and the timeline. Without the flag, an empty script crashes the align step.
 - **No CTA pill:** run with `NO_AUTO_CTA=1` when Fix moved the CTA to the caption, or on a heavy-content clip. Otherwise the script auto-adds `Link below!` over the last 2.2 s, and it collides with a pill you placed there (`pills overlap` exit).

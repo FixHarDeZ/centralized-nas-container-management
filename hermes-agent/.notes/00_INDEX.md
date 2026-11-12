@@ -175,6 +175,7 @@ registered, `presenter-shots` still registered, Telegram reconnected. Re-enablin
 
 | วันที่ | เรื่อง |
 |--------|--------|
+| 2026-11-12 | Stage timing in clipjob (`timing` in job + clip-log, ⏱ line on delivery) and `heavylock.py` (one heavy script at a time, `logs/heavy-log.jsonl` with peak MB per run). |
 | 2026-11-12 | Post OOM fix (one whisper model in RAM, `3d90a33`); photo-gate crop budget = 2 vision checks; live `auxiliary.vision.model: mimo-v2.6-flash` (built-in xiaomi default `mimo-v2.5` is retired; re-check after a HERMES_REF bump). |
 | 2026-11-12 | 🎬 length flexible 15–50 s from the footage, no Q2 (Fix's named length still wins). |
 | 2026-11-12 | Clip skills hardening (review 11-11 items 1–5): clipjob chain/edit-id/resend/gameplay deliver, `sync.sh --pull`, gameplay SKILL 76→27 KB, house-rules 36→9 KB, size budgets (`3b9b3c7`, `8229ca7`, `f3c2959`). |

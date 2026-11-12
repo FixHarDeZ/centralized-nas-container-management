@@ -118,6 +118,52 @@ def new_job(job, mode, product, link="", shots=0, refs=(), workdir=None, charact
             "events": [], "delivery": None}
 
 
+def workdir_started(wd, before):
+    """Earliest file mtime in the workdir when it is older than `before`: intake and the photo gate run
+    before `new`, so the job's clock starts at the first file they wrote."""
+    ts = [before]
+    for root, _, files in os.walk(wd) if os.path.isdir(wd) else ():
+        ts += [os.path.getmtime(os.path.join(root, f)) for f in files]
+    return min(ts)
+
+
+def _epoch(ts):
+    return dt.datetime.fromisoformat(ts).timestamp()
+
+
+def timeline(j, end=None):
+    """Where the time went, in minutes, from the job's own events. A revision counts from its reopen."""
+    ev = [(_epoch(e["ts"]), e["msg"]) for e in j["events"]]
+    end = end if end is not None else (ev[-1][0] if ev else now())
+    created = _epoch(j["created"])
+    mins = lambda a, b: max(0, round((b - a) / 60))
+    reopened = [t for t, m in ev if m.startswith("reopened for a revision")]
+    if reopened:
+        return {"total_min": mins(reopened[-1], end), "stages": [["แก้งาน", mins(reopened[-1], end)]], "wait_fix_min": 0}
+    start = min(created, _epoch(j["started"])) if j.get("started") else created
+    stages = [["เตรียม", mins(start, created)]]
+    decides = [t for t, m in ev if m.startswith("decide shot")]
+    wait, ready_at = 0.0, {}
+    for t, m in ev:
+        mm = re.match(r"(ready|decide) shot (\d+)", m)
+        if mm and mm.group(1) == "ready":
+            ready_at[mm.group(2)] = t
+        elif mm and mm.group(2) in ready_at:
+            wait += t - ready_at.pop(mm.group(2))
+    if decides:
+        stages += [["gen+รีวิว", mins(created, decides[-1])], ["post", mins(decides[-1], end)]]
+    else:
+        stages.append(["ทำคลิป", mins(created, end)])
+    return {"total_min": mins(start, end), "stages": stages, "wait_fix_min": round(wait / 60)}
+
+
+def timeline_text(tl):
+    h, m = divmod(tl["total_min"], 60)
+    parts = [f"{k} {v} น." + (f" (รอฟิกตอบ {tl['wait_fix_min']} น.)" if k == "gen+รีวิว" and tl["wait_fix_min"] else "")
+             for k, v in tl["stages"]]
+    return f"⏱ รวม {f'{h} ชม. ' if h else ''}{m} น. · " + " · ".join(parts)
+
+
 def shot(j, k):
     if not 1 <= k <= len(j["shots"]):
         raise Refused(f"shot {k} out of range 1..{len(j['shots'])}")
@@ -529,6 +575,8 @@ def repeats_gate(raw, script):
     p = subprocess.run(["uv", "run", "--with", "faster-whisper", "--with", "numpy", "python",
                         os.path.join(HERE, "detect_repeats.py"), raw, "--script", script, "--cut", cut],
                        capture_output=True, text=True)
+    if p.returncode == 75:               # heavylock: another heavy job is running
+        raise Refused(f"detect_repeats could not start: {p.stderr.strip()[-300:]}")
     try:
         out = json.loads(p.stdout.strip().splitlines()[-1])
     except (ValueError, IndexError):
@@ -765,7 +813,7 @@ def cmd_deliver(j, a):
                "duration_s": round(float(report.get("v_dur") or 0), 2),
                "credits": (0 if j["mode"] == "gameplay" else
                            sum(c for c in credits if c) if credits and all(c is not None for c in credits) else None),
-               "notes": notes.strip(" |")}
+               "notes": notes.strip(" |"), "timing": timeline(j, now())}
         os.makedirs(os.path.dirname(CLIP_LOG), exist_ok=True)
         with open(CLIP_LOG, "a", encoding="utf-8") as f:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -794,7 +842,8 @@ def cmd_deliver(j, a):
     j.pop("revision", None)
     j["delivery"] = {"at": iso(), "sha256": digest, "file": final, "sent": done, "logged": True}
     log(j, "delivered")
-    notify(f"ส่งงาน {j['job']} ครบแล้วค่ะ")        # also clears the review reply keyboard
+    j["timing"] = timeline(j)
+    notify(f"ส่งงาน {j['job']} ครบแล้วค่ะ\n{timeline_text(j['timing'])}")        # also clears the review reply keyboard
     return j["delivery"]
 
 
@@ -859,6 +908,7 @@ def main(argv=None):
                 raise Refused(f"ref not found: {missing}")
             j = new_job(a.job, a.mode, a.product, a.link, a.shots, a.ref, a.workdir, a.character)
             os.makedirs(j["workdir"], exist_ok=True)
+            j["started"] = iso(workdir_started(j["workdir"], now()))
             log(j, "created"); save(j)
             return out(summary(j))
         if a.cmd == "status":

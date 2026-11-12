@@ -412,3 +412,38 @@ def test_old_job_files_still_load(tmp_path, monkeypatch, capsys):
     assert cj.main(["status", "t-1"]) == 0 and cj.main(["decide", "t-1", "1", "approve"]) == 0
     assert cj.main(["edit-id", "t-1", "1", "real-id-9"]) == 0
     assert cj.load("t-1")["shots"][0]["attempts"][-1]["edit_id"] == "real-id-9"
+
+
+# ---------------------------------------------------------------- timing
+def _ev(j, hhmm, msg):
+    j["events"].append({"ts": f"2026-11-12T{hhmm}:00+07:00", "msg": msg})
+
+
+def test_timeline_splits_prep_generation_and_post():
+    j = job(shots=1)
+    j["started"], j["created"], j["events"] = "2026-11-12T08:55:00+07:00", "2026-11-12T10:31:00+07:00", []
+    for hhmm, msg in [("10:31", "created"), ("11:15", "ready shot 1 pass=True"), ("11:23", "decide shot 1: approve"),
+                      ("12:18", "delivered")]:
+        _ev(j, hhmm, msg)
+    tl = cj.timeline(j)
+    assert tl == {"total_min": 203, "stages": [["เตรียม", 96], ["gen+รีวิว", 52], ["post", 55]], "wait_fix_min": 8}
+    text = cj.timeline_text(tl)
+    assert "รวม 3 ชม. 23 น." in text and "รอฟิกตอบ 8 น." in text
+
+
+def test_timeline_gameplay_and_revision():
+    j = job(shots=0, mode="gameplay")
+    j["created"], j["events"] = "2026-11-12T10:00:00+07:00", []
+    j.pop("started", None)                              # an old job file has no start stamp
+    _ev(j, "10:00", "created"); _ev(j, "10:40", "delivered")
+    assert cj.timeline(j)["stages"] == [["เตรียม", 0], ["ทำคลิป", 40]]
+    _ev(j, "13:00", "reopened for a revision: sub typo"); _ev(j, "13:12", "delivered")
+    assert cj.timeline(j) == {"total_min": 12, "stages": [["แก้งาน", 12]], "wait_fix_min": 0}
+
+
+def test_workdir_started_uses_the_oldest_file(tmp_path):
+    f = tmp_path / "intake_sheet.jpg"
+    f.write_bytes(b"x")
+    os.utime(f, (1000, 1000))
+    assert cj.workdir_started(str(tmp_path), 5000) == 1000
+    assert cj.workdir_started(str(tmp_path / "none"), 5000) == 5000

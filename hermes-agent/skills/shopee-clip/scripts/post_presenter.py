@@ -363,6 +363,8 @@ def main():
                     help="210 = pill box ~y196-252, below the y192 top-UI band (safe-zones.md)")
     ap.add_argument("--whoosh-gain", type=float, default=0.35, help="linear gain of whoosh vs VO bed")
     a = ap.parse_args()
+    import heavylock
+    heavylock.acquire("post_presenter")
     plan = json.load(open(a.plan, encoding="utf-8"))
     pdir = os.path.dirname(os.path.abspath(a.plan))
     wd = os.path.abspath(a.workdir or pdir)

@@ -720,3 +720,14 @@ Not done / open:
   built-in xiaomi vision default is the retired `mimo-v2.5`. Not yet confirmed in the log: next vision call must
   show no "model not found on xiaomi".
 - Ported Hermes' 12:26 in-place lessons captured by the sync (late image numbering, review-screenshot salvage, OOM symptom note; its `model: small` workaround replaced by the script fix).
+
+### 2026-11-12 (evening) — stage timing + heavy-job lock
+- `clipjob.py`: `started` stamp at `new` (oldest file in the workdir = intake start), `timeline()` from the job's
+  events (เตรียม / gen+รีวิว incl. minutes waiting on Fix / post; 🎬 = เตรียม / ทำคลิป; a revision counts from its
+  reopen). `deliver` stores `timing`, writes it to the clip-log row and adds a ⏱ line to the "ส่งงานครบ" message.
+- `heavylock.py`: flock `/opt/data/clips/heavy.lock` in post_presenter, product_build, detect_repeats, build_v5,
+  asr_th, asr_speech_spans, gen_vo_natural (whisper part). Busy = wait 120 s then exit 75 naming the holder; a
+  holder's children skip the lock. `/opt/data/clips/logs/heavy-log.jsonl`: start/end rows with seconds + peak MB;
+  a start with no end = killed. `clipjob ready` refuses (no failed gate) when detect_repeats is BUSY.
+- The six 11-11 kills (19:18–20:46) stay untraced: no session transcript, no work files in that window. The log
+  above identifies the next one.

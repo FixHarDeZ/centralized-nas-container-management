@@ -26,6 +26,10 @@ ap.add_argument("src")
 ap.add_argument("--model", default="small")
 ap.add_argument("--language", default="th")
 args = ap.parse_args()
+import os, sys
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "shopee-clip", "scripts"))
+import heavylock
+heavylock.acquire("asr_th")
 
 # raw float32 array path: passing a file path to transcribe() crashes on Py3.14
 # (av.open metadata_errors), so decode to PCM first.

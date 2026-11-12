@@ -381,6 +381,9 @@ def main():
     a = ap.parse_args()
     if a.selftest_zoom:
         sys.exit(0 if selftest_zoom() else 1)
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "shopee-clip", "scripts"))
+    import heavylock
+    heavylock.acquire("build_v5")
     if not a.plan:
         ap.error("plan.json required")
     plan = json.load(open(a.plan))
