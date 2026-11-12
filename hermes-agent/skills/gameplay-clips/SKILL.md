@@ -36,6 +36,20 @@ metadata:
 - **Footage sourcing can be silent for 15–20 min** (downloads + ASR + vision sheets): send one short status line
   midway (what is done / what is next) and `clipjob.py note <job> "…"`.
 
+## Length — 15–50 s, picked from the footage (Fix 2026-11-12)
+- No fixed 10/20/30 menu and no Q2 for 🎬. DUR = any whole number of seconds from 15 to 50 that the content
+  carries: the usable seconds (speech-free AND text/logo-free, counted in step 2 / footage-sourcing §2a) and the
+  story (hook + 4–8 shots of 1.5–3 s + the real end card ~2.5–3 s, and selling points worth a VO line).
+- Lock DUR after the footage count and before the VO script; write it in the plan, `clipjob.py note <job>
+  "DUR <n> s: <usable> s clean, <why>"` and in the status line. Do not wait for Fix to confirm it.
+- Thin content → the shorter clip, never padding: no repeated shot, held frame, stretched footage or filler VO
+  to reach a longer number. Rich content → go longer, up to 50 s (Shopee allows 10–60 s).
+- A length Fix names in the order wins over this rule (the older "below DUR → clarify" rules apply to it).
+- Usable seconds < 15 → clarify with the real number and options (shorter clip at the usable length / another
+  source / footage Fix sends) and stop, as in `references/gameplay-pitfalls.md`.
+- Scale with DUR: VO char budget (deadline − lead − Σgaps) × 10–16 ch/s, the gap gate (≥4 gaps >0.25 s per 20 s),
+  and the shot count. A clip of 15 s or less may use the short-clip path below.
+
 ## Cover sticker + thumbnail — DEFAULT on every clip (Fix 2026-11-07 / 11-08)
 - After build_v5 + master + remux, add the game case cover (product: the product crop) as a cut-out sticker with
   `/opt/data/skills/shopee-clip/scripts/graphics_layer.py out.mp4 gfx.json final.mp4` — below the Thai subs, clear of

@@ -142,7 +142,7 @@ Runtime data: `/opt/data/clips/jobs` (clipjob state), `/opt/data/clips/logs` (cl
 `/opt/data/clips/flow-state` (Flow project roster/edit ids), `/opt/data/clips/work/<job>` (durable job workdir —
 scratch is pruned ~24 h). Old skill archived at `/opt/data/skills-archive/flow-shopee-clips`.
 Flow: Q1 mode (🎬 footage from official videos — games + brand product films / 🧑 presenter+graphic / 📦 graphic ล้วน;
-rigid products get a drift warning) → Q2 length (N = length/10 s shots) → photo gate → storyboard (+ product-identity
+rigid products get a drift warning) → Q2 length for 🧑/📦 (N = length/10 s shots; 🎬 skips Q2 and picks 15–50 s from the usable footage, Fix 2026-11-12) → photo gate → storyboard (+ product-identity
 checklist) → Q3 📝 prompt pack / 🤖 auto (auto falls back to 📝 itself) → `clipjob.py ready/decide` per shot → post
 (graphics always) → `clipjob.py deliver` (only send path; clip + ONE copy-button message + cover). **🎬 also runs
 through clipjob since 2026-11-12**: `new --mode gameplay`, `note` per stage, `deliver` (no report needed;
@@ -175,6 +175,7 @@ registered, `presenter-shots` still registered, Telegram reconnected. Re-enablin
 
 | วันที่ | เรื่อง |
 |--------|--------|
+| 2026-11-12 | 🎬 length flexible 15–50 s from the footage, no Q2 (Fix's named length still wins). |
 | 2026-11-12 | Clip skills hardening (review 11-11 items 1–5): clipjob chain/edit-id/resend/gameplay deliver, `sync.sh --pull`, gameplay SKILL 76→27 KB, house-rules 36→9 KB, size budgets (`3b9b3c7`, `8229ca7`, `f3c2959`). |
 | 2026-11-10 | Session closed (3): skills unlocked, VITURE 🎬 job awaiting "ทำต่อ". |
 | 2026-11-10 | Skill lock removed (false-positive block stalled the VITURE 🎬 clip); sync.sh captures in-place drift instead (`74367f4`). |

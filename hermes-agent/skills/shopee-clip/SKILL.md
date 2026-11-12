@@ -55,7 +55,9 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    Do not guess from the product type: a game can be 🧑, and a washer can be 🎬. For a rigid product
    (rack, shelf, cabinet, device) add one line to the question: in 🧑 Flow redrew its parts/size in 2 of 2
    jobs (2026-11-10/11, 30 credits each); 🎬/📦 hold the shape better. Fix still picks.
-3. **Q2 — length** (`clarify`, one question): `["10 วิ (แนะนำ)", "20 วิ", "30 วิ", "40 วิ"]`.
+3. **Q2 — length, 🧑/📦 only** (`clarify`, one question): `["10 วิ (แนะนำ)", "20 วิ", "30 วิ", "40 วิ"]`.
+   **🎬 skips Q2** (Fix 2026-11-12): gameplay-clips picks any whole length 15–50 s from the usable footage
+   and the content (its "Length" section). A length Fix names in the order still wins.
    One shot = one Flow generation of 10 s (Omni 1.1 Flash, ≈15 credits; `house-rules.md` → Credits).
    N = length / 10: 10 s→1, 20 s→2, 30 s→3, 40 s→4. A shot can hold several storyboard beats.
    If the order message already names the mode and/or length, do not ask that question again: take it as the answer. Ask only the questions still open (Q3, storyboard approval).

@@ -47,12 +47,12 @@ and `hook_id: "pft-N"`.
     vision-check 2–3 frames against Fix's listing photos: shape, logo, ports, colour.
 - **Product films are often narrated all the way through.** Rank the sources by the total ASR gap
   (footage-sourcing.md), exactly as for trailers. Music-only brand films and "design" films work best.
-  When no source has enough gap for the length Fix picked, stop and tell him, and offer 📦 (Flow b-roll)
+  When no source has enough gap for the length Fix named (or 15 s when he named none; SKILL.md "Length"), stop and tell him, and offer 📦 (Flow b-roll)
   or a shorter clip. Do not lay Thai VO over English narration.
 - **Measure the text-free runs before committing to a length (brand films are caption-heavy).** Run a 1 fps
   contact sheet over the whole source and count the longest continuous run with no on-screen text and no
   people. A 50 s 16:9 brand film had only a ~6 s clean run; a 60 s vertical short had a 9 s one. If the longest
-  clean run is shorter than the ordered length, stop and offer Fix a shorter clip or another source (shorts are
+  clean run is shorter than the length Fix named (or 15 s), stop and offer Fix a shorter clip or another source (shorts are
   often the cleaner option). Do not paper over it with brand captions.
 - **Shorts are vertical: use `product_build.py` directly.** They are 9:16 already, so skip the 16:9 window
   path. A short can yield a clean run with zero speech while ASR reports one segment; that is a music-only

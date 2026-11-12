@@ -697,3 +697,10 @@ Not done / open:
 - `bao-jin-rack` 1.5 h post time not investigated.
 
 - 07:45 follow-up: Hermes' 06:44–07:33 session ended with no open job; its background review added one frame-check bullet in place (overlay text checked against the string on disk, line crops). Ported verbatim (`a079618`), re-synced: 0 files changed, live == repo.
+
+### 2026-11-12 (later) — 🎬 length flexible
+- Fix: gameplay/footage clips need not be 10/20/30 s; any 15–50 s that the footage carries.
+- Router Q2 now 🧑/📦 only; 🎬 skips it. gameplay-clips SKILL.md new "Length" section: DUR = whole seconds 15–50
+  from usable seconds + story, locked after the footage count, noted via `clipjob.py note`, no padding; Fix's named
+  length still wins; usable < 15 s → clarify. Pitfalls / product-footage / footage-sourcing "below DUR" rules point
+  to it. Tests 56 passed. Live test = next 🎬 order.
