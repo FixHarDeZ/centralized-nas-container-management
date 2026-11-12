@@ -44,7 +44,9 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    confirmed with Fix (which clip, what changes) before any spend.
 1. **Intake** (before any question that costs time). Run
    `uv run --with pillow python S/intake_images.py <first image> /opt/data/clips/work/<job>`, then do
-   one vision pass on the sheet. You need the product name and the basket link. A missing link is
+   one vision pass on the sheet. The gateway already described each image on arrival, so do not read
+   them one by one again: a single-image read only for a tile the sheet leaves unclear (at most 2).
+   You need the product name and the basket link. A missing link is
    asked for in the same message as Q1. The sheet read can misattribute images across tiles, and one
    listing often carries SEVERAL models (a toy rack, a kitchen box set, a pet rack under one link):
    when a tile's description disagrees with what the image plainly shows, re-read that image on its own
@@ -74,6 +76,8 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    reference, attached whole (`references/product-image-prep.md` "Lifestyle photos"); never ask Fix for a
    plain-background photo because of props alone. Ad graphics and review screenshots
    are storyboard input only. Crop and cutout recipes: `references/product-image-prep.md`.
+   **Crop budget: 2 vision checks.** Put every candidate crop on ONE labelled sheet per check; if no
+   candidate passes the second check, send Fix the best one with what is wrong and ask (use it / new photo).
    With no clean photo, ask Fix for one and stop at zero spend. Never fill the gap with a guessed product.
    A reference under ~1000 px is high-risk for product identity: Flow drew a different frame shape and
    added a fake on-lens graphic when the attached photo was ~700 px. If Fix accepts a small photo anyway, say

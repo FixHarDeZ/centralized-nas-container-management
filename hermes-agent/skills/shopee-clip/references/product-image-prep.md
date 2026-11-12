@@ -4,6 +4,16 @@ Fix's screenshot is always the primary ingredient (the Shopee listing itself is 
 
 **Decision before any salvage — vision-read the source once, then branch.** ONE read on the FULL image asking for every readable text plus any price / currency / discount / coupon / QR / shop wordmark. Any of those present → run the salvage recipe below. NONE present → attach the ORIGINAL file un-cropped: the no-price rule bans price / promo / wordmark TEXT, not ad layout, and cropping a clean ad only throws away product context (branding, spec badges, feature icons) the model can use as reference. Name the branch in the delivery — which file was attached, and that the source was checked clean.
 
+## Time budget — 2 vision checks per reference (Fix 2026-11-12)
+A vision call takes 20–150 s here. One job spent 55 min on ~14 crop → check rounds for a single reference
+(anttermite, 2026-11-12). So:
+- Make ALL candidate crops first (different sources / margins), paste them on ONE sheet with a big label per
+  tile (PIL, labels from code), and ask vision once: which tiles are free of text / price / UI / people and
+  show the whole product.
+- Use pixel probes (recipe below), not vision, to find edges and to confirm a fix.
+- A second sheet is allowed after fixing what the first check named. No third: send Fix the best candidate
+  with the remaining defect in one line and ask `clarify` (use it / he sends another photo). Zero spend while waiting.
+
 ## Lifestyle photos — a styled room is a valid reference
 Shop photos often show the product set up in a real room: a clothes rack holding clothes and a bag, a shelf with jars, a desk with a lamp. When the photo has no text/UI/people, it passes the photo gate AS IS. Do not refuse it, do not ask Fix for a plain-background photo, and do not try to cut the product out (thin white frames on a pale wall do not survive a cutout, and the props show what the product is for). (2026-11-10: a clothes rack in a bedroom was refused as "not product-only" and stalled the order.)
 - The ~1000 px floor in `house-rules.md` is for ad screenshots where the product is a small part of the frame. A lifestyle photo where the product fills most of the frame is fine at Shopee's usual ~750–800 px.

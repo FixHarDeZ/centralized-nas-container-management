@@ -714,3 +714,8 @@ Not done / open:
   ~8.5 min waiting on clarify answers. OOM cost ~15 min.
 - Open: cap the photo-gate crop loop (batch crops in one sheet / stop after 2 tries); auxiliary vision model
   still points at retired `mimo-v2.5` (400, falls back to the main model every call).
+- Follow-up same day: photo-gate crop budget (2 vision checks, candidates on one sheet, then ask Fix) in router
+  step 5 + `product-image-prep.md`; intake no longer re-reads every image singly. Live config
+  `auxiliary.vision.model: mimo-v2.6-flash` (backup `/opt/data/config.yaml.bak-20261112`) because Hermes'
+  built-in xiaomi vision default is the retired `mimo-v2.5`. Not yet confirmed in the log: next vision call must
+  show no "model not found on xiaomi".
