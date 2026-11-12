@@ -695,3 +695,5 @@ Not done / open:
   hermes-agent/skills; `git pull` is unaffected while no commit touches them).
 - n8n mentions left as history in flow-driver strategy notes (they say n8n is off).
 - `bao-jin-rack` 1.5 h post time not investigated.
+
+- 07:45 follow-up: Hermes' 06:44–07:33 session ended with no open job; its background review added one frame-check bullet in place (overlay text checked against the string on disk, line crops). Ported verbatim (`a079618`), re-synced: 0 files changed, live == repo.
