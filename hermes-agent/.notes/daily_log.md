@@ -719,3 +719,4 @@ Not done / open:
   `auxiliary.vision.model: mimo-v2.6-flash` (backup `/opt/data/config.yaml.bak-20261112`) because Hermes'
   built-in xiaomi vision default is the retired `mimo-v2.5`. Not yet confirmed in the log: next vision call must
   show no "model not found on xiaomi".
+- Ported Hermes' 12:26 in-place lessons captured by the sync (late image numbering, review-screenshot salvage, OOM symptom note; its `model: small` workaround replaced by the script fix).

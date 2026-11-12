@@ -16,12 +16,18 @@ model, trim. The script text comes from the prompt's `Audio (Thai voiceover): ".
 Outputs: `subs.ass`, `pills.txt`, `out.mp4` (mastered, FB-safe High/yuv420p, faststart),
 `report.json`.
 
+- **A run that dies printing NOTHING (no traceback, only a leaked-semaphore warning) is an OOM kill**, not an
+  empty failure: the container is cgroup-fenced at 4 GB. Cause on 2026-11-12: `auto` loaded whisper medium
+  while small was still cached (~3.6 GB). Fixed in the script since (one model in RAM, measured peak 1.95 GB
+  for small → medium), so `"model": "auto"` is safe again. If it still gets killed, run with
+  `CT2_CPU_THREADS=2 OMP_NUM_THREADS=2` and `"model": "small"`, and never run two heavy jobs at once.
+
 - **Silent H / B-roll shots:** set `"silent": true` on the scene and leave out `script`/`prompt`. It gets no ASR and no subs, only pills, and still joins the xfade and the timeline. Without the flag, an empty script crashes the align step.
 - **No CTA pill:** run with `NO_AUTO_CTA=1` when Fix moved the CTA to the caption, or on a heavy-content clip. Otherwise the script auto-adds `Link below!` over the last 2.2 s, and it collides with a pill you placed there (`pills overlap` exit).
 - **graphics_layer image_stickers:** the avoid-check box is `w_est+42` wide. Keep `x - (w_est+42)/2` past the face box's right edge, or the run exits with `covers avoid-zone 'face'` and leaves the OLD `final.mp4` in place. Check that the sha changed.
 
 ## Run gate (read before any send)
-- A run prints `FLAG:` lines and writes `report.json`. Read both before sending. `FLAG: ... not in script` means Flow's voiceover spoke words the script does not contain: the burned subs still follow the script, so the audio can be wrong while the subs look right. Report it to Fix with the frame time, and let him choose between delivering as-is and regenerating that scene.
+- A run prints `FLAG:` lines and writes `report.json`. Read both before sending. `FLAG: ... not in script` means Flow's voiceover spoke words the script does not contain: the burned subs still follow the script, so the audio can be wrong while the subs look right. Report it to Fix with the frame time, and let him choose between delivering as-is and regenerating that scene — UNLESS the flagged fragments are the script's OWN words out of order (signature: CER far above the ~0.2 norm, `match=0/N`, and a mid-script phrase timestamped at the scene's start): that is Flow speaking the script REORDERED to fit the visual beat order, not ad-libbing. Confirm with an unprompted probe of the raw scene; when every script phrase appears exactly once, reorder `plan.json`'s script to the spoken order and re-run — 0 credits, and the alignment then passes so the subs follow the real audio. Only words genuinely absent from the script go to Fix as deliver-as-is/regenerate.
 - **Not every FLAG is a defect.** `clipjob.py deliver` matches flags against `INFO_FLAGS` (anything containing `auto-added`, e.g. the auto `Link below!` pill) and ships without an `--ack`. Only real defects — words not in script, a skipped phrase, `pause_err` max well past ~1.5 s — need Fix's call passed as `--ack "<flag>=<his call>"`. Never stall a finished clip waiting for him to ratify an auto-added pill.
 - A `phrases_matched` count below total, or an `onset_err` over ~1 s, means the subs may lag the audio. Check it before delivery, not after.
 - The run can yield to background in the terminal. Poll it to exit before reading its output; never send `final.mp4` while the run is still writing.

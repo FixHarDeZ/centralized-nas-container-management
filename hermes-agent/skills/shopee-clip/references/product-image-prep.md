@@ -13,6 +13,7 @@ A vision call takes 20–150 s here. One job spent 55 min on ~14 crop → check 
 - Use pixel probes (recipe below), not vision, to find edges and to confirm a fix.
 - A second sheet is allowed after fixing what the first check named. No third: send Fix the best candidate
   with the remaining defect in one line and ask `clarify` (use it / he sends another photo). Zero spend while waiting.
+  (The zoom reads in "Review-screenshot salvage" count against this budget.)
 
 ## Lifestyle photos — a styled room is a valid reference
 Shop photos often show the product set up in a real room: a clothes rack holding clothes and a bag, a shelf with jars, a desk with a lamp. When the photo has no text/UI/people, it passes the photo gate AS IS. Do not refuse it, do not ask Fix for a plain-background photo, and do not try to cut the product out (thin white frames on a pale wall do not survive a cutout, and the props show what the product is for). (2026-11-10: a clothes rack in a bedroom was refused as "not product-only" and stalled the order.)
@@ -24,6 +25,12 @@ Shop photos often show the product set up in a real room: a clothes rack holding
 
 ## Use-context gate for review and listing screenshots
 A crop from a buyer's review photo or a listing thumbnail often shows the product as shipped: loose parts, a tray on cardboard, the item unassembled beside its screws. That crop is not a valid shelf, rack or appliance reference, because the model then invents the installed form. Before offering any such crop as the reference, vision-read it once and require that the product appears assembled and in its use context (on or beside the appliance it is meant for). When only loose-part crops exist, say so in the question to Fix, with the options (wait for a clean installed photo, or accept the structure risk), and spend no credits until he picks.
+
+### Review-screenshot salvage — strip the UI band first
+A review post (buyer photo + comment UI) is often the only photo of the exact product Fix has. Salvage it in two stages:
+1. **Cut the screenshot's UI out before touching the product.** Ask ONE layout read with bounds as FRACTIONS of the image (0.0–1.0), never pixel coordinates: vision's pixel answers come back in whatever canvas it assumed and two reads disagree by tens of px, while fractions are scale-free and self-consistent. Crop the PHOTO band out first, so the @handle, star row, price bar and avatar are outside your working rect from then on and can no longer ride into any later crop.
+2. **Adjudicate hands and cut edges with targeted zoom reads, not hue probes.** On warm-lit photos every skin predicate also matches the beige background and the product's own orange label art, so a skin-count probe finds "fingers" on label graphics and misses pale skin. Settle "is a hand in the crop / is the base cut" with ONE zoom read of that zone (tile several suspect zones into one sheet if there are several), and take the product's top/bottom from row profiles instead: count near-white pixels per row across the product's x-range — the first and last row with a real count are the nozzle top and the base bottom. Vision's completeness verdicts flip between runs; the row count does not.
+3. A sliver of finger at one corner is Fix's explicit call, not yours: offer it alongside the small-source options in the same clarify, then record the accepted risk in the storyboard (drift check before the next shot's submit) and in the delivery.
 
 ## Salvage recipe — locate, cut, verify by pixel probes
 1. Copy the cache image into a scratch dir under a descriptive filename and `ffprobe` it for WxH (the picker lists by filename, so make it descriptive).

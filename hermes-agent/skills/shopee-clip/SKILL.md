@@ -52,6 +52,10 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    when a tile's description disagrees with what the image plainly shows, re-read that image on its own
    before deciding, build the clip around the product the order text leads with, and name every image
    you dropped in the delivery.
+   A late image (arrives after intake) is part of the order, not a new question: copy it into the workdir
+   by hand as the NEXT number (`img6.jpg`, …) and fold it into the storyboard — re-running
+   `intake_images.py` on a later image re-numbers from `img1` inside its own window and overwrites the
+   files already there.
 2. **Q1 — mode** (`clarify`, one question, buttons):
    `["🎬 footage จากวิดีโอทางการ (เกม/สินค้า, 0 เครดิต)", "🧑 presenter + graphic", "📦 graphic ล้วน (ภาพสินค้า ไม่มีคน)"]`.
    Do not guess from the product type: a game can be 🧑, and a washer can be 🎬. For a rigid product
