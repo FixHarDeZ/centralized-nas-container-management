@@ -447,3 +447,12 @@ def test_workdir_started_uses_the_oldest_file(tmp_path):
     os.utime(f, (1000, 1000))
     assert cj.workdir_started(str(tmp_path), 5000) == 1000
     assert cj.workdir_started(str(tmp_path / "none"), 5000) == 5000
+
+
+def test_billed_credits_skip_a_refunded_failed_card():
+    j = {"shots": [{"attempts": [{"submitted_at": "t", "credits": 15}]},
+                   {"attempts": [{"submitted_at": "t", "credits": 15, "failed": "policy (refunded)", "credits_spent": False},
+                                 {"submitted_at": "t", "credits": 15, "failed": "bad card", "credits_spent": True},
+                                 {"submitted_at": "t", "credits": 15},
+                                 {"reserved_at": "t"}]}]}
+    assert cj.billed_credits(j) == [15, 15, 15]

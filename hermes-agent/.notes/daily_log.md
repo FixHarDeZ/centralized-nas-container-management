@@ -742,3 +742,22 @@ Not done / open:
 - Not verified: any of it on a real order; the vision model setting.
 - Next: watch the first real 🎬 and 🧑 orders (⏱ line, no Q2 for 🎬, crop rounds), then decide on the open ideas
   listed in 00_INDEX.
+
+### 2026-11-12 — check of the first real order after the changes (blackmores-omega-triple-20s, 🧑 20 s, 🤖)
+- Delivered 15:05, 137 min: เตรียม 4 / gen+รีวิว 94 / post 39, waited on Fix 4. The ⏱ line and clip-log `timing`
+  work. anttermite the same morning: 202 min with เตรียม 96.
+- No OOM kill after 11:44. heavy-log: 14 rows, every start has an end, post_presenter peak 1.38 GB, no BUSY.
+- Shot 2 frame gate failed (label read "OMEGA DAILY", no "TRIPLE"), `ready` sent pass=False, Fix approved. As designed.
+- Bug fixed: clip-log `credits` counted the shot-2 card that Flow refunded (logged 45, real 30). `billed_credits()`
+  skips a failed attempt without `--credits-spent`. The blackmores row in clip-log.jsonl still says 45.
+- Vision setting has no effect: 502 "model not found on xiaomi" lines today, still at 15:03. Cause in
+  `/opt/hermes/agent/auxiliary_client.py` `_vision_main_provider_client`: with `provider: auto` a non-nous main
+  provider uses `_PROVIDER_VISION_MODELS` (`mimo-v2.5`) and never reads `auxiliary.vision.model`. Cost per call is
+  one 400 (~0.4 s), then it falls back to `mimo-v2.6-flash`, so vision works. Not changed. Untested option:
+  `auxiliary.vision.provider: xiaomi` + `model: mimo-v2.6-flash`.
+- The live value is now `claude-haiku-5-5`, not what was set. config.yaml was rewritten 12:50:12 when Fix pressed
+  "always" on an exec approval (allowlist gained `overwrite project env/config file`) while the session ran on
+  `claude-haiku-5-5` (12:47–13:13). Which command wrote the value was not traced.
+- Still slow: gen+รีวิว 94 min. Shot 1 render→ready 31 min (Flow grid Download did nothing, editor dblclick failed),
+  shot 2 policy fail + resubmit, one `vision_analyze` timeout 14:21. Post 39 min holds only 2.2 min of
+  post_presenter; the rest is LLM rounds.

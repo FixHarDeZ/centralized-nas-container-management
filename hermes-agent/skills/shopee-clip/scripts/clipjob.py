@@ -244,6 +244,12 @@ def submitted(j, k, edit_id=None, credits=None):
     log(j, f"submitted shot {k} edit_id={edit_id}")
 
 
+def billed_credits(j):
+    """Credits per submitted attempt; a failed card that Flow refunded (no --credits-spent) is not billed."""
+    return [at.get("credits") for s in j["shots"] for at in s["attempts"]
+            if at.get("submitted_at") and not (at.get("failed") and not at.get("credits_spent"))]
+
+
 def submit_failed(j, k, reason, credits_spent=False):
     """-> True when this failure triggers the fallback to prompt pack."""
     s = shot(j, k)
@@ -799,7 +805,7 @@ def cmd_deliver(j, a):
     done = dict(prev.get("partial") or {})
     if not prev.get("logged"):
         edit_ids = [at["edit_id"] for s in j["shots"] for at in s["attempts"] if real_edit_id(at.get("edit_id"))]
-        credits = [at.get("credits") for s in j["shots"] for at in s["attempts"] if at.get("submitted_at")]
+        credits = billed_credits(j)
         notes = (f"REVISED: {j['revision']} | " if j.get("revision") else "") + (a.notes or "")
         notes += f" | job {j['job']} production={j['production']}"
         if j.get("fallback"):
