@@ -704,3 +704,13 @@ Not done / open:
   from usable seconds + story, locked after the footage count, noted via `clipjob.py note`, no padding; Fix's named
   length still wins; usable < 15 s → clarify. Pitfalls / product-footage / footage-sourcing "below DUR" rules point
   to it. Tests 56 passed. Live test = next 🎬 order.
+
+### 2026-11-12 (afternoon) — OOM in post + slow anttermite job
+- OOM: cgroup 4 GB cap (not the host). Victim = `post_presenter.py` python at ~3.5 GB, killed 11:42 + 11:44
+  (6 more kills on 11-11 evening, not traced). `auto` kept whisper small cached while loading medium.
+  Fix `3d90a33`: one model in RAM. Measured on NAS small→medium on scene2: peak 1.95 GB.
+- Timeline anttermite-20s (🧑, 3 h 20 min): 08:55–10:31 before the job opened = 25 `vision_analyze` calls
+  (1500 s, avg 60 s) — ~12 of them a crop→check loop on ref1/img6 for the photo gate (09:29–10:24) — plus
+  ~8.5 min waiting on clarify answers. OOM cost ~15 min.
+- Open: cap the photo-gate crop loop (batch crops in one sheet / stop after 2 tries); auxiliary vision model
+  still points at retired `mimo-v2.5` (400, falls back to the main model every call).
