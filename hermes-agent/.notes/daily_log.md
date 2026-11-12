@@ -669,3 +669,29 @@ Left:
 - Docs still describe the old behaviour: router + flow-driver (edit-id, --resend, chain flag, failed-shot button),
   gameplay-clips steps 0/10/11 (clipjob new/note/deliver/reopen, durable workdir, D-N pill, copy buttons only).
 - Phase 4 (slim gameplay SKILL.md 76 KB and house-rules 36 KB, size tests) and Phase 5 (🧑 drift warning in Q1).
+
+## 2026-11-12 — clip skills hardening finished + synced
+
+Hermes ported its own overnight in-place edits and pushed them (`ff2a98f`), so `--pull` worked as intended
+before it existed. Pulled that, then:
+- `8229ca7` router + flow-driver follow the new clipjob calls: 🎬 opens a gameplay clipjob (`note`, `deliver`,
+  `reopen`), delivery = copy-button message only (D3), `submitted` without id + `edit-id` (no hand-edited JSON),
+  chain warnings, Q1 rigid-product drift warning, storyboard product-identity checklist, storyboard.md no longer
+  says shots are unchained.
+- `f3c2959` docs split: gameplay SKILL 76→27 KB (`gameplay-pitfalls.md` grouped by step, `cover-sticker.md`,
+  step 2/7 sub-rules into footage-sourcing/natural-vo), D-N pill removed, workdir = `/opt/data/clips/work/<job>`;
+  house-rules 36→9 KB (every original bullet verbatim in `house-rules-history.md`; Flow-UI facts →
+  `flow-production-notes.md`); `deliver --style footage`; `DOC_BUDGETS` test; flow-browser-env read-first guide.
+- `c92c2c4` index.
+- Waited for Hermes to go idle (a Telegram session ran 06:44–07:09), then `make hermes-skills`: tests 56 passed in
+  the container, 20 files updated, no drift captured. Verified: live == repo for every tracked file, manifest
+  `#commit c92c2c4`, all 4 existing job files load, clipjob help lists edit-id/note/reopen, check_delivery 0,
+  3 skills still pinned, `sync.sh --pull` dry run OK.
+
+Not done / open:
+- No real clip has exercised the new clipjob rules yet (first 🧑 2-shot 🤖 job and first 🎬 job via `deliver` are
+  the live test).
+- Hermes' clone still shows `.venv/bin/python` + `uv.lock` modified (harmless: sync only refuses dirt under
+  hermes-agent/skills; `git pull` is unaffected while no commit touches them).
+- n8n mentions left as history in flow-driver strategy notes (they say n8n is off).
+- `bao-jin-rack` 1.5 h post time not investigated.
