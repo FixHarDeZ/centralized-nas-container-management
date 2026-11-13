@@ -846,3 +846,6 @@ Not done / open:
   2 scripts live (`shopee-clip/scripts/send_status.py`, `freerect.py`). All ported to the repo (read first: a
   Telegram one-liner sender and a numpy free-rect map); gameplay SKILL.md trimmed to 30704 B. 68 tests pass.
 - Open job at sync time: `aot3-20261113` (🎬, last update 15:40).
+- Pushed `0a131dc` (hands mode) + `f59d2ed` (port). `make hermes-skills` synced at `f59d2ed`, 68 tests passed in the
+  container; live check: `clipjob.py new --help` lists `hands`, `hands-mode.md` present. The sync's 1 drift file
+  (`skill-drift/20261113-162848`, gameplay SKILL.md) is byte-identical to the copy already ported. No deploy, no restart.
