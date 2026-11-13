@@ -818,3 +818,14 @@ Not done / open:
   look-v5, natural-vo) and its new `gameplay-clips/scripts/sub_bandprofile.py`; SKILL.md cut back to 30.6 KB (cap 30 KB×1024).
 - Tests 67 passed. Not verified on a real order: the 250 cap taking effect (next turn log must show `/250`),
   `wait` being used, vision times with `.v.jpg`.
+
+### 2026-11-13 — session closed
+- On `main`, pushed: `35bbe41` (clipjob `wait`, `vprep.py`, vision rules, Hermes' edits ported, `sub_bandprofile.py`).
+  Skills synced at `35bbe41`, tests 67 passed in the container. Smoke test on the NAS: `clipjob.py wait --help` ok,
+  `vprep.py` 435 KB PNG → 30 KB.
+- The sync captured 2 files in `/opt/data/clips/skill-drift/20261113-114838` (gameplay SKILL.md, footage-sourcing.md):
+  Hermes' own versions, already ported; the repo copies differ only by the trim and the new rules. Nothing to port.
+- Hermes' clone: the `--pull` copies were discarded after the port (`git checkout -- hermes-agent/skills`), clone clean.
+- Live-only: `agent.max_turns: 250` (backup `/opt/data/config.yaml.bak-20261113`). No container restart, no deploy.
+- Open for the next order: turn log shows `/250` (else restart the gateway), `wait` used, vision time with `.v.jpg`,
+  cause of the 420 s vision stalls, xenoblade had no `note` events.
