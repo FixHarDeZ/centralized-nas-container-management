@@ -403,6 +403,30 @@ def test_flow_mode_still_needs_a_report(tmp_path, monkeypatch, capsys):
     assert "--report" in capsys.readouterr().err
 
 
+def test_hands_mode_is_a_flow_mode_with_no_presenter_gates(tmp_path, monkeypatch):
+    """✋ = the 📦 pipeline with hands in frame: refs and graphics required, no character, VO added in post."""
+    monkeypatch.setattr(cj, "DIR", str(tmp_path)); monkeypatch.setenv("CLIPJOB_NO_TG", "1")
+    with pytest.raises(cj.Refused, match="photo"):
+        cj.new_job("h", "hands", "x", shots=1, refs=[])
+    j = cj.new_job("t-1", "hands", "Thing", "https://s.shopee.co.th/x", 1, ["/tmp/ref.jpg"])
+    assert j["character"] is None and len(j["shots"]) == 1
+    j["production"] = "prompt"; j["workdir"] = str(tmp_path)
+    cj.shot(j, 1)["state"] = "submitted"; cj.shot(j, 1)["attempts"].append({"via": "prompt"})
+    cj.save(j)
+    raw = tmp_path / "s.mp4"; raw.write_bytes(b"x")
+    monkeypatch.setattr(cj, "ffprobe", lambda p: {"w": 720, "h": 1280, "dur": 10.0, "kbps": 3000, "has_audio": False})
+
+    def no_asr(*a):
+        raise AssertionError("the repeats gate is for a presenter speaking in Flow")
+    monkeypatch.setattr(cj, "repeats_gate", no_asr)
+    assert cj.main(["ready", "t-1", "1", "--raw", str(raw), "--frame", "pass", "--no-send"]) == 0
+    j = cj.load("t-1")
+    assert set(j["shots"][0]["gates"]) == {"probe", "frame"}      # a silent shot is fine: no speech is asked for
+    cj.decide(j, 1, "approve")
+    probs = cj.deliver_problems(j, {"v_dur": 10, "a_dur": 10}, {}, "#a", [])
+    assert any("graphics" in p for p in probs)
+
+
 def test_old_job_files_still_load(tmp_path, monkeypatch, capsys):
     """Jobs written before the hardening (placeholder edit ids, no chain_stale/review_sent keys)."""
     monkeypatch.setattr(cj, "DIR", str(tmp_path)); monkeypatch.setenv("CLIPJOB_NO_TG", "1")

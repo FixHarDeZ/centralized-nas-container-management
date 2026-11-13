@@ -829,3 +829,15 @@ Not done / open:
 - Live-only: `agent.max_turns: 250` (backup `/opt/data/config.yaml.bak-20261113`). No container restart, no deploy.
 - Open for the next order: turn log shows `/250` (else restart the gateway), `wait` used, vision time with `.v.jpg`,
   cause of the 420 s vision stalls, xenoblade had no `note` events.
+
+### 2026-11-13 — ✋ hands mode added (4th clip mode)
+- Fix asked for the faceless demo style (only hands + product, try it while a voice explains).
+- `clipjob.py`: `hands` is a Flow mode (`FLOW_MODES`): needs `--shots` + `--ref`, no `--character`, no
+  repeats/CTA gate at `ready` (no Flow speech), graphics mandatory at `deliver`. clip-log `style` = `hands`.
+- It rides on the 📦 pipeline: Flow shots with "no speech", VO in post via `product_build.py`, then `graphics_layer`.
+  New `shopee-clip/references/hands-mode.md` (framing wrists-down, demo beats, frame-check defects, `avoid` box
+  over the motion path). Router: 4th Q1 button, Q2/photo gate/step 6/7/11 name ✋ (15105 B of 15360).
+  `product-mode.md` + `flow-steps.md` step 2 scoped (no character chip for 📦/✋).
+- Tests: 68 passed locally (new `test_hands_mode_is_a_flow_mode_with_no_presenter_gates`).
+- Not run on a real order: no Flow generation was made (credits). 📦 underneath has never run a real clip either.
+  Risk known: Flow redraws rigid products when hands grip/rotate them, finger faults.

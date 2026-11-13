@@ -1,9 +1,11 @@
 # 📦 graphic ล้วน: Flow product b-roll with no person, plus gameplay-style VO and graphics
 
+> ✋ hands mode reuses this file for the voiceover, build and graphics; its own shot rules are in `hands-mode.md`.
+
 Fix 2026-11-10: the voice copies the gameplay recipe ("ลอกแนวเสียงจากคลิปแนว gameplay ได้เลย อันนั้นเทสมาแล้ว").
 
 ## Shots (Flow)
-- No person and no hands: hero turntable, macro or texture, the product in use by itself (pouring, opening,
+- 📦: no person and no hands: hero turntable, macro or texture, the product in use by itself (pouring, opening,
   lighting up), and a lifestyle set dressing.
 - Every prompt carries **"no speech, no voiceover, no music — natural ambient sound only"**. The VO is added in
   post, and Flow speech would fight it. Add the no-on-screen-text block from `presenter-post.md`.

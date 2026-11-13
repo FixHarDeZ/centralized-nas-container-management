@@ -4,7 +4,7 @@
 State: $CLIPJOB_DIR/<job>.json (default /opt/data/clips/jobs). Pacing clock: $CLIPJOB_DIR/pacing.json.
 This CLI is the only sanctioned way to move a Flow-mode clip forward. It refuses out-of-order steps.
 
-  clipjob.py new JOB --mode presenter|product|gameplay --product "..." [--link URL] [--shots N] [--ref IMG ...] [--character NAME]
+  clipjob.py new JOB --mode presenter|product|hands|gameplay --product "..." [--link URL] [--shots N] [--ref IMG ...] [--character NAME]
   clipjob.py production JOB auto|prompt            # Fix's answer to Q2 (Flow modes only)
   clipjob.py status [JOB]
   # auto (IU drives Flow)
@@ -61,7 +61,7 @@ PACING_S = 300
 WAIT_CAP_S = 150           # one `reserve --wait` sleeps at most this long: the Hermes terminal tool times out at 180 s
 SHOT_SECONDS = 10          # one Omni 1.1 Flash generation (house-rules.md -> Duration)
 INFO_FLAGS = [re.compile(r"auto-added")]   # report flags that only inform (post_presenter adds the CTA pill itself)
-FLOW_MODES = ("presenter", "product")
+FLOW_MODES = ("presenter", "product", "hands")   # hands = product pipeline, hands in frame, no face
 MODES = FLOW_MODES + ("gameplay",)
 JOB_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}$")
 APPROVE, REGEN = "✅ ผ่าน", "🔁 gen ใหม่"

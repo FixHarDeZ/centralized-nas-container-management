@@ -57,11 +57,11 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    `intake_images.py` on a later image re-numbers from `img1` inside its own window and overwrites the
    files already there.
 2. **Q1 — mode** (`clarify`, one question, buttons):
-   `["🎬 footage จากวิดีโอทางการ (เกม/สินค้า, 0 เครดิต)", "🧑 presenter + graphic", "📦 graphic ล้วน (ภาพสินค้า ไม่มีคน)"]`.
+   `["🎬 footage จากวิดีโอทางการ (เกม/สินค้า, 0 เครดิต)", "🧑 presenter + graphic", "📦 graphic ล้วน (ภาพสินค้า ไม่มีคน)", "✋ มือ+สินค้า ลองใช้ให้ดู (ไม่เห็นหน้า)"]`.
    Do not guess from the product type: a game can be 🧑, and a washer can be 🎬. For a rigid product
    (rack, shelf, cabinet, device) add one line to the question: in 🧑 Flow redrew its parts/size in 2 of 2
-   jobs (2026-11-10/11, 30 credits each); 🎬/📦 hold the shape better. Fix still picks.
-3. **Q2 — length, 🧑/📦 only** (`clarify`, one question): `["10 วิ (แนะนำ)", "20 วิ", "30 วิ", "40 วิ"]`.
+   jobs (2026-11-10/11, 30 credits each), ✋ handles it too; 🎬/📦 hold the shape better. Fix still picks.
+3. **Q2 — length, 🧑/📦/✋ only** (`clarify`, one question): `["10 วิ (แนะนำ)", "20 วิ", "30 วิ", "40 วิ"]`.
    **🎬 skips Q2** (Fix 2026-11-12): gameplay-clips picks any whole length 15–50 s from the usable footage
    and the content (its "Length" section). A length Fix names in the order still wins.
    One shot = one Flow generation of 10 s (Omni 1.1 Flash, ≈15 credits; `house-rules.md` → Credits).
@@ -74,7 +74,7 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    `references/product-footage.md` first (official brand video of the exact model only, gated by
    `source_check.py`). A revision of a delivered clip: `clipjob.py reopen <job> --reason …`, then
    `deliver` again (it logs a REVISED row). Stop reading here for 🎬.
-5. **Photo gate (🧑/📦; 🎬 product needs one clean photo for the sticker).** References must be clean product photos: no price, promo text, rating, UI,
+5. **Photo gate (🧑/📦/✋; 🎬 product needs one clean photo for the sticker).** References must be clean product photos: no price, promo text, rating, UI,
    person or hands, and the product in the state the shot needs. "Clean" means no text/UI/people — NOT
    a plain background: a styled room photo (a rack holding clothes, a shelf with items) is a valid
    reference, attached whole (`references/product-image-prep.md` "Lifestyle photos"); never ask Fix for a
@@ -97,10 +97,12 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    - 📦: no person and no hands. Use product hero shots, macro, texture, in-use objects and a lifestyle
      set. The prompt says **no speech** (ambient sound only), because the voice is added in post
      (gameplay TTS). Write the VO script into the storyboard as well.
+   - ✋: every 📦 step from here on (no speech, VO in post), but hands use the product in frame and no
+     face ever shows. Read `references/hands-mode.md` first.
 7. **Prompts → files.** Write `<workdir>/shot<K>.txt` for every shot. Build them from
    `templates/clip-prompt.md` + `templates/style-card.md` + a hook from `templates/hooks.md`
    (`S/perf.py pick-hook --category <cat>`), plus the no-on-screen-text block. Then:
-   `clipjob.py new <job> --mode presenter|product --product "…" --link <url> --shots N --ref <workdir>/ref1.jpg [--ref …] --character <name>` (required for 🧑; omit for 📦). workdir = `/opt/data/clips/work/<job>`
+   `clipjob.py new <job> --mode presenter|product|hands --product "…" --link <url> --shots N --ref <workdir>/ref1.jpg [--ref …] --character <name>` (🧑 only). workdir = `/opt/data/clips/work/<job>`
 8. **Q3 — who drives Flow** (`clarify`, one question, cost in the text):
    `["📝 เตรียม prompt ทีละช็อตให้ (ฟิกกดใน Flow เอง)", "🤖 ให้ไอยูลองทำใน Flow ให้เลย (≈<N×15> เครดิต ถ้าติดจะสลับเป็นโหมด prompt ให้เอง)"]`.
    An unanswered or timed-out question means 📝 (zero spend) — for ANY question that would spend credits, not just this one. Record the answer: `clipjob.py production <job> prompt|auto`, using `production prompt` rather than `fallback` (a fallback locks that job out of `auto` for good; the hand-off message format is in `flow-driver` → Manual hand-off).
@@ -130,7 +132,7 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
 11. **Post-production (graphics always).** `clipjob.py assemble-check <job>` prints the approved files in order.
     - 🧑: `references/presenter-rules.md` + `references/presenter-graphics.md`:
       `layout_probe` → `presenter_fx` → `post_presenter` → `graphics_layer --report … --check`, then render.
-    - 📦: `references/product-mode.md`: `product_build.py` (gameplay VO recipe), then
+    - 📦/✋: `references/product-mode.md`: `product_build.py` (gameplay VO recipe), then
       `graphics_layer --report <workdir>/report.json`.
     - Read `report.json` and every `FLAG:` line. Then make a frame sheet (`references/frame-check.md`) and
       run `make_cover.py` (pre-sub source, EN ≤3 words).
@@ -150,9 +152,8 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
 ## Talking to Fix
 - One status line when something blocks, sent at that moment, not at the end. Put the credit cost inside
   any question that spends credits. Short "ok/ได้" to your own go/no-go question = yes.
-- **A long silent stretch also needs a line, not just a blocker.** Post-production (whisper, ffmpeg,
-  graphics) can run 15+ min with nothing to ask — and so can the 🤖 browser drive (Chrome launch → prompt →
-  attach → submit), which is where the silence actually builds up. Send one short line at each stage
-  transition anyway ("Chrome ขึ้นแล้ว → กำลังแปะ chip", "ผ่านทั้ง 2 ช็อต → กำลังทำซับ/กราฟิก"). Silence on
-  his phone reads as the run having died, and he will ping to ask whether it is still going.
+- **A long silent stretch also needs a line, not just a blocker.** Post-production and the 🤖 browser
+  drive can run 15+ min with nothing to ask. Send one short line at each stage transition anyway
+  ("Chrome ขึ้นแล้ว → กำลังแปะ chip", "ผ่านทั้ง 2 ช็อต → กำลังทำซับ/กราฟิก"): silence on his phone reads
+  as the run having died.
 - He reads on the phone: buttons over typing, no walls of text, never ask him to check a UI.

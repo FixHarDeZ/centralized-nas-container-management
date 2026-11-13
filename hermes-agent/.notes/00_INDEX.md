@@ -2,7 +2,7 @@
 
 **สร้าง:** 2026-05-24  
 **Port:** 5063 (external Nginx basic auth) → 9119 (dashboard internal)  
-**Status:** 2026-11-13 ✅ (closed, skills synced at `35bbe41`) — last two 🎬 jobs checked (delivered, slow); live `agent.max_turns: 250` (was 100, jobs stalled at the cap until Fix typed ต่อ); `clipjob.py wait` + `vprep.py` (small JPEG for vision, one call per batch); Hermes' 11-12/13 skill edits ported; running `HERMES_REF=v0.23.1`; webhook OFF; clip skills repo-owned + pinned; vision = `provider: xiaomi` + `mimo-v2.6-flash`; rollback image `hermes-agent:v0.22.7-rollback`
+**Status:** 2026-11-13 ✅ — ✋ `hands` mode added (4th Q1 mode: hands + product demo, no face; rides on the 📦 pipeline; `references/hands-mode.md`; unproven on a real order); last two 🎬 jobs checked (delivered, slow); live `agent.max_turns: 250` (was 100, jobs stalled at the cap until Fix typed ต่อ); `clipjob.py wait` + `vprep.py` (small JPEG for vision, one call per batch); Hermes' 11-12/13 skill edits ported; running `HERMES_REF=v0.23.1`; webhook OFF; clip skills repo-owned + pinned; vision = `provider: xiaomi` + `mimo-v2.6-flash`; rollback image `hermes-agent:v0.22.7-rollback`
 
 ---
 
@@ -155,6 +155,8 @@ Added later on 2026-11-12: 🎬 skips Q2 and picks 15–50 s from the usable foo
 checks (candidates on one sheet, then ask Fix); `post_presenter.py` keeps one whisper model in RAM (peak 1.95 GB);
 `heavylock.py` = one heavy script at a time (exit 75 `BUSY`), `/opt/data/clips/logs/heavy-log.jsonl` has seconds +
 peak MB per run (start with no end = killed); `clipjob deliver` reports ⏱ time per stage (`timing` in job + clip-log).
+Added 2026-11-13 (modes): Q1 now offers 🎬 / 🧑 / 📦 / ✋. `clipjob.py new --mode hands` = Flow mode with refs, no character, no repeats/CTA gate, graphics mandatory; shots say "no speech", VO in post (`product_build.py`); rules in `shopee-clip/references/hands-mode.md`. Neither ✋ nor 📦 has run a real clip yet.
+
 Added 2026-11-13: `clipjob.py wait <job> "…"` before a turn-ending message (gap → `wait_fix_min`, 🎬 too); `shopee-clip/scripts/vprep.py` → `.v.jpg` for every vision call, one `vision_analyze` per tool batch; `gameplay-clips/scripts/sub_bandprofile.py` (Hermes' own) decides a `sub_linecheck` bands=1 want=2 FAIL; live `agent.max_turns: 250` (backup `config.yaml.bak-20261113`) because a 🎬 job needs 200–290 tool turns.
 **Open: Flow grid Download on desktop does nothing (Fix sends the mp4 meanwhile); `command_allowlist` has `overwrite project env/config file` (Fix keeps it, 2026-11-12); vision `reasoning_effort: low` untested;** unverified on a real order: `/250` in the turn log, `wait` in use, vision time with `.v.jpg`; 8 `vision_analyze` 420 s timeouts on 11-12/13 (cause not proven); confirm the vision model change in `agent.log` (no
 "model not found on xiaomi"); six OOM kills of 11-11 untraced; ideas not started: fewer LLM rounds in prep (helper
@@ -185,6 +187,7 @@ registered, `presenter-shots` still registered, Telegram reconnected. Re-enablin
 | วันที่ | เรื่อง |
 |--------|--------|
 | 2026-11-13 | Checked muramasa + xenoblade 🎬 (268 / 545 min). `agent.max_turns` 100 → 250 (live), `clipjob wait`, `vprep.py`, one-vision-per-batch rule, Hermes' drift ported + `sub_bandprofile.py`. |
+| 2026-11-13 | ✋ `hands` clip mode: `clipjob.py` FLOW_MODES, `hands-mode.md`, router Q1 button. Unproven on a real order. |
 | 2026-11-12 | Stage timing in clipjob (`timing` in job + clip-log, ⏱ line on delivery) and `heavylock.py` (one heavy script at a time, `logs/heavy-log.jsonl` with peak MB per run). |
 | 2026-11-12 | First real order checked (blackmores 137 min, เตรียม 4, no OOM). clip-log `credits` no longer counts a refunded failed card (`billed_credits`). Vision model setting found ineffective, open. |
 | 2026-11-12 | Post OOM fix (one whisper model in RAM, `3d90a33`); photo-gate crop budget = 2 vision checks; live `auxiliary.vision.provider: xiaomi` + `model: mimo-v2.6-flash` (verified; `model` alone is ignored under `provider: auto`) (built-in xiaomi default `mimo-v2.5` is retired; re-check after a HERMES_REF bump). |
