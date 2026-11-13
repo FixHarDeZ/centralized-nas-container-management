@@ -12,11 +12,11 @@
 # NodeSource, same trick hermes-agent uses.
 # Base images pinned by digest (tag kept for reading): the NAS only ever
 # built from whatever it happened to have cached. `make desk-latest` bumps them.
-FROM node:22-bookworm-slim@sha256:5ec23b7c622b00547753bc6ffd78085dd868a68aeb41c8e0a1418f033e13d96d AS node_source
+FROM node:22-bookworm-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc3cdf566e8ba3ab21ee AS node_source
 
 FROM debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc AS desk_runtime
 
-ARG CODEX_VERSION=0.167.1
+ARG CODEX_VERSION=0.167.2
 ARG CLAUDE_VERSION=2.1.272
 ARG SKILLS_REF=34040c9c568585f6929bedeaad110ad08f079624
 ARG TTYD_VERSION=1.7.7
