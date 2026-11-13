@@ -883,3 +883,8 @@ Not done / open:
 - Ported Hermes' 4 in-place edits made after the ✋ job (hands-mode, product-mode, product-image-prep, hooks). Its
   hands-mode status said "no face in any sampled frame": corrected, the raw shot 1 shows one.
 - Not proven: no Flow generation was run. The scan is still judged by vision reading the sheets.
+- Pushed `a9071c3`, `make hermes-skills` synced at `a9071c3`, 68 tests passed in the container. The sync's 1 drift
+  file (`skill-drift/20261113-202430`, hands-mode.md) is byte-identical to Hermes' copy already merged.
+- Live check: `scan_sheets` on the real `aimi-rack` shot 1 inside the container → 2 sheets; sheet 1 shows the face
+  in tiles 9–10 (4.0 / 4.5 s) and a torso/sleeve in tiles 4–5. The old 3-frame check had none of these.
+  No deploy, no restart.
