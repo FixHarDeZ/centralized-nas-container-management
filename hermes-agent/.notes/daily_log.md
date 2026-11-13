@@ -849,3 +849,9 @@ Not done / open:
 - Pushed `0a131dc` (hands mode) + `f59d2ed` (port). `make hermes-skills` synced at `f59d2ed`, 68 tests passed in the
   container; live check: `clipjob.py new --help` lists `hands`, `hands-mode.md` present. The sync's 1 drift file
   (`skill-drift/20261113-162848`, gameplay SKILL.md) is byte-identical to the copy already ported. No deploy, no restart.
+
+### 2026-11-13 — session closed (second close)
+- On `main`, pushed: `0a131dc` (✋ hands mode), `f59d2ed` (Hermes' 9 doc edits + `send_status.py` + `freerect.py`
+  ported), `6be6964` (notes). Skills synced at `f59d2ed`, 68 tests passed in the container. No deploy, no restart.
+- Open: first real ✋ order (also the first real run of the 📦 pipeline); `aot3-20261113` (🎬) was open at sync time;
+  morning items still open (`/250` in the turn log, `wait` used, vision time with `.v.jpg`, 420 s vision stalls).
