@@ -785,3 +785,36 @@ Not done / open:
   with "Fully describe and explain everything about this image", answers run 700–3,000 characters.
 - Not done: `auxiliary.vision.reasoning_effort: low` (key exists in `auxiliary_client.py`); may cost label-reading
   accuracy in the frame gate, so it needs an A/B on real frames first.
+
+### 2026-11-13 — check of the last two 🎬 jobs (muramasa-20s-20261112, xenoblade3-new-20261113)
+- Both delivered through `clipjob deliver`: clip + copy buttons + cover all `ok`, sha256 in delivery-log matches
+  clip-log, `credits` 0, ⏱ timing stored. Gates per the notes: -14.0 / -14.3 LUFS, duck 11.65 / 10.45 dB, verify-clip ok.
+  The mp4s themselves were not re-checked: Downloads and the muramasa workdir were emptied at 11:07–11:11 after "จบงาน".
+- No OOM kill since 11-12 11:44. 0 "model not found on xiaomi". heavy-log: one start without an end
+  (`asr_speech_spans` 11-12 18:45, no kernel kill → killed by the agent or a tool timeout), no BUSY.
+- Slow: muramasa 268 min, xenoblade 545 min (order 01:59, delivered 11:04).
+  - Turn ended while the job was unfinished, session idled until Fix typed "ต่อ": xenoblade 04:16 → 06:53 (2 h 37),
+    muramasa before 20:27. `wait_fix_min` is 0 on both: the 🎬 timeline does not count these waits.
+  - `vision_analyze` hit the 420 s tool timeout 8 times (11-12 22:10/22:33/22:43, 11-13 02:32/02:39/02:47/02:55,
+    10:20) ≈ 56 min, plus 4 "Connection error … all fallbacks exhausted" at 22:18. Sheets sent are 4 MB PNG (5.5 MB base64).
+  - muramasa: official trailer unusable (narration + cards), 2.5 h of footage hunting before Steam preview clips.
+- Rule gaps: xenoblade has no `note` event at all (rule = one per stage). muramasa `sub_linecheck` FAIL(2) was
+  overridden by the agent as a false positive. xenoblade footage is trailers/cinematics, not gameplay (said in notes).
+- Hermes edited skills in place 6 times (11-12 20:29, 23:48–23:49 ×4, 11-13 04:16). Not pulled or ported yet:
+  run `make hermes-skills ARGS=--pull` before the next sync.
+- Nothing changed on the NAS or in the skills in this check.
+
+### 2026-11-13 — fixes after the check: turn cap, wait clock, vision input
+- Cause of the "ต่อ" stalls: `max_iterations_reached(100/100)` at 11-12 20:26 and 11-13 04:06 (`agent.max_turns: 100`);
+  the agent wrote a wrap-up and the session idled. Live config now `agent.max_turns: 250` (backup
+  `/opt/data/config.yaml.bak-20261113`). The two jobs used roughly 200–290 tool turns each.
+- `clipjob.py wait <job> "…"`: logged before a message that ends the turn with the job open; the gap to the next
+  event counts as `wait_fix_min`, shown on the ⏱ line for 🎬 too. Resume = `note <job> "resumed"`.
+- `shopee-clip/scripts/vprep.py`: image → `<name>.v.jpg` (≤1600 px JPEG) for vision. Rules in gameplay SKILL,
+  footage-sourcing §5, frame-check: small JPEG only, one `vision_analyze` per tool batch, no resend after a timeout.
+  Evidence: all 5 batch timeouts were the second call of a parallel pair (5–10 min); sheets were 2–4 MB PNG.
+  Not proven that size alone causes the stalls (a single 0.9 MB image also took 373 s at 02:55).
+- Ported Hermes' 6 in-place edits (gameplay SKILL v1.3.0, cover-sticker, footage-sourcing, gameplay-pitfalls,
+  look-v5, natural-vo) and its new `gameplay-clips/scripts/sub_bandprofile.py`; SKILL.md cut back to 30.6 KB (cap 30 KB×1024).
+- Tests 67 passed. Not verified on a real order: the 250 cap taking effect (next turn log must show `/250`),
+  `wait` being used, vision times with `.v.jpg`.

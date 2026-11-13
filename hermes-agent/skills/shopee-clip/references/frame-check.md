@@ -24,6 +24,7 @@ Standing depth for SKILL.md step 10 (per-shot review). Step 10 owns WHAT to samp
 - The rest of the verdict rules (caption garble = defect, claim-word flips, stray props, cover-art fidelity, multi-scene seam continuity) stay in SKILL.md step 10.
 
 ## When vision reads fail mid-run
+- Send vision a small JPEG (`scripts/vprep.py <img>` → `<img>.v.jpg`), one `vision_analyze` per tool batch. Before a message that ends the turn while the job is open: `clipjob.py wait <job> "<what is needed>"`.
 - A provider-level `vision_analyze` failure (HTTP 400 naming an unsupported model, or repeated timeouts) is a transient work-stop, not a dead run — and never a serial-retry loop: probe once, then move on.
 - Everything except the pixel gate runs without vision: render poll, download, `verify-clip.py`, log/state writes, and the next clip's submit. Do that work while the provider recovers, then slot the pending frame reads back in.
 - If it never recovers in this run, state exactly which frame times went unread in the delivery — an unrun frame check is reported as NOT RUN, never as clean and never as an implied pass.

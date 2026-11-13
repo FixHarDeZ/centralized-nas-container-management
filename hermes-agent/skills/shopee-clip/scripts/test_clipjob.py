@@ -456,3 +456,15 @@ def test_billed_credits_skip_a_refunded_failed_card():
                                  {"submitted_at": "t", "credits": 15},
                                  {"reserved_at": "t"}]}]}
     assert cj.billed_credits(j) == [15, 15, 15]
+
+
+def test_timeline_counts_waits_on_fix_in_a_footage_job():
+    j = job(shots=0, mode="gameplay")
+    j["created"], j["events"] = "2026-11-12T02:00:00+07:00", []
+    j.pop("started", None)
+    for hhmm, msg in [("02:00", "created"), ("04:16", "wait: turn budget used up, footage picked"),
+                      ("06:53", "note: resumed"), ("11:04", "delivered")]:
+        _ev(j, hhmm, msg)
+    tl = cj.timeline(j)
+    assert tl["wait_fix_min"] == 157 and tl["stages"] == [["เตรียม", 0], ["ทำคลิป", 544]]
+    assert "ทำคลิป 544 น. (รอฟิกตอบ 157 น.)" in cj.timeline_text(tl)

@@ -49,7 +49,9 @@ Minimal plan that passed `--check` (no beats, no release pill, no logo, header-o
 - **ffprobe:** 20.000 s, 600 frames, 30/1, High/yuv420p/L4.0, a_dur == v_dur, faststart.
 - **Duck-only delta:** 8.47 dB (≥6 ✅). Mastered I = −14.3 LUFS, max −4.0 dB ✅.
 - **sub_linecheck:** PASS. Run it against `subs_v5.ass` copied as `subs.ass`, because the builder
-  rewrites margins into `subs_v5.ass`.
+  rewrites margins into `subs_v5.ass`. A `bands=1 want=2` FAIL from marks/tails bridging the band gap
+  is a false positive — decide it with `scripts/sub_bandprofile.py <dir>` (line bodies ≥16 px apart =
+  pass + note the reason; <16 px = real collision → fix the sub text).
 - **Vision sheet (8 frames):** no price/QR/shop, no tofu, no black bars, flash not harsh.
 - **Duck-only render for the delta gate:** build_v5 exports its stems at `work/music_v5.wav`,
   `work/sfx_v5.wav`, `work/vo_v5.wav` — but RAW, before the gains (changing `music_gain` leaves
@@ -77,12 +79,15 @@ Minimal plan that passed `--check` (no beats, no release pill, no logo, header-o
   than t−0.5 s vs frame 0 (~65–70).
 
 ## Pitfalls
-- **Master v5 with ceiling `-6.0` (then step it down until the DECODED peak passes).** With the
-  default −4.5 the impact SFX transients overshoot after AAC to max −2.8 dB, which fails the
-  "max < −3" gate. **`master.sh` prints its max BEFORE the AAC encode, so re-measure the file you
-  will ship — decode `out.mp4` after the faststart remux and read the peak: a −6.0 ceiling has come
-  back at −2.76 dB decoded, −7.0 at −3.78 dB.** Ceiling is a master-only knob: re-run master +
-  remux, no rebuild, no credits.
+- **Master v5 with ceiling `-6.0`; the ceiling is a TARGET, not a guarantee.** With the default −4.5
+  the impact SFX transients push the decoded peak to −2.8 dB, which fails the "max < −3" gate.
+  **`master.sh` measures and prints the peak of its own finished AAC file (the faststart remux is
+  `-c copy` and does not change audio), but that peak can still land 3–4 dB ABOVE the ceiling passed
+  (−6.0 → −2.76 in one run, −6.0 → −1.9 in another) — the printed max IS the number to gate on.**
+  If it is ≥ −3: re-run `master.sh` once with the SAME ceiling first (the second pass re-measures
+  `I_before` and has passed where the first failed), then step the ceiling down 1 dB at a time.
+  Ceiling is a master-only knob: master + remux, no rebuild, no credits. Then re-measure on
+  `final.mp4` after `graphics_layer` — it re-encodes the audio through its own limiter.
 - **VO deadline = `dur − 1.5`.** The Gemini VO is longer (18.36 s), so dur 20.0 is needed.
   The last seg absorbs the remainder.
 - **Run heavy jobs ONE AT A TIME on this NAS.**

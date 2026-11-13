@@ -63,6 +63,7 @@ Apply the warm EQ chain from SKILL.md pitfalls ("เสียงเหมือ�
   sounds rushed again.
 - An intermittent candidate comes back with `finishReason` but no `content`. The script retries it.
 - Voices tried: Leda (used), Laomedeia, Zephyr, Aoede. Female, youthful.
+- **CTA phrase must start inside the last seg — solve the gap from one run's numbers, don't nudge-and-rerun.** The `Link below!` line is spoken in the final seg only; `build_v5 --check` gates the CTA *pill*, so it stays green while the VO CTA straddles the cut. From one stdout you have `prev_end` (end of the phrase before the CTA) and `cta_dur = vo_end − cta_start`; `--check` prints the last seg's `t0`. The gap window is `last_seg_t0 − prev_end ≤ gap_after ≤ (DUR − 1.6) − prev_end − cta_dur` (CTA start = prev_end + gap, measured exact). Take the middle of the window, re-time ONCE with `--from-take` (0 requests), confirm both numbers. `--check` only prints OK/LATE at `DUR − 1.5` — looser than the window top, so it can bless a gap that eats the music tail. Window empty (CTA line too long for seg boundary → deadline) = shorten the wording; no gap fixes that.
 - Gap ladder example (20 s, 5 phrases at ~14 ch/s): lead 0.10 + gaps 0.35–0.40 gave `vo_end` 15.9 s. Re-timing the same take with lead 0.25 + gaps 0.65 via `--from-take` gave 17.1 s at 0 requests. Adjust gaps before writing extra phrases, since each new phrase costs a request.
 
 ## Gates (same as SKILL.md)

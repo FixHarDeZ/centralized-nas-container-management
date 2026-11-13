@@ -28,6 +28,8 @@ This CLI is the only sanctioned way to move a Flow-mode clip forward. It refuses
                          # a re-run after a failed send skips the steps already done and logs the clip once
   clipjob.py cancel JOB --reason "..."
   clipjob.py note JOB "..."                         # stage marker in the job's events (🎬: what is done, what is next)
+  clipjob.py wait JOB "..."                         # the turn is about to end on Fix (question, turn budget): starts the wait clock;
+                                                    # the next clipjob event stops it (resume with `note JOB "resumed"`)
   clipjob.py reopen JOB --reason "..."              # a delivered job gets a revision; the next deliver logs a REVISED row
 
 Exit codes: 0 ok · 1 refused by a rule (message printed) · 2 setup/usage error · 4 pacing (wait_s printed).
@@ -144,6 +146,9 @@ def timeline(j, end=None):
     stages = [["เตรียม", mins(start, created)]]
     decides = [t for t, m in ev if m.startswith("decide shot")]
     wait, ready_at = 0.0, {}
+    for (t, m), nxt in zip(ev, [t for t, _ in ev[1:]] + [end]):
+        if m.startswith("wait:"):                       # the turn ended on Fix; the next event is the resume
+            wait += max(0, nxt - t)
     for t, m in ev:
         mm = re.match(r"(ready|decide) shot (\d+)", m)
         if mm and mm.group(1) == "ready":
@@ -159,7 +164,7 @@ def timeline(j, end=None):
 
 def timeline_text(tl):
     h, m = divmod(tl["total_min"], 60)
-    parts = [f"{k} {v} น." + (f" (รอฟิกตอบ {tl['wait_fix_min']} น.)" if k == "gen+รีวิว" and tl["wait_fix_min"] else "")
+    parts = [f"{k} {v} น." + (f" (รอฟิกตอบ {tl['wait_fix_min']} น.)" if k in ("gen+รีวิว", "ทำคลิป") and tl["wait_fix_min"] else "")
              for k, v in tl["stages"]]
     return f"⏱ รวม {f'{h} ชม. ' if h else ''}{m} น. · " + " · ".join(parts)
 
@@ -898,6 +903,7 @@ def main(argv=None):
     s.add_argument("--notes"); s.add_argument("--ack", action="append", default=[])
     s = sub.add_parser("cancel"); s.add_argument("job"); s.add_argument("--reason", required=True)
     s = sub.add_parser("note"); s.add_argument("job"); s.add_argument("text")
+    s = sub.add_parser("wait"); s.add_argument("job"); s.add_argument("text")
     s = sub.add_parser("reopen"); s.add_argument("job"); s.add_argument("--reason", required=True)
     a = ap.parse_args(argv)
 
@@ -976,8 +982,8 @@ def main(argv=None):
         if a.cmd == "edit-id":
             set_edit_id(j, a.shot, a.edit_id); save(j)
             return out(summary(j))
-        if a.cmd == "note":
-            need_open(j); log(j, f"note: {a.text}"); save(j)
+        if a.cmd in ("note", "wait"):
+            need_open(j); log(j, f"{a.cmd}: {a.text}"); save(j)
             return out({**summary(j), "events": j["events"][-5:]})
         if a.cmd == "reopen":
             if j["status"] != "delivered":
