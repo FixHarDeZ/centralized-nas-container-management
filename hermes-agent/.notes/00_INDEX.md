@@ -2,7 +2,7 @@
 
 **สร้าง:** 2026-05-24  
 **Port:** 5063 (external Nginx basic auth) → 9119 (dashboard internal)  
-**Status:** 2026-11-13 ✅ (closed, skills synced at `f59d2ed`; open: first real ✋ order) — ✋ `hands` mode added (4th Q1 mode: hands + product demo, no face; rides on the 📦 pipeline; `references/hands-mode.md`; unproven on a real order); last two 🎬 jobs checked (delivered, slow); live `agent.max_turns: 250` (was 100, jobs stalled at the cap until Fix typed ต่อ); `clipjob.py wait` + `vprep.py` (small JPEG for vision, one call per batch); Hermes' 11-12/13 skill edits ported; running `HERMES_REF=v0.23.1`; webhook OFF; clip skills repo-owned + pinned; vision = `provider: xiaomi` + `mimo-v2.6-flash`; rollback image `hermes-agent:v0.22.7-rollback`
+**Status:** 2026-11-13 ✅ (closed, skills synced at `f59d2ed`; first ✋ clip `aimi-rack-20261113` delivered but shot 1 shows a face in profile ~3.6–4.4 s that the frame check passed; open: tighten the ✋ frame check) — ✋ `hands` mode added (4th Q1 mode: hands + product demo, no face; rides on the 📦 pipeline; `references/hands-mode.md`; unproven on a real order); last two 🎬 jobs checked (delivered, slow); live `agent.max_turns: 250` (was 100, jobs stalled at the cap until Fix typed ต่อ); `clipjob.py wait` + `vprep.py` (small JPEG for vision, one call per batch); Hermes' 11-12/13 skill edits ported; running `HERMES_REF=v0.23.1`; webhook OFF; clip skills repo-owned + pinned; vision = `provider: xiaomi` + `mimo-v2.6-flash`; rollback image `hermes-agent:v0.22.7-rollback`
 
 ---
 

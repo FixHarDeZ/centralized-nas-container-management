@@ -855,3 +855,21 @@ Not done / open:
   ported), `6be6964` (notes). Skills synced at `f59d2ed`, 68 tests passed in the container. No deploy, no restart.
 - Open: first real ✋ order (also the first real run of the 📦 pipeline); `aot3-20261113` (🎬) was open at sync time;
   morning items still open (`/250` in the turn log, `wait` used, vision time with `.v.jpg`, 420 s vision stalls).
+
+### 2026-11-13 (evening) — checked the last two clips: aot3 (🎬) and aimi-rack (first ✋)
+- `aot3-20261113` 🎬: delivered 17:19, 100 min, 0 credits, clip/copy buttons/cover ok, sha256 matches the clip-log row.
+  One `note` event only (at the end). Workdir already cleaned.
+- `aimi-rack-20261113` ✋ (first real hands order, also first run of the 📦 pipeline): delivered 19:52, 140 min
+  (wait on Fix 25), 30 credits (15+15, no regen), `product_build` flags 0, VO Gemini/Leda, sha256 matches.
+  Final mp4 was already removed by cleanup, so the checks below are on `shot1_raw.mp4` / `shot2_raw.mp4`:
+  - **Shot 1, ~3.6–4.4 s: a woman's face in profile enters at the left edge**, plus forearm, shoulder and a white
+    sleeve. `ready --frame pass` was given and Fix approved the shot. The no-face rule of `hands-mode.md` was missed.
+  - Shot 1 shows two arms from opposite sides and well above the wrist (not "wrists down").
+  - Shot 2 is another room with the rack EMPTY (shot 1: loaded, bathroom): no continuity between shots.
+  - Flow drew an "Aimi" label on a skincare tube (the rack's brand on a prop).
+  - Rack itself held: 4 tiers, wheels, shape close to `ref1.jpg` in both shots.
+- Logs 15:00–20:00: turn cap now `/250` in use (8 turns started at `1/250`), no `max_iterations_reached` on the main
+  agent (one `16/16` is a sub-budget), no vision timeout (calls 21–85 s), no new OOM (last one is still 11-12 11:44).
+  `clipjob.py wait` was not used in either job. Hermes `MEMORY.md` is over its limit (2289/2200), additions blocked.
+- Not fixed in this check. Candidates: frame sheet for ✋ must sample every ~0.5 s at the frame edges (the face was
+  on screen under 1 s), and the prompt should frame tighter (top-down / close) so a body cannot fit.
