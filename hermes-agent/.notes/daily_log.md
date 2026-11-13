@@ -873,3 +873,13 @@ Not done / open:
   `clipjob.py wait` was not used in either job. Hermes `MEMORY.md` is over its limit (2289/2200), additions blocked.
 - Not fixed in this check. Candidates: frame sheet for ✋ must sample every ~0.5 s at the frame edges (the face was
   on screen under 1 s), and the prompt should frame tighter (top-down / close) so a body cannot fit.
+
+### 2026-11-13 (evening) — ✋ fixes after the first hands clip
+- `clipjob.py scan <job> K --raw <file>`: sheets `shotK_scan*.jpg`, one frame every 0.5 s (10 tiles, 1600×1138 each);
+  `ready` refuses a ✋ shot whose file has no scan (size+mtime signature, so a regen needs a new scan). Test added.
+- `hands-mode.md`: camera too close for a body to fit (hands enter from the bottom edge), a big product is whole only
+  in beats with no person, shot K+1 keeps the room and load state, unbranded props, scan before `ready`, first-run
+  status. Router step 6 points at `scan` (15153 B).
+- Ported Hermes' 4 in-place edits made after the ✋ job (hands-mode, product-mode, product-image-prep, hooks). Its
+  hands-mode status said "no face in any sampled frame": corrected, the raw shot 1 shows one.
+- Not proven: no Flow generation was run. The scan is still judged by vision reading the sheets.

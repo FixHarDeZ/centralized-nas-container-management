@@ -30,15 +30,34 @@ uv run --with edge-tts --with faster-whisper --with numpy \
   python /opt/data/skills/shopee-clip/scripts/product_build.py plan.json --workdir <workdir>
 ```
 `plan.json`: `{"shots": [<assemble-check files>], "vo": "vo_plan.json", "pills": [...], "xfade": 0.25}`.
+- A VO already built in the workdir goes in prebuilt (`"vo_mp3"`/`"vo_ass"` + the `.timeline.json` beside
+  the ass), but never point them at the workdir's own files: the prebuilt branch copies source→workdir and
+  raises `SameFileError` on the same path. Copy to distinct names first (`vo_src.mp3`, `subs_src.ass`,
+  `subs_src.timeline.json`) and point the plan at those.
 - The bed is Flow's ambient audio at 0.75, ducked under the VO with the gameplay sidechain. Subs use the
   Itim house style from the VO timeline (known text, no ASR timing). Pills are drawn at y=210.
 - An edge fallback applies the warm EQ automatically and adds a `notes` line. Tell Fix that voice A was used.
 - `report.json` has `flags`, and `deliver` refuses while any flag stands.
 
 ## Graphics (mandatory)
-- Run `graphics_layer.py out.mp4 gfx.json final.mp4 --report <workdir>/report.json --check`, then render.
-- **`layout_probe.py` does not fit here.** It looks for a face and a pastel studio wall. For b-roll, vision-read
-  2–3 frames per shot, put the product's box into `avoid` (so text never covers it), and use `headlines` /
-  `stickers` / `badges` / `endcard`. Keep the subtitle band (y 700–835) and the pill band (y 186–262) clear,
-  as the layout check enforces.
-- Not yet proven on a real 📦 clip (2026-11-10). After the first real run, write down what worked here.
+- `graphics_layer.py out.mp4 gfx.json final.mp4 --report <workdir>/report.json --check` runs the layout
+  check only and exits without writing the output — render with the same command minus `--check`.
+- **`layout_probe.py` does not fit here.** It looks for a face and a pastel studio wall. For b-roll, use
+  `headlines` / `stickers` / `badges` / `endcard`. Keep the subtitle band (y 700–835) and the pill band
+  (y 186–262) clear, as the layout check enforces.
+- **The check validates only against the `avoid` boxes you supply — measure them, never estimate them:**
+  - Read geometry from FULL-res frames with a drawn grid (100 px lines + coordinate labels + the candidate
+    text rect drawn onto the frame). A 50 % contact sheet lies about geometry: its boxes come back in mixed
+    coordinate spaces, Thai overlay text misreads, and a spot it calls "clear wall" can be the product
+    running straight through the text area.
+  - Sample every intended text window at start/mid/end. Framing changes WITHIN a shot (wide → close-up →
+    pull back; a late camera move lifts the product rim into a top band that was clear seconds earlier), so
+    time-slice each `avoid` rect to the segment its measurement covers — one rect spanning the whole shot
+    either blocks all placement or silently stops protecting anything.
+  - Pick windows where the measured product top sits below the text rect (and the rect leaves the pill band
+    while a pill shows), then let `--check` confirm the arithmetic.
+  - After render, re-verify each headline on a grid frame plus a ~3× full-res crop of its y-band checked
+    glyph-by-glyph against the plan string (`frame-check.md`); when a sheet read and a crop read disagree,
+    the targeted full-res crop wins.
+- Proven end-to-end through deliver on the first real hands run (build → 2 headlines placed by the method
+  above → cover); a pure 📦 clip with no hands has not run yet.

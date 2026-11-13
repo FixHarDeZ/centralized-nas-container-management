@@ -14,6 +14,14 @@ A vision call takes 20–150 s here. One job spent 55 min on ~14 crop → check 
 - A second sheet is allowed after fixing what the first check named. No third: send Fix the best candidate
   with the remaining defect in one line and ask `clarify` (use it / he sends another photo). Zero spend while waiting.
   (The zoom reads in "Review-screenshot salvage" count against this budget.)
+- **When the first sheet comes back ALL-failing (every crop still carries text), cut nothing blind again —
+  run one LOCATOR read first.** Overlay a labelled 10 % grid on the SOURCES (one sheet, labels drawn in
+  code) and ask only WHERE things are, in each tile's own percent coordinates: the box covering every
+  non-photographic element (text / banner / icon / inset) and the box of the complete product. Cut the next
+  candidates from those boxes, padding away from the text side — vision draws these boxes SMALL, so expect
+  to keep only the tiles whose text sits entirely along one edge, and name the ones you drop. The budget
+  counts CANDIDATE verdicts (sheets you ask "is this clean?"); a locator asks only for positions, so it may
+  sit once between the two sheets — but it never replaces the second verdict.
 
 ## Lifestyle photos — a styled room is a valid reference
 Shop photos often show the product set up in a real room: a clothes rack holding clothes and a bag, a shelf with jars, a desk with a lamp. When the photo has no text/UI/people, it passes the photo gate AS IS. Do not refuse it, do not ask Fix for a plain-background photo, and do not try to cut the product out (thin white frames on a pale wall do not survive a cutout, and the props show what the product is for). (2026-11-10: a clothes rack in a bedroom was refused as "not product-only" and stalled the order.)

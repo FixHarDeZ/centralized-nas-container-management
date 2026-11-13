@@ -14,6 +14,11 @@ for that category, take the id whose most recent use is the OLDEST (LRU decides
 alone), record it, and move on. Only when the LRU id is wrong for the product does
 a tie-break matter: prefer the id whose wording the product actually fits.
 
+**A VO opener that is NOT one of the templates below gets a `custom-<slug>-N` id** (written bespoke for
+the clip from the ad/creative): template ids exist to track template rotation, so logging a template id
+the VO never spoke corrupts that category's LRU. Slug = short product/job name; N counts the product's
+clips.
+
 ## เกม / ตลับเกม (`game`)
 **กติกาใหม่ของ Fix (2026-10-28): คลิปแผ่นเกมห้ามใช้ hook/เสียงพากย์แนวนี้ "วางบนชั้นแล้วเพื่อนทักทุกครั้งที่มาบ้าน"** (ใช้ไปแล้วในคลิป FINAL FANTASY RESONANCE — เขาสั่งเลิกเด็ดขาด) ให้ hook + voiceover พูดถึง **ตัวเกม** แทน: แนวเกม (RPG / แอคชัน / ผจญภัย / สยองขวัญ / ไฟต์เตอร์ / แข่งรถ / จำลองสถานการณ์), เนื้อเรื่อง, เกมเพลย์ หรือระบบการเล่น — แนวเกมนั้น **หาจาก `web_search` ครั้งเดียว** (ชื่อเกม + publisher/แพลตฟอร์มทางการ): ลิสติ้ง Shopee อ่านไม่ได้เพราะ WAF จึงเป็นแหล่งข้อมูลที่ใช้ไม่ได้จริง, และผลค้นหาทางการยืนยันได้ทั้ง แนวเกม + วันวางจำหน่าย (ใช้เป็นวันที่ในคลิปได้) + ภาษาที่รองรับ (ใช้ยืนยัน region/language ที่ Fix ส่งมา) แล้วเติมลง `<แนวเกม>` ใน hook ที่เป็น template — **ค้นครั้งแรกให้ใช้ภาษาของ publisher ด้วย**: query ชื่อเกมภาษาอังกฤษล้วนคืนผลว่างได้จริงสำหรับเกมที่ marketing ญี่ปุ่น (เช่น FINAL FANTASY RESONANCE ค้นอังกฤษได้ 0 รายการ แต่ `ชื่อเกม + スクウェア・エニックス + 発売日` ได้ press release ทางการทันที) ซึ่งให้ แนวเกม (ジャンル) + วันวางจำหน่าย + ตาราง対応言語 ที่ยืนยัน region/language ของตลับที่ Fix ส่งมา — ถ้า query แรกคืนว่าง ให้สลับภาษาอีกครั้งเดียวแล้วหยุด อย่าวนลูป
 - `game-1` — "สายเกม<แนวเกม>ฟังทางนี้…" (แทนที่ "แอคชันซูเปอร์ฮีโร่" ด้วยแนวจริงของเกมนั้น)

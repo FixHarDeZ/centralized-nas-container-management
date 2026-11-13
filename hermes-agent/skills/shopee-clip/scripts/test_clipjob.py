@@ -403,7 +403,7 @@ def test_flow_mode_still_needs_a_report(tmp_path, monkeypatch, capsys):
     assert "--report" in capsys.readouterr().err
 
 
-def test_hands_mode_is_a_flow_mode_with_no_presenter_gates(tmp_path, monkeypatch):
+def test_hands_mode_is_a_flow_mode_with_no_presenter_gates(tmp_path, monkeypatch, capsys):
     """✋ = the 📦 pipeline with hands in frame: refs and graphics required, no character, VO added in post."""
     monkeypatch.setattr(cj, "DIR", str(tmp_path)); monkeypatch.setenv("CLIPJOB_NO_TG", "1")
     with pytest.raises(cj.Refused, match="photo"):
@@ -419,6 +419,19 @@ def test_hands_mode_is_a_flow_mode_with_no_presenter_gates(tmp_path, monkeypatch
     def no_asr(*a):
         raise AssertionError("the repeats gate is for a presenter speaking in Flow")
     monkeypatch.setattr(cj, "repeats_gate", no_asr)
+    # a 3-frame check passed a face that was on screen for <1 s (aimi-rack, 2026-11-13): ready needs the 0.5 s scan
+    assert cj.main(["ready", "t-1", "1", "--raw", str(raw), "--frame", "pass", "--no-send"]) == 1
+    assert "scan" in capsys.readouterr().err
+
+    def fake_sheets(video, prefix):
+        (tmp_path / "shot1_scan1.jpg").write_bytes(b"j")
+        return [str(tmp_path / "shot1_scan1.jpg")]
+    monkeypatch.setattr(cj, "scan_sheets", fake_sheets)
+    assert cj.main(["scan", "t-1", "1", "--raw", str(raw)]) == 0
+    assert "face" in capsys.readouterr().out
+    raw.write_bytes(b"a regenerated file")                       # the scan was of the old render
+    assert cj.main(["ready", "t-1", "1", "--raw", str(raw), "--frame", "pass", "--no-send"]) == 1
+    assert cj.main(["scan", "t-1", "1", "--raw", str(raw)]) == 0
     assert cj.main(["ready", "t-1", "1", "--raw", str(raw), "--frame", "pass", "--no-send"]) == 0
     j = cj.load("t-1")
     assert set(j["shots"][0]["gates"]) == {"probe", "frame"}      # a silent shot is fine: no speech is asked for

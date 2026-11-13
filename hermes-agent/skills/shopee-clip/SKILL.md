@@ -98,7 +98,7 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
      set. The prompt says **no speech** (ambient sound only), because the voice is added in post
      (gameplay TTS). Write the VO script into the storyboard as well.
    - ✋: every 📦 step from here on (no speech, VO in post), but hands use the product in frame and no
-     face ever shows. Read `references/hands-mode.md` first.
+     face ever shows. Read `references/hands-mode.md` first; step 10 needs `clipjob.py scan` before `ready`.
 7. **Prompts → files.** Write `<workdir>/shot<K>.txt` for every shot. Build them from
    `templates/clip-prompt.md` + `templates/style-card.md` + a hook from `templates/hooks.md`
    (`S/perf.py pick-hook --category <cat>`), plus the no-on-screen-text block. Then:

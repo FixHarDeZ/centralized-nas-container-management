@@ -18,6 +18,7 @@ This CLI is the only sanctioned way to move a Flow-mode clip forward. It refuses
   clipjob.py pack JOB [--shot K] [--no-send]
   clipjob.py ingest JOB FILE (--reply-text "<replied-to message text>" | --shot K)
   # both
+  clipjob.py scan JOB K --raw FILE                  # ✋ required before ready: frame sheets every 0.5 s (a face lasts <1 s)
   clipjob.py ready JOB K --raw FILE --frame pass|flag:<what you saw> [--no-send]
   clipjob.py ready JOB K --resend                   # the review message failed to send: send it again (no re-check)
   clipjob.py decide (--text "<Fix's button text>" | JOB K approve|regen)
@@ -40,6 +41,7 @@ Shot prompts live in <workdir>/shot<K>.txt (written by IU from the approved stor
 """
 import argparse
 import datetime as dt
+import glob
 import hashlib
 import json
 import os
@@ -669,6 +671,39 @@ def last_frame(video, out):
     return out if os.path.exists(out) else None
 
 
+SCAN_Q = ("In ANY tile: a face, head, hair, shoulder, torso or a second person (check the tile EDGES); an arm shown "
+          "above the forearm; text or a brand name drawn on a prop; a room or product load state that differs from the "
+          "previous shot. Answer per tile number; one hit = --frame flag:<what, which tile>.")
+
+
+def file_sig(path):
+    st = os.stat(path)
+    return [os.path.abspath(path), st.st_size, int(st.st_mtime)]
+
+
+def scan_sheets(video, prefix):
+    """Tile one frame every 0.5 s, 10 tiles per sheet (5x2, 320 px wide each): a 3-frame check misses what lasts <1 s."""
+    for old in glob.glob(prefix + "*.jpg"):
+        os.remove(old)
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", video, "-vf", "fps=2,scale=320:-1,tile=5x2",
+                    "-q:v", "3", prefix + "%d.jpg"], check=False)
+    return sorted(glob.glob(prefix + "*.jpg"))
+
+
+def cmd_scan(j, k, raw):
+    if j["mode"] not in FLOW_MODES:
+        raise Refused(f"mode {j['mode']} has no Flow shots")
+    if not raw or not os.path.exists(raw):
+        raise Refused(f"no such file: {raw}")
+    sheets = scan_sheets(raw, os.path.join(j["workdir"], f"shot{k}_scan"))
+    if not sheets:
+        raise Refused(f"ffmpeg made no sheet from {raw}")
+    shot(j, k)["scan"] = {"sig": file_sig(raw), "sheets": sheets}
+    log(j, f"scan shot {k}: {len(sheets)} sheet(s)")
+    return {"shot": k, "sheets": sheets, "ask_vision": SCAN_Q,
+            "next": "one vision_analyze per sheet, then clipjob.py ready … --frame pass|flag:<what>"}
+
+
 # ---------------------------------------------------------------- commands
 def cmd_pack(j, only, no_send):
     targets = pack_targets(j, only)
@@ -747,6 +782,9 @@ def cmd_ready(j, k, raw, frame_arg, no_send, resend=False):
         raise Refused(f"no such file: {raw}")
     if shot(j, k)["state"] != "submitted":
         raise Refused(f"shot {k} is {shot(j, k)['state']}, not submitted")
+    if j["mode"] == "hands" and (shot(j, k).get("scan") or {}).get("sig") != file_sig(raw):
+        raise Refused(f"✋ shot {k} has no frame scan of this file: run clipjob.py scan {j['job']} {k} --raw {raw}, "
+                      "vision-read every sheet (a face at the frame edge lasted under 1 s in the first ✋ job), then ready")
     info = ffprobe(raw)
     gates = {"probe": probe_verdict(info)}
     file = raw
@@ -890,6 +928,7 @@ def main(argv=None):
     s.add_argument("--no-send", action="store_true")
     s = sub.add_parser("ingest"); s.add_argument("job"); s.add_argument("file")
     s.add_argument("--reply-text"); s.add_argument("--shot", type=int)
+    s = sub.add_parser("scan"); s.add_argument("job"); s.add_argument("shot", type=int); s.add_argument("--raw")
     s = sub.add_parser("ready"); s.add_argument("job"); s.add_argument("shot", type=int)
     s.add_argument("--raw"); s.add_argument("--frame")
     s.add_argument("--no-send", action="store_true"); s.add_argument("--resend", action="store_true")
@@ -1030,6 +1069,9 @@ def main(argv=None):
             save(j)
             return out({**summary(j), "file": dst,
                         "next": f"vision-check frames, then clipjob.py ready {a.job} {k} --raw {dst} --frame …"})
+        if a.cmd == "scan":
+            res = cmd_scan(j, a.shot, a.raw); save(j)
+            return out(res)
         if a.cmd == "ready":
             res = cmd_ready(j, a.shot, a.raw, a.frame, a.no_send, a.resend); save(j)
             return out(res)
