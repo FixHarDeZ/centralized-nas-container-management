@@ -78,6 +78,13 @@ Measured on a 2:50 PS5 gameplay trailer: vision tiles gave roughly 5–8 s of ga
 - **Keep sheets to about 30–40 tiles per call.** At 60+ tiles the per-tile indices drift and the labels stop matching the timestamps. Split a long window into several sheets, and ask for 'label + 4 words' only.
 - **Use the vision answer as a candidate list, then confirm the winners with the two pixel checks above** before cutting.
 
+### 5b. Shot picking: scene detect and batch in/out confirmation (moved from SKILL.md 2026-11-13)
+
+- scene detect `select='gt(scene,0.25)'` (จุดตัดแข็ง) + รันซ้ำที่ `0.06` (dissolve) เป็นจุดหยาบ → สุ่มเฟรมด้วย `-ss` ห่าง ~0.5 วิ ในช่วงที่สงสัย.
+- **ยืนยัน in/out ด้วยเฟรมจริงแบบแบทช์**: `ffmpeg -ss T -i master.mp4 -frames:v 1 -update 1 f_T.png` แล้วป้ายด้วย PIL จาก list เวลาในโค้ด (ห้ามพึ่งป้ายจาก fps filter/ให้ vision อ่านป้าย) ต่อเป็นแผ่นเดียวถาม vision ครั้งเดียว.
+- crop แถบซับของฟุตเตจ (`crop=720:110:0:615`) ตรวจด้วย — trailer เผาซับค้างหลังเสียงพูด 1–3 วิ เลื่อน in/out ให้พ้นได้ก็เลื่อน; เลี่ยงเฟรมที่มีตัวเลขหน้าตาเหมือนราคา.
+- เหตุผลที่ต้อง OCR ก่อนล็อก seg: vision บน contact sheet คืนเป็นคำอธิบาย ตอบคำเดิมซ้ำทุกเฟรม และพลาด caption ตัวเล็ก ~18 px ได้ จึงใช้ตัดสินเรื่อง "ช่วงนี้มีตัวหนังสือไหม" ไม่ได้ → ใช้ผัง OCR §5d
+
 ## 5c. Pixel checks before cutting (cheap, do them every time)
 - **Dark-dip scan.** Per-frame luma of the master, bucketed to 0.5 s; any bucket under ~25 YAVG is a cut or fade to black. Command: `ffmpeg -v info -i master.mp4 -vf "signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=yavg.txt" -an -f null -`, then average YAVG per 0.5 s from `pts_time:` / `YAVG=` lines in that file. Keep every window and every hero's in→out inside runs above the threshold. A hero that starts at a black cut shows an empty first frame on the cold open — the most visible defect in the clip. Measured on one NVIDIA promo: dips at 9 s, 24 s and 38 s, and the first 5 s was a title card.
 - **Long source: probe the candidate windows, skip the whole-file scan.** `signalstats` over an 8-min 1080p file takes ~20 min — past the 420 s foreground cap (background + poll only if you truly need the full map). A seg can only sit inside a speech-gap window anyway, so extract each planned in/out frame and read PIL `ImageStat.Stat(im.convert('L')).mean[0]` instead: 0.0 = black frame, drop that window. Vision labels dark frames inconsistently (a pure-black frame came back as 'GAME'), so luma is the arbiter for dark dips and vision disagreement alike.

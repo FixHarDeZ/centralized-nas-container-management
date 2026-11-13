@@ -70,6 +70,11 @@ Read the group for the step you are on before running it; a gate that can be che
 - **Chk ชีต 2 วินาทีต่อเฟรมให้ผลต่างกันระหว่างรอบ** (callout เช่น AIR STRIKE มักถูกมองว่าเป็น C) → เลือกช่วงที่สองชีตตรงกันเท่านั้น และรัน frame check ตอนท้ายเสมอ
 - **แฟลชขาวที่ seam ต้องวัดด้วย mean luminance ไม่ใช่ถาม vision**: vision ตอบ "ไม่มีแฟลช/เป็น hard cut" ทั้งที่แฟลชขึ้นจริง — ดึงเฟรมรอบ seam (`-ss` ห่าง ~0.033 วิ = 1 เฟรม) แล้ววัด mean ด้วย numpy; spike แบบ 134 → 176 → 147 ที่จุดตัด = แฟลช 0.5 alpha 3 เฟรมตาม plan (ผ่าน), ขาวเกือบ 255 ค้างหลายเฟรม = แรงเกิน → ลดค่าใน `flash` แล้ว rebuild
 
+- **Final OCR pass on RENDERED frames (step 9)**: `ffmpeg -ss T -i out.mp4 -frames:v 1 -update 1` at every seam + the midpoint of every seg + every pill + the end card → RapidOCR (method: footage-sourcing §5d). The pre-lock OCR map reads only the *footage*; the shipped clip also burns our pills, subs and the borrowed end-card logo — any number/currency that clears the price gate must be judged from rendered frames only.
+- **Black-band / pillarbox reports → pixels first**: sample luma of the left/right edge columns on the real frame before "fixing" anything — the padding between plates on a check sheet always reads as a black band to vision.
+- **ป้าย pill เช็คด้วยแผ่น crop แถบป้าย**: `crop=600:90:60:180` scale 2x ทีละเวลา แล้วเขียน expected text ลงใน label — vision ตอบตรงกว่าถามจากภาพเต็มเฟรม.
+- **ห้ามใช้แผ่นหลายเฟรมยืนยัน *เวลา* ของซับ**: vision จะตอบข้อความซับเดิมซ้ำทุกเฟรมทั้งที่ซับคนละใบ → เช็คเวลาซับจาก plan/timeline แทน OCR.
+
 ## Hermes terminal and tooling
 - **Gate script: `python3` ของ NAS ไม่มี numpy** → ใช้ `uv run --with numpy python <file>.py`. และ **อย่าใส่ heredoc ที่อ้างอิงไฟล์ wav/mp4 ขนาดใหญ่ใน terminal** — lifecycle guard จะ block คำสั่งที่อ้างไฟล์ >1 MB ว่าเป็น script ที่สแกนไม่ได้. เขียนสคริปต์วิเคราะห์เป็นไฟล์ `.py` ด้วย write_file แล้วรันแบบ path
 - **งานหลายนาที → `terminal(background=true)` + รอ/เช็คไฟล์ output** — sleep-loop ใน `execute_code` โดน timeout แล้ว kernel state หาย; `pgrep -f` match shell ที่ poll เอง. `process_manage(action=wait)` clamps each call to 180 s, so repeat waits until the process exits; a foreground call promoted past 600 s also ends up here.
@@ -84,6 +89,10 @@ Read the group for the step you are on before running it; a gate that can be che
 - **`pkill -f <pattern>` ที่ pattern ไปโผล่ในคำสั่งตัวเอง = ฆ่า shell ของ terminal call นั้น** (wrapper ส่งทั้งบรรทัดเป็น cmdline ของ bash) → call คืน exit −15 เงียบ ๆ ทั้งที่งานยังไม่จบ; ใช้ `[p]attern` bracket trick หรือ `pgrep` เอา PID มาก่อน kill
 
 ## Hook and delivery (steps 1, 10)
+- **`--hook-id` must be the `templates/hooks.md` line the VO actually uses** — match it against the written script before delivering; `pick-hook` returns the LRU *at run time*, which may not be the line you wrote, and a wrong id skews the next LRU rotation.
+- **Build cleanup deletion lists in Python (`os.listdir` + keep-set), never from a shell `list` command's output**: the wrapper elides long listings with a `... (N more)` token, which either breaks the `rm` syntax or swallows files that must stay. Keep at least `trailer/master/plan/vo/bg/cutout` + seg sources (`extra*.mp4`) + `fonts/` + `work/` for the step-11 revision.
+- **วันที่/ลิสติ้ง (step 1)**: ลิสติ้งที่ฟิกส่งมาอาจล้าสมัย — ถ้าข่าวทางการใหม่กว่าเลื่อนวัน → ห้ามวันเก่าบนจอ/เสียง ใช้ PRE-ORDER หรือไม่แสดงวัน และบอกฟิกใน delivery ให้แก้ลิสติ้ง (ลิสติ้งที่ค้างวันเดิมทำให้คนซื้อเข้าใจผิด). **วันที่สองแหล่งขัดกัน** (หน้าร้าน ≠ search): ใช้ระดับเดือนเท่านั้นทั้งเสียงและจอ — ห้ามเลขวันหลุด แล้วบอกทั้งสองวันพร้อมเหตุผลใน delivery; ตรงกันถึงระดับวัน → ใช้ระดับวันได้ (hook 📅 ใช้ได้เฉพาะกรณีนี้; `pick-hook` ที่ได้ hook นับถอยหลัง/📅 ทั้งที่วันยังไม่ยืนยันจากผู้จัดจำหน่วย → ข้ามไปเลือก hook ที่ไม่มีวันที่ แล้ว log `hook_id: "custom-<slug>-N"` ตามที่คลิปก่อนหน้าทำ)
+
 - **Hook `gph-10` / `gph-2` = นับถอยหลังหรือวันวางขาย → เลี่ยง** แม้ LRU เลือกมาให้; ใช้ hook custom แล้ว log `hook_id: "custom-<slug>-N"` ตามที่คลิปก่อนหน้าทำ.
 - preset นี้ไม่มี Flow = ไม่มี Chrome = 0 เครดิต — อย่าเผลอเริ่ม browser
 - **`clipjob.py deliver` sends the clip, the copy-button message and the cover — do not add a `MEDIA:` line or a hashtag/link block to the final reply** (`MEDIA:` sends the file a second time; the buttons already carry hashtags + link).
