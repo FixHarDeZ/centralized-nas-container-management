@@ -13,6 +13,10 @@
 - 40 s (≈60) exceeds the daily quota on its own: read the live cost and tell Fix before submitting.
 - Never edit inside Flow (40 credits per edit). Never retry a failed submit with his credits without saying so.
 - Credit approval is per product and per question; put the cost inside the question text.
+- **Reported spend = the sum of EVERY attempt's `credits` across all shots, regens included.** Before delivery read
+  it from the job JSON (sum `attempts[].credits`; `deliver` writes that same sum into the row's `credits` field), and
+  at wrap-up quote the clip-log row — never compute shots × 15: a 🔁d shot costs twice, and a delivery that
+  under-reports spend has to be corrected to Fix after the fact.
 
 ## Running an order
 - **After the order, run end to end without per-step confirmation** (Fix: "หลังผมสั่งครั้งแรกทำตั้งแต่ต้นจนจบได้เลยนะ").
@@ -20,7 +24,8 @@
   (`references/run-mode-gates.md`).
 - **Tell Fix early when something blocks.** At most ONE silent retry; a second failure (refusal, Failed card, login wall,
   dead picker) gets a short status at that moment: what failed, what you tried, what is next, whether credits moved.
-  Also send one line at each long silent stage (Chrome up, post-production start).
+  Also send one line at each long silent stage (Chrome up, post-production start) — `python3 S/send_status.py "<line>"`
+  sends it without ending the run (do not hand-roll the Bot API call each time).
 - **Poll through to delivery in the same turn.** Do not end on "still generating" when you could keep watching.
 - **First `unusual activity` card → stop driving Flow** (clipjob falls back to the prompt pack; `flow-browser-env.md` →
   Manual mode). No retry, no cookie clearing.

@@ -5,6 +5,7 @@ Fix's order: keep OUR subtitle style for all Thai subs, and add a preset that co
 **Graphics v2 is the DEFAULT for every presenter clip.** Fix chose it over the plain build in an A/B, with one change: *"ภาพนิ่งที่แทรกขอ crop แค่รูปสินค้าวางบนจอให้ไม่บัง presenter"*.
 - Every product still (hook card AND inserts) uses `presenter_fx.py` `"mode": "overlay"`: the product is cut out (edge flood-fill bg removal + white sticker border + shadow), slides in and bobs.
 - Place it in the empty backdrop beside her. Read that rect off real frames with vision first; for Flow presenters it is usually the right side, centre x≈615–625, y≈380–405, h 225–270.
+- **Check the rect at BOTH ends of its window.** She walks across the frame, so a rect that is empty wall when the overlay starts can sit on her by its end: vision-read the drawn rect on a frame at the start AND on the last frame of the window, then cap `dur` at the last clean frame instead of letting the sticker cover her.
 - Never use a full-screen card that hides the presenter.
 - Keep sparkle/heart stickers ≥20 px away from the cutout's edge, or they read as crammed.
 - With a hook overlay, set `"trim": [0, "auto"]` in the post_presenter plan.
@@ -17,6 +18,7 @@ Fix's order: keep OUR subtitle style for all Thai subs, and add a preset that co
 ## Pipeline order (all post-production, 0 credits)
 
 ### 0a. `scripts/detect_repeats.py scene_raw.mp4 --script prompt_sN.txt --cut sceneN_cut.mp4` (every raw scene, one at a time)
+**Skip the run when the job JSON already has `gates.repeats` for that shot — `clipjob.py ready` runs exactly this detector on every 🧑 shot.** Read the verdict instead of paying a second whisper pass over every scene: `note: ""` = clean (use `shotK_raw.mp4`), `note: "ตัดคำซ้ำแล้ว: …"` = the `_cut.mp4` exists and is the file to feed step 1. Only run it yourself when a scene arrived outside `ready` (no gate in the JSON).
 Run it as `uv run --with faster-whisper --with numpy python …`. It runs unprompted word-level ASR and looks for ADJACENT doubled phrases that the script does not contain twice.
 - exit 3 = repeat found and cut (0 credits). Use `sceneN_cut.mp4` from here on and NAME the cut in the delivery (text + seconds removed).
 - exit 0 = clean.
@@ -27,7 +29,7 @@ Run it as `uv run --with faster-whisper --with numpy python …`. It runs unprom
 Run it as `uv run --with "opencv-python-headless<5" --with numpy python …`. **Pin <5: opencv 5 ships no Haar cascades.**
 
 One JSON line per window:
-- `face`: Haar union. Use it as the `avoid` rect.
+- `face`: Haar union. Use it as the `avoid` rect — but that box is in RAW time: for `graphics_layer`'s `avoid` on the final `out.mp4`, re-probe there (step 3), because punch and xfade move it.
 - `empty_left` / `empty_right`: the backdrop rect free in EVERY sampled frame, inside y 260–640.
 - `overlay`: {x, y, h} for the product cutout, sized to its aspect. When `note` says the side is too small → skip or shorten that overlay.
 
@@ -38,7 +40,7 @@ It is CONSERVATIVE: the mottled wall makes it reserve more than vision does, e.g
 
 ### 1. `scripts/presenter_fx.py scene_raw.mp4 fx.json scene_fx.mp4`
 Run once per RAW scene, BEFORE post_presenter. It touches video only and copies audio, so duration, ASR and sub timing are unchanged.
-- `hook_card` (`"mode": "overlay"`, ~1.4 s): a cut-out product sticker appears beside the presenter from frame 0.
+- `hook_card` (`"mode": "overlay"`, ~1.4 s): a cut-out product sticker appears beside the presenter from frame 0. Dur: aim ≥3 s (a 1.2 s card reads as a flicker), but the last clean frame of the rect — the both-ends check above — is the hard cap.
 - `punch`: snap zoom ≤1.15 on each new selling point. (cx,cy) = the face or the product in hand.
 - `inserts` (`"mode": "overlay"`, 1.2–1.5 s): put one on a word that names the product or its label art.
   - Without `mode` you get the old full-screen card. Use that only to hide a seam or a looped phrase, because it hides the presenter.
@@ -67,7 +69,7 @@ Elements:
   - Skip it when the presenter already holds the product at the CTA: two bottles on screen read as redundant clutter. Use only a bouncing `arrow` sticker beside her pointing hand.
 - `cover`: a twinkle sparkle over Flow's lower-right sparkle mark.
 - `avoid`: the presenter face box.
-  - **Take it from step 0b's `face` per window** (add the scene's global start). Fall back to a vision read only when the probe finds no face.
+  - **Probe it on `out.mp4` itself, in final-clip time** (`layout_probe out.mp4 --window S E …`, one window per gfx span): step 0b's boxes are RAW-scene coordinates, and `punch` zoom plus the xfade shift every face rect — carrying a raw box over (even + the scene's global start) lands the headline on her cheek. Fall back to a vision read only when the probe finds no face.
   - Flow presenters sit centre-frame, so headlines at the old default y=300 land on the face.
 - Auto SFX: pop/twinkle at each element plus a whoosh on the endcard.
   - Mixed at gain 0.35 under a limiter at 0.63 (AAC overshoot otherwise lands the max at exactly −3.0 dB).
@@ -144,6 +146,6 @@ Practical slots:
 - **Never guess coordinates.** Guessed coordinates put headlines on faces and rings on empty space.
   - Faces and empty sides come from `layout_probe.py`.
   - A callout TARGET (pump, cap, label part) still needs a point on the real frame at the element's time — but **budget exactly ONE coordinate ask** (gridded frame, cyan lines every 100 px, labels carrying parent-frame coords). Vision replying with prose instead of numbers happens often enough that a second rephrasing burns the run: when the answer carries no `(x,y)`, drop the geometry-dependent element (callout ring, endcard) and keep headlines + stickers + pills + subs. That is still a complete graphics pass; a ring on a guessed point is a defect Fix sends back.
-- **Free-rect map — the fallback when `layout_probe` reports `no empty side big enough`.** Sample 6–7 frames across the scene (`ffmpeg -ss <t> -i <scene> -frames:v 1 -f rawvideo -pix_fmt rgb24 -`, 720×1280), take each frame's wall as the median of the outermost 8 px of the left and right edge columns over rows 100–1200, mark a 20×20 cell busy when the median per-pixel `|px − wall|` summed over RGB exceeds ~26, and print the grid as ASCII with x labelled every 100 px (`.` <20 free, `:` <45, `*` <90, `#` busy). The largest `.`/`:` block that lies outside y186–262 and y700–835 is your overlay/insert rect — then vision-check one frame of the render as usual. `numpy` is not in the `execute_code` kernel: keep the probe as a file under the scratch dir and run it with `uv run --with numpy python <file>`.
+- **Free-rect map — the fallback when `layout_probe` reports `no empty side big enough`.** Sample 6–7 frames across the scene (`ffmpeg -ss <t> -i <scene> -frames:v 1 -f rawvideo -pix_fmt rgb24 -`, 720×1280), take each frame's wall as the median of the outermost 8 px of the left and right edge columns over rows 100–1200, mark a 20×20 cell busy when the median per-pixel `|px − wall|` summed over RGB exceeds ~26, and print the grid as ASCII with x labelled every 100 px (`.` <20 free, `:` <45, `*` <90, `#` busy). The largest `.`/`:` block that lies outside y186–262 and y700–835 is your overlay/insert rect — then vision-check one frame of the render as usual. The recipe is implemented as `scripts/freerect.py` — `uv run --with numpy python <skill>/scripts/freerect.py <scene.mp4> <t1,t2,…>` prints this grid directly (`.` free, `#` busy; numpy is not in the `execute_code` kernel).
 - **The `--report` timeline moves when a scene's trim changes** (e.g. hook overlay → `trim: 0`). Re-read `report.json` pills/subs and shift every gfx time after each post_presenter re-run, before `--check`.
 - **Close-up product shots (no face) are the slot for the headline and callout.** On presenter shots the face takes the centre column, and the pill and sub bands take the top and bottom.

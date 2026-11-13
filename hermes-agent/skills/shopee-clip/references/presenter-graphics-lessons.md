@@ -6,7 +6,7 @@
   1. `scripts/layout_probe.py` on the raw scenes (windows around each product mention) for overlay x/y/h.
      Its `note: no empty side big enough` is conservative; overlay at x≈655, y≈330, h≈120-130 still fit beside the face in practice. Confirm with one vision read on a frame with a cyan grid.
   2. `scripts/presenter_fx.py scene_raw.mp4 fxN.json sceneN_fx.mp4` with `hook_card` / `inserts` in `mode: overlay` (product cutout from a CLEAN bottle photo, not the ad crop), plus `punch`.
-     Use dur 3.0 or longer for the hook; 1.2 s was too brief and nobody saw it.
+     Use dur 3.0 or longer for the hook; 1.2 s was too brief and nobody saw it — capped by the rect's last clean frame (presenter-graphics.md → *Check the rect at BOTH ends of its window*: she can walk into it before 3 s).
   3. `post_presenter.py` on the fx scenes. Set `trim: [0, "auto"]` at TOP LEVEL (a per-scene `trim` key is ignored). Keep `script` text merged without spaces where a Thai phrase is split; spaces are subtitle breaks.
   4. `scripts/graphics_layer.py out.mp4 gfx.json final.mp4 --report report.json --check` then render. The script lives in `scripts/`, not the skill root.
   5. Frame sheet check, then verify-clip.py, then send.

@@ -841,3 +841,8 @@ Not done / open:
 - Tests: 68 passed locally (new `test_hands_mode_is_a_flow_mode_with_no_presenter_gates`).
 - Not run on a real order: no Flow generation was made (credits). 📦 underneath has never run a real clip either.
   Risk known: Flow redraws rigid products when hands grip/rotate them, finger faults.
+- Before the sync: Hermes had edited 9 skill docs in place since the 11:48 sync (flow-driver SKILL, gameplay SKILL,
+  gameplay-pitfalls, natural-vo, frame-check, house-rules, presenter-graphics(-lessons), presenter-rules) and added
+  2 scripts live (`shopee-clip/scripts/send_status.py`, `freerect.py`). All ported to the repo (read first: a
+  Telegram one-liner sender and a numpy free-rect map); gameplay SKILL.md trimmed to 30704 B. 68 tests pass.
+- Open job at sync time: `aot3-20261113` (🎬, last update 15:40).

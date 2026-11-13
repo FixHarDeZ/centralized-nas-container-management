@@ -68,6 +68,7 @@ Read the group for the step you are on before running it; a gate that can be che
 ## Vision checks
 - **Vision: ถามเป็นแผ่น คำถามสั้น 1 บรรทัด/เฟรม**; ห้ามเชื่อชื่อเกม/โลโก้/วันที่ที่อ่านจากแผ่น (แต่งชื่อเกมขึ้นใหม่ได้) — ยืนยันด้วยเฟรมเดี่ยว + crop zoom; vision ขัดกันเอง → วัดด้วย pixel (ความสว่าง/นับพิกเซลสี) เป็นคำตอบสุดท้าย. **`vision_analyze` timeout (420 s) บนแผ่น = อย่า retry แผ่นเดิมซ้ำ** (ซ้ำแล้วก็ timeout) — **แผ่นที่ต้องตอบ 1 บรรทัด/ไทล์ ให้ ≤ ~10 ไทล์/call**: 19–36 ไทล์ timeout ซ้ำ ๆ → ประกอบซับชีตใหม่จากเฟรมเดิมด้วย PIL (ไม่ต้อง ffmpeg ใหม่) แล้วถามทีละชีต; ยัง timeout ค่อยเหลือ crop เดียวคำถามเดียว (ภาพ ~880×260) แล้วประกอบคำตอบเอง
 - **Chk ชีต 2 วินาทีต่อเฟรมให้ผลต่างกันระหว่างรอบ** (callout เช่น AIR STRIKE มักถูกมองว่าเป็น C) → เลือกช่วงที่สองชีตตรงกันเท่านั้น และรัน frame check ตอนท้ายเสมอ
+- **แฟลชขาวที่ seam ต้องวัดด้วย mean luminance ไม่ใช่ถาม vision**: vision ตอบ "ไม่มีแฟลช/เป็น hard cut" ทั้งที่แฟลชขึ้นจริง — ดึงเฟรมรอบ seam (`-ss` ห่าง ~0.033 วิ = 1 เฟรม) แล้ววัด mean ด้วย numpy; spike แบบ 134 → 176 → 147 ที่จุดตัด = แฟลช 0.5 alpha 3 เฟรมตาม plan (ผ่าน), ขาวเกือบ 255 ค้างหลายเฟรม = แรงเกิน → ลดค่าใน `flash` แล้ว rebuild
 
 ## Hermes terminal and tooling
 - **Gate script: `python3` ของ NAS ไม่มี numpy** → ใช้ `uv run --with numpy python <file>.py`. และ **อย่าใส่ heredoc ที่อ้างอิงไฟล์ wav/mp4 ขนาดใหญ่ใน terminal** — lifecycle guard จะ block คำสั่งที่อ้างไฟล์ >1 MB ว่าเป็น script ที่สแกนไม่ได้. เขียนสคริปต์วิเคราะห์เป็นไฟล์ `.py` ด้วย write_file แล้วรันแบบ path
@@ -79,6 +80,7 @@ Read the group for the step you are on before running it; a gate that can be che
 - **grep URL ที่มี quote ใน terminal พัง** → ใช้ Python `re.findall`
 - **Never `source` /opt/data/.env in the shell to get an API key.** A command that sources the secrets file gets held for approval, times out, and stalls the whole clip run. The VO script reads `GEMINI_API_KEY` from `/opt/data/.env` itself, so run `gen_vo_natural.py` with no env prefix. If a command is blocked for approval, stop and ask Fix once; do not rephrase it to reach the same outcome.
 - **`terminal(workdir=…)` must be an existing directory.** A nonexistent workdir returns exit 126 with a stale `cd` error, the same symptom as the persisted-cwd trap. Set `workdir=/opt/data` (or any existing dir) and do the `mkdir` inside the command.
+- **Gate ที่รันผ่าน pipe: `… | tail/grep; echo $?` คืน rc ของ pipe ไม่ใช่ของสคริปต์** (บางสคริปต์พิมพ์ `no subs.ass in <dir>` แล้วยัง exit 0 ผ่าน tail) → อ่านบรรทัด verdict จาก stdout เองเป็นเกณฑ์ (ต้องเห็น `SUB STRUCTURE PASS` / `DELIVERY CHECK: clean` / `PASS`) หรือ `set -o pipefail` ก่อน pipeline — ไม่มีบรรทัด verdict = ไม่ต้องอ้างว่าผ่าน
 - **`pkill -f <pattern>` ที่ pattern ไปโผล่ในคำสั่งตัวเอง = ฆ่า shell ของ terminal call นั้น** (wrapper ส่งทั้งบรรทัดเป็น cmdline ของ bash) → call คืน exit −15 เงียบ ๆ ทั้งที่งานยังไม่จบ; ใช้ `[p]attern` bracket trick หรือ `pgrep` เอา PID มาก่อน kill
 
 ## Hook and delivery (steps 1, 10)
