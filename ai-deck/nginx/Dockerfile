@@ -4,7 +4,7 @@
 # file. Single files (nginx.conf, .htpasswd) are fine because the master
 # process reads them as root, so those stay as binds in docker-compose.yml.
 # Pinned by digest; `make desk-latest` bumps it with the desk pins.
-FROM nginx:alpine@sha256:713fc2ebfd92e8217db451477182ee91944b123d2b1ee9fd5a8c6e91ca6c3a11
+FROM nginx:alpine@sha256:fed7e14be83cbd2661a75cdc5b872d936cf155d46c327084d30b8df19ae88d72
 COPY ui/ /usr/share/nginx/html/
 # The tar|ssh upload lands files as 0700; COPY keeps that, the worker runs
 # as uid 101 → 403 on everything. Normalise here instead of on the NAS.
