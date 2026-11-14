@@ -6,9 +6,10 @@ Why: two 10 s takes of "hold it up / press / set down" read as filler (vacuum-ba
 - Arc: problem -> product doing its job (step by step) -> result. Every shot = ONE visible action where the product performs its function. "Holds it up to camera" alone is not a shot.
 - Source the beats from the listing's own how-to / feature / before-after images (gathered by `intake_images.py`). They are storyboard material even when they cannot be attached as references.
 - Pace submits ≥5 min apart (Fix 2026-11-09, quality over speed), so a 5-shot board adds ~20 min of wall clock. Say so in the board.
-- Shot length: a Flow generation is 10 s for 🧑 presenter boards (N = length / 10, router step 3). The 4-6 s
-  mix below applies only to a 📦 graphic board with explicitly shorter shots. Cost: 10 s ≈ 15 cr (measured);
-  4 s = 7 cr (measured); 6 s ≈ 10 cr (estimate, mark it as such).
+- Shot length: one Flow generation is 3–10 s (Omni 1.2 Flash, 3 credits/s at 720p). Give each shot the seconds
+  its speech or action needs (6–8 s normal; ~4 Thai syllables/s) and pass them as `clipjob.py new --seconds 8,6`.
+  Never 11–15 s (double rate). Seconds the clip still needs come from post, 0 credits: hook card, product still
+  with push-in, end card. Example 20 s 🧑: Flow 8 + 6 = ≈42 credits + ~6 s of post, instead of 2 × 10 = ≈60.
 - Mix shot types:
   - `P` presenter to camera (hook, reaction, result) - character chip attached, Flow voiceover.
   - `H` hands close-up doing the action (no face, NO character chip - also avoids the prominent-person refusal).
@@ -52,7 +53,7 @@ Why: two 10 s takes of "hold it up / press / set down" read as filler (vacuum-ba
 ⚠️ ช็อตเสี่ยง: <n> (<why>) สำรอง: <alt>
 🔎 เช็คสินค้า: <ชั้น/ลิ้นชัก/ล้อ N> · <สี> · <สูงประมาณ เอว/อก/หัว>
 ```
-**Shot count, seconds per shot, per-shot credits and the total are MANDATORY lines (Fix 2026-11-09).** Credit table, Omni 1.1 Flash 720p x1: 4 s = 7 (measured), 8 s = 12 (measured), 10 s = 15 (measured), 6 s ≈ 10 (estimate - mark it `≈` and say it is an estimate). Before each submit read the Settings panel `Generating will use N credits`; if it differs from the board, tell Fix before generating.
+**Shot count, seconds per shot, per-shot credits and the total are MANDATORY lines (Fix 2026-11-09).** Credits, Omni 1.2 Flash 720p x1 = 3 per second (4 s = 12, 6 s = 18, 8 s = 24, 10 s = 30; `clipjob.py cost --seconds 8,6`); published rates, not measured here yet, so mark every figure `≈`. Size each shot to its speech (6–8 s normal), never above 10 s, and cover the remaining clip seconds in post (0 credits). Before each submit read the Settings panel `Generating will use N credits`; if it differs from the board, tell Fix before generating.
 Then ask with `clarify`: `["ผ่าน เริ่ม gen (≈X เครดิต)", "แก้ storyboard", "ยกเลิก"]`. Unanswered = zero spend, no generation.
 Put the whole board inside the `clarify` question text and the buttons in `choices`, so the board and the approval arrive as one message. When the source images show two colourways, make the approval buttons carry the colour choice, so the same tap approves the board and resolves the colour.
 Router Q3 (who drives Flow, step 8) may ride as the SECOND question in that same call: its default is 📝 (zero spend), so a second entry that gets lost costs nothing and is re-asked at most once.

@@ -46,7 +46,15 @@ product is tried while a voice explains). `clipjob.py new --mode hands`; clip-lo
 ## Frame check, per shot (in addition to `frame-check.md`)
 **`clipjob.py scan <job> K --raw <file>` first; `ready` refuses a ✋ shot without it.** It writes
 `shotK_scan1.jpg …` (one frame every 0.5 s, 10 tiles per sheet, tile n of sheet m = second
-`((m−1)·10 + n − 1)/2`). Read EVERY sheet, one `vision_analyze` per sheet, with the question the command
+`((m−1)·10 + n − 1)/2`).
+
+**Order the reads: identity FIRST.** Run the side-by-side below (`hstack` ref vs the shot's last frame)
+before the sheet pass: one call, and a structural mismatch with the reference kills the shot whatever the
+sheets show, so Fix gets that finding the moment it surfaces — never behind a dozen later reads. Structural
+reads that disagree between frames of ONE clip (hook count 2 vs 3, split vs full-width shelves) are
+themselves the drift signal: settle them on that hstack, not on more sheet reads.
+
+Read EVERY sheet, one `vision_analyze` per sheet, with the question the command
 prints, and look at the tile edges: three sampled frames missed a face that was on screen for under a second.
 Any one of these is `--frame flag:<what>`:
 - an arm shown above the forearm, a shoulder, hair or clothing of a body;
@@ -59,6 +67,25 @@ Any one of these is `--frame flag:<what>`:
 - product shape, colour, logo or parts differ from the reference photo;
 - the planned action did not happen (the hand only hovers), or the product is switched to another state
   with no action (state teleport).
+
+**Every sheet hit is a screening, not a verdict.** Scan tiles come out ~240 px wide, and at that size an
+anatomy read invents fused/short fingers and mis-reads labels that are not in the source. For each flagged
+window pull one full-res frame (`ffmpeg -ss <t> -i shotK_raw.mp4 -frames:v 1 -q:v 2 f.jpg`, then `crop` +
+`scale` the region) and re-read just that crop; only what survives goes into `--frame flag:…`, and name
+the times you verified in the note. Printed text survives the crop far more often than anatomy does — a
+brand read at full res is a real flag even when the sheet named the wrong brand.
+
+**Judge product identity side by side, never from a description of the reference.** `hstack` the
+reference photo and the shot's last frame scaled to the same height, and ask for the structural diff:
+tier count, split top vs full-width shelf, pull-out drawer vs hanging basket, what hangs at the very
+bottom, height:width ratio. A standalone read of a cropped `ref1.jpg` can contradict the original listing
+photo (`img1.jpg` …): when they disagree the listing photo is the product — re-read it before calling
+Drift.
+
+**Before calling drift the model's fault, check the prompt's product paragraph against the reference.**
+If `shot<K>.txt` describes parts the photo has no trace of, Flow only obeyed what it was told and a regen
+with the same paragraph returns the same product: correct the paragraph first, tell Fix which of the two
+was wrong, then re-submit.
 
 ## Graphics
 - `layout_probe.py` does not fit (no face, no studio wall): vision-read 2–3 frames per shot, as in 📦 —

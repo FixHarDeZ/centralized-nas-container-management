@@ -21,3 +21,16 @@ images are ads, review screenshots or crops.
 - When the crop shows the product in a different state from the shot, say so in the question
   text with the credit cost, and ask once. An approval given with that risk stated is valid.
 - Never fill a missing reference with a guessed product. If the user declines, hold at zero spend.
+
+## Close-out with no clip (router step 12b)
+Fix orders the skip ("ข้ามทุก step ส่ง hashtag + ปักตะกร้า จบงาน") while
+   `status` shows no shot file: `deliver` cannot run, so never stage or imply a clip. Run
+   `S/send_copy_buttons.py "<tags>" "<link>" [chat_id] "<label>"` directly — tags per `templates/hashtags.md`
+   gates, link must be https (exit 0 = both buttons echoed = verified) — then
+   `clipjob.py cancel <job> --reason "<his order>; no clip produced, 0 credits"`. One message reports:
+   buttons message_id, that no clip exists, `spent_shots`, and that prompts/refs stay in the workdir for a
+   re-order. His explicit skip waives the pipeline, not the honesty gates — do not re-ask for the videos.
+
+## Talking to Fix: detail
+- **A real `FLAG` needs his call: ask once with `clarify`, then end the turn and wait.** An unanswered clarify blocks the run for its whole timeout, so re-asking the same question stalls it twice — report the flag with its frame time and wait for his reply instead of passing `--ack` as if he had chosen.
+- The senders parse no flags — `S/send_status.py "<line>"` posts its FIRST argument verbatim as the message body, so probing one with `--help` or any flag posts that literal text to the chat. Read the script's docstring instead of running it to ask what it does.

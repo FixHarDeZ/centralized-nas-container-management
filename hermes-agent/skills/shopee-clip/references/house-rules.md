@@ -7,7 +7,18 @@
 > (known edit ids, roster, last character), `/opt/data/clips/work/<job>` (job workdirs).
 
 ## Credits
-- ~1.5 credits per second at 720p (measured 4 s = 7, 8 s = 12, 10 s = 15). PRO = 50/day ≈ 33 s of finished clip.
+- **Model = Omni 1.2 Flash** (Omni 1.1 Flash and Veo 3.1 Fast/Quality leave Flow on 2026-12-05; Veo 3.1 Lite stays,
+  4/6/8 s, cost not known here). Rates, from third-party write-ups in 2026-11 and NOT yet measured on Fix's accounts:
+  720p = 3 credits/s for seconds 1–10, **6/s for seconds 11–15**; 360p = 1/s (2/s for 11–15). So 720p: 6 s = 18,
+  8 s = 24, 10 s = 30, 15 s = 60. Estimate with `clipjob.py cost --seconds 8,6`. Every account has 50/day
+  (≈16 s at 720p); Pro adds 1,000/month.
+- **Spend less on 1.2 (twice the 1.1 price):** (1) a shot is as long as its speech needs, 6–8 s is the normal
+  size, 10 s only when the line fills it (~4 Thai syllables/s) — pass `--seconds`; (2) never 11–15 s, two shots
+  are cheaper; (3) the clip's remaining seconds come from post at 0 credits (hook card, product still with
+  push-in, end card), not from a longer generation; (4) Flow shots only where a person or motion is needed —
+  a rigid product's hero view is its own photo in post; (5) the regen stop in the router (same defect twice =
+  stop) matters twice as much now. A 360p generation saved at 720p is reported as a third of the price but is
+  softer and untested here: use it only when Fix says so (`cost --res 360p`).
   Read the live `Generating will use N credits` line when it is visible; quote only numbers actually read. The narrow
   layout shows no balance: say "remaining unknown" rather than estimating.
 - 40 s (≈60) exceeds the daily quota on its own: read the live cost and tell Fix before submitting.

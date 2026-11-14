@@ -11,7 +11,7 @@ Fix 2026-11-10: the voice copies the gameplay recipe ("ลอกแนวเส�
   post, and Flow speech would fight it. Add the no-on-screen-text block from `presenter-post.md`.
 - Use the reference photo as the Ingredient on every shot, the same as 🧑. The product must not drift
   between shots. Check it in each shot's frame verdict.
-- Shots are 10 s (one Omni 1.1 Flash generation). Plan ~1–2 s more footage than the VO needs (`fit()` holds the last frame when the
+- Shots are 3–10 s (one Omni 1.2 Flash generation, `--seconds`; 3 credits/s, so no spare seconds beyond the VO need). Plan ~1–2 s more footage than the VO needs (`fit()` holds the last frame when the
   footage is short, and flags a hold >2 s).
 
 ## Voiceover = the gameplay recipe

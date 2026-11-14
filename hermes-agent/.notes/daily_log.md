@@ -888,3 +888,23 @@ Not done / open:
 - Live check: `scan_sheets` on the real `aimi-rack` shot 1 inside the container → 2 sheets; sheet 1 shows the face
   in tiles 9–10 (4.0 / 4.5 s) and a torso/sleeve in tiles 4–5. The old 3-frame check had none of these.
   No deploy, no restart.
+
+### 2026-11-15 — checked the 11-14 jobs, Omni 1.2 Flash readiness, second Flow account
+- 11-14 jobs (job JSON + clip-log only; workdirs and finals were already cleaned, no video viewed):
+  - `gta6-codebox` 🧑 delivered, 10 s, 241 min, **45 credits for one shot** (3 generations). The box cover came out as
+    GTA V art in all three; attempt 1 was passed by the frame check and Fix caught it. Fix accepted the clip.
+  - `wallshelf-20261114` ✋ 📝: cancelled, product redrawn (third rigid-product drift). Scan gate flagged it.
+  - `octopath-bundle` 🎬: cancelled, no text-free footage; bg/logo/VO/subs were built before that was known.
+  - `gundam-ro-gfx` 🧑 📝: Fix skipped the clip, hashtags + basket only, 0 credits.
+- Hermes had 10 live in-place skill edits + new `flow-driver/templates/character-prompt.md` since the last sync, and
+  pushed `1619dac`/`98f7858` itself. All ported (`--pull`); its router edits took `shopee-clip/SKILL.md` to 18.1 KB,
+  cut back to 15.3 KB (close-out 12b and sender detail moved to `run-mode-gates.md`).
+- Omni 1.2 Flash (Omni 1.1 Flash, Veo 3.1 Fast/Quality leave Flow 2026-12-05): `clipjob.py new --seconds 8,6`
+  (3–10 s per shot, 11–15 refused), `clipjob.py cost [job] [--seconds] [--res]`, pack header names the model and
+  each shot's seconds. Rates in `RATE` (720p 3/s, 360p 1/s) are from third-party write-ups, not measured.
+  Docs: house-rules Credits (+ how to spend less), storyboard, project-state credits-line check, product-mode,
+  flow-production-notes. Gameplay SKILL: usable footage proven before bg/logo/VO.
+- Second account: `pack` sends `/opt/data/clips/characters/<name>.jpg` when present, with the line to attach it as
+  an Ingredient; `prompt-pack.md` section. **No portrait files exist yet.**
+- Tests 73 passed. Not verified live: the real credits line on 1.2, the saved default switched to 1.2 in the
+  project (flow-state still says 1.1), a shot shorter than 10 s through post, portraits, 360p quality.

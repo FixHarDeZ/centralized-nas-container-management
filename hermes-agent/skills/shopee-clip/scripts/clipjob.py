@@ -4,7 +4,8 @@
 State: $CLIPJOB_DIR/<job>.json (default /opt/data/clips/jobs). Pacing clock: $CLIPJOB_DIR/pacing.json.
 This CLI is the only sanctioned way to move a Flow-mode clip forward. It refuses out-of-order steps.
 
-  clipjob.py new JOB --mode presenter|product|hands|gameplay --product "..." [--link URL] [--shots N] [--ref IMG ...] [--character NAME]
+  clipjob.py new JOB --mode presenter|product|hands|gameplay --product "..." [--link URL] [--shots N] [--seconds 8,6] [--ref IMG ...] [--character NAME]
+  clipjob.py cost [JOB] [--seconds 8,6] [--res 720p|360p]   # estimated credits, Omni 1.2 Flash
   clipjob.py production JOB auto|prompt            # Fix's answer to Q2 (Flow modes only)
   clipjob.py status [JOB]
   # auto (IU drives Flow)
@@ -61,7 +62,13 @@ CHAT = os.environ.get("CLIPJOB_CHAT", "8663614341")
 CLIP_LOG = os.environ.get("CLIP_LOG", "/opt/data/clips/logs/clip-log.jsonl")
 PACING_S = 300
 WAIT_CAP_S = 150           # one `reserve --wait` sleeps at most this long: the Hermes terminal tool times out at 180 s
-SHOT_SECONDS = 10          # one Omni 1.1 Flash generation (house-rules.md -> Duration)
+FLOW_MODEL = "Omni 1.2 Flash"   # Omni 1.1 Flash and Veo 3.1 Fast/Quality leave Flow on 2026-12-05
+SHOT_SECONDS = 10          # default and cap of one generation: seconds 11-15 bill at double rate
+SHOT_MIN = 3
+# credits per second for a 3-10 s generation. Third-party figures (2026-11), not measured on this account:
+# Flow's "Generating will use N credits" line wins, and `submitted --credits` records what was read.
+RATE = {"720p": 3, "360p": 1}
+CHAR_DIR = os.environ.get("CLIPJOB_CHARS", "/opt/data/clips/characters")   # <name>.jpg portrait per roster name
 INFO_FLAGS = [re.compile(r"auto-added")]   # report flags that only inform (post_presenter adds the CTA pill itself)
 FLOW_MODES = ("presenter", "product", "hands")   # hands = product pipeline, hands in frame, no face
 MODES = FLOW_MODES + ("gameplay",)
@@ -101,7 +108,48 @@ def iso(t=None):
     return dt.datetime.fromtimestamp(t if t is not None else now()).astimezone().isoformat(timespec="seconds")
 
 
-def new_job(job, mode, product, link="", shots=0, refs=(), workdir=None, character=None):
+def parse_seconds(text, shots):
+    """'8' or '8,6,8' -> one length per shot. Empty = SHOT_SECONDS each."""
+    if not text:
+        return [SHOT_SECONDS] * shots
+    try:
+        secs = [int(x) for x in str(text).split(",")]
+    except ValueError:
+        raise Refused("--seconds takes whole numbers: 8 or 8,6,8")
+    if len(secs) == 1 and shots:
+        secs *= shots
+    if shots and len(secs) != shots:
+        raise Refused(f"--seconds names {len(secs)} lengths for {shots} shots")
+    bad = [s for s in secs if not SHOT_MIN <= s <= SHOT_SECONDS]
+    if bad:
+        raise Refused(f"a shot is {SHOT_MIN}-{SHOT_SECONDS} s ({bad}): {FLOW_MODEL} bills seconds 11-15 at double "
+                      "rate, so split a longer beat into two shots or cover it in post")
+    return secs
+
+
+def cost(secs, res="720p"):
+    """Estimated credits for the given shot lengths. An estimate: the Flow panel line is the truth."""
+    if res not in RATE:
+        raise Refused(f"--res must be one of {sorted(RATE)}")
+    per = [s * RATE[res] for s in secs]
+    return {"model": FLOW_MODEL, "res": res, "seconds": secs, "credits": per, "total": sum(per),
+            "regen_one": max(per) if per else 0,
+            "note": "estimate from published rates; quote Flow's 'Generating will use N credits' line when read"}
+
+
+def shot_seconds(s):
+    return s.get("seconds") or SHOT_SECONDS
+
+
+def character_image(name):
+    for ext in ("jpg", "jpeg", "png"):
+        f = os.path.join(CHAR_DIR, f"{name}.{ext}")
+        if name and os.path.exists(f):
+            return f
+    return None
+
+
+def new_job(job, mode, product, link="", shots=0, refs=(), workdir=None, character=None, seconds=None):
     if not JOB_RE.match(job):
         raise Refused("job slug must match [a-z0-9][a-z0-9-]{0,40}")
     if mode not in MODES:
@@ -112,12 +160,13 @@ def new_job(job, mode, product, link="", shots=0, refs=(), workdir=None, charact
         raise Refused("presenter needs --character (the roster pick; the prompt pack tells Fix which one to attach)")
     if mode in FLOW_MODES and not refs:
         raise Refused("Flow modes need at least one clean product photo (--ref) — run the photo gate first")
+    secs = parse_seconds(seconds, shots) if mode in FLOW_MODES else []
     t = now()
     return {"job": job, "mode": mode, "product": product, "link": link, "status": "open",
             "production": None, "character": character, "refs": [os.path.abspath(r) for r in refs],
             "workdir": workdir or os.path.join(WORK, job),
             "created": iso(t), "updated": iso(t), "fallback": None, "trouble": {},
-            "shots": [{"k": k, "state": "pending", "attempts": [], "raw": None, "file": None,
+            "shots": [{"k": k, "seconds": secs[k - 1], "state": "pending", "attempts": [], "raw": None, "file": None,
                        "gates": None, "pack_msg": None} for k in range(1, shots + 1)] if mode in FLOW_MODES else [],
             "events": [], "delivery": None}
 
@@ -714,10 +763,14 @@ def cmd_pack(j, only, no_send):
     if missing:
         raise Refused(f"write the prompt files first: {', '.join(f'{wd}/shot{k}.txt' for k in missing)}")
     sent = []
+    char_img = character_image(j.get("character"))
     if not no_send and not only:
         head = (f"📝 โหมดเตรียม prompt · {j['product']}\n"
                 + (f"สลับจากโหมดอัตโนมัติ: {j['fallback']['reason']}\n" if j.get("fallback") else "")
-                + (f"ตัวละคร: {j['character']} (แนบจาก Characters ใน Flow ทุกช็อต)\n" if j.get("character") else "")
+                + (f"ตัวละคร: {j['character']} (แนบจาก Characters ใน Flow ทุกช็อต"
+                   + (" · account ที่ไม่มีตัวนี้ ให้แนบรูปตัวละครด้านล่างเป็น Ingredient แทน" if char_img else "")
+                   + ")\n" if j.get("character") else "")
+                + f"โมเดล: {FLOW_MODEL} · 720p · x1 (ห้ามเกิน 10 วิ/ช็อต วินาทีที่ 11-15 คิดเครดิต 2 เท่า)\n"
                 + f"ช็อตที่ต้องทำ: {', '.join(map(str, targets))}\n\n"
                   "วิธีใช้: เซฟรูปอ้างอิงด้านล่างไปแนบใน Flow (Ingredients) → ก๊อป prompt ของแต่ละช็อต "
                   "→ gen ใน Flow → กด reply ข้อความ prompt ของช็อตนั้นแล้วแนบ mp4 กลับมา "
@@ -726,6 +779,9 @@ def cmd_pack(j, only, no_send):
         for i, r in enumerate(j["refs"], 1):
             tg("sendPhoto", {"chat_id": CHAT, "caption": f"รูปอ้างอิง {i}/{len(j['refs'])} · {j['job']}"},
                files={"photo": r})
+        if char_img:
+            tg("sendPhoto", {"chat_id": CHAT, "caption": f"ตัวละคร {j['character']} · ใช้เมื่อ account นี้ไม่มีตัวละครนี้ "
+                                                         "(แนบเป็น Ingredient ทุกช็อต)"}, files={"photo": char_img})
     for k in targets:
         prompt = open(os.path.join(wd, f"shot{k}.txt"), encoding="utf-8").read().strip()
         prev = shot(j, k - 1) if k > 1 else None
@@ -739,7 +795,7 @@ def cmd_pack(j, only, no_send):
         elif prev:
             chain = f"\nเฟรมเริ่ม: ถ้าทำช็อต {k - 1} เสร็จแล้ว ใช้เฟรมท้ายของมันเป็น start frame ภาพจะต่อเนื่อง"
         mid = None
-        for text in prompt_messages(j["job"], k, len(j["shots"]), prompt, SHOT_SECONDS, chain):
+        for text in prompt_messages(j["job"], k, len(j["shots"]), prompt, shot_seconds(shot(j, k)), chain):
             if not no_send:
                 r = tg("sendMessage", {"chat_id": CHAT, "text": text, "parse_mode": "HTML"})
                 mid = mid or r["message_id"]
@@ -912,6 +968,9 @@ def main(argv=None):
     s.add_argument("--product", required=True); s.add_argument("--link", default="")
     s.add_argument("--shots", type=int, default=0); s.add_argument("--ref", action="append", default=[])
     s.add_argument("--workdir"); s.add_argument("--character")
+    s.add_argument("--seconds", help="per-shot length: 8 or 8,6,8 (3-10, default 10)")
+    s = sub.add_parser("cost"); s.add_argument("job", nargs="?"); s.add_argument("--seconds")
+    s.add_argument("--res", default="720p")
     s = sub.add_parser("production"); s.add_argument("job"); s.add_argument("value", choices=["auto", "prompt"])
     s = sub.add_parser("status"); s.add_argument("job", nargs="?")
     s = sub.add_parser("reserve"); s.add_argument("job"); s.add_argument("shot", type=int)
@@ -957,11 +1016,17 @@ def main(argv=None):
             missing = [r for r in a.ref if not os.path.exists(r)]
             if missing:
                 raise Refused(f"ref not found: {missing}")
-            j = new_job(a.job, a.mode, a.product, a.link, a.shots, a.ref, a.workdir, a.character)
+            j = new_job(a.job, a.mode, a.product, a.link, a.shots, a.ref, a.workdir, a.character, a.seconds)
             os.makedirs(j["workdir"], exist_ok=True)
             j["started"] = iso(workdir_started(j["workdir"], now()))
             log(j, "created"); save(j)
             return out(summary(j))
+        if a.cmd == "cost":
+            if a.job:
+                return out(cost([shot_seconds(s) for s in load(a.job)["shots"]], a.res))
+            if not a.seconds:
+                raise Refused("cost needs a job or --seconds 8,6")
+            return out(cost(parse_seconds(a.seconds, 0), a.res))
         if a.cmd == "status":
             if a.job:
                 return out(load(a.job))

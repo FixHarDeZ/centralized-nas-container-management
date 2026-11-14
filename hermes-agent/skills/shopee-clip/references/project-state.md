@@ -14,7 +14,7 @@ change (new opened `/edit` id, new character used, new settings saved).
   "project_id": "b618e7a8-...",
   "project_name": "Shopee Affiliate",
   "updated": "2026-10-26",
-  "video_defaults_saved": { "aspect": "9:16", "x": "x1", "model": "Omni 1.1 Flash" },
+  "video_defaults_saved": { "aspect": "9:16", "x": "x1", "model": "Omni 1.2 Flash" },
   "confirm_before_generating": "Never",
   "character_roster": ["น้องมิ้นท์", "น้องมิลค์", "น้องมายด์", "น้องมุก", "น้องพีช", "น้องออม"],
   "last_character_used": "น้องมุก",
@@ -51,8 +51,11 @@ Rules
   the current order — the seconds AND the x1–x4 count come back stale, and the
   `x` saved in this file did not stop the panel opening on `x2` — so the only
   trustworthy read is the credits line: it must equal duration × rate ×
-  generation count (Omni Flash 720p ≈ 1.5 cr/s; `8s · x2 · 24 credits` is
-  8 × 1.5 × 2), i.e. exactly 15 for a 10 s x1 order. Adjust every tile until
+  generation count (Omni 1.2 Flash 720p: 3 cr/s up to 10 s per published rates, unmeasured
+  here; `clipjob.py cost --seconds N` gives the expected figure, e.g. 24 for an 8 s x1
+  order). The model tile must read `Omni 1.2 Flash` and the seconds must equal the
+  shot's `seconds` in the job. If the line differs from the expected figure with the
+  right model/seconds/720p/x1, do NOT keep adjusting: quote the line to Fix and wait. Adjust every tile until
   it lands there, and quote only that final figure. Read checked state off
   `mat-button-toggle`'s `className`, never with
   `querySelectorAll('mat-button-toggle-checked')` — that is a CLASS, not an

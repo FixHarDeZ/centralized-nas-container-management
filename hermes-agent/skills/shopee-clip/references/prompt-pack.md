@@ -23,6 +23,10 @@ not proof that 🤖 cannot work.
   Never guess from the order or the file name: a wrong guess puts a good shot in the wrong slot.
   **Exception: a job with ONE shot has exactly one slot** — ingest the bare video with `--shot 1` and ask
   nothing; with N>1 the ask stands, because only then can a guess land in the wrong slot.
+- The same bytes can arrive twice — a bare send, then the identical mp4 again as a reply to the prompt.
+  `md5sum` both before ingesting: equal hashes mean one render, so ingest only the copy carrying the
+  `[ช็อต K · job]` tag and drop the other. Do not start a frame review on a bare video either — the
+  status/reply context decides the slot, the file name never does.
 - The ✅/🔁 tap comes back as plain text and `clipjob.py decide --text` accepts ONLY the button label
   verbatim: `✅ ผ่าน ช็อต K · <job>` / `🔁 gen ใหม่ ช็อต K · <job>`. A paraphrase (`✅ ช็อต K · <job>`)
   is REFUSED — copy the label off the keyboard message, don't retype it from memory.
@@ -31,6 +35,17 @@ not proof that 🤖 cannot work.
 - The Bot API download cap is 20 MB. A 10 s 720p shot is far below it. A bigger file fails to download,
   so ask Fix to export at 720p.
 - Fix may finish the shots in any order. `ingest` accepts any shot that has been packed.
+
+## Fix's second Flow account (saved characters are per account)
+A saved character exists only in the Google account/project that made it; the other account's Characters list
+does not have it. `pack` therefore also sends the character's portrait when
+`/opt/data/clips/characters/<name>.jpg` exists, and the header tells Fix to attach it as an Ingredient there.
+The portraits come from the main account: one crop per roster name from the Characters page (0 credits), saved
+under exactly the roster name. No portrait on disk = say so in the header message's follow-up and ask Fix which
+account he is on; never swap in another character silently. A face attached as a plain image holds less well
+than a saved character (unmeasured here): for a multi-shot 🧑 clip keep all shots on ONE account, and chain
+from the previous shot's last frame as usual. The model line in the header (`Omni 1.2 Flash · 720p · x1`) is
+what Fix sets in either account.
 
 ## Credits
 Fix's own submits spend his Flow credits exactly like 🤖, and IU cannot read them. Do not report a credit

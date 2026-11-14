@@ -46,6 +46,7 @@ metadata:
 - No fixed 10/20/30 menu and no Q2 for 🎬. DUR = any whole number of seconds from 15 to 50 that the content
   carries: the usable seconds (speech-free AND text/logo-free, counted in step 2 / footage-sourcing §2a) and the
   story (hook + 4–8 shots of 1.5–3 s + the real end card ~2.5–3 s, and selling points worth a VO line).
+- **Usable footage is proven first**: under 15 s of text-free, speech-free windows = stop and ask Fix (other source / his footage / cancel) BEFORE bg, logo, VO or subs. Octopath 2026-11-14 built all four, then cancelled.
 - Lock DUR after the footage count and before the VO script; write it in the plan, `clipjob.py note <job>
   "DUR <n> s: <usable> s clean, <why>"` and in the status line. Do not wait for Fix to confirm it.
 - Thin content → the shorter clip, never padding: no repeated shot, held frame, stretched footage or filler VO

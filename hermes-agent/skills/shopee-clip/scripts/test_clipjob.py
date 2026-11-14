@@ -505,3 +505,49 @@ def test_timeline_counts_waits_on_fix_in_a_footage_job():
     tl = cj.timeline(j)
     assert tl["wait_fix_min"] == 157 and tl["stages"] == [["เตรียม", 0], ["ทำคลิป", 544]]
     assert "ทำคลิป 544 น. (รอฟิกตอบ 157 น.)" in cj.timeline_text(tl)
+
+
+# ---------------------------------------------------------------- Omni 1.2 Flash: per-shot seconds and cost
+def test_shot_seconds_default_and_per_shot():
+    assert [s["seconds"] for s in job(2)["shots"]] == [10, 10]
+    j = cj.new_job("t-2", "product", "Thing", "", 3, ["/tmp/r.jpg"], seconds="8,6,8")
+    assert [s["seconds"] for s in j["shots"]] == [8, 6, 8]
+    assert [s["seconds"] for s in cj.new_job("t-3", "hands", "T", "", 2, ["/tmp/r.jpg"], seconds="8")["shots"]] == [8, 8]
+
+
+def test_shot_seconds_refuses_the_double_rate_band_and_bad_counts():
+    for bad in ("12", "8,15", "2", "8,6", "x"):
+        with pytest.raises(cj.Refused):
+            cj.new_job("t-2", "product", "Thing", "", 3, ["/tmp/r.jpg"], seconds=bad)
+
+
+def test_cost_is_per_second_and_names_the_model():
+    c = cj.cost([8, 6])
+    assert c["model"] == "Omni 1.2 Flash" and c["credits"] == [24, 18] and c["total"] == 42 and c["regen_one"] == 24
+    assert cj.cost([10], "360p")["total"] == 10
+    with pytest.raises(cj.Refused):
+        cj.cost([8], "1080p")
+    assert cj.parse_seconds("8,6", 0) == [8, 6]
+    with pytest.raises(cj.Refused):
+        cj.parse_seconds("12", 0)
+
+
+def test_old_job_without_seconds_reads_as_ten():
+    assert cj.shot_seconds({"k": 1}) == 10
+
+
+def test_pack_sends_the_character_portrait_for_an_account_without_it(tmp_path, monkeypatch):
+    chars = tmp_path / "chars"; chars.mkdir(); (chars / "น้องมุก.jpg").write_bytes(b"x")
+    monkeypatch.setattr(cj, "CHAR_DIR", str(chars))
+    calls = []
+    monkeypatch.setattr(cj, "tg", lambda m, d, files=None: calls.append((m, d, files)) or {"message_id": 1})
+    j = job(1, prod="prompt"); j["workdir"] = str(tmp_path); (tmp_path / "shot1.txt").write_text("p", encoding="utf-8")
+    cj.cmd_pack(j, None, False)
+    head = calls[0][1]["text"]
+    assert "Omni 1.2 Flash" in head and "Ingredient แทน" in head
+    assert any(f and f.get("photo", "").endswith("น้องมุก.jpg") for _, _, f in calls)
+    assert "10 วิ" in calls[-1][1]["text"]
+    monkeypatch.setattr(cj, "CHAR_DIR", str(tmp_path / "none")); calls.clear()
+    j2 = job(1, prod="prompt"); j2["workdir"] = str(tmp_path)
+    cj.cmd_pack(j2, None, False)
+    assert "Ingredient แทน" not in calls[0][1]["text"] and len([c for c in calls if c[0] == "sendPhoto"]) == 1

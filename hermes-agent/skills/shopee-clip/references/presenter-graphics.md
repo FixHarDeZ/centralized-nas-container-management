@@ -77,6 +77,7 @@ Elements:
 ### 3b. Cover (every clip, presenter AND gameplay)
 1. `uv run --with pillow --with numpy python scripts/make_cover.py --video sceneN_fx.mp4 --t <moment with face + product> --text "<BRAND PRODUCT ≤3 words EN>" --cy 1150 --color green|pink|… --out cover.jpg`
    - The source must be a PRE-subtitle render.
+   - When the clip carries an accepted defect ON the product (a redrawn cover), take `--t` from a moment where the product is out of frame: the post thumbnail is the first thing a viewer sees, so do not feature the flaw there.
    - `--cy 1150` puts the title on her torso, clear of the face. Auto put it on the chin.
    - The title box can cover the bottle's label (measured on a Pureen cover: the box took the label's middle, and the vision check failed label visibility). Before sending, check the label is readable; if not, keep the box clear of the label area with a shorter title or a lower `--cy` and re-check. Untested alternative: move `--cy` lower, not verified yet.
    - Pick a box colour that contrasts with the wall (pink-on-pink blends in).
@@ -88,6 +89,7 @@ Elements:
 
 ### 4. Check and send
 1. Run `verify-clip.py` on final.mp4.
+1b. `uv run --with pillow python /opt/data/skills/gameplay-clips/scripts/sub_linecheck.py <workdir>` (symlink `fonts/` into the workdir first): the per-event band count is deterministic, while vision OCR misreads small Thai and will invent a "truncated" subtitle that is not there — never clear a sub defect from a vision read alone.
 2. Make a frame sheet at each element's start + 0.3 s.
 3. Vision-check the sheet:
    - every element is present;
@@ -115,6 +117,9 @@ Practical slots:
   `report.json`, set `y = face_bottom + ~20` with `bottom < sub_top` (face bottom 525 + subs from 700 →
   y 545, size 42, 2 lines ≈ 121 px). It lands on the product she holds, which is allowed: only `avoid`
   (the face) is hard.
+  Legal, but DROP the headline instead when what she holds IS the identity art (a game case's cover): centred
+  text over it hides the exact thing the shot exists to show. Ship callout + stickers + pills + subs, and say in
+  the delivery that no headline slot survived.
 - **`--check` prints a text element's ACTUAL rect — read it and shift, don't re-guess.** A callout label is
   CENTRED on (lx, ly) with width ≈ its own text (~240 px for a 2-word label), so a 2-word label needs
   lx ≥ ~201 to stay inside x80 and ly ≥ face_bottom + ~10 to clear `avoid`; the printed rect is the answer,
