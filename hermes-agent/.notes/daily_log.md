@@ -920,3 +920,18 @@ Not done / open:
 - Fix: live edits by Hermes count as much as repo edits. `sync.sh` now refuses a plain sync while a live in-place
   edit is unpulled (`.pulled` hash file after `--pull`, `DRIFT_OK=1` override; env overrides `CLIPS_DIR`,
   `HERMES_SCRIPTS_DIR`). Checked in the container against a temp skills dir: refuse → pull → merge → sync ok.
+
+### 2026-11-15 — session closed
+- On `main`, pushed: `8d3773d` (Omni 1.2 Flash `--seconds`/`cost`, character portrait in the pack, Hermes' 10 live
+  edits ported), `a7ff532` (clip length = sum of shots, one repeated defect stops regens), `81dc2f1` (sync refuses
+  unpulled live edits). Skills synced at `81dc2f1`, 73 tests passed in the container. No deploy, no restart.
+- **Still running at close (started 00:42):** a one-shot `hermes chat -Q --query-file /opt/data/clips/characters/_task.txt
+  --skills flow-driver --max-turns 90` inside hermes-gateway (session `local-c0dd7bd4…`, model `mimo-v2.6-flash`),
+  asked to save the 12 roster portraits to `/opt/data/clips/characters/<name>.jpg` (read-only on Flow, 0 credits,
+  contact sheet `_sheet.jpg`, one Telegram status line at the end). At 00:46 it was working, no portrait saved yet,
+  `_run.log` empty. Approvals were left on (no `--yolo`), so it may stall on a command that needs approval.
+  `--source claude-code` / `--run-budget` gave `invalid_params` on the first try (which flag is not isolated).
+- Open for the next session: check the portraits (12 files, right face per name, no UI in frame) and that the run
+  touched no skill file and spent nothing; if it failed, Fix sends the task text in Telegram. Then the items from
+  above: real credits line on Omni 1.2, saved default model in the Flow project, first shot under 10 s through post,
+  360p A/B (needs Fix's OK, ~40 credits). Router is at 15354 of 15360 B.
