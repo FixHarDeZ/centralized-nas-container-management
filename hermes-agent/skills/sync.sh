@@ -22,6 +22,10 @@
 #   the clone's working tree and nothing live is touched. Review with git diff, commit, push, then sync.
 #   This is how a lesson written into a live skill reaches the repo. A plain sync refuses while the
 #   clone has uncommitted skill changes (it would copy them live under the wrong baseline commit).
+# LIVE EDITS COME FIRST: a plain sync REFUSES (exit 3, nothing copied) while a live file carries an in-place
+#   edit that was never pulled. Run `--pull`, merge it with the repo change, commit, push, then sync. `--pull`
+#   records each pulled file's hash in <skill>/.pulled, so the sync that follows knows the edit is in the
+#   repo's history and lets that file through. DRIFT_OK=1 = old behaviour (capture to skill-drift/, overwrite).
 # DRY=1 prints what would change. SKIP_TESTS=1 skips the test gate (emergencies only).
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
@@ -51,30 +55,59 @@ if [ -z "$PULL" ] && [ "${SKIP_TESTS:-}" != 1 ]; then
   echo "tests: $(tail -1 /tmp/hermes-skills-tests.log)"
 fi
 
-DRIFT_ROOT=/opt/data/clips/skill-drift
+CLIPS=${CLIPS_DIR:-/opt/data/clips}
+SCRIPTS_DST=${HERMES_SCRIPTS_DIR:-/opt/data/scripts}
+DRIFT_ROOT=$CLIPS/skill-drift
 TS=$(date +%Y%m%d-%H%M%S)
 drift_n=0
+sum() { sha256sum "$1" | cut -d' ' -f1; }
+# live file differs from the repo AND from what the last sync wrote = an in-place edit
+drifted() {   # $1 skill  $2 file  $3 baseline commit
+  local live="$DST/$1/$2"
+  [ -f "$live" ] || return 1
+  cmp -s "$SRC/$1/$2" "$live" && return 1
+  if [ -n "$3" ] && git cat-file -e "$3:$SRC/$1/$2" 2>/dev/null; then
+    git show "$3:$SRC/$1/$2" | cmp -s - "$live" && return 1
+  fi
+  return 0
+}
+baseline() { local b=""; [ -f "$DST/$1/.repo-synced" ] && b=$(sed -n 's/^#commit //p' "$DST/$1/.repo-synced" | head -1); echo "${b:-${SYNC_BASE:-}}"; }
+pulled() { [ -f "$DST/$1/.pulled" ] && grep -qxF -- "$(sum "$DST/$1/$2")  $2" "$DST/$1/.pulled"; }
+
+# Pass 1 (plain sync only): refuse before touching anything when a live edit has not been pulled.
+if [ -z "$PULL" ] && [ "${DRIFT_OK:-}" != 1 ]; then
+  unpulled=()
+  for s in "${SKILLS[@]}"; do
+    base=$(baseline "$s")
+    while IFS= read -r f; do
+      drifted "$s" "$f" "$base" && ! pulled "$s" "$f" && unpulled+=("$s/$f")
+    done < <(git ls-files "$SRC/$s" | sed "s#^$SRC/$s/##")
+  done
+  if [ "${#unpulled[@]}" -gt 0 ]; then
+    printf 'LIVE EDIT: %s\n' "${unpulled[@]}" >&2
+    echo "REFUSED: ${#unpulled[@]} live in-place edit(s) are not in the repo — nothing synced." >&2
+    echo "  bash $SRC/sync.sh --pull   (make hermes-skills ARGS=--pull) → merge with the repo change, commit, push, sync again." >&2
+    echo "  DRIFT_OK=1 overwrites them (a copy goes to $DRIFT_ROOT)." >&2
+    [ "${DRY:-}" = 1 ] || exit 3
+  fi
+fi
 for s in "${SKILLS[@]}"; do
   mapfile -t files < <(git ls-files "$SRC/$s" | sed "s#^$SRC/$s/##")
   [ "${#files[@]}" -gt 0 ] || { echo "no tracked files for $s" >&2; exit 2; }
   man="$DST/$s/.repo-synced"
-  base=""
-  [ -f "$man" ] && base=$(sed -n 's/^#commit //p' "$man" | head -1)
-  base=${base:-${SYNC_BASE:-}}     # SYNC_BASE=<commit>: baseline for manifests written before drift capture
+  base=$(baseline "$s")            # SYNC_BASE=<commit>: baseline for manifests written before drift capture
   # drift: live file differs from what the last sync wrote (baseline commit), or from the repo when unknown
   for f in "${files[@]}"; do
     live="$DST/$s/$f"
-    [ -f "$live" ] || continue
-    cmp -s "$SRC/$s/$f" "$live" && continue
-    if [ -n "$base" ] && git cat-file -e "$base:$SRC/$s/$f" 2>/dev/null; then
-      git show "$base:$SRC/$s/$f" | cmp -s - "$live" && continue      # untouched since last sync = repo change
-    fi
+    drifted "$s" "$f" "$base" || continue
     if [ -n "$PULL" ]; then
       run cp -p "$live" "$SRC/$s/$f"
+      [ "${DRY:-}" = 1 ] || echo "$(sum "$live")  $f" >> "$DST/$s/.pulled"
       echo "PULLED: $s/$f (live edit copied into the clone)"
       drift_n=$((drift_n + 1))
       continue
     fi
+    pulled "$s" "$f" && continue      # already pulled into the repo's history: the merged version replaces it
     out="$DRIFT_ROOT/$TS/$s/$f"
     run mkdir -p "$(dirname "$out")"
     run cp -p "$live" "$out"
@@ -87,7 +120,7 @@ for s in "${SKILLS[@]}"; do
     rel=${extra#"$DST/$s/"}
     printf '%s\n' "${files[@]}" | grep -qxF -- "$rel" && continue
     echo "EXTRA (not in repo, kept): $s/$rel"
-  done < <(find "$DST/$s" -type f ! -name .repo-synced ! -path '*/__pycache__/*' ! -path '*/.pytest_cache/*' 2>/dev/null)
+  done < <(find "$DST/$s" -type f ! -name .repo-synced ! -name .pulled ! -path '*/__pycache__/*' ! -path '*/.pytest_cache/*' 2>/dev/null)
   [ -n "$PULL" ] && continue
   if [ -f "$man" ]; then
     while IFS= read -r old; do
@@ -106,23 +139,24 @@ for s in "${SKILLS[@]}"; do
       n=$((n + 1))
     fi
   done
-  [ "${DRY:-}" = 1 ] || { echo "#commit $(git rev-parse HEAD)"; printf '%s\n' "${files[@]}"; } > "$man"
+  [ "${DRY:-}" = 1 ] || { { echo "#commit $(git rev-parse HEAD)"; printf '%s\n' "${files[@]}"; } > "$man"; rm -f "$DST/$s/.pulled"; }
   echo "$s: ${#files[@]} tracked, $n updated"
 done
 if [ -n "$PULL" ]; then
   echo "pulled $drift_n live edit(s) into the clone — review with git diff, commit, push, then sync"
   exit 0
 fi
-run mkdir -p /opt/data/clips/jobs /opt/data/clips/logs /opt/data/clips/flow-state
+run mkdir -p "$CLIPS/jobs" "$CLIPS/logs" "$CLIPS/flow-state"
 HERMES=${HERMES_BIN:-/opt/hermes/.venv/bin/hermes}
 for s in "${SKILLS[@]}"; do
   if [ "${DRY:-}" != 1 ] && [ -x "$HERMES" ]; then
     "$HERMES" curator pin "$s" >/dev/null 2>&1 || echo "WARN: curator pin $s failed" >&2
   fi
 done
-if ! cmp -s "$SRC/shopee-clip/scripts/check_delivery.py" /opt/data/scripts/check_delivery.py 2>/dev/null; then
-  run cp -p "$SRC/shopee-clip/scripts/check_delivery.py" /opt/data/scripts/check_delivery.py
-  echo "updated /opt/data/scripts/check_delivery.py"
+if ! cmp -s "$SRC/shopee-clip/scripts/check_delivery.py" "$SCRIPTS_DST/check_delivery.py" 2>/dev/null; then
+  run mkdir -p "$SCRIPTS_DST"
+  run cp -p "$SRC/shopee-clip/scripts/check_delivery.py" "$SCRIPTS_DST/check_delivery.py"
+  echo "updated $SCRIPTS_DST/check_delivery.py"
 fi
 [ "$drift_n" -gt 0 ] && echo "⚠️  $drift_n in-place edit(s) captured in $DRIFT_ROOT/$TS — review and port to the repo"
 echo "synced at $(git rev-parse --short HEAD)"

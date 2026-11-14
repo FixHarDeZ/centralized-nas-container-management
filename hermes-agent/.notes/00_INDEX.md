@@ -133,8 +133,9 @@ Tracker: `docs/superpowers/specs/2026-06-02-hermes-token-tuning-verification.md`
 
 `hermes-agent/skills/{shopee-clip,flow-driver,gameplay-clips}` → `make hermes-skills` (pull clone in container
 + `skills/sync.sh`: copy tracked files, `hermes curator pin`). **Not locked**: `hermes curator lock`'s terminal
-heuristic refused a legit pipeline command and stalled a real clip (2026-11-10). In-place edits are saved to
-`/opt/data/clips/skill-drift/<ts>/` (+diff) on the next sync, then overwritten. **To keep them:
+heuristic refused a legit pipeline command and stalled a real clip (2026-11-10). **Live edits come first (2026-11-15)**: a plain sync refuses (exit 3) while a live file has an in-place edit that
+was not pulled; `--pull` records hashes in `<skill>/.pulled` so the next sync passes. `DRIFT_OK=1` = old capture to
+`/opt/data/clips/skill-drift/<ts>/` then overwrite. **To keep them:
 `make hermes-skills ARGS=--pull`** (copies live drift into Hermes' clone, changes nothing live) → review, commit,
 push → sync. Hermes also ports its own edits (it pushed `ff2a98f` itself on 2026-11-12). `sync.sh` refuses a dirty
 clone and is test-gated (`DOC_BUDGETS`: router ≤15 KB, house-rules ≤20 KB, gameplay SKILL ≤30 KB, flow-driver ≤8 KB).

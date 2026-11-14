@@ -16,8 +16,8 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
 
 ## Ground rules for this skill
 - **Source of truth is the repo**: `centralized-nas-container-management/hermes-agent/skills/`. Every sync
-  overwrites the three skills (shopee-clip, flow-driver, gameplay-clips); an in-place edit is only saved to
-  `/opt/data/clips/skill-drift/`. To keep a change: edit the clone, commit, push, then
+  overwrites the three skills (shopee-clip, flow-driver, gameplay-clips) and refuses while an in-place edit
+  is not pulled (`sync.sh --pull`). To keep a change: edit the clone, commit, push, then
   `cd /opt/data/centralized-nas-container-management && bash hermes-agent/skills/sync.sh` (tests run first), or
   ask Fix for `make hermes-skills`. Runtime data: `/opt/data/clips/` (workdirs in `work/<job>`).
 - **A missed gate is fixed in code, not in prose.** If you skipped a rule, add the check to `clipjob.py`

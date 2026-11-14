@@ -917,3 +917,6 @@ Not done / open:
   gta6's raw shot is gone too, so no frame of any 11-14 clip was viewed.
 - Pushed and synced (see git log); router is at 15352 of 15360 B, so the next router edit needs a trim first.
   The rebase also pushed another session's local ai-deck pin bump (`d9aaaa1`, was `41f02ec`); `refs/deploy/ai-deck` is `1c02e45`.
+- Fix: live edits by Hermes count as much as repo edits. `sync.sh` now refuses a plain sync while a live in-place
+  edit is unpulled (`.pulled` hash file after `--pull`, `DRIFT_OK=1` override; env overrides `CLIPS_DIR`,
+  `HERMES_SCRIPTS_DIR`). Checked in the container against a temp skills dir: refuse → pull → merge → sync ok.

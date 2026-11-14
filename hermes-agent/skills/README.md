@@ -21,6 +21,12 @@ make hermes-skills ARGS=--pull   # copy live in-place edits INTO Hermes' clone (
 removes files that were synced before but are no longer tracked.
 
 ## Rules
+- **Live edits come first (Fix 2026-11-15).** What Hermes writes into a live skill is a lesson from a real order.
+  A plain sync refuses (exit 3, nothing copied) while any live file has an in-place edit that was not pulled.
+  Every tuning session starts with `make hermes-skills ARGS=--pull`, takes the pulled files as the base, merges
+  the new change onto them, commits, pushes, syncs. `--pull` records the pulled hashes in `<skill>/.pulled`, so
+  the following sync lets those files through. On the Mac: fetch the clone's `git diff` as a patch, apply it,
+  then `git checkout -- hermes-agent/skills` in the clone. `DRIFT_OK=1` is the old capture-and-overwrite.
 - `sync.sh` **pins** the three skills (`hermes curator pin`: the curator never archives or merges them). They are
   NOT locked: `hermes curator lock`'s terminal check is a heuristic, and on 2026-11-10 it refused a legit pipeline
   command (an inline python writing `vo_plan.json` in the work dir, chained with a gameplay script path), which
