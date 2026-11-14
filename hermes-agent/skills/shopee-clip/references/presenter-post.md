@@ -61,7 +61,7 @@ Flow stretches the voiceover to fill the scene's full duration. When the script 
 - scene 1 (script ≈4.3 s of speech in a 10 s scene): `ห้องรกแค่ไหน` 0–2 s, `ดูก่อนกับหลังใช้ตัวนี้` 2–5 s, then **the same phrase again 5–7 s**.
 - scene 2: `ลิ้นชักมีกุญแจ` **`ล็อกได้ ล็อกได้`** — one word doubled to pad.
 Two causes, both preventable:
-1. **Fill the duration.** Thai presenter pace is ~3.5–4.5 syllables/s, so a 10 s scene needs roughly 30–38 syllables (usually 3 phrases), i.e. speech covering **≥70 % of the scene**. Count the script's syllables, divide by 4, compare with the scene length BEFORE submitting; if it falls short, add a จุดเด่น line rather than letting the model improvise. A genuinely short line belongs in a shorter generation (Omni offers 4/6/8 s), not in a padded 10 s scene.
+1. **Fill the duration.** Thai presenter pace is ~3.5–4.5 syllables/s, so a 10 s scene needs roughly 30–38 syllables (usually 3 phrases; 8 s ≈ 24–30, 6 s ≈ 18–23), i.e. speech covering **≥70 % of the scene**. Count the script's syllables, divide by 4, compare with the scene length BEFORE submitting; if it falls short, add a จุดเด่น line rather than letting the model improvise. A genuinely short line belongs in a shorter generation (Omni offers 4/6/8 s), not in a padded 10 s scene.
 2. **Write the anti-repeat clause verbatim** — the `Audio (Thai voiceover)` line above. A bare `Audio (Thai voiceover): "..."` with no clause is what shipped the looped clip.
 
 ### Detection gate — run it on every raw scene BEFORE stitching

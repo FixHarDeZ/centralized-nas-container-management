@@ -8,8 +8,8 @@ Why: two 10 s takes of "hold it up / press / set down" read as filler (vacuum-ba
 - Pace submits ≥5 min apart (Fix 2026-11-09, quality over speed), so a 5-shot board adds ~20 min of wall clock. Say so in the board.
 - Shot length: one Flow generation is 3–10 s (Omni 1.2 Flash, 3 credits/s at 720p). Give each shot the seconds
   its speech or action needs (6–8 s normal; ~4 Thai syllables/s) and pass them as `clipjob.py new --seconds 8,6`.
-  Never 11–15 s (double rate). Seconds the clip still needs come from post, 0 credits: hook card, product still
-  with push-in, end card. Example 20 s 🧑: Flow 8 + 6 = ≈42 credits + ~6 s of post, instead of 2 × 10 = ≈60.
+  Never 11–15 s (double rate). The clip length is the sum of the shots (post adds none): show that total on the
+  board. Example, a "20 วิ" 🧑 order: 8 + 8 = 16 s ≈48 credits, or 10 + 10 = 20 s ≈60; Fix picks with the approval tap.
 - Mix shot types:
   - `P` presenter to camera (hook, reaction, result) - character chip attached, Flow voiceover.
   - `H` hands close-up doing the action (no face, NO character chip - also avoids the prominent-person refusal).

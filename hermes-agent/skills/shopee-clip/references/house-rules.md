@@ -12,15 +12,15 @@
   720p = 3 credits/s for seconds 1–10, **6/s for seconds 11–15**; 360p = 1/s (2/s for 11–15). So 720p: 6 s = 18,
   8 s = 24, 10 s = 30, 15 s = 60. Estimate with `clipjob.py cost --seconds 8,6`. Every account has 50/day
   (≈16 s at 720p); Pro adds 1,000/month.
-- **Spend less on 1.2 (twice the 1.1 price):** (1) a shot is as long as its speech needs, 6–8 s is the normal
-  size, 10 s only when the line fills it (~4 Thai syllables/s) — pass `--seconds`; (2) never 11–15 s, two shots
-  are cheaper; (3) the clip's remaining seconds come from post at 0 credits (hook card, product still with
-  push-in, end card), not from a longer generation; (4) Flow shots only where a person or motion is needed —
-  a rigid product's hero view is its own photo in post; (5) the regen stop in the router (same defect twice =
-  stop) matters twice as much now. A 360p generation saved at 720p is reported as a third of the price but is
-  softer and untested here: use it only when Fix says so (`cost --res 360p`).
-  Read the live `Generating will use N credits` line when it is visible; quote only numbers actually read. The narrow
-  layout shows no balance: say "remaining unknown" rather than estimating.
+- **Spend less on 1.2 (twice the 1.1 price):** (1) a shot is as long as its speech needs (~4 Thai syllables/s):
+  6–8 s is normal, 10 s only when the line fills it — pass `--seconds`. The clip is the SUM of its shots (post
+  adds no seconds: cards and end cards are overlays), so a "20 วิ" order planned as 8 + 8 is a 16 s clip for
+  ≈48 instead of ≈60; put the real total on the board and let Fix approve it. (2) Never 11–15 s: two shots are
+  cheaper. (3) One regen that repeats the same defect = stop and ask (router step 10); gta6 2026-11-14 paid three
+  generations for the same wrong cover. (4) A product Flow cannot hold (new game cover art, rigid rack) is not
+  fixed by a reworded prompt: offer 🎬/📦 or a post insert of the real photo. A 360p generation saved at 720p
+  is reported as a third of the price but softer, and is untested here: only when Fix says so (`cost --res 360p`).
+  A shot under 10 s has not been through post yet (first one: check subs/graphics timing by eye).
 - 40 s (≈60) exceeds the daily quota on its own: read the live cost and tell Fix before submitting.
 - Never edit inside Flow (40 credits per edit). Never retry a failed submit with his credits without saying so.
 - Credit approval is per product and per question; put the cost inside the question text.

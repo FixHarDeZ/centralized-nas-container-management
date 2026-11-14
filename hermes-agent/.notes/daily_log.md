@@ -908,3 +908,12 @@ Not done / open:
   an Ingredient; `prompt-pack.md` section. **No portrait files exist yet.**
 - Tests 73 passed. Not verified live: the real credits line on 1.2, the saved default switched to 1.2 in the
   project (flow-state still says 1.1), a shot shorter than 10 s through post, portraits, 360p quality.
+- Follow-up same session: post adds no seconds (end card/cards are overlays), so the docs now say clip length = sum
+  of shot seconds and the board shows the real total (a "20 วิ" order as 8 + 8 = 16 s ≈48). Regen stop reworded in
+  router + house-rules: ONE regen that repeats the defect = stop (the old "two regens" wording would not have
+  changed gta6's 45 credits).
+- `agent.log` 11-14: 3 `vision_analyze` timeouts (2 in gta6 post at 10:57/11:04, 1 at 19:56), one 300 s
+  `browser_exec` error, no OOM, no max-iterations. wallshelf sent 4 and 3 vision calls in parallel (rule: one per batch).
+  gta6's raw shot is gone too, so no frame of any 11-14 clip was viewed.
+- Pushed and synced (see git log); router is at 15352 of 15360 B, so the next router edit needs a trim first.
+  The rebase also pushed another session's local ai-deck pin bump (`d9aaaa1`, was `41f02ec`); `refs/deploy/ai-deck` is `1c02e45`.

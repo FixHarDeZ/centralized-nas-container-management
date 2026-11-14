@@ -60,7 +60,7 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    **🎬 skips Q2** (Fix 2026-11-12): gameplay-clips picks any whole length 15–50 s from the usable footage
    and the content (its "Length" section). A length Fix names in the order still wins.
    One shot = one Flow generation of 3–10 s, never 11–15 (Omni 1.2 Flash 720p = 3 credits/s; `house-rules.md`
-   → Credits). N = ceil(length / 10); size each shot to its speech (`--seconds`), the rest is post.
+   → Credits). N = ceil(length / 10); size each shot to its speech (`--seconds`); clip = sum of shots.
    A mode/length already named in the order is not asked again.
 4. **🎬 → `clipjob.py new <job> --mode gameplay --product "…" --link <url>`, then load skill
    `gameplay-clips` and follow it.** The job has no shots; it holds the state across session resets
@@ -120,7 +120,7 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
     the repeats and CTA gates, then sends the shot with the ✅/🔁 keyboard. If that send fails the checks are
     kept: `clipjob.py ready <job> K --resend` (no re-check). Fix's tap arrives as text →
     `clipjob.py decide --text "<text>"`; if it prints `REFUSED: text is not a review button`, run
-    `clipjob.py decide <job> K approve|regen`. Never hand-edit the job JSON. On 🔁: in 📝 run `pack <job> --shot K`; in 🤖 regenerate via flow-driver. Same defect after two regens = stop: name it, the credits spent, the zero-credit options (post fix / manual), wait for Fix.
+    `clipjob.py decide <job> K approve|regen`. Never hand-edit the job JSON. On 🔁: in 📝 run `pack <job> --shot K`; in 🤖 regenerate via flow-driver. A regen that repeats the defect = stop: name it, the credits spent, the zero-credit options (post fix / manual), wait for Fix.
     A 🔁 on shot K also asks Fix keep/regen for an already rendered shot K+1 (its start frame is gone); wait
     for that tap too. Shot 2 may render while shot 1 is reviewed only when shot 1 passed every gate.
 11. **Post-production (graphics always).** `clipjob.py assemble-check <job>` prints the approved files in order — copy exactly those paths into the workdir (a leftover `shotK_raw.mp4` may be a rejected take).
