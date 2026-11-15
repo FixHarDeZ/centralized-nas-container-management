@@ -25,12 +25,13 @@ Outputs: `subs.ass`, `pills.txt`, `out.mp4` (mastered, FB-safe High/yuv420p, fas
   `/opt/data/clips/logs/heavy-log.jsonl`.
 
 - **Silent H / B-roll shots:** set `"silent": true` on the scene and leave out `script`/`prompt`. It gets no ASR and no subs, only pills, and still joins the xfade and the timeline. Without the flag, an empty script crashes the align step.
-- **No CTA pill:** run with `NO_AUTO_CTA=1` when Fix moved the CTA to the caption, or on a heavy-content clip. Otherwise the script auto-adds `Link below!` over the last 2.2 s, and it collides with a pill you placed there (`pills overlap` exit).
+- **No CTA pill:** run with `NO_AUTO_CTA=1` when Fix moved the CTA to the caption, or on a heavy-content clip. Otherwise the script auto-adds `Link below!` over the last 2.2 s, and it collides with a pill you placed there — the run aborts on ANY overlap, even 0.05 s (`pills overlap` exit), so end a final-scene pill ≥0.3 s before (scene duration − 2.2), or plan the `Link below!` pill yourself.
 - **graphics_layer image_stickers:** the avoid-check box is `w_est+42` wide. Keep `x - (w_est+42)/2` past the face box's right edge, or the run exits with `covers avoid-zone 'face'` and leaves the OLD `final.mp4` in place. Check that the sha changed.
 
 ## Run gate (read before any send)
 - A run prints `FLAG:` lines and writes `report.json`. Read both before sending. `FLAG: ... not in script` means Flow's voiceover spoke words the script does not contain: the burned subs still follow the script, so the audio can be wrong while the subs look right. Report it to Fix with the frame time, and let him choose between delivering as-is and regenerating that scene — UNLESS the flagged fragments are the script's OWN words out of order (signature: CER far above the ~0.2 norm, `match=0/N`, and a mid-script phrase timestamped at the scene's start): that is Flow speaking the script REORDERED to fit the visual beat order, not ad-libbing. Confirm with an unprompted probe of the raw scene; when every script phrase appears exactly once, reorder `plan.json`'s script to the spoken order and re-run — 0 credits, and the alignment then passes so the subs follow the real audio. Only words genuinely absent from the script go to Fix as deliver-as-is/regenerate.
 - **Probe a `not in script` flag across configs before calling it genuine:** cut the span out (`ffmpeg -ss <t0-0.3> -t <len+0.6> -i scene.mp4 -ac 1 -ar 16000 -f f32le -` → `np.frombuffer(raw, np.float32)`) and transcribe it small AND medium, `language="th"` AND `"en"`, unprompted AND with an `initial_prompt`/`hotwords` naming the script's word. Configs that DISAGREE = an ASR ghost over Flow's music bed, so the fragment is the script's own word and not a defect; every config landing on the SAME non-script token — even with hotwords forcing the script's word — means Flow really vocalised it, and that is the flag that goes to Fix.
+- **A NUMBER in the script is the classic false positive.** The pair `script phrase '<num>' timing interpolated` + `Flow said '<Thai numeral>' … not in script` at the same timestamp is ONE phenomenon: one config writes the digit, another hears its Thai reading (เก้า / สามสิบ). Digit-vs-reading disagreement across configs = the script's own number spoken, and the script-following sub is correct — not an ad-lib.
 - **Not every FLAG is a defect.** `clipjob.py deliver` matches flags against `INFO_FLAGS` (anything containing `auto-added`, e.g. the auto `Link below!` pill) and ships without an `--ack`. Only real defects — words not in script, a skipped phrase, `pause_err` max well past ~1.5 s — need Fix's call passed as `--ack "<flag>=<his call>"`. Never stall a finished clip waiting for him to ratify an auto-added pill.
 - A `phrases_matched` count below total, or an `onset_err` over ~1 s, means the subs may lag the audio. Check it before delivery, not after.
 - The run can yield to background in the terminal. Poll it to exit before reading its output; never send `final.mp4` while the run is still writing.
@@ -55,6 +56,8 @@ no stickers, no emoji, no cartoon graphics, no hand icons, no pointing-hand grap
 Audio (Thai voiceover): "<exact Thai lines>"  — พูดตามนี้ทุกคำ ไม่เพิ่ม ไม่ตัด ห้ามพูดประโยคใดซ้ำสอง พูดจบแล้วเงียบจนจบคลิป เหลือแค่เสียงดนตรี
 ```
 Keep each spoken line short with natural breaks between ideas (each break becomes a subtitle event), but the WHOLE script must still fill the scene — see the repetition rule below.
+
+**Products with their own display (smartwatch, phone, appliance panel, dash cam):** the block's absolute "no text anywhere" blanks the device's screen, and a dead screen means the product is never seen working — the defect the storyboard gate exists to prevent. Carve the device's own UI out inside the same block: `(the <device>'s OWN screen may show its normal interface of time and metric numbers — that is the product itself, not on-screen text; no OTHER text anywhere)`. Then judge only OVERLAY text as a frame-check defect, never the device's own readout.
 
 ## Looped voiceover: a short script makes Flow repeat the last phrase (2026-11-06)
 Flow stretches the voiceover to fill the scene's full duration. When the script runs out early it does **not** go quiet — it says the last phrase again, or stutters one word to pad. Measured on the KENZZO kids-wardrobe clip, both scenes, unprompted ASR of the raw renders:
@@ -113,8 +116,10 @@ The mute-and-patch alternative (kept for when a cut would break a gesture): voic
 - **Subs use MarginV 465** (safe-zones.md). Presenter faces must sit at y≈250–800 so the text
   doesn't cover the face; check it in the frame check.
 - **`sub_linecheck` counts fill pixels only (`LIT=120`)** so the dark outline cannot bridge two lines into
-  one band. If it still reports 1 band for a 2-line event, the marks really touch — confirm with a crop
-  zoom before "fixing" anything.
+  one band. When it still reports 1 band for a 2-line event the usual cause is its row-grouping: `bands()`
+  merges lit rows whose gap is ≤4 px, so two clean lines a few pixels apart read as one band. Confirm with a
+  crop zoom — or deterministically with the fill-colour row-cluster count in `presenter-graphics.md` → step 4 —
+  before "fixing" anything.
 
 ## Changing the subtitle look (when Fix complains about it)
 1. Find a clean frame (no burned subs) from the last delivered clip, with the product visible:

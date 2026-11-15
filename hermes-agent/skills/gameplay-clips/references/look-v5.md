@@ -53,7 +53,10 @@ Minimal plan that passed `--check` (no beats, no release pill, no logo, header-o
   is a false positive — decide it with `scripts/sub_bandprofile.py <dir>` (line bodies ≥16 px apart =
   pass + note the reason; <16 px = real collision → fix the sub text).
 - **Vision sheet (8 frames):** no price/QR/shop, no tofu, no black bars, flash not harsh.
-- **Duck-only render for the delta gate:** build_v5 exports its stems at `work/music_v5.wav`,
+- **Duck-only render for the delta gate:** run `uv run --with numpy python <skill>/scripts/duck_stem_gate.py`
+  from the workdir — it implements the whole graph below (reads music_gain/vo_gain from plan.json, VO windows
+  from `work/timeline_v5.json`, re-renders both wavs after every build, exit 0 = min delta ≥6 dB); building
+  the graph by hand is the fallback. build_v5 exports its stems at `work/music_v5.wav`,
   `work/sfx_v5.wav`, `work/vo_v5.wav` — but RAW, before the gains (changing `music_gain` leaves
   `music_v5.wav` unchanged), so the gate graph must re-apply them exactly as build does:
   `[0]music + [1]sfx amix → volume={music_gain} → pre`; `[2]vo → volume={vo_gain},apad=whole_dur=DUR`

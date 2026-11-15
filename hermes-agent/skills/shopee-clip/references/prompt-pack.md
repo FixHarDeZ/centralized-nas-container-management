@@ -14,6 +14,9 @@ not proof that 🤖 cannot work.
    When shot K−1 already has a file, its last frame goes out first as the start-frame photo.
 
 `pack <job> --shot K` resends a single shot. Use it after a 🔁 tap, or when Fix asks for one prompt again.
+**A job's FIRST pack must be a bare `pack <job>`** (no `--shot`): the flag suppresses the header AND the
+reference photos along with the other shots, so a first pack run with `--shot 1` leaves Fix with a prompt and
+nothing to attach in Ingredients. `--shot` is a resend of prompts only — the refs must already be in his chat.
 
 ## Taking the files back
 - Hermes passes the replied-to message text to you. Read it, find `[ช็อต K · job]`, and run

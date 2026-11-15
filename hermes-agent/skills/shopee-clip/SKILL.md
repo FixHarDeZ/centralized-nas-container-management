@@ -38,7 +38,9 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    (a clip with no caption is a shot coming back until `status` says otherwise, not a new order).
    Resume the job that message is about (a reply with a video, a ✅/🔁 tap, "ต่อ"), never from memory.
    Grep `/opt/data/clips/logs/clip-log.jsonl` and `delivery-log.jsonl` for the product name before a new
-   job: a duplicate order is confirmed with Fix (which clip, what changes) before any spend.
+   job: a duplicate order is confirmed with Fix (which clip, what changes) before any spend. Same game
+   but a DIFFERENT platform/edition listing (Switch 2 clip exists, PS5 ordered) is not a duplicate: note
+   the prior clip in one line and open the new job — gameplay-clips reuses the old job's source artifacts.
 1. **Intake** (before any question that costs time). Run
    `uv run --with pillow python S/intake_images.py <first image> /opt/data/clips/work/<job>`, then do
    one vision pass on the sheet. The gateway already described each image on arrival, so do not read
@@ -140,6 +142,15 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
     (`/opt/data/skills/flow-driver/references/flow-steps.md` step 13).
 12b. **Close-out with no clip** (Fix orders the skip, `status` shows no shot file): `references/run-mode-gates.md`
    → Close-out. Never stage or imply a clip.
+12c. **Re-send of an already-delivered package** (`ขอคลิป hashtag และปักตะกร้า`, `สรุปอีกรอบ`): resolve WHICH
+   clip first — the newest `clip-log.jsonl` row only when one job landed today; with several, scroll recent
+   sessions (`session_search`) for the one the last summary named, never guess among the day's jobs. Read the
+   job's `delivery.sent` (`clip`/`copy_buttons`/`cover`) to see what already went out, then re-run
+   `S/send_copy_buttons.py "<tags>" "<link>" 8663614341 "<product>"` directly — tags from the clip-log row,
+   `link` from the job JSON; exit 0 with both buttons echoed = verified. Attach `<workdir>/final.mp4` only when
+   he asks for the คลิป itself (cleanup already deleted the Downloads copy). The recap comes from the
+   clip-log row — gates passed once, no re-check — and the day's other clips are offered in one line, not
+   dumped.
 13. Fix calls it off (`เลิกทำ` / `หยุด` / `พอแล้ว`) → `clipjob.py cancel <job> --reason …`, close Chrome, report
     the credits actually spent (`spent_shots`). No clip-log row.
 
