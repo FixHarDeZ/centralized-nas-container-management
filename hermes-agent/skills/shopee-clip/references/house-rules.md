@@ -124,3 +124,8 @@
 - Every delivered clip is High / yuv420p / L4.0 with faststart; a multi-scene stitch must set
   `-pix_fmt yuv420p -profile:v high -level 4.0` on the output (Facebook Reels rejects `High 4:4:4 Predictive`).
   `verify-clip.py` checks this and `clipjob.py deliver` runs it; a 4:4:4 reading = re-encode, never deliver.
+
+## Status lines (long silent stretches)
+- **A long silent stretch also needs a line.** Post, the 🤖 browser drive and the per-shot frame review can run
+  15+ min with nothing to ask: send one short line at each stage transition ("Chrome ขึ้นแล้ว → กำลังแปะ chip",
+  "ช็อต 2 มาแล้ว → กำลังสแกน/รีวิว"). Silence on his phone reads as the run having died.

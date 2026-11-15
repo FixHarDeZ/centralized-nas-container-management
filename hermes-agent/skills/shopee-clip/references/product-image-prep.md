@@ -164,3 +164,13 @@ Ad layouts put headlines and badges across the product area. When the remaining 
 
 ## When the listing and the art disagree
 The listing Fix pastes and the ad he attaches can name different variants (link says one set number, the ad banner says another). Do not silently pick one: keep the variant code out of both voiceover and captions so the clip cannot contradict the box on screen, then say so plainly in the delivery and offer to re-shoot the clip from a correct photo — that spends another clip of credits, so it is his call, never a silent re-run.
+
+## Intake sheet (misreads and late images)
+The sheet read can misattribute images across tiles, and one
+   listing often carries SEVERAL models (a toy rack, a kitchen box set, a pet rack under one link):
+   when a tile's description disagrees with what the image plainly shows, re-read that image on its own
+   before deciding; same re-read when the sheet disagrees with the ORDER TEXT on which product it is (a
+   game cover read as another entry in the series). Build the clip around the product the order text
+   leads with, and name every image you dropped in the delivery.
+   A late image is part of the order: copy it into the workdir by hand as the NEXT number (`img6.jpg`, …);
+   re-running `intake_images.py` re-numbers from `img1` and overwrites the files already there.

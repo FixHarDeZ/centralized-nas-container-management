@@ -46,14 +46,9 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    one vision pass on the sheet. The gateway already described each image on arrival, so do not read
    them one by one again: a single-image read only for a tile the sheet leaves unclear (at most 2).
    You need the product name and the basket link. A missing link is
-   asked for in the same message as Q1. The sheet read can misattribute images across tiles, and one
-   listing often carries SEVERAL models (a toy rack, a kitchen box set, a pet rack under one link):
-   when a tile's description disagrees with what the image plainly shows, re-read that image on its own
-   before deciding; same re-read when the sheet disagrees with the ORDER TEXT on which product it is (a
-   game cover read as another entry in the series). Build the clip around the product the order text
-   leads with, and name every image you dropped in the delivery.
-   A late image is part of the order: copy it into the workdir by hand as the NEXT number (`img6.jpg`, …);
-   re-running `intake_images.py` re-numbers from `img1` and overwrites the files already there.
+   asked for in the same message as Q1. Misattribution across tiles, several models under one link, a sheet-vs-ORDER-TEXT mismatch and a
+   late image (re-running `intake_images.py` re-numbers from `img1`): `references/product-image-prep.md`
+   → Intake sheet.
 2. **Q1 — mode** (`clarify`, one question, buttons):
    `["🎬 footage จากวิดีโอทางการ (เกม/สินค้า, 0 เครดิต)", "🧑 presenter + graphic", "📦 graphic ล้วน (ภาพสินค้า ไม่มีคน)", "✋ มือ+สินค้า ลองใช้ให้ดู (ไม่เห็นหน้า)"]`.
    Do not guess from the product type. For a rigid product (rack, shelf, cabinet, device) add one line to the
@@ -143,23 +138,16 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
 12b. **Close-out with no clip** (Fix orders the skip, `status` shows no shot file): `references/run-mode-gates.md`
    → Close-out. Never stage or imply a clip.
 12c. **Re-send of an already-delivered package** (`ขอคลิป hashtag และปักตะกร้า`, `สรุปอีกรอบ`): resolve WHICH
-   clip first — the newest `clip-log.jsonl` row only when one job landed today; with several, scroll recent
-   sessions (`session_search`) for the one the last summary named, never guess among the day's jobs. Read the
-   job's `delivery.sent` (`clip`/`copy_buttons`/`cover`) to see what already went out, then re-run
-   `S/send_copy_buttons.py "<tags>" "<link>" 8663614341 "<product>"` directly — tags from the clip-log row,
-   `link` from the job JSON; exit 0 with both buttons echoed = verified. Attach `<workdir>/final.mp4` only when
-   he asks for the คลิป itself (cleanup already deleted the Downloads copy). The recap comes from the
-   clip-log row — gates passed once, no re-check — and the day's other clips are offered in one line, not
-   dumped.
+   clip first, read the job's `delivery.sent`, re-run `S/send_copy_buttons.py` — `references/run-mode-gates.md`
+   → Re-send.
 13. Fix calls it off (`เลิกทำ` / `หยุด` / `พอแล้ว`) → `clipjob.py cancel <job> --reason …`, close Chrome, report
     the credits actually spent (`spent_shots`). No clip-log row.
 
 ## Talking to Fix
 - One status line when something blocks, sent at that moment, not at the end. Put the credit cost inside
   any question that spends credits. Short "ok/ได้" to your own go/no-go question = yes.
-- **A long silent stretch also needs a line.** Post, the 🤖 browser drive and the per-shot frame review can run
-  15+ min with nothing to ask: send one short line at each stage transition ("Chrome ขึ้นแล้ว → กำลังแปะ chip",
-  "ช็อต 2 มาแล้ว → กำลังสแกน/รีวิว"). Silence on his phone reads as the run having died.
+- **A long silent stretch also needs a line** (post, 🤖 browser drive, per-shot frame review): one short
+  line at each stage transition — `references/house-rules.md` → Status lines.
 - He reads on the phone: buttons over typing, no walls of text, never ask him to check a UI.
 - **A real `FLAG` needs his call: ask once with `clarify`, then end the turn and wait** (no re-ask, no `--ack` for him).
 - Senders parse no flags: `S/send_status.py` posts its FIRST argument verbatim, so never probe one with `--help`.

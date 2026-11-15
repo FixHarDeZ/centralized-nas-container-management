@@ -34,3 +34,14 @@ Fix orders the skip ("ข้ามทุก step ส่ง hashtag + ปัก�
 ## Talking to Fix: detail
 - **A real `FLAG` needs his call: ask once with `clarify`, then end the turn and wait.** An unanswered clarify blocks the run for its whole timeout, so re-asking the same question stalls it twice — report the flag with its frame time and wait for his reply instead of passing `--ack` as if he had chosen.
 - The senders parse no flags — `S/send_status.py "<line>"` posts its FIRST argument verbatim as the message body, so probing one with `--help` or any flag posts that literal text to the chat. Read the script's docstring instead of running it to ask what it does.
+
+## Re-send of an already-delivered package
+12c. **Re-send of an already-delivered package** (`ขอคลิป hashtag และปักตะกร้า`, `สรุปอีกรอบ`): resolve WHICH
+   clip first — the newest `clip-log.jsonl` row only when one job landed today; with several, scroll recent
+   sessions (`session_search`) for the one the last summary named, never guess among the day's jobs. Read the
+   job's `delivery.sent` (`clip`/`copy_buttons`/`cover`) to see what already went out, then re-run
+   `S/send_copy_buttons.py "<tags>" "<link>" 8663614341 "<product>"` directly — tags from the clip-log row,
+   `link` from the job JSON; exit 0 with both buttons echoed = verified. Attach `<workdir>/final.mp4` only when
+   he asks for the คลิป itself (cleanup already deleted the Downloads copy). The recap comes from the
+   clip-log row — gates passed once, no re-check — and the day's other clips are offered in one line, not
+   dumped.
