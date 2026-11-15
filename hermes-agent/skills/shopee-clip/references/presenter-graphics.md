@@ -30,6 +30,7 @@ Run it as `uv run --with "opencv-python-headless<5" --with numpy python …`. **
 
 One JSON line per window:
 - `face`: Haar union. Use it as the `avoid` rect — but that box is in RAW time: for `graphics_layer`'s `avoid` on the final `out.mp4`, re-probe there (step 3), because punch and xfade move it.
+  - A `face` box in a scene that has NO face (hands-only close-up) is Haar firing on skin or a lit panel — keep it as `avoid` anyway: it marks the action area, and centred text landing on the hands reads as covering the subject just as a face hit does.
 - `empty_left` / `empty_right`: the backdrop rect free in EVERY sampled frame, inside y 260–640.
 - `overlay`: {x, y, h} for the product cutout, sized to its aspect. When `note` says the side is too small → skip or shorten that overlay.
 
@@ -46,7 +47,10 @@ Run once per RAW scene, BEFORE post_presenter. It touches video only and copies 
   - Without `mode` you get the old full-screen card. Use that only to hide a seam or a looped phrase, because it hides the presenter.
 - Source images must be CLEAN crops (no price/QR/claims, see `product-image-prep.md`), on a plain light background so the flood-fill cutout works.
 - Input is the step-0a output (`sceneN_cut.mp4` when a repeat was cut), so post_presenter aligns to the corrected audio.
-- Overlay x/y/h come from step 0b's `overlay` field for that window.
+- Overlay x/y/h come from step 0b's `overlay` field for that window — but fit them to the cutout's own canvas math BEFORE trusting that `h`: `cutout_png(h)` returns `w = round(src_aspect × h) + 42` by `h + 42` (21 px of outline padding per side), and the overlay then slides up 40 px at `t=start`. So the rect to verify is the UNION of the settled and the slid positions, its centre must satisfy `x0 ≥ empty_left` and `x0 + w ≤ 715` (the overlay never clamps, so a centre near the right edge clips the sticker's border off-frame), and `h ≤ empty_h − 42 − 40`. Check that union on frames at BOTH ends of the window.
+- **The probe's own `overlay.h` and `note` are NOT the verdict.** It can print `note: null` ("fits") while suggesting an `h` above the cap that this same rect allows — recompute the cap from `empty_*` with the math above and shrink its suggestion to fit; the canvas math wins.
+- **Find the hook card's `dur` by probing successive windows, not by picking a duration.** The empty side shrinks as she moves, so run `--window 0 1.4 --window 0 2.0 --window 0 2.5` and take the LAST window whose rect still passes the cap: that window's end is the hard `dur` cap, and a card sized for the first window clips or covers her by its end.
+- Keep every `punch` window OUT of the hook card's window: punch re-frames the base video while the composited sticker stays at fixed coordinates, so an overlap drags her arm under a sticker you already cleared.
 
 ### 2. `post_presenter.py`
 Run it as before, with each scene's `video` pointing at its `scene_fx.mp4`.
@@ -75,16 +79,17 @@ Elements:
   - Mixed at gain 0.35 under a limiter at 0.63 (AAC overshoot otherwise lands the max at exactly −3.0 dB).
 
 ### 3b. Cover (every clip, presenter AND gameplay)
-1. `uv run --with pillow --with numpy python scripts/make_cover.py --video sceneN_fx.mp4 --t <moment with face + product> --text "<BRAND PRODUCT ≤3 words EN>" --cy 1150 --color green|pink|… --out cover.jpg`
+1. `uv run --with pillow --with numpy python scripts/make_cover.py --video sceneN_fx.mp4 --t <moment with face + product> --text "<BRAND PRODUCT ≤3 words EN>" --cy 0.45 --color green|pink|… --out cover.jpg`
    - The source must be a PRE-subtitle render.
    - When the clip carries an accepted defect ON the product (a redrawn cover), take `--t` from a moment where the product is out of frame: the post thumbnail is the first thing a viewer sees, so do not feature the flaw there.
-   - `--cy 1150` puts the title on her torso, clear of the face. Auto put it on the chin.
+   - `--cy` takes a FRACTION of H (0–1), NOT pixels: `--cy 1150` is read as 1150×H, clamped to the safe-zone floor, and prints the identical `block centre y=` line whatever large value you pass — a pixel figure in the old instructions was a silent no-op. Pass `--cy 0.45` (or leave `auto`) and take the printed `block centre y=…` line as the only proof the block moved. Auto picks the least-detail band: it landed on her torso, clear of the face, where the default sat on her chin.
+   - **When the box lands on the product's own identity art (a game case's cover), the fix is another `--t`, not a lower `--cy`** — the safe-zone clamp is the floor, so `--cy` cannot push it further down. Render two candidates (`--t` where the product is held up vs where it sits on the table), put them side by side in ONE vision sheet and take the frame where face AND product art are both clear; the losing render costs nothing.
    - The title box can cover the bottle's label (measured on a Pureen cover: the box took the label's middle, and the vision check failed label visibility). Before sending, check the label is readable; if not, keep the box clear of the label area with a shorter title or a lower `--cy` and re-check. Untested alternative: move `--cy` lower, not verified yet.
    - Pick a box colour that contrasts with the wall (pink-on-pink blends in).
 2. Vision-check: face clear, label mostly visible, no price.
    - **Check the printed `main WxH` line too:** when `W > 1080` the title runs off the canvas and the vision
      check reads it as truncated text — shorten the title and re-run before sending.
-3. `python3 scripts/send_photo.py cover.jpg "<caption>" 8663614341 <label>` → ok + message_id. Ledger rows are `kind: photo`; check_delivery stays clean.
+3. **Cover sending — one sender only.** When the clip goes out through `clipjob.py deliver --cover cover.jpg`, deliver sends the cover ITSELF (its step list runs `send_photo.py`, one ledger row `kind: photo`): do not pre-send it here, or Fix receives the cover twice. The manual `python3 scripts/send_photo.py cover.jpg "<caption>" 8663614341 <label>` → ok + message_id line is for a hand-built delivery (the `send_clip.py` path) only — check_delivery stays clean either way as long as exactly one photo row exists.
 - make_cover now uses `FredokaSB-Static.ttf`: the variable Fredoka loads a thin default instance in PIL.
 
 ### 4. Check and send
@@ -150,7 +155,7 @@ Practical slots:
   - The chip shows no filename, so verify it from the thumbnail.
 - **Never guess coordinates.** Guessed coordinates put headlines on faces and rings on empty space.
   - Faces and empty sides come from `layout_probe.py`.
-  - A callout TARGET (pump, cap, label part) still needs a point on the real frame at the element's time — but **budget exactly ONE coordinate ask** (gridded frame, cyan lines every 100 px, labels carrying parent-frame coords). Vision replying with prose instead of numbers happens often enough that a second rephrasing burns the run: when the answer carries no `(x,y)`, drop the geometry-dependent element (callout ring, endcard) and keep headlines + stickers + pills + subs. That is still a complete graphics pass; a ring on a guessed point is a defect Fix sends back.
+  - A callout TARGET (pump, cap, label part) still needs a point on the real frame at the element's time — but **budget exactly ONE coordinate ask** (gridded frame, cyan lines every 100 px, labels carrying parent-frame coords). Vision replying with prose instead of numbers happens often enough that a second rephrasing burns the run: when the answer carries no `(x,y)`, drop the geometry-dependent element (callout ring, endcard) and keep headlines + stickers + pills + subs. **And REJECT any coordinate that falls outside the 720×1280 frame** — a box edge past x720 or a point at x850 means the read invented geometry, which is the prose failure in numeric clothing: drop the element rather than trusting a number that cannot exist. That is still a complete graphics pass; a ring on a guessed point is a defect Fix sends back.
 - **Free-rect map — the fallback when `layout_probe` reports `no empty side big enough`.** Sample 6–7 frames across the scene (`ffmpeg -ss <t> -i <scene> -frames:v 1 -f rawvideo -pix_fmt rgb24 -`, 720×1280), take each frame's wall as the median of the outermost 8 px of the left and right edge columns over rows 100–1200, mark a 20×20 cell busy when the median per-pixel `|px − wall|` summed over RGB exceeds ~26, and print the grid as ASCII with x labelled every 100 px (`.` <20 free, `:` <45, `*` <90, `#` busy). The largest `.`/`:` block that lies outside y186–262 and y700–835 is your overlay/insert rect — then vision-check one frame of the render as usual. The recipe is implemented as `scripts/freerect.py` — `uv run --with numpy python <skill>/scripts/freerect.py <scene.mp4> <t1,t2,…>` prints this grid directly (`.` free, `#` busy; numpy is not in the `execute_code` kernel).
 - **The `--report` timeline moves when a scene's trim changes** (e.g. hook overlay → `trim: 0`). Re-read `report.json` pills/subs and shift every gfx time after each post_presenter re-run, before `--check`.
 - **Close-up product shots (no face) are the slot for the headline and callout.** On presenter shots the face takes the centre column, and the pill and sub bands take the top and bottom.

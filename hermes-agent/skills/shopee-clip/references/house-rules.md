@@ -8,10 +8,11 @@
 
 ## Credits
 - **Model = Omni 1.2 Flash** (Omni 1.1 Flash and Veo 3.1 Fast/Quality leave Flow on 2026-12-05; Veo 3.1 Lite stays,
-  4/6/8 s, cost not known here). Rates, from third-party write-ups in 2026-11 and NOT yet measured on Fix's accounts:
-  720p = 3 credits/s for seconds 1–10, **6/s for seconds 11–15**; 360p = 1/s (2/s for 11–15). So 720p: 6 s = 18,
-  8 s = 24, 10 s = 30, 15 s = 60. Estimate with `clipjob.py cost --seconds 8,6`. Every account has 50/day
-  (≈16 s at 720p); Pro adds 1,000/month.
+  4/6/8 s, cost not known here). 720p = 3 credits/s for seconds 1–10 — **now measured on Fix's account** from the
+  Settings panel's `Generating will use N credits` (Omni 1.2: 6 s → 18, 7 s → 21, 8 s → 24; Omni 1.1 measured
+  cheaper at 1.5/s: 8 s → 12). Still unmeasured here: 6/s for seconds 11–15 and the 360p rates (1/s, 2/s for
+  11–15) — third-party write-ups only. So 720p: 6 s = 18, 8 s = 24, 10 s = 30, 15 s = 60. Estimate with
+  `clipjob.py cost --seconds 8,6`. Every account has 50/day (≈16 s at 720p); Pro adds 1,000/month.
 - **Spend less on 1.2 (twice the 1.1 price):** (1) a shot is as long as its speech needs (~4 Thai syllables/s):
   6–8 s is normal, 10 s only when the line fills it — pass `--seconds`. The clip is the SUM of its shots (post
   adds no seconds: cards and end cards are overlays), so a "20 วิ" order planned as 8 + 8 is a 16 s clip for
@@ -33,6 +34,10 @@
 - **After the order, run end to end without per-step confirmation** (Fix: "หลังผมสั่งครั้งแรกทำตั้งแต่ต้นจนจบได้เลยนะ").
   The standing gates still hold: storyboard approval, per-shot review, cost in any spending question
   (`references/run-mode-gates.md`).
+- **Invoke skill scripts with an explicit `workdir` (`/opt/data`), not the shell's inherited cwd.** The terminal
+  keeps its cwd across calls; after a job's workdir is cleaned up, a stale cwd makes every command fail BEFORE
+  the script runs (`bash: cd: /opt/data/clips/work/<job>: No such file or directory`, exit 126) — that reads like
+  a broken script, so pass `workdir` (or `cd /opt/data && …`) instead of debugging the script.
 - **Tell Fix early when something blocks.** At most ONE silent retry; a second failure (refusal, Failed card, login wall,
   dead picker) gets a short status at that moment: what failed, what you tried, what is next, whether credits moved.
   Also send one line at each long silent stage (Chrome up, post-production start) — `python3 S/send_status.py "<line>"`
@@ -58,6 +63,9 @@
   images (headline text, staged lifestyle shots) are storyboard input only; apply that default and say so in one line.
 - **Answer repeated image sends once per batch**: one short line per image (usable or not, what is still missing).
 - Once an order is clear, never repeat a question across several image messages.
+- **Run the CJK/full-width scan over EVERY outbound Thai message too** (clarify questions, status lines), not just
+  hashtags and prompts: a stray full-width/CJK pair typed into a Thai sentence goes out verbatim and reads as
+  corruption to Fix. The same codepoint check from the hashtag gate is one line before `send_status.py`/`clarify`.
 
 ## Style standard (every clip)
 - Female presenter, cute tone, no hard sell; modern Thai teen slang (ปัง, เริ่ด, ของมันต้องมี, ดี๊ดี, คุ้มเว่อร์), not cringe.

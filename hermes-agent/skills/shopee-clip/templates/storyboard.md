@@ -10,6 +10,7 @@ Why: two 10 s takes of "hold it up / press / set down" read as filler (vacuum-ba
   its speech or action needs (6–8 s normal; ~4 Thai syllables/s) and pass them as `clipjob.py new --seconds 8,6`.
   Never 11–15 s (double rate). The clip length is the sum of the shots (post adds none): show that total on the
   board. Example, a "20 วิ" 🧑 order: 8 + 8 = 16 s ≈48 credits, or 10 + 10 = 20 s ≈60; Fix picks with the approval tap.
+- **Keep every per-shot second count inside what the Flow duration control can actually express** (buttons `4s/6s/8s/10s`, or a 1-s slider when the panel renders one — `flow-driver` → `flow-production-notes.md`). A board promising 7 s per shot while the control offers only even seconds forces a mid-run re-split; when that happens the APPROVAL still binds the totals, so re-split to offered values keeping the same clip total and same total credits (7+6+7 → 8+6+6), and say so in one status line instead of re-asking.
 - Mix shot types:
   - `P` presenter to camera (hook, reaction, result) - character chip attached, Flow voiceover.
   - `H` hands close-up doing the action (no face, NO character chip - also avoids the prominent-person refusal).
@@ -55,7 +56,8 @@ Why: two 10 s takes of "hold it up / press / set down" read as filler (vacuum-ba
 ```
 **Shot count, seconds per shot, per-shot credits and the total are MANDATORY lines (Fix 2026-11-09).** Credits, Omni 1.2 Flash 720p x1 = 3 per second (4 s = 12, 6 s = 18, 8 s = 24, 10 s = 30; `clipjob.py cost --seconds 8,6`); published rates, not measured here yet, so mark every figure `≈`. Size each shot to its speech (6–8 s normal), never above 10 s, and cover the remaining clip seconds in post (0 credits). Before each submit read the Settings panel `Generating will use N credits`; if it differs from the board, tell Fix before generating.
 Then ask with `clarify`: `["ผ่าน เริ่ม gen (≈X เครดิต)", "แก้ storyboard", "ยกเลิก"]`. Unanswered = zero spend, no generation.
-Put the whole board inside the `clarify` question text and the buttons in `choices`, so the board and the approval arrive as one message. When the source images show two colourways, make the approval buttons carry the colour choice, so the same tap approves the board and resolves the colour.
+The board itself goes out FIRST as its own message (`S/send_status.py`, posts its first argument verbatim); the `clarify` carries only the buttons (router step 6) — a board stuffed into a question text is a wall of text on the phone. When the source images show two colourways, make the approval buttons carry the colour choice, so the same tap approves the board and resolves the colour.
+**On a `แก้ storyboard` tap:** ONE follow-up `clarify` naming what to change (บทพากย์/hook · โครงคลิป/ความยาว · ผู้บรรยาย · สไตล์/กราฟิก), revise, re-send the board as its own message, then ask approval again — one revision round, then a non-answer = zero spend. **A voiceover/hook change is HIS text: ask Fix to send his line instead of drafting alternatives** (he writes his own script; offer drafts only if he asks for options), and check his line against the syllable budget for the chosen length before the board goes out again.
 Router Q3 (who drives Flow, step 8) may ride as the SECOND question in that same call: its default is 📝 (zero spend), so a second entry that gets lost costs nothing and is re-asked at most once.
 
 ## Example: vacuum bag 20 s
