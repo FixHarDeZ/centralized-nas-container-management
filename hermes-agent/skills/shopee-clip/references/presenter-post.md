@@ -136,3 +136,4 @@ The mute-and-patch alternative (kept for when a cut would break a gesture): voic
    up covers the face).
 5. Apply the pick to every `Style:` line (post_presenter + gen_vo_natural/custom/subs) with an exact
    string replace + count assert, rerun `sub_linecheck.py` on a 1-line + 2-line test ass, `py_compile`.
+- **`post_presenter.py` keeps pills off her face by itself (`pillclear.py`, 2026-11-16).** It measures the skin share under each pill's rectangle and, in a close-up, moves the pill to the nearest clear window of the same scene or drops it. It prints `NOTE: pill 'X' moved …` / `DROPPED …` and stores them in `report.json` `notes`; notes do not block `deliver`. Do not re-time a moved pill back. A dropped pill's word goes into `gfx.json` as a headline or callout when the beat needs it. `NO_PILL_CLEAR=1` switches the check off.

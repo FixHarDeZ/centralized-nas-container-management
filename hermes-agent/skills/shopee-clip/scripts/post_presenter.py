@@ -515,6 +515,41 @@ def main():
         t1 = total - 0.15
         pills.append({"text": CTA, "t0": t1 - 2.2, "t1": t1, "scene": last})
         report["flags"].append(f"no CTA pill in final scene -> auto-added '{CTA}' {t1-2.2:.2f}-{t1:.2f}")
+    # ---- 3b. a pill never sits on her face: move it inside its scene, or drop it (pillclear.py)
+    if not os.environ.get("NO_PILL_CLEAR"):
+        import pillclear
+        starts = [s["global_start"] for s in report["scenes"]]
+        kept = []
+        for p in sorted(pills, key=lambda p: (p["text"] != CTA, p["t0"])):     # the CTA is placed first: it cannot move
+            k, g = p["scene"], starts[p["scene"]]
+            sc = scenes[k]
+            try:
+                series = pillclear.skin_series(P(sc["video"]), p["text"], sc["_T"], sc["_D"])
+            except Exception as e:                                           # a measuring error never blocks post
+                report.setdefault("notes", []).append(f"pill '{p['text']}': face check not run ({e})")
+                kept.append(p)
+                continue
+            if p["text"] == CTA:
+                if pillclear.on_face(series, p["t0"] - g, p["t1"] - g):
+                    report.setdefault("notes", []).append(f"pill '{CTA}' sits on her face (close-up at the end); "
+                                                          "it is tied to the clip's end and was left there")
+                kept.append(p)
+                continue
+            taken = [(q["t0"] - g, q["t1"] - g) for q in kept]
+            hi = sc["_D"] - (xf if k < len(scenes) - 1 else 0.0) - 0.15
+            spot = pillclear.place(series, p["t0"] - g, p["t1"] - g, 0.1 + (xf if k else 0.0), hi, taken)
+            if spot is None:
+                report.setdefault("notes", []).append(
+                    f"pill '{p['text']}' DROPPED: her face fills the pill band of scene {k+1} wherever no other "
+                    f"pill shows (close-up) - put that word in gfx.json as a headline or callout instead")
+                continue
+            if abs(spot[0] - (p["t0"] - g)) > 0.01 or abs(spot[1] - (p["t1"] - g)) > 0.01:
+                report.setdefault("notes", []).append(
+                    f"pill '{p['text']}' moved {p['t0']:.2f}-{p['t1']:.2f} -> {g+spot[0]:.2f}-{g+spot[1]:.2f}: "
+                    f"it was on her face (close-up)")
+                p["t0"], p["t1"] = g + spot[0], g + spot[1]
+            kept.append(p)
+        pills = kept
     pills.sort(key=lambda p: p["t0"])
     for p in pills:
         if len(p["text"].split()) > 2:
@@ -615,6 +650,8 @@ def main():
               f"onset_err={s['speech_onset_err_s']} snapped={s['boundaries_snapped']}")
     for f in report["flags"]:
         print("FLAG:", f)
+    for f in report.get("notes", []):
+        print("NOTE:", f)
     print(m)
     print(f"OUT {out} v={report['v_dur']:.3f} a={report['a_dur']:.3f} target={total}")
 
