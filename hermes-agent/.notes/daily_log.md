@@ -1057,3 +1057,15 @@ Not done / open:
   First chance: `venita-sunscreen` (open 📝 job at sync time, shots pending).
 - Not done (Fix decides): end the Hermes session at close (idle reset is 180 min, so the next order can land in
   this job's context); the gameplay workdir intermediates (`out*`, `work/` wav) are not junk-matched.
+
+### 2026-11-16 (evening) — session closed
+- On `main`, pushed: `88d12e1` (🏁 close button + 5-min auto close), `1d5f603` (Hermes' flow-driver live edits
+  ported), `d7993c1` (cover kept, OSError guards, tests on temp DIR/WORK), notes `79dd7c9`, `9d03a19`.
+  Skills synced live at `d7993c1`, 92 tests passed in the container. No deploy, no restart (skills only).
+- Live edit outside the repo: `pending-work-triage` SKILL.md (🏁 / typed จบงาน → `clipjob.py close`).
+- Open job at close: `venita-sunscreen` (🧑 📝, shots pending) — first real run of the button.
+- Verify on that order: button under the delivery message, sleeper survives the terminal tool
+  (`/opt/data/clips/logs/close-timer.log`, job `close.state`), Hermes ends the turn without cleaning,
+  tap → `decide --text`, auto close message after 5 min.
+- Fix decides: end the Hermes session at close; purge older workdirs / global Downloads + uv sweep; 🎬
+  intermediates as junk.
