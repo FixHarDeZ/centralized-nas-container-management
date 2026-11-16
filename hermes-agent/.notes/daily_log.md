@@ -1022,3 +1022,5 @@ Not done / open:
   post time under the 169 min of hatari, reasoning tokens per call, frame gate still flags on `low`, files in
   `/opt/data/clips/finals/`. Not fixed: `.v.jpg`/one-vision-per-batch ignored, ✅ tap replayed after a long turn,
   📝 jobs log `credits: null`.
+- Later the same day: Fix ran `gh auth login -h github.com` + `gh auth setup-git`; `git push origin main` went
+  through (`c6ebf75..da34f10`). Origin, the Mac and Hermes' clone hold the same skill commits.
