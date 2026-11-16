@@ -551,3 +551,27 @@ def test_pack_sends_the_character_portrait_for_an_account_without_it(tmp_path, m
     j2 = job(1, prod="prompt"); j2["workdir"] = str(tmp_path)
     cj.cmd_pack(j2, None, False)
     assert "Ingredient แทน" not in calls[0][1]["text"] and len([c for c in calls if c[0] == "sendPhoto"]) == 1
+
+
+def test_cli_ingest_sends_the_next_shots_start_frame(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(cj, "DIR", str(tmp_path))
+    j = job(shots=2, prod="prompt"); j["workdir"] = str(tmp_path / "w")
+    for s in j["shots"]:
+        s["state"] = "packed"
+    cj.save(j)
+    src = tmp_path / "in.mp4"; src.write_bytes(b"x")
+    sent = []
+    monkeypatch.setattr(cj, "tg", lambda method, payload=None, files=None: sent.append((method, payload, files)) or {"message_id": 1})
+    monkeypatch.setattr(cj, "last_frame", lambda video, out: open(out, "wb").close() or out)
+    assert cj.main(["ingest", "t-1", str(src), "--shot", "1"]) == 0
+    assert json.loads(capsys.readouterr().out)["start_frame_sent"] == 2
+    (method, payload, files), = sent
+    assert method == "sendPhoto" and "ช็อต 2" in payload["caption"] and files["photo"].endswith("shot1_last.jpg")
+    assert cj.main(["ingest", "t-1", str(src), "--shot", "2"]) == 0      # last shot: nothing follows it
+    assert json.loads(capsys.readouterr().out)["start_frame_sent"] is None and len(sent) == 1
+
+
+def test_start_frame_is_not_sent_for_a_shot_that_already_has_a_file(tmp_path):
+    j = job(shots=2, prod="prompt"); j["workdir"] = str(tmp_path)
+    cj.shot(j, 2)["state"] = "in_review"
+    assert cj.next_start_frame(j, 1, "/tmp/none.mp4") is None

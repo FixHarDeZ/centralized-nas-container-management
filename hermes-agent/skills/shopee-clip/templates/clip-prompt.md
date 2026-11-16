@@ -1,6 +1,6 @@
 # Flow clip prompt template (proven structure — fill the <> parts, keep every section)
 
-> **2026-11-05 override:** Flow must render NO on-screen text. Use the "ON-SCREEN TEXT: NONE" block from `references/presenter-post.md` instead of any caption/pill instruction below. EN pills and Thai subs are added in post by `scripts/post_presenter.py`.
+> **Text-free (2026-11-05, wording cleaned 2026-11-16):** Flow renders NO on-screen text. Every prompt carries the "ON-SCREEN TEXT: NONE" block from `references/presenter-post.md` and names no caption, label, pill, font or CTA wording anywhere else: Flow draws what the prompt describes (hatari-s14m1 shot 2). EN pills and Thai subs are added in post by `scripts/post_presenter.py`.
 
 
 <Pitch sentence in Thai, 1–2 lines: the pain point, then the product as the fix. 9:16 vertical format. A short, cute product review video in 9:16 vertical format.>
@@ -19,10 +19,10 @@ Audio (Thai voiceover — spoken only, NO narration text on screen):
 
 > **Typing this prompt (step 4):** ONE full-length `cdp('Input.insertText', text=PROMPT)` is fine for a ~2,500–2,900-char prompt — the replace-bug that produced half-length prompts was a clear-then-retype cycle, not insert size. Read back `innerText.length` AND a head/tail slice: the length settles ~38 chars lower once the editor re-renders (innerText normalizes the `\n\n` runs), so a few-dozen-char drift with an intact head/tail is re-rendering, not truncation — judge truncation on the tail, never on the number.
 
-Visual style: Bright, fun social media aesthetic, vibrant rounded fonts popping up on screen (e.g. "<caption 1>", "<caption 2>", "<caption 3>"), consistent with the provided storyboard grid and product references. NO prices or currency symbols should appear.
+Visual style: Bright, fun social media aesthetic, clean frame with nothing overlaid on the picture, consistent with the product references. Same room, backdrop and lighting in every shot of the clip.
 
 ---
-Rules baked in: no price / no Baht figures anywhere (spoken or on-screen); captions per beat, rounded + colorful; soft CTA only ("ลิงก์ใต้คลิป"), never a hard sell; ~10 s single scene is enough.
+Rules baked in: no price / no Baht figures anywhere (spoken or on-screen); no text drawn by Flow (pills and subs come from post); soft CTA only ("ลิงก์ใต้คลิป"), never a hard sell; ~10 s single scene is enough.
 Stray-prop prohibition — add whenever the project has held OTHER products' props: the model pulls an earlier clip's props into this one (a previous controller clip put a controller on the table of a box-only brief), so name the single product plus everything else allowed in frame, e.g. `ในเฟรมมีแค่กล่องเกมนี้เท่านั้น ห้ามมีจอย / ตัวควบคุม / อุปกรณ์อื่นบนโต๊ะ`, then verify it in the frame check (step 10).
 Multi-scene hard rule (Fix 2026-10-27): when the clip is longer than one generation, EVERY scene except the last must carry NO link/CTA wording at all — put this line verbatim in each non-final scene prompt: `ห้ามมีคำว่า ลิงก์ / ใต้คลิป / คำอธิบาย / พิกัด ใดๆ ใน scene นี้ ทั้งพูดและขึ้นบนจอ — CTA อยู่เฉพาะส่วนที่ 2 เท่านั้น`. Then verify it in the frame check (last ~1 s of the non-final scene) and re-gen the scene if a link caption still shows.
 Physical counts (drawers, doors, knobs, shelves) go into the prompt as exact numbers with a 'no extra X' clause, e.g. `exactly three drawers, no fourth drawer` — an unstated count lets the model add parts the product does not have. Scale goes in the same way: real dimensions PLUS a body anchor (`a SMALL LOW cabinet, ~70–90 cm — its roof reaches only her HIP when she stands beside it; never chest-height, never a built-in wall unit`), because the model defaults to filling the frame with the product — the no-size rule bans cm from VO/on-screen only, never from the prompt. Verify the anchor in the frame check (product top vs presenter body part).
@@ -44,8 +44,8 @@ If Fix sends several photos, pick 2–3 that cover (a) the product held/in use a
 Flow ไม่เคยก๊อปปี้พิกเซล — มัน re-draw ปกใหม่จาก reference เสมอ จึงต้องสั่งห้ามมัน redesign และให้ crop ปกกล่องกินพื้นที่ ≥ 60% ของภาพอ้างอิง (ครอปกล่องเดียวเต็มเฟรมแนวตั้ง; สินค้า 2 กล่อง = 2 crop แล้วบอกใน prompt ว่ามือไหนถือกล่องไหน) — ถ้า crop ปกเล็ก ปกจะเพี้ยนและแก้ด้วย prompt ไม่ได้:
 `reproduce the printed cover art EXACTLY as in the attached image: <รายละเอียดสำคัญของปก เช่น ตัวละคร/ฉาก/ตัวหนังสือ/แถบสีหัวกล่อง>. Do NOT redesign, do NOT change the characters, layout or colors, do NOT swap in different artwork.`
 
-### Caption legibility block (Thai on-screen text garbles on Omni 1.1 Flash)
-ใส่ทุกครั้ง ไม่ใช่แค่คลิปเกม — model ขีดเขียนสระ/วรรณยุกต์ไทยไม่ได้ จึงต้องสั่ง caption ให้สั้น:
+### Caption legibility block — RETIRED, do not paste (history: why no Thai glyph goes on screen)
+Since 2026-11-05 no caption instruction goes to Flow at all; the rule below now binds the pills made in post. เดิม: ใส่ทุกครั้ง ไม่ใช่แค่คลิปเกม — model ขีดเขียนสระ/วรรณยุกต์ไทยไม่ได้ จึงต้องสั่ง caption ให้สั้น:
 `CAPTION RULE (สำคัญมาก): ห้ามขึ้นตัวหนังสือภาษาไทยบนจอใดๆ ทั้งสิ้น — ให้ caption บนจอเป็นภาษาอังกฤษ/คำยืมเท่านั้น ไม่เกิน 2 คำต่อ beat (เช่น LEGO Harry Potter / 2 games in 1 / Pre-order 5 Nov / Link below!) วันที่ก็เขียนอังกฤษ เสียงพากย์ไทยคงไว้ตามเดิม`
 (Fix ตัดสิน 2026-10-30: mitigation (2) = EN caption กลายเป็น DEFAULT ทุกคลิป — ไทยสั้น 2 คำบนจอยังเพี้ยนซ้ำ และ agent มัก rewrite เพิ่มประโยคไทยยาวขึ้นจอเอง จึงสั่งห้ามไทยบนจอเด็ดขาดแทน) — เดิมใช้คู่กับ caption อังกฤษ/คำยืมใน beat ที่ไม่ใช่วันที่ แล้วคงเสียงพากย์ไทยไว้
 

@@ -65,8 +65,9 @@ WAIT_CAP_S = 150           # one `reserve --wait` sleeps at most this long: the 
 FLOW_MODEL = "Omni 1.2 Flash"   # Omni 1.1 Flash and Veo 3.1 Fast/Quality leave Flow on 2026-12-05
 SHOT_SECONDS = 10          # default and cap of one generation: seconds 11-15 bill at double rate
 SHOT_MIN = 3
-# credits per second for a 3-10 s generation. Third-party figures (2026-11), not measured on this account:
-# Flow's "Generating will use N credits" line wins, and `submitted --credits` records what was read.
+# credits per second for a 3-10 s generation. 720p is measured (withat-softener 2026-11-15: Flow's panel read
+# "6 Sec · Generating will use 18 credits", an 8 s shot billed 24); 360p is a third-party figure. Flow's line
+# wins, and `submitted --credits` records what was read.
 RATE = {"720p": 3, "360p": 1}
 CHAR_DIR = os.environ.get("CLIPJOB_CHARS", "/opt/data/clips/characters")   # <name>.jpg portrait per roster name
 INFO_FLAGS = [re.compile(r"auto-added")]   # report flags that only inform (post_presenter adds the CTA pill itself)
@@ -403,6 +404,15 @@ def ingest(j, k, path):
     s["attempts"].append({"via": "prompt", "submitted_at": iso(), "file_in": dst, "source": os.path.abspath(path)})
     log(j, f"ingest shot {k}: {os.path.basename(path)} -> {os.path.basename(dst)}")
     return dst
+
+
+def next_start_frame(j, k, file):
+    """📝 mode: shot k's file just arrived and shot k+1 is not generated yet, so k+1 can start on k's last
+    frame (same room, light and outfit). -> the jpg to send Fix, or None."""
+    nxt = next((s for s in j["shots"] if s["k"] == k + 1), None)
+    if not nxt or nxt["state"] not in ("pending", "packed", "regen_approved"):
+        return None
+    return last_frame(file, os.path.join(j["workdir"], f"shot{k}_last.jpg"))
 
 
 def probe_verdict(info):
@@ -793,7 +803,8 @@ def cmd_pack(j, only, no_send):
                    files={"photo": lf})
                 chain = "\nเฟรมเริ่ม: แนบรูปเฟรมท้ายช็อตก่อนหน้าที่ส่งไปเมื่อกี้เป็น start frame"
         elif prev:
-            chain = f"\nเฟรมเริ่ม: ถ้าทำช็อต {k - 1} เสร็จแล้ว ใช้เฟรมท้ายของมันเป็น start frame ภาพจะต่อเนื่อง"
+            chain = (f"\nเฟรมเริ่ม: ส่ง mp4 ของช็อต {k - 1} กลับมาก่อน แล้วรอรูป 'เฟรมเริ่มของช็อต {k}' ที่ไอยูส่งให้ "
+                     "แนบรูปนั้นเป็น start frame (ห้อง แสง ชุด จะต่อเนื่อง)")
         mid = None
         for text in prompt_messages(j["job"], k, len(j["shots"]), prompt, shot_seconds(shot(j, k)), chain):
             if not no_send:
@@ -1132,7 +1143,16 @@ def main(argv=None):
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             shutil.copy2(a.file, dst)
             save(j)
-            return out({**summary(j), "file": dst,
+            lf = next_start_frame(j, k, dst)
+            if lf:
+                try:
+                    tg("sendPhoto", {"chat_id": CHAT, "caption": f"เฟรมเริ่มของช็อต {k + 1} (= เฟรมท้ายช็อต {k}) · {j['job']}\n"
+                                                                 f"แนบเป็น start frame ตอน gen ช็อต {k + 1}"},
+                       files={"photo": lf})
+                except (Refused, OSError, ValueError) as e:
+                    print(f"start frame for shot {k + 1} not sent: {e}", file=sys.stderr)
+                    lf = None
+            return out({**summary(j), "file": dst, "start_frame_sent": k + 1 if lf else None,
                         "next": f"vision-check frames, then clipjob.py ready {a.job} {k} --raw {dst} --frame …"})
         if a.cmd == "scan":
             res = cmd_scan(j, a.shot, a.raw); save(j)
