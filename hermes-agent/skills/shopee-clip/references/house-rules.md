@@ -22,7 +22,10 @@
   fixed by a reworded prompt: offer 🎬/📦 or a post insert of the real photo. A 360p generation saved at 720p
   is reported as a third of the price but softer, and is untested here: only when Fix says so (`cost --res 360p`).
   A shot under 10 s has not been through post yet (first one: check subs/graphics timing by eye).
-- 40 s (≈60) exceeds the daily quota on its own: read the live cost and tell Fix before submitting.
+- **Any plan above the 50/day quota cannot finish in one day** — not just a 40 s clip: a "20 วิ" board's
+  10 + 10 = 60, and even 8 + 8 = 48 leaves no room for the regen the board advertises (+24). Read the live
+  cost, mark on the board which option fits today's quota and that a regen may wait for the reset, and tell
+  Fix before submitting.
 - Never edit inside Flow (40 credits per edit). Never retry a failed submit with his credits without saying so.
 - Credit approval is per product and per question; put the cost inside the question text.
 - **Reported spend = the sum of EVERY attempt's `credits` across all shots, regens included.** Before delivery read
@@ -34,10 +37,15 @@
 - **After the order, run end to end without per-step confirmation** (Fix: "หลังผมสั่งครั้งแรกทำตั้งแต่ต้นจนจบได้เลยนะ").
   The standing gates still hold: storyboard approval, per-shot review, cost in any spending question
   (`references/run-mode-gates.md`).
+- **Between the order and the storyboard approval there is no job row** (`clipjob.py new` runs at step 7), so
+  `status` is empty after a session reset. Save the board you sent as `<workdir>/board.txt` — a resumed session
+  then picks the job up from the workdir (product, refs, board, character, seconds) instead of re-running intake
+  and re-asking Q1/Q2.
 - **Invoke skill scripts with an explicit `workdir` (`/opt/data`), not the shell's inherited cwd.** The terminal
   keeps its cwd across calls; after a job's workdir is cleaned up, a stale cwd makes every command fail BEFORE
   the script runs (`bash: cd: /opt/data/clips/work/<job>: No such file or directory`, exit 126) — that reads like
-  a broken script, so pass `workdir` (or `cd /opt/data && …`) instead of debugging the script.
+  a broken script, so pass `workdir` (or `cd /opt/data && …`) instead of debugging the script. The same stale
+  cwd reaches `terminal()` called from `execute_code` — it inherits that shell, so set `workdir` there too.
 - **Tell Fix early when something blocks.** At most ONE silent retry; a second failure (refusal, Failed card, login wall,
   dead picker) gets a short status at that moment: what failed, what you tried, what is next, whether credits moved.
   Also send one line at each long silent stage (Chrome up, post-production start) — `python3 S/send_status.py "<line>"`
@@ -73,6 +81,10 @@
 - Caption pills are ours (post-production, EN/คำยืม ≤2 words); **Flow renders no on-screen text at all**.
 - Short but interesting (Fix: "คลิปไม่ต้องยาวแต่น่าสนใจ"). Structure: short hook → 1–2 selling points → soft CTA.
 - Vertical 9:16, Thai voiceover, sound on. No shop name or wordmark on screen, and never ask Fix for one (2026-10-26).
+- **Speak a brand name in the voiceover only when its Thai reading is certain**; otherwise name the product type
+  (the wordmark is on the product in frame anyway). When two vision reads of the same printed wordmark name
+  different brands, the mark is illegible at that resolution — keep it out of VO and pills, and judge product
+  identity by shape, colour and counts instead.
 - Per-run artifacts: `templates/style-card.md` block in every prompt; hook by category, least recently used
   (`perf.py pick-hook`, never the same `hook_id` for a category within 5 rows); hashtags from the category pool in
   `templates/hashtags.md` (4 product + 3 vibe + 1 platform).

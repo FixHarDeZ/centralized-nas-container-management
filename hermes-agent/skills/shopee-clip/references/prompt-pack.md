@@ -34,6 +34,7 @@ nothing to attach in Ingredients. `--shot` is a resend of prompts only — the r
   verbatim: `✅ ผ่าน ช็อต K · <job>` / `🔁 gen ใหม่ ช็อต K · <job>`. A paraphrase (`✅ ช็อต K · <job>`)
   is REFUSED — copy the label off the keyboard message, don't retype it from memory.
 - `ready` flags anything below 720×1280 or a low bitrate. That means Telegram re-encoded a "video" send.
+- The gates JSON that `ready` prints proves the checks, not the send: confirm `review_sent` in `/opt/data/clips/jobs/<job>.json` before telling Fix the ✅/🔁 keyboard is up.
   Tell Fix once to send shots as a **file** (📎 → File); a file keeps Flow's original 720p.
 - The Bot API download cap is 20 MB. A 10 s 720p shot is far below it. A bigger file fails to download,
   so ask Fix to export at 720p.

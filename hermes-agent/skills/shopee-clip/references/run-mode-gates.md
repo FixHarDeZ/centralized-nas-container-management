@@ -33,6 +33,7 @@ Fix orders the skip ("ข้ามทุก step ส่ง hashtag + ปัก�
 
 ## Talking to Fix: detail
 - **A real `FLAG` needs his call: ask once with `clarify`, then end the turn and wait.** An unanswered clarify blocks the run for its whole timeout, so re-asking the same question stalls it twice — report the flag with its frame time and wait for his reply instead of passing `--ack` as if he had chosen.
+- **Pre-flight with `deliver` before asking anything.** It validates the whole package in one output — flags, hashtags, gfx, cover file, shot approval, verify — and a refusal sends NOTHING: clear the mechanical refusals yourself, then put only the remaining flags into ONE clarify. A clean pass ships the clip, so pre-flight only when that is the intent; asking before it buys a second stall for the next blocker.
 - The senders parse no flags — `S/send_status.py "<line>"` posts its FIRST argument verbatim as the message body, so probing one with `--help` or any flag posts that literal text to the chat. Read the script's docstring instead of running it to ask what it does.
 
 ## Re-send of an already-delivered package

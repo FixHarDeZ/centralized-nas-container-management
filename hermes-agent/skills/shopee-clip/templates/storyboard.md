@@ -9,7 +9,9 @@ Why: two 10 s takes of "hold it up / press / set down" read as filler (vacuum-ba
 - Shot length: one Flow generation is 3–10 s (Omni 1.2 Flash, 3 credits/s at 720p). Give each shot the seconds
   its speech or action needs (6–8 s normal; ~4 Thai syllables/s) and pass them as `clipjob.py new --seconds 8,6`.
   Never 11–15 s (double rate). The clip length is the sum of the shots (post adds none): show that total on the
-  board. Example, a "20 วิ" 🧑 order: 8 + 8 = 16 s ≈48 credits, or 10 + 10 = 20 s ≈60; Fix picks with the approval tap.
+  board. Example, a "20 วิ" 🧑 order: 8 + 8 = 16 s ≈48 credits, or 10 + 10 = 20 s ≈60; Fix picks with the
+  approval tap, and the board marks which option fits the 50/day quota — 10 + 10 = 60 does not, and a regen on
+  top of 48 usually does not either (`house-rules.md` → Credits).
 - **Keep every per-shot second count inside what the Flow duration control can actually express** (buttons `4s/6s/8s/10s`, or a 1-s slider when the panel renders one — `flow-driver` → `flow-production-notes.md`). A board promising 7 s per shot while the control offers only even seconds forces a mid-run re-split; when that happens the APPROVAL still binds the totals, so re-split to offered values keeping the same clip total and same total credits (7+6+7 → 8+6+6), and say so in one status line instead of re-asking.
 - Mix shot types:
   - `P` presenter to camera (hook, reaction, result) - character chip attached, Flow voiceover.
@@ -49,7 +51,7 @@ Why: two 10 s takes of "hold it up / press / set down" read as filler (vacuum-ba
 - ช็อต 1: <s> วิ ≈ <c> เครดิต
 - ช็อต 2: <s> วิ ≈ <c> เครดิต
 - ...
-💳 เครดิตรวม ≈ <sum> (ถ้าต้อง gen ช็อตเสี่ยงใหม่ 1 ครั้ง +<c>)
+💳 เครดิตรวม ≈ <sum> (ถ้าต้อง gen ช็อตเสี่ยงใหม่ 1 ครั้ง +<c>) · โควตาวันนี้: <พอ / เกิน 50 ต้องรอวันถัดมา>
 🔁 กด gen ทั้งหมด <N> ครั้ง (≥5 ครั้ง = ต้องเว้นระยะ ใช้เวลานานขึ้น)
 ⚠️ ช็อตเสี่ยง: <n> (<why>) สำรอง: <alt>
 🔎 เช็คสินค้า: <ชั้น/ลิ้นชัก/ล้อ N> · <สี> · <สูงประมาณ เอว/อก/หัว>
