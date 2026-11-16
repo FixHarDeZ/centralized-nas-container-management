@@ -270,6 +270,9 @@ def main(argv=None):
     s.add_argument("--out", required=True)
     s.add_argument("--fx1")
     a = ap.parse_args(argv)
+    for f in [a.video] + ([a.report] if a.cmd == "gfx" else [a.product] if a.product else []):
+        if not os.path.exists(f):
+            sys.exit(f"autogfx: no such file: {f}")
     plan, skipped = cmd_fx(a) if a.cmd == "fx" else cmd_gfx(a)
     with open(a.out, "w", encoding="utf-8") as f:
         json.dump(plan, f, ensure_ascii=False, indent=1)
