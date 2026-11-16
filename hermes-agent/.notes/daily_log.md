@@ -1126,3 +1126,14 @@ Not done / open:
   holding-height line into a prompt, the frame-check question being asked.
 - Not done, Fix decides: `autogfx` skips the hook card when no free wall holds it (both 🧑 clips today) — thinner
   graphics vs letting the card cover the room.
+
+### 2026-11-16 (late) — session closed
+- On `main`, pushed: `8a779ae` (check of the afternoon clips), `d5d0222` (Hermes' 6 live edits ported),
+  `431d111` (`pillclear.py` in `post_presenter.py`, holding-height prompt rule, frame-check question), notes.
+  Skills synced live at `431d111`, 98 tests passed in the container. No deploy, no restart. No open clip job.
+- Verify on the next 🧑 order: prompt says where she holds the product (not chest height); the review message
+  names a label under the sub band; `NOTE: pill … moved/DROPPED` in `report.json` on a close-up; a moved pill
+  looks right on the frame sheet.
+- Fix decides: hook card when the room has no free wall (now skipped; my advice: keep, or ask Flow for a bare
+  wall side in shot 1). Still open from before: a tap held behind Hermes' post-turn skill-patch pass,
+  ✅ tap replayed after a long turn, 📝 `credits: null`, start frame on 📝 unproven, Hermes `MEMORY.md` over limit.
