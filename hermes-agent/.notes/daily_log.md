@@ -1024,3 +1024,33 @@ Not done / open:
   📝 jobs log `credits: null`.
 - Later the same day: Fix ran `gh auth login -h github.com` + `gh auth setup-git`; `git push origin main` went
   through (`c6ebf75..da34f10`). Origin, the Mac and Hermes' clone hold the same skill commits.
+
+### 2026-11-16 (evening) — 🏁 จบงาน button after a clip delivery, auto-close in 5 min
+- Fix: "หลังส่งงานแล้ว (คลิป, hashtag, ลิงก์ปักตะกร้าครบ) ให้ขึ้นปุ่มกดจบงาน ถ้าไม่กดภายใน 5 นาทีให้จบงานเอง".
+- Found: a typed `จบงาน` today runs Hermes' own `pending-work-triage` + `disk-housekeeping` = 4–6 min of LLM
+  turns per close (garmin 19:00→19:04, 11-16 06:37 drifted into a skill port + push).
+- `clipjob.py` (`88d12e1`, 7 new tests, 91 total):
+  - `deliver` ends on a reply-keyboard button `🏁 จบงาน · <job>` (replaces the review keyboard) and arms
+    `close` = `{state: pending, due, token}`; token = delivery sha + time, so `reopen` (drops it) and a
+    re-deliver (new token) void an older timer.
+  - Timer = detached sleeper `clipjob.py close JOB --auto --token T --after 300` (`start_new_session`, no
+    inherited pipes, log `/opt/data/clips/logs/close-timer.log`). `CLIPJOB_CLOSE_S` overrides 300.
+  - Tap → `decide --text "🏁 จบงาน · job"` → close by `tap`; late tap = "งาน X ปิดไปแล้วค่ะ"; `close` (no job)
+    closes every waiting job; any other clipjob command sweeps a close overdue by >60 s (gateway restart).
+  - `close` deletes only provable junk of that job: `*sheet*.jpg/png`, `.v.jpg`, `*_last(frame).jpg`, `.log`,
+    `.html` in `work/<job>` (not `fonts/`), files byte-identical to the kept final/cover, Downloads files that
+    are copies of those or of a workdir mp4 (shot `file` repointed to the workdir twin). Never removes a
+    directory, keeps the revision set, refuses an open job, skips a workdir outside `clips/work`.
+- Docs: router step 12 = no cleanup after deliver, 🏁 tap → only `decide --text` (15343 of 15360 B);
+  gameplay step 10 same (30303 B); `flow-steps.md` step 13 "When" = `clipjob.py close`.
+- Live edit (not repo-owned): `/opt/data/skills/productivity/pending-work-triage/SKILL.md` got a first
+  paragraph: 🏁 text → only `decide --text`; typed `จบงาน` → `clipjob.py close` first. Pre-edit copy:
+  `/opt/data/clips/skill-drift/triage-20261116/SKILL.md`.
+- Also ported 2 live Hermes edits to flow-driver refs (`1d5f603`). Synced at `1d5f603`, 91 tests in the container.
+- Verified in the container (throwaway dirs, `CLIPJOB_CLOSE_S=6`, piped stdout): parent returned at once,
+  job still pending at 3 s, closed `by: auto` at 6 s, sheet deleted, workdir kept.
+- Not proven: the sleeper surviving Hermes' terminal tool on a real order, the button showing up under
+  Hermes' own reply, Hermes ending the turn without cleaning, the tap routing to `decide --text`.
+  First chance: `venita-sunscreen` (open 📝 job at sync time, shots pending).
+- Not done (Fix decides): end the Hermes session at close (idle reset is 180 min, so the next order can land in
+  this job's context); the gameplay workdir intermediates (`out*`, `work/` wav) are not junk-matched.
