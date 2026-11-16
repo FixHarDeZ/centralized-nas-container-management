@@ -987,3 +987,25 @@ Not done / open:
   gate verdicts on the next clip); raise `idle_minutes` or keep 15; keep finals 7 days (his 11-04 call was "do not
   keep finished clips"); a helper that computes fx/gfx coordinates. Not built. `templates/styles.md` presets still
   say "caption EN ต่อ beat" under the override banner (not cleaned).
+
+### 2026-11-16 (later) — Fix: "ทำตามแนะนำ" — the four open items done
+- Config, live (backup `/opt/data/config.yaml.bak-20261116`, `hermes config set`, no restart):
+  `agent.reasoning_effort` medium → low, `session_reset.idle_minutes` 15 → 180. Effect not measured yet.
+- `shopee-clip/scripts/autogfx.py` (new, 7 unit tests): `fx <scene> --out fxN.json [--hook --product ref]` and
+  `gfx out.mp4 --report report.json --out gfx.json [--fx1 fx1.json]`. Uses `layout_probe.probe()` (refactored out of
+  its `main`, CLI output unchanged) plus a texture mask (Laplacian) because the colour mask read hatari's white fan
+  and the cream cardigan as wall. Stickers go only on measured free wall, off the face and the column under it; a
+  window with none is skipped; `NO sticker placed` tells the agent to add one element by hand.
+  - On the real hatari shots: hook card x545 y368 h162 dur 2.5 (Hermes by hand: 536/371/160/2.4), shot 2 punch
+    498,439 (hand: 500,441), face boxes match. Shot 1's punch is skipped (she leans into the camera). Hatari gets
+    1 sticker (the fan fills the frame); the garmin shot gets 3 on bare wall, checked on a drawn sheet. `--check`
+    passes on both. In the container: `fx` 16 s, `gfx` 22 s.
+  - Not proven: Hermes using it on a real order, and the rendered look (no render was made).
+- `clipjob.py`: `deliver` copies final + cover to `/opt/data/clips/finals/<job>.mp4|_cover.jpg` and drops copies
+  older than 7 days (a copy error never blocks a delivery); `timeline` takes the union of wait spans (withat would
+  read 56, not 115). 84 tests.
+- Docs: router step 11 names `autogfx` (15240 of 15360 B); `presenter-graphics.md` section on it; `flow-steps.md`
+  step 13 keeps `clips/finals/`; `styles.md` presets say the EN labels are added in post.
+- Synced live, 84 tests passed in the container. Still not on GitHub (same `gh` token problem); commits reached
+  Hermes' clone by `git bundle`.
+

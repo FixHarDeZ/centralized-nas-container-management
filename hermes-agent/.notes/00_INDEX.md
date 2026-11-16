@@ -2,7 +2,7 @@
 
 **สร้าง:** 2026-05-24  
 **Port:** 5063 (external Nginx basic auth) → 9119 (dashboard internal)  
-**Status:** 2026-11-16 ✅ — checked the 7 clips of 11-15/16 (all delivered; 60 credits recorded for withat 🤖; the three 📝 jobs Fix generated himself log `credits: null`, ≈138 at 3 cr/s). Fixed + synced at `17499c8`: text-free Flow style card (the old card described caption pills; likely why Flow drew them on hatari shot 2 — shot 1 had the same card and came out clean, confirm on the next 🧑 order), `clipjob.py ingest` sends shot K's last frame as shot K+1's start frame (📝 mode), cleanup runs from outside the deleted workdir. **`77789bc` + `17499c8` + the notes commit are NOT on GitHub** (Mac `gh` token invalid; carried to Hermes' clone by `git bundle`, the clone is ahead of origin): `gh auth login -h github.com`, then `git push origin main`. Measured: 720p = 3 cr/s (Flow panel `6 Sec … 18 credits`), Flow offers 4/6/8/10 s (a 7 s board became 8/6/6). Portraits: 12 files in `/opt/data/clips/characters/`, checked. Open (Fix decides): `agent.reasoning_effort` medium → low trial; `session_reset.idle_minutes` 15 resets the session between every stage of a clip (and a ✅ tap that lands mid-turn is replayed into the fresh session afterwards); `timeline` adds overlapping review gaps into `wait_fix_min`; keep delivered finals 7 days for review; helper script for post layout numbers (fx/gfx coordinates are reasoned by hand: 81 of 126 LLM min in hatari post); `.v.jpg` + one-vision-per-batch still ignored (33 of 190 calls, 32 parallel). Earlier: sync refuses unpulled live edits, tuning starts with `--pull`; ✋ `hands` mode + `clipjob.py scan`; `agent.max_turns: 250`; `HERMES_REF=v0.23.1`; webhook OFF; vision = `provider: xiaomi` + `mimo-v2.6-flash`; main model `mimo-v2.6-flash`; rollback image `hermes-agent:v0.22.7-rollback`
+**Status:** 2026-11-16 ✅ — checked the 7 clips of 11-15/16, then tuned (Fix: "ทำตามแนะนำ"). Live, synced at the `autogfx` fix commit after `29f749d` (84 tests in the container): **`scripts/autogfx.py`** drafts `fx<N>.json` + `gfx.json` from measurements (face boxes, hook card, punch, stickers; ~20 s a call; an element with no measured place is skipped, never guessed) — router step 11 and `presenter-graphics.md` point at it; `clipjob.py deliver` keeps final + cover 7 days in `/opt/data/clips/finals/`; `ingest` sends shot K's last frame as shot K+1's start frame (📝); text-free Flow style card / clip-prompt / styles presets; cleanup runs from outside the deleted workdir; `wait_fix_min` = union of waits. Config (backup `/opt/data/config.yaml.bak-20261116`): `agent.reasoning_effort` medium → **low**, `session_reset.idle_minutes` 15 → **180**. **None of today's commits are on GitHub** (Mac `gh` token invalid; carried to Hermes' clone by `git bundle`, clone ahead of origin): `gh auth login -h github.com`, then `git push origin main`. Measured: 720p = 3 cr/s (Flow panel `6 Sec … 18 credits`), Flow offers 4/6/8/10 s. Portraits: 12 files in `/opt/data/clips/characters/`, checked. **Verify on the next 🧑 order:** Flow draws no pills with the new card; the start-frame photo arrives and shot 2 keeps the room; `autogfx` is used and post time drops (hatari post = 169 min); reasoning tokens per API call vs ~1.9k before, and the frame gate still flags real defects on `low`; `finals/` holds the clip. Still open: `.v.jpg` + one-vision-per-batch ignored (33 of 190 calls, 32 parallel); a ✅ tap that lands mid-turn is replayed after the turn; 📝 jobs log `credits: null`. Earlier: sync refuses unpulled live edits, tuning starts with `--pull`; ✋ `hands` mode + `clipjob.py scan`; `agent.max_turns: 250`; `HERMES_REF=v0.23.1`; webhook OFF; vision = `provider: xiaomi` + `mimo-v2.6-flash`; main model `mimo-v2.6-flash`; rollback image `hermes-agent:v0.22.7-rollback`
 
 ---
 
@@ -62,7 +62,7 @@ Post-2026-06-02 token tune (verified keys in `hermes-v2026.5.16-schema.md`):
 ```yaml
 session_reset:
   mode: both
-  idle_minutes: 15             # was 1440 default — zombie sessions broke prefix cache
+  idle_minutes: 180            # 15 until 2026-11-16: a clip job crosses many Fix replies, every reset re-read the router
 
 agent:
   max_turns: 20                # was 60 — cap iteration runaway
@@ -188,6 +188,7 @@ registered, `presenter-shots` still registered, Telegram reconnected. Re-enablin
 
 | วันที่ | เรื่อง |
 |--------|--------|
+| 2026-11-16 | `autogfx.py` (measured fx/gfx coordinates), finals kept 7 days, `reasoning_effort: low`, `idle_minutes: 180`, `wait_fix_min` union (`29f749d`). |
 | 2026-11-16 | Checked 7 clips of 11-15/16. Text-free style card, start frame on `ingest`, cleanup cwd rule (`77789bc`), Hermes' live edits pulled (`c6ebf75`, `17499c8`). Time per clip is LLM reasoning, not tools. |
 | 2026-11-15 | Omni 1.2 Flash readiness (`--seconds`, `cost`, credit docs), character portrait in the pack for the second Flow account, Hermes' 11-14 live edits ported, router back under 15 KB. |
 | 2026-11-13 | Checked muramasa + xenoblade 🎬 (268 / 545 min). `agent.max_turns` 100 → 250 (live), `clipjob wait`, `vprep.py`, one-vision-per-batch rule, Hermes' drift ported + `sub_bandprofile.py`. |
