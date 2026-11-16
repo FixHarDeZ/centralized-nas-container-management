@@ -1069,3 +1069,34 @@ Not done / open:
   tap → `decide --text`, auto close message after 5 min.
 - Fix decides: end the Hermes session at close; purge older workdirs / global Downloads + uv sweep; 🎬
   intermediates as junk.
+
+### 2026-11-16 (17:10) — check of the three clips made after the tune (read-only, nothing changed)
+- Jobs: `dettol-blossom-grapefruit` 🧑 🤖 (87 min, 60 cr), `venita-sunscreen` 🧑 📝 (40 min), `mhwilds-sw2-bundle` 🎬
+  (103 min). All three: clip + copy buttons + cover `ok`, `check_delivery` clean, files in `clips/finals/`,
+  no OOM, no vision timeout, every heavy-log start has an end (peak 1.57 GB).
+- Model cost by agent.log window (hatari before the tune: 274 calls, 224 min latency, 451k out tokens):
+  dettol 165 calls / 36 min / 75k out; venita 63 / 25 min / 51k; mhwilds 172 / 69 min / 104k.
+  Reasoning tokens per call (state.db sessions): 212 (`…8956152b`, 231 calls) and 408 (`…0b094d82`, 174 calls),
+  was ~1.9k. Post: 9 and 13 min (hatari 169). `autogfx` was used on both 🧑 jobs.
+- Frame gate on `low`: caught nothing wrong that I can see on the sheets; the venita audio defect
+  (`เหนอะหนะ` half-cut at 7.3 s) was flagged and Fix chose to send. No Flow-drawn pills in either 🧑 clip.
+- Seen on the final frames (contact sheets pulled from `finals/`):
+  - venita shot 1: the subtitle band sits on the tube for ~2–9 s and covers `SPF 50 PA+++` on the label;
+    dettol has the same overlap, milder (bottle label under the sub in shot 1). Nothing checks subs vs product.
+  - `autogfx` skipped the hook card in both 🧑 clips and 3 of 4 punches (venita `fx1/fx2` = `{}`), so the
+    graphics are two pills + small stickers + CTA pill.
+  - venita shot 2 close-up: pill `GEL TEXTURE` lies on the forehead/eyes (face box top y108, pill y≈210).
+  - mhwilds: fine; lower third of the frame is blurred background with only the box sticker.
+- 🏁 button, first real runs: shows under the delivery; the sleeper survived (venita closed `by: auto` at
+  14:55:59); mhwilds tap → `decide --text` → closed `by: tap` in 8 s, timer skipped itself. Venita's tap at
+  14:51:27 got no answer for 9 min: a post-turn skill-patch pass ran (two `skill_manage` refusals, one 300 s
+  stale stream at 154k context), then Hermes answered a replayed `✅ ผ่าน ช็อต 1` instead. After the mhwilds
+  close Hermes still spent 6 API calls / 6 min (16:48–16:54) on its own skill notes.
+- Unpulled live edits (after the 14:25 sync): `shopee-clip/references/presenter-graphics.md`,
+  `presenter-post.md` (14:56), `gameplay-clips/references/cover-sticker.md`, `gameplay-pitfalls.md` (16:53),
+  `flow-driver/references/flow-picker-dom.md`, `flow-browser-env.md` (14:36). Next sync refuses until `--pull`.
+- Small: dettol was delivered before the close code was live, so it has no `close`; Hermes' old จบงาน emptied
+  Downloads and its shot `file` paths point at deleted files (twins `scene1_raw.mp4`/`scene2_raw.mp4` are in
+  the workdir). Dettol shot 2: 21 min render + 8 min to download (grid Download dead, signed URL from payload).
+  Venita: Fix sent both mp4s 51 s apart, so the start-frame photo was not used; still unproven. Hermes'
+  `MEMORY.md` is over its limit (2289/2200), additions blocked. 📝 job still logs `credits: null`.
