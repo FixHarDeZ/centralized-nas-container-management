@@ -14,6 +14,8 @@ spec = importlib.util.spec_from_file_location("clipjob", os.path.join(HERE, "cli
 cj = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(cj)
 cj.FINALS_DIR = tempfile.mkdtemp(prefix="clipjob-finals-")     # no test writes into the real kept-finals dir
+os.environ["CLIPJOB_NO_TIMER"] = "1"                            # no test leaves a 5-minute close sleeper behind
+cj.DOWNLOADS = []                                               # nor deletes from the real Downloads dirs
 
 
 def job(shots=3, mode="presenter", prod=None):
@@ -602,3 +604,108 @@ def test_wait_on_fix_counts_overlapping_reviews_once():
                    {"ts": cj.iso(t0 + 2400), "msg": "decide shot 2: approve"},
                    {"ts": cj.iso(t0 + 2400), "msg": "decide shot 1: approve"}]
     assert cj.timeline(j, t0 + 3000)["wait_fix_min"] == 30          # 600 → 2400, not 30 + 20
+
+
+# ---------------------------------------------------------------- close (🏁 button / 5 min timer)
+@pytest.fixture
+def closing(tmp_path, monkeypatch):
+    """A delivered 🎬 job with a workdir under WORK and one Downloads dir; Telegram calls recorded."""
+    monkeypatch.setattr(cj, "DIR", str(tmp_path / "jobs")); monkeypatch.setenv("CLIPJOB_NO_TIMER", "1")
+    monkeypatch.delenv("CLIPJOB_NO_TG", raising=False)
+    monkeypatch.setattr(cj, "WORK", str(tmp_path / "work"))
+    monkeypatch.setattr(cj, "FINALS_DIR", str(tmp_path / "finals"))
+    monkeypatch.setattr(cj, "CLIP_LOG", str(tmp_path / "logs" / "clip-log.jsonl"))
+    dl = tmp_path / "dl"; dl.mkdir(); monkeypatch.setattr(cj, "DOWNLOADS", [str(dl)])
+    sent = []
+    monkeypatch.setattr(cj, "tg", lambda m, p=None, files=None: sent.append((m, p)) or {"message_id": 1})
+    monkeypatch.setattr(cj, "av_durations", lambda p: (20.0, 20.0))
+    monkeypatch.setattr(cj, "run", lambda cmd: (0, json.dumps({"ok": True}), ""))
+    wd = tmp_path / "work" / "g-1"
+    assert cj.main(["new", "g-1", "--mode", "gameplay", "--product", "Game", "--link", "https://s.shopee.co.th/x",
+                    "--workdir", str(wd)]) == 0
+    final = wd / "final.mp4"; final.write_bytes(b"FINAL"); cover = wd / "thumb.jpg"; cover.write_bytes(b"COVER")
+    args = ["deliver", "g-1", "--final", str(final), "--hashtags", "#game", "--cover", str(cover), "--caption", "c",
+            "--hook-id", "gph-1", "--category", "game"]
+    sent.clear()
+    assert cj.main(args) == 0
+    return {"wd": wd, "dl": dl, "sent": sent, "args": args, "final": final}
+
+
+def test_deliver_shows_the_close_button_and_arms_the_timer(closing):
+    last = [p for m, p in closing["sent"] if m == "sendMessage"][-1]
+    assert last["reply_markup"]["keyboard"] == [[{"text": "🏁 จบงาน · g-1"}]]
+    c = cj.load("g-1")["close"]
+    assert c["state"] == "pending" and c["token"] and c["due_ts"] > cj.now() + cj.CLOSE_S - 5
+    assert cj.parse_close_text("🏁 จบงาน · g-1") == "g-1" and cj.parse_close_text("จบงาน") is None
+
+
+def test_close_deletes_only_provable_junk(closing):
+    wd, dl = closing["wd"], closing["dl"]
+    for f in ("frame_sheet.jpg", "shot1.v.jpg", "shot1_last.jpg", "chrome.log", "plan.json", "subs.ass", "src_1.mp4"):
+        (wd / f).write_bytes(f.encode())
+    (wd / "fonts").mkdir(); (wd / "fonts" / "x_sheet.png").write_bytes(b"font")
+    (dl / "final_copy.mp4").write_bytes(b"FINAL")          # the delivered final, downloaded
+    (dl / "Flow_take_1.mp4").write_bytes(b"src_1.mp4")      # byte twin of a workdir source
+    (dl / "other.mp4").write_bytes(b"someone else's")
+    j = cj.load("g-1"); j["shots"] = [{"k": 1, "state": "approved", "file": str(dl / "Flow_take_1.mp4")}]; cj.save(j)
+    assert cj.main(["decide", "--text", "🏁 จบงาน · g-1"]) == 0
+    left = sorted(p.name for p in wd.iterdir())
+    assert left == ["fonts", "plan.json", "src_1.mp4", "subs.ass"]          # final + thumb live on in finals/
+    assert (wd / "fonts" / "x_sheet.png").exists() and wd.is_dir()
+    assert sorted(p.name for p in dl.iterdir()) == ["other.mp4"]
+    j = cj.load("g-1")
+    assert j["shots"][0]["file"] == str(wd / "src_1.mp4")                   # a revision still finds the shot
+    assert j["close"]["state"] == "closed" and j["close"]["by"] == "tap" and j["status"] == "delivered"
+    assert all(os.path.exists(k) for k in j["delivery"]["kept"])
+    msg = closing["sent"][-1][1]
+    assert "ปิดงาน g-1" in msg["text"] and msg["reply_markup"] == {"remove_keyboard": True}
+
+
+def test_tap_then_timer_and_timer_then_tap(closing, capsys):
+    tok = cj.load("g-1")["close"]["token"]
+    assert cj.main(["close", "g-1", "--auto", "--token", tok, "--after", "0"]) == 0
+    assert cj.load("g-1")["close"]["by"] == "auto"
+    assert "อัตโนมัติ" in closing["sent"][-1][1]["text"]
+    assert cj.main(["decide", "--text", "🏁 จบงาน · g-1"]) == 0                # late tap
+    assert closing["sent"][-1][1]["text"] == "งาน g-1 ปิดไปแล้วค่ะ"
+    assert cj.load("g-1")["close"]["by"] == "auto"
+    n = len(closing["sent"])
+    assert cj.main(["close", "g-1", "--auto", "--token", tok, "--after", "0"]) == 0   # a second timer: no-op
+    assert len(closing["sent"]) == n and "skipped" in capsys.readouterr().out
+
+
+def test_reopen_voids_the_timer_and_redeliver_arms_a_new_one(closing, capsys):
+    old = cj.load("g-1")["close"]["token"]
+    assert cj.main(["reopen", "g-1", "--reason", "ฟิก: แก้ซับ"]) == 0
+    assert "close" not in cj.load("g-1")
+    assert cj.main(["close", "g-1", "--auto", "--token", old, "--after", "0"]) == 0
+    assert "close" not in cj.load("g-1")
+    closing["final"].write_bytes(b"FINAL v2")
+    assert cj.main(closing["args"]) == 0
+    new = cj.load("g-1")["close"]["token"]
+    assert new != old
+    assert cj.main(["close", "g-1", "--auto", "--token", old, "--after", "0"]) == 0
+    assert cj.load("g-1")["close"]["state"] == "pending"
+    assert cj.main(["close", "g-1", "--auto", "--token", new, "--after", "0"]) == 0
+    assert cj.load("g-1")["close"]["state"] == "closed"
+
+
+def test_overdue_close_is_swept_by_the_next_command(closing):
+    j = cj.load("g-1"); j["close"]["due_ts"] = cj.now() - cj.CLOSE_GRACE_S - 1; cj.save(j)
+    assert cj.main(["status"]) == 0
+    c = cj.load("g-1")["close"]
+    assert c["state"] == "closed" and c["by"] == "auto (late)"
+
+
+def test_close_without_job_closes_every_waiting_one(closing):
+    assert cj.main(["close"]) == 0
+    assert cj.load("g-1")["close"]["by"] == "manual"
+
+
+def test_close_refuses_an_open_job_and_skips_a_workdir_outside_work(closing, tmp_path, monkeypatch):
+    assert cj.main(["new", "o-1", "--mode", "gameplay", "--product", "G", "--workdir", str(tmp_path / "w2")]) == 0
+    assert cj.main(["close", "o-1"]) == 1
+    monkeypatch.setattr(cj, "WORK", str(tmp_path / "elsewhere"))
+    (closing["wd"] / "a_sheet.jpg").write_bytes(b"x")
+    assert cj.main(["close", "g-1"]) == 0
+    assert (closing["wd"] / "a_sheet.jpg").exists()

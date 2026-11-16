@@ -28,6 +28,11 @@ This CLI is the only sanctioned way to move a Flow-mode clip forward. It refuses
                          --caption "..." [--hook-id ID] [--category C] [--notes "..."] [--ack "<flag text>=<Fix's call>" ...]
                          # 🎬 only: --report may be omitted; --style footage for a brand product film
                          # a re-run after a failed send skips the steps already done and logs the clip once
+                         # its last message carries the 🏁 จบงาน button; the job closes itself CLOSE_S (300 s) later
+  clipjob.py close [JOB]                            # close now (Fix's 🏁 tap = decide --text); no JOB = every delivered
+                                                    # job still waiting to close. Deletes only provable junk of that job
+                                                    # (frame sheets, .v.jpg, last frames, logs, copies of the kept final/
+                                                    # cover, Downloads twins); the revision set and the workdir stay
   clipjob.py cancel JOB --reason "..."
   clipjob.py note JOB "..."                         # stage marker in the job's events (🎬: what is done, what is next)
   clipjob.py wait JOB "..."                         # the turn is about to end on Fix (question, turn budget): starts the wait clock;
@@ -72,6 +77,14 @@ RATE = {"720p": 3, "360p": 1}
 FINALS_DIR = os.environ.get("CLIPJOB_FINALS", "/opt/data/clips/finals")   # delivered final + cover, for review
 KEEP_DAYS = 7              # Fix 2026-11-16: keep them a week (cleanup deletes the workdir and Downloads copies)
 CHAR_DIR = os.environ.get("CLIPJOB_CHARS", "/opt/data/clips/characters")   # <name>.jpg portrait per roster name
+# Fix 2026-11-16: "หลังส่งงาน ... ขึ้นปุ่มกดจบงาน ถ้าไม่กดภายใน 5 นาทีให้จบงานเอง"
+CLOSE_S = int(os.environ.get("CLIPJOB_CLOSE_S", "300"))
+CLOSE_GRACE_S = 60         # the lazy sweep leaves a just-due job to its own sleeper for this long
+CLOSE_BTN = "🏁 จบงาน"
+CLOSE_RE = re.compile(r"^🏁 จบงาน · ([a-z0-9][a-z0-9-]{0,40})$")
+DOWNLOADS = [d for d in os.environ.get("CLIPJOB_DOWNLOADS", "/opt/data/Downloads:/opt/data/home/Downloads").split(":") if d]
+# regenerable leftovers of a delivered job: frame/contact sheets, vision preps, start frames, logs, html dumps
+JUNK_RE = re.compile(r"(sheet[^/]*\.(jpe?g|png|webp)|\.v\.jpe?g|_last(frame)?\.jpe?g|\.(log|html))$", re.I)
 INFO_FLAGS = [re.compile(r"auto-added")]   # report flags that only inform (post_presenter adds the CTA pill itself)
 FLOW_MODES = ("presenter", "product", "hands")   # hands = product pipeline, hands in frame, no face
 MODES = FLOW_MODES + ("gameplay",)
@@ -432,6 +445,149 @@ def keep_final(label, final, cover, t=None):
     for src, name in ((final, label + ".mp4"), (cover, f"{label}_cover{os.path.splitext(cover)[1] or '.jpg'}")):
         kept.append(shutil.copyfile(src, os.path.join(FINALS_DIR, name)))
     return kept
+
+
+# ---------------------------------------------------------------- close (🏁 tap or 5 min after deliver)
+def close_keyboard(job):
+    return {"keyboard": [[{"text": f"{CLOSE_BTN} · {job}"}]], "one_time_keyboard": True, "resize_keyboard": True}
+
+
+def arm_close(j, t=None):
+    """Called by deliver: the job closes itself CLOSE_S later unless Fix taps 🏁 first.
+    The token ties the timer to THIS delivery: a reopen or a re-deliver makes an older timer a no-op."""
+    t = t if t is not None else now()
+    j["close"] = {"state": "pending", "due": iso(t + CLOSE_S), "due_ts": t + CLOSE_S,
+                  "token": f"{(j.get('delivery') or {}).get('sha256', '')[:12]}-{int(t)}"}
+    return j["close"]
+
+
+def parse_close_text(text):
+    m = CLOSE_RE.match((text or "").strip())
+    return m.group(1) if m else None
+
+
+def _under(path, root):
+    path, root = os.path.realpath(path), os.path.realpath(root)
+    return path.startswith(root.rstrip("/") + "/")
+
+
+def _rm(path, removed):
+    size = os.path.getsize(path)
+    os.remove(path)
+    removed.append(path)
+    return size
+
+
+def close_cleanup(j):
+    """Delete only what is provably this job's and regenerable. -> {"removed": [...], "freed": bytes}.
+    Never removes a directory (a deleted cwd breaks every later terminal call, 2026-11-15) and keeps the
+    revision set: shot files, scenes, plan/subs/gfx/fx, fonts, refs, board, report."""
+    d = j.get("delivery") or {}
+    kept = [k for k in (d.get("kept") if isinstance(d.get("kept"), list) else []) if os.path.isfile(k)]
+    kept_sha = {}
+    for k in kept:
+        kept_sha.setdefault(os.path.getsize(k), set()).add(sha256(k))
+    removed, freed, twins = [], 0, {}
+    wd = j.get("workdir")
+    if wd and os.path.isdir(wd) and _under(wd, WORK):
+        for root, dirs, files in os.walk(wd):
+            dirs[:] = [x for x in dirs if x != "fonts"]
+            for f in files:
+                p = os.path.join(root, f)
+                if os.path.islink(p) or not os.path.isfile(p):
+                    continue
+                size = os.path.getsize(p)
+                if JUNK_RE.search(f) or (size in kept_sha and sha256(p) in kept_sha[size]):
+                    freed += _rm(p, removed)      # the final + cover live on in FINALS_DIR
+                elif f.lower().endswith(".mp4"):
+                    twins.setdefault(size, []).append(p)
+    for dl in DOWNLOADS:
+        if not os.path.isdir(dl):
+            continue
+        for f in os.listdir(dl):
+            p = os.path.join(dl, f)
+            if os.path.islink(p) or not os.path.isfile(p):
+                continue
+            size = os.path.getsize(p)
+            if size not in kept_sha and size not in twins:
+                continue
+            h = sha256(p)
+            if h in kept_sha.get(size, ()):
+                freed += _rm(p, removed)
+                continue
+            twin = next((w for w in twins.get(size, []) if sha256(w) == h), None)
+            if twin:                              # a shot download the workdir holds byte-for-byte
+                for s in j.get("shots") or []:
+                    if s.get("file") and os.path.abspath(s["file"]) == os.path.abspath(p):
+                        s["file"] = twin
+                freed += _rm(p, removed)
+    return {"removed": removed, "freed": freed}
+
+
+def close_job(j, by):
+    """-> result dict. Idempotent: a second close (tap after the timer, or the other way round) changes nothing."""
+    c = j.get("close") or {}
+    if c.get("state") == "closed":
+        return {"job": j["job"], "already_closed": c}
+    if j["status"] != "delivered":
+        raise Refused(f"job {j['job']} is {j['status']}; only a delivered job is closed")
+    res = close_cleanup(j)
+    mb = round(res["freed"] / 1e6, 1)
+    j["close"] = {"state": "closed", "at": iso(), "by": by, "freed_mb": mb,
+                  "removed": [os.path.basename(p) for p in res["removed"]]}
+    log(j, f"closed by {by}: {len(res['removed'])} file(s), {mb} MB")
+    return {"job": j["job"], "closed": j["close"]}
+
+
+def close_text(j):
+    c = j["close"]
+    how = "อัตโนมัติ (ไม่ได้กดใน 5 นาที)" if c["by"].startswith("auto") else "ตามที่กด"
+    kept = (j.get("delivery") or {}).get("kept")
+    return (f"🏁 ปิดงาน {j['job']} แล้วค่ะ · {how}\nลบไฟล์ชั่วคราว {len(c['removed'])} ไฟล์ ({c['freed_mb']} MB)"
+            + (f"\nคลิป + ปกเก็บไว้ที่ clips/finals {KEEP_DAYS} วัน" if isinstance(kept, list) else ""))
+
+
+def spawn_closer(j):
+    """Detached sleeper: its own session, no inherited pipes, so the terminal tool returns at once and
+    Hermes does not track it as a background process. A gateway restart kills it; the sweep covers that."""
+    if os.environ.get("CLIPJOB_NO_TIMER"):
+        return None
+    os.makedirs(os.path.dirname(CLIP_LOG), exist_ok=True)
+    out = open(os.path.join(os.path.dirname(CLIP_LOG), "close-timer.log"), "a")
+    p = subprocess.Popen([sys.executable, os.path.abspath(__file__), "close", j["job"], "--auto",
+                          "--token", j["close"]["token"], "--after", str(CLOSE_S)],
+                         stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT,
+                         start_new_session=True, close_fds=True, cwd="/")
+    out.close()
+    return p.pid
+
+
+def due_closes(t=None):
+    """Delivered jobs whose close is overdue (their sleeper died with a gateway restart)."""
+    t = t if t is not None else now()
+    out = []
+    for f in sorted(os.listdir(DIR)) if os.path.isdir(DIR) else []:
+        if not f.endswith(".json") or f == "pacing.json":
+            continue
+        try:
+            jj = json.load(open(os.path.join(DIR, f), encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        c = jj.get("close") or {}
+        if jj.get("status") == "delivered" and c.get("state") == "pending" and c.get("due_ts", 0) + CLOSE_GRACE_S < t:
+            out.append(jj["job"])
+    return out
+
+
+def sweep_closes():
+    """Runs before every clipjob command; never lets a close problem break the command itself."""
+    try:
+        for job in due_closes():
+            j = load(job)
+            close_job(j, "auto (late)"); save(j)
+            notify(close_text(j))
+    except Exception as e:                     # best effort by design
+        print(f"close sweep skipped: {e}", file=sys.stderr)
 
 
 def probe_verdict(info):
@@ -982,7 +1138,10 @@ def cmd_deliver(j, a):
         j["delivery"]["kept"] = f"not kept: {e}"
     log(j, "delivered")
     j["timing"] = timeline(j)
-    notify(f"ส่งงาน {j['job']} ครบแล้วค่ะ\n{timeline_text(j['timing'])}")        # also clears the review reply keyboard
+    arm_close(j)
+    notify(f"ส่งงาน {j['job']} ครบแล้วค่ะ\n{timeline_text(j['timing'])}\n"
+           f"กด {CLOSE_BTN} เพื่อปิดงาน · ไม่กดภายใน {CLOSE_S // 60} นาที ปิดให้เอง",
+           close_keyboard(j["job"]))                  # replaces the review reply keyboard
     return j["delivery"]
 
 
@@ -992,6 +1151,8 @@ def summary(j):
            "shots": {s["k"]: s["state"] for s in j["shots"]}}
     if j.get("fallback"):
         out["fallback"] = j["fallback"]
+    if j.get("close"):
+        out["close"] = {k: v for k, v in j["close"].items() if k in ("state", "due", "at", "by", "freed_mb")}
     return out
 
 
@@ -1037,7 +1198,12 @@ def main(argv=None):
     s = sub.add_parser("note"); s.add_argument("job"); s.add_argument("text")
     s = sub.add_parser("wait"); s.add_argument("job"); s.add_argument("text")
     s = sub.add_parser("reopen"); s.add_argument("job"); s.add_argument("--reason", required=True)
+    s = sub.add_parser("close"); s.add_argument("job", nargs="?")
+    s.add_argument("--auto", action="store_true", help=argparse.SUPPRESS)       # the deliver timer
+    s.add_argument("--token", help=argparse.SUPPRESS); s.add_argument("--after", type=float, help=argparse.SUPPRESS)
     a = ap.parse_args(argv)
+    if a.cmd != "close":
+        sweep_closes()
 
     def out(obj):
         print(json.dumps(obj, ensure_ascii=False, indent=1)[:6000])
@@ -1071,6 +1237,21 @@ def main(argv=None):
                     if jj["status"] == "open":
                         rows.append(summary(jj))
             return out({"open_jobs": rows})
+        if a.cmd == "close" and a.after is not None:         # the sleeper spawned by deliver
+            time.sleep(max(0.0, a.after))
+            j = load(a.job); c = j.get("close") or {}
+            if j["status"] != "delivered" or c.get("state") != "pending" or c.get("token") != a.token:
+                return out({"job": a.job, "skipped": "closed, reopened or re-delivered since this timer started"})
+            res = close_job(j, "auto"); save(j); notify(close_text(j))
+            return out(res)
+        if a.cmd == "close" or (a.cmd == "decide" and parse_close_text(a.text)):
+            jobs = [a.job or parse_close_text(a.text)] if (a.job or a.cmd == "decide") else due_closes(now() + CLOSE_S + CLOSE_GRACE_S)
+            done = []
+            for job in jobs:
+                j = load(job); res = close_job(j, "tap" if a.cmd == "decide" else "manual"); save(j)
+                notify(close_text(j) if "closed" in res else f"งาน {job} ปิดไปแล้วค่ะ")
+                done.append(res)
+            return out({"closed": done, "next": "end the turn: one short line, no cleanup of your own"})
         if a.cmd == "decide":
             if a.text:
                 parsed = parse_decision_text(a.text)
@@ -1126,7 +1307,8 @@ def main(argv=None):
         if a.cmd == "reopen":
             if j["status"] != "delivered":
                 raise Refused(f"job {a.job} is {j['status']}; only a delivered job is reopened for a revision")
-            j["status"] = "open"; j["revision"] = a.reason; log(j, f"reopened for a revision: {a.reason}"); save(j)
+            j["status"] = "open"; j["revision"] = a.reason; j.pop("close", None)        # a waiting timer is now void
+            log(j, f"reopened for a revision: {a.reason}"); save(j)
             return out({**summary(j), "next": "rebuild, rerun the gates, then the same deliver command with the new final"})
         if a.cmd in ("submit-failed", "trouble"):
             fb = (submit_failed(j, a.shot, a.reason, a.credits_spent) if a.cmd == "submit-failed"
@@ -1189,8 +1371,15 @@ def main(argv=None):
             return 0
         if a.cmd == "deliver":
             d = cmd_deliver(j, a); save(j)
+            try:
+                pid = spawn_closer(j)
+            except OSError as e:                                # the sweep closes it on a later call
+                pid = f"timer not started: {e}"
             rc, o, e = run(["python3", os.path.join(HERE, "check_delivery.py")])
-            return out({"delivered": d, "check_delivery_exit": rc, "check_delivery": (o + e)[-600:]})
+            return out({"delivered": d, "check_delivery_exit": rc, "check_delivery": (o + e)[-600:],
+                        "close": {**j["close"], "timer_pid": pid},
+                        "next": f"one short line to Fix, then end the turn. No cleanup: Fix's {CLOSE_BTN} tap or the "
+                                f"timer runs clipjob.py close in {CLOSE_S // 60} min"})
         if a.cmd == "cancel":
             need_open(j)
             j["status"] = "cancelled"; log(j, f"cancelled: {a.reason}"); save(j)

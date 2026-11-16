@@ -133,9 +133,9 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
     It refuses when a shot is unapproved, graphics are empty, hashtags fail, verify-clip fails, or the report
     has a flag Fix has not decided on: tell him each flag with its frame time, he picks "ส่งแบบนี้" or regen;
     as-is = `--ack "<flag text>=<his call>"` (logged). Never edit `report.json` to clear a flag. A failed send =
-    rerun the same command (finished steps are skipped). Send no extra MEDIA or hashtag text in the
-    reply (it would duplicate them). Then do the cleanup
-    (`/opt/data/skills/flow-driver/references/flow-steps.md` step 13).
+    rerun the same command (finished steps are skipped). Send no extra MEDIA or hashtag text (it would
+    duplicate them). Its last message has the 🏁 จบงาน button: do NO cleanup, end the turn (🤖: close Chrome
+    first). A 🏁 tap → only `clipjob.py decide --text "<text>"`; no tap = it closes itself in 5 min.
 12b. **Close-out with no clip** (Fix orders the skip, `status` shows no shot file): `references/run-mode-gates.md`
    → Close-out. Never stage or imply a clip.
 12c. **Re-send of an already-delivered package** (`ขอคลิป hashtag และปักตะกร้า`, `สรุปอีกรอบ`): resolve WHICH

@@ -103,8 +103,7 @@ metadata:
     (`--report` is optional for gameplay: deliver checks audio == video duration itself). It runs verify-clip, appends
     the clip-log row (`style: gameplay`, `credits: 0`), sends the clip, the copy-button message (hashtags + basket
     link) and the cover, then check_delivery. A failed send = rerun the same command. Send no MEDIA line and no
-    hashtag text in the reply. **`--hook-id` = บรรทัดที่ VO ใช้จริง** (จับคู่ `templates/hooks.md` ก่อนส่ง — `pick-hook` คืน LRU อาจไม่ใช่บรรทัดที่เขียน). Cleanup afterwards: delete only scratch (frame sheets, OCR/scan files, intermediates)
-    and the Downloads copy **ลบจากลิสต์ที่ build ใน Python (`os.listdir` + keep-set)** ห้ามใช้ผล `list` ของเชลล์ (ถูกย่อเป็น `... (N more)` → `rm` ผิดไวยากรณ์/กินของที่ต้องเก็บ); keep set อย่างน้อย trailer/master/plan/vo/bg/cutout + seg sources + fonts/ + work/ สำหรับ step 11
+    hashtag text in the reply. **`--hook-id` = บรรทัดที่ VO ใช้จริง** (จับคู่ `templates/hooks.md` ก่อนส่ง — `pick-hook` คืน LRU อาจไม่ใช่บรรทัดที่เขียน). Then end the turn with NO cleanup of your own: deliver's 🏁 จบงาน button (or 5 min) runs `clipjob.py close`, which keeps the step-11 set; a 🏁 tap → only `clipjob.py decide --text "<text>"`
 11. **Revision pass (ฟิกทักแก้จุดเดียว)** — `clipjob.py reopen <job> --reason "<what Fix asked>"`, then reuse the
     passed seg/bg/trailer/master: fix the part he named → new `vo.mp3` + `subs.ass` (`--from-take` if only timing)
     → **regenerate every pill from the new timeline** → build → master → remux → the full gate set → the same
