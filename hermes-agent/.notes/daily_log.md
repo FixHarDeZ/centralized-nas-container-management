@@ -1009,3 +1009,16 @@ Not done / open:
 - Synced live, 84 tests passed in the container. Still not on GitHub (same `gh` token problem); commits reached
   Hermes' clone by `git bundle`.
 
+### 2026-11-16 — session closed
+- On `main`, local only (8 commits ahead of origin with this one; `git push` fails, `gh` token invalid on the Mac):
+  `77789bc` (text-free style card, start frame on ingest, cleanup cwd rule), `17499c8` (Hermes' live edit),
+  `29f749d` + `f9a704b` (`autogfx.py`, finals kept 7 days, `wait_fix_min` union), notes commits.
+  Hermes' clone got the skill commits by `git bundle` and is ahead of origin. Skills synced at `f9a704b`,
+  84 tests passed in the container. No deploy, no restart. No open clip job at close.
+- Live config: `agent.reasoning_effort: low`, `session_reset.idle_minutes: 180` (backup `config.yaml.bak-20261116`).
+- Open for the next session: Fix runs `gh auth login -h github.com`, then `git push origin main` (before any other
+  session or Hermes pushes: the clone holds the same commits, so a push from either side fast-forwards).
+  Then check the first 🧑 order after this tune: no Flow-drawn pills, start-frame photo used, `autogfx` called and
+  post time under the 169 min of hatari, reasoning tokens per call, frame gate still flags on `low`, files in
+  `/opt/data/clips/finals/`. Not fixed: `.v.jpg`/one-vision-per-batch ignored, ✅ tap replayed after a long turn,
+  📝 jobs log `credits: null`.
