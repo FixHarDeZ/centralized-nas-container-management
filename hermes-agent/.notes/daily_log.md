@@ -1038,7 +1038,8 @@ Not done / open:
   - Tap → `decide --text "🏁 จบงาน · job"` → close by `tap`; late tap = "งาน X ปิดไปแล้วค่ะ"; `close` (no job)
     closes every waiting job; any other clipjob command sweeps a close overdue by >60 s (gateway restart).
   - `close` deletes only provable junk of that job: `*sheet*.jpg/png`, `.v.jpg`, `*_last(frame).jpg`, `.log`,
-    `.html` in `work/<job>` (not `fonts/`), files byte-identical to the kept final/cover, Downloads files that
+    `.html` in `work/<job>` (not `fonts/`), files byte-identical to the kept final (the cover stays: a re-deliver
+    needs it, `d7993c1`), Downloads files that
     are copies of those or of a workdir mp4 (shot `file` repointed to the workdir twin). Never removes a
     directory, keeps the revision set, refuses an open job, skips a workdir outside `clips/work`.
 - Docs: router step 12 = no cleanup after deliver, 🏁 tap → only `decide --text` (15343 of 15360 B);
@@ -1046,7 +1047,9 @@ Not done / open:
 - Live edit (not repo-owned): `/opt/data/skills/productivity/pending-work-triage/SKILL.md` got a first
   paragraph: 🏁 text → only `decide --text`; typed `จบงาน` → `clipjob.py close` first. Pre-edit copy:
   `/opt/data/clips/skill-drift/triage-20261116/SKILL.md`.
-- Also ported 2 live Hermes edits to flow-driver refs (`1d5f603`). Synced at `1d5f603`, 91 tests in the container.
+- Also ported 2 live Hermes edits to flow-driver refs (`1d5f603`). Follow-up `d7993c1`: cover kept, per-file
+  OSError guards, tests pin DIR/WORK to temp dirs (main() sweeps DIR). Synced at `d7993c1`, 92 tests. Pushed.
+- `check_delivery.py` flags a missing file only on an UNverified row, so close deleting Downloads finals is fine.
 - Verified in the container (throwaway dirs, `CLIPJOB_CLOSE_S=6`, piped stdout): parent returned at once,
   job still pending at 3 s, closed `by: auto` at 6 s, sheet deleted, workdir kept.
 - Not proven: the sleeper surviving Hermes' terminal tool on a real order, the button showing up under
