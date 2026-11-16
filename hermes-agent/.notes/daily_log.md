@@ -1100,3 +1100,29 @@ Not done / open:
   the workdir). Dettol shot 2: 21 min render + 8 min to download (grid Download dead, signed URL from payload).
   Venita: Fix sent both mp4s 51 s apart, so the start-frame photo was not used; still unproven. Hermes'
   `MEMORY.md` is over its limit (2289/2200), additions blocked. 📝 job still logs `credits: null`.
+
+### 2026-11-16 (late afternoon) — fixes from the check: pills off the face, product above the sub band
+- Fix: "ตามที่แนะนำมาจัดได้เลย". Pulled Hermes' 6 live edits (`make hermes-skills ARGS=--pull`), ported as
+  `d5d0222` (download = stop after two empty clicks, picker card below the popover pane, cover-sticker checks at the
+  same timestamp, `verify-clip` leaves `Downloads/final.mp4`, `--color` choices, one defect = several FLAG lines).
+- `431d111`:
+  - `shopee-clip/scripts/pillclear.py` (new, 6 tests): skin share (YCrCb) of the pill's rectangle every 0.25 s.
+    Measured on today's scenes: hair/wall under the pill 0.11–0.57, close-up face 0.69–0.93. On face = window
+    mean > 0.62 or one sample > 0.75.
+  - `post_presenter.py` step 3b: a pill on her face moves to the nearest clear window of its own scene (full
+    length, then down to 1.5 s, 0.2 s clear of other pills), else it is dropped. The CTA pill never moves.
+    Result goes to `report.json` `notes` and prints as `NOTE:`; notes do not block `deliver`. `NO_PILL_CLEAR=1`
+    switches it off; a measuring error leaves the pill where it was.
+  - Subs over the product: cause was the prompt (`holding the tube … at chest height` = the sub band y 700–835).
+    `templates/clip-prompt.md` now has the holding-height line (beside her cheek, shoulder height or higher);
+    `references/frame-check.md` has the defect class + the question for the per-shot vision check (label at
+    55–65 % of frame height → tell Fix, his call). No script measures it: nothing locates the product.
+  - `references/presenter-post.md`: what the `NOTE:` lines mean.
+- Synced live at `431d111`, 98 tests passed in the container, pushed. No deploy, no restart.
+- Verified in the container on a throwaway copy of venita's two fx scenes (real `post_presenter.py` run):
+  `FIRST STEP` kept at 1.00–3.50, `GEL TEXTURE` dropped (close-up from 1.5 s until the CTA span), 19.75 s out.
+  Copy deleted.
+- Not proven: a pill being MOVED on a real order (venita's case ends in a drop), Hermes writing the
+  holding-height line into a prompt, the frame-check question being asked.
+- Not done, Fix decides: `autogfx` skips the hook card when no free wall holds it (both 🧑 clips today) — thinner
+  graphics vs letting the card cover the room.
