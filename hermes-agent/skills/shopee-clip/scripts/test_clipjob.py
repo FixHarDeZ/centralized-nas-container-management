@@ -5,6 +5,7 @@ Run: uv run --with pytest pytest -q hermes-agent/skills/shopee-clip/scripts/test
 import importlib.util
 import json
 import os
+import tempfile
 
 import pytest
 
@@ -12,6 +13,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 spec = importlib.util.spec_from_file_location("clipjob", os.path.join(HERE, "clipjob.py"))
 cj = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(cj)
+cj.FINALS_DIR = tempfile.mkdtemp(prefix="clipjob-finals-")     # no test writes into the real kept-finals dir
 
 
 def job(shots=3, mode="presenter", prod=None):
@@ -371,6 +373,7 @@ def test_cli_ready_keeps_state_when_send_fails_then_resend(tmp_path, monkeypatch
 
 def test_cli_gameplay_job_note_deliver_reopen(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(cj, "DIR", str(tmp_path)); monkeypatch.setenv("CLIPJOB_NO_TG", "1")
+    monkeypatch.setattr(cj, "FINALS_DIR", str(tmp_path / "finals"))
     log = tmp_path / "clip-log.jsonl"; monkeypatch.setattr(cj, "CLIP_LOG", str(log))
     assert cj.main(["new", "g-1", "--mode", "gameplay", "--product", "Game", "--link", "https://s.shopee.co.th/x",
                     "--workdir", str(tmp_path / "w")]) == 0
@@ -384,6 +387,8 @@ def test_cli_gameplay_job_note_deliver_reopen(tmp_path, monkeypatch, capsys):
     assert cj.main(args) == 0
     row = json.loads(log.read_text(encoding="utf-8").splitlines()[-1])
     assert row["style"] == "gameplay" and row["credits"] == 0 and row["duration_s"] == 20.0 and row["edit_id"] is None
+    kept = cj.load("g-1")["delivery"]["kept"]
+    assert [os.path.basename(k) for k in kept] == ["g-1.mp4", "g-1_cover.jpg"] and all(os.path.exists(k) for k in kept)
     assert cj.main(args) == 1                                   # delivered: closed
     assert cj.main(["reopen", "g-1", "--reason", "ฟิก: ซับทับ sticker"]) == 0
     final.write_bytes(b"b")
@@ -575,3 +580,25 @@ def test_start_frame_is_not_sent_for_a_shot_that_already_has_a_file(tmp_path):
     j = job(shots=2, prod="prompt"); j["workdir"] = str(tmp_path)
     cj.shot(j, 2)["state"] = "in_review"
     assert cj.next_start_frame(j, 1, "/tmp/none.mp4") is None
+
+
+def test_kept_finals_older_than_a_week_are_dropped(tmp_path, monkeypatch):
+    monkeypatch.setattr(cj, "FINALS_DIR", str(tmp_path / "finals"))
+    final = tmp_path / "f.mp4"; final.write_bytes(b"a"); cover = tmp_path / "c.jpg"; cover.write_bytes(b"c")
+    old = cj.keep_final("old-job", str(final), str(cover))
+    cj.keep_final("new-job", str(final), str(cover), t=cj.now() + 6 * 86400)
+    assert all(os.path.exists(p) for p in old)
+    cj.keep_final("newer-job", str(final), str(cover), t=cj.now() + 8 * 86400)
+    assert not any(os.path.exists(p) for p in old)
+    assert sorted(os.listdir(tmp_path / "finals")) == ["newer-job.mp4", "newer-job_cover.jpg"]
+
+
+def test_wait_on_fix_counts_overlapping_reviews_once():
+    j = job(shots=2, prod="auto")
+    t0 = cj._epoch(j["created"])
+    j["events"] = [{"ts": cj.iso(t0), "msg": "created"},
+                   {"ts": cj.iso(t0 + 600), "msg": "ready shot 1 pass=True"},
+                   {"ts": cj.iso(t0 + 1200), "msg": "ready shot 2 pass=True"},
+                   {"ts": cj.iso(t0 + 2400), "msg": "decide shot 2: approve"},
+                   {"ts": cj.iso(t0 + 2400), "msg": "decide shot 1: approve"}]
+    assert cj.timeline(j, t0 + 3000)["wait_fix_min"] == 30          # 600 → 2400, not 30 + 20

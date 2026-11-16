@@ -17,6 +17,29 @@ Fix's order: keep OUR subtitle style for all Thai subs, and add a preset that co
 
 ## Pipeline order (all post-production, 0 credits)
 
+### Coordinates come from `scripts/autogfx.py`, not from reasoning (2026-11-16)
+On hatari-s14m1 the post scripts ran for about 2 minutes while the model spent 81 minutes working out face boxes,
+the hook card rect, punch centres and sticker spots. `autogfx.py` measures all of them (layout_probe's face
+detection and free-wall mask, plus a texture mask so a white product or cream knitwear is not taken for wall):
+
+```
+R='uv run --with opencv-python-headless<5 --with numpy python /opt/data/skills/shopee-clip/scripts/autogfx.py'
+$R fx sceneN_cut.mp4 --out fx1.json --hook --product ref1.jpg     # scene 1: hook card + punch (step 1 input)
+$R fx sceneN_cut.mp4 --out fx2.json                               # later scenes: punch only
+$R gfx out.mp4 --report report.json --out gfx.json --fx1 fx1.json # after post_presenter (step 3 input)
+```
+
+- About 20 s per call. Each prints the plan it wrote and a `skipped` list. On the real hatari shots its hook card
+  and punch came within 10 px of the hand-made ones.
+- **A skipped element is left out on purpose** (no face found, she leans into the camera, no free wall because the
+  product fills the frame). Do not fill the gap with a guessed coordinate. A clip with one sticker is fine. Only
+  `NO sticker placed` needs you: add ONE element by hand with step 0b's probe, because `deliver` refuses an empty plan.
+- Add what the product needs on top (a callout on a close-up, a headline): keep the numbers already in the file.
+- The gates after it are unchanged: `graphics_layer.py --check`, then ONE vision look at a frame sheet of the
+  render (each sticker's start + 0.3 s). The check that the hook card is clear at both ends of its window is
+  already inside `fx` (it probes 0–1.4, 0–2.0, 0–2.5, 0–3.0 s and keeps the last window that fits).
+- Steps 0b, 1 and 3 below describe the same maths for the cases you place by hand.
+
 ### 0a. `scripts/detect_repeats.py scene_raw.mp4 --script prompt_sN.txt --cut sceneN_cut.mp4` (every raw scene, one at a time)
 **Skip the run when the job JSON already has `gates.repeats` for that shot — `clipjob.py ready` runs exactly this detector on every 🧑 shot.** Read the verdict instead of paying a second whisper pass over every scene: `note: ""` = clean (use `shotK_raw.mp4`), `note: "ตัดคำซ้ำแล้ว: …"` = the `_cut.mp4` exists and is the file to feed step 1. Only run it yourself when a scene arrived outside `ready` (no gate in the JSON).
 Run it as `uv run --with faster-whisper --with numpy python …`. It runs unprompted word-level ASR and looks for ADJACENT doubled phrases that the script does not contain twice.

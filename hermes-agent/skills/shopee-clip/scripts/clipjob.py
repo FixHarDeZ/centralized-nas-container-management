@@ -69,6 +69,8 @@ SHOT_MIN = 3
 # "6 Sec · Generating will use 18 credits", an 8 s shot billed 24); 360p is a third-party figure. Flow's line
 # wins, and `submitted --credits` records what was read.
 RATE = {"720p": 3, "360p": 1}
+FINALS_DIR = os.environ.get("CLIPJOB_FINALS", "/opt/data/clips/finals")   # delivered final + cover, for review
+KEEP_DAYS = 7              # Fix 2026-11-16: keep them a week (cleanup deletes the workdir and Downloads copies)
 CHAR_DIR = os.environ.get("CLIPJOB_CHARS", "/opt/data/clips/characters")   # <name>.jpg portrait per roster name
 INFO_FLAGS = [re.compile(r"auto-added")]   # report flags that only inform (post_presenter adds the CTA pill itself)
 FLOW_MODES = ("presenter", "product", "hands")   # hands = product pipeline, hands in frame, no face
@@ -197,16 +199,20 @@ def timeline(j, end=None):
     start = min(created, _epoch(j["started"])) if j.get("started") else created
     stages = [["เตรียม", mins(start, created)]]
     decides = [t for t, m in ev if m.startswith("decide shot")]
-    wait, ready_at = 0.0, {}
+    spans, ready_at = [], {}
     for (t, m), nxt in zip(ev, [t for t, _ in ev[1:]] + [end]):
         if m.startswith("wait:"):                       # the turn ended on Fix; the next event is the resume
-            wait += max(0, nxt - t)
+            spans.append((t, max(t, nxt)))
     for t, m in ev:
         mm = re.match(r"(ready|decide) shot (\d+)", m)
         if mm and mm.group(1) == "ready":
             ready_at[mm.group(2)] = t
         elif mm and mm.group(2) in ready_at:
-            wait += t - ready_at.pop(mm.group(2))
+            spans.append((ready_at.pop(mm.group(2)), t))
+    wait, upto = 0.0, 0.0                               # union: three shots in review at once are one wait, not three
+    for a, b in sorted(spans):
+        wait += max(0.0, b - max(a, upto))
+        upto = max(upto, b)
     if decides:
         stages += [["gen+รีวิว", mins(created, decides[-1])], ["post", mins(decides[-1], end)]]
     else:
@@ -413,6 +419,19 @@ def next_start_frame(j, k, file):
     if not nxt or nxt["state"] not in ("pending", "packed", "regen_approved"):
         return None
     return last_frame(file, os.path.join(j["workdir"], f"shot{k}_last.jpg"))
+
+
+def keep_final(label, final, cover, t=None):
+    """Copy the delivered final + cover to FINALS_DIR and drop copies older than KEEP_DAYS. -> kept paths."""
+    os.makedirs(FINALS_DIR, exist_ok=True)
+    t = t if t is not None else now()
+    for f in glob.glob(os.path.join(FINALS_DIR, "*")):
+        if os.path.isfile(f) and t - os.path.getmtime(f) > KEEP_DAYS * 86400:
+            os.remove(f)
+    kept = []
+    for src, name in ((final, label + ".mp4"), (cover, f"{label}_cover{os.path.splitext(cover)[1] or '.jpg'}")):
+        kept.append(shutil.copyfile(src, os.path.join(FINALS_DIR, name)))
+    return kept
 
 
 def probe_verdict(info):
@@ -957,6 +976,10 @@ def cmd_deliver(j, a):
     j["status"] = "delivered"
     j.pop("revision", None)
     j["delivery"] = {"at": iso(), "sha256": digest, "file": final, "sent": done, "logged": True}
+    try:
+        j["delivery"]["kept"] = keep_final(label, final, a.cover)
+    except OSError as e:                                # a full disk never blocks a delivery that already went out
+        j["delivery"]["kept"] = f"not kept: {e}"
     log(j, "delivered")
     j["timing"] = timeline(j)
     notify(f"ส่งงาน {j['job']} ครบแล้วค่ะ\n{timeline_text(j['timing'])}")        # also clears the review reply keyboard

@@ -122,7 +122,8 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
     for that tap too. Shot 2 may render while shot 1 is reviewed only when shot 1 passed every gate.
 11. **Post-production (graphics always).** `clipjob.py assemble-check <job>` prints the approved files in order — copy exactly those paths into the workdir (a leftover `shotK_raw.mp4` may be a rejected take).
     - 🧑: `references/presenter-rules.md` + `references/presenter-graphics.md`:
-      `layout_probe` → `presenter_fx` → `post_presenter` → `graphics_layer --report … --check`, then render.
+      `autogfx.py fx` → `presenter_fx` → `post_presenter` → `autogfx.py gfx` → `graphics_layer --report … --check`,
+      then render. `autogfx` MEASURES every coordinate: never work one out by hand.
     - 📦/✋: `references/product-mode.md`: `product_build.py` (gameplay VO recipe), then
       `graphics_layer --report <workdir>/report.json`.
     - Read `report.json` and every `FLAG:` line. Then make a frame sheet (`references/frame-check.md`) and

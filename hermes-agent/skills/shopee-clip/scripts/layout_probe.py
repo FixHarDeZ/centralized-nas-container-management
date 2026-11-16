@@ -101,6 +101,47 @@ def best_edge_rect(empty, side, aspect=None):
     return [0, ry0, mw * S, ry1] if side == "L" else [W - mw * S, ry0, W, ry1]
 
 
+def probe(video, s, e, step=0.25, aspect=None):
+    """One window -> {window, face, empty_left, empty_right, overlay, note, busy}. busy = the 180x320 mask
+    of cells that are person/props in ANY sampled frame (autogfx.py places stickers on its free cells)."""
+    ts = list(np.arange(s, e + 1e-6, step)) or [s]
+    acc, fl = None, []
+    for t in ts:
+        img = frame(video, float(t))
+        b = busy(img)
+        acc = b if acc is None else (acc | b)
+        f = faces(img)
+        if f:
+            fl.append(f)
+    # median box (robust to one false detection), then widen to cover the spread of real ones
+    fu = None
+    if fl:
+        arr = np.array(fl)
+        med = np.median(arr, axis=0)
+        ok = arr[(np.abs(arr - med) < 80).all(axis=1)]
+        ok = ok if len(ok) else arr
+        fu = [int(ok[:, 0].min()), int(ok[:, 1].min()), int(ok[:, 2].max()), int(ok[:, 3].max())]
+    empty = acc == 0
+    L, R = best_edge_rect(empty, "L", aspect), best_edge_rect(empty, "R", aspect)
+    area = (lambda r: 0 if not r else min(r[3] - r[1] - 62, (r[2] - r[0] - 2 * X_EDGE - 54) / aspect)) if aspect \
+        else (lambda r: 0 if not r else (r[2] - r[0]) * (r[3] - r[1]))
+    side = R if area(R) >= area(L) else L
+    ov = None
+    if side:
+        # inset 12 px from the edge, 10 px vertically; cutout adds ~42 px of border/shadow
+        side = [max(side[0], X_EDGE), side[1], min(side[2], W - X_EDGE), side[3]]
+        bw, bh = side[2] - side[0] - 12, side[3] - side[1] - 20
+        h = bh - 42
+        if aspect:
+            h = int(min(h, (bw - 42) / aspect))
+        is_r = side[2] >= W - X_EDGE
+        cx = (side[0] + side[2]) // 2
+        ov = {"x": int(cx), "y": int((side[1] + side[3]) // 2), "h": int(max(0, h)), "side": "right" if is_r else "left"}
+    return {"window": [round(s, 3), round(e, 3)], "face": fu, "empty_left": L, "empty_right": R, "overlay": ov,
+            "note": None if (ov and ov["h"] >= 150) else "no empty side big enough - skip the overlay or shorten it",
+            "busy": acc}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("video")
@@ -114,42 +155,10 @@ def main():
         aspect = p.shape[1] / p.shape[0]
     out = []
     for s, e in a.window:
-        ts = list(np.arange(s, e + 1e-6, a.step)) or [s]
-        acc, fl = None, []
-        for t in ts:
-            img = frame(a.video, float(t))
-            b = busy(img)
-            acc = b if acc is None else (acc | b)
-            f = faces(img)
-            if f:
-                fl.append(f)
-        # median box (robust to one false detection), then widen to cover the spread of real ones
-        fu = None
-        if fl:
-            arr = np.array(fl)
-            med = np.median(arr, axis=0)
-            ok = arr[(np.abs(arr - med) < 80).all(axis=1)]
-            ok = ok if len(ok) else arr
-            fu = [int(ok[:, 0].min()), int(ok[:, 1].min()), int(ok[:, 2].max()), int(ok[:, 3].max())]
-        empty = acc == 0
-        L, R = best_edge_rect(empty, "L", aspect), best_edge_rect(empty, "R", aspect)
-        area = (lambda r: 0 if not r else min(r[3] - r[1] - 62, (r[2] - r[0] - 2 * X_EDGE - 54) / aspect)) if aspect \
-            else (lambda r: 0 if not r else (r[2] - r[0]) * (r[3] - r[1]))
-        side = R if area(R) >= area(L) else L
-        ov = None
-        if side:
-            # inset 12 px from the edge, 10 px vertically; cutout adds ~42 px of border/shadow
-            side = [max(side[0], X_EDGE), side[1], min(side[2], W - X_EDGE), side[3]]
-            bw, bh = side[2] - side[0] - 12, side[3] - side[1] - 20
-            h = bh - 42
-            if aspect:
-                h = int(min(h, (bw - 42) / aspect))
-            is_r = side[2] >= W - X_EDGE
-            cx = (side[0] + side[2]) // 2
-            ov = {"x": int(cx), "y": int((side[1] + side[3]) // 2), "h": int(max(0, h)), "side": "right" if is_r else "left"}
-        out.append({"window": [round(s + a.offset, 3), round(e + a.offset, 3)], "face": fu,
-                    "empty_left": L, "empty_right": R, "overlay": ov,
-                    "note": None if (ov and ov["h"] >= 150) else "no empty side big enough - skip the overlay or shorten it"})
+        o = probe(a.video, s, e, a.step, aspect)
+        o.pop("busy")
+        o["window"] = [round(s + a.offset, 3), round(e + a.offset, 3)]
+        out.append(o)
     for o in out:
         print(json.dumps(o, ensure_ascii=False, default=int))
 
