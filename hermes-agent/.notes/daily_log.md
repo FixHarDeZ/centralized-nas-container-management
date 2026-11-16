@@ -938,13 +938,13 @@ Not done / open:
 
 ### 2026-11-16 — checked the clips of 11-15 and 11-16
 - 7 delivered, 0 cancelled: tomb-raider-atlantis 🎬 (134 min), tomb-raider-atlantis2 🧑📝 (253), withat-softener 🧑🤖
-  (158, 60 credits, 3 shots, no regen), garmin-fr965-20s 🧑📝 (142), 13z-zodiac-trials 🎬 (103), 13z-ps5 🎬 (70, reused
+  (158, 60 credits recorded, 3 shots, no regen), garmin-fr965-20s 🧑📝 (142), 13z-zodiac-trials 🎬 (103), 13z-ps5 🎬 (70, reused
   the Switch job's sources), hatari-s14m1 🧑📝 (291). Every delivery sent clip + copy buttons + cover. No OOM, no
   max-iterations, one 420 s vision timeout (11-15 11:23).
 - Viewed: raw shots of hatari and garmin (inbound cache), hatari cover, the portrait sheet. No final mp4 exists
   anywhere (cleanup), so graphics/subs/audio of the finished clips were NOT viewed. The other five: logs only.
   - hatari shot 2: Flow drew pastel pills (`EASY ADJUST`, `3 LEVELS`, `3-YEAR MOTOR WARRANTY`, `LINK BELOW!`) and
-    moved to a plain studio backdrop (shot 1 = living room). Fix approved. Cause 1: `templates/style-card.md`, pasted
+    moved to a plain studio backdrop (shot 1 = living room). Fix approved. Likely cause 1 (shot 1 carried the same card and came out clean; confirm on the next 🧑 order): `templates/style-card.md`, pasted
     into every prompt, described caption font, position, "EN labels per beat" and `Link below!` beside
     "ON-SCREEN TEXT: NONE". Cause 2: in 📝 mode both shots are packed before either exists, so shot 2's message only
     asked Fix to use shot 1's last frame himself.
@@ -957,17 +957,22 @@ Not done / open:
   10:02–10:27 = 48k tokens before writing `gfx.json`). Session rows: reasoning is 70–90% of output
   (`agent.reasoning_effort: medium`). Tool time per job is 18–73 min, mostly `vision_analyze` (mean 49–99 s).
 - `session_reset.idle_minutes: 15` starts a new session at almost every Fix reply (5 sessions for hatari); each one
-  re-reads the router (185 `skill_view` in two days). At 11:18 the new session read "✅ ผ่าน ช็อต 2" as "go to shot 3",
-  searched for files that do not exist, re-verified the finished clip and delivered at 11:44 (26 min after post ended).
+  re-reads the router (185 `skill_view` in two days). Fix's "✅ ผ่าน ช็อต 2" tap of 08:54:59 landed mid-turn (recorded by `decide` at 08:55). When that turn ended at 11:17
+  the same message (id 11049) was replayed into a fresh session at 11:18, which read it as "go to shot 3", searched
+  for files that do not exist, re-verified the finished clip and delivered at 11:44 (26 min after post ended).
+  So the reset is one half; the replayed stale tap is the other. The 📝 jobs' credits are not recorded (`credits: null`,
+  ≈30 + 60 + 48 at 3 cr/s).
   A turn cut by the reset is not in `state.db` (session `…96cb9f84`: 34 messages for 100 API calls).
 - `origin=background_review` runs after each turn (47 in two days, up to 16 calls, 4–15 min, beside the next turn);
   it is where Hermes' live skill edits come from.
 - Terminal cwd trap: 40 terminal calls failed with `cd: /opt/data/clips/work/gundam-ro-gfx: No such file` exit 126
-  (the tool's persisted cwd was a workdir deleted on 11-14). Stop-gap: recreated the empty directory.
+  (the tool's persisted cwd was a workdir deleted on 11-14). Stop-gap: recreated the empty directory (owner hermes); a relative-path command now runs in that empty folder
+  until the gateway restarts.
 - Rules not followed: 33 of 190 vision calls used a `.v.jpg`; 32 calls started within 2 s of another.
 - Measured for the open items: Flow panel `6 Sec · Generating will use 18 credits` and 24 for 8 s = 3 cr/s at 720p.
   withat's board said 7/6/7 s, Flow made 8/6/6 (Hermes' docs now say the control offers 4/6/8/10).
-  `wait_fix_min` 115 for withat is wrong against ~9 min of idle in the log (not looked into).
+  `wait_fix_min` 115 for withat = 56 + 38 + 21, the three review→decision gaps added although they overlap
+  (`timeline` bug, not fixed).
   Portraits: 12 jpg (1376×768) saved 11-15 01:04, sheet viewed, names match faces seen in clips, 0 credits per its log.
 - Hermes pushed 5 commits of its own live edits (`faab3ef`…`c6ebf75`); pulled, 73 tests passed.
 - Changed (`77789bc`): style card block and `clip-prompt.md` name no caption wording; `clipjob.py ingest` sends
@@ -980,4 +985,5 @@ Not done / open:
   public). The commits went to Hermes' clone as a `git bundle`, so the clone is ahead of origin. No deploy, no restart.
 - Open, Fix decides: `reasoning_effort` low trial (backup config first, compare reasoning tokens per call and the
   gate verdicts on the next clip); raise `idle_minutes` or keep 15; keep finals 7 days (his 11-04 call was "do not
-  keep finished clips"); a helper that computes fx/gfx coordinates. Not built.
+  keep finished clips"); a helper that computes fx/gfx coordinates. Not built. `templates/styles.md` presets still
+  say "caption EN ต่อ beat" under the override banner (not cleaned).
