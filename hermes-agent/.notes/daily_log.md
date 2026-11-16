@@ -935,3 +935,49 @@ Not done / open:
   touched no skill file and spent nothing; if it failed, Fix sends the task text in Telegram. Then the items from
   above: real credits line on Omni 1.2, saved default model in the Flow project, first shot under 10 s through post,
   360p A/B (needs Fix's OK, ~40 credits). Router is at 15354 of 15360 B.
+
+### 2026-11-16 — checked the clips of 11-15 and 11-16
+- 7 delivered, 0 cancelled: tomb-raider-atlantis 🎬 (134 min), tomb-raider-atlantis2 🧑📝 (253), withat-softener 🧑🤖
+  (158, 60 credits, 3 shots, no regen), garmin-fr965-20s 🧑📝 (142), 13z-zodiac-trials 🎬 (103), 13z-ps5 🎬 (70, reused
+  the Switch job's sources), hatari-s14m1 🧑📝 (291). Every delivery sent clip + copy buttons + cover. No OOM, no
+  max-iterations, one 420 s vision timeout (11-15 11:23).
+- Viewed: raw shots of hatari and garmin (inbound cache), hatari cover, the portrait sheet. No final mp4 exists
+  anywhere (cleanup), so graphics/subs/audio of the finished clips were NOT viewed. The other five: logs only.
+  - hatari shot 2: Flow drew pastel pills (`EASY ADJUST`, `3 LEVELS`, `3-YEAR MOTOR WARRANTY`, `LINK BELOW!`) and
+    moved to a plain studio backdrop (shot 1 = living room). Fix approved. Cause 1: `templates/style-card.md`, pasted
+    into every prompt, described caption font, position, "EN labels per beat" and `Link below!` beside
+    "ON-SCREEN TEXT: NONE". Cause 2: in 📝 mode both shots are packed before either exists, so shot 2's message only
+    asked Fix to use shot 1's last frame himself.
+  - hatari cover: the label sits on the middle of the fan and the presenter's eyes are cut by the top edge.
+  - garmin: strap plain (ref has a perforated two-tone strap), shot 2 never runs in place; both flagged by the frame
+    gate and approved by Fix. Same backdrop in both shots.
+- Where the time goes (agent.log `latency=`, state.db `reasoning_tokens`): the model, not the tools.
+  hatari: 274 API calls, 224 min of model latency, 451k output tokens; its post turn (08:50–11:17) ran
+  `post_presenter` once for 60 s, while 27 calls with >3k output tokens took 81 of 126 model minutes (four calls
+  10:02–10:27 = 48k tokens before writing `gfx.json`). Session rows: reasoning is 70–90% of output
+  (`agent.reasoning_effort: medium`). Tool time per job is 18–73 min, mostly `vision_analyze` (mean 49–99 s).
+- `session_reset.idle_minutes: 15` starts a new session at almost every Fix reply (5 sessions for hatari); each one
+  re-reads the router (185 `skill_view` in two days). At 11:18 the new session read "✅ ผ่าน ช็อต 2" as "go to shot 3",
+  searched for files that do not exist, re-verified the finished clip and delivered at 11:44 (26 min after post ended).
+  A turn cut by the reset is not in `state.db` (session `…96cb9f84`: 34 messages for 100 API calls).
+- `origin=background_review` runs after each turn (47 in two days, up to 16 calls, 4–15 min, beside the next turn);
+  it is where Hermes' live skill edits come from.
+- Terminal cwd trap: 40 terminal calls failed with `cd: /opt/data/clips/work/gundam-ro-gfx: No such file` exit 126
+  (the tool's persisted cwd was a workdir deleted on 11-14). Stop-gap: recreated the empty directory.
+- Rules not followed: 33 of 190 vision calls used a `.v.jpg`; 32 calls started within 2 s of another.
+- Measured for the open items: Flow panel `6 Sec · Generating will use 18 credits` and 24 for 8 s = 3 cr/s at 720p.
+  withat's board said 7/6/7 s, Flow made 8/6/6 (Hermes' docs now say the control offers 4/6/8/10).
+  `wait_fix_min` 115 for withat is wrong against ~9 min of idle in the log (not looked into).
+  Portraits: 12 jpg (1376×768) saved 11-15 01:04, sheet viewed, names match faces seen in clips, 0 credits per its log.
+- Hermes pushed 5 commits of its own live edits (`faab3ef`…`c6ebf75`); pulled, 73 tests passed.
+- Changed (`77789bc`): style card block and `clip-prompt.md` name no caption wording; `clipjob.py ingest` sends
+  shot K's last frame as "เฟรมเริ่มของช็อต K+1" when K+1 has no file yet (2 tests); pack text for a later shot says
+  to wait for that photo; `flow-steps.md` step 13: delete a workdir from outside it; `RATE` comment = measured.
+  `17499c8`: Hermes' one new live edit to `presenter-post.md` ported.
+- Synced at `17499c8`, 75 tests passed in the container. Live check: `next_start_frame` on the real hatari shot 1
+  wrote a 720×1280 jpg. The Telegram send of that photo and the new style card are unproven until the next 🧑 order.
+- **Not pushed to GitHub:** `git push` fails on this Mac (`gh`: token invalid; fetch works because the repo is
+  public). The commits went to Hermes' clone as a `git bundle`, so the clone is ahead of origin. No deploy, no restart.
+- Open, Fix decides: `reasoning_effort` low trial (backup config first, compare reasoning tokens per call and the
+  gate verdicts on the next clip); raise `idle_minutes` or keep 15; keep finals 7 days (his 11-04 call was "do not
+  keep finished clips"); a helper that computes fx/gfx coordinates. Not built.
