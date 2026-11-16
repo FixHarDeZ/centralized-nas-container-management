@@ -31,8 +31,8 @@ This CLI is the only sanctioned way to move a Flow-mode clip forward. It refuses
                          # its last message carries the 🏁 จบงาน button; the job closes itself CLOSE_S (300 s) later
   clipjob.py close [JOB]                            # close now (Fix's 🏁 tap = decide --text); no JOB = every delivered
                                                     # job still waiting to close. Deletes only provable junk of that job
-                                                    # (frame sheets, .v.jpg, last frames, logs, copies of the kept final/
-                                                    # cover, Downloads twins); the revision set and the workdir stay
+                                                    # (frame sheets, .v.jpg, last frames, logs, copies of the kept final,
+                                                    # Downloads twins); the revision set, cover and workdir stay
   clipjob.py cancel JOB --reason "..."
   clipjob.py note JOB "..."                         # stage marker in the job's events (🎬: what is done, what is next)
   clipjob.py wait JOB "..."                         # the turn is about to end on Fix (question, turn budget): starts the wait clock;
@@ -472,8 +472,12 @@ def _under(path, root):
 
 
 def _rm(path, removed):
-    size = os.path.getsize(path)
-    os.remove(path)
+    """-> bytes freed; 0 when the file vanished meanwhile (a tap racing the timer, the agent's own cleanup)."""
+    try:
+        size = os.path.getsize(path)
+        os.remove(path)
+    except OSError:
+        return 0
     removed.append(path)
     return size
 
@@ -481,9 +485,11 @@ def _rm(path, removed):
 def close_cleanup(j):
     """Delete only what is provably this job's and regenerable. -> {"removed": [...], "freed": bytes}.
     Never removes a directory (a deleted cwd breaks every later terminal call, 2026-11-15) and keeps the
-    revision set: shot files, scenes, plan/subs/gfx/fx, fonts, refs, board, report."""
+    revision set: shot files, scenes, plan/subs/gfx/fx, fonts, refs, board, report, the cover (a re-deliver
+    needs --cover, and the cover is picked by hand, not rebuilt by a script)."""
     d = j.get("delivery") or {}
-    kept = [k for k in (d.get("kept") if isinstance(d.get("kept"), list) else []) if os.path.isfile(k)]
+    kept = [k for k in (d.get("kept") if isinstance(d.get("kept"), list) else [])
+            if k.lower().endswith(".mp4") and os.path.isfile(k)]           # the final only
     kept_sha = {}
     for k in kept:
         kept_sha.setdefault(os.path.getsize(k), set()).add(sha256(k))
@@ -494,32 +500,38 @@ def close_cleanup(j):
             dirs[:] = [x for x in dirs if x != "fonts"]
             for f in files:
                 p = os.path.join(root, f)
-                if os.path.islink(p) or not os.path.isfile(p):
+                try:
+                    if os.path.islink(p) or not os.path.isfile(p):
+                        continue
+                    size = os.path.getsize(p)
+                    if JUNK_RE.search(f) or (size in kept_sha and sha256(p) in kept_sha[size]):
+                        freed += _rm(p, removed)  # the final lives on in FINALS_DIR
+                    elif f.lower().endswith(".mp4"):
+                        twins.setdefault(size, []).append(p)
+                except OSError:
                     continue
-                size = os.path.getsize(p)
-                if JUNK_RE.search(f) or (size in kept_sha and sha256(p) in kept_sha[size]):
-                    freed += _rm(p, removed)      # the final + cover live on in FINALS_DIR
-                elif f.lower().endswith(".mp4"):
-                    twins.setdefault(size, []).append(p)
     for dl in DOWNLOADS:
         if not os.path.isdir(dl):
             continue
         for f in os.listdir(dl):
             p = os.path.join(dl, f)
-            if os.path.islink(p) or not os.path.isfile(p):
+            try:
+                if os.path.islink(p) or not os.path.isfile(p):
+                    continue
+                size = os.path.getsize(p)
+                if size not in kept_sha and size not in twins:
+                    continue
+                h = sha256(p)
+                if h in kept_sha.get(size, ()):
+                    freed += _rm(p, removed)
+                    continue
+                twin = next((w for w in twins.get(size, []) if os.path.isfile(w) and sha256(w) == h), None)
+            except OSError:
                 continue
-            size = os.path.getsize(p)
-            if size not in kept_sha and size not in twins:
-                continue
-            h = sha256(p)
-            if h in kept_sha.get(size, ()):
-                freed += _rm(p, removed)
-                continue
-            twin = next((w for w in twins.get(size, []) if sha256(w) == h), None)
             if twin:                              # a shot download the workdir holds byte-for-byte
                 for s in j.get("shots") or []:
                     if s.get("file") and os.path.abspath(s["file"]) == os.path.abspath(p):
-                        s["file"] = twin
+                        s["file"] = twin          # repointed before the delete, saved with the close
                 freed += _rm(p, removed)
     return {"removed": removed, "freed": freed}
 

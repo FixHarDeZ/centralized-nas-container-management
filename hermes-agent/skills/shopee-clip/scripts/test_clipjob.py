@@ -16,6 +16,8 @@ spec.loader.exec_module(cj)
 cj.FINALS_DIR = tempfile.mkdtemp(prefix="clipjob-finals-")     # no test writes into the real kept-finals dir
 os.environ["CLIPJOB_NO_TIMER"] = "1"                            # no test leaves a 5-minute close sleeper behind
 cj.DOWNLOADS = []                                               # nor deletes from the real Downloads dirs
+cj.DIR = tempfile.mkdtemp(prefix="clipjob-jobs-")               # main() sweeps DIR: never the real jobs dir
+cj.WORK = tempfile.mkdtemp(prefix="clipjob-work-")
 
 
 def job(shots=3, mode="presenter", prod=None):
@@ -650,7 +652,7 @@ def test_close_deletes_only_provable_junk(closing):
     j = cj.load("g-1"); j["shots"] = [{"k": 1, "state": "approved", "file": str(dl / "Flow_take_1.mp4")}]; cj.save(j)
     assert cj.main(["decide", "--text", "🏁 จบงาน · g-1"]) == 0
     left = sorted(p.name for p in wd.iterdir())
-    assert left == ["fonts", "plan.json", "src_1.mp4", "subs.ass"]          # final + thumb live on in finals/
+    assert left == ["fonts", "plan.json", "src_1.mp4", "subs.ass", "thumb.jpg"]   # the final lives on in finals/
     assert (wd / "fonts" / "x_sheet.png").exists() and wd.is_dir()
     assert sorted(p.name for p in dl.iterdir()) == ["other.mp4"]
     j = cj.load("g-1")
@@ -709,3 +711,13 @@ def test_close_refuses_an_open_job_and_skips_a_workdir_outside_work(closing, tmp
     (closing["wd"] / "a_sheet.jpg").write_bytes(b"x")
     assert cj.main(["close", "g-1"]) == 0
     assert (closing["wd"] / "a_sheet.jpg").exists()
+
+
+def test_close_then_reopen_then_redeliver(closing):
+    assert cj.main(["decide", "--text", "🏁 จบงาน · g-1"]) == 0
+    assert not closing["final"].exists()                                   # the kept copy is in finals/
+    assert cj.main(["reopen", "g-1", "--reason", "ฟิก: แก้ซับ"]) == 0
+    closing["final"].write_bytes(b"FINAL v2")                             # the rebuilt final, same cover
+    assert cj.main(closing["args"]) == 0
+    j = cj.load("g-1")
+    assert j["status"] == "delivered" and j["close"]["state"] == "pending" and j["timing"]
