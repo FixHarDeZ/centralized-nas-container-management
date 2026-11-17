@@ -1185,3 +1185,14 @@ Not done / open:
 - Seen on the mock: one window shot shows the trailer's own letterbox bars; subs and pills lie on footage.
 - Not proven: Hermes writing `window_h` on a real order and choosing `win_x`/`wide` per shot;
   `sub_linecheck.py` / `sub_bandprofile.py` on subs over footage; OCR text check on the 1:1 crop.
+
+### 2026-11-17 — session closed
+- On `main`, pushed: `7740ede` (Hermes' live edits ported), `63d9eab` + `63742d4` (Secretary copy + vault keys,
+  hermes-agent deployed once for the env), `4befc47` (link line last, CTA pill on the link line, brand names
+  unbroken), `765efdc` (1:1 gameplay window), notes. Skills synced live at `765efdc`. No open clip job.
+- Verify on the next orders: Secretary copy arriving by itself after `deliver` (`delivery.mirror.state`,
+  `logs/mirror.log`); `reserve`/`pack` refusing a late selling point and Hermes rewriting; gameplay plan with
+  `window_h` 720 and sane `win_x`/`wide`; sub checks on subs over footage.
+- Fix decides after watching the mock (message 11604): sub size, cover position, window height.
+- Still open from before: hook card when the room has no free wall, tap held behind Hermes' skill-patch pass,
+  ✅ tap replayed after a long turn, 📝 `credits: null`, Hermes `MEMORY.md` over limit.
