@@ -1197,3 +1197,4 @@ Not done / open:
 - Still open from before: hook card when the room has no free wall, tap held behind Hermes' skill-patch pass,
   ✅ tap replayed after a long turn, 📝 `credits: null`, Hermes `MEMORY.md` over limit.
 - Fix watched the mock (message 11604): "mock โอเค" — layout A stays as built, nothing to adjust.
+- Closed again after the approval: live skills at `fe9d1ed`, nothing left to adjust on layout A.
