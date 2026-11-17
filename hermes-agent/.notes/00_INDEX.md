@@ -102,6 +102,7 @@ Tracker: `docs/superpowers/specs/2026-06-02-hermes-token-tuning-verification.md`
 | HERMES_GID | Container group GID (100) |
 | DASHBOARD_BASIC_AUTH_USER | Dashboard auth username (default: fixhardez) |
 | DASHBOARD_PASSWORD_HASH | scrypt hash for dashboard auth (from vault) |
+| SECRETARY_TELEGRAM_BOT_TOKEN / _CHAT_ID | Secretary bot (n8n credential "Secretary Bot") — vault `stacks.secretary.telegram.*`; `clipjob.py` copies each delivered clip there. Both unset = feature off |
 
 ---
 
@@ -130,6 +131,13 @@ Tracker: `docs/superpowers/specs/2026-06-02-hermes-token-tuning-verification.md`
 ---
 
 ## Shopee clip skills — repo-owned since 2026-11-10
+
+**Secretary copy (2026-11-17, `63d9eab`)**: after `clipjob.py deliver`, a detached `clipjob.py mirror <job> --auto`
+re-uploads the clip (finals copy; a Telegram `file_id` is per bot) + the copy-buttons message as the Secretary bot
+(`TG_TOKEN_ENV=SECRETARY_TELEGRAM_BOT_TOKEN`, token never on argv). State in `delivery.mirror`
+(`pending/ok/failed/skipped`), log `logs/mirror.log`, ledger rows carry `via` and `check_delivery.py` skips them.
+A failure never blocks Fix's delivery; it notifies Fix and `clipjob.py mirror <job>` resends. Jobs delivered before
+the feature have no `delivery.mirror` (`mirror` refuses them).
 
 `hermes-agent/skills/{shopee-clip,flow-driver,gameplay-clips}` → `make hermes-skills` (pull clone in container
 + `skills/sync.sh`: copy tracked files, `hermes curator pin`). **Not locked**: `hermes curator lock`'s terminal
@@ -188,6 +196,7 @@ registered, `presenter-shots` still registered, Telegram reconnected. Re-enablin
 
 | วันที่ | เรื่อง |
 |--------|--------|
+| 2026-11-17 | Delivered clip + hashtags + basket link copied to the Secretary bot chat (`63d9eab`, env deployed + live send verified); Hermes' 11-16 night live edits ported (`7740ede`). Checked the 4 clips of 11-17. |
 | 2026-11-16 | Checked 3 clips after the tune (all clean). `pillclear.py` + holding-height prompt rule + frame-check question (`431d111`); Hermes' 6 live edits ported (`d5d0222`). |
 | 2026-11-16 | 🏁 จบงาน button + 5-min auto close (`clipjob.py close`, `88d12e1`); triage skill live edit; flow-driver live edits ported (`1d5f603`); cover kept + OSError guards (`d7993c1`). |
 | 2026-11-16 | `autogfx.py` (measured fx/gfx coordinates), finals kept 7 days, `reasoning_effort: low`, `idle_minutes: 180`, `wait_fix_min` union (`29f749d`). |

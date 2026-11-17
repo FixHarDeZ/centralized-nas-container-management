@@ -1137,3 +1137,23 @@ Not done / open:
 - Fix decides: hook card when the room has no free wall (now skipped; my advice: keep, or ask Flow for a bare
   wall side in shot 1). Still open from before: a tap held behind Hermes' post-turn skill-patch pass,
   ✅ tap replayed after a long turn, 📝 `credits: null`, start frame on 📝 unproven, Hermes `MEMORY.md` over limit.
+
+### 2026-11-17 — Secretary copy of delivered clips
+- Fix: after a Shopee clip is delivered, also send the clip, hashtags and basket link to the Secretary bot chat.
+- `7740ede`: Hermes' live edits of 11-16 night ported first (`make hermes-skills ARGS=--pull`).
+- `63d9eab`: `clipjob.py` mirror (`send_mirror`, `spawn_mirror`, `mirror JOB`), `send_clip.py` `TG_TOKEN_ENV`,
+  `check_delivery.py` skips `via` rows, 7 new tests (105 passed), `flow-steps.md` step 13 bullet. Synced live.
+- Vault: `stacks.secretary.telegram.bot_token` / `chat_id` (Fix ran the export from the n8n credential himself;
+  the token never passed through the session). Manifest keys added after the vault had them, test vault synced,
+  `make secrets`, `deploy.sh -s hermes-agent -y` (no open job). Both env vars present in `hermes-gateway`.
+- Live check: `send_clip.py` + `send_copy_buttons.py` as the Secretary bot sent `shokubutsu-shower-gel` to the
+  Secretary chat (message_id 136, 137); `check_delivery.py --verbose` clean.
+- Not proven: the automatic path on a real `deliver` (detached `mirror --auto`) — watch the next order:
+  `secretary_copy` in the deliver JSON, `logs/mirror.log`, `delivery.mirror.state == ok`.
+- Checked the 4 clips of today (car-air-vent, shokubutsu, harvestmoon, dbsparkingzero): 720x1280, -14.3 to
+  -15.0 LUFS, peaks -4 dBTP or lower. Defects, not fixed yet (Fix decides):
+  - shokubutsu: scene 3 script says the CTA first and a selling point last ("กลิ่นก็มีให้เลือกเพียบ"), and the
+    `Link below!` pill (3.4-5.9 s) sits on that last line, not on the CTA.
+  - shokubutsu: subtitle line break inside the brand name (`ครีมอาบน้ำโช\Nกุบุสซึโฉมใหม่`).
+  - car-air-vent: shot 3 is another seat/interior than shot 1 (continuity).
+  - gameplay layout: last ~3 s without a subtitle; lower 45 % of the frame is blur with a small box shot.
