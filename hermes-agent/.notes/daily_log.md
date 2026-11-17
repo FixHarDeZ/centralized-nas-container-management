@@ -1226,3 +1226,20 @@ Not done / open:
 - State: live skills synced at `5072539`, tree clean, no open clip job, no deploy needed (no env / image change).
 - Watch on the next order: Secretary copy arrives by itself with clip + buttons + cover; Hermes builds the poster
   cover from `references/poster-cover.md` and vision-checks it; CTA-order gate; first real 1:1 gameplay layout.
+
+### 2026-11-17 — gameplay VO: mid-word pauses fixed
+- Fix: Dragon's Dogma 2 clip, 4–5 s "ดรา … ก้อนด็อกมา" and 7–8 s "โลก … เปิดกว้าง" each had a 1 s-ish hole; earlier
+  clips too.
+- Cause (reproduced exactly from `gemini_take2.wav`, vo_end 21.77 s): `gen_vo_natural.align_bounds` cut the whole
+  Gemini take at the quietest 20 ms within ±0.35 s of a character-proportion estimate. The estimate ran 0.3–0.5 s late,
+  so the real line pause (0.42–0.65 s) was out of the window and the cut fell in a 60–70 ms stop-consonant closure
+  inside the word; `gap_after` (0.45–0.5 s) then opened there. 3 of 5 cuts bad (also ภาคนี้). Splatoon (3 bad:
+  Switch|2, ลึก|ลับ, ปืน) and mhwilds (1 cut just past a pause) had the same bug.
+- Fix `ba9faee`: new `gameplay-clips/scripts/vo_split.py` — quiet runs (p95 −24 dB, ≥60 ms), ordered pick of one
+  run per boundary maximising pause length − 0.3 × distance (reach 1.5 s), cut = run middle; dip <0.15 s or too few
+  pauses → `GATE WARN` (old snap kept only as that fallback). stdout `pauses used: 3.94(0.44s) …`.
+  `test_vo_split.py` (5) + `natural-vo.md` updated. Re-split of dragonddogma2 / splatoon / mhwilds takes: every cut in
+  a line pause, whisper-medium ASR of each phrase matches the script.
+- Also ported Hermes' live edit to `shopee-clip/templates/style-card.md` (scan rule, `e904836`).
+- Tests 117 passed local (py3.12), 128 in sync gate; live synced at `ba9faee`, live probe on the NAS take gives the
+  same cuts. Delivered clips are unchanged (no re-render); no deploy needed.
