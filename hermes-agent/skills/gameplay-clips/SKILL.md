@@ -75,7 +75,7 @@ metadata:
 
 ## LOOK standard — v5 = DEFAULT (Fix อนุมัติ demo แล้ว)
 - **ทุกคลิปประกอบด้วย `scripts/build_v5.py` (plan.json; schema ใน docstring)**: cold open เต็มจอด้วยช็อตแรงที่สุด (ห้ามเปิดด้วยการ์ดไตเติล; โลโก้เกม PNG ใสเล็ก ๆ ทับ ~1.5 วิ), push-in 1.00→1.10 ทุก window shot (`--selftest-zoom` ต้อง PASS), hero เต็มจอ (crop 9:16 จาก trailer 1080p ต้นฉบับ) ≤3 ช็อต, ตัดลงบีต (`scripts/beats.py`), แฟลชขาว 3 เฟรม + whoosh/impact ที่ seam (`scripts/make_sfx.sh` → `assets/sfx/`), ป้าย `OUT NOW` เท่านั้น (ห้าม `D-N` — กฎ no countdown ด้านบน), loop tail 0.3 วิ crossfade เข้าเฟรมแรก, grade [1.18,1.15,1.04]
-- **Layout ตาม `references/safe-zones.md`: pill y=210, หน้าต่างเกม y=280, subs MarginV 465** (ค่า v4 pill y=52 / MarginV 290 อยู่ใต้ UI แอปทุกแพลตฟอร์ม)
+- **Layout ตาม `references/safe-zones.md`: pill y=210, หน้าต่างเกม 1:1 `window_h` 720 (look-v5), subs MarginV 465** (ค่า v4 อยู่ใต้ UI แอป)
 - bg.png = key art cover-fit + blur (step 6); caption pill Fredoka-SemiBold 40pt พาสเทล `0xFF8FB1/0xFFD166/0x8AC926/0x7A5CFF@0.92`, `boxborderw=14`, `borderw=3:bordercolor=0x5A2A4A`; ซับไทย libass **Itim 48 เหลืองพาสเทล `&H0066D1FF` ขอบน้ำตาลเข้ม `&H00203050` Outline 5 Shadow 2.5, `BorderStyle=1` (ไม่มีกล่อง), Alignment=2** (ฟิกเลือกแทนกล่องดำ เพราะกล่องไม่น่ารักและบังสินค้า — ห้ามกลับไปใช้ BorderStyle=3; จะเปลี่ยน look ใช้สูตร A/B ใน `/opt/data/skills/shopee-clip/references/presenter-post.md` → Changing the subtitle look) + filter ต้องเป็น `ass=…:shaping=complex` เสมอ; เสียง trailer volume 0.75 + duck `sidechaincompress threshold=0.04:ratio=4:release=500` + VO
 - วิธีรัน/gates/pitfalls: **`references/look-v5.md` (อ่านก่อนทุกคลิป)**. `scripts/build.sh` (v4: หน้าต่าง 16:9 นิ่งบน bg) = fallback เท่านั้น
 

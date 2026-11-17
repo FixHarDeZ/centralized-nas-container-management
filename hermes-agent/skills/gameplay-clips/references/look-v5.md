@@ -3,6 +3,22 @@
 Fix approved the LEGO Batman demo. **It is the default builder; v4 `build.sh` is the fallback only.**
 (The demo work dir was cleaned up at job end. The example plan below and the docstring schema are the reference.)
 
+## Tall window = the default layout (Fix 2026-11-17, "เอา A")
+The 16:9 band left the lower 45 % of the frame as blur. Every new plan sets **`"window_h": 720`** and has no
+`window_y` key (it defaults to 190): the footage is a 1:1 window at y 190–910, cropped from the ORIGINAL
+trailer, ~1.8× the picture area. Fix saw the Harvest Moon mock (message 11604) rendered this way.
+- **The crop keeps the middle 56 % of the width.** Look at each window shot on a frame sheet: subject off-centre
+  → `"win_x": ±N` on that seg (px of the 1080p source, limit ±420). HUD / text / two subjects at both edges →
+  `"wide": true` on that seg (whole 16:9 picture as a band inside the window). The OCR text check must read the
+  1:1 crop, not the full frame: text outside the crop is gone, text inside it is bigger.
+- **Pill and subs sit ON the footage** (pill y 210, subs MarginV 465, unchanged numbers). Check a frame per sub
+  for a bright or busy patch behind the text.
+- **Cover sticker** (`gfx.json`): `"y": 1060` (not 960) and `avoid` footage `[0, 190, 720, 910]`.
+- A trailer with baked-in letterbox bars shows them inside the window: pick another window or use `wide`.
+- Not proven yet: `sub_linecheck.py` / `sub_bandprofile.py` on subs that lie over footage (they were tuned on
+  the blurred plate) — a FAIL there needs a look at the frame, not a blind re-render.
+- `window_h` omitted = the old 16:9 band; use it only when Fix asks for the old look.
+
 ## What changed vs v4
 - **Cold open.** Seg 0 is a full-screen `hero` shot, a 9:16 centre crop of the ORIGINAL 1080p
   trailer (sharp). There is no title card. The transparent game logo sits small on top for ~1.5 s.

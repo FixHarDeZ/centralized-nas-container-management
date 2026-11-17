@@ -21,6 +21,9 @@ plan.json schema (paths relative to the plan file's directory unless absolute)
   "fonts_dir": "fonts", "pill_font": "Fredoka-SemiBold.ttf",
   "out": "out.mp4",
   "window_y": 280,                   # safe-zones.md: window 280..685
+  "window_h": 720,                   # TALL WINDOW (Fix 2026-11-17): 720 = a 1:1 window, y 190..910 (window_y
+                                     # defaults to 190). Window segs are then cropped from the ORIGINAL trailer
+                                     # (sharp), not from the 405 px master. Omit = the 16:9 band (405).
   "pill_y": 210,                     # safe-zones.md: pill box ~196..252
   "sub_style": {"MarginV": 465, "MarginL": 60, "MarginR": 140},
   "sub_text": {"2": "line one\\Nline two"},   # optional per-event text override (0-based event idx)
@@ -52,7 +55,9 @@ seg keys: src master|trailer|path; in; dur; mode window|hero; optional audio_src
   audio_in (default = in), snap (default true: in snapped to a beat and out to the beat nearest
   in+dur, inside the gap, away from hard cuts), sfx whoosh|impact|both|none (default whoosh;
   hero -> both; seg 0 -> impact), hero_x (crop x offset from centre, px of the 1080p source),
-  zoom [a,b] override.
+  zoom [a,b] override. Tall window only: win_x (crop x offset from centre, px of the 1080p source —
+  the 1:1 crop keeps the middle 56 % of the width, so move it to the subject), wide true (this seg
+  keeps the whole 16:9 picture, as a band in the middle of the window: HUD / text at the edges).
 Hard failures: seg audio outside a no-speech gap, overlapping pills, pill > 2 words / non-ASCII /
 price-like text, CTA anywhere but the last seg, vo_shift not inside a VO pause.
 """
@@ -63,6 +68,12 @@ from PIL import Image
 SKILL = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 W, H = 720, 1280
 WW, WH = 720, 405
+BAND_H = 405             # the 16:9 picture; WH is set from plan["window_h"] in main()
+
+
+def tall_crop_w():
+    """Width (px of the 1080p source) that a WW x WH window shows."""
+    return int(round(1080 * WW / WH / 2)) * 2
 SR = 48000
 GRADE = [1.0, 1.0, 1.0]  # set from plan["grade"] in main()
 
@@ -327,12 +338,19 @@ def seg_frames(s, paths, n, fps):
         vf = (f"fps={fps},scale=-2:1080:flags=lanczos,crop={cw}:1080:(iw-{cw})/2+{hx}:0,"
               f"scale={W}:{H}:flags=lanczos")
         w, h = W, H
+    elif WH != BAND_H and not s.get("wide"):
+        if src == paths["master"]:
+            src = paths["trailer"]          # same timeline; the master's picture is only 405 px tall
+        cw = tall_crop_w()
+        vf = (f"fps={fps},scale=-2:1080:flags=lanczos,crop={cw}:1080:(iw-{cw})/2+{s.get('win_x', 0)}:0,"
+              f"scale={WW}:{WH}:flags=lanczos")
+        w, h = WW, WH
     else:
         if src == paths["master"]:
-            vf = f"fps={fps},crop={WW}:{WH}:0:320"
+            vf = f"fps={fps},crop={WW}:{BAND_H}:0:320"
         else:
-            vf = f"fps={fps},scale={WW}:{WH}:flags=lanczos"
-        w, h = WW, WH
+            vf = f"fps={fps},scale={WW}:{BAND_H}:flags=lanczos"
+        w, h = WW, BAND_H
     g = s.get("grade", GRADE)  # [gamma, saturation, contrast] — lifts dark trailer footage
     if g and list(g) != [1.0, 1.0, 1.0]:
         # format=rgb24 BEFORE eq: eq straight after crop on yuv420p emits a short/misaligned
@@ -389,8 +407,16 @@ def main():
     plan = json.load(open(a.plan))
     base = os.path.dirname(os.path.abspath(a.plan))
     P = lambda k, d=None: (lambda v: v if v is None or os.path.isabs(v) else os.path.join(base, v))(plan.get(k, d))
-    global GRADE
+    global GRADE, WH
     GRADE = plan.get("grade", GRADE)
+    WH = int(plan.get("window_h", BAND_H))
+    if not BAND_H <= WH <= 900 or (WH % 2 and WH != BAND_H):
+        die(f"window_h {WH}: an even number from {BAND_H} (16:9 band) to 900; 720 = the 1:1 window")
+    if WH != BAND_H:
+        room = (1920 - tall_crop_w()) // 2
+        for i, sg in enumerate(plan["segs"]):
+            if sg.get("mode") == "window" and abs(sg.get("win_x", 0)) > room:
+                die(f"seg{i} win_x {sg['win_x']}: the crop leaves the picture (limit ±{room})")
     fps = plan.get("fps", 30)
     DUR = float(plan["dur"])
     NT = int(round(DUR * fps))
@@ -516,7 +542,9 @@ def main():
 
     # ---- video frames
     bg = np.asarray(Image.open(P("bg", "bg.png")).convert("RGB").resize((W, H)), np.uint8)
-    wy = plan.get("window_y", 280)
+    wy = plan.get("window_y", 280 if WH == BAND_H else 190)
+    if wy + WH > 920:
+        die(f"window_y {wy} + window_h {WH} ends below y 920 (the sticker / bottom band needs that room)")
     flash = plan.get("flash", [0.5, 0.3, 0.12])
     lg = plan.get("logo")
     logo = None
@@ -584,9 +612,11 @@ def main():
                     f = affine_zoom(f, z[0] + (z[1] - z[0]) * j / max(1, s["n"] - 1), W / 2, H / 2)
                 frame = np.asarray(f, np.uint8).copy()
             else:
+                fh = fr.shape[1]                      # WH, or the 16:9 band of a "wide" seg
                 f = affine_zoom(Image.fromarray(fr[j]), z[0] + (z[1] - z[0]) * j / max(1, s["n"] - 1),
-                                WW / 2, WH / 2)
-                frame = bg.copy(); frame[wy:wy + WH] = np.asarray(f, np.uint8)
+                                WW / 2, fh / 2)
+                y0 = wy + (WH - fh) // 2
+                frame = bg.copy(); frame[y0:y0 + fh] = np.asarray(f, np.uint8)
             tt = fidx / fps
             if logo and logo[2] <= tt < logo[3]:
                 pi = Image.fromarray(frame).convert("RGBA")

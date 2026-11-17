@@ -60,3 +60,16 @@ def test_default_band_matches_graphics_layer(tmp_path):
     text_top = baseline - 48
     assert 700 <= text_top and baseline <= 835, \
         f"MarginV {margin_v} puts text y{text_top}-{baseline}, outside SUB_BAND 700-835"
+
+
+def test_tall_window_crop_width():
+    """window_h 720 shows a 1080 px square of the 1080p source; the 16:9 band shows all 1920."""
+    import build_v5
+    old = build_v5.WH
+    try:
+        build_v5.WH = 720
+        assert build_v5.tall_crop_w() == 1080
+        build_v5.WH = build_v5.BAND_H
+        assert build_v5.tall_crop_w() == 1920
+    finally:
+        build_v5.WH = old

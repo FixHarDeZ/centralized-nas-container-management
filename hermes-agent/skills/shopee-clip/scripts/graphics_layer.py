@@ -35,6 +35,8 @@ plan.json (all keys optional, times = FINAL clip seconds):
   Gameplay v5 layout (Fix 2026-11-07: "crop หน้าปกเกมมาแปะ ไม่บังจอ"): the footage window is y 280-690
   and subs y ~707-830, so the cover goes BELOW the subs at x≈520, y≈960, h≈220, rot -6 (clear of the
   right-rail icons x>=640 and the bottom-left caption text). Pass avoid [0,280,720,690] "footage",
+  Tall window (plan window_h 720, the default since 2026-11-17): footage is y 190-910, so y≈1060 and
+  avoid [0,190,720,910].
   and keep it OFF full-bleed hero/cold-open shots (start after the cold open, end before the hero).
 `avoid` = presenter face box (read it off 2-3 real frames with vision first); text-bearing
 elements may not cover it. Flow presenters sit centre-frame, so headlines usually go to
