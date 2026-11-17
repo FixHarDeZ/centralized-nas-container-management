@@ -1220,3 +1220,9 @@ Not done / open:
 - Open: nothing forces Hermes to use the script (`deliver` takes any file as `--cover`); first real order will show
   whether Hermes writes a sane spec and runs the vision check. Auto theme gave peach-brown for shokubutsu (pink would
   suit). Chip icons are all ticks; no decorations yet.
+
+### 2026-11-17 — session closed (cover work)
+- Fix: "โอเคเลย จบงานได้" after seeing the two real-script covers (messages 11668, 11669).
+- State: live skills synced at `5072539`, tree clean, no open clip job, no deploy needed (no env / image change).
+- Watch on the next order: Secretary copy arrives by itself with clip + buttons + cover; Hermes builds the poster
+  cover from `references/poster-cover.md` and vision-checks it; CTA-order gate; first real 1:1 gameplay layout.
