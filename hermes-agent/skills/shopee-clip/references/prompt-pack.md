@@ -12,6 +12,9 @@ not proof that 🤖 cannot work.
 3. For each shot K that needs generating (pending or regen_approved), one message:
    `[ช็อต K · <job>] ช็อต K/N · 9:16 · 10 วิ`, then the prompt in a `<pre>` block (tap to copy on the phone).
    When shot K−1 already has a file, its last frame goes out first as the start-frame photo.
+   The command's JSON prints ONLY these prompt messages in `packed` — the header, reference photos and
+   character portrait are sent by the same run and are not echoed, so a bare pack with a 3-entry `packed`
+   list is complete; do not re-run it (that re-spams the chat) just because the output names no photos.
 
 `pack <job> --shot K` resends a single shot. Use it after a 🔁 tap, or when Fix asks for one prompt again.
 **A job's FIRST pack must be a bare `pack <job>`** (no `--shot`): the flag suppresses the header AND the
