@@ -767,7 +767,8 @@ def _mirror_calls(calls):
 def test_secretary_copy_sends_clip_and_buttons_as_the_secretary_bot(mirroring):
     assert cj.main(mirroring["args"]) == 0
     mc = _mirror_calls(mirroring["calls"])
-    assert [os.path.basename(c[3]) for c in mc] == ["send_clip.py", "send_copy_buttons.py"]
+    assert [os.path.basename(c[3]) for c in mc] == ["send_clip.py", "send_copy_buttons.py", "send_photo.py"]
+    assert mc[2][4].endswith("finals/g-1_cover.jpg")            # the kept cover
     assert all(c[1] == f"TG_TOKEN_ENV={cj.MIRROR_TOKEN_ENV}" and "555" in c for c in mc)
     assert mc[0][4].endswith("finals/g-1.mp4")                  # the kept copy, which cleanup never deletes
     assert mc[1][4:6] == ["#game", "https://s.shopee.co.th/x"]
@@ -792,7 +793,8 @@ def test_secretary_copy_failure_never_blocks_delivery_and_mirror_resends(mirrori
     assert [os.path.basename(c[3]) for c in _mirror_calls(mirroring["calls"])] == ["send_clip.py"]  # no buttons
     mirroring["calls"].clear(); mirroring["fail"].clear()
     assert cj.main(["mirror", "g-1"]) == 0
-    assert [os.path.basename(c[3]) for c in _mirror_calls(mirroring["calls"])] == ["send_clip.py", "send_copy_buttons.py"]
+    assert [os.path.basename(c[3]) for c in _mirror_calls(mirroring["calls"])] == ["send_clip.py", "send_copy_buttons.py",
+                                                                                   "send_photo.py"]
     assert cj.load("g-1")["delivery"]["mirror"]["state"] == "ok"
     mirroring["calls"].clear()
     assert cj.main(["mirror", "g-1"]) == 0                      # already sent: nothing re-posted
@@ -804,7 +806,7 @@ def test_secretary_copy_rerun_skips_the_clip_already_sent(mirroring):
     assert cj.main(mirroring["args"]) == 0
     mirroring["calls"].clear(); mirroring["fail"].clear()
     assert cj.main(["mirror", "g-1"]) == 0
-    assert [os.path.basename(c[3]) for c in _mirror_calls(mirroring["calls"])] == ["send_copy_buttons.py"]
+    assert [os.path.basename(c[3]) for c in _mirror_calls(mirroring["calls"])] == ["send_copy_buttons.py", "send_photo.py"]
 
 
 def test_secretary_copy_auto_failure_tells_fix_and_keeps_the_close_button(mirroring):

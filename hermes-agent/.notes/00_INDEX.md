@@ -133,7 +133,7 @@ Tracker: `docs/superpowers/specs/2026-06-02-hermes-token-tuning-verification.md`
 ## Shopee clip skills — repo-owned since 2026-11-10
 
 **Secretary copy (2026-11-17, `63d9eab`)**: after `clipjob.py deliver`, a detached `clipjob.py mirror <job> --auto`
-re-uploads the clip (finals copy; a Telegram `file_id` is per bot) + the copy-buttons message as the Secretary bot
+re-uploads the clip (finals copy; a Telegram `file_id` is per bot) + the copy-buttons message + the posting cover (`ปกคลิป`, kept `finals/<label>_cover.*`; added later the same day) as the Secretary bot
 (`TG_TOKEN_ENV=SECRETARY_TELEGRAM_BOT_TOKEN`, token never on argv). State in `delivery.mirror`
 (`pending/ok/failed/skipped`), log `logs/mirror.log`, ledger rows carry `via` and `check_delivery.py` skips them.
 A failure never blocks Fix's delivery; it notifies Fix and `clipjob.py mirror <job>` resends. Jobs delivered before

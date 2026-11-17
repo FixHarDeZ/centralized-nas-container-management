@@ -1198,3 +1198,9 @@ Not done / open:
   ✅ tap replayed after a long turn, 📝 `credits: null`, Hermes `MEMORY.md` over limit.
 - Fix watched the mock (message 11604): "mock โอเค" — layout A stays as built, nothing to adjust.
 - Closed again after the approval: live skills at `fe9d1ed`, nothing left to adjust on layout A.
+
+### 2026-11-17 — Secretary copy also carries the cover
+- Fix: "เพิ่มให้มีส่งหน้าปกเกมไปที่ secretary telegram" / "หมายถึงหน้าปกสำหรับใช้โพส" → `send_mirror` gained a third step
+  `cover` (`send_photo.py` as the Secretary bot, kept cover from `finals/`), every clip mode, after clip + copy buttons.
+  Mirror records written before this change have no `cover` key and simply skip the step.
+- `test_clipjob.py` 67 passed (local).

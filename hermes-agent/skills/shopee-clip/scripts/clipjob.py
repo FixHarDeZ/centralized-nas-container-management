@@ -29,7 +29,7 @@ This CLI is the only sanctioned way to move a Flow-mode clip forward. It refuses
                          # 🎬 only: --report may be omitted; --style footage for a brand product film
                          # a re-run after a failed send skips the steps already done and logs the clip once
                          # its last message carries the 🏁 จบงาน button; the job closes itself CLOSE_S (300 s) later
-                         # then a detached `mirror --auto` sends a copy (clip + copy-button message) to the
+                         # then a detached `mirror --auto` sends a copy (clip + copy-button message + cover) to the
                          # Secretary bot chat when SECRETARY_TELEGRAM_BOT_TOKEN + _CHAT_ID are set; it messages
                          # Fix only when the copy fails, and never blocks or delays the delivery
   clipjob.py mirror JOB                             # resend a failed Secretary copy of the delivered clip
@@ -1107,7 +1107,7 @@ def _store_mirror(job, m):
 
 
 def send_mirror(job):
-    """Send the delivered clip + copy-button message to the Secretary chat. Never raises.
+    """Send the delivered clip + copy-button message + cover to the Secretary chat. Never raises.
     Steps already ok are skipped, so a rerun (`clipjob.py mirror JOB`) never double-posts."""
     j = load(job)
     m = (j.get("delivery") or {}).get("mirror")
@@ -1121,6 +1121,9 @@ def send_mirror(job):
     via = ["env", f"TG_TOKEN_ENV={MIRROR_TOKEN_ENV}", "python3"]
     steps = [("clip", via + [os.path.join(HERE, "send_clip.py"), m["file"], m["caption"], chat, m["label"] + "_secretary"]),
              ("copy_buttons", via + [os.path.join(HERE, "send_copy_buttons.py"), m["hashtags"], m["link"], chat, m["product"]])]
+    if m.get("cover"):                              # Fix 2026-11-17: the cover goes to the Secretary chat too
+        steps.append(("cover", via + [os.path.join(HERE, "send_photo.py"), m["cover"], "ปกคลิป", chat,
+                                      m["label"] + "_cover_secretary"]))
     sent = m.setdefault("sent", {})
     for name, cmd in steps:
         if sent.get(name) == "ok":
@@ -1128,8 +1131,9 @@ def send_mirror(job):
         if os.environ.get("CLIPJOB_NO_TG"):
             sent[name] = "skipped (CLIPJOB_NO_TG)"
             continue
-        if not os.path.exists(m["file"]):
-            sent[name] = f"failed: {m['file']} is gone"
+        need = m["cover"] if name == "cover" else m["file"]
+        if not os.path.exists(need):
+            sent[name] = f"failed: {need} is gone"
             break
         try:
             rc, out, err = run(cmd)
@@ -1259,6 +1263,7 @@ def cmd_deliver(j, a):
         kept = j["delivery"]["kept"]
         j["delivery"]["mirror"] = {"job": j["job"], "sha256": digest, "state": "pending",
                                    "file": kept[0] if isinstance(kept, list) and kept else final,
+                                   "cover": kept[1] if isinstance(kept, list) and len(kept) > 1 else a.cover,
                                    "caption": a.caption[:1000], "hashtags": a.hashtags,
                                    "link": j["link"], "product": j["product"], "label": label}
     arm_close(j)
