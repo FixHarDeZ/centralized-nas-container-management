@@ -1262,3 +1262,12 @@ Not done / open:
   clip / copy_buttons / cover all ok.
 - Alternative not taken: `terminal.env_passthrough` in live config (official knob, but not repo-owned and only covers
   execute_code).
+
+### 2026-11-17 — session closed (VO split + Secretary copy)
+- Fix: "จบงาน".
+- State: live skills synced at `d2eaf38`; notes `3a5f91c`; all pushed, tree clean; no open clip job (d-branner,
+  dragonddogma2, shokubutsu all delivered + closed). No deploy needed (no env / image / config change).
+- Not done: delivered clips with the old mid-word VO (dragonddogma2, splatoon, mhwilds) were not re-rendered —
+  Fix's call (dragonddogma2 re-split is 0 Gemini requests via `--from-take gemini_take2.wav`).
+- Watch on the next orders: gameplay stdout `pauses used: …` all ≥0.15 s and no `GATE WARN … INSIDE a word`;
+  Secretary copy arrives by itself even when Hermes delivers from `execute_code`; job stamps +07:00.
