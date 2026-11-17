@@ -127,7 +127,7 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
     - 📦/✋: `references/product-mode.md`: `product_build.py` (gameplay VO recipe), then
       `graphics_layer --report <workdir>/report.json`.
     - Read `report.json` and every `FLAG:` line. Then make a frame sheet (`references/frame-check.md`) and
-      run `make_cover.py` (pre-sub source, EN ≤3 words).
+      make the cover: `references/poster-cover.md`.
 12. **Deliver — one command, nothing else sends the final clip:**
     `clipjob.py deliver <job> --final <final.mp4> --report <report.json> --gfx <gfx.json> --hashtags "<tags>" --cover <cover.jpg> --caption "<short Thai caption>" --hook-id <id> --category <cat> [--notes "…"] [--ack "<flag>=<Fix's call>"]`
     It refuses when a shot is unapproved, graphics are empty, hashtags fail, verify-clip fails, or the report

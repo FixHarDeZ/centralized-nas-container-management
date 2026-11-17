@@ -105,6 +105,7 @@ Elements:
   - Mixed at gain 0.35 under a limiter at 0.63 (AAC overshoot otherwise lands the max at exactly −3.0 dB).
 
 ### 3b. Cover (every clip, presenter AND gameplay)
+**SUPERSEDED 2026-11-17 — the cover is the poster: `references/poster-cover.md` (`make_poster_cover.py`). The `make_cover.py` steps below are history; their rules about a PRE-subtitle source and a defect-free product still apply to the hero frame.**
 1. `uv run --with pillow --with numpy python scripts/make_cover.py --video sceneN_fx.mp4 --t <moment with face + product> --text "<BRAND PRODUCT ≤3 words EN>" --cy 0.45 --color green|pink|… --out cover.jpg`
    - The source must be a PRE-subtitle render.
    - When the clip carries an accepted defect ON the product (a redrawn cover), take `--t` from a moment where the product is out of frame: the post thumbnail is the first thing a viewer sees, so do not feature the flaw there.

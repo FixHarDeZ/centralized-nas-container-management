@@ -1204,3 +1204,19 @@ Not done / open:
   `cover` (`send_photo.py` as the Secretary bot, kept cover from `finals/`), every clip mode, after clip + copy buttons.
   Mirror records written before this change have no `cover` key and simply skip the step.
 - `test_clipjob.py` 67 passed (local).
+
+### 2026-11-17 — poster-style posting cover, every clip
+- Fix sent a grid of infographic covers ("ทำแนวนี้ได้ไหม"), picked route A, approved the mock (message 11667):
+  "แนวนี้โอเคเลยเอาแบบนี้ หลังจากนี้ gen ปกแบบนี้ให้ทุกคลิปเลยนะ".
+- New `shopee-clip/scripts/make_poster_cover.py` (JSON spec → 1080x1920: headline, sub ribbon, hero photo + badge,
+  0–3 detail circles, 2–4 chips, theme from the hero hue). Every text shrinks to a floor then fails by name; price /
+  discount words refused; stops without Raqm. `test_make_poster_cover.py` 11 passed in the container.
+- Hero = a raw shot frame (no extra Flow credit) — differs from the "Flow generates a new still" idea first proposed;
+  the approved mock was built this way.
+- Docs: `references/poster-cover.md` (sources per part, vision check of the finished cover is mandatory); router step 11,
+  gameplay SKILL thumbnail bullet, `cover-sticker.md`, `presenter-graphics.md` 3b, `presenter-rules.md`,
+  `product-footage.md` now point at it. `make_cover.py` kept (frame scoring only). `clipjob.py` unchanged.
+- Proof renders in the container: car-air-vent (mock), shokubutsu, Harvest Moon — sent to Fix.
+- Open: nothing forces Hermes to use the script (`deliver` takes any file as `--cover`); first real order will show
+  whether Hermes writes a sane spec and runs the vision check. Auto theme gave peach-brown for shokubutsu (pink would
+  suit). Chip icons are all ticks; no decorations yet.

@@ -72,8 +72,8 @@ and `hook_id: "pft-N"`.
 - `bg.png` `--art`: the brand's product key visual, or a 1080p frame from the source (step 6 fallback).
 - The case-cover sticker becomes a **product cutout** from Fix's listing photo or the brand page,
   background removed (`/opt/data/skills/shopee-clip/references/product-image-prep.md` covers the cutout).
-  Use the same `image_stickers` plan and placement rules as the game cover. The thumbnail uses the
-  cutout too.
+  Use the same `image_stickers` plan and placement rules as the game cover. The thumbnail is the poster cover
+  (`/opt/data/skills/shopee-clip/references/poster-cover.md`); the cutout can be one of its circles.
 - **A clean product photo on a plain white studio background needs no ad salvage — cut it out in one PIL pass:**
   `ImageDraw.floodfill(work, seed, MARK, thresh=32)` from all four corners with a marker colour, build the
   alpha from where the marker landed, then `alpha.getbbox()` to crop. Flood fill from the corners rather than

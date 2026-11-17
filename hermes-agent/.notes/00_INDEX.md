@@ -132,6 +132,11 @@ Tracker: `docs/superpowers/specs/2026-06-02-hermes-token-tuning-verification.md`
 
 ## Shopee clip skills — repo-owned since 2026-11-10
 
+**Poster cover (2026-11-17)**: the posting cover of every clip (all modes) is built by
+`shopee-clip/scripts/make_poster_cover.py <spec.json> --out cover.jpg` — recipe `references/poster-cover.md`
+(hero = raw shot frame / trailer frame, text from listing + VO, vision check of the result). Needs Raqm → run in the
+container. `make_cover.py` is kept for frame scoring only. Not enforced by `clipjob.py deliver`; unproven on a real order.
+
 **Secretary copy (2026-11-17, `63d9eab`)**: after `clipjob.py deliver`, a detached `clipjob.py mirror <job> --auto`
 re-uploads the clip (finals copy; a Telegram `file_id` is per bot) + the copy-buttons message + the posting cover (`ปกคลิป`, kept `finals/<label>_cover.*`; added later the same day) as the Secretary bot
 (`TG_TOKEN_ENV=SECRETARY_TELEGRAM_BOT_TOKEN`, token never on argv). State in `delivery.mirror`

@@ -66,7 +66,7 @@ metadata:
   `volumedetect` on `final.mp4` before deliver** — the peak gate on `out.mp4` does not cover it and
   verify-clip does not check peaks.
 - The sticker shows the WHOLE case front — aspect per case type (Switch ≈1.6 h:w, PS5 ≈1.37); a grid-vision read returns the ARTWORK bbox, so probe the case edges with pixel transitions (cover-sticker.md).
-- Thumbnail = `make_cover.py` + the same crop composited bottom-right; card size has two limits (width ≤ ~620 and not over the title) and a title wider than ~1000 px is cut: `references/cover-sticker.md`.
+- Thumbnail = the poster cover (`make_poster_cover.py`; case front = one circle): `/opt/data/skills/shopee-clip/references/poster-cover.md`.
 - Recipe, measurements and traps: **`references/cover-sticker.md` (read before placing the sticker).**
 
 ## Short clip (≤15 s, one or two clean windows) — direct ffmpeg, not build_v5
