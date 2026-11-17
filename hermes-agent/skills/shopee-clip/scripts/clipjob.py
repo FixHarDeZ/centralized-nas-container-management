@@ -83,6 +83,12 @@ RATE = {"720p": 3, "360p": 1}
 # uploaded again. The token stays in the env: the send scripts get only its NAME (TG_TOKEN_ENV), never argv.
 MIRROR_TOKEN_ENV = "SECRETARY_TELEGRAM_BOT_TOKEN"
 MIRROR_CHAT_ENV = "SECRETARY_TELEGRAM_CHAT_ID"
+# 2026-11-17 d-branner-toothpaste: Hermes ran `deliver` from its execute_code tool, whose child env drops every
+# name that looks like a secret (and TZ). The Secretary copy was silently off and the stamps were UTC. The gateway
+# process (same uid, same container) holds the compose env, so missing names are taken from there.
+GATEWAY_PID = os.environ.get("CLIPJOB_GATEWAY_PID", "/opt/data/gateway.pid")
+PROC = "/proc"
+ADOPT_ENV = (MIRROR_TOKEN_ENV, MIRROR_CHAT_ENV, "TZ")
 FINALS_DIR = os.environ.get("CLIPJOB_FINALS", "/opt/data/clips/finals")   # delivered final + cover, for review
 KEEP_DAYS = 7              # Fix 2026-11-16: keep them a week (cleanup deletes the workdir and Downloads copies)
 CHAR_DIR = os.environ.get("CLIPJOB_CHARS", "/opt/data/clips/characters")   # <name>.jpg portrait per roster name
@@ -1090,6 +1096,30 @@ def cmd_ready(j, k, raw, frame_arg, no_send, resend=False):
     return res
 
 
+def adopt_gateway_env():
+    """Fill ADOPT_ENV names missing from this process from the gateway's own environ. -> names adopted.
+    Children (the detached mirror, the send scripts) inherit them; the token never goes on argv."""
+    missing = [n for n in ADOPT_ENV if not os.environ.get(n, "").strip()]
+    if not missing:
+        return []
+    try:
+        with open(GATEWAY_PID, encoding="utf-8") as f:
+            pid = int(json.load(f)["pid"])
+        with open(os.path.join(PROC, str(pid), "environ"), "rb") as f:
+            env = dict(kv.split(b"=", 1) for kv in f.read().split(b"\0") if b"=" in kv)
+    except (OSError, ValueError, KeyError, TypeError):
+        return []
+    got = []
+    for n in missing:
+        v = env.get(n.encode(), b"").decode("utf-8", "replace").strip()
+        if v:
+            os.environ[n] = v
+            got.append(n)
+    if "TZ" in got:
+        time.tzset()
+    return got
+
+
 def mirror_chat():
     """The Secretary chat id when both its env vars are set, else None (no copy, silently)."""
     if os.environ.get(MIRROR_TOKEN_ENV, "").strip():
@@ -1259,13 +1289,17 @@ def cmd_deliver(j, a):
         j["delivery"]["kept"] = f"not kept: {e}"
     log(j, "delivered")
     j["timing"] = timeline(j)
-    if mirror_chat():                                 # sent by spawn_mirror once this job is saved
-        kept = j["delivery"]["kept"]
-        j["delivery"]["mirror"] = {"job": j["job"], "sha256": digest, "state": "pending",
-                                   "file": kept[0] if isinstance(kept, list) and kept else final,
-                                   "cover": kept[1] if isinstance(kept, list) and len(kept) > 1 else a.cover,
-                                   "caption": a.caption[:1000], "hashtags": a.hashtags,
-                                   "link": j["link"], "product": j["product"], "label": label}
+    kept = j["delivery"]["kept"]
+    j["delivery"]["mirror"] = {"job": j["job"], "sha256": digest,
+                               # pending = spawn_mirror sends it once this job is saved; off = recorded anyway,
+                               # so `clipjob.py mirror JOB` can send it later from a process that has the env
+                               **({"state": "pending"} if mirror_chat() else
+                                  {"state": "off", "why": f"{MIRROR_TOKEN_ENV} / {MIRROR_CHAT_ENV} not set "
+                                                          "in the deliver process"}),
+                               "file": kept[0] if isinstance(kept, list) and kept else final,
+                               "cover": kept[1] if isinstance(kept, list) and len(kept) > 1 else a.cover,
+                               "caption": a.caption[:1000], "hashtags": a.hashtags,
+                               "link": j["link"], "product": j["product"], "label": label}
     arm_close(j)
     notify(f"ส่งงาน {j['job']} ครบแล้วค่ะ\n{timeline_text(j['timing'])}\n"
            f"กด {CLOSE_BTN} เพื่อปิดงาน · ไม่กดภายใน {CLOSE_S // 60} นาที ปิดให้เอง",
@@ -1331,6 +1365,7 @@ def main(argv=None):
     s.add_argument("--auto", action="store_true", help=argparse.SUPPRESS)       # the deliver timer
     s.add_argument("--token", help=argparse.SUPPRESS); s.add_argument("--after", type=float, help=argparse.SUPPRESS)
     a = ap.parse_args(argv)
+    adopt_gateway_env()
     if a.cmd != "close":
         sweep_closes()
 
@@ -1436,7 +1471,8 @@ def main(argv=None):
         if a.cmd == "mirror":
             m = (j.get("delivery") or {}).get("mirror")
             if j["status"] != "delivered" or not m:
-                raise Refused(f"job {a.job} has no Secretary copy to send (not delivered, or the copy was off then)")
+                raise Refused(f"job {a.job} has no Secretary copy to send (not delivered, or delivered before the copy "
+                              "was recorded)")
             if not mirror_chat():
                 raise Refused(f"{MIRROR_TOKEN_ENV} / {MIRROR_CHAT_ENV} not set in this container")
             if m.get("state") == "ok":
@@ -1526,6 +1562,8 @@ def main(argv=None):
                 except OSError as e:
                     mirror = f"copy not started: {e} (clipjob.py mirror {j['job']})"
                 mirror = mirror if isinstance(mirror, (str, int)) else (mirror or {}).get("state")
+            elif j["delivery"].get("mirror"):
+                mirror = "off: " + j["delivery"]["mirror"].get("why", "")
             rc, o, e = run(["python3", os.path.join(HERE, "check_delivery.py")])
             return out({"delivered": d, "check_delivery_exit": rc, "check_delivery": (o + e)[-600:],
                         "close": {**j["close"], "timer_pid": pid}, "secretary_copy": mirror,

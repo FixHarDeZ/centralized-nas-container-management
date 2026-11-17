@@ -20,6 +20,7 @@ os.environ["CLIPJOB_NO_TIMER"] = "1"                            # no test leaves
 cj.DOWNLOADS = []                                               # nor deletes from the real Downloads dirs
 cj.DIR = tempfile.mkdtemp(prefix="clipjob-jobs-")               # main() sweeps DIR: never the real jobs dir
 cj.WORK = tempfile.mkdtemp(prefix="clipjob-work-")
+cj.GATEWAY_PID = os.path.join(cj.WORK, "no-gateway.pid")            # never adopt the real gateway env
 
 
 def job(shots=3, mode="presenter", prod=None):
@@ -782,7 +783,40 @@ def test_secretary_copy_off_without_env(mirroring):
     mirroring["monkeypatch"].delenv(cj.MIRROR_TOKEN_ENV)
     assert cj.main(mirroring["args"]) == 0
     assert _mirror_calls(mirroring["calls"]) == []
-    assert "mirror" not in cj.load("g-1")["delivery"]
+    m = cj.load("g-1")["delivery"]["mirror"]                    # recorded anyway, so it can be sent later
+    assert m["state"] == "off" and cj.MIRROR_TOKEN_ENV in m["why"]
+    mirroring["monkeypatch"].setenv(cj.MIRROR_TOKEN_ENV, "123:SECRET-TOKEN-VALUE")
+    assert cj.main(["mirror", "g-1"]) == 0
+    assert [os.path.basename(c[3]) for c in _mirror_calls(mirroring["calls"])] == ["send_clip.py", "send_copy_buttons.py",
+                                                                                   "send_photo.py"]
+    assert cj.load("g-1")["delivery"]["mirror"]["state"] == "ok"
+
+
+def test_scrubbed_deliver_adopts_secretary_env_from_the_gateway(mirroring, tmp_path):
+    """2026-11-17 d-branner-toothpaste: deliver ran from Hermes' execute_code (secret-looking names scrubbed)."""
+    mp = mirroring["monkeypatch"]
+    mp.setenv(cj.MIRROR_TOKEN_ENV, ""); mp.setenv(cj.MIRROR_CHAT_ENV, "")    # restored to the test's env afterwards
+    proc = tmp_path / "proc"; (proc / "425").mkdir(parents=True)
+    (proc / "425" / "environ").write_bytes(b"PATH=/bin\0SECRETARY_TELEGRAM_BOT_TOKEN=9:GW-TOKEN\0"
+                                           b"SECRETARY_TELEGRAM_CHAT_ID=777\0")
+    pidf = tmp_path / "gateway.pid"; pidf.write_text(json.dumps({"pid": 425, "kind": "hermes-gateway"}))
+    mp.setattr(cj, "PROC", str(proc)); mp.setattr(cj, "GATEWAY_PID", str(pidf))
+    assert cj.main(mirroring["args"]) == 0
+    mc = _mirror_calls(mirroring["calls"])
+    assert [os.path.basename(c[3]) for c in mc] == ["send_clip.py", "send_copy_buttons.py", "send_photo.py"]
+    assert all("777" in c for c in mc)
+    assert not any("GW-TOKEN" in x for c in mirroring["calls"] for x in c)   # token never on argv
+    assert os.environ[cj.MIRROR_TOKEN_ENV] == "9:GW-TOKEN"                  # children inherit it
+    assert cj.load("g-1")["delivery"]["mirror"]["state"] == "ok"
+
+
+def test_adopt_gateway_env_keeps_set_names_and_survives_a_missing_gateway(tmp_path, monkeypatch):
+    monkeypatch.setenv(cj.MIRROR_TOKEN_ENV, "mine"); monkeypatch.setenv(cj.MIRROR_CHAT_ENV, "1")
+    monkeypatch.setenv("TZ", "Asia/Bangkok")
+    assert cj.adopt_gateway_env() == []                                     # nothing missing: no read at all
+    monkeypatch.setenv(cj.MIRROR_CHAT_ENV, "")
+    monkeypatch.setattr(cj, "GATEWAY_PID", str(tmp_path / "absent.pid"))
+    assert cj.adopt_gateway_env() == [] and os.environ[cj.MIRROR_TOKEN_ENV] == "mine"
 
 
 def test_secretary_copy_failure_never_blocks_delivery_and_mirror_resends(mirroring, capsys):
