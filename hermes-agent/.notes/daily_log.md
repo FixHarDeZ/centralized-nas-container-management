@@ -1170,3 +1170,18 @@ Not done / open:
   Synced live at `4befc47`. No deploy.
 - Not proven: Hermes meeting the refusal on a real order and rewriting the script.
 - Open, Fix decides: gameplay layout (lower 45 % blur). Advice given: 1:1 crop of the footage.
+
+### 2026-11-17 (3) — gameplay layout A: 1:1 footage window (`765efdc`)
+- Fix picked A ("เอา A") from three layout options for the blur in the lower 45 % of gameplay clips.
+- `build_v5.py`: plan `window_h` (720 = 1:1 window y 190-910; `window_y` then defaults to 190), window segs
+  cropped from the original trailer, per-seg `win_x` (limit ±420) and `wide`. Omitted `window_h` = old band.
+- `look-v5.md`: tall window is the default for every new plan; cover sticker `y` 1060, avoid `[0,190,720,910]`.
+  `SKILL.md` line updated (30611 of 30720 bytes). `graphics_layer.py` docstring.
+- Proof: real render of harvestmoon's plan with `window_h` 720 on a scratch copy + cover sticker through
+  `graphics_layer.py` (y 1040 refused by the layout check, 1060 passed); frame sheet read; mock sent to Fix's
+  chat (message 11604, label `layoutA_mock_review`). Live: 9 tests + `--selftest-zoom` PASS. Synced `765efdc`.
+- Slip: the scratch copy symlinked `work/`, so the mock build rewrote `timeline_v5.json` and the wavs in
+  harvestmoon's closed workdir (same segs, same values). Use a real copy next time.
+- Seen on the mock: one window shot shows the trailer's own letterbox bars; subs and pills lie on footage.
+- Not proven: Hermes writing `window_h` on a real order and choosing `win_x`/`wide` per shot;
+  `sub_linecheck.py` / `sub_bandprofile.py` on subs over footage; OCR text check on the 1:1 crop.

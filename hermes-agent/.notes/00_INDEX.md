@@ -196,6 +196,7 @@ registered, `presenter-shots` still registered, Telegram reconnected. Re-enablin
 
 | วันที่ | เรื่อง |
 |--------|--------|
+| 2026-11-17 | Gameplay layout A: `build_v5.py` `window_h` 720 = 1:1 footage window y 190-910 from the original trailer (`win_x`, `wide` per seg), default for new plans in `look-v5.md`; cover sticker y 1060 (`765efdc`). |
 | 2026-11-17 | `ctarule.py`: final shot's link line must be last (`reserve`/`pack` refuse; `CTA_ORDER_OK=1`), CTA pill tied to the spoken link line, subtitle split keeps brand names whole + plan `keep_words` (`4befc47`). |
 | 2026-11-17 | Delivered clip + hashtags + basket link copied to the Secretary bot chat (`63d9eab`, env deployed + live send verified); Hermes' 11-16 night live edits ported (`7740ede`). Checked the 4 clips of 11-17. |
 | 2026-11-16 | Checked 3 clips after the tune (all clean). `pillclear.py` + holding-height prompt rule + frame-check question (`431d111`); Hermes' 6 live edits ported (`d5d0222`). |
