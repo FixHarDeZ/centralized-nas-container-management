@@ -6,7 +6,7 @@ Fix approved the LEGO Batman demo. **It is the default builder; v4 `build.sh` is
 ## Tall window = the default layout (Fix 2026-11-17, "เอา A")
 The 16:9 band left the lower 45 % of the frame as blur. Every new plan sets **`"window_h": 720`** and has no
 `window_y` key (it defaults to 190): the footage is a 1:1 window at y 190–910, cropped from the ORIGINAL
-trailer, ~1.8× the picture area. Fix saw the Harvest Moon mock (message 11604) rendered this way.
+trailer, ~1.8× the picture area. Fix approved the Harvest Moon mock (message 11604) rendered this way.
 - **The crop keeps the middle 56 % of the width.** Look at each window shot on a frame sheet: subject off-centre
   → `"win_x": ±N` on that seg (px of the 1080p source, limit ±420). HUD / text / two subjects at both edges →
   `"wide": true` on that seg (whole 16:9 picture as a band inside the window). The OCR text check must read the

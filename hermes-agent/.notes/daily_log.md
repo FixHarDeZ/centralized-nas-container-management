@@ -1196,3 +1196,4 @@ Not done / open:
 - Fix decides after watching the mock (message 11604): sub size, cover position, window height.
 - Still open from before: hook card when the room has no free wall, tap held behind Hermes' skill-patch pass,
   ✅ tap replayed after a long turn, 📝 `credits: null`, Hermes `MEMORY.md` over limit.
+- Fix watched the mock (message 11604): "mock โอเค" — layout A stays as built, nothing to adjust.
