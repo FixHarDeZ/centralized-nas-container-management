@@ -164,9 +164,13 @@ def gemini_whole():
 
 def align_bounds(fr):
     """Phrase boundaries in the whole take: ASR word timestamps (faster-whisper small) mapped by
-    cumulative script-character proportion, then snapped to the quietest 20 ms inside +-0.35 s."""
+    cumulative script-character proportion give an estimate per boundary; the cut is then the middle
+    of a REAL pause chosen by vo_split.pick (longest pauses near the estimates, in order). The old
+    'quietest 20 ms within +-0.35 s' snap cut inside words (dragonddogma2 2026-11-17: ดรา|ก้อน)."""
     import numpy as np
     from faster_whisper import WhisperModel
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import vo_split
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "shopee-clip", "scripts"))
     import heavylock
     heavylock.acquire("gen_vo_natural")
@@ -181,8 +185,7 @@ def align_bounds(fr):
     tot_asr = sum(w[2] for w in words)
     say = [len(ph["say"].replace(" ", "")) for ph in P["phrases"]]
     tot = sum(say)
-    env = np.convolve(np.abs(st), np.ones(960) / 960, "same")  # 20 ms envelope
-    bounds, acc = [], 0
+    est, acc = [], 0
     for n in say[:-1]:
         acc += n
         target = acc / tot * tot_asr
@@ -191,9 +194,25 @@ def align_bounds(fr):
             c += k
             if c >= target:
                 t = b; break
-        i0, i1 = int(max(0, t - 0.35) * SR), int(min(len(st) / SR, t + 0.35) * SR)
-        bounds.append((i0 + int(np.argmin(env[i0:i1]))) / SR)
-    return bounds
+        est.append(float(t))
+    runs = vo_split.pauses(st, SR)
+    chosen = vo_split.pick(runs, est)
+    if chosen is None:  # fewer real pauses than boundaries: old snap, loudly
+        print(f"GATE WARN: only {len(runs)} pauses for {len(est)} boundaries -> quietest-point snap; "
+              "a cut may sit inside a word: listen to every boundary / ASR it")
+        env = np.convolve(np.abs(st), np.ones(960) / 960, "same")  # 20 ms envelope
+        bounds = []
+        for t in est:
+            i0, i1 = int(max(0, t - 0.35) * SR), int(min(len(st) / SR, t + 0.35) * SR)
+            bounds.append((i0 + int(np.argmin(env[i0:i1]))) / SR)
+        return bounds
+    print("align estimates:", [round(t, 2) for t in est],
+          "| pauses used:", [f"{c:.2f}({ln:.2f}s)" for c, ln in chosen])
+    for i, (c, ln) in enumerate(chosen):
+        if ln < vo_split.REAL_PAUSE:
+            print(f"GATE WARN: boundary {i}->{i + 1} at {c:.2f}s sits in a {ln:.2f}s dip = likely INSIDE a word "
+                  "(Gemini ran the lines together); listen there before shipping")
+    return [c for c, _ in chosen]
 
 
 def synth_edge(ph):
