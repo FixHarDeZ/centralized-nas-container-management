@@ -11,6 +11,12 @@ into step 7's prompt, AFTER the beat list and BEFORE the voiceover line, unchang
 check the finished `shot<K>.txt`: apart from the "ON-SCREEN TEXT: NONE" block it must not contain the words
 caption, label, pill, ป้าย, font, ฟอนต์, subtitle or `Link below`.
 
+Scanning it: cut the block out from `ON-SCREEN TEXT: NONE` through the end of the `ห้ามมีตัวอักษรใดๆ … ทีหลังเอง`
+line before grepping — the block itself contains `ป้าย`, so scanning the raw file always false-positives on it.
+A hit in the product prose (`a green-and-white label printed …`) is still a hit: the gate is word-based, not
+intent-based, so reword the prose (`the green-and-white printed front reading …`) instead of exempting it.
+Two words is the whole fix; do not shorten or drop the ON-SCREEN block to make the scan pass.
+
 ## The block (Thai, ready to paste)
 
 ```
