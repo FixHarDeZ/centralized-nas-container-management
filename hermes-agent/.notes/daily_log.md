@@ -1157,3 +1157,16 @@ Not done / open:
   - shokubutsu: subtitle line break inside the brand name (`ครีมอาบน้ำโช\Nกุบุสซึโฉมใหม่`).
   - car-air-vent: shot 3 is another seat/interior than shot 1 (continuity).
   - gameplay layout: last ~3 s without a subtitle; lower 45 % of the frame is blur with a small box shot.
+
+### 2026-11-17 (2) — link line last, brand names unbroken (`4befc47`)
+- Fix: fix defects 1-2 of the clip check; layout of gameplay clips = advice only.
+- `scripts/ctarule.py` (new, stdlib): `clipjob.py reserve` and `pack` refuse a final presenter `shot<K>.txt`
+  with a selling point after the link line (`CTA_ORDER_OK=1` = Fix's own call). `post_presenter.py` ties the
+  `Link below!` pill to the spoken link line and flags audio that still ends on something else.
+- `post_presenter.py` `glue_names`: pieces of a name the dictionary cut up are one word; plan `keep_words`.
+- Docs: `templates/clip-prompt.md` (link line last), `references/presenter-post.md` (pill note, flag, `keep_words`).
+- Proof in the container on a scratch copy: 95 tests passed; real `post_presenter.py` run on shokubutsu's three
+  fx scenes: sub `ครีมอาบน้ำ / โชกุบุสซึโฉมใหม่`, pill 16.48-18.98 -> 13.43-15.43, flag raised. Copy deleted.
+  Synced live at `4befc47`. No deploy.
+- Not proven: Hermes meeting the refusal on a real order and rewriting the script.
+- Open, Fix decides: gameplay layout (lower 45 % blur). Advice given: 1:1 crop of the footage.
