@@ -25,6 +25,7 @@ plan.json:
      "pills": [{"text": "Mineral Rich", "start": 1.0, "end": 3.0},
                {"text": "Link below!", "start": 7.6, "end": 9.6}]}
   ],
+  "keep_words": ["โชกุบุสซึ"],  # Thai brand / product names as spoken: a subtitle line never breaks inside one
   "xfade": 0.25,            # seconds; 0 = hard cut
   "seam_whoosh": true,      # extra whoosh at each seam (hook whoosh is always on)
   "model": "auto",          # small | medium | auto (small, escalate to medium if CER > 0.35)
@@ -290,13 +291,42 @@ def text_w(s):
     return _FONT.getlength(s) * 1.06   # Bold=1 in the style -> libass faux-bold widens ~5%
 
 
-def split_thai(s):
-    """Split one long Thai phrase into 2 lines at a word boundary near the middle."""
+KEEP = []                 # plan "keep_words": brand / product names a subtitle line never breaks inside
+
+
+def glue_names(words, known):
+    """Rejoin a name the dictionary cut up. newmm cuts โชกุบุสซึ into โช|กุ|บุ|สซึ and the 2-line split then
+    broke inside the brand (shokubutsu-shower-gel 2026-11-17). A run of pieces that are each unknown to the
+    dictionary or at most 2 letters long is one word, when at least one piece is unknown."""
+    out, run = [], []
+
+    def flush():
+        if run:
+            out.extend(["".join(run)] if any(w not in known for w in run) else run)
+            run.clear()
+    for w in words:
+        if w not in known or base_len(w) <= 2:
+            run.append(w)
+        else:
+            flush(); out.append(w)
+    flush()
+    return out
+
+
+def thai_words(s):
     try:
         from pythainlp.tokenize import word_tokenize
-        words = word_tokenize(s, engine="newmm")
+        from pythainlp.corpus import thai_words as corpus
+        from pythainlp.util import dict_trie
+        known = set(corpus()) | set(KEEP)
+        return glue_names(word_tokenize(s, engine="newmm", custom_dict=dict_trie(known)), known)
     except Exception:
-        words = list(s)
+        return list(s)
+
+
+def split_thai(s):
+    """Split one long Thai phrase into 2 lines at a word boundary near the middle."""
+    words = thai_words(s)
     best, bi = None, None
     acc = ""
     for k in range(1, len(words)):
@@ -377,6 +407,8 @@ def main():
     trims = plan.get("trim", "auto")
     model_pref = plan.get("model", "auto")
     report = {"scenes": [], "flags": []}
+    KEEP[:] = [w for w in plan.get("keep_words", []) if w]
+    link = None               # (t0, t1) of the spoken link line in the final scene, clip time
 
     # ---- per scene: trim, ASR, align
     gstart, events, pills = 0.0, [], []
@@ -462,6 +494,19 @@ def main():
         for pl in sc.get("pills", []):
             pills.append({"text": pl["text"], "t0": gstart + pl["start"], "t1": gstart + pl["end"], "scene": k})
 
+        if k == len(scenes) - 1:
+            import ctarule
+            said = [p for p in phr if p["status"] != "SKIPPED"]
+            span = ctarule.link_span([p["text"] for p in said])
+            if span:
+                link = (gstart + said[span[0]]["t0"], gstart + said[span[1]]["t1"])
+                late = ctarule.after_link([p["text"] for p in said])
+                if late:
+                    report["flags"].append(
+                        f"scene{k+1}: the link line is NOT the last thing said - '{' / '.join(late)}' comes after "
+                        f"it. This cut cannot reorder speech: tell Fix (re-gen the shot with the link line last, "
+                        f"or ship as is)")
+
         st = {"video": sc["video"], "freeze_head_s": round(fz, 3), "trim_s": round(T, 3), "dur_s": D,
               "global_start": round(gstart, 3), "asr_model": best["model"], "asr_text": best["text"],
               "cer": best["cer"], "cer_prompted": rp["cer"], "asr_text_prompted": rp["text"],
@@ -515,6 +560,20 @@ def main():
         t1 = total - 0.15
         pills.append({"text": CTA, "t0": t1 - 2.2, "t1": t1, "scene": last})
         report["flags"].append(f"no CTA pill in final scene -> auto-added '{CTA}' {t1-2.2:.2f}-{t1:.2f}")
+    # the CTA pill shows WHILE she says the link line (a fixed time put it on a selling point, 2026-11-17)
+    if link:
+        for p in pills:
+            if p["text"] == CTA and p["scene"] == last:
+                t0 = max(link[0] - 0.1, report["scenes"][last]["global_start"] + (xf if last else 0.0) + 0.1)
+                t1 = min(total - 0.15, max(link[1] + 0.4, t0 + 2.0))
+                if t1 - t0 >= 1.0 and (abs(t0 - p["t0"]) > 0.3 or abs(t1 - p["t1"]) > 0.3):
+                    report.setdefault("notes", []).append(
+                        f"pill '{CTA}' {p['t0']:.2f}-{p['t1']:.2f} -> {t0:.2f}-{t1:.2f}: tied to the spoken link line")
+                    p["t0"], p["t1"] = t0, t1
+                for q in pills:                      # another pill of the scene gives way to it
+                    if q is not p and q["scene"] == last and q["t0"] < p["t0"] < q["t1"] + 0.1:
+                        q["t1"] = p["t0"] - 0.1
+        pills = [q for q in pills if q["t1"] - q["t0"] >= 0.8]
     # ---- 3b. a pill never sits on her face: move it inside its scene, or drop it (pillclear.py)
     if not os.environ.get("NO_PILL_CLEAR"):
         import pillclear
@@ -532,7 +591,7 @@ def main():
             if p["text"] == CTA:
                 if pillclear.on_face(series, p["t0"] - g, p["t1"] - g):
                     report.setdefault("notes", []).append(f"pill '{CTA}' sits on her face (close-up at the end); "
-                                                          "it is tied to the clip's end and was left there")
+                                                          "it is tied to the link line and was left there")
                 kept.append(p)
                 continue
             taken = [(q["t0"] - g, q["t1"] - g) for q in kept]

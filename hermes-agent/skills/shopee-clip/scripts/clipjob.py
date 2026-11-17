@@ -289,6 +289,7 @@ def reserve(j, k, last_reserve, t=None):
     s = shot(j, k)
     if s["state"] not in ("pending", "regen_approved"):
         raise Refused(f"shot {k} is {s['state']}; a rendered or failed shot needs Fix's 🔁 first")
+    cta_order_check(j, k)
     if k > 1:
         prev = shot(j, k - 1)
         if prev["state"] not in ("in_review", "approved"):
@@ -625,6 +626,20 @@ def probe_verdict(info):
     if info["h"] and info["w"] and abs(info["w"] / info["h"] - 9 / 16) > 0.02:
         probs.append(f"สัดส่วน {info['w']}x{info['h']} ไม่ใช่ 9:16")
     return {"ok": not probs, "dur": round(info["dur"], 2), "note": "; ".join(probs)}
+
+
+def cta_order_check(j, k):
+    """Final presenter shot: the link line closes the script (ctarule.py). Before credits / Fix's time are spent."""
+    if j.get("mode") != "presenter" or k != len(j["shots"]) or os.environ.get("CTA_ORDER_OK"):
+        return
+    path = os.path.join(j["workdir"], f"shot{k}.txt")
+    if not os.path.exists(path):
+        return
+    import ctarule
+    why = ctarule.problem(ctarule.voiceover(open(path, encoding="utf-8").read()))
+    if why:
+        raise Refused(f"shot {k} ({path}): {why}. แก้ลำดับใน Audio (Thai voiceover) แล้วสั่งใหม่ "
+                      "(ฟิกสั่งให้เรียงแบบนี้เองเท่านั้นถึงใช้ CTA_ORDER_OK=1)")
 
 
 def cta_hits(text):
@@ -968,6 +983,8 @@ def cmd_pack(j, only, no_send):
     missing = [k for k in targets if not os.path.exists(os.path.join(wd, f"shot{k}.txt"))]
     if missing:
         raise Refused(f"write the prompt files first: {', '.join(f'{wd}/shot{k}.txt' for k in missing)}")
+    for k in targets:
+        cta_order_check(j, k)
     sent = []
     char_img = character_image(j.get("character"))
     if not no_send and not only:
