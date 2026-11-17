@@ -29,6 +29,10 @@ This CLI is the only sanctioned way to move a Flow-mode clip forward. It refuses
                          # 🎬 only: --report may be omitted; --style footage for a brand product film
                          # a re-run after a failed send skips the steps already done and logs the clip once
                          # its last message carries the 🏁 จบงาน button; the job closes itself CLOSE_S (300 s) later
+                         # then a detached `mirror --auto` sends a copy (clip + copy-button message) to the
+                         # Secretary bot chat when SECRETARY_TELEGRAM_BOT_TOKEN + _CHAT_ID are set; it messages
+                         # Fix only when the copy fails, and never blocks or delays the delivery
+  clipjob.py mirror JOB                             # resend a failed Secretary copy of the delivered clip
   clipjob.py close [JOB]                            # close now (Fix's 🏁 tap = decide --text); no JOB = every delivered
                                                     # job still waiting to close. Deletes only provable junk of that job
                                                     # (frame sheets, .v.jpg, last frames, logs, copies of the kept final,
@@ -74,6 +78,11 @@ SHOT_MIN = 3
 # "6 Sec · Generating will use 18 credits", an 8 s shot billed 24); 360p is a third-party figure. Flow's line
 # wins, and `submitted --credits` records what was read.
 RATE = {"720p": 3, "360p": 1}
+# Fix 2026-11-17: "หลังทำคลิปเสร็จและส่งงานแล้ว อยากให้ส่งคลิป, hashtag กับ link ปักตะกร้าไปแชทของ secretary"
+# The copy is sent AS the Secretary bot (a file_id from Hermes' bot is useless to another bot), so the mp4 is
+# uploaded again. The token stays in the env: the send scripts get only its NAME (TG_TOKEN_ENV), never argv.
+MIRROR_TOKEN_ENV = "SECRETARY_TELEGRAM_BOT_TOKEN"
+MIRROR_CHAT_ENV = "SECRETARY_TELEGRAM_CHAT_ID"
 FINALS_DIR = os.environ.get("CLIPJOB_FINALS", "/opt/data/clips/finals")   # delivered final + cover, for review
 KEEP_DAYS = 7              # Fix 2026-11-16: keep them a week (cleanup deletes the workdir and Downloads copies)
 CHAR_DIR = os.environ.get("CLIPJOB_CHARS", "/opt/data/clips/characters")   # <name>.jpg portrait per roster name
@@ -1064,6 +1073,85 @@ def cmd_ready(j, k, raw, frame_arg, no_send, resend=False):
     return res
 
 
+def mirror_chat():
+    """The Secretary chat id when both its env vars are set, else None (no copy, silently)."""
+    if os.environ.get(MIRROR_TOKEN_ENV, "").strip():
+        return os.environ.get(MIRROR_CHAT_ENV, "").strip() or None
+    return None
+
+
+def _store_mirror(job, m):
+    """Write only delivery.mirror back: the close sleeper / a 🏁 tap may have saved the job meanwhile."""
+    j = load(job)
+    if (j.get("delivery") or {}).get("sha256") == m.get("sha256"):
+        j["delivery"]["mirror"] = m
+        save(j)
+    return j
+
+
+def send_mirror(job):
+    """Send the delivered clip + copy-button message to the Secretary chat. Never raises.
+    Steps already ok are skipped, so a rerun (`clipjob.py mirror JOB`) never double-posts."""
+    j = load(job)
+    m = (j.get("delivery") or {}).get("mirror")
+    if not m:
+        return None
+    chat = mirror_chat()
+    if not chat:
+        m["state"] = "off"
+        _store_mirror(job, m)
+        return m
+    via = ["env", f"TG_TOKEN_ENV={MIRROR_TOKEN_ENV}", "python3"]
+    steps = [("clip", via + [os.path.join(HERE, "send_clip.py"), m["file"], m["caption"], chat, m["label"] + "_secretary"]),
+             ("copy_buttons", via + [os.path.join(HERE, "send_copy_buttons.py"), m["hashtags"], m["link"], chat, m["product"]])]
+    sent = m.setdefault("sent", {})
+    for name, cmd in steps:
+        if sent.get(name) == "ok":
+            continue
+        if os.environ.get("CLIPJOB_NO_TG"):
+            sent[name] = "skipped (CLIPJOB_NO_TG)"
+            continue
+        if not os.path.exists(m["file"]):
+            sent[name] = f"failed: {m['file']} is gone"
+            break
+        try:
+            rc, out, err = run(cmd)
+        except OSError as e:
+            rc, out, err = 1, "", str(e)
+        if rc:
+            sent[name] = "failed: " + (out[-200:] + " " + err[-200:]).strip()
+            break                                   # no copy buttons under a clip that never arrived
+        sent[name] = "ok"
+        _store_mirror(job, m)
+    if all(sent.get(n) == "ok" for n, _ in steps):
+        m["state"] = "ok"
+    elif sent and all(str(v).startswith("skipped") for v in sent.values()):
+        m["state"] = "skipped"
+    else:
+        m["state"] = "failed"
+    j = _store_mirror(job, m)
+    log(j, f"secretary copy: {m['state']}"); save(j)
+    return m
+
+
+def mirror_fail_text(m):
+    return (f"⚠️ ส่งสำเนาคลิป {m['label']} ไปแชท Secretary ไม่สำเร็จค่ะ (คลิปของฟิกส่งครบแล้ว)\n"
+            f"ส่งซ้ำ: clipjob.py mirror {m['job']}")
+
+
+def spawn_mirror(j):
+    """Detached like spawn_closer: the delivery returns at once, the second upload runs on its own."""
+    if os.environ.get("CLIPJOB_MIRROR_INLINE") or os.environ.get("CLIPJOB_NO_TG"):
+        return send_mirror(j["job"])
+    os.makedirs(os.path.dirname(CLIP_LOG), exist_ok=True)
+    out = open(os.path.join(os.path.dirname(CLIP_LOG), "mirror.log"), "a")
+    p = subprocess.Popen([sys.executable, os.path.abspath(__file__), "mirror", j["job"], "--auto"],
+                         stdin=subprocess.DEVNULL, stdout=out, stderr=subprocess.STDOUT,
+                         start_new_session=True, close_fds=True, cwd="/")
+    out.close()
+    return p.pid
+
+
 def cmd_deliver(j, a):
     if a.report:
         report = json.load(open(a.report, encoding="utf-8"))
@@ -1150,6 +1238,12 @@ def cmd_deliver(j, a):
         j["delivery"]["kept"] = f"not kept: {e}"
     log(j, "delivered")
     j["timing"] = timeline(j)
+    if mirror_chat():                                 # sent by spawn_mirror once this job is saved
+        kept = j["delivery"]["kept"]
+        j["delivery"]["mirror"] = {"job": j["job"], "sha256": digest, "state": "pending",
+                                   "file": kept[0] if isinstance(kept, list) and kept else final,
+                                   "caption": a.caption[:1000], "hashtags": a.hashtags,
+                                   "link": j["link"], "product": j["product"], "label": label}
     arm_close(j)
     notify(f"ส่งงาน {j['job']} ครบแล้วค่ะ\n{timeline_text(j['timing'])}\n"
            f"กด {CLOSE_BTN} เพื่อปิดงาน · ไม่กดภายใน {CLOSE_S // 60} นาที ปิดให้เอง",
@@ -1210,6 +1304,7 @@ def main(argv=None):
     s = sub.add_parser("note"); s.add_argument("job"); s.add_argument("text")
     s = sub.add_parser("wait"); s.add_argument("job"); s.add_argument("text")
     s = sub.add_parser("reopen"); s.add_argument("job"); s.add_argument("--reason", required=True)
+    s = sub.add_parser("mirror"); s.add_argument("job"); s.add_argument("--auto", action="store_true", help=argparse.SUPPRESS)
     s = sub.add_parser("close"); s.add_argument("job", nargs="?")
     s.add_argument("--auto", action="store_true", help=argparse.SUPPRESS)       # the deliver timer
     s.add_argument("--token", help=argparse.SUPPRESS); s.add_argument("--after", type=float, help=argparse.SUPPRESS)
@@ -1316,6 +1411,21 @@ def main(argv=None):
         if a.cmd in ("note", "wait"):
             need_open(j); log(j, f"{a.cmd}: {a.text}"); save(j)
             return out({**summary(j), "events": j["events"][-5:]})
+        if a.cmd == "mirror":
+            m = (j.get("delivery") or {}).get("mirror")
+            if j["status"] != "delivered" or not m:
+                raise Refused(f"job {a.job} has no Secretary copy to send (not delivered, or the copy was off then)")
+            if not mirror_chat():
+                raise Refused(f"{MIRROR_TOKEN_ENV} / {MIRROR_CHAT_ENV} not set in this container")
+            if m.get("state") == "ok":
+                return out({"job": a.job, "mirror": "already sent"})
+            m = send_mirror(a.job)
+            if m["state"] not in ("ok", "skipped"):
+                if a.auto:                                  # the detached run after deliver: tell Fix, keep 🏁
+                    c = load(a.job).get("close") or {}
+                    notify(mirror_fail_text(m), close_keyboard(a.job) if c.get("state") == "pending" else None)
+                raise Refused(f"Secretary copy failed: {m['sent']}")
+            return out({"job": a.job, "mirror": m["sent"]})
         if a.cmd == "reopen":
             if j["status"] != "delivered":
                 raise Refused(f"job {a.job} is {j['status']}; only a delivered job is reopened for a revision")
@@ -1387,9 +1497,16 @@ def main(argv=None):
                 pid = spawn_closer(j)
             except OSError as e:                                # the sweep closes it on a later call
                 pid = f"timer not started: {e}"
+            mirror = None
+            if (j["delivery"].get("mirror") or {}).get("state") == "pending":
+                try:
+                    mirror = spawn_mirror(j)                    # Secretary copy: detached, reports its own failure
+                except OSError as e:
+                    mirror = f"copy not started: {e} (clipjob.py mirror {j['job']})"
+                mirror = mirror if isinstance(mirror, (str, int)) else (mirror or {}).get("state")
             rc, o, e = run(["python3", os.path.join(HERE, "check_delivery.py")])
             return out({"delivered": d, "check_delivery_exit": rc, "check_delivery": (o + e)[-600:],
-                        "close": {**j["close"], "timer_pid": pid},
+                        "close": {**j["close"], "timer_pid": pid}, "secretary_copy": mirror,
                         "next": f"one short line to Fix, then end the turn. No cleanup: Fix's {CLOSE_BTN} tap or the "
                                 f"timer runs clipjob.py close in {CLOSE_S // 60} min"})
         if a.cmd == "cancel":

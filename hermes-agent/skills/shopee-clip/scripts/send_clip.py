@@ -10,6 +10,8 @@ logs/delivery-log.jsonl so check_delivery.py can audit it afterwards.
 
 Usage:
   send_clip.py <file.mp4> "<caption>" [chat_id] [label]
+  TG_TOKEN_ENV=<NAME> send_clip.py ...   # send as another bot: its token is read from env var NAME
+                                         # (never argv); ledger rows then carry "via": NAME
 
 Exit: 0 = verified delivered, 1 = NOT verified (retry it or report to Fix;
 never claim "sent" on exit 1).
@@ -33,6 +35,12 @@ UPLOAD_TIMEOUT = 500
 
 
 def read_token():
+    name = os.environ.get("TG_TOKEN_ENV")
+    if name:                                # a second bot (clipjob's Secretary copy)
+        tok = os.environ.get(name, "").strip()
+        if not tok:
+            raise SystemExit(name + " is empty")
+        return tok
     with open(ENV) as fh:
         for line in fh:
             if line.startswith("TELEGRAM_BOT_TOKEN="):
@@ -114,6 +122,8 @@ def main():
             "http": (data or {}).get("http"),
             "reason": None if ok else reason,
         }
+        if os.environ.get("TG_TOKEN_ENV"):
+            row["via"] = os.environ["TG_TOKEN_ENV"]
         append_row(row)
         verdict = {"file": path, "size": size, "ok": ok,
                    "message_id": row["message_id"], "attempt": attempt}

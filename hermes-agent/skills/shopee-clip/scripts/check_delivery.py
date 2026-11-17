@@ -11,6 +11,8 @@ logs/clip-log.jsonl (appended at SKILL.md step 9) and reports:
         shipped but that never left this box (the MEDIA: bug signature)
 
 Text-only review sends and probes are not checked; only clip deliveries are.
+Rows with "via" (a copy sent as another bot, e.g. the Secretary chat) are skipped:
+they are not Fix's delivery, and clipjob reports their failure itself.
 
 Usage: check_delivery.py [--verbose]
 Exit 0 = clean, exit 1 = something needs re-sending or reporting.
@@ -53,7 +55,7 @@ def day(ts):
 
 def main():
     verbose = "--verbose" in sys.argv
-    deliveries = load(LEDGER)
+    deliveries = [r for r in load(LEDGER) if not r.get("via")]
     clips = load(CLIPLOG)
     problems = []
 

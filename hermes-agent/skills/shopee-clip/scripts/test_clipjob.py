@@ -5,6 +5,8 @@ Run: uv run --with pytest pytest -q hermes-agent/skills/shopee-clip/scripts/test
 import importlib.util
 import json
 import os
+import subprocess
+import sys
 import tempfile
 
 import pytest
@@ -721,3 +723,119 @@ def test_close_then_reopen_then_redeliver(closing):
     assert cj.main(closing["args"]) == 0
     j = cj.load("g-1")
     assert j["status"] == "delivered" and j["close"]["state"] == "pending" and j["timing"]
+
+
+# ---------------------------------------------------------------- Secretary copy (Fix 2026-11-17)
+@pytest.fixture
+def mirroring(tmp_path, monkeypatch):
+    """Deliver a 🎬 job with the Secretary env set; `run` calls recorded, mirror sent inline."""
+    monkeypatch.setattr(cj, "DIR", str(tmp_path / "jobs")); monkeypatch.setenv("CLIPJOB_NO_TIMER", "1")
+    monkeypatch.delenv("CLIPJOB_NO_TG", raising=False)
+    monkeypatch.setenv("CLIPJOB_MIRROR_INLINE", "1")
+    monkeypatch.setenv(cj.MIRROR_TOKEN_ENV, "123:SECRET-TOKEN-VALUE")
+    monkeypatch.setenv(cj.MIRROR_CHAT_ENV, "555")
+    monkeypatch.setattr(cj, "WORK", str(tmp_path / "work"))
+    monkeypatch.setattr(cj, "FINALS_DIR", str(tmp_path / "finals"))
+    monkeypatch.setattr(cj, "CLIP_LOG", str(tmp_path / "logs" / "clip-log.jsonl"))
+    monkeypatch.setattr(cj, "DOWNLOADS", [])
+    sent = []
+    monkeypatch.setattr(cj, "tg", lambda m, p=None, files=None: sent.append((m, p)) or {"message_id": 1})
+    monkeypatch.setattr(cj, "av_durations", lambda p: (20.0, 20.0))
+    calls, fail = [], set()
+
+    def fake_run(cmd):
+        calls.append(cmd)
+        mirror = cmd[0] == "env"
+        script = os.path.basename(next(c for c in cmd if c.endswith(".py")))
+        if mirror and script in fail:
+            return 1, json.dumps({"ok": False}), "boom"
+        return 0, json.dumps({"ok": True}), ""
+    monkeypatch.setattr(cj, "run", fake_run)
+    wd = tmp_path / "work" / "g-1"
+    assert cj.main(["new", "g-1", "--mode", "gameplay", "--product", "Game", "--link", "https://s.shopee.co.th/x",
+                    "--workdir", str(wd)]) == 0
+    final = wd / "final.mp4"; final.write_bytes(b"FINAL"); cover = wd / "thumb.jpg"; cover.write_bytes(b"COVER")
+    args = ["deliver", "g-1", "--final", str(final), "--hashtags", "#game", "--cover", str(cover), "--caption", "cap",
+            "--hook-id", "gph-1", "--category", "game"]
+    return {"args": args, "calls": calls, "fail": fail, "sent": sent, "monkeypatch": monkeypatch}
+
+
+def _mirror_calls(calls):
+    return [c for c in calls if c[0] == "env"]
+
+
+def test_secretary_copy_sends_clip_and_buttons_as_the_secretary_bot(mirroring):
+    assert cj.main(mirroring["args"]) == 0
+    mc = _mirror_calls(mirroring["calls"])
+    assert [os.path.basename(c[3]) for c in mc] == ["send_clip.py", "send_copy_buttons.py"]
+    assert all(c[1] == f"TG_TOKEN_ENV={cj.MIRROR_TOKEN_ENV}" and "555" in c for c in mc)
+    assert mc[0][4].endswith("finals/g-1.mp4")                  # the kept copy, which cleanup never deletes
+    assert mc[1][4:6] == ["#game", "https://s.shopee.co.th/x"]
+    assert not any("SECRET-TOKEN-VALUE" in x for c in mirroring["calls"] for x in c)   # token never on argv
+    j = cj.load("g-1")
+    assert j["status"] == "delivered" and j["delivery"]["mirror"]["state"] == "ok"
+    assert j["close"]["state"] == "pending"                     # the copy does not disturb the 🏁 timer
+
+
+def test_secretary_copy_off_without_env(mirroring):
+    mirroring["monkeypatch"].delenv(cj.MIRROR_TOKEN_ENV)
+    assert cj.main(mirroring["args"]) == 0
+    assert _mirror_calls(mirroring["calls"]) == []
+    assert "mirror" not in cj.load("g-1")["delivery"]
+
+
+def test_secretary_copy_failure_never_blocks_delivery_and_mirror_resends(mirroring, capsys):
+    mirroring["fail"].add("send_clip.py")
+    assert cj.main(mirroring["args"]) == 0                      # Fix's delivery still succeeded
+    j = cj.load("g-1")
+    assert j["status"] == "delivered" and j["delivery"]["mirror"]["state"] == "failed"
+    assert [os.path.basename(c[3]) for c in _mirror_calls(mirroring["calls"])] == ["send_clip.py"]  # no buttons
+    mirroring["calls"].clear(); mirroring["fail"].clear()
+    assert cj.main(["mirror", "g-1"]) == 0
+    assert [os.path.basename(c[3]) for c in _mirror_calls(mirroring["calls"])] == ["send_clip.py", "send_copy_buttons.py"]
+    assert cj.load("g-1")["delivery"]["mirror"]["state"] == "ok"
+    mirroring["calls"].clear()
+    assert cj.main(["mirror", "g-1"]) == 0                      # already sent: nothing re-posted
+    assert _mirror_calls(mirroring["calls"]) == []
+
+
+def test_secretary_copy_rerun_skips_the_clip_already_sent(mirroring):
+    mirroring["fail"].add("send_copy_buttons.py")
+    assert cj.main(mirroring["args"]) == 0
+    mirroring["calls"].clear(); mirroring["fail"].clear()
+    assert cj.main(["mirror", "g-1"]) == 0
+    assert [os.path.basename(c[3]) for c in _mirror_calls(mirroring["calls"])] == ["send_copy_buttons.py"]
+
+
+def test_secretary_copy_auto_failure_tells_fix_and_keeps_the_close_button(mirroring):
+    mirroring["fail"].add("send_clip.py")
+    assert cj.main(mirroring["args"]) == 0
+    mirroring["sent"].clear()
+    assert cj.main(["mirror", "g-1", "--auto"]) == 1
+    msg = [p for m, p in mirroring["sent"] if m == "sendMessage"][-1]
+    assert "Secretary" in msg["text"] and "clipjob.py mirror g-1" in msg["text"]
+    assert msg["reply_markup"]["keyboard"] == [[{"text": "🏁 จบงาน · g-1"}]]
+
+
+def test_send_clip_reads_a_named_token_and_tags_ledger(tmp_path, monkeypatch):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("send_clip_t", os.path.join(os.path.dirname(cj.__file__), "send_clip.py"))
+    sc = importlib.util.module_from_spec(spec); spec.loader.exec_module(sc)
+    monkeypatch.setenv("TG_TOKEN_ENV", "OTHER_BOT"); monkeypatch.setenv("OTHER_BOT", "9:abc")
+    assert sc.read_token() == "9:abc"
+    monkeypatch.setenv("OTHER_BOT", "")
+    with pytest.raises(SystemExit):
+        sc.read_token()
+
+
+def test_check_delivery_ignores_copies_sent_as_another_bot(tmp_path):
+    led = tmp_path / "d.jsonl"; clog = tmp_path / "c.jsonl"
+    led.write_text(json.dumps({"ts": "2026-11-17T10:00:00", "file": "f.mp4", "ok": True, "message_id": 1,
+                               "size": 1, "remote_size": 1, "attempt": 1}) + "\n" +
+                   json.dumps({"ts": "2026-11-17T10:01:00", "file": "f.mp4", "ok": False, "attempt": 2,
+                               "via": "SECRETARY_TELEGRAM_BOT_TOKEN", "reason": "boom"}) + "\n")
+    clog.write_text("")
+    env = dict(os.environ, CLIP_LEDGER=str(led), CLIP_LOG=str(clog))
+    p = subprocess.run([sys.executable, os.path.join(os.path.dirname(cj.__file__), "check_delivery.py")],
+                       env=env, capture_output=True, text=True)
+    assert p.returncode == 0, p.stdout
