@@ -1243,3 +1243,22 @@ Not done / open:
 - Also ported Hermes' live edit to `shopee-clip/templates/style-card.md` (scan rule, `e904836`).
 - Tests 117 passed local (py3.12), 128 in sync gate; live synced at `ba9faee`, live probe on the NAS take gives the
   same cuts. Delivered clips are unchanged (no re-render); no deploy needed.
+
+### 2026-11-17 — Secretary copy missing on d-branner-toothpaste
+- Fix: the latest clip reached Fix's chat with the close button, but no clip / hashtags / link / cover reached the
+  Secretary chat.
+- Cause: Hermes ran `deliver` from its `execute_code` tool (`subprocess.run(['python3', clipjob, 'deliver', …])`).
+  That tool's child env drops every secret-looking name (`tools/code_execution_env._scrub_child_env`) plus TZ →
+  `mirror_chat()` None → copy silently skipped, no `delivery.mirror`, job stamps in UTC. Dragon's Dogma (13:33) went
+  through `terminal` and was fine. Fix's own send worked because `send_clip.py` reads the main token from
+  `/opt/data/.env`.
+- Fix `d2eaf38`: `clipjob.adopt_gateway_env()` fills missing `SECRETARY_TELEGRAM_*` + `TZ` from the gateway process
+  (`/opt/data/gateway.pid` → `/proc/<pid>/environ`, same uid) at every clipjob call; deliver now always records
+  `delivery.mirror` (`state: off` + `why` when there are no creds) so `clipjob.py mirror JOB` can send later.
+  Tests: 2 new + 1 changed in `test_clipjob.py`; 130 passed in the sync gate. Live check under `env -i`: 3 names
+  adopted, stamp +07:00.
+- Resent d-branner: rebuilt its `delivery.mirror` from the exact deliver args (caption/hashtags from Hermes' session
+  in `state.db`, hashtags matched clip-log, kept mp4 sha matched) → `clipjob.py mirror d-branner-toothpaste`:
+  clip / copy_buttons / cover all ok.
+- Alternative not taken: `terminal.env_passthrough` in live config (official knob, but not repo-owned and only covers
+  execute_code).
