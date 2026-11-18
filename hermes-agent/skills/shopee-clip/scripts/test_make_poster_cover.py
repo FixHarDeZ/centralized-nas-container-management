@@ -89,3 +89,68 @@ def test_theme_auto_follows_the_hero_and_named_theme_is_checked(spec, capsys):
     assert mp.palette("auto", Image.new("RGB", (64, 64), (128, 128, 128)))["dark"] == mp.palette("blue", None)["dark"]
     s["theme"] = "neon"
     assert run(tmp, s) == 1
+
+
+# ---- detail-slot gates (Fix 2026-11-18: blurry D2 circles, GT6 map not visible, Lego case art cut off)
+
+def test_small_crop_would_be_upscaled_and_is_refused(spec, capsys):
+    tmp, s = spec
+    s["circles"] = [{"image": "img.jpg", "box": [100, 100, 270, 300], "label": "สายถัก"},
+                    {"image": "img.jpg", "box": [0, 0, 400, 400], "label": "มุมข้าง"}]
+    assert run(tmp, s) == 1
+    err = capsys.readouterr().err
+    assert "circle 1 ('สายถัก') is too small" in err and "upscaled" in err
+
+
+def test_tall_picture_in_a_circle_is_refused_and_a_card_shows_it_whole(spec, capsys):
+    tmp, s = spec
+    Image.new("RGB", (832, 1400), (200, 30, 30)).save(tmp / "case.jpg")
+    s["circles"] = [{"image": "case.jpg", "label": "ปกเกม"}]
+    assert run(tmp, s) == 1
+    assert "square-ish" in capsys.readouterr().err
+    s["circles"][0]["shape"] = "card"
+    assert run(tmp, s) == 0
+    out = Image.open(tmp / "cover.jpg")
+    assert out.size == (1080, 1920)
+
+
+def test_card_keeps_the_whole_picture(spec):
+    tmp, s = spec
+    case = Image.new("RGB", (600, 1000), (30, 160, 30))
+    case.paste((250, 220, 20), (0, 0, 600, 80))             # a yellow top strip = the title of the case
+    case.paste((20, 60, 230), (0, 920, 600, 1000))          # a blue bottom strip
+    case.save(tmp / "case.png")
+    s["circles"] = [{"image": "case.png", "shape": "card", "label": "ปกเกม"}]
+    s["theme"] = "green"
+    tmp_out = tmp / "cover.png"
+    (tmp / "spec.json").write_text(json.dumps(s, ensure_ascii=False), encoding="utf-8")
+    assert mp.main([str(tmp / "spec.json"), "--out", str(tmp_out)]) == 0
+    px = [c for _, c in Image.open(tmp_out).convert("RGB").getcolors(1 << 24)]
+    near = lambda c, t: max(abs(a - b) for a, b in zip(c, t)) < 40          # noqa: E731
+    assert any(near(p, (250, 220, 20)) for p in px)         # both strips survive: nothing was cropped off
+    assert any(near(p, (20, 60, 230)) for p in px)
+
+
+def test_white_and_black_borders_are_trimmed():
+    im = Image.new("RGB", (800, 1400), (255, 255, 255))
+    im.paste((200, 30, 30), (0, 0, 800, 1250))
+    assert mp.trim_border(im).size == (800, 1250)
+    im = Image.new("RGB", (1000, 600), (0, 0, 0))
+    im.paste((40, 90, 200), (100, 0, 900, 600))
+    assert mp.trim_border(im).size == (800, 600)
+    plain = Image.new("RGB", (300, 300), (40, 90, 200))
+    assert mp.trim_border(plain).size == (300, 300)
+
+
+def test_long_label_fails_instead_of_turning_tiny(spec, capsys):
+    tmp, s = spec
+    s["circles"][0]["label"] = "แผนที่สนามกอล์ฟบนข้อมือแบบละเอียดทุกหลุม"
+    assert run(tmp, s) == 1
+    assert "circle 1 label does not fit" in capsys.readouterr().err
+
+
+def test_unknown_shape_is_refused(spec, capsys):
+    tmp, s = spec
+    s["circles"][0]["shape"] = "hexagon"
+    assert run(tmp, s) == 1
+    assert "shape must be" in capsys.readouterr().err

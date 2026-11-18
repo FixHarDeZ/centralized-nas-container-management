@@ -16,10 +16,20 @@ spec.json (paths are relative to the spec file):
    the last line takes the accent colour
    "sub": "เปลี่ยนกลิ่นอับในรถ ให้หอมสดชื่น",             # optional ribbon
    "badge": ["มี 2 สี", "ฟ้า / ดำ"],                    # optional sticker on the hero, 1-2 short lines
-   "circles": [{"image": "img1.jpg", "box": [372, 262, 772, 662], "label": "แพ็กเกจสีฟ้า"}],   # 0-3
+   "circles": [{"image": "img1.jpg", "box": [372, 262, 772, 662], "label": "แพ็กเกจสีฟ้า"},   # 0-3 detail slots
+               {"image": "case.jpg", "shape": "card", "label": "ปกเกม"}],
    "chips": ["ติดช่องแอร์", "ดีไซน์คริสตัลใส"],          # 2-4
    "theme": "auto"}                      # auto = hue of the hero
    or blue|green|pink|purple|orange|red|teal|gold
+
+Detail slots (Fix 2026-11-18: blurry / meaningless / cropped circles):
+  shape "circle" (default) — a square-ish close-up of ONE detail. The source (after box + border trim) must be
+    roughly square (w/h 0.8-1.25) and at least as many pixels as the circle shows (no upscaling): a 170 px crop of a
+    720p frame is refused — take a listing detail photo instead.
+  shape "card" — the WHOLE picture in a rounded rectangle at its own aspect (a game case, a pack, a box art);
+    nothing is cut off. Also needs enough pixels.
+  A uniform white/black border is trimmed off every picture first (listing photos and screenshots carry them).
+  1-2 slots draw bigger than 3.
 
 Every text shrinks to fit down to a floor size
 one that still does not fit stops the run and names the
@@ -34,7 +44,7 @@ import os
 import re
 import sys
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont, features
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont, features
 
 W, H = 1080, 1920
 PX, PY, PW, PH = 90, 150, 900, 1600          # the card
@@ -99,6 +109,32 @@ def crop_box(im, box, what):
     if not (0 <= x0 < x1 <= im.width and 0 <= y0 < y1 <= im.height):
         raise Bad(f"{what}: box {box} is outside the {im.width}x{im.height} image")
     return im.crop((x0, y0, x1, y1))
+
+
+def trim_border(im, tol=18):
+    """Drop a uniform near-white or near-black frame (a listing photo's padding, a screenshot's bar).
+    Only a border whose colour is near white or near black is cut; a coloured edge is picture."""
+    for edge in ((255, 255, 255), (0, 0, 0)):
+        corners = [im.getpixel(p) for p in ((0, 0), (im.width - 1, 0), (0, im.height - 1), (im.width - 1, im.height - 1))]
+        if not any(max(abs(a - b) for a, b in zip(c, edge)) <= tol for c in corners):
+            continue
+        diff = ImageChops.difference(im, Image.new("RGB", im.size, edge)).convert("L").point(lambda v: 255 if v > tol else 0)
+        bb = diff.getbbox()
+        if bb and (bb[2] - bb[0]) * (bb[3] - bb[1]) >= 0.25 * im.width * im.height:
+            im = im.crop(bb)
+    return im
+
+
+def need_pixels(im, w, h, what):
+    """Refuse a picture shown bigger than it is (upscaled = mush)."""
+    if im.width < 0.9 * w or im.height < 0.9 * h:
+        raise Bad(f"{what} is too small: {im.width}x{im.height} px shown at {round(w)}x{round(h)} would be upscaled "
+                  f"(blurry) — use a bigger box or a higher-resolution picture (a listing detail photo)")
+
+
+def contain(im, w, h):
+    s = min(w / im.width, h / im.height)
+    return im.resize((max(1, round(im.width * s)), max(1, round(im.height * s))), Image.LANCZOS)
 
 
 def rounded(im, rad):
@@ -198,7 +234,10 @@ def build(spec, base="."):
         check_text(t, f"chip {i + 1}")
     if not spec.get("hero"):
         raise Bad("spec needs a hero image")
-    hero = crop_box(Image.open(path(spec["hero"])).convert("RGB"), spec.get("hero_box"), "hero_box")
+    for i, c in enumerate(circles):
+        if c.get("shape", "circle") not in ("circle", "card"):
+            raise Bad(f"circle {i + 1}: shape must be 'circle' or 'card', not {c.get('shape')!r}")
+    hero = trim_border(crop_box(Image.open(path(spec["hero"])).convert("RGB"), spec.get("hero_box"), "hero_box"))
     fx, fy = spec.get("hero_focus") or (0.5, 0.42)
     pal = palette(spec.get("theme"), hero)
     DARK, MID = pal["dark"], pal["mid"]
@@ -209,8 +248,33 @@ def build(spec, base="."):
            for i, t in enumerate(title)]
     ssz = fit_size(sub, inner - 68, 46, 32, "sub") if sub else 0
     csz, rows = chip_rows(chips, PW - 24)
-    R = 122
-    lsz = [fit_size(c["label"], 2 * R + 30, 40, 26, f"circle {i + 1} label") for i, c in enumerate(circles)]
+    n = len(circles)
+    R = {1: 170, 2: 160}.get(n, 122)              # 1-2 detail slots draw bigger
+    step = {2: 380, 3: 285}.get(n, 0)             # centre-to-centre
+    slot_w = {1: 640, 2: 360, 3: 262}.get(n, 0)   # widest a card may be
+    lsz = [fit_size(c["label"], slot_w if n == 1 else 2 * R + 30, 40, 32, f"circle {i + 1} label")
+           for i, c in enumerate(circles)]
+    slots = []                                    # (shape, picture ready to paste)
+    for i, c in enumerate(circles):
+        what = f"circle {i + 1} ('{c['label']}')"
+        src = trim_border(crop_box(Image.open(path(c["image"])).convert("RGB"), c.get("box"), what))
+        if c.get("shape", "circle") == "circle":
+            ratio = src.width / src.height
+            if not 0.8 <= ratio <= 1.25:
+                raise Bad(f"{what}: a circle needs a square-ish picture, this one is {src.width}x{src.height} "
+                          f"(w/h {ratio:.2f}) and the circle would cut most of it off — give a square box around the "
+                          f"detail, or \"shape\": \"card\" to show the whole picture")
+            need_pixels(src, 2 * R, 2 * R, what)
+            im = cover_fit(src, 2 * R, 2 * R).convert("RGBA")
+            m = Image.new("L", (2 * R, 2 * R), 0)
+            ImageDraw.Draw(m).ellipse((0, 0, 2 * R, 2 * R), fill=255)
+            im.putalpha(m)
+            slots.append(("circle", im))
+        else:
+            dw = min(slot_w, 2 * R * src.width / src.height)
+            dh = dw * src.height / src.width
+            need_pixels(src, dw, dh, what)
+            slots.append(("card", rounded(contain(src, dw, dh), 24)))
     bsz = [fit_size(t, 260, 54 if i == 0 else 42, 30, f"badge line {i + 1}") for i, t in enumerate(badge)]
     y = 28
     title_y = []
@@ -264,19 +328,22 @@ def build(spec, base="."):
         for t, sz in zip(badge, bsz):
             d.text(((sb[0] + sb[2]) // 2, by + round(sz * 0.55)), t, font=font(sz), fill=DARK, anchor="mm")
             by += round(sz * 1.15)
-    n = len(circles)
-    for i, (c, sz) in enumerate(zip(circles, lsz)):
-        cx = PW // 2 + round((i - (n - 1) / 2) * 285)
-        src = crop_box(Image.open(path(c["image"])).convert("RGB"), c.get("box"), f"circle {i + 1}")
-        im = cover_fit(src, 2 * R, 2 * R).convert("RGBA")
-        shadow(card, (cx - R, circ_cy - R, cx + R, circ_cy + R), R)
-        m = Image.new("L", (2 * R, 2 * R), 0)
-        ImageDraw.Draw(m).ellipse((0, 0, 2 * R, 2 * R), fill=255)
-        im.putalpha(m)
-        card.alpha_composite(im, (cx - R, circ_cy - R))
-        d = ImageDraw.Draw(card)
-        d.ellipse((cx - R, circ_cy - R, cx + R, circ_cy + R), outline=WHITE, width=9)
-        d.ellipse((cx - R - 5, circ_cy - R - 5, cx + R + 5, circ_cy + R + 5), outline=MID, width=4)
+    for i, (c, sz, (shape, im)) in enumerate(zip(circles, lsz, slots)):
+        cx = PW // 2 + round((i - (n - 1) / 2) * step)
+        if shape == "circle":
+            shadow(card, (cx - R, circ_cy - R, cx + R, circ_cy + R), R)
+            card.alpha_composite(im, (cx - R, circ_cy - R))
+            d = ImageDraw.Draw(card)
+            d.ellipse((cx - R, circ_cy - R, cx + R, circ_cy + R), outline=WHITE, width=9)
+            d.ellipse((cx - R - 5, circ_cy - R - 5, cx + R + 5, circ_cy + R + 5), outline=MID, width=4)
+        else:
+            x0, y0 = cx - im.width // 2, circ_cy + R - im.height     # bottom-aligned, label sits on its foot
+            box = (x0, y0, x0 + im.width, y0 + im.height)
+            shadow(card, box, 24)
+            card.alpha_composite(im, (x0, y0))
+            d = ImageDraw.Draw(card)
+            d.rounded_rectangle(box, 24, outline=WHITE, width=8)
+            d.rounded_rectangle((box[0] - 5, box[1] - 5, box[2] + 5, box[3] + 5), 28, outline=MID, width=4)
         tw = width(c["label"], sz)
         d.rounded_rectangle((cx - tw / 2 - 20, circ_cy + R - 14, cx + tw / 2 + 20, circ_cy + R + 44), 28,
                             fill=WHITE, outline=MID, width=4)
