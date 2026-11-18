@@ -1351,3 +1351,13 @@ Not done / open:
   (น้ำไหลจากปากเป็ด, กังหันสิงโตหมุนได้), chips: truncated "ของเล่นลอยน้ำให้" → "ของเล่นลอยน้ำ 5 ชิ้น", duplicate
   lion chip → "ขอบมน ล้างง่าย". finals replaced (v1 kept), Secretary msg 159–160.
 - Open: D2 side card is small (wide 1260×770 photo in a 2-slot row = 360×220). Watch next order: Hermes picks listing detail photos, uses `card` for case art, per-slot check.
+
+### 2026-11-18 (2) — session closed
+- Fix: "จบงานจริงๆละ".
+- State: live skills synced at `0687642` (poster cover slot gates `f5a7b4c` + Hermes' 7 live edits ported); notes
+  `a188039`, `35c8195`, `e2c79b2` + this close; all pushed, tree clean. No deploy needed. No open clip job.
+- Covers rebuilt this session (v2 in `finals/`, v1 kept as `finals/<job>_cover.v1.jpg`): huawei-watch-d2, honma-gt6,
+  lego-hp-switch2-gameplay (Fix chat + Secretary), d-branner-toothpaste, nikos-bath-toy (Secretary only).
+- Watch on the next order: Hermes' cover uses listing/official detail photos in slots, `"shape": "card"` for case art,
+  the blind per-slot check runs; a `too small` / `square-ish` exit gets fixed with a better picture, not a smaller R.
+- Open: D2 side card small (wide photo in a 2-slot row); the D.Branner hero lost some tube height to the bigger slots.
