@@ -70,6 +70,28 @@ Measured on a 2:50 PS5 gameplay trailer: vision tiles gave roughly 5–8 s of ga
 - Encoding the source window directly as master with `-ss S -t D` is the default; the speech VTT from ASR on the full source must then be shifted with `scripts/rebase_vtt.py speech.vtt S subs.en.vtt` (drops cues ending before S, keeps the header format `build_v5` parses).
 - Encoding the full 20+ min source to master takes ~8 min on the NAS. Encode only the window you need (`-t` = window end) and rebase the times.
 
+## 4b. `scripts/windows.py` — the window table (DEFAULT since 2026-11-18)
+- Why: lego-hp-switch2-gameplay (11-17) spent 6.5 of its 9 hours joining VTT gaps, whisper spans, OCR hits,
+  luma probes, VAD and vision verdicts by hand, re-listing the whole map in every turn. The script does the
+  join in one run (~2–4 min on a 2-min trailer) and the sections below become its fallback and its reasons.
+- Run it per candidate source, in the workdir:
+  `uv run --with faster-whisper --with rapidocr-onnxruntime --with numpy --with pillow python <skill>/scripts/windows.py tr_x.mp4 --vtt subs_x.en.vtt [--rebase S]`
+  → `tr_x_windows.json`, `tr_x_windows.jpg` (already ≤1600 px: no vprep) and a table `W n · start · end · dur ·
+  luma · motion · cuts · flags`. Times are of the file you pass (trailer = master when the master is the whole
+  trailer; `--rebase S` adds master times for a `-ss S` master).
+- What it already did, so don't redo it: speech = silero VAD (no transcription: whisper hallucinates words over
+  music, "do do do" on lego-hp) ∪ caption cues, padded 0.15 s; dark = 4 fps luma < 25; text = RapidOCR at 1 s on
+  the candidates + 0.25 s probes at every text run's edges; a string on ≥ half the frames = overlay (reported,
+  crop it in the master encode); 1-char hits = `suspect` (look at that tile, they are usually noise);
+  `STATIC` = a card or a still; `cuts` = hard cuts inside the window.
+- Then ONE vision call on the sheet: per W, gameplay / cutscene / card / logo / UI. Pick segs inside the W's
+  (cut at a listed cut for a seam), hero = the strongest moving W on the 1080p source. The end card has text by
+  design and is not in the table: pick it with `framesheet.py`.
+- `STOP` on the last line (< 15 s moving) = next official source; after 3 sources still STOP → ask Fix with the
+  number (SKILL.md Length rule). Don't fetch a fourth and fifth trailer on your own.
+- Speech the VAD misses (whispered lines, sung lyrics) still shows in the captions — always pass `--vtt` when
+  yt-dlp has auto-subs.
+
 ## 5. Contact sheets (cheap, no credits)
 - **Sheets go to vision as small JPEG, one call at a time**: `uv run --with pillow python /opt/data/skills/shopee-clip/scripts/vprep.py sheet.png` → send `sheet.v.jpg` (≤1600 px). The xenoblade sheets were 2–4 MB PNG and were sent two per batch; four batches hit the 420 s tool timeout.
 - Window tiles: `ffmpeg -ss T -t D -i master.mp4 -vf "crop=720:405:0:320,fps=N,scale=240:135,tile=CxR" -frames:v 1 sheet.png` with `N = C*R/D` so the grid covers the range.
