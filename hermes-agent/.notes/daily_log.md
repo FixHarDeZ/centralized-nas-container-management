@@ -1321,3 +1321,26 @@ Not done / open:
   No deploy needed. Test copies of windows.py removed from the NAS.
 - Watch on the next 🎬 order: Hermes runs `windows.py` + one vision call (not hand OCR/VAD/luma), footage-stage
   minutes, ≤3 sources. Next short 📦/🧑: no false gap WARN. ⏱ line includes clarify waits.
+
+## 2026-11-18 (2) — poster cover detail slots (Fix: ปกไม่สวย / ไม่สื่อ)
+- Fix sent 3 delivered covers: huawei-watch-d2 (circles "สายถัก"/"มุมข้าง" unreadable), honma-gt6 ("แผนที่สนามกอล์ฟ"
+  circle shows no map), lego-hp (case art in a circle, cut off).
+- Root cause from the live `cover_spec.json`s: D2 circles = 196×262 / 168×198 crops of 720p Flow frames upscaled to
+  244 px; GT6 = 250×250 box of a Flow frame with no map in it, label shrank to the 26 px floor; Lego = 832×1400
+  `cover_crop.jpg` (white band at the bottom) square-cropped. The workdirs already had the right pictures:
+  `huawei-watch-d-2-blue-straps.jpg` / `-blue-side.jpg`, `off6_golf.jpg`, `off5_dial.png`. Recipe listed "another
+  raw frame" before "listing photo" and the hero/circle contradiction trap pushed Hermes to clip frames only.
+- `make_poster_cover.py` (`f5a7b4c`): refuse an upscaled slot (source < 0.9 × shown px), refuse a circle source
+  outside w/h 0.8–1.25, new `"shape": "card"` (whole picture at its own aspect, bottom-aligned, label on its foot),
+  `trim_border` (white/black padding off every picture), R 170/160/122 for 1/2/3 slots, label floor 26 → 32.
+  6 new tests (17 total, pass in the container). Old specs of all 3 jobs now exit 1 with the reason.
+- `poster-cover.md`: listing detail photo that shows the label = first choice, "Detail slots" section, blind
+  per-slot vision check ("what does slot N show?"), variant rule narrowed. gameplay SKILL: case front = card.
+- Rebuilt v2 for all 3 in the workdirs (`cover_spec_v2.json` → `cover_v2.jpg`, not resent): D2 strap circle from the
+  official strap photo + side profile card; GT6 golf circle tight on the watch face of `off6_golf.jpg` + dial circle;
+  Lego case card + gameplay circle. Before/after shown to Fix.
+- Hermes' 7 live edits (pulled into the NAS clone, not local — misread first) ported `0687642`; its router Q1 line
+  moved to `templates/storyboard.md` (SKILL.md was 164 B over budget). Clone reset, live synced at `0687642`
+  (149 tests). All pushed. No deploy.
+- Open: D2 side card is small (wide 1260×770 photo in a 2-slot row = 360×220); cover_v2 files not sent to Fix's
+  chat / finals. Watch next order: Hermes picks listing detail photos, uses `card` for case art, per-slot check.
