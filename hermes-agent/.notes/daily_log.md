@@ -1342,5 +1342,7 @@ Not done / open:
 - Hermes' 7 live edits (pulled into the NAS clone, not local — misread first) ported `0687642`; its router Q1 line
   moved to `templates/storyboard.md` (SKILL.md was 164 B over budget). Clone reset, live synced at `0687642`
   (149 tests). All pushed. No deploy.
-- Open: D2 side card is small (wide 1260×770 photo in a 2-slot row = 360×220); cover_v2 files not sent to Fix's
-  chat / finals. Watch next order: Hermes picks listing detail photos, uses `card` for case art, per-slot check.
+- Fix: "ส่งทับปกเดิมได้เลย" → v2 copied over `finals/<job>_cover.jpg` + workdir `cover.jpg` (old kept as
+  `finals/<job>_cover.v1.jpg`, `work/<job>/cover_v1.jpg`), sent via `send_photo.py` to Fix's chat (msg 12174–12176)
+  and the Secretary chat (156–158), caption `ปกคลิป (แก้ใหม่) · <job>`; ledger rows `<job>_cover_v2[_secretary]`.
+- Open: D2 side card is small (wide 1260×770 photo in a 2-slot row = 360×220). Watch next order: Hermes picks listing detail photos, uses `card` for case art, per-slot check.
