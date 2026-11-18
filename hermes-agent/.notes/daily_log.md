@@ -1313,3 +1313,11 @@ Not done / open:
 - Tests 132 passed local (py3.12), 143 in the sync gate; live synced at `b40cf8d`; all pushed. No deploy needed.
 - Watch on the next 🎬 order: Hermes runs windows.py (not hand OCR/VAD), one vision call on the sheet, footage
   stage minutes; next 📦/🧑 short clip: no false gap WARN; ⏱ line shows clarify waits.
+
+### 2026-11-18 — session closed
+- Fix: "จบงาน".
+- State: live skills synced at `b40cf8d`; notes `88cbc9b` + this close; all pushed, tree clean (uv side-effect
+  edits to `uv.lock` / `.venv/bin/python` reverted). No open clip job (lego-hp + nikos delivered + closed).
+  No deploy needed. Test copies of windows.py removed from the NAS.
+- Watch on the next 🎬 order: Hermes runs `windows.py` + one vision call (not hand OCR/VAD/luma), footage-stage
+  minutes, ≤3 sources. Next short 📦/🧑: no false gap WARN. ⏱ line includes clarify waits.
