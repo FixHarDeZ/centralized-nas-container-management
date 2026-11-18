@@ -1271,3 +1271,45 @@ Not done / open:
   Fix's call (dragonddogma2 re-split is 0 Gemini requests via `--from-take gemini_take2.wav`).
 - Watch on the next orders: gameplay stdout `pauses used: …` all ≥0.15 s and no `GATE WARN … INSIDE a word`;
   Secretary copy arrives by itself even when Hermes delivers from `execute_code`; job stamps +07:00.
+
+### 2026-11-18 — checked lego-hp-switch2-gameplay (11-17) + nikos-bath-toy (11-18)
+- Fix: "ของเมื่อวานคลิป gameplay Harry Potter ทำนานหลาย ชม. มากเกิดอะไรขึ้น ต้อง tune อะไรเพิ่มไหม".
+- **lego-hp 🎬 = 535 min** (other 🎬 jobs ~66–134 min in ทำคลิป). Timeline from `state.db` session
+  `20261117_171523_78088b3e`: 17:22–18:44 source search (6 trailers fetched, `Relive the Magic` is narrated + text
+  cards), **18:44–01:22 footage-window analysis done in the model's head**: ~30 turns of 7–24 min each, reasoning
+  per turn grew from ~6k to 100–200k chars (it re-lists every window, VTT gap, OCR hit and luma value each turn);
+  session total 200 calls, 872k reasoning tokens (vs 29k the session before). Context compacted at 23:50. Tools
+  themselves were fast. Plan → VO → build → gates → cover → deliver took only 45 min (01:26–02:11). Fix asked
+  "นานมากยังไม่เสร็จอีกหรอ" at 21:42; the reply turn itself thought 24 min (answered 22:06).
+  VO split fine (`pauses used` 0.36–0.69 s, 5 gaps), Secretary copy ok, auto close ok.
+- **nikos-bath-toy 📦 = 101 min** (first real 📦 order; prep 21, gen+review 11, post 69). Clean otherwise:
+  `make_poster_cover.py` used + vision-checked, Secretary copy ok, `vo_split` pauses 0.39–0.64 s. ~21 min of post
+  were two `clarify` timeouts on `GATE WARN: <4 gaps > 0.25s` — impossible on a 4-phrase 10 s clip (3 gaps max;
+  `gen_vo_natural.py` line ~336 is a fixed 4). `clarify` waits are not counted in `wait_fix_min`.
+- Proposed tunes (not done yet): (1) a window-finder script that fuses speech spans + `ocr_scan` + luma + scene cuts
+  into one ranked JSON table + one sheet, so Hermes picks from a table instead of reasoning over raw maps;
+  (2) scale the VO gap gate to phrase count / length; (3) count `clarify` waits in `wait_fix_min`.
+
+### 2026-11-18 — the three tunes (Fix: "ที่แนะนำมา ทำได้เลย")
+- Started with `make hermes-skills ARGS=--pull`: 6 live edits by Hermes (poster-cover misread rule, probe-truncation
+  trap, 📦 prompt CTA-word rule + script sizing + take hand-off + punch-in substitute, hooks mismatch → custom id,
+  storyboard no punch-in for 📦/✋, style-card substring scan) ported as `b17f73d`.
+- **VO pause gate scales with length** (`46366df`): new `gameplay-clips/scripts/vo_gates.py` `gap_need(vo_end)` =
+  one gap >0.25 s per 5 s of VO (4 per 20 s, 2 per 10 s), stdlib only (edge-only runs have no numpy);
+  `gen_vo_natural.py` WARN and `gen_vo_custom.py` FAIL print `need N for X s`. Docs: natural-vo, SKILL Length,
+  short-clip-ffmpeg, product-mode (Hermes' "ask Fix once" workaround replaced by "widen a gap_after first").
+- **clarify waits count** (`46366df`): `clipjob.clarify_spans()` reads Hermes' `state.db` read-only (assistant
+  `clarify` tool call → its tool result) inside the job clock; `deliver` passes them to `timeline()` as `asks`.
+  Tests point `HERMES_DB` at a missing file. Live re-count: nikos-bath-toy wait_fix_min 0 → 22.
+- **`gameplay-clips/scripts/windows.py`** (`b40cf8d`): one run per source → `<stem>_windows.json` + labelled
+  `<stem>_windows.jpg` (≤1600 px) + table. Speech = silero VAD (`faster_whisper.vad`, no transcription; whisper
+  hallucinated "do do do" over the music) ∪ `--vtt` cues, pad 0.15; dark = 4 fps luma < 25; text = RapidOCR 1 s on
+  candidates + 0.25 s probes at run edges; overlays (≥ half the frames) and 1-char hits not dirty; motion/STATIC,
+  hard cuts, `USABLE`/`STOP` (15 s moving). heavylock name `windows`. On the real `tr_relive.mp4` (111 s, 1080p):
+  4 min, 108 OCR frames, 43.7 s in 9 windows (Hermes by hand: ~45 s in 6.5 h); the segs Hermes shipped sit inside
+  W2/W6/W7/W8/W9 (our edges 0.1–0.4 s more conservative); the sheet showed no text on any tile.
+  SKILL.md step 4 now = windows.py + one vision call, ≤3 sources then ask Fix, "past 45 min on footage say so"
+  (SKILL 30.2 KB, under budget); footage-sourcing §4b documents it (§5 = fallback/reasons). 7 unit tests.
+- Tests 132 passed local (py3.12), 143 in the sync gate; live synced at `b40cf8d`; all pushed. No deploy needed.
+- Watch on the next 🎬 order: Hermes runs windows.py (not hand OCR/VAD), one vision call on the sheet, footage
+  stage minutes; next 📦/🧑 short clip: no false gap WARN; ⏱ line shows clarify waits.
