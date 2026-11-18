@@ -95,7 +95,7 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
 7. **Prompts → files.** Write `<workdir>/shot<K>.txt` for every shot. Build them from
    `templates/clip-prompt.md` + `templates/style-card.md` + a hook from `templates/hooks.md`
    (`S/perf.py pick-hook --category <cat>`), plus the no-on-screen-text block. Then:
-   `clipjob.py new <job> --mode presenter|product|hands --product "…" --link <url> --shots N [--seconds 8,6] --ref <workdir>/ref1.jpg [--ref …] --character <name>` (🧑 only). Credits (board, Q3): `clipjob.py cost --seconds 8,6`. workdir = `/opt/data/clips/work/<job>`
+   `clipjob.py new <job> --mode presenter|product|hands --product "…" --link <url> --shots N [--seconds 8,6] [--ref <workdir>/ref1.jpg [--ref …]] [--character <name>]` (🧑 only). Credits (board, Q3): `clipjob.py cost --seconds 8,6`. workdir = `/opt/data/clips/work/<job>`
 8. **Q3 — who drives Flow** (`clarify`, one question, cost in the text):
    `["📝 เตรียม prompt ทีละช็อตให้ (ฟิกกดใน Flow เอง)", "🤖 ให้ไอยูลองทำใน Flow ให้เลย (≈<cost> เครดิต ถ้าติดจะสลับเป็นโหมด prompt ให้เอง)"]`.
    An unanswered or timed-out question means 📝 (zero spend) — for ANY question that would spend credits, not just this one. Record the answer: `clipjob.py production <job> prompt|auto`, using `production prompt` rather than `fallback` (a fallback locks that job out of `auto` for good; the hand-off message format is in `flow-driver` → Manual hand-off).

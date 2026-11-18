@@ -66,6 +66,9 @@
 ## Talking to Fix
 - **An unanswered, timed-out or cancelled question = the zero-spend option**, re-asked at most once. A reply that carries
   images or prose but no chosen option is input, not an answer: use the material, re-ask once, hold at zero spend.
+  A FLAG question follows the same rule (after the one re-ask times out, run `deliver` with
+  `--ack "<flag>=zero-spend default (clarify timed out)"`) — the ack value must state it is the timeout default,
+  never pretend Fix chose it.
 - **A short "ok" / "ได้" to your own go/no-go question is a yes.** Do not re-ask.
 - **Reference images with no order are input, not a job.** Ask once (new clip / use in an open job / just keep). Ad-style
   images (headline text, staged lifestyle shots) are storyboard input only; apply that default and say so in one line.
@@ -88,6 +91,9 @@
 - Per-run artifacts: `templates/style-card.md` block in every prompt; hook by category, least recently used
   (`perf.py pick-hook`, never the same `hook_id` for a category within 5 rows); hashtags from the category pool in
   `templates/hashtags.md` (4 product + 3 vibe + 1 platform).
+  When the picked hook's subject does not fit the product (a desk line for a wearable), keep the returned
+  `hook_id` and swap only the subject noun — the LRU tracks ids, not wording, so a rewritten line with the
+  original id keeps the history intact; do not re-pick for a subject mismatch.
 - Presenter build = graphics v2 (default since 2026-11-07): `presenter_fx.py` → `post_presenter.py` →
   `graphics_layer.py --report report.json` (`references/presenter-graphics.md`). Product stills are cut-out stickers
   beside the presenter, never full-screen cards that hide her.
