@@ -15,7 +15,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 spec = importlib.util.spec_from_file_location("clipjob", os.path.join(HERE, "clipjob.py"))
 cj = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(cj)
-cj.FINALS_DIR = tempfile.mkdtemp(prefix="clipjob-finals-")     # no test writes into the real kept-finals dir
+cj.FINALS_DIR = tempfile.mkdtemp(prefix="clipjob-finals-")
+cj.HERMES_DB = "/nonexistent/state.db"                          # no test reads the real Hermes sessions     # no test writes into the real kept-finals dir
 os.environ["CLIPJOB_NO_TIMER"] = "1"                            # no test leaves a 5-minute close sleeper behind
 cj.DOWNLOADS = []                                               # nor deletes from the real Downloads dirs
 cj.DIR = tempfile.mkdtemp(prefix="clipjob-jobs-")               # main() sweeps DIR: never the real jobs dir
@@ -517,6 +518,40 @@ def test_timeline_counts_waits_on_fix_in_a_footage_job():
     tl = cj.timeline(j)
     assert tl["wait_fix_min"] == 157 and tl["stages"] == [["เตรียม", 0], ["ทำคลิป", 544]]
     assert "ทำคลิป 544 น. (รอฟิกตอบ 157 น.)" in cj.timeline_text(tl)
+
+
+def _hermes_db(path, rows):
+    import sqlite3
+    c = sqlite3.connect(path)
+    c.execute("CREATE TABLE messages (id INTEGER PRIMARY KEY, session_id TEXT, role TEXT, content TEXT, "
+              "tool_call_id TEXT, tool_calls TEXT, tool_name TEXT, timestamp REAL)")
+    c.executemany("INSERT INTO messages (role, tool_call_id, tool_calls, timestamp) VALUES (?, ?, ?, ?)", rows)
+    c.commit()
+    c.close()
+
+
+def test_clarify_spans_reads_hermes_asks(tmp_path):
+    db = str(tmp_path / "state.db")
+    ask = lambda cid, name="clarify": json.dumps([{"id": cid, "type": "function",
+                                                   "function": {"name": name, "arguments": "{}"}}])
+    _hermes_db(db, [("assistant", None, ask("c1"), 1000.0), ("tool", "c1", None, 1600.0),      # 10 min ask
+                    ("assistant", None, ask("c2"), 2000.0), ("tool", "c2", None, 2600.0),      # outside the window
+                    ("assistant", None, ask("t1", "terminal"), 1100.0), ("tool", "t1", None, 1900.0),
+                    ("assistant", None, ask("c3"), 1700.0)])                                    # never answered
+    assert cj.clarify_spans(900, 1800, db) == [(1000.0, 1600.0)]
+    assert cj.clarify_spans(900, 1300, db) == [(1000.0, 1300.0)]                               # clipped at the end
+    assert cj.clarify_spans(900, 1800, str(tmp_path / "missing.db")) == []
+
+
+def test_timeline_counts_clarify_waits():
+    j = job(shots=0, mode="gameplay")
+    j["created"], j["events"] = "2026-11-12T02:00:00+07:00", []
+    j.pop("started", None)
+    for hhmm, msg in [("02:00", "created"), ("03:00", "delivered")]:
+        _ev(j, hhmm, msg)
+    t0 = cj._epoch(j["created"])
+    tl = cj.timeline(j, asks=[(t0 + 600, t0 + 1200), (t0 + 900, t0 + 1500)])   # overlapping asks = one wait
+    assert tl["wait_fix_min"] == 15
 
 
 # ---------------------------------------------------------------- Omni 1.2 Flash: per-shot seconds and cost

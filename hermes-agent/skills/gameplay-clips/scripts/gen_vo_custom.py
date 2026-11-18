@@ -28,7 +28,7 @@ Contract:
 to ASS \\N at write time — a raw newline would end the Dialogue line and
 silently drop the rest of the text).
   * rate '-3%' / pitch '+11Hz' are the preset defaults (see SKILL.md).
-  * Gates it prints for you: >=4 gaps > 0.25s, last_token_end <= DUR-1.5.
+  * Gates it prints for you: one gap > 0.25s per 5 s of VO (4 per 20 s), last_token_end <= DUR-1.5.
   * If shorter gaps make the VO end too early -> ADD phrases (more selling
     points), never raise --gap back toward 1.0.
   * Retries each synthesis up to 5x (edge-tts raises NoAudioReceived
@@ -179,8 +179,9 @@ def main():
     gaps = [round(alltoks[i][0] - alltoks[i-1][1], 2) for i in range(1, len(alltoks))]
     big = [g for g in gaps if g > 0.25]
     print(f"last_token_end={alltoks[-1][1]:.2f}s  gaps>0.25={len(big)} {big}")
-    if len(big) < 4:
-        print("GATE FAIL: need >=4 gaps > 0.25s (add more phrases)")
+    need = max(1, round(alltoks[-1][1] / 5.0))  # 4 per 20 s = one per 5 s (vo_gates.gap_need)
+    if len(big) < need:
+        print(f"GATE FAIL: need >={need} gaps > 0.25s for {alltoks[-1][1]:.1f}s (add more phrases)")
     if args.probe:
         print("(--probe: no files written)")
         return

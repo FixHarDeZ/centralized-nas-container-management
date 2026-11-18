@@ -49,13 +49,9 @@ uv run --with edge-tts --with faster-whisper --with numpy \
   Itim house style from the VO timeline (known text, no ASR timing). Pills are drawn at y=210.
 - An edge fallback applies the warm EQ automatically and adds a `notes` line. Tell Fix that voice A was used.
 - `report.json` has `flags`, and `deliver` refuses while any flag stands.
-- `VO GATE WARN: <4 gaps > 0.25s` is the 20 s heuristic (`gen_vo_natural` counts gaps across the whole
-  script): a ≤10 s clip built from 4 phrases has only 3 gaps, so it fires as a proportionality false
-  positive (3 gaps/10 s ≈ the 6/20 s the gate wants). Either plan ≥5 short phrases (4 gaps clears it) or
-  ask Fix ONCE with that framing; a timed-out ask = deliver as-is (the zero-spend default), acked
-  transparently. Never re-cut or re-time a verified VO just to silence it.
-
-## Graphics (mandatory)
+- The VO pause gate scales with length (`vo_gates.gap_need`: one gap >0.25 s per 5 s of VO, so 2 on a 10 s
+  clip, 4 on 20 s). `VO GATE WARN: N gaps > 0.25s, need M …` is therefore real: widen a `gap_after` to ≥0.30
+  via `--from-take` (0 requests) before asking Fix. Never re-cut a verified VO just to silence it.
 - `graphics_layer.py out.mp4 gfx.json final.mp4 --report <workdir>/report.json --check` runs the layout
   check only and exits without writing the output — render with the same command minus `--check`.
 - **`layout_probe.py` does not fit here.** It looks for a face and a pastel studio wall. For b-roll, use

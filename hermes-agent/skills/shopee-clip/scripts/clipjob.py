@@ -57,6 +57,7 @@ import json
 import os
 import re
 import shutil
+import sqlite3
 import subprocess
 import sys
 import time
@@ -86,6 +87,7 @@ MIRROR_CHAT_ENV = "SECRETARY_TELEGRAM_CHAT_ID"
 # 2026-11-17 d-branner-toothpaste: Hermes ran `deliver` from its execute_code tool, whose child env drops every
 # name that looks like a secret (and TZ). The Secretary copy was silently off and the stamps were UTC. The gateway
 # process (same uid, same container) holds the compose env, so missing names are taken from there.
+HERMES_DB = os.environ.get("CLIPJOB_STATE_DB", "/opt/data/state.db")   # Hermes sessions: clarify waits
 GATEWAY_PID = os.environ.get("CLIPJOB_GATEWAY_PID", "/opt/data/gateway.pid")
 PROC = "/proc"
 ADOPT_ENV = (MIRROR_TOKEN_ENV, MIRROR_CHAT_ENV, "TZ")
@@ -215,8 +217,45 @@ def _epoch(ts):
     return dt.datetime.fromisoformat(ts).timestamp()
 
 
-def timeline(j, end=None):
-    """Where the time went, in minutes, from the job's own events. A revision counts from its reopen."""
+def clarify_spans(a, b, db=None):
+    """(asked, answered) epochs of Hermes `clarify` calls between a and b, read from its state.db.
+
+    A clarify blocks the turn on Fix without any clipjob event (nikos-bath-toy 2026-11-18: two timed-out asks,
+    21 min, logged as wait_fix_min 0). Read-only and best effort: no db / a locked or changed schema = []."""
+    db = db or HERMES_DB
+    if not os.path.exists(db):
+        return []
+    try:
+        c = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=2)
+        try:
+            asked = {}
+            for ts, tc in c.execute("SELECT timestamp, tool_calls FROM messages WHERE role='assistant' "
+                                    "AND timestamp BETWEEN ? AND ? AND tool_calls LIKE '%clarify%'", (a, b)):
+                for call in json.loads(tc or "[]"):
+                    if (call.get("function") or {}).get("name") == "clarify":
+                        asked[call.get("id") or call.get("call_id")] = ts
+            asked.pop(None, None)
+            if not asked:
+                return []
+            marks = ",".join("?" * len(asked))
+            rows = c.execute(f"SELECT tool_call_id, timestamp FROM messages WHERE role='tool' "
+                             f"AND tool_call_id IN ({marks})", list(asked)).fetchall()
+        finally:
+            c.close()
+    except (sqlite3.Error, ValueError, TypeError, AttributeError):
+        return []
+    return sorted({(asked[i], min(t, b)) for i, t in rows if i in asked and t > asked[i]})
+
+
+def job_asks(j, end):
+    """clarify waits inside this job's clock (see timeline)."""
+    start = min(_epoch(j["created"]), _epoch(j["started"])) if j.get("started") else _epoch(j["created"])
+    return clarify_spans(start, end)
+
+
+def timeline(j, end=None, asks=()):
+    """Where the time went, in minutes, from the job's own events. A revision counts from its reopen.
+    `asks` = extra (start, end) waits on Fix that left no event (Hermes clarify calls, job_asks)."""
     ev = [(_epoch(e["ts"]), e["msg"]) for e in j["events"]]
     end = end if end is not None else (ev[-1][0] if ev else now())
     created = _epoch(j["created"])
@@ -227,7 +266,7 @@ def timeline(j, end=None):
     start = min(created, _epoch(j["started"])) if j.get("started") else created
     stages = [["เตรียม", mins(start, created)]]
     decides = [t for t, m in ev if m.startswith("decide shot")]
-    spans, ready_at = [], {}
+    spans, ready_at = list(asks), {}
     for (t, m), nxt in zip(ev, [t for t, _ in ev[1:]] + [end]):
         if m.startswith("wait:"):                       # the turn ended on Fix; the next event is the resume
             spans.append((t, max(t, nxt)))
@@ -1255,7 +1294,7 @@ def cmd_deliver(j, a):
                "duration_s": round(float(report.get("v_dur") or 0), 2),
                "credits": (0 if j["mode"] == "gameplay" else
                            sum(c for c in credits if c) if credits and all(c is not None for c in credits) else None),
-               "notes": notes.strip(" |"), "timing": timeline(j, now())}
+               "notes": notes.strip(" |"), "timing": timeline(j, now(), job_asks(j, now()))}
         os.makedirs(os.path.dirname(CLIP_LOG), exist_ok=True)
         with open(CLIP_LOG, "a", encoding="utf-8") as f:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -1288,7 +1327,8 @@ def cmd_deliver(j, a):
     except OSError as e:                                # a full disk never blocks a delivery that already went out
         j["delivery"]["kept"] = f"not kept: {e}"
     log(j, "delivered")
-    j["timing"] = timeline(j)
+    t_end = now()
+    j["timing"] = timeline(j, t_end, job_asks(j, t_end))
     kept = j["delivery"]["kept"]
     j["delivery"]["mirror"] = {"job": j["job"], "sha256": digest,
                                # pending = spawn_mirror sends it once this job is saved; off = recorded anyway,

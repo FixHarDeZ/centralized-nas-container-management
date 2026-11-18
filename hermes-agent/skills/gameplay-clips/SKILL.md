@@ -54,7 +54,7 @@ metadata:
 - A length Fix names in the order wins over this rule (the older "below DUR → clarify" rules apply to it).
 - Usable seconds < 15 → clarify with the real number and options (shorter clip at the usable length / another
   source / footage Fix sends) and stop, as in `references/gameplay-pitfalls.md`.
-- Scale with DUR: VO char budget (deadline − lead − Σgaps) × 10–16 ch/s, the gap gate (≥4 gaps >0.25 s per 20 s),
+- Scale with DUR: VO char budget (deadline − lead − Σgaps) × 10–16 ch/s, the gap gate (one gap >0.25 s per 5 s, `vo_gates.gap_need`),
   and the shot count. A clip of 15 s or less may use the short-clip path below.
 
 ## Cover sticker + thumbnail — DEFAULT on every clip (Fix 2026-11-07 / 11-08)

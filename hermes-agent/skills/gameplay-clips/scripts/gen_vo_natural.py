@@ -25,7 +25,7 @@ plan.json:
   ]
 }
 Outputs vo.mp3 (48k stereo), subs.ass (Itim style identical to v4), and prints the
-timeline + gates: gaps>0.25 count (need >=4 per 20 s), last end, per-phrase
+timeline + gates: gaps>0.25 count (need one per 5 s of VO, vo_gates.gap_need), last end, per-phrase
 chars/sec (a phrase far faster than its neighbours = engine skipped words).
 Every phrase is RMS-levelled to the same loudness so per-call takes match.
 """
@@ -332,9 +332,12 @@ def main():
         cps = len(e["say"].replace(" ", "")) / d if d else 0
         print(f"  [{e['i']}] {e['start']:.2f}-{e['end']:.2f} ({d:.2f}s, {cps:.1f} ch/s)  {e['say'][:44]}")
     big = [g for g in gaps if g > 0.25]
-    print(f"gaps={gaps}  gaps>0.25={len(big)}")
-    if len(big) < 4:
-        print("GATE WARN: <4 gaps > 0.25s")
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import vo_gates
+    need = vo_gates.gap_need(tl[-1]["end"])
+    print(f"gaps={gaps}  gaps>0.25={len(big)} (need {need} for {tl[-1]['end']:.1f}s)")
+    if len(big) < need:
+        print(f"GATE WARN: {len(big)} gaps > 0.25s, need {need} for {tl[-1]['end']:.1f}s of VO (one per 5 s)")
     cps_all = [len(e["say"].replace(" ", "")) / (e["end"] - e["start"]) for e in tl]
     med = sorted(cps_all)[len(cps_all) // 2]
     for e, c in zip(tl, cps_all):
