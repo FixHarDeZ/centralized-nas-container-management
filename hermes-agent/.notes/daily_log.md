@@ -1345,4 +1345,9 @@ Not done / open:
 - Fix: "ส่งทับปกเดิมได้เลย" → v2 copied over `finals/<job>_cover.jpg` + workdir `cover.jpg` (old kept as
   `finals/<job>_cover.v1.jpg`, `work/<job>/cover_v1.jpg`), sent via `send_photo.py` to Fix's chat (msg 12174–12176)
   and the Secretary chat (156–158), caption `ปกคลิป (แก้ใหม่) · <job>`; ledger rows `<job>_cover_v2[_secretary]`.
+- Fix: same fix for d-branner-toothpaste + nikos-bath-toy, send to Secretary only. Both had 720p frame crops
+  (Nikos: 190 px lion crop, labels overlapping). v2: D-Branner squeeze circle `cand_a.jpg` [170,560,590,980] + packshot
+  card `img6.jpg` "ขนาด 50 กรัม"; Nikos duck + lion circles from listing `img1.jpg` (1024 px) with listing wording
+  (น้ำไหลจากปากเป็ด, กังหันสิงโตหมุนได้), chips: truncated "ของเล่นลอยน้ำให้" → "ของเล่นลอยน้ำ 5 ชิ้น", duplicate
+  lion chip → "ขอบมน ล้างง่าย". finals replaced (v1 kept), Secretary msg 159–160.
 - Open: D2 side card is small (wide 1260×770 photo in a 2-slot row = 360×220). Watch next order: Hermes picks listing detail photos, uses `card` for case art, per-slot check.
