@@ -31,6 +31,10 @@ Spec keys and limits are in the script docstring. It costs no Flow credit: every
 3. **Vision-check the finished cover** (one call): the product is the real one and whole, no price / discount / store
    logo / QR inside any picture (the script only reads the text you typed), Thai is spelled right, no circle shows a
    face mid-blink or an empty crop. A failed check = fix the spec and rerun; do not deliver it.
+   **A read that reports misspellings across several unrelated strings is the misread signature, not N defects:**
+   the script draws the spec strings verbatim (PIL can drop tone marks without Raqm, but cannot swap base
+   glyphs). Confirm with ONE sheet of zoomed band crops (~1.5–3× per text region) checked against the spec
+   strings before touching the spec — editing to chase a thumbnail misread corrupts correct Thai.
 4. Pass `cover.jpg` to `clipjob.py deliver --cover`.
 
 ## Traps

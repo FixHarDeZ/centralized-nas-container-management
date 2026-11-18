@@ -15,6 +15,8 @@ Scanning it: cut the block out from `ON-SCREEN TEXT: NONE` through the end of th
 line before grepping — the block itself contains `ป้าย`, so scanning the raw file always false-positives on it.
 A hit in the product prose (`a green-and-white label printed …`) is still a hit: the gate is word-based, not
 intent-based, so reword the prose (`the green-and-white printed front reading …`) instead of exempting it.
+The scan matches SUBSTRINGS, not words: an innocent word containing a banned token still hits (`spills` ⊃
+`pill`), so reword the sentence (`water flows out of …`) rather than assuming a word boundary.
 Two words is the whole fix; do not shorten or drop the ON-SCREEN block to make the scan pass.
 
 ## The block (Thai, ready to paste)

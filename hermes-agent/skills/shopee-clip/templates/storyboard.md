@@ -18,7 +18,7 @@ Why: two 10 s takes of "hold it up / press / set down" read as filler (vacuum-ba
   - `H` hands close-up doing the action (no face, NO character chip - also avoids the prominent-person refusal).
   - `R` result / before-after (product in place, wide).
 - Voiceover line per shot must describe what is on screen in that shot. Count it: ~3.5-4.5 Thai syllables/s, speech >= 70 % of a talking shot. H shots may carry no speech (music + SFX, our sub/pill only).
-- Plan the graphics v2 layer per shot: punch-in at the money moment, EN pill (<=2 words), product cutout, before/after card.
+- Plan the graphics v2 layer per shot: punch-in at the money moment, EN pill (<=2 words), product cutout, before/after card. **📦/✋ have no punch-in** — `graphics_layer.py` has no zoom effect — so for those modes the board plans a sticker (arrow/sparkle, `anim: pop`) at the money moment instead; never promise in an approved board what post cannot render.
 - Flag risky actions (zips, valves, fine finger work, text on product) and name a fallback shot.
 - CTA: only on the final shot, and only if the clip is light (heavy-content clips skip it).
 - No price, no unverified claims (%, seconds, certifications) in any line.
