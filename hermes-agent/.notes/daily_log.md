@@ -1429,3 +1429,15 @@ Not done / open:
 - Tests: 144 passed local (py3.12 + opencv), 159 in the sync gate. Pushed; live synced at `dcbd9b2`. No deploy.
 - Not proven on a real order: Hermes running `intake` at step 1, `idcheck` + one vision call, a DRIFT reaching
   Fix's review, a faceless start-frame message, windows.py on a full real run after the fix.
+
+### 2026-11-19 — session closed
+- Fix: "จบงาน".
+- State: commits `5de6c1e` (9 live edits), `059aea8` (windows.py EOF grab + long-command rule), `dcbd9b2` (idcheck /
+  identity gate, face-aware start frame, intake), notes `45e41a9` + this close; all pushed, tree clean. Live skills
+  synced at `dcbd9b2` (159 tests in the container). No deploy, no config change, no open clip job. NAS scratch
+  (`review1119`, `tune1119`) removed.
+- Watch on the next orders: `clipjob intake` at step 1 + notes per stage; `idcheck` + one vision call before `ready`;
+  a DRIFT shows as ❌ identity in Fix's review; a faceless start-frame message on a 🧑 hands-only shot; windows.py
+  full run with no EOF crash; build_v5 run in the foreground.
+- Fix decides: real Flow credit plan (50/day rule stale?), flexible products (cables) in 🧑, 🎬 product visible in
+  the CTA footage (zelda showed Joy-Con).
