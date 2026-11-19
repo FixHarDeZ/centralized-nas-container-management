@@ -84,7 +84,8 @@ def overlays(ocr_map):
     for items in ocr_map.values():
         for k in {norm(i["text"]) for i in items if norm(i["text"])}:
             seen[k] = seen.get(k, 0) + 1
-    return sorted(k for k, c in seen.items() if n >= 4 and c >= max(4, n / 2))
+    failed = norm(GRAB_FAILED)          # a run of failed grabs is never a "persistent overlay"
+    return sorted(k for k, c in seen.items() if n >= 4 and c >= max(4, n / 2) and k != failed)
 
 
 def classify(items, skip):
@@ -216,12 +217,34 @@ def frame_stats(src):
     return times, luma, diff
 
 
-def ocr_frames(src, times, ocr, scratch):
+EOF_GAP = 0.1        # ffmpeg cannot seek a frame at t == duration: probe this much before the end
+GRAB_FAILED = "<frame grab failed>"
+
+
+def grab_time(t, dur):
+    """The time actually grabbed: span ends sit on the duration, which has no frame."""
+    return max(0.0, min(float(t), dur - EOF_GAP)) if dur else float(t)
+
+
+def grab(src, t, out, dur=None):
+    """One frame -> PNG (the mjpeg encoder refuses the tv-range yuv of a plain libx264 re-encode, which
+    killed every grab on 2026-11-18). -> True when the file was written."""
+    if os.path.exists(out):
+        os.remove(out)
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", f"{grab_time(t, dur):.3f}", "-i", src, "-frames:v", "1",
+                    "-update", "1", out], capture_output=True)
+    return os.path.exists(out) and os.path.getsize(out) > 0
+
+
+def ocr_frames(src, times, ocr, scratch, dur=None):
+    """A failed grab counts as text (dirty): an unreadable frame is never called clean."""
     out = {}
     for t in times:
-        f = os.path.join(scratch, f"_win_{t}.jpg")
-        subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", str(t), "-i", src, "-frames:v", "1", "-update", "1", f],
-                       check=True)
+        f = os.path.join(scratch, f"_win_{t}.png")
+        if not grab(src, t, f, dur):
+            print(f"WARN: no frame at {t}s — marked dirty", file=sys.stderr)
+            out[str(t)] = [{"text": GRAB_FAILED, "score": 1.0}]
+            continue
         try:
             found, _ = ocr(f)
         finally:
@@ -231,14 +254,14 @@ def ocr_frames(src, times, ocr, scratch):
     return out
 
 
-def sheet(src, wins, out, scratch, cols=6, tile_w=300):
+def sheet(src, wins, out, scratch, cols=6, tile_w=300, dur=None):
     from PIL import Image, ImageDraw, ImageFont
     tiles = []
     for w in wins:
         for t in w["tiles"]:
-            f = os.path.join(scratch, f"_ws_{t}.jpg")
-            subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", str(t), "-i", src, "-frames:v", "1", "-update", "1", f],
-                           check=True)
+            f = os.path.join(scratch, f"_ws_{t}.png")
+            if not grab(src, t, f, dur):
+                continue
             im = Image.open(f).convert("RGB")
             os.remove(f)
             im.thumbnail((tile_w, tile_w))
@@ -292,10 +315,10 @@ def main():
 
     from rapidocr_onnxruntime import RapidOCR
     ocr = RapidOCR()
-    ocr_map = ocr_frames(a.src, ocr_grid(cand), ocr, scratch)
+    ocr_map = ocr_frames(a.src, ocr_grid(cand), ocr, scratch, dur)
     skip = set(overlays(ocr_map))
     more = refine_times(ocr_map, skip, 0.0, dur)
-    ocr_map.update(ocr_frames(a.src, more, ocr, scratch))
+    ocr_map.update(ocr_frames(a.src, more, ocr, scratch, dur))
     text = dirty_spans(ocr_map, skip)
 
     clean = [s for s in subtract(cand, text) if s[1] - s[0] >= a.min]
@@ -313,7 +336,7 @@ def main():
             picked.append(w)
             budget -= len(w["tiles"])
     picked.sort(key=lambda w: w["start"])
-    sheet_path = sheet(a.src, picked, sheet_out, scratch)
+    sheet_path = sheet(a.src, picked, sheet_out, scratch, dur=dur)
 
     res = {"src": os.path.abspath(a.src), "dur": round(dur, 2), "vtt": a.vtt, "rebase": a.rebase,
            "speech": speech, "dark": dark, "text": text, "overlays": sorted(skip), "cuts": cuts,

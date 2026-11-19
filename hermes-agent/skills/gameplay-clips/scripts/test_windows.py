@@ -62,3 +62,24 @@ def test_describe_flags_static_cards():
     assert still["static"] and not moving["static"]
     assert still["score"] < moving["score"]
     assert moving["tiles"] == [0.2, 2.0, 3.8]
+
+
+def test_grab_never_seeks_past_the_last_frame():
+    assert w.grab_time(93.89, 93.89) == 93.79
+    assert w.grab_time(10.0, 93.89) == 10.0
+    assert w.grab_time(0.0, 0.05) == 0.0
+    assert w.grab_time(12.5, None) == 12.5
+
+
+def test_failed_grabs_are_dirty_never_an_overlay():
+    failed = [{"text": w.GRAB_FAILED, "score": 1.0}]
+    ocr_map = {str(float(t)): failed for t in range(8)}
+    assert w.overlays(ocr_map) == []
+    assert w.classify(failed, set(w.overlays(ocr_map)))[0] == "text"
+    assert w.dirty_spans(ocr_map, set()) == [(-1.0, 8.0)]
+
+
+def test_ocr_frames_survives_a_bad_grab(monkeypatch, tmp_path):
+    monkeypatch.setattr(w, "grab", lambda src, t, out, dur=None: False)
+    out = w.ocr_frames("x.mp4", [1.0, 2.0], lambda f: ([], None), str(tmp_path), dur=2.0)
+    assert out == {"1.0": [{"text": w.GRAB_FAILED, "score": 1.0}], "2.0": [{"text": w.GRAB_FAILED, "score": 1.0}]}
