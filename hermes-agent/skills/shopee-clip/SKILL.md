@@ -15,11 +15,8 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
 `clipjob.py` holds the job state. Scripts: `/opt/data/skills/shopee-clip/scripts/` (S below).
 
 ## Ground rules for this skill
-- **Source of truth is the repo**: `centralized-nas-container-management/hermes-agent/skills/`. Every sync
-  overwrites the three skills (shopee-clip, flow-driver, gameplay-clips) and refuses while an in-place edit
-  is not pulled (`sync.sh --pull`). To keep a change: edit the clone, commit, push, then
-  `cd /opt/data/centralized-nas-container-management && bash hermes-agent/skills/sync.sh` (tests run first), or
-  ask Fix for `make hermes-skills`. Runtime data: `/opt/data/clips/` (workdirs in `work/<job>`).
+- **Source of truth is the repo** (`hermes-agent/skills/`); how a change is kept: `references/house-rules.md`
+  → Skill sync. Runtime data: `/opt/data/clips/` (workdirs in `work/<job>`).
 - **A missed gate is fixed in code, not in prose.** If you skipped a rule, add the check to `clipjob.py`
   (with a test) instead of adding another paragraph here. This file has a 15 KB budget, enforced by a test.
 - File names are unique across shopee-clip, flow-driver and gameplay-clips. A file named in `references/` or
@@ -37,10 +34,14 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
 0. `python3 S/clipjob.py status` lists open jobs — run it BEFORE inspecting any bare video from Fix
    (a clip with no caption is a shot coming back until `status` says otherwise, not a new order).
    Resume the job that message is about (a reply with a video, a ✅/🔁 tap, "ต่อ"), never from memory.
+   Rows carry `stage` + `last` (newest notes): after a context loss (a model refusal, a reset, a bare "ต่อ")
+   continue from `last` and the workdir — never rebuild it from `session_search`.
    Grep `/opt/data/clips/logs/clip-log.jsonl` and `delivery-log.jsonl` for the product name before a new
    job: a duplicate order is confirmed with Fix (which clip, what changes) before any spend. Same game
    but a DIFFERENT platform/edition listing (Switch 2 clip exists, PS5 ordered) is not a duplicate: note
    the prior clip in one line and open the new job — gameplay-clips reuses the old job's source artifacts.
+   Then at once: `clipjob.py intake <job> --product "…" --link <url> [--mode …]`, and
+   `clipjob.py note <job> "<done; next>"` after Q1, the photo gate and the board (🎬: `new` here instead).
 1. **Intake** (before any question that costs time). Run
    `uv run --with pillow python S/intake_images.py <first image> /opt/data/clips/work/<job>`, then do
    one vision pass on the sheet. The gateway already described each image on arrival, so do not read
@@ -68,19 +69,11 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    `references/product-footage.md` first (official brand video of the exact model only, gated by
    `source_check.py`). A revision of a delivered clip: `clipjob.py reopen <job> --reason …`, then
    `deliver` again (it logs a REVISED row). Stop reading here for 🎬.
-5. **Photo gate (🧑/📦/✋; 🎬 product needs one clean photo for the sticker).** References must be clean product photos: no price, promo text, rating, UI,
-   person or hands, and the product in the state the shot needs. "Clean" means no text/UI/people — NOT
-   a plain background: a styled room photo (a rack holding clothes, a shelf with items) is a valid
-   reference, attached whole (`references/product-image-prep.md` "Lifestyle photos"); never ask Fix for a
-   plain-background photo because of props alone.   Ad graphics and review screenshots
-   are storyboard input only. Crop and cutout recipes: `references/product-image-prep.md`.
-   **Printed box/case (game, console): take the official store packshot first** (`references/product-image-prep.md`
-   → "official brand renders"), not an ad crop.
-   **Crop budget: 2 vision checks.** Put every candidate crop on ONE labelled sheet per check; if no
-   candidate passes the second check, send Fix the best one with what is wrong and ask (use it / new photo).
-   With no clean photo, ask Fix for one and stop at zero spend. Never fill the gap with a guessed product.
-   A reference under ~1000 px is high-risk for product identity (Flow redrew a ~700 px one): if Fix accepts it,
-   say the drift risk in the storyboard and run the identity frame check before the second shot's submit.
+5. **Photo gate (🧑/📦/✋; 🎬 product needs one clean photo for the sticker)** — `references/product-image-prep.md`
+   (lifestyle photos, official packshots first for a printed box, crops, cutouts). Clean = no price, promo,
+   rating, UI, person or hands; a styled room is fine. Ad graphics are storyboard input only.
+   **Crop budget: 2 vision checks**, every candidate on ONE labelled sheet; then send Fix the best one and ask.
+   No clean photo = ask Fix, zero spend; never a guessed product. Under ~1000 px = drift risk on the board.
    Save the references as `<workdir>/ref1.jpg …`.
 6. **Storyboard** from `templates/storyboard.md`: N shots (seconds each from the speech, ≤10), the hook in shot 1, CTA in the last shot.
    Shots after the first chain from the previous shot's last frame, with the continuity block repeated.
@@ -97,7 +90,7 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
 7. **Prompts → files.** Write `<workdir>/shot<K>.txt` for every shot. Build them from
    `templates/clip-prompt.md` + `templates/style-card.md` + a hook from `templates/hooks.md`
    (`S/perf.py pick-hook --category <cat>`), plus the no-on-screen-text block. Then:
-   `clipjob.py new <job> --mode presenter|product|hands --product "…" --link <url> --shots N [--seconds 8,6] [--ref <workdir>/ref1.jpg [--ref …]] [--character <name>]` (🧑 only). Credits (board, Q3): `clipjob.py cost --seconds 8,6`. workdir = `/opt/data/clips/work/<job>`
+   `clipjob.py new <job> --mode presenter|product|hands --product "…" --link <url> --shots N [--seconds 8,6] [--ref <workdir>/ref1.jpg [--ref …]] [--character <name>]` (🧑 only; fills in the intake job). Credits (board, Q3): `clipjob.py cost --seconds 8,6`. workdir = `/opt/data/clips/work/<job>`
 8. **Q3 — who drives Flow** (`clarify`, one question, cost in the text):
    `["📝 เตรียม prompt ทีละช็อตให้ (ฟิกกดใน Flow เอง)", "🤖 ให้ไอยูลองทำใน Flow ให้เลย (≈<cost> เครดิต ถ้าติดจะสลับเป็นโหมด prompt ให้เอง)"]`.
    An unanswered or timed-out question means 📝 (zero spend) — for ANY question that would spend credits, not just this one. Record the answer: `clipjob.py production <job> prompt|auto`, using `production prompt` rather than `fallback` (a fallback locks that job out of `auto` for good; the hand-off message format is in `flow-driver` → Manual hand-off).
@@ -108,17 +101,18 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
      which shot it is (buttons ช็อต 1…N), then run `--shot K`. Do not ask when the job state answers it: exactly one
      shot is submitted with no file yet. Full rules: `references/prompt-pack.md`.
    - 🤖: load skill `flow-driver` and follow it. It calls `reserve`/`submitted`/`submit-failed`/`trouble`.
+     Start frame of shot K≥2 = `clipjob.py startframe <job> K` (🧑 skips a last frame without her face;
+     `file` null = character chip + refs only). 📝 gets the same pick from `ingest`/`pack`.
      🤖, Flow download fails and Fix sends the mp4: copy it to the workdir as `shotK_raw.mp4` and run
      step 10's `ready` on it. 🤖 has no `ingest` step.
      When a command prints `"FALLBACK": true`: stop driving Flow and close Chrome (CDP `Browser.close`), tell Fix
      in one line (reason, credits spent, shots left), run `clipjob.py pack <job>` and continue as 📝.
      A shot that failed after spending credits gets its own 🔁 button from `submit-failed`; wait for the tap.
-10. **Per-shot review.** Read `references/frame-check.md` first: it owns the defect classes and the exact
-    3-frame question set (chest-height sub-band, product-vs-reference identity, planned action). After each file
-    arrives (downloaded or ingested), vision-check 3 frames — one inside the first 2 s, since a caption can live
-    only in the hook window — for Flow text,
-    product drift (shape AND real-world scale against the presenter), and whether the planned action happened. Then run
-    `clipjob.py ready <job> K --raw <file> --frame pass|flag:<what you saw>`. That runs ffprobe and, for 🧑,
+10. **Per-shot review.** Read `references/frame-check.md` first (defect classes, question set). After each file
+    arrives: `clipjob.py idcheck <job> K --raw <file>` → ONE vision call on its sheet (refs + 6 frames, one in the
+    first 2 s) asking its `ask_vision` plus the frame-check questions (Flow text, sub band, scale, planned
+    action). Then `clipjob.py ready <job> K --raw <file> --frame pass|flag:<what> --identity match|drift:<what>`
+    (refused without the sheet of THIS file). That runs ffprobe and, for 🧑,
     the repeats and CTA gates, then sends the shot with the ✅/🔁 keyboard. If that send fails the checks are
     kept: `clipjob.py ready <job> K --resend` (no re-check). Fix's tap arrives as text →
     `clipjob.py decide --text "<text>"`; if it prints `REFUSED: text is not a review button`, run

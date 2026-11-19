@@ -99,7 +99,7 @@ The mute-and-patch alternative (kept for when a cut would break a gesture): voic
 4. `out.mp4` is the candidate. Check three frames (~4.5 s, mid, last 1 s) for subs and pills, then `verify-clip.py` on that exact file.
 
 ### Chaining scene 2 (verified 2026-11-08)
-- Scene 2's start frame can be the ONLY chip. Extract it from scene 1's raw render: `ffmpeg -y -v error -sseof -0.15 -i scene1_raw.mp4 -frames:v 1 lastframe.jpg`, upload it, attach it, and leave out the character chip, since the frame already shows the presenter. Dropping the character chip also removes one refusal trigger (see the prominent-person pitfall).
+- Scene 2's start frame can be the ONLY chip. Get it with `clipjob.py startframe <job> 2` (it skips a last frame with no face; `file` null = attach the character chip instead) — by hand it was `ffmpeg -y -v error -sseof -0.15 -i scene1_raw.mp4 -frames:v 1 lastframe.jpg`, upload it, attach it, and leave out the character chip, since the frame already shows the presenter. Dropping the character chip also removes one refusal trigger (see the prominent-person pitfall).
 - Prompt for scene 2: `Start exactly on the attached last-frame image`, plus `CONTINUITY:` naming the same face, outfit and backdrop. Scene 2 is the only scene that carries the CTA.
 - `plan.json` can set `"script"` directly instead of `"prompt"`, which avoids keeping separate prompt files in sync with the plan.
 - Re-run post_presenter after every plan change (script or pill edits). A run takes a few minutes, so do not read `out.mp4` until the run exits.

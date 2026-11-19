@@ -39,10 +39,17 @@
 - **After the order, run end to end without per-step confirmation** (Fix: "หลังผมสั่งครั้งแรกทำตั้งแต่ต้นจนจบได้เลยนะ").
   The standing gates still hold: storyboard approval, per-shot review, cost in any spending question
   (`references/run-mode-gates.md`).
-- **Between the order and the storyboard approval there is no job row** (`clipjob.py new` runs at step 7), so
-  `status` is empty after a session reset. Save the board you sent as `<workdir>/board.txt` — a resumed session
-  then picks the job up from the workdir (product, refs, board, character, seconds) instead of re-running intake
-  and re-asking Q1/Q2.
+- **The job row exists from intake** (`clipjob.py intake`, router step 0, since 2026-11-19): before it a 🧑 job had
+  no row until the board was approved, and after a mimo `content_filter` refusal wiped the history (nual-loop-240w
+  2026-11-18: every such refusal so far left the next turn with `history=0`) Hermes spent 46 min rebuilding the job
+  from `session_search`. `note` each stage; save the board you sent as `<workdir>/board.txt`. A resumed session
+  reads `status` (`stage`, `last`) and the workdir, never re-runs intake or re-asks Q1/Q2.
+- **A long command runs in the foreground with `timeout` ≤ 600.** Above the 600 s cap the terminal starts it as a
+  background process and says so (`promoted_from_foreground` … "Do NOT re-run it"); then poll it with
+  `process_manage(action="poll", session_id=…)` or read `/opt/data/clips/logs/heavy-log.jsonl` for its `end` row —
+  never `pgrep -f <name>` / `ps | grep` (the shell running the check matches itself: honma-gt6-gp 2026-11-18 polled
+  a `build_v5` that had died in 2 s for 17 min), never a sleep loop inside `execute_code` (its cell dies at 300 s).
+  `build_v5` ≈ 70 s, `windows.py` 0.5–5 min, `post_presenter` 2–15 min.
 - **Invoke skill scripts with an explicit `workdir` (`/opt/data`), not the shell's inherited cwd.** The terminal
   keeps its cwd across calls; after a job's workdir is cleaned up, a stale cwd makes every command fail BEFORE
   the script runs (`bash: cd: /opt/data/clips/work/<job>: No such file or directory`, exit 126) — that reads like
@@ -112,7 +119,20 @@
 - No Flow generation before Fix approves the board (`templates/storyboard.md`). Reason: two 10 s "hold / press / set down"
   takes read as filler; every shot must show the product working.
 - Shots chain (shot K+1 starts from shot K's last frame) and are submitted ≥5 min apart (Fix: "นานหน่อยแต่คุณภาพดี").
+  🧑: a last frame without her face (a hands-only close-up) is never a start frame — `clipjob.py startframe` /
+  `ingest` / `pack` take the newest earlier shot whose last frame shows her (facecheck.py, Haar), or none (character
+  chip + refs only). uneed-pb-1 2026-11-18: shot 3 started on hands-only shot 2 → a new woman three gens running.
 - The frame check asks of every shot: did the planned action happen? did the product keep its shape and size? No = defect.
+  The product half is code-gated: `ready` refuses a Flow shot with refs until `clipjob.py idcheck` made the
+  refs + 6-frame sheet of THAT file and `--identity match|drift:<what>` records the verdict (aukey-pby92
+  2026-11-18: the powerbank morphed between 2 s and 5 s; a 3-frame check with no reference passed it to Fix).
+
+## Skill sync
+- Source of truth is the repo: `centralized-nas-container-management/hermes-agent/skills/`. Every sync overwrites
+  the three skills (shopee-clip, flow-driver, gameplay-clips) and refuses while an in-place edit is not pulled
+  (`sync.sh --pull`). To keep a change: edit the clone, commit, push, then
+  `cd /opt/data/centralized-nas-container-management && bash hermes-agent/skills/sync.sh` (tests run first), or
+  ask Fix for `make hermes-skills`.
 
 ## CTA
 - CTA words (ลิงก์ / ใต้คลิป / คำอธิบาย / พิกัด / ตะกร้า) only in the last shot, spoken or on screen. Write the prohibition

@@ -4,7 +4,10 @@
 State: $CLIPJOB_DIR/<job>.json (default /opt/data/clips/jobs). Pacing clock: $CLIPJOB_DIR/pacing.json.
 This CLI is the only sanctioned way to move a Flow-mode clip forward. It refuses out-of-order steps.
 
+  clipjob.py intake JOB --product "..." [--link URL] [--mode M]   # right after the duplicate check: the job exists
+                                                    # (status lists it) before Q1/board, so a lost context can resume
   clipjob.py new JOB --mode presenter|product|hands|gameplay --product "..." [--link URL] [--shots N] [--seconds 8,6] [--ref IMG ...] [--character NAME]
+                                                    # on an intake job: fills it in (same slug)
   clipjob.py cost [JOB] [--seconds 8,6] [--res 720p|360p]   # estimated credits, Omni 1.2 Flash
   clipjob.py production JOB auto|prompt            # Fix's answer to Q2 (Flow modes only)
   clipjob.py status [JOB]
@@ -20,7 +23,9 @@ This CLI is the only sanctioned way to move a Flow-mode clip forward. It refuses
   clipjob.py ingest JOB FILE (--reply-text "<replied-to message text>" | --shot K)
   # both
   clipjob.py scan JOB K --raw FILE                  # ✋ required before ready: frame sheets every 0.5 s (a face lasts <1 s)
-  clipjob.py ready JOB K --raw FILE --frame pass|flag:<what you saw> [--no-send]
+  clipjob.py idcheck JOB K --raw FILE               # Flow modes, required before ready: refs + 6 frames on one sheet
+  clipjob.py ready JOB K --raw FILE --frame pass|flag:<what you saw> --identity match|drift:<what differs> [--no-send]
+  clipjob.py startframe JOB K                       # the start-frame jpg for shot K (🧑: newest earlier shot showing her face)
   clipjob.py ready JOB K --resend                   # the review message failed to send: send it again (no re-check)
   clipjob.py decide (--text "<Fix's button text>" | JOB K approve|regen)
   clipjob.py assemble-check JOB                     # approved files in shot order, exit 0 only when all approved
@@ -315,6 +320,34 @@ def need_flow(j):
         raise Refused(f"mode {j['mode']} has no Flow shots")
 
 
+INTAKE_CMDS = ("note", "wait", "cancel", "status")
+
+
+def intake_job(job, product, link="", mode=None, workdir=None):
+    """A job record from the first minute (Fix 2026-11-19 tune): before this a 🧑 job existed only after the
+    board was approved, so when a mimo `content_filter` refusal wiped Hermes' history (nual-loop-240w, 46 min
+    rebuilding context) `clipjob.py status` showed nothing. `new` fills it in later."""
+    if not JOB_RE.match(job):
+        raise Refused("job slug must match [a-z0-9][a-z0-9-]{0,40}")
+    if mode is not None and mode not in MODES:
+        raise Refused(f"mode must be one of {MODES}")
+    t = now()
+    return {"job": job, "mode": mode, "product": product, "link": link, "status": "open", "stage": "intake",
+            "production": None, "character": None, "refs": [], "workdir": workdir or os.path.join(WORK, job),
+            "created": iso(t), "updated": iso(t), "fallback": None, "trouble": {}, "shots": [],
+            "events": [], "delivery": None}
+
+
+def promote_intake(old, new):
+    """`new` on an intake job: the new record keeps the intake's clock and history."""
+    if old.get("stage") != "intake" or old["status"] != "open":
+        raise Refused(f"job {old['job']} exists (pick another slug)")
+    new.update({"created": old["created"], "events": old["events"]})
+    if old.get("started"):
+        new["started"] = old["started"]
+    return new
+
+
 def set_production(j, prod):
     need_open(j); need_flow(j)
     if prod not in ("auto", "prompt"):
@@ -480,13 +513,62 @@ def ingest(j, k, path):
     return dst
 
 
+def has_face(img):
+    """Haar face in a still (facecheck.py). -> True / False / None when the check itself failed."""
+    p = subprocess.run(["uv", "run", "--with", "opencv-python-headless<5", "--with", "numpy", "python",
+                        os.path.join(HERE, "facecheck.py"), img], capture_output=True, text=True)
+    try:
+        return bool(json.loads(p.stdout.strip().splitlines()[-1])["face"]) if p.returncode == 0 else None
+    except (ValueError, IndexError, KeyError):
+        return None
+
+
+def shot_file(s):
+    """The newest file of a shot: the reviewed one, else the last ingested attempt."""
+    return s.get("file") or next((a.get("file_in") for a in reversed(s["attempts"]) if a.get("file_in")), None)
+
+
+def start_frame_for(j, k, files=None):
+    """Start frame for shot k = the last frame of shot k-1 (same room, light, outfit). 🧑: a last frame with no
+    face is skipped for the newest earlier one that shows her (uneed-pb-1 2026-11-18: hands-only shot 2 -> a new
+    woman in shot 3, three gens). No earlier face = no start frame; character chip + refs carry her.
+    -> {"file": jpg|None, "from": shot|None, "faceless": [shots skipped], "unchecked": bool}"""
+    files = files or {}
+    res = {"file": None, "from": None, "faceless": [], "unchecked": False}
+    for m in range(k - 1, 0, -1):
+        src = files.get(m) or shot_file(shot(j, m))
+        if not src:
+            break
+        lf = last_frame(src, os.path.join(j["workdir"], f"shot{m}_last.jpg"))
+        if not lf:
+            break
+        face = has_face(lf) if j["mode"] == "presenter" else True
+        if face is None:                     # the check failed: old behaviour, say so
+            res["unchecked"] = True
+        if face is not False:
+            res.update({"file": lf, "from": m})
+            return res
+        res["faceless"].append(m)
+    return res
+
+
+def start_frame_text(j, k, sf):
+    """The line that goes with shot k's start frame (or with its absence)."""
+    if sf["file"]:
+        note = (f" · ช็อต {', '.join(map(str, sf['faceless']))} ไม่เห็นหน้า เลยใช้ท้ายช็อต {sf['from']}"
+                if sf["faceless"] else "")
+        return f"เฟรมเริ่มของช็อต {k} (= เฟรมท้ายช็อต {sf['from']}{note}) · {j['job']}\nแนบเป็น start frame ตอน gen ช็อต {k}"
+    who = f"ตัวละคร {j['character']} + " if j.get("character") else ""
+    return (f"ช็อต {k} · {j['job']}: ไม่ต้องแนบ start frame — ช็อตก่อนหน้าไม่เห็นหน้า "
+            f"(Flow จะวาดคนใหม่) แนบแค่{who}รูปสินค้า เหมือนช็อต 1")
+
+
 def next_start_frame(j, k, file):
-    """📝 mode: shot k's file just arrived and shot k+1 is not generated yet, so k+1 can start on k's last
-    frame (same room, light and outfit). -> the jpg to send Fix, or None."""
+    """📝 mode: shot k's file just arrived and shot k+1 is not generated yet. -> start_frame_for(k+1) or None."""
     nxt = next((s for s in j["shots"] if s["k"] == k + 1), None)
     if not nxt or nxt["state"] not in ("pending", "packed", "regen_approved"):
         return None
-    return last_frame(file, os.path.join(j["workdir"], f"shot{k}_last.jpg"))
+    return start_frame_for(j, k + 1, {k: file})
 
 
 def keep_final(label, final, cover, t=None):
@@ -1005,6 +1087,71 @@ def scan_sheets(video, prefix):
     return sorted(glob.glob(prefix + "*.jpg"))
 
 
+ID_FRACS = (0.05, 0.25, 0.45, 0.65, 0.85)   # + the last frame: aukey-pby92 morphed between 2 s and 5 s
+
+
+def id_question(n_refs, times):
+    tiles = [f"tile {i} = REFERENCE photo {i}" for i in range(1, n_refs + 1)]
+    tiles += [f"tile {n_refs + i} = shot at {t:.1f} s" for i, t in enumerate(times, 1)]
+    return ("Tiles left to right: " + "; ".join(tiles) + ". Compare EVERY shot tile with the reference: body shape and "
+            "thickness, colour/finish, screen/display size and position, ports, built-in cables, straps, printed "
+            "logo. Name each part that differs and in which tiles; a product that changes BETWEEN tiles is drift too. "
+            "Answer MATCH or DRIFT: <part, tiles>. Then ready … --identity match|drift:<what>")
+
+
+def id_sheet(raw, refs, out, dur):
+    """refs + 6 frames of the shot, one row, 360 px tall."""
+    wd = os.path.dirname(out)
+    times = [round(dur * f, 2) for f in ID_FRACS] + [max(0.0, round(dur - 0.1, 2))]
+    parts = []
+    for i, r in enumerate(refs[:2]):
+        parts.append(r)
+    for i, t in enumerate(times):
+        f = os.path.join(wd, f"_id_{i}.jpg")
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", f"{t:.2f}", "-i", raw, "-frames:v", "1", "-update", "1",
+                        f], check=False)
+        if os.path.exists(f):
+            parts.append(f)
+    n = len(parts)
+    graph = ";".join(f"[{i}:v]scale=-2:360,setsar=1[v{i}]" for i in range(n))
+    graph += ";" + "".join(f"[v{i}]" for i in range(n)) + f"hstack=inputs={n}[o]"
+    cmd = ["ffmpeg", "-y", "-v", "error"]
+    for f in parts:
+        cmd += ["-i", f]
+    subprocess.run(cmd + ["-filter_complex", graph, "-map", "[o]", "-frames:v", "1", "-q:v", "3", out], check=False)
+    for f in parts:
+        if os.path.basename(f).startswith("_id_"):
+            os.remove(f)
+    return (out if os.path.exists(out) else None), times
+
+
+def cmd_idcheck(j, k, raw):
+    need_flow(j)
+    if not j["refs"]:
+        raise Refused("job has no reference photo to compare against")
+    if not raw or not os.path.exists(raw):
+        raise Refused(f"no such file: {raw}")
+    info = ffprobe(raw)
+    if not info or not info["dur"]:
+        raise Refused(f"ffprobe cannot read {raw}")
+    sheet, times = id_sheet(raw, j["refs"], os.path.join(j["workdir"], f"shot{k}_id.jpg"), info["dur"])
+    if not sheet:
+        raise Refused(f"ffmpeg made no identity sheet from {raw}")
+    shot(j, k)["idcheck"] = {"sig": file_sig(raw), "sheet": sheet}
+    log(j, f"idcheck shot {k}")
+    return {"shot": k, "sheet": sheet, "ask_vision": id_question(min(len(j["refs"]), 2), times),
+            "next": f"ONE vision_analyze on the sheet, then clipjob.py ready {j['job']} {k} --raw {raw} "
+                    "--frame pass|flag:<…> --identity match|drift:<…>"}
+
+
+def parse_identity(arg):
+    if arg == "match":
+        return {"ok": True, "note": ""}
+    if arg and arg.startswith("drift:") and arg[6:].strip():
+        return {"ok": False, "note": "สินค้าเพี้ยนจากรูปอ้างอิง: " + arg[6:].strip()}
+    raise Refused("--identity must be 'match' or 'drift:<what differs>' (from the idcheck sheet)")
+
+
 def cmd_scan(j, k, raw):
     if j["mode"] not in FLOW_MODES:
         raise Refused(f"mode {j['mode']} has no Flow shots")
@@ -1054,12 +1201,14 @@ def cmd_pack(j, only, no_send):
         prompt = open(os.path.join(wd, f"shot{k}.txt"), encoding="utf-8").read().strip()
         prev = shot(j, k - 1) if k > 1 else None
         chain = ""
-        if prev and prev.get("file"):
-            lf = last_frame(prev["file"], os.path.join(wd, f"shot{k - 1}_last.jpg"))
-            if lf and not no_send:
-                tg("sendPhoto", {"chat_id": CHAT, "caption": f"เฟรมเริ่มของช็อต {k} (= เฟรมท้ายช็อต {k - 1})"},
-                   files={"photo": lf})
-                chain = "\nเฟรมเริ่ม: แนบรูปเฟรมท้ายช็อตก่อนหน้าที่ส่งไปเมื่อกี้เป็น start frame"
+        if prev and shot_file(prev):
+            sf = start_frame_for(j, k)
+            if sf["file"]:
+                if not no_send:
+                    tg("sendPhoto", {"chat_id": CHAT, "caption": start_frame_text(j, k, sf)}, files={"photo": sf["file"]})
+                chain = "\nเฟรมเริ่ม: แนบรูปเฟรมเริ่มที่ส่งไปเมื่อกี้เป็น start frame"
+            elif sf["faceless"]:
+                chain = "\nเฟรมเริ่ม: ไม่ต้องแนบ (ช็อตก่อนหน้าไม่เห็นหน้า) แนบตัวละคร + รูปสินค้าเหมือนช็อต 1"
         elif prev:
             chain = (f"\nเฟรมเริ่ม: ส่ง mp4 ของช็อต {k - 1} กลับมาก่อน แล้วรอรูป 'เฟรมเริ่มของช็อต {k}' ที่ไอยูส่งให้ "
                      "แนบรูปนั้นเป็น start frame (ห้อง แสง ชุด จะต่อเนื่อง)")
@@ -1094,7 +1243,7 @@ def send_review(j, k):
     s["review_sent"] = iso()
 
 
-def cmd_ready(j, k, raw, frame_arg, no_send, resend=False):
+def cmd_ready(j, k, raw, frame_arg, no_send, resend=False, identity_arg=None):
     if resend:
         if shot(j, k)["state"] != "in_review":
             raise Refused(f"shot {k} is {shot(j, k)['state']}; --resend is for a shot already in review")
@@ -1110,6 +1259,13 @@ def cmd_ready(j, k, raw, frame_arg, no_send, resend=False):
     if j["mode"] == "hands" and (shot(j, k).get("scan") or {}).get("sig") != file_sig(raw):
         raise Refused(f"✋ shot {k} has no frame scan of this file: run clipjob.py scan {j['job']} {k} --raw {raw}, "
                       "vision-read every sheet (a face at the frame edge lasted under 1 s in the first ✋ job), then ready")
+    identity = None
+    if j["mode"] in FLOW_MODES and j["refs"]:
+        if (shot(j, k).get("idcheck") or {}).get("sig") != file_sig(raw):
+            raise Refused(f"shot {k} has no identity sheet of this file: run clipjob.py idcheck {j['job']} {k} --raw {raw}, "
+                          "vision-read it against the reference (aukey-pby92 2026-11-18: the powerbank morphed inside "
+                          "the shot and the review went to Fix as a pass), then ready … --identity match|drift:<what>")
+        identity = parse_identity(identity_arg)
     info = ffprobe(raw)
     gates = {"probe": probe_verdict(info)}
     file = raw
@@ -1124,6 +1280,8 @@ def cmd_ready(j, k, raw, frame_arg, no_send, resend=False):
         if info and not info["has_audio"]:
             gates["probe"] = {"ok": False, "note": "ไม่มีเสียง — presenter ต้องมีเสียงพากย์จาก Flow"}
     gates["frame"] = frame
+    if identity:
+        gates["identity"] = identity
     mark_ready(j, k, file, gates)
     res = {"shot": k, "pass": gates_passed(gates), "file": os.path.abspath(file), "gates": gates}
     if not no_send:
@@ -1351,6 +1509,8 @@ def summary(j):
     out = {"job": j["job"], "mode": j["mode"], "production": j["production"], "status": j["status"],
            "product": j["product"], "updated": j["updated"],
            "shots": {s["k"]: s["state"] for s in j["shots"]}}
+    if j.get("stage"):
+        out["stage"] = j["stage"]
     if j.get("fallback"):
         out["fallback"] = j["fallback"]
     if j.get("close"):
@@ -1366,6 +1526,10 @@ def main(argv=None):
     s.add_argument("--shots", type=int, default=0); s.add_argument("--ref", action="append", default=[])
     s.add_argument("--workdir"); s.add_argument("--character")
     s.add_argument("--seconds", help="per-shot length: 8 or 8,6,8 (3-10, default 10)")
+    s = sub.add_parser("intake"); s.add_argument("job"); s.add_argument("--product", required=True)
+    s.add_argument("--link", default=""); s.add_argument("--mode", choices=MODES); s.add_argument("--workdir")
+    s = sub.add_parser("idcheck"); s.add_argument("job"); s.add_argument("shot", type=int); s.add_argument("--raw")
+    s = sub.add_parser("startframe"); s.add_argument("job"); s.add_argument("shot", type=int)
     s = sub.add_parser("cost"); s.add_argument("job", nargs="?"); s.add_argument("--seconds")
     s.add_argument("--res", default="720p")
     s = sub.add_parser("production"); s.add_argument("job"); s.add_argument("value", choices=["auto", "prompt"])
@@ -1386,7 +1550,7 @@ def main(argv=None):
     s.add_argument("--reply-text"); s.add_argument("--shot", type=int)
     s = sub.add_parser("scan"); s.add_argument("job"); s.add_argument("shot", type=int); s.add_argument("--raw")
     s = sub.add_parser("ready"); s.add_argument("job"); s.add_argument("shot", type=int)
-    s.add_argument("--raw"); s.add_argument("--frame")
+    s.add_argument("--raw"); s.add_argument("--frame"); s.add_argument("--identity")
     s.add_argument("--no-send", action="store_true"); s.add_argument("--resend", action="store_true")
     s = sub.add_parser("decide"); s.add_argument("job", nargs="?"); s.add_argument("shot", nargs="?", type=int)
     s.add_argument("decision", nargs="?", choices=["approve", "regen"]); s.add_argument("--text")
@@ -1414,16 +1578,28 @@ def main(argv=None):
         return 0
 
     try:
-        if a.cmd == "new":
+        if a.cmd == "intake":
             if os.path.exists(path_of(a.job)):
-                raise Refused(f"job {a.job} exists (pick another slug)")
+                raise Refused(f"job {a.job} exists (pick another slug, or `status {a.job}` to resume it)")
+            j = intake_job(a.job, a.product, a.link, a.mode, a.workdir)
+            os.makedirs(j["workdir"], exist_ok=True)
+            j["started"] = iso(workdir_started(j["workdir"], now()))
+            log(j, "intake"); save(j)
+            return out({**summary(j), "next": "clipjob.py note <job> \"<done; next>\" after each stage (Q1, photo gate, "
+                                               "board sent/approved); clipjob.py new <job> … after the board"})
+        if a.cmd == "new":
             missing = [r for r in a.ref if not os.path.exists(r)]
             if missing:
                 raise Refused(f"ref not found: {missing}")
             j = new_job(a.job, a.mode, a.product, a.link, a.shots, a.ref, a.workdir, a.character, a.seconds)
+            if os.path.exists(path_of(a.job)):
+                j = promote_intake(load(a.job), j)
+                log(j, "created (from intake)")
+            else:
+                log(j, "created")
             os.makedirs(j["workdir"], exist_ok=True)
-            j["started"] = iso(workdir_started(j["workdir"], now()))
-            log(j, "created"); save(j)
+            j.setdefault("started", iso(workdir_started(j["workdir"], now())))
+            save(j)
             return out(summary(j))
         if a.cmd == "cost":
             if a.job:
@@ -1439,7 +1615,7 @@ def main(argv=None):
                 if f.endswith(".json") and f != "pacing.json":
                     jj = json.load(open(os.path.join(DIR, f), encoding="utf-8"))
                     if jj["status"] == "open":
-                        rows.append(summary(jj))
+                        rows.append({**summary(jj), "last": [e["msg"] for e in jj["events"][-3:]]})
             return out({"open_jobs": rows})
         if a.cmd == "close" and a.after is not None:         # the sleeper spawned by deliver
             time.sleep(max(0.0, a.after))
@@ -1477,6 +1653,8 @@ def main(argv=None):
             return out({**summary(j), "next": nxt, **({"next_shot_chain": stale} if stale else {})})
 
         j = load(a.job)
+        if j.get("stage") == "intake" and a.cmd not in INTAKE_CMDS:
+            raise Refused(f"job {a.job} is still at intake: run clipjob.py new {a.job} --mode … after Fix approves the board")
         if a.cmd == "production":
             set_production(j, a.value); save(j)
             return out(summary(j))
@@ -1568,22 +1746,34 @@ def main(argv=None):
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             shutil.copy2(a.file, dst)
             save(j)
-            lf = next_start_frame(j, k, dst)
-            if lf:
+            sf = next_start_frame(j, k, dst)
+            sent_sf = None
+            if sf and (sf["file"] or sf["faceless"]):
                 try:
-                    tg("sendPhoto", {"chat_id": CHAT, "caption": f"เฟรมเริ่มของช็อต {k + 1} (= เฟรมท้ายช็อต {k}) · {j['job']}\n"
-                                                                 f"แนบเป็น start frame ตอน gen ช็อต {k + 1}"},
-                       files={"photo": lf})
+                    if sf["file"]:
+                        tg("sendPhoto", {"chat_id": CHAT, "caption": start_frame_text(j, k + 1, sf)}, files={"photo": sf["file"]})
+                    else:
+                        tg("sendMessage", {"chat_id": CHAT, "text": start_frame_text(j, k + 1, sf)})
+                    sent_sf = k + 1
                 except (Refused, OSError, ValueError) as e:
                     print(f"start frame for shot {k + 1} not sent: {e}", file=sys.stderr)
-                    lf = None
-            return out({**summary(j), "file": dst, "start_frame_sent": k + 1 if lf else None,
+            return out({**summary(j), "file": dst, "start_frame_sent": sent_sf if sf and sf["file"] else None,
+                        **({"start_frame": {kk: sf[kk] for kk in ("from", "faceless", "unchecked")}} if sf else {}),
                         "next": f"vision-check frames, then clipjob.py ready {a.job} {k} --raw {dst} --frame …"})
         if a.cmd == "scan":
             res = cmd_scan(j, a.shot, a.raw); save(j)
             return out(res)
+        if a.cmd == "idcheck":
+            res = cmd_idcheck(j, a.shot, a.raw); save(j)
+            return out(res)
+        if a.cmd == "startframe":
+            need_flow(j)
+            if a.shot < 2:
+                raise Refused("shot 1 has no start frame")
+            return out({"shot": a.shot, **start_frame_for(j, a.shot),
+                        "next": "attach `file` as the start frame; file null = character chip + refs only"})
         if a.cmd == "ready":
-            res = cmd_ready(j, a.shot, a.raw, a.frame, a.no_send, a.resend); save(j)
+            res = cmd_ready(j, a.shot, a.raw, a.frame, a.no_send, a.resend, a.identity); save(j)
             return out(res)
         if a.cmd == "assemble-check":
             files = assemble_files(j)

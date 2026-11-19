@@ -22,6 +22,7 @@ cj.DOWNLOADS = []                                               # nor deletes fr
 cj.DIR = tempfile.mkdtemp(prefix="clipjob-jobs-")               # main() sweeps DIR: never the real jobs dir
 cj.WORK = tempfile.mkdtemp(prefix="clipjob-work-")
 cj.GATEWAY_PID = os.path.join(cj.WORK, "no-gateway.pid")            # never adopt the real gateway env
+cj.has_face = lambda img: True                                  # no test runs OpenCV; face tests override it
 
 
 def job(shots=3, mode="presenter", prod=None):
@@ -372,7 +373,8 @@ def test_cli_ready_keeps_state_when_send_fails_then_resend(tmp_path, monkeypatch
     monkeypatch.setattr(cj, "ffprobe", lambda p: {"w": 720, "h": 1280, "dur": 10.0, "kbps": 3000, "has_audio": True})
     calls = []
     monkeypatch.setattr(cj, "run", lambda cmd: (calls.append(cmd) or ((1, "", "boom") if len(calls) == 1 else (0, "", ""))))
-    assert cj.main(["ready", "t-1", "1", "--raw", str(raw), "--frame", "pass"]) == 1
+    j = cj.load("t-1"); cj.shot(j, 1)["idcheck"] = {"sig": cj.file_sig(str(raw))}; cj.save(j)
+    assert cj.main(["ready", "t-1", "1", "--raw", str(raw), "--frame", "pass", "--identity", "match"]) == 1
     assert "--resend" in capsys.readouterr().err
     assert cj.load("t-1")["shots"][0]["state"] == "in_review"
     assert cj.main(["ready", "t-1", "1", "--resend"]) == 0
@@ -445,9 +447,12 @@ def test_hands_mode_is_a_flow_mode_with_no_presenter_gates(tmp_path, monkeypatch
     raw.write_bytes(b"a regenerated file")                       # the scan was of the old render
     assert cj.main(["ready", "t-1", "1", "--raw", str(raw), "--frame", "pass", "--no-send"]) == 1
     assert cj.main(["scan", "t-1", "1", "--raw", str(raw)]) == 0
-    assert cj.main(["ready", "t-1", "1", "--raw", str(raw), "--frame", "pass", "--no-send"]) == 0
+    monkeypatch.setattr(cj, "id_sheet", lambda raw, refs, out, dur: (open(out, "wb").close() or out, [0.5, 9.9]))
+    assert cj.main(["idcheck", "t-1", "1", "--raw", str(raw)]) == 0
+    capsys.readouterr()
+    assert cj.main(["ready", "t-1", "1", "--raw", str(raw), "--frame", "pass", "--identity", "match", "--no-send"]) == 0
     j = cj.load("t-1")
-    assert set(j["shots"][0]["gates"]) == {"probe", "frame"}      # a silent shot is fine: no speech is asked for
+    assert set(j["shots"][0]["gates"]) == {"probe", "frame", "identity"}   # a silent shot is fine: no speech asked
     cj.decide(j, 1, "approve")
     probs = cj.deliver_problems(j, {"v_dur": 10, "a_dur": 10}, {}, "#a", [])
     assert any("graphics" in p for p in probs)
@@ -910,3 +915,123 @@ def test_check_delivery_ignores_copies_sent_as_another_bot(tmp_path):
     p = subprocess.run([sys.executable, os.path.join(os.path.dirname(cj.__file__), "check_delivery.py")],
                        env=env, capture_output=True, text=True)
     assert p.returncode == 0, p.stdout
+
+
+# ---------------------------------------------------------------- 2026-11-19 tunes
+def test_ready_needs_an_identity_verdict_of_this_file(tmp_path, monkeypatch, capsys):
+    """aukey-pby92 2026-11-18: the 3-frame check passed a powerbank that morphed mid-shot; the ref comparison
+    ran after the review had gone to Fix."""
+    monkeypatch.setattr(cj, "DIR", str(tmp_path))
+    j = job(shots=1, mode="product", prod="auto"); j["workdir"] = str(tmp_path)
+    cj.shot(j, 1)["state"] = "submitted"; cj.shot(j, 1)["attempts"].append({"via": "auto"})
+    cj.save(j)
+    raw = tmp_path / "s.mp4"; raw.write_bytes(b"x")
+    monkeypatch.setattr(cj, "ffprobe", lambda p: {"w": 720, "h": 1280, "dur": 10.0, "kbps": 3000, "has_audio": True})
+    ready = ["ready", "t-1", "1", "--raw", str(raw), "--frame", "pass", "--no-send"]
+    assert cj.main(ready + ["--identity", "match"]) == 1
+    assert "idcheck" in capsys.readouterr().err
+    made = {}
+    monkeypatch.setattr(cj, "id_sheet", lambda raw, refs, out, dur: (made.update(refs=refs, dur=dur) or out,
+                                                                      [0.5, 2.5, 4.5, 6.5, 8.5, 9.9]))
+    assert cj.main(["idcheck", "t-1", "1", "--raw", str(raw)]) == 0
+    res = json.loads(capsys.readouterr().out)
+    assert made == {"refs": ["/tmp/ref.jpg"], "dur": 10.0}
+    assert "tile 1 = REFERENCE" in res["ask_vision"] and "tile 7 = shot at 9.9 s" in res["ask_vision"]
+    assert cj.main(ready) == 1                                   # no verdict
+    assert "--identity" in capsys.readouterr().err
+    assert cj.main(ready + ["--identity", "drift:"]) == 1         # a drift needs the part
+    assert cj.main(ready + ["--identity", "drift:display bigger at 2-4 s, colour white at 5 s"]) == 0
+    g = cj.load("t-1")["shots"][0]["gates"]["identity"]
+    assert g["ok"] is False and "display bigger" in g["note"]
+
+
+def test_identity_sheet_is_tied_to_the_file(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(cj, "DIR", str(tmp_path))
+    j = job(shots=1, mode="product", prod="auto"); j["workdir"] = str(tmp_path)
+    cj.shot(j, 1)["state"] = "submitted"; cj.shot(j, 1)["attempts"].append({"via": "auto"})
+    raw = tmp_path / "s.mp4"; raw.write_bytes(b"x")
+    cj.shot(j, 1)["idcheck"] = {"sig": cj.file_sig(str(raw))}; cj.save(j)
+    raw.write_bytes(b"the regenerated take")
+    monkeypatch.setattr(cj, "ffprobe", lambda p: {"w": 720, "h": 1280, "dur": 10.0, "kbps": 3000, "has_audio": True})
+    assert cj.main(["ready", "t-1", "1", "--raw", str(raw), "--frame", "pass", "--identity", "match", "--no-send"]) == 1
+
+
+def chained(tmp_path, faces, shots=3):
+    """A presenter job whose shots 1..len(faces) have files; faces[m-1] = does shot m's last frame show her."""
+    j = job(shots=shots, prod="prompt"); j["workdir"] = str(tmp_path)
+    for m in range(1, len(faces) + 1):
+        cj.shot(j, m).update({"state": "approved", "file": str(tmp_path / f"s{m}.mp4")})
+    return j
+
+
+def test_start_frame_skips_a_shot_without_her_face(tmp_path, monkeypatch):
+    """uneed-pb-1 2026-11-18: hands-only shot 2 -> shot 3 started on it -> a new woman, three gens."""
+    monkeypatch.setattr(cj, "last_frame", lambda video, out: open(out, "wb").close() or out)
+    seen = {"shot1_last.jpg": True, "shot2_last.jpg": False}
+    monkeypatch.setattr(cj, "has_face", lambda img: seen[os.path.basename(img)])
+    sf = cj.start_frame_for(chained(tmp_path, [True, False]), 3)
+    assert sf["from"] == 1 and sf["faceless"] == [2] and sf["file"].endswith("shot1_last.jpg")
+    assert "ไม่เห็นหน้า เลยใช้ท้ายช็อต 1" in cj.start_frame_text(chained(tmp_path, [True, False]), 3, sf)
+    seen["shot1_last.jpg"] = False                               # no earlier face at all: no start frame
+    sf = cj.start_frame_for(chained(tmp_path, [False, False]), 3)
+    assert sf["file"] is None and sf["faceless"] == [2, 1]
+    assert "ไม่ต้องแนบ start frame" in cj.start_frame_text(chained(tmp_path, [False, False]), 3, sf)
+
+
+def test_start_frame_keeps_the_old_way_when_the_face_check_fails(tmp_path, monkeypatch):
+    monkeypatch.setattr(cj, "last_frame", lambda video, out: open(out, "wb").close() or out)
+    monkeypatch.setattr(cj, "has_face", lambda img: None)
+    sf = cj.start_frame_for(chained(tmp_path, [True, True]), 3)
+    assert sf["from"] == 2 and sf["unchecked"] is True
+
+
+def test_product_modes_chain_without_a_face_check(tmp_path, monkeypatch):
+    monkeypatch.setattr(cj, "last_frame", lambda video, out: open(out, "wb").close() or out)
+
+    def boom(img):
+        raise AssertionError("📦/✋ shots have no face to look for")
+    monkeypatch.setattr(cj, "has_face", boom)
+    j = job(shots=2, mode="product", prod="prompt"); j["workdir"] = str(tmp_path)
+    cj.shot(j, 1).update({"state": "approved", "file": str(tmp_path / "s1.mp4")})
+    assert cj.start_frame_for(j, 2)["from"] == 1
+
+
+def test_cli_ingest_tells_fix_not_to_attach_a_faceless_start_frame(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(cj, "DIR", str(tmp_path))
+    j = job(shots=2, prod="prompt"); j["workdir"] = str(tmp_path / "w")
+    for s in j["shots"]:
+        s["state"] = "packed"
+    cj.save(j)
+    src = tmp_path / "in.mp4"; src.write_bytes(b"x")
+    sent = []
+    monkeypatch.setattr(cj, "tg", lambda method, payload=None, files=None: sent.append((method, payload)) or {"message_id": 1})
+    monkeypatch.setattr(cj, "last_frame", lambda video, out: open(out, "wb").close() or out)
+    monkeypatch.setattr(cj, "has_face", lambda img: False)
+    assert cj.main(["ingest", "t-1", str(src), "--shot", "1"]) == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["start_frame_sent"] is None and out["start_frame"]["faceless"] == [1]
+    (method, payload), = sent
+    assert method == "sendMessage" and "ไม่ต้องแนบ start frame" in payload["text"] and "น้องมุก" in payload["text"]
+
+
+def test_intake_job_is_listed_then_promoted_by_new(tmp_path, monkeypatch, capsys):
+    """nual-loop-240w 2026-11-18: a content_filter refusal wiped Hermes' history and `status` showed no job."""
+    monkeypatch.setattr(cj, "DIR", str(tmp_path)); monkeypatch.setattr(cj, "WORK", str(tmp_path / "work"))
+    assert cj.main(["intake", "n-1", "--product", "Cable", "--link", "https://s.shopee.co.th/x"]) == 0
+    assert cj.main(["intake", "n-1", "--product", "Cable"]) == 1            # one record per slug
+    assert cj.main(["note", "n-1", "board sent (msg 12208); next: wait for approval + Q3"]) == 0
+    capsys.readouterr()
+    assert cj.main(["status"]) == 0
+    row, = json.loads(capsys.readouterr().out)["open_jobs"]
+    assert row["stage"] == "intake" and "board sent" in row["last"][-1]
+    assert cj.main(["pack", "n-1", "--no-send"]) == 1                       # nothing runs before `new`
+    assert "still at intake" in capsys.readouterr().err
+    ref = tmp_path / "ref1.jpg"; ref.write_bytes(b"r")
+    created = cj.load("n-1")["created"]
+    assert cj.main(["new", "n-1", "--mode", "presenter", "--product", "Cable", "--link", "https://s.shopee.co.th/x",
+                    "--shots", "2", "--ref", str(ref), "--character", "น้องมิลค์"]) == 0
+    j = cj.load("n-1")
+    assert "stage" not in j and len(j["shots"]) == 2 and j["created"] == created
+    assert [e["msg"] for e in j["events"]][:2] == ["intake", "note: board sent (msg 12208); next: wait for approval + Q3"]
+    assert cj.main(["new", "n-1", "--mode", "presenter", "--product", "Cable", "--shots", "2", "--ref", str(ref),
+                    "--character", "น้องมิลค์"]) == 1                     # a real job is never overwritten

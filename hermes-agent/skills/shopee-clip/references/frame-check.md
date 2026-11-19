@@ -2,6 +2,15 @@
 
 Standing depth for SKILL.md step 10 (per-shot review). Step 10 owns WHAT to sample and the delivery format; this file owns the defect classes that decide the verdict and the workflow when `vision_analyze` itself is failing.
 
+## The identity sheet (code-gated since 2026-11-19)
+- `clipjob.py idcheck <job> K --raw <file>` writes `shot<K>_id.jpg` (up to 2 refs + frames at 5/25/45/65/85 % and
+  the last frame, one row) and prints `ask_vision`. Ask that question AND this file's questions (Flow text, sub
+  band, scale, planned action, presenter identity) in ONE `vision_analyze` of the sheet. `ready` refuses a Flow
+  shot with refs until the sheet of THAT file exists and `--identity match|drift:<part, frame times>` is given.
+- A product that changes BETWEEN frames is drift even when each frame looks plausible (aukey-pby92: silver →
+  thick dark box with a big display → white, built-in cable turned into a loose one). DRIFT goes into the review
+  as `❌ identity` with the part named; Fix decides.
+
 ## Defect classes
 - **A contact sheet's own filename/timestamp labels are annotations, not on-screen text — say so in the question.** Otherwise the reader reports `f1.jpg @ 0.5s` as a caption the video drew, which reads as a text defect that does not exist. Name the labels as sheet furniture in the prompt ("the text above each frame is my label, not part of the video"), and treat any text answer that quotes a filename as the annotation, not the clip.
 - **A price-shaped detail IS a price.** A yellow/green shop sticker on the case's shrink wrap — or any price tag the model paints onto the product — counts as a price defect even when its figures are illegible. Report it as a sticker with its frame time; never fold it into "no price reached the screen", and never quote a figure you could not read. Both directions matter: an unread price must not be claimed present, and a present price-shaped tag must not be reported away.
