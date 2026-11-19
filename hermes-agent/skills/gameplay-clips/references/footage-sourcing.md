@@ -89,8 +89,12 @@ Measured on a 2:50 PS5 gameplay trailer: vision tiles gave roughly 5–8 s of ga
   design and is not in the table: pick it with `framesheet.py`.
 - `STOP` on the last line (< 15 s moving) = next official source; after 3 sources still STOP → ask Fix with the
   number (SKILL.md Length rule). Don't fetch a fourth and fifth trailer on your own.
-- Speech the VAD misses (whispered lines, sung lyrics) still shows in the captions — always pass `--vtt` when
-  yt-dlp has auto-subs.
+- Speech the VAD misses (whispered lines, sung lyrics) still shows in the captions — pass `--vtt` when
+  yt-dlp has auto-subs. **Exception: a music-only source.** windows.py unions the caption cues into `speech`
+  without reading their text, so a VTT whose cues are all `[music]` marks the whole film spoken and the table
+  ends `STOP: 0.0 s clean in 0 windows` — prove the silence first (`asr_speech_spans.py` → `0 ASR segments`)
+  and pass a header-only file instead (`printf 'WEBVTT\n\n' > nospeech.vtt`); that same header-only file is the
+  `vtt` key for build_v5 (§3). Do not conclude "unusable source" from that STOP.
 
 ## 5. Contact sheets (cheap, no credits)
 - **Sheets go to vision as small JPEG, one call at a time**: `uv run --with pillow python /opt/data/skills/shopee-clip/scripts/vprep.py sheet.png` → send `sheet.v.jpg` (≤1600 px). The xenoblade sheets were 2–4 MB PNG and were sent two per batch; four batches hit the 420 s tool timeout.

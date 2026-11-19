@@ -25,7 +25,9 @@
 - **Any plan above the 50/day quota cannot finish in one day** — not just a 40 s clip: a "20 วิ" board's
   10 + 10 = 60, and even 8 + 8 = 48 leaves no room for the regen the board advertises (+24). Read the live
   cost, mark on the board which option fits today's quota and that a regen may wait for the reset, and tell
-  Fix before submitting.
+  Fix before submitting. **Today's spend = clip-log rows whose `date` is today, not the sum of their `credits`**
+  — a 📝 prompt-mode row writes `credits: null` and carries the real figure inside `notes` ("ยอดจริงจากบัญชีฟิก
+  = 2x10วิ"), so a quota line summed from the field alone under-reports a day that already spent.
 - Never edit inside Flow (40 credits per edit). Never retry a failed submit with his credits without saying so.
 - Credit approval is per product and per question; put the cost inside the question text.
 - **Reported spend = the sum of EVERY attempt's `credits` across all shots, regens included.** Before delivery read
@@ -98,6 +100,13 @@
   `graphics_layer.py --report report.json` (`references/presenter-graphics.md`). Product stills are cut-out stickers
   beside the presenter, never full-screen cards that hide her.
 - Style reference: Shopee Video `sv.shopee.co.th/share-video/KUNZuOMsCgCKQAICAAAAAA==`.
+
+## Character pick (🧑)
+- **Pick the face from `clip-log.jsonl`, never from flow-state's `last_character_used`.** That field is only
+  written when the agent drives Flow, so a 📝 prompt-mode run never updates it and it lags behind the newest
+  `character` value in clip-log — reading it alone repeats the face Fix already saw in the last clip. Take the
+  newest `character` row in clip-log, exclude that name, choose at random from `character_roster` in
+  `/opt/data/clips/flow-state/<project-id>.json`, and name the pick on the board.
 
 ## Storyboard gate (Flow modes)
 - No Flow generation before Fix approves the board (`templates/storyboard.md`). Reason: two 10 s "hold / press / set down"

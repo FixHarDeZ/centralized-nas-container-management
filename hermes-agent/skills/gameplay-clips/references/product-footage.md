@@ -11,12 +11,18 @@ and `hook_id: "pft-N"`.
 - Use one `web_search` on the brand's own product page (or the Thai distributor's) for the exact model
   in Fix's listing. Keep the facts you will say: what it does, 2–3 headline features, and a size or
   capacity if it is a selling point.
+- **When search returns only aggregators and review sites, get the brand's own page from its sitemap:**
+  `curl -sL https://<brand>.com/sitemap_products_1.xml | grep -o '<loc>[^<]*</loc>'` → the product URL →
+  `web_extract`. Shopify stores list every product there; that page (not the listing) is the spec source.
 - **Every claim in the VO must come from that page.** No "ประหยัดไฟ 50%", "ดีที่สุด" or "อันดับ 1" unless the
   page says it in those words. When the listing and the brand page differ (capacity, variant, colour),
   tell Fix and use the brand page.
 - Drop `release_date` / `release_pill` from the plan (step 8 already says to delete the key when there
   is no date). Countdown and date hooks do not exist for products.
 - A listing that says PRE-ORDER for a product already on sale goes to Fix as a note, same as for games.
+- **A bundle listing whose photos show only part of it** (controller listed with a display stand, console with a
+  bundled game) → the missing item simply never appears on screen: say so in the delivery, and never draw or
+  source a stand-in for it.
 
 ## Step 2 — footage source: official brand video of THIS model
 - Search with yt-dlp: `ytsearch8:<brand> <exact model>`, plus `official` / `film` / `introducing` /
@@ -29,6 +35,11 @@ and `hook_id: "pft-N"`.
   ```
   For example, `@VITURE … query=pro%202` → "Introducing VITURE Pro 2 …" (50 s, 1080p) and "Sleek on Every Face"
   (32 s, 4K), both 16:9 and both passing the gate.
+- **When the brand has no official channel at all, take the brand store's own marketplace listing videos** —
+  they are the brand's own asset, so they do not trip the third-party-reviewer ban. A video-detail page carries
+  the file in its meta tags: `curl -sL -A 'Mozilla/5.0' '<marketplace video-detail URL>' | grep -o 'og:video:url[^,]*'`
+  → the CDN mp4 downloads with plain `curl -o` (the CDN is not behind the listing page's WAF). Read
+  `og:video:duration` from the same page first, and still vision-check 2–3 frames against Fix's photos.
 - **Prefer 16:9 `watch?v=` films.** `/shorts/` uploads are vertical. The v5 layout puts the source in a 16:9
   window, so a vertical short ends up tiny with bars. When only shorts exist, cut segments from them and build
   with `/opt/data/skills/shopee-clip/scripts/product_build.py` (full-frame 9:16 + the same VO recipe) instead
@@ -54,6 +65,13 @@ and `hook_id: "pft-N"`.
   people. A 50 s 16:9 brand film had only a ~6 s clean run; a 60 s vertical short had a 9 s one. If the longest
   clean run is shorter than the length Fix named (or 15 s), stop and offer Fix a shorter clip or another source (shorts are
   often the cleaner option). Do not paper over it with brand captions.
+- **Locate the product itself before counting those clean seconds.** Text-free seconds of *other* hardware do
+  not make a product clip: map where the exact model appears (the OCR map plus one framesheet pass) and require
+  at least one moving, supers-free window of it for the hero. Brand films routinely park an accessory in a static
+  end-card block with its name and a date burned in across the whole shot — if that block is the product's only
+  appearance, no crop saves it (the label sits between the product and the frame edge) → stop and offer Fix:
+  footage with the product carried as a sticker cut from his photos / footage he supplies / a different mode
+  (📦 or 🧑). Checking three official sources is normal here; fetching a fourth on your own is not.
 - **Shorts are vertical: use `product_build.py` directly.** They are 9:16 already, so skip the 16:9 window
   path. A short can yield a clean run with zero speech while ASR reports one segment; that is a music-only
   film, not a failed ASR.
@@ -79,12 +97,35 @@ and `hook_id: "pft-N"`.
   alpha from where the marker landed, then `alpha.getbbox()` to crop. Flood fill from the corners rather than
   a global "near-white" threshold, or white areas INSIDE the product (labels, highlights, screen bezel) turn
   transparent too. Vision-check the result for clipped parts and a white halo before it goes into `gfx.json`.
+  - **Crop the marketing text away BEFORE the flood fill**: corner fill only removes background connected to
+    the corners, so a headline/spec block sitting on the same white field survives as floating islands in the
+    alpha. Locate the product first (largest dark component on a 4×-downscaled mask), crop to it plus a few px,
+    then fill.
+  - **Eat the JPEG halo and keep the sticker sharp**: `alpha = alpha.filter(ImageFilter.MinFilter(3))` before
+    `getbbox()` drops the 1-px light fringe left at the edge, and upscaling the cut-out 2× (LANCZOS) stops it
+    going soft at display size.
 
 ## Step 7 — VO
 - Same voice and recipe (Gemini Leda, edge fallback). Write the script as a friend explaining what it
   does, not ad copy: "ใส่แล้วเหมือนมีจอยักษ์ลอยอยู่ตรงหน้าเลยอะ". Specs are spoken as words.
 - Hook from `/opt/data/skills/shopee-clip/templates/hooks.md` → `pft-N`:
   `python3 /opt/data/skills/shopee-clip/scripts/perf.py pick-hook --category <cat> --prefix pft-`.
+
+## Step 8 — build: `product_build.py` when the footage spans several files
+Mixing orientations (a 16:9 brand film plus vertical listing videos) does not fit `build_v5`'s single
+master/trailer pair — pre-cut each seg to its own file and drive `product_build.py` instead.
+- **Cut every seg to 9:16 before the build** so its `scale=…:increase,crop=720:1280` is a no-op: a portrait
+  source scales straight to 720×1280; a 16:9 source becomes a 720×405 band at `y=280` over its own blurred
+  stretch (`split` → `boxblur=24:2,eq=brightness=-0.12` → `overlay=(W-w)/2:280`) — the whole picture survives
+  and the pill band (186–262) and subtitle band (700–835) stay clear.
+- **The music bed must be ONE track cut into consecutive slices**: give shot *k* the audio of a single
+  music-only source at a running offset (the shot durations summed), so `acrossfade` blends the same musical
+  moment with itself and the seams are silent. Slicing each source's own audio jumps the track at every cut.
+- **Lay the VO around the last shot before writing it** — `product_build` sets `total = vo_end + tail`, the CTA
+  may only start inside the last shot, and `hold = total − footage` must stay ≤ 2 s (it flags otherwise). With
+  `L = footage − d_last` (the last shot's start) the constraints are `cta_start ≥ L`,
+  `d_last ≥ cta_dur + tail − 2`, and the pre-CTA phrases must fill `0 → L`: size the script to that window
+  first, tune gaps second.
 
 ## Steps 9–10 — gates, log, delivery
 Gates unchanged. Log row (written by `deliver --style footage`): `style:"footage"`, `category:<cat>`, `hook_id:"pft-N"`. In `notes`, record the

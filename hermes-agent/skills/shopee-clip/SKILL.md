@@ -51,7 +51,9 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    → Intake sheet.
 2. **Q1 — mode** (`clarify`, one question, buttons):
    `["🎬 footage จากวิดีโอทางการ (เกม/สินค้า, 0 เครดิต)", "🧑 presenter + graphic", "📦 graphic ล้วน (ภาพสินค้า ไม่มีคน)", "✋ มือ+สินค้า ลองใช้ให้ดู (ไม่เห็นหน้า)"]`.
-   Do not guess from the product type. For a rigid product (rack, shelf, cabinet, device) add one line to the
+   Do not guess from the product type. **Vocabulary in the order already names the mode → skip Q1:**
+   `gameplay` / `ฟุตเตจ` / `footage` = 🎬, and `+ graphic` is not a mode — graphics are made in post in every
+   mode. For a rigid product (rack, shelf, cabinet, device) add one line to the
    question: Flow redrew its parts/size in 3 of 3 🧑/✋ jobs (2026-11-10/11/14); 🎬/📦 hold the shape better.
 3. **Q2 — length, 🧑/📦/✋ only** (`clarify`, one question): `["10 วิ (แนะนำ)", "20 วิ", "30 วิ", "40 วิ"]`.
    **🎬 skips Q2** (Fix 2026-11-12): gameplay-clips picks any whole length 15–50 s from the usable footage
@@ -111,7 +113,10 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
      When a command prints `"FALLBACK": true`: stop driving Flow and close Chrome (CDP `Browser.close`), tell Fix
      in one line (reason, credits spent, shots left), run `clipjob.py pack <job>` and continue as 📝.
      A shot that failed after spending credits gets its own 🔁 button from `submit-failed`; wait for the tap.
-10. **Per-shot review.** After each file arrives (downloaded or ingested), vision-check 3 frames — one inside the first 2 s, since a caption can live only in the hook window — for Flow text,
+10. **Per-shot review.** Read `references/frame-check.md` first: it owns the defect classes and the exact
+    3-frame question set (chest-height sub-band, product-vs-reference identity, planned action). After each file
+    arrives (downloaded or ingested), vision-check 3 frames — one inside the first 2 s, since a caption can live
+    only in the hook window — for Flow text,
     product drift (shape AND real-world scale against the presenter), and whether the planned action happened. Then run
     `clipjob.py ready <job> K --raw <file> --frame pass|flag:<what you saw>`. That runs ffprobe and, for 🧑,
     the repeats and CTA gates, then sends the shot with the ✅/🔁 keyboard. If that send fails the checks are
@@ -141,8 +146,9 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
 12c. **Re-send of an already-delivered package** (`ขอคลิป hashtag และปักตะกร้า`, `สรุปอีกรอบ`): resolve WHICH
    clip first, read the job's `delivery.sent`, re-run `S/send_copy_buttons.py` — `references/run-mode-gates.md`
    → Re-send.
-13. Fix calls it off (`เลิกทำ` / `หยุด` / `พอแล้ว`) → `clipjob.py cancel <job> --reason …`, close Chrome, report
-    the credits actually spent (`spent_shots`). No clip-log row.
+13. Fix calls it off (`เลิกทำ` / `หยุด` / `พอแล้ว`, or `ไม่ผ่าน` together with `ยกเลิก`) → `clipjob.py cancel <job> --reason …`, close Chrome, report
+    the credits actually spent (`spent_shots`). No clip-log row. `ไม่ผ่าน` on its own is a shot REVIEW failure,
+    not a cancel: it gets the ✅/🔁 treatment (which shot, regen cost), never a cancel.
 
 ## Talking to Fix
 - One status line when something blocks, sent at that moment, not at the end. Put the credit cost inside
