@@ -1361,3 +1361,71 @@ Not done / open:
 - Watch on the next order: Hermes' cover uses listing/official detail photos in slots, `"shape": "card"` for case art,
   the blind per-slot check runs; a `too small` / `square-ish` exit gets fixed with a better picture, not a smaller R.
 - Open: D2 side card small (wide photo in a 2-slot row); the D.Branner hero lost some tube height to the bigger slots.
+
+## 2026-11-19 — check of the 11-18 / 11-19 clip jobs (read-only, nothing changed)
+- Fix: "รีวิวงานเมื่อวานและวันนี้หน่อยว่ามีอะไรต้อง enhance หรือ tune เพิ่มไหม".
+- 8 jobs after the ones already checked: delivered honma-gt6 🧑🤖 (107 min), huawei-watch-d2 🧑📝 (64), zelda-ctrl-stand40 🎬
+  (118), honma-gt6-gp 🎬 (130), m105-pocket 🎬 (107, `wait_fix_min` 12); **cancelled 3 🧑**: nual-loop-240w (📝 cable,
+  "คลิปเสียทั้ง 2 scene", no files sent back), uneed-pb-1 (📝 powerbank, "Gen ยังไงก็หน้าไม่ตรง"), aukey-pby92 (🤖
+  powerbank, "ไม่ผ่าน ยกเลิก"). Credits lost on the cancels ≈ 144 (estimate: nual ~48 Fix's own, uneed ~66, aukey 30).
+- Watch-list from 11-18: windows.py used in all 3 🎬 (but 11–20 vision calls per job, not one); 🎬 107–130 min (lego
+  535); Secretary copy `ok` + auto close on all 5 deliveries; covers use listing photos + `card` (zelda box/angle).
+  honma-gt6-gp fetched 5+ sources (src_b/th/detail/zul/id) without asking Fix (rule: ≤3 then ask).
+- Causes found:
+  - aukey: the powerbank morphs inside shot 1 (silver → dark thick box → white; built-in cable becomes a loose one).
+    `ready … pass=True` + review sent 09:27:24 on a 3-frame check with no reference comparison; the ref-vs-render
+    check (DRIFT) ran after, 09:28:52. Hermes already wrote the lesson live (`frame-check.md`, SKILL step 10).
+  - uneed: shot 2 was hands-only; its last frame became shot 3's start frame → Flow drew a new face (straight hair vs
+    น้องพลอย's wavy bob). Ref was a 327×409 crop (Fix chose it). Prep 47 min (vision timeout 7 min, Shopee WAF hunt).
+  - nual: unknown (no files). Board had flagged the coiled cable as risky.
+  - **mimo `content_filter` refusal → the next turn runs with `history=0`** (agent.log `turn_context … history=0`):
+    12 refusals since 11-12, every following turn had no history. nual: refusal 16:56:12 right after a 55 KB
+    `skill_view product-image-prep.md`; Fix's "ต่อ" ran 16:56→17:42 rebuilding context via session_search/state.db;
+    `clipjob status` showed `open_jobs: []` because 🧑 jobs get `clipjob new` only after board approval. Cause is in
+    Hermes core (`gateway/run_turn_persistence.py` persists the user row; history not reloaded) — not traced further.
+  - honma-gt6-gp: `build_v5` asked `timeout: 900` > the 600 s terminal cap → promoted to background; it died in 2.2 s
+    (fonts dir), Hermes polled 17 min with `pgrep -c -f build_v5` (counts its own shell) — notice came after the turn.
+    Same job: an execute_code poll loop hit the 300 s cell timeout (kernel killed).
+  - windows.py: 6 runs on re-encoded variants of one source in honma-gp (~29 min, one 94 s source = 487 s), 12 runs
+    in m105 (~13 min). Hermes' live pitfall: `ocr_grid` always probes `t == duration` (`ocr_frames` → ffmpeg
+    `check=True` dies at EOF) and the mjpeg grab rejects tv-range re-encodes — a script bug, worked around in docs.
+  - Board quota line: house-rules 50 credits/day makes every 20 s board say "เกินโควต้า ต้องรอวันถัดมา" on a day that
+    already spent 120 — rule looks stale (question for Fix).
+- Delivered quality: zelda's last seg (trailer 35.65 s, CTA "ลิงก์อยู่ใต้คลิปนะ") shows Joy-Con, not the listed Pro
+  Controller; the Pro Controller itself appears only as the sticker (rest = triforce emblem animation). honma-gt6-gp:
+  watch only in the hero, rest generic golf. m105: mosaic block at ~2 s; cover circles are crops of the hero frame.
+- honma-gt6: ✅ shot 1 and ✅ shot 2 each delivered twice (OOB replay, known).
+- Unpulled live edits (9): gameplay-clips `cover-sticker.md`, `footage-sourcing.md`, `gameplay-pitfalls.md`,
+  `product-footage.md`; shopee-clip `frame-check.md`, `house-rules.md`, `product-image-prep.md`, `SKILL.md`,
+  `templates/clip-prompt.md`. Next tune starts with `make hermes-skills ARGS=--pull`.
+- Scratch on the NAS (`/opt/data/cache/scratch/review1119`) removed. No commit of skills, no sync, no deploy.
+
+### 2026-11-19 — tunes 1-3 from the check (Fix: "ทำข้อ 1-3 ตามแนะนำได้เลย")
+- Started with `make hermes-skills ARGS=--pull`: 9 live edits ported as `5de6c1e`.
+- `059aea8` windows.py: frame grabs clamp to `duration − 0.1 s` (ocr_grid always probed the last span end = EOF,
+  `check=True` killed the run), PNG instead of jpg, a failed grab = dirty sample (never clean, never an overlay).
+  NAS proof on honma-gt6-gp `src_b/src_bw/src_c` (tv range): old jpg grab ok mid-file, FAILS at the end; new ok at
+  both. Hermes' "mjpeg rejects tv range" part was not reproduced (mid-file jpg grabs worked). 3 tests.
+  gameplay SKILL: build_v5 foreground, timeout ≤600, no `pgrep -f`.
+- `dcbd9b2` clipjob:
+  - `idcheck JOB K --raw F` → `shot<K>_id.jpg` (≤2 refs + frames at 5/25/45/65/85 % + last, one row 360 px) +
+    `ask_vision`; `ready` refuses a Flow shot with refs until the sheet of THAT file (sig) exists and
+    `--identity match|drift:<what>` is given → gate `identity` in the review message. Real sheet built from aukey's
+    shot 1 shows the morph plainly.
+  - Start frame: `start_frame_for` skips a 🧑 last frame with no face for the newest earlier one, or none (message
+    tells Fix to attach chip + refs only). `facecheck.py` = Haar + skin share ≥0.35 in the box middle + width
+    ≥150 px — plain Haar boxed the cardigan knit (97 px) on uneed's hands-only frame. Calibrated on 52 frames of
+    6 shots: faces 230–505 px skin 0.82–0.98; false hits skin 0.00–0.08; palms 94–140 px. Used by `ingest`, `pack`,
+    new `startframe JOB K` (🤖). Face check failure = old behaviour + `unchecked: true`. Live proof:
+    `startframe uneed-pb-1 3` → `shot1_last.jpg`, faceless [2].
+  - `intake JOB --product … [--link] [--mode]` right after the duplicate check; `status` rows carry `stage` + `last`
+    (3 newest events); every command except note/wait/cancel/status refuses an intake job; `new` fills it in
+    (keeps created/started/events) and still refuses a real existing job.
+  - Router (15353 B): step 0 context-loss rule (continue from `last`, never `session_search`), step 1 intake +
+    notes, step 9 🤖 `startframe`, step 10 idcheck → ONE vision call → `ready … --identity`; photo gate and sync
+    detail moved to `product-image-prep.md` / house-rules "Skill sync". house-rules: job row from intake, long-command
+    rule (≤600 s foreground, `process_manage poll`, heavy-log end row; build_v5 ≈70 s). frame-check: identity sheet
+    section. presenter-post / prompt-pack: start-frame pick.
+- Tests: 144 passed local (py3.12 + opencv), 159 in the sync gate. Pushed; live synced at `dcbd9b2`. No deploy.
+- Not proven on a real order: Hermes running `intake` at step 1, `idcheck` + one vision call, a DRIFT reaching
+  Fix's review, a faceless start-frame message, windows.py on a full real run after the fix.
