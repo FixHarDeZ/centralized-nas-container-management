@@ -1548,3 +1548,39 @@ Not done / open:
   window too), natural-vo.md (CTA ≈10–12 Thai chars for a ~2.9 s card). Hermes `MEMORY.md` still 2289/2200.
 - Proposed tunes (waiting on Fix): see the reply of this session. NAS scratch `/tmp/rev1123` removed. No commit of
   skills, no sync, no deploy.
+
+### 2026-11-23 — tunes 1-7 (Fix: "ทำตามแนะนำได้เลย 1-7")
+- `484c504`: Hermes' 6 live edits ported as-is (`--pull` lands in the NAS clone; copied to local, NAS clone reset).
+  Its loosened end-card rule ("crop to a file is OK if ≥1280 px + OCR") is superseded by tune 2 (crop key; pre-cropped
+  files refused) — Fix had this marked as his call; told him.
+- `edd3849` + `9b8f78d` (live synced at `9b8f78d`, container tests pass, no open job at sync, no deploy):
+  1. port above; gameplay SKILL back under 30 KB (font detail → gameplay-pitfalls §Thai subs).
+  2. **End card**: build_v5 `"crop": [x,y,w,h]` on the end-card seg (from the trailer, scaled to window width, no
+     stretch, default zoom [1,1]); `wide` on a non-16:9 file refused (the shipped oblivion plan: "would stretch it"
+     — the shipped final IS 1.8× stretched, missed in the morning check); `endcard_rect` (crop cards only) →
+     `endcard_check --rect` top/bottom → `clipjob deliver` passes it. Shipped oblivion final with its band rect:
+     flagged "OUT NOW" bottom. Rect on full-frame cards false-flagged gotg's whole MARVEL logo (2 px from the
+     trailer frame top) → rect emitted for `crop` only. Rect check on old finals: mario/gta6/zelda/ffr pass,
+     sniper + lego-hp fail on the right edge (both known cut).
+  3. **White flash**: windows.py drops frames mean >225 & std <12 at source rate (64×36), padded 0.1 s;
+     build_v5 refuses a seg holding one (`blank_ok`). Oblivion trailer: flashes at most cuts; old hero window
+     76.13–84.62 now 3 windows; `--check` on the shipped plan flags seg 0 at 78.22–78.35. 🎬 only (no final scan).
+  4. **Scripts**: `gameplay-clips/scripts/endcard_crop.py` (OCR tail 2 fps, title vs legal/platform/badge/corner
+     boxes, card run, crop + preview) — oblivion → `[524,41,880,592]` at 100.66 s, real build 720×484 card, OCR
+     rect pass; `shopee-clip/scripts/box_crop.py` (contours + push sides to full edge lines, one sheet, OCR per
+     candidate) — oblivion listing C1 = 141,56 422×706 ≈ Hermes' hand crop.
+  5. **windows.py without --vtt runs whisper** (small, word timestamps): words within 1.5 s of a VAD span extend it,
+     far words dropped; writes `<stem>_speech.vtt`. Segment-level spans swallowed the whole trailer (one segment
+     85–102 s) → word level; oblivion back to 7 windows / 23.6 s (was 24.3 before the flash cuts). Run 2m47s.
+  6. **Vision**: the 420 s cap is Hermes' generic per-tool deadline (`timeouts.tools.sequential_call`); only
+     terminal declares a floor, `execute_code` doesn't → lowering it would cut long runs; `auxiliary.vision.timeout:
+     120` did not hold (one silent call to 420). Not changed. Shipped instead: `clipjob` counts `vision_analyze`
+     calls from state.db vs a budget (8 for 🎬, 6 + 🤖 shots) in note/wait/stage/status + clip-log + timing, with a
+     warning past it. Real: oblivion 13/8 (1 timeout, 23 min), wellux 7/7.
+  7. `clipjob.py stage JOB footage|endcard|vo|build|cover` → 🎬 timing split by stage.
+- Docs: router photo gate (box_crop) + vision line, gameplay SKILL step 0/4/status/cover lines, footage-sourcing
+  (endcard_crop, whisper note, wash), cover-sticker, product-image-prep a0.
+- Watch next 🎬: `endcard_crop` seg used, `stage` marks, vision warning, windows.py whisper inside 600 s on a long
+  source, box_crop for the case. Visible change: end cards no longer zoom.
+- Open (Fix): case sticker over the end card (3rd clip with no product in the CTA); Hermes pushing to main from
+  the NAS clone (`011b26c`).
