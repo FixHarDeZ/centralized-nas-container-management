@@ -1441,3 +1441,35 @@ Not done / open:
   full run with no EOF crash; build_v5 run in the foreground.
 - Fix decides: real Flow credit plan (50/day rule stale?), flexible products (cables) in 🧑, 🎬 product visible in
   the CTA footage (zelda showed Joy-Con).
+
+## 2026-11-22 — check of the 11-19 (pm) → 11-22 clip jobs (read-only, nothing changed)
+- Fix: "ตรวจงานตั้งแต่ 2 วันที่แล้วหน่อยว่างานออกมาโอเคไหม มีอะไรต้อง enhance เพิ่มได้บอกผมมาเลย".
+- 18 jobs, 17 delivered, 1 cancelled-and-reopened (gotg-encore-s2: 6+4 s two-scene gen failed → s2b one 10 s scene;
+  clipjob has no reshape-before-spend command). Minutes: 🧑 oppo 126, eucerin 103, vaseline 188, gotg-s2b 59,
+  comulytic 293, champion 55 · 🎬 gta6 166, mario 118, sniper 148, gotg-gp 117, ffr 250 · 📦 joygrip 132, clicker 118
+  · ✋ onesuper 61, tec-cooling 142 (first real ✋ orders, both delivered). Secretary copy `ok` on all 17, auto/tap close
+  on all. Credits logged: 60/60/60/30, `null` on six 📝 jobs (still).
+- 11-19 watch-list: intake at step 1 ✓ (every job); idcheck before `ready` ✓ (every Flow shot); DRIFT reached Fix ✓
+  (eucerin presenter, comulytic body, onesuper compartments, champion) — Fix approved every one; one vision call per
+  shot ✗ (20–47 `vision_analyze` per session, 222 in 3 days, ~4 h, 8 × 420 s timeouts ≈ 56 min); windows.py used, no
+  crash in the log; faceless start-frame message not exercised (no 🤖 🧑 hands-only shot). `content_filter` 3×; the
+  next turn kept its history (`history=319`) — the 9 `history=0` lines are session starts. 3 exec approval cards timed
+  out after 60 s (`BLOCKED`, Fix not at the phone).
+- Visual check (12-frame sheets of all 15 finals):
+  - champion: Flow drew the text "น้องเอิร์ธ" on the wall 0.3–2.2 s — `shot1.txt` says "The presenter is น้องเอิร์ธ"
+    (Thai script; ~30 earlier prompts did the same without a render). น้องเอิร์ธ is the roster's only MALE character
+    (flow-state note 2026-11-18), prompt said "young Thai woman", no `characters/น้องเอิร์ธ.jpg` so idcheck could not
+    compare, Flow drew a woman. LRU character pick has no gender/appearance field.
+  - onesuper: basket 2 compartments in shot 1, 3 in shot 2 (ref = 3). Prompt said "exactly THREE"; the two shots were
+    generated in parallel by Fix (📝), so no start-frame chain.
+  - ffr + sniper: end-card title cropped ("L FANTASY RESONANCE", "NIPER ELITE"). ffr seg is `wide: true` but on an
+    836×470 `endcard.mp4` Hermes pre-cropped; sniper last seg plain window. gotg-gp's 1920×1080 `wide` card is fine.
+  - gotg-s2b: game case washes out to blank at ~0.8 s (frame gate passed). sniper "ALL DLC"/"REAL BALLISTICS" segs are
+    blurry close-ups. mario/gta6 fine; vaseline, oppo, eucerin, comulytic, tec-cooling, joygrip, clicker look clean.
+- Small defects: `clipjob.py:1151` prefixes every identity drift "สินค้าเพี้ยนจากรูปอ้างอิง:" even when the drift is the
+  presenter (eucerin). Post stage of 📦 10 s clips 57–64 min; comulytic post 111 min (3 post_presenter runs).
+- Hermes' live rule (house-rules drift): the board quota line must quote Flow's LIVE balance (account menu, pooled,
+  `Resets <date>`), champion board read 282 left — the 50/day rule is stale.
+- Live drift: 22 files edited in place, not pulled (router 16 976 B > 15 KB budget, house-rules 22 190 B > 20 KB) —
+  next tune starts with `make hermes-skills ARGS=--pull` + trim, or the sync test gate fails. Dry run only
+  (`ARGS=-n`), nothing copied. NAS scratch `rev1122` removed. No commit of skills, no sync, no deploy.

@@ -14,7 +14,11 @@ trailer, ~1.8× the picture area. Fix approved the Harvest Moon mock (message 11
 - **Pill and subs sit ON the footage** (pill y 210, subs MarginV 465, unchanged numbers). Check a frame per sub
   for a bright or busy patch behind the text.
 - **Cover sticker** (`gfx.json`): `"y": 1060` (not 960) and `avoid` footage `[0, 190, 720, 910]`.
-- A trailer with baked-in letterbox bars shows them inside the window: pick another window or use `wide`.
+- A source with letterbox bars baked in ALL the way through shows them in every window and hero — `wide` and
+  window-picking cannot hide them (the bars are part of the picture). Measure row-mean over several frames
+  first; if the edge rows are ≈0 on every frame, crop the bars into a new source file BEFORE encoding master
+  and point both `master` and `trailer` at it (recipe in gameplay-pitfalls §Footage). A bar that appears only
+  in one shot is scene darkness — leave it.
 - Not proven yet: `sub_linecheck.py` / `sub_bandprofile.py` on subs that lie over footage (they were tuned on
   the blurred plate) — a FAIL there needs a look at the frame, not a blind re-render.
 - `window_h` omitted = the old 16:9 band; use it only when Fix asks for the old look.
@@ -88,6 +92,11 @@ Minimal plan that passed `--check` (no beats, no release pill, no logo, header-o
   Operational rules for this gate (each one cost a silent wrong result):
   - Use `ffmpeg -y` on the duck-only output. Without it ffmpeg prompts `Overwrite? [y/N]`, exits, and the old wav is read as if fresh.
   - Regenerate duck-only after every build; the music stem changes whenever the plan changes.
+  - **A FAIL is a gain problem before it is a graph problem.** `duck_stem_gate.py` re-applies `music_gain` /
+    `vo_gain` from plan.json over the unchanged raw stems, so a gain-only change can be re-measured WITHOUT a
+    rebuild (seconds) — the build must still be re-run before shipping, because build_v5 bakes the gains in.
+    Levers: lower `music_gain`, raise `vo_gain`. The window that fails is normally the FIRST phrase, since the
+    cold open carries the loudest music, so size the nudge from that window's number, not from the average.
   - The NAS `python3` has no numpy: run the delta reader with `uv run --with numpy python <file>.py`, and write that reader as a file (a heredoc that references a multi-MB wav trips the lifecycle guard).
   Compare RMS over the VO-phrase windows in `work/timeline_v5.json`.
   Both numbers must be pre-master — master's gain scales them equally so the ratio is unchanged,

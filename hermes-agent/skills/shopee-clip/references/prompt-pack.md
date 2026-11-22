@@ -23,6 +23,11 @@ reference photos along with the other shots, so a first pack run with `--shot 1`
 nothing to attach in Ingredients. `--shot` is a resend of prompts only — the refs must already be in his chat.
 
 ## Taking the files back
+- **Confirm the bytes before you ingest.** A reply that names a video but saved no file is not a submission:
+  check the disk (`find /opt/data -name '*.mp4' -newermt '-15 minutes'`), and when nothing is there ask Fix to
+  resend it as a file replying to that prompt — the shot stays `packed`, never `submitted`, and never answer a
+  video reply as if nothing arrived. A reply whose metadata carries a saved path IS the file: ingest it from
+  that path.
 - Hermes passes the replied-to message text to you. Read it, find `[ช็อต K · job]`, and run
   `clipjob.py ingest <job> <file> --reply-text "<that text>"`. The tag, not the message id or the file name,
   maps the file to its shot.
@@ -56,5 +61,7 @@ from the previous shot's last frame as usual. The model line in the header (`Omn
 what Fix sets in either account.
 
 ## Credits
-Fix's own submits spend his Flow credits exactly like 🤖, and IU cannot read them. Do not report a credit
-figure for 📝 shots: `deliver` logs `credits: null` unless every attempt carried a number.
+Fix's own submits spend his Flow credits exactly like 🤖, and IU cannot read them, so `deliver` logs
+`credits: null` unless every attempt carried a number — but `deliver --notes` on a 📝 job MUST still state the
+real spend Fix reported (`ยอดจริง = 30 เครดิต`): a null row with no figure leaves the next board's quota line
+computed from zero (`house-rules.md` → Credits).

@@ -27,7 +27,7 @@ vibe pool: `#ดีไซน์มินิมอล #บ้านและส�
 platform: `#ShopeeTH`
 
 ## `beauty` (ความงาม)
-product pool: `#_skincare #ของมันต้องมี #รีวิวความงาม #ของดีบอกต่อ` + brand tag
+product pool: `#skincare #ของมันต้องมี #รีวิวความงาม #ของดีบอกต่อ` + brand tag
 vibe pool: `#ดูแลตัวเอง #รีวิวของดี #ของดีบอกต่อ #หน้าเด็ก`
 platform: `#ShopeeTH`
 

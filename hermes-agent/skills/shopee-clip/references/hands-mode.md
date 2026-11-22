@@ -28,6 +28,10 @@ product is tried while a voice explains). `clipjob.py new --mode hands`; clip-lo
   and light, and the same load state of the product (what stands on which tier). A beat that needs another
   state (empty rack for a drainage demo) is written as an action inside the shot (the hand lifts the items
   off), never as a new scene. In aimi-rack shot 2 came back as another room with the rack empty.
+  **A chained ✋ shot carries TWO chips: `clipjob.py startframe`'s last frame AND the product ref** — there is
+  no character chip to drop, so the 🧑 rule ("start frame can be the ONLY chip") does not apply, and the
+  pre-submit gate expects `chips == 2`. Verify both in ONE screenshot-crop zoom (both chip rects, one call)
+  before Start generation.
 - Props carry no label: "plain unbranded bottles, no text on any prop". Flow printed the product's brand
   name on a skincare tube.
 
@@ -81,6 +85,12 @@ tier count, split top vs full-width shelf, pull-out drawer vs hanging basket, wh
 bottom, height:width ratio. A standalone read of a cropped `ref1.jpg` can contradict the original listing
 photo (`img1.jpg` …): when they disagree the listing photo is the product — re-read it before calling
 Drift.
+
+**The `idcheck` sheet and scan tiles are ~240 px, so every identity or structure verdict from them is a
+screening, not a verdict — and "size in frame is framing, not identity" is the standing false positive.**
+Both rules, and the full-res confirmation that settles them (ref crop paired with a full-res frame, one zoom
+read, `--identity drift` only for what survives — a part the tile claims present must be confirmed there too),
+live in `frame-check.md` → The identity sheet; apply them here unchanged.
 
 **Before calling drift the model's fault, check the prompt's product paragraph against the reference.**
 If `shot<K>.txt` describes parts the photo has no trace of, Flow only obeyed what it was told and a regen

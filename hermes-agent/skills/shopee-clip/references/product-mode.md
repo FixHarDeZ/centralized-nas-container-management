@@ -18,9 +18,17 @@ Fix 2026-11-10: the voice copies the gameplay recipe ("ลอกแนวเส�
   footage is short, and flags a hold >2 s).
 
 ## Voiceover = the gameplay recipe
+- **The script comes from the approved board, not from the shots — write the plan and generate the take WHILE
+  the shots are still rendering or waiting on Fix's ✅** (it costs Gemini quota, never Flow credits, and needs
+  no mp4 in the workdir). Do the ASR phrase-by-phrase check in the same window, so when the last shot lands the
+  only work left is `assemble-check` → build. Waiting idle on the review reply and then starting a 10-min VO
+  chain is the avoidable half of a long tail.
 - Write the plan for `gameplay-clips/scripts/gen_vo_natural.py` exactly as `gameplay-clips/references/natural-vo.md`
   says: engine `gemini`, voice `Leda`, style "cheerful, casual, like telling a friend", spoken Thai with
   particles, numbers as words in `say`, uneven gaps, and edge `rate/pitch` on every phrase for the fallback.
+- **Keep each `sub` line ≤ ~35 Thai chars** (Itim 48 in the 620 px sub width: 36 chars render on one row, 43
+  wrapped to a 3rd). A third row grows the block upward out of the sub band over the product — split the words
+  across the two lines differently; the `say` can stay as long as the pacing needs.
 - `vo_end` must land in `DUR−3 … DUR−1.6`. Fit it from stdout as the gameplay skill does (`--from-take`
   costs 0 requests).
 - **Size the script to that window BEFORE the first take.** On a 10 s clip the window is 1.4 s wide, and
@@ -31,8 +39,11 @@ Fix 2026-11-10: the voice copies the gameplay recipe ("ลอกแนวเส�
 - ASR the take with `gameplay-clips/scripts/asr_th.py` and compare it phrase by phrase with the script before
   building.
 - **Hand THAT take to the build:** `plan.json` with `"vo": "vo_plan.json"` re-rolls a FRESH Gemini take, so
-  the ASR'd take is discarded and an unverified one ships. Copy the verified files to distinct names and
-  point the plan at the prebuilt keys (see Build) instead.
+  the ASR'd take is discarded and an unverified one ships. Two ways out, both keeping the verified audio:
+  add `"from_take": "<the saved take.wav>"` (the build re-times THAT take from the plan — 0 requests, no
+  file juggling), or copy the verified files to distinct names and point the plan at the prebuilt keys
+  (`vo_mp3`/`vo_ass` + the `.timeline.json` beside the ass — never at the workdir's own paths: that branch
+  copies source→workdir and raises `SameFileError`).
 - The CTA phrase goes last. No price, as always.
 
 ## Build
@@ -41,6 +52,11 @@ uv run --with edge-tts --with faster-whisper --with numpy \
   python /opt/data/skills/shopee-clip/scripts/product_build.py plan.json --workdir <workdir>
 ```
 `plan.json`: `{"shots": [<assemble-check files>], "vo": "vo_plan.json", "pills": [...], "xfade": 0.25}`.
+- **`tail` sets the shipped length: the clip ends at `vo_end + tail` (capped by the stitched footage), so set it
+  to `<ordered seconds> − vo_end`, never a default.** A default 1.6 s under-shoots any order whose VO ends early
+  (7.8 + 1.6 = 9.4 s shipped against a 10 วิ order): read `v_dur` off the build stdout and rebuild with a bigger
+  `tail` — a rebuild costs ~1 min and 0 credits — while keeping the empty music tail after the VO at ≤3 s (the
+  `vo_end ≥ DUR−3` window is the same constraint seen from the VO side).
 - A VO already built in the workdir goes in prebuilt (`"vo_mp3"`/`"vo_ass"` + the `.timeline.json` beside
   the ass), but never point them at the workdir's own files: the prebuilt branch copies source→workdir and
   raises `SameFileError` on the same path. Copy to distinct names first (`vo_src.mp3`, `subs_src.ass`,
@@ -62,12 +78,28 @@ uv run --with edge-tts --with faster-whisper --with numpy \
     text rect drawn onto the frame). A 50 % contact sheet lies about geometry: its boxes come back in mixed
     coordinate spaces, Thai overlay text misreads, and a spot it calls "clear wall" can be the product
     running straight through the text area.
+  - When the product has a detectable hue, skip the grid+vision round and use the pixel probe in
+    `frame-check.md` → Locating a crop: a strict mask with a per-row count floor returns the product's top
+    per frame in one PIL pass, and that number is exactly what the `avoid` top needs (a grid read's y came
+    back wrong even with coordinate labels). **Print the per-row profile before trusting `rows[0]`:** a warm
+    mask over a warm-lit set also matches the wall and the shadows, so the first hit is background — the
+    product top is the first row of the SUSTAINED block, and the clear text band is the run of zero-count
+    rows above it (that run is where a headline actually fits).
+  - Pre-measure a headline BEFORE writing gfx.json: `ImageFont.truetype(Itim, size).getlength(text) + 12`
+    must fit the safe box (x80–592 = 512 px) — a full product name at size 58 overflows and `--check` fails
+    on the first run; drop the size (40–46) or split into two lines first.
   - Sample every intended text window at start/mid/end. Framing changes WITHIN a shot (wide → close-up →
     pull back; a late camera move lifts the product rim into a top band that was clear seconds earlier), so
     time-slice each `avoid` rect to the segment its measurement covers — one rect spanning the whole shot
     either blocks all placement or silently stops protecting anything.
   - Pick windows where the measured product top sits below the text rect (and the rect leaves the pill band
     while a pill shows), then let `--check` confirm the arithmetic.
+  - **A product that fills the frame leaves ONE legal text band, so a headline and a pill cannot share that beat.**
+    A close-up measuring its top at ~235–275 px leaves only y192–262 clear (the pill band — and only while no pill
+    shows; the sub band 700–835 is blocked while subs show, the safe box ends at y832). Stagger the windows instead:
+    headline in a window where no pill is showing, the pill after it — and keep the pill's window where the measured
+    product top is >262, or the pill visibly sits on the product. Planning both over the same shot only gets settled
+    by `--check` failing, which costs a rebuild rather than a re-plan.
   - After render, re-verify each headline on a grid frame plus a ~3× full-res crop of its y-band checked
     glyph-by-glyph against the plan string (`frame-check.md`); when a sheet read and a crop read disagree,
     the targeted full-res crop wins.

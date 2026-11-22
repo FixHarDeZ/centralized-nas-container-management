@@ -22,13 +22,27 @@
   fixed by a reworded prompt: offer 🎬/📦 or a post insert of the real photo. A 360p generation saved at 720p
   is reported as a third of the price but softer, and is untested here: only when Fix says so (`cost --res 360p`).
   A shot under 10 s has not been through post yet (first one: check subs/graphics timing by eye).
+- **A board's quota line comes from Flow's LIVE balance, not from clip-log arithmetic alone.** Open the
+  account menu first (`flow-driver` → `flow-browser-env.md` → Desktop: `Account details` → `N Google Flow
+  credits` + its `Resets <date>` line) and quote that figure with the reset date: an account can carry a pooled
+  balance far above 50/day, and a quota line computed from today's clip-log sum against an assumed 50 then tells
+  Fix "ต้องรอรอบโควต้า" while every shot still fits — that costs a whole idle turn. The clip-log today-sum stays
+  the check on SPEND; the live figure plus its reset date is the check on what is LEFT and when it refreshes.
 - **Any plan above the 50/day quota cannot finish in one day** — not just a 40 s clip: a "20 วิ" board's
   10 + 10 = 60, and even 8 + 8 = 48 leaves no room for the regen the board advertises (+24). Read the live
   cost, mark on the board which option fits today's quota and that a regen may wait for the reset, and tell
   Fix before submitting. **Today's spend = clip-log rows whose `date` is today, not the sum of their `credits`**
   — a 📝 prompt-mode row writes `credits: null` and carries the real figure inside `notes` ("ยอดจริงจากบัญชีฟิก
   = 2x10วิ"), so a quota line summed from the field alone under-reports a day that already spent.
+  **Therefore `deliver --notes` on a 📝 job MUST state the real spend** (`ยอดจริง = 30 เครดิต`): a null row with
+  no figure in its notes leaves the next board's quota line computed from zero, and the board then under-quotes
+  what is left today.
 - Never edit inside Flow (40 credits per edit). Never retry a failed submit with his credits without saying so.
+- **Do not pre-run `verify-clip.py` on the candidate before `clipjob.py deliver` in a clipjob mode.** The standalone
+  run COPIES the file it verified into a Downloads dir (its verdict names `sent_from`), and `deliver` re-runs the
+  same hash gate on the workdir file — that self-copy is then read as an earlier clip and the delivery refuses.
+  `deliver` runs verify itself; if an early sanity check already happened, delete the copy from both Downloads
+  dirs first (deleting is the fix either way, then re-run the same `deliver`).
 - Credit approval is per product and per question; put the cost inside the question text.
 - **Reported spend = the sum of EVERY attempt's `credits` across all shots, regens included.** Before delivery read
   it from the job JSON (sum `attempts[].credits`; `deliver` writes that same sum into the row's `credits` field), and
@@ -67,6 +81,9 @@
   was image prep, chip cycles, vision reads and an upload timeout. Do image prep while the render runs and batch vision reads.
 - **A queue of clips:** start clip N+1's submit before composing clip N's delivery (clipjob paces submits across jobs).
   Compute clip N+1's hook and character only after clip N's log row is written, and frame-check every clip on its own.
+- **A new ORDER arriving while another job is mid-run:** capture it at once — `intake` + a note
+  `gated until <job> delivered` — then finish the open job first. Intaking immediately is what survives a context
+  loss; the gate keeps one heavy job at a time and stops the two jobs' submits/paces from interleaving.
 - **Called off (`เลิกทำ` / `หยุด` / `พอแล้ว`):** `clipjob.py cancel`, no clip-log row. There is no cancel control in Flow:
   a queued render may still finish server-side, so say so. Record the abort (edit ids opened, the reason) in the
   flow-state file, close Chrome with CDP `Browser.close` (pkill only when CDP is dead), verify `:9222` is gone, and
@@ -86,6 +103,9 @@
 - **Run the CJK/full-width scan over EVERY outbound Thai message too** (clarify questions, status lines), not just
   hashtags and prompts: a stray full-width/CJK pair typed into a Thai sentence goes out verbatim and reads as
   corruption to Fix. The same codepoint check from the hashtag gate is one line before `send_status.py`/`clarify`.
+  **Run it on the exact string in the same call that sends it** — scanning a draft and then re-typing the message is
+  how a clean scan ends up checking a string other than the one that goes out. On a miss, resend the corrected line
+  immediately and name the wrong word; do not leave the corrupted line as the last word.
 
 ## Style standard (every clip)
 - Female presenter, cute tone, no hard sell; modern Thai teen slang (ปัง, เริ่ด, ของมันต้องมี, ดี๊ดี, คุ้มเว่อร์), not cringe.
@@ -100,9 +120,17 @@
 - Per-run artifacts: `templates/style-card.md` block in every prompt; hook by category, least recently used
   (`perf.py pick-hook`, never the same `hook_id` for a category within 5 rows); hashtags from the category pool in
   `templates/hashtags.md` (4 product + 3 vibe + 1 platform).
+  The category argument is the `hooks.md` section id (`game|gadget|home|beauty|fashion|food`); an id outside that
+  set returns `no candidate hook ids` with no list — read the `##` sections of `hooks.md` to get the id, don't
+  invent one from the product noun.
   When the picked hook's subject does not fit the product (a desk line for a wearable), keep the returned
   `hook_id` and swap only the subject noun — the LRU tracks ids, not wording, so a rewritten line with the
   original id keeps the history intact; do not re-pick for a subject mismatch.
+  For a placeholder that must name ANOTHER game (`gph-1`'s `<เกมที่คล้าย>`), choose by genre *and* by how certainly
+  the name reads in Thai (the brand-name rule above): sharing the genre is enough — the technically closest title is
+  the wrong pick if its Thai reading is uncertain, and the id still stays. The same holds for a verb that
+  contradicts the product's state: `gph-3` ("ต้องพรีฯ") is wrong once the game is already on sale → swap that
+  verb only (ต้องมี / ต้องโดน), keep the id, and name the change in the delivery notes.
 - Presenter build = graphics v2 (default since 2026-11-07): `presenter_fx.py` → `post_presenter.py` →
   `graphics_layer.py --report report.json` (`references/presenter-graphics.md`). Product stills are cut-out stickers
   beside the presenter, never full-screen cards that hide her.
@@ -114,6 +142,17 @@
   `character` value in clip-log — reading it alone repeats the face Fix already saw in the last clip. Take the
   newest `character` row in clip-log, exclude that name, choose at random from `character_roster` in
   `/opt/data/clips/flow-state/<project-id>.json`, and name the pick on the board.
+- **Screen the pool before the draw — gender and a portrait.** The style standard is a female presenter, but
+  `character_roster` holds male characters created on Fix's order and only clip-log `notes` carry that
+  (`ตัวละครชาย …`): read the newest rows' `notes` for each candidate name before drawing. A name with no file
+  in `/opt/data/clips/characters/` cannot be identity-checked against a local grid (the portrait set lags the
+  roster — see `frame-check.md` → identity), so prefer a candidate whose portrait exists. When the pick is not
+  a standard female presenter, say so on the board line so Fix's approval covers it.
+- **Write the prompt's presenter line from that character's recorded look, not a generic description**
+  (flow-state `roster_note` carries hair/outfit per name; clip-log notes carry the rest): a generic
+  "young Thai woman" typed for a character who is not one makes the render follow the prompt text instead of
+  the chip, and shot 1's identity check then fails for a prompt-side cause that another generation on the same
+  setup cannot fix.
 
 ## Storyboard gate (Flow modes)
 - No Flow generation before Fix approves the board (`templates/storyboard.md`). Reason: two 10 s "hold / press / set down"
@@ -157,6 +196,9 @@
 - **Claims come from the product's own label or a source Fix confirms, never from ad copy.** Efficacy, medical
   ("99.9%", a hospital seal), child-safety, durability, load-bearing and award claims stay out of voiceover, pills and
   subs. Crop claim text out of attached art; when label and ad disagree, follow the label and keep the number out.
+- **คำที่ฟิกเขียนเองก็ต้องผ่านเกต label เหมือนกัน:** ถ้า hook/บรรยายของเขาบอก attribute ที่ label สินค้าขัด
+  (เช่น "แผ่นล็อตใหม่" ทั้งที่สินค้าเป็นโค้ดในกล่อง) → คงเจตนาไว้ เปลี่ยนแค่คำที่ขัด แล้วบอกสิ่งที่เปลี่ยนใน
+  delivery — ห้ามพูดซ้ำคำที่ label ปฏิเสธ และห้ามเปลี่ยนเงียบ ๆ โดยไม่บอก.
 - **Shopee listing links usually hit a login wall.** Build the brief from Fix's text and images; never take price, stock
   or spec from an unreadable listing.
 - **Ad screenshots are storyboard input, not attachable references.** Vision-check every image for price, QR,
@@ -176,3 +218,7 @@
 - **A long silent stretch also needs a line.** Post, the 🤖 browser drive and the per-shot frame review can run
   15+ min with nothing to ask: send one short line at each stage transition ("Chrome ขึ้นแล้ว → กำลังแปะ chip",
   "ช็อต 2 มาแล้ว → กำลังสแกน/รีวิว"). Silence on his phone reads as the run having died.
+- **The line for a stage goes out when the stage STARTS, not when it ends — every mode, 🎬 included.** 0 credits
+  still means 20–40 min of sourcing, OCR, gates and post with nothing to ask. Keep ≤ ~5 min between two lines:
+  he reads the gap, not the progress, and a silent first stage pulls "ยังทำอยู่เนาะ / ทำไมเงียบไป" out of him while
+  the run is in fact healthy.

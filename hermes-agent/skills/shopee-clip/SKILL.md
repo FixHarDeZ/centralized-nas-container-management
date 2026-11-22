@@ -36,15 +36,19 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    Resume the job that message is about (a reply with a video, a ✅/🔁 tap, "ต่อ"), never from memory.
    Rows carry `stage` + `last` (newest notes): after a context loss (a model refusal, a reset, a bare "ต่อ")
    continue from `last` and the workdir — never rebuild it from `session_search`.
-   Grep `/opt/data/clips/logs/clip-log.jsonl` and `delivery-log.jsonl` for the product name before a new
-   job: a duplicate order is confirmed with Fix (which clip, what changes) before any spend. Same game
+   Grep `/opt/data/clips/logs/clip-log.jsonl` for the product name (and `delivery-log.jsonl` for the job slug —
+   its rows carry `label`/`file`, never the product, so a product-name grep there always comes back empty)
+   before a new
+   job: a duplicate order is confirmed with Fix (which clip, what changes) before any spend — the notice may
+   ride on the storyboard board's ⚠️ line instead of its own question, because the board gate is already
+   pre-spend and he reads one message better than two. Same game
    but a DIFFERENT platform/edition listing (Switch 2 clip exists, PS5 ordered) is not a duplicate: note
    the prior clip in one line and open the new job — gameplay-clips reuses the old job's source artifacts.
    Then at once: `clipjob.py intake <job> --product "…" --link <url> [--mode …]`, and
    `clipjob.py note <job> "<done; next>"` after Q1, the photo gate and the board (🎬: `new` here instead).
 1. **Intake** (before any question that costs time). Run
    `uv run --with pillow python S/intake_images.py <first image> /opt/data/clips/work/<job>`, then do
-   one vision pass on the sheet. The gateway already described each image on arrival, so do not read
+   one vision pass on the sheet (`question=` only — `prompt=` is ignored and burns the pass). The gateway already described each image on arrival, so do not read
    them one by one again: a single-image read only for a tile the sheet leaves unclear (at most 2).
    You need the product name and the basket link. A missing link is
    asked for in the same message as Q1. Misattribution across tiles, several models under one link, a sheet-vs-ORDER-TEXT mismatch and a
@@ -73,6 +77,11 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    (lifestyle photos, official packshots first for a printed box, crops, cutouts). Clean = no price, promo,
    rating, UI, person or hands; a styled room is fine. Ad graphics are storyboard input only.
    **Crop budget: 2 vision checks**, every candidate on ONE labelled sheet; then send Fix the best one and ask.
+   When every candidate passes AS IS (clean lifestyle photos, no crop), there is nothing to pick: record the
+   gate in a `note` and go straight to the board — the ask exists for a crop pick or an accepted defect, and an
+   unnecessary question costs a 10-min timeout.
+   Build that sheet in one `execute_code` (PIL: crop fractions from the vision read → tile with labels), send
+   the picked crop with `S/send_photo.py <file> "<caption>"`, then ask with `clarify` — photo first, buttons second.
    No clean photo = ask Fix, zero spend; never a guessed product. Under ~1000 px = drift risk on the board.
    Save the references as `<workdir>/ref1.jpg …`.
 6. **Storyboard** from `templates/storyboard.md`: N shots (seconds each from the speech, ≤10), the hook in shot 1, CTA in the last shot.
@@ -93,7 +102,7 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    `clipjob.py new <job> --mode presenter|product|hands --product "…" --link <url> --shots N [--seconds 8,6] [--ref <workdir>/ref1.jpg [--ref …]] [--character <name>]` (🧑 only; fills in the intake job). Credits (board, Q3): `clipjob.py cost --seconds 8,6`. workdir = `/opt/data/clips/work/<job>`
 8. **Q3 — who drives Flow** (`clarify`, one question, cost in the text):
    `["📝 เตรียม prompt ทีละช็อตให้ (ฟิกกดใน Flow เอง)", "🤖 ให้ไอยูลองทำใน Flow ให้เลย (≈<cost> เครดิต ถ้าติดจะสลับเป็นโหมด prompt ให้เอง)"]`.
-   An unanswered or timed-out question means 📝 (zero spend) — for ANY question that would spend credits, not just this one. Record the answer: `clipjob.py production <job> prompt|auto`, using `production prompt` rather than `fallback` (a fallback locks that job out of `auto` for good; the hand-off message format is in `flow-driver` → Manual hand-off).
+   An unanswered or timed-out question means 📝 (zero spend) — for ANY question that would spend credits, not just this one. **An order that already says ให้ไอยูทำ/กดใน Flow เอง (จนส่งคลิป) names auto → skip Q3**, record `production auto` right after `new`, and still put the cost on the board. Record the answer: `clipjob.py production <job> prompt|auto`, using `production prompt` rather than `fallback` (a fallback locks that job out of `auto` for good; the hand-off message format is in `flow-driver` → Manual hand-off). It REFUSES while the job is still at `intake`, so when Q3 rode on the board approval (step 6, before step 7's `new`), note the answer and run `production` immediately after `new`.
 9. **Shots.**
    - 📝: `clipjob.py pack <job>` sends the reference photos and one tagged prompt per shot. Then wait.
      Each video from Fix: if the message replies to a prompt, run
@@ -130,8 +139,11 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
 12. **Deliver — one command, nothing else sends the final clip:**
     `clipjob.py deliver <job> --final <final.mp4> --report <report.json> --gfx <gfx.json> --hashtags "<tags>" --cover <cover.jpg> --caption "<short Thai caption>" --hook-id <id> --category <cat> [--notes "…"] [--ack "<flag>=<Fix's call>"]`
     It refuses when a shot is unapproved, graphics are empty, hashtags fail, verify-clip fails, or the report
-    has a flag Fix has not decided on: tell him each flag with its frame time, he picks "ส่งแบบนี้" or regen;
-    as-is = `--ack "<flag text>=<his call>"` (logged). Never edit `report.json` to clear a flag. A failed send =
+    has a flag Fix has not decided on (a shot gate that recorded a flag or a failed identity does NOT block
+    delivery once Fix has tapped ✅ on that shot — carry it into `--notes`): tell him each flag with its frame time, he picks "ส่งแบบนี้" or regen;
+    as-is = `--ack "<flag text>=<his call>"` (logged) — one `--ack` per undecided flag: they append and each
+    string splits on its first `=`, so `|`-joining two flags inside one `--ack` leaves the second undecided and
+    the refusal repeats. Never edit `report.json` to clear a flag. A failed send =
     rerun the same command (finished steps are skipped). Send no extra MEDIA or hashtag text (it would
     duplicate them). Its last message has the 🏁 จบงาน button: do NO cleanup, end the turn (🤖: close Chrome
     first). A 🏁 tap → only `clipjob.py decide --text "<text>"`; no tap = it closes itself in 5 min.
