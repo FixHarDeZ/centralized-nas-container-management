@@ -60,6 +60,9 @@ a circle and lost its top and bottom. The workdirs already held the right pictur
    vision garbles Thai on every read and the script draws the spec strings verbatim (PIL cannot swap glyphs),
    so a read that "finds" misspellings in several strings is the misread signature — never edit spec Thai to
    match it. Latin lines can be OCR-checked (crop the band, RapidOCR, compare to the spec).
+   **`check_sheet` ที่ timeout (420 s) อย่าส่งซ้ำ**: ส่ง `cover.jpg` ที่ `vprep.py` แล้ว (≤1600 px) พร้อมคำถาม 3 ข้อสั้น ๆ
+   (ราคา/QR ในรูปไหม · ซับไทยครบไหม · slot card ตัดหรือไม่) แทน — slot เป็น `card` อยู่แล้วจึงยืนยันด้วย OCR ของ
+   รูปต้นฉบับได้ ไม่ต้องอ่านจากแผ่น; นับเป็น 1 ใน 2 calls ของ cover
 4. Pass `cover.jpg` to `clipjob.py deliver --cover`.
 
 ## Traps

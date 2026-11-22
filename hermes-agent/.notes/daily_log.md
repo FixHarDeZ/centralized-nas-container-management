@@ -1515,3 +1515,36 @@ Not done / open:
   via `check_sheet`; clip-log rows carry `credits_est` on 📝 jobs; `reshape` used instead of cancel + reopen.
 - Open: mario/gta6 CTA footage shows no product; น้องเอิร์ธ has no portrait; older finals lego-hp + splatoon have
   cut end-card titles (already delivered, not redone).
+
+## 2026-11-23 — check of the 11-22 (pm) clip jobs (read-only, nothing changed)
+- Fix: "งานทำคลิป shopee ตรวจงานที่ยังไม่ได้ตรวจแล้วดูว่ามีส่วนไหน enhance ได้อีก".
+- 2 jobs since the 11-22 check, both delivered, Secretary copy `ok`, auto close:
+  - **wellux-swatter-666** (🧑 น้องมิลค์, 63 min, wait Fix 23): Fix picked 📝 then "เปลี่ยนใจ ไอยูทำให้ผมหน่อย" 4 min after
+    the pack → `reserve` refused the `packed` shot; Hermes patched `set_production` (packed → pending on a switch to
+    auto) + 2 tests, then **committed and pushed `011b26c` to main itself from the NAS clone** and synced. Code is fine
+    (risk only if Fix had already gen'd the packed shot). 1 gen, 30 cr, idcheck match, post 16 min (was 57–64 for 10 s
+    clips). Final: clean — product matches the ref, face stable, pills/subs clear of the face.
+  - **switch2-oblivion-rd** (🎬, 113 min, no Fix wait, 0 cr): visually fine, end card whole ("OUT NOW" sits ~1 px above
+    the window edge). Defects: a white flash frame at 1.33 s inside the hook (trailer transition; 2nd time after
+    gotg-s2b's 0.8 s wash-out, the frame gate looks for dark only); the trailer's orange sigil logo top-centre 0–0.7 s;
+    CTA over the end card shows no product (3rd time: mario, gta6, oblivion).
+- End-card gate: Hermes cut `endcard.mp4` (`crop=1920:600:0:0`) and used it as a plain `window` seg with no
+  `"endcard": true` → `build_v5 --check`'s rule never fired. `deliver` OCR ran (no `ENDCARD_OK`) and passed, but it only
+  looks at the left/right frame edge; a top/bottom cut inside the 720-tall window can't be seen. Vision had flagged
+  "OUT NOW cut at the bottom" on the band crop; Hermes went on.
+- Time (Oblivion): photo crop 8 min (4 hand-written pixel-probe scripts), footage 18, end card + logo + bg 27 (hand
+  probes, scraping Nintendo pages), VO 20 (3 Gemini runs), build + master + checks 19, sticker + cover 21 (7 of them a
+  420 s vision timeout). Turns at 20–34k reasoning chars. Subs 429 → `windows.py` ran VAD only. clipjob timing has one
+  stage "ทำคลิป 113" for 🎬 (no notes after footage).
+- Vision: wellux 8 calls (~13 min, two at 183–198 s), Oblivion 13 calls + 1 timeout (420 s) + 1 invalid response.
+  The per-job budget is prose only — ✗.
+- 11-22 watch-list: 📝 auto-approve not exercised (switched to auto); no name in prompts ✓; end-card gate: ran, but
+  sidestepped (above); cover vision ≤2 ✓ both (Oblivion's first was the timeout); `credits_est` not exercised;
+  `reshape` not used.
+- Live drift (not pulled): 6 files — poster-cover.md (check_sheet timeout → one short cover.jpg call), gameplay
+  SKILL.md (fontsdir for the libass check; **end-card rule loosened: a crop is allowed to cut platform logo / legal
+  lines if ≥1280 px + OCR confirms the title** — Fix decides), cover-sticker.md (tall-window numbers y 1065, footage
+  rect 190–910), footage-sourcing.md (no `--vtt` → ASR the locked segs first), look-v5.md (loudness nudge from the CTA
+  window too), natural-vo.md (CTA ≈10–12 Thai chars for a ~2.9 s card). Hermes `MEMORY.md` still 2289/2200.
+- Proposed tunes (waiting on Fix): see the reply of this session. NAS scratch `/tmp/rev1123` removed. No commit of
+  skills, no sync, no deploy.

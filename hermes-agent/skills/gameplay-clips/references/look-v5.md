@@ -96,7 +96,8 @@ Minimal plan that passed `--check` (no beats, no release pill, no logo, header-o
     `vo_gain` from plan.json over the unchanged raw stems, so a gain-only change can be re-measured WITHOUT a
     rebuild (seconds) — the build must still be re-run before shipping, because build_v5 bakes the gains in.
     Levers: lower `music_gain`, raise `vo_gain`. The window that fails is normally the FIRST phrase, since the
-    cold open carries the loudest music, so size the nudge from that window's number, not from the average.
+    cold open carries the loudest music — or the LAST (CTA) window when the end card's audio is cut from the
+    trailer's climax music. Either way size the nudge from THAT window's number, not from the average.
   - The NAS `python3` has no numpy: run the delta reader with `uv run --with numpy python <file>.py`, and write that reader as a file (a heredoc that references a multi-MB wav trips the lifecycle guard).
   Compare RMS over the VO-phrase windows in `work/timeline_v5.json`.
   Both numbers must be pre-master — master's gain scales them equally so the ratio is unchanged,
