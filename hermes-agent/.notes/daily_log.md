@@ -1473,3 +1473,34 @@ Not done / open:
 - Live drift: 22 files edited in place, not pulled (router 16 976 B > 15 KB budget, house-rules 22 190 B > 20 KB) —
   next tune starts with `make hermes-skills ARGS=--pull` + trim, or the sync test gate fails. Dry run only
   (`ARGS=-n`), nothing copied. NAS scratch `rev1122` removed. No commit of skills, no sync, no deploy.
+
+### 2026-11-22 — tunes 1-7 + Fix's 📝 rule (Fix: "Tune ทุกข้อตามที่แนะมาได้เลย 1-7 และกรณี gen prompt แล้วผม reply กลับแล้วถือว่าผมรีวิวแล้ว ตีผ่านหมดได้เลย ไม่ต้องให้ผม confirm")
+- `88ce4e0`: `make hermes-skills ARGS=--pull` → Hermes' 22 live edits ported as-is (+ the review notes). NAS clone reset after.
+- `930b2b9` + `5fb7c31` (live synced at `5fb7c31`, 173 tests in the container, no open job at sync):
+  - **📝 reply = Fix's review**: `ready JOB K --raw F` on a file Fix sent (production prompt, attempt via prompt)
+    needs no `--frame`/`--identity`, no idcheck/scan/vision; runs only probe (+🧑 repeats/CTA), approves at once,
+    no ✅/🔁; an ℹ️ line (no buttons) only when a file gate noted something. A new file for an approved 📝 shot
+    replaces it. Pack header: "ไฟล์ที่ส่งกลับมา = ฟิกรีวิวแล้ว" + gen shots in order (onesuper parallel gen).
+  - 1 name/portrait: `pack`/`reserve` refuse `น้อง…` or the roster name outside the quoted VO (`name_check`);
+    `new --mode presenter` refuses a character with no `characters/<name>.jpg` (`CLIPJOB_NO_PORTRAIT_OK=1`);
+    clip-prompt template describes the chip's look, never the name; house-rules: draw female names with a portrait.
+    Sweep of every past shot file: hits only roster names (no `น้องแมว`-type false positive).
+  - 2 end card: `build_v5 --check` refuses `"endcard": true` without `wide` and `wide` on a file <1280 px
+    (ffr plan refused, gotg passes); `deliver` (🎬) runs `gameplay-clips/scripts/endcard_check.py` = RapidOCR on the
+    last 0.4/1.0/1.6 s, text within 4 px of the frame edge = cut (`ENDCARD_OK=1` = HUD, not a title). On finals:
+    flags sniper, lego-hp, splatoon (both older ones really are cut); passes gotg, mario, gta6, zelda; misses
+    ffr's stylised title (the build_v5 rule covers that one).
+  - 3+4 identity kinds: `--identity match|drift:|count:|presenter:`; `count:` puts 🔁 first in the 🤖 review
+    (not a block); wording per kind (no more "สินค้าเพี้ยน" for a face).
+  - 5 credits: `ingest` and `submitted` without `--credits` record 3 cr/s × shot length with `credits_est`;
+    clip-log row gets `credits_est: true`.
+  - 6 vision: `make_poster_cover.py` prints `check_sheet` (cover + every slot as pasted) + `ask_vision` +
+    `slot_labels` → ONE call per cover (smoke on champion's spec ok); poster-cover.md budget 2 (+1 re-check);
+    router vision budget per job (past it: decide and `note`, don't ask Fix); 📝 shots 0 calls.
+  - 7 `clipjob.py reshape JOB --shots N [--seconds]` before any attempt.
+  - Docs: router 15 341 B, house-rules 19 658 B (moved text to `house-rules-history.md`), gameplay SKILL 30 384 B
+    (moved to `gameplay-pitfalls.md`); quota line = live Flow balance (Hermes' rule kept, 50/day rule dropped);
+    deliver acks moved to `prompt-pack.md`; `flow-driver/scripts/cdp_shot.py` (Hermes-made) now tracked.
+- Not proven on a real order: 📝 auto-approve flow, name refusal on a fresh prompt, end-card gate on a new 🎬,
+  cover check sheet in Hermes' hands, `reshape`. Open: mario/gta6 CTA footage shows no product (zelda item);
+  น้องเอิร์ธ has no portrait (only usable with `CLIPJOB_NO_PORTRAIT_OK=1` or after saving one).
