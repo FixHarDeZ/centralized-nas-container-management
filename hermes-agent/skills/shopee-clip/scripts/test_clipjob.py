@@ -1199,3 +1199,59 @@ def test_prompt_mode_end_to_end_needs_no_tap_and_no_ack(tmp_path, monkeypatch, c
     assert cj.deliver_problems(j, {"flags": [], "v_dur": 16.0, "a_dur": 16.0},
                                {"headlines": [{"text": "x"}]}, "#a #b") == []
     assert cj.billed_credits(j) == [30, 30]
+
+
+def test_endcard_rect_comes_from_the_jobs_build_timeline(tmp_path):
+    """switch2-oblivion-rd 2026-11-22: the card's picture edge is only known to build_v5."""
+    j = {"workdir": str(tmp_path)}
+    assert cj.endcard_rect(j, "final.mp4") is None                       # no build yet
+    (tmp_path / "work").mkdir()
+    (tmp_path / "work" / "timeline_v5.json").write_text('{"segs": []}')
+    assert cj.endcard_rect(j, "final.mp4") is None                       # older build_v5: no key
+    (tmp_path / "work" / "timeline_v5.json").write_text('{"endcard_rect": [0, 348, 720, 750.0]}')
+    assert cj.endcard_rect(j, "final.mp4") == "0,348,720,750"
+
+
+def _vision_db(path, calls):
+    """A state.db with the two tables vision_calls reads: (asked, answered or None) per call."""
+    import sqlite3
+    c = sqlite3.connect(path)
+    c.execute("CREATE TABLE messages (role TEXT, timestamp REAL, tool_calls TEXT, tool_call_id TEXT)")
+    for i, (a, b) in enumerate(calls):
+        c.execute("INSERT INTO messages VALUES ('assistant', ?, ?, NULL)",
+                  (a, json.dumps([{"id": f"v{i}", "function": {"name": "vision_analyze"}}])))
+        if b is not None:
+            c.execute("INSERT INTO messages VALUES ('tool', ?, NULL, ?)", (b, f"v{i}"))
+    c.execute("INSERT INTO messages VALUES ('assistant', 5, ?, NULL)",
+              (json.dumps([{"id": "t1", "function": {"name": "terminal"}}]),))
+    c.commit(); c.close()
+
+
+def test_vision_calls_counts_this_jobs_calls_and_the_420s_hang(tmp_path):
+    """switch2-oblivion-rd 2026-11-22: 13 vision calls, one hung to the 420 s tool deadline."""
+    db = str(tmp_path / "state.db")
+    _vision_db(db, [(10, 70), (100, 520), (600, None), (5000, 5050)])
+    assert cj.vision_calls(0, 1000, db) == [(10, 70), (100, 520), (600, 1000)]
+    assert cj.vision_calls(0, 1000, str(tmp_path / "none.db")) == []
+
+
+def test_vision_budget_and_warning():
+    g = {"mode": "gameplay", "shots": []}
+    p = {"mode": "presenter", "shots": [{"attempts": [{"via": "auto"}]}, {"attempts": [{"via": "prompt"}]}]}
+    assert cj.vision_budget(g) == 8 and cj.vision_budget(p) == 7
+    assert cj.vision_warning({"calls": 7, "budget": 8, "min": 9}) is None
+    assert "13/8" in cj.vision_warning({"calls": 13, "budget": 8, "min": 25})
+
+
+def test_stage_marks_split_a_gameplay_timeline():
+    """🎬 timing was one 'ทำคลิป 113' block (switch2-oblivion-rd); stage events split it."""
+    def ev(hhmm, msg):
+        return {"ts": f"2026-11-22T{hhmm}:00+07:00", "msg": msg}
+    j = {"created": "2026-11-22T19:23:00+07:00", "started": "2026-11-22T19:23:00+07:00",
+         "events": [ev("19:23", "created"), ev("19:33", "stage: footage"), ev("19:50", "stage: endcard"),
+                    ev("20:16", "stage: vo"), ev("20:36", "stage: build"), ev("20:55", "stage: cover"),
+                    ev("21:16", "delivered")]}
+    tl = cj.timeline(j)
+    assert tl["stages"] == [["เตรียม", 0], ["ทำคลิป", 10], ["footage", 17], ["endcard", 26], ["vo", 20],
+                            ["build", 19], ["cover", 21]]
+    assert tl["total_min"] == 113

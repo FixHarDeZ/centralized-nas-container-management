@@ -83,3 +83,33 @@ def test_ocr_frames_survives_a_bad_grab(monkeypatch, tmp_path):
     monkeypatch.setattr(w, "grab", lambda src, t, out, dur=None: False)
     out = w.ocr_frames("x.mp4", [1.0, 2.0], lambda f: ([], None), str(tmp_path), dur=2.0)
     assert out == {"1.0": [{"text": w.GRAB_FAILED, "score": 1.0}], "2.0": [{"text": w.GRAB_FAILED, "score": 1.0}]}
+
+
+def test_wash_spans_cut_the_white_flash_with_its_ramp():
+    """switch2-oblivion-rd trailer, measured at 30 fps around 78.29 s and 81.59 s."""
+    rate = 30.0
+    means = [120.0] * 2400
+    stds = [40.0] * 2400
+    for t, m, sd in ((78.221, 231.9, 5.5), (78.254, 250.3, 1.4), (78.287, 255.0, 0.0), (78.321, 250.6, 1.0),
+                     (78.354, 233.9, 3.9), (12.203, 229.9, 20.2)):           # last: bright WITH detail = kept
+        i = int(round(t * rate))
+        means[i], stds[i] = m, sd
+    spans = w.wash_spans(means, stds, rate)
+    assert len(spans) == 1
+    a, b = spans[0]
+    assert 78.0 < a < 78.21 and 78.37 < b < 78.5
+
+
+def test_asr_extends_vad_tails_and_drops_far_hallucinations():
+    vad = [(10.0, 12.0), (30.0, 31.0)]
+    asr = [(10.5, 13.1),        # quiet tail under music: VAD stopped 1.1 s early -> extended
+           (13.2, 14.0),        # within ASR_NEAR of the VAD span: same speech
+           (50.0, 52.0)]        # no VAD near: "do do do" on music -> dropped
+    assert w.asr_extend(vad, asr) == [(10.0, 13.1), (13.2, 14.0), (30.0, 31.0)]   # PAD joins the 0.1 s gap later
+    assert w.asr_extend([], asr) == []
+
+
+def test_write_vtt_rebases_to_master_time(tmp_path):
+    p = w.write_vtt([(10.0, 14.0), (2.0, 3.0)], str(tmp_path / "s.vtt"), rebase=5.0)
+    txt = open(p).read()
+    assert txt.startswith("WEBVTT") and "00:00:05.000 --> 00:00:09.000" in txt and "00:00:02" not in txt

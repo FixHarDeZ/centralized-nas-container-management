@@ -9,9 +9,16 @@ Run (in the container, from the clip workdir):
 Why (lego-hp-switch2-gameplay 2026-11-17, 535 min): Hermes found the windows by hand — ASR, VTT, OCR,
 luma, VAD and vision maps read and re-read in its head for 6.5 hours, 100-200k chars of reasoning a
 turn. This script does that join once. A window here is a run of the source that is
-  * speech-free: silero VAD (no transcription, so music cannot hallucinate words the way whisper's
-    "do do do" did) united with the auto-caption cues when --vtt is given, each padded PAD s;
+  * speech-free: silero VAD united with the auto-caption cues when --vtt is given, each padded PAD s.
+    No --vtt (yt-dlp auto-subs 429 / none): faster-whisper runs on the source too, and a whisper WORD
+    that overlaps or sits within ASR_NEAR s of a VAD span EXTENDS it (switch2-oblivion-rd 2026-11-22: VAD
+    ended quiet speech under music ~1 s early). A whisper word far from any VAD span is dropped (music
+    hallucinates words, "do do do" on lego-hp). The joined speech is written as <stem>_speech.vtt (master
+    time with --rebase) = the build_v5 "vtt" key, so build and table agree. --no-asr skips it;
   * not dark: per-frame luma (4 fps, whole frame) >= DARK; a black dip at a cut never starts a seg;
+  * not washed out: every frame at the source rate (64x36 gray) — mean > WASH_MEAN with almost no detail
+    = a white flash cut (switch2-oblivion-rd 2026-11-22: 2-5 frame flashes at most of the trailer's cuts,
+    one blinked in the hook; 4 fps misses them), padded WASH_PAD;
   * text-free: RapidOCR at 1 s over the candidates only, every text run's edges re-scanned at 0.25 s.
     A string seen on >= half the scanned frames is a persistent overlay (watermark, HUD, rating bug):
     reported, never dirty. One-character hits are listed as `suspect`, never dirty.
@@ -32,6 +39,9 @@ import sys
 PAD = 0.15          # speech padding each side (auto-captions lag VAD by up to ~1 s; both are kept)
 DARK = 25.0         # mean luma below this = black dip / fade (footage-sourcing §5c)
 FPS = 4             # frame-stat rate
+WASH_MEAN, WASH_STD = 225.0, 12.0   # 64x36 gray (same numbers as build_v5's seg check)
+WASH_PAD = 0.1      # the ramp frames either side of a flash (205-215 luma) are half white too
+ASR_NEAR = 1.5      # s: a whisper word this close to a VAD span is the same speech, VAD cut its tail
 OCR_STEP = 1.0
 REFINE = (0.25, 0.5, 0.75)
 MIN_SCORE = 0.6     # RapidOCR confidence for a hit
@@ -170,6 +180,13 @@ def describe(a, b, times, luma, diff, cuts, ocr_map, skip):
             "score": round(dur * (0.3 if motion < STATIC else 1.0), 2)}
 
 
+def wash_spans(means, stds, rate, pad_s=WASH_PAD):
+    """Washed-out (white flash) frames at the source rate -> padded spans."""
+    half = 0.5 / rate
+    return merge([(max(0.0, i / rate - half - pad_s), i / rate + half + pad_s)
+                  for i, (m, sd) in enumerate(zip(means, stds)) if m > WASH_MEAN and sd < WASH_STD])
+
+
 # ---------------------------------------------------------------- media IO
 def probe_dur(src):
     out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", src],
@@ -187,6 +204,43 @@ def vad_spans(src):
         return []
     ts = get_speech_timestamps(a, VadOptions(threshold=0.5, min_silence_duration_ms=300, speech_pad_ms=100))
     return [(x["start"] / 16000, x["end"] / 16000) for x in ts]
+
+
+def asr_extend(vad, asr, near=ASR_NEAR):
+    """VAD spans extended by the whisper word spans that touch or sit within `near` s of them; a word with no VAD
+    span near it is music hallucination and is dropped. Chained words reach further only through the VAD
+    span they touch, never word to word."""
+    vad = merge(vad)
+    keep = [(a, b) for a, b in asr if any(a <= y + near and b >= x - near for x, y in vad)]
+    return merge(list(vad) + keep)
+
+
+def asr_segments(src):
+    """faster-whisper (small, int8, English, word timestamps) over the whole source -> [(start, end)] per word."""
+    import numpy as np
+    from faster_whisper import WhisperModel
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", src, "-vn", "-ac", "1", "-ar", "16000", "-f", "f32le", "-"],
+                         capture_output=True, check=True).stdout
+    a = np.frombuffer(raw, np.float32)
+    if len(a) < 1600:
+        return []
+    segs, _ = WhisperModel("small", device="cpu", compute_type="int8").transcribe(
+        a, language="en", vad_filter=False, beam_size=1, word_timestamps=True)
+    # WORD spans: a segment can run 15 s across music (oblivion 85-102 s) and would swallow every window
+    return [(round(wd.start, 2), round(wd.end, 2)) for x in segs for wd in (x.words or []) if wd.end > wd.start]
+
+
+def write_vtt(spans, path, rebase=0.0):
+    def ft(t):
+        t = max(0.0, t)
+        return f"{int(t // 3600):02d}:{int(t % 3600 // 60):02d}:{t % 60:06.3f}"
+    lines = ["WEBVTT", ""]
+    for a, b in spans:
+        if b - rebase > 0:
+            lines += [f"{ft(a - rebase)} --> {ft(b - rebase)}", "speech", ""]
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+    return path
 
 
 def vtt_spans(path):
@@ -215,6 +269,19 @@ def frame_stats(src):
     luma = [float(f.mean()) for f in fr]
     diff = [0.0] + [float(np.abs(fr[i] - fr[i - 1]).mean()) for i in range(1, n)]
     return times, luma, diff
+
+
+def wash_stats(src):
+    """Per-frame mean / std at the source rate (64x36 gray) + that rate."""
+    import numpy as np
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", src, "-an", "-vf", "scale=64:36,format=gray",
+                          "-f", "rawvideo", "-"], capture_output=True, check=True).stdout
+    n = len(raw) // (64 * 36)
+    if not n:
+        return [], [], 30.0
+    fr = np.frombuffer(raw[: n * 64 * 36], np.uint8).reshape(n, 36, 64).astype(np.float32)
+    rate = n / probe_dur(src)
+    return [float(x) for x in fr.mean(axis=(1, 2))], [float(x) for x in fr.std(axis=(1, 2))], rate
 
 
 EOF_GAP = 0.1        # ffmpeg cannot seek a frame at t == duration: probe this much before the end
@@ -293,6 +360,7 @@ def main():
     ap.add_argument("--rebase", type=float, default=0.0, help="master encoded from -ss S: also print t - S")
     ap.add_argument("--min", type=float, default=1.2, help="shortest window kept (s)")
     ap.add_argument("--max-tiles", type=int, default=36)
+    ap.add_argument("--no-asr", action="store_true", help="no --vtt: skip the whisper pass (VAD only)")
     ap.add_argument("--out")
     ap.add_argument("--sheet")
     a = ap.parse_args()
@@ -307,11 +375,23 @@ def main():
     scratch = os.path.dirname(os.path.abspath(out))
     dur = probe_dur(a.src)
 
-    speech_raw = vad_spans(a.src) + (vtt_spans(a.vtt) if a.vtt else [])
+    vad = vad_spans(a.src)
+    asr_n, vtt_out = None, None
+    if a.vtt:
+        speech_raw = vad + vtt_spans(a.vtt)
+    elif a.no_asr:
+        speech_raw = vad
+    else:
+        asr = asr_segments(a.src)
+        speech_raw = asr_extend(vad, asr)
+        asr_n = len(asr)
     speech = pad(speech_raw, PAD, 0.0, dur)
+    if not a.vtt:
+        vtt_out = write_vtt(speech, stem + "_speech.vtt", a.rebase)
     times, luma, diff = frame_stats(a.src)
     dark, cuts, med = frame_flags(times, luma, diff)
-    cand = [s for s in subtract([(0.0, dur)], speech + dark) if s[1] - s[0] >= a.min]
+    wash = wash_spans(*wash_stats(a.src))
+    cand = [s for s in subtract([(0.0, dur)], speech + dark + wash) if s[1] - s[0] >= a.min]
 
     from rapidocr_onnxruntime import RapidOCR
     ocr = RapidOCR()
@@ -339,14 +419,14 @@ def main():
     sheet_path = sheet(a.src, picked, sheet_out, scratch, dur=dur)
 
     res = {"src": os.path.abspath(a.src), "dur": round(dur, 2), "vtt": a.vtt, "rebase": a.rebase,
-           "speech": speech, "dark": dark, "text": text, "overlays": sorted(skip), "cuts": cuts,
+           "speech": speech, "speech_vtt": vtt_out, "asr_segments": asr_n, "dark": dark, "wash": wash, "text": text, "overlays": sorted(skip), "cuts": cuts,
            "motion_median": round(med, 2), "ocr_frames": len(ocr_map), "windows": wins,
            "usable_s": usable, "moving_s": moving, "sheet": sheet_path,
            "sheet_windows": [w["n"] for w in picked]}
     with open(out, "w", encoding="utf-8") as f:
         json.dump(res, f, ensure_ascii=False, indent=1)
 
-    print(f"src={a.src} dur={dur:.1f}s speech={len(speech)} spans dark={len(dark)} text={len(text)} "
+    print(f"src={a.src} dur={dur:.1f}s speech={len(speech)} spans dark={len(dark)} wash={len(wash)} text={len(text)} "
           f"ocr_frames={len(ocr_map)} overlays={sorted(skip) or '-'}")
     print(" W    start    end   dur  luma  motion  cuts  flags" + ("   master" if a.rebase else ""))
     for w in wins:
@@ -355,6 +435,8 @@ def main():
         m = f"   {w['master'][0]:.2f}-{w['master'][1]:.2f}" if a.rebase else ""
         print(f"W{w['n']:<3} {w['start']:7.2f} {w['end']:7.2f} {w['dur']:5.2f} {w['luma_min']:5.0f} {w['motion']:7.1f}"
               f"  {cut:<10} {flags}{m}")
+    if vtt_out:
+        print(f"speech VTT (VAD{' + whisper' if asr_n is not None else ' only'}) -> {vtt_out} = build_v5 \"vtt\"")
     print(f"-> {out}" + (f" + sheet {sheet_path} (W{', W'.join(str(n) for n in res['sheet_windows'])})" if sheet_path else ""))
     verdict = "USABLE" if moving >= USABLE_S else "STOP"
     print(f"{verdict}: {usable:.1f} s clean in {len(wins)} windows, {moving:.1f} s moving"

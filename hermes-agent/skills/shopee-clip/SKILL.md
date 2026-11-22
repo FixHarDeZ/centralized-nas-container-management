@@ -66,7 +66,7 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    `source_check.py`). A revision of a delivered clip: `clipjob.py reopen <job> --reason …`, then
    `deliver` again (it logs a REVISED row). Stop reading here for 🎬.
 5. **Photo gate (🧑/📦/✋; 🎬 product needs one clean photo for the sticker)** — `references/product-image-prep.md`
-   (lifestyle photos, official packshots first for a printed box, crops, cutouts). Clean = no price, promo,
+   (box/case: `scripts/box_crop.py` first; packshots, crops, cutouts). Clean = no price, promo,
    rating, UI, person or hands; a styled room is fine. Ad graphics are storyboard input only.
    **Crop budget: 2 vision checks**, all candidates on ONE sheet; every candidate clean AS IS = no question,
    `note` it and go to the board. Sheet build, the ask, no-clean-photo: `product-image-prep.md` → Photo gate.
@@ -144,7 +144,7 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
 
 **Vision budget per job** (11-19..22: 222 calls, ~4 h, 8 × 420 s timeouts): intake 1 · photo gate ≤2 ·
 🤖 shot 1 (+1 full-res confirm of a drift) · 📝 shot 0 · post frame sheet 1 · cover 2 (pick + the
-`check_sheet` that `make_poster_cover.py` prints) · 🎬 footage: one sheet per stage. Past it: decide on what you have, `note` it.
+`check_sheet` that `make_poster_cover.py` prints) · 🎬 footage: one sheet per stage. clipjob `note`/`status` print `vision N/budget`; past it: decide + `note`.
 
 ## Talking to Fix
 - One status line when something blocks, sent at that moment, not at the end. Put the credit cost inside

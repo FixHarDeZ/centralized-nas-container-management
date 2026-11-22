@@ -58,10 +58,17 @@ seg keys: src master|trailer|path; in; dur; mode window|hero; optional audio_src
   zoom [a,b] override. Tall window only: win_x (crop x offset from centre, px of the 1080p source —
   the 1:1 crop keeps the middle 56 % of the width, so move it to the subject), wide true (this seg
   keeps the whole 16:9 picture, as a band in the middle of the window: HUD / text at the edges),
-  endcard true (the title / logo card: must be wide, from the ORIGINAL >= 1280 px source).
+  endcard true (the title / logo card: "wide" on the ORIGINAL >= 1280 px 16:9 source, or "crop":
+  [x, y, w, h] in source px = the title block only, scaled to the window width without stretching —
+  `endcard_crop.py` measures it; the end card plays without zoom unless the seg sets "zoom"),
+  blank_ok true (accept a washed-out / white flash frame inside this seg).
 Hard failures: seg audio outside a no-speech gap, overlapping pills, pill > 2 words / non-ASCII /
-price-like text, CTA anywhere but the last seg, vo_shift not inside a VO pause, an endcard seg not wide,
-`wide` on a file narrower than 1280 px (a pre-cropped card).
+price-like text, CTA anywhere but the last seg, vo_shift not inside a VO pause, an endcard seg with
+neither wide nor crop, `wide` on a file narrower than 1280 px (a pre-cropped card) or not 16:9 (it
+would be stretched: oblivion 2026-11-22 put a 1920x600 cut into the 720x405 band), a bad crop, a
+white flash frame inside a seg (switch2-oblivion-rd 2026-11-22: the trailer's white cut at 78.29 s
+blinked in the hook). work/timeline_v5.json carries "endcard_rect" (the last seg's picture in the
+720x1280 frame) for the end-card OCR at deliver.
 """
 import argparse, datetime, json, os, re, subprocess, sys, time
 import numpy as np
@@ -332,9 +339,19 @@ def affine_zoom(img, z, cx, cy):
                          resample=Image.BICUBIC)
 
 
+def crop_h(c):
+    """Picture height of a "crop" end card scaled to the window width (even)."""
+    return int(round(WW * c[3] / c[2] / 2)) * 2
+
+
 def seg_frames(s, paths, n, fps):
     src = paths.get(s["src"]) or s["src"]
-    if s["mode"] == "hero":
+    if s.get("crop"):
+        x, y, cw, ch = s["crop"]
+        h = crop_h(s["crop"])
+        vf = f"fps={fps},crop={cw}:{ch}:{x}:{y},scale={WW}:{h}:flags=lanczos"
+        w = WW
+    elif s["mode"] == "hero":
         cw = int(round(1080 * 9 / 16 / 2)) * 2  # 608 for 1080p
         hx = s.get("hero_x", 0)
         vf = (f"fps={fps},scale=-2:1080:flags=lanczos,crop={cw}:1080:(iw-{cw})/2+{hx}:0,"
@@ -396,29 +413,90 @@ def selftest_zoom():
 MIN_WIDE_W = 1280
 
 
-def probe_w(path):
+WIDE_ASPECT = 16 / 9
+ASPECT_TOL = 0.03        # 1920x1080 / 1280x720 / 3840x2160 pass; 1920x600 (oblivion's cut) does not
+WASH_MEAN, WASH_STD = 225.0, 12.0   # 64x36 gray: a white flash peaks at 255 / std 0, a white card with text has std >> 12
+
+
+def probe_wh(path):
+    """(width, height) of the first video stream, or None when it can't be read."""
     if not path or not os.path.exists(path):
         return None
-    p = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width",
+    p = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height",
                         "-of", "csv=p=0", path], capture_output=True, text=True)
     try:
-        return int(p.stdout.strip().splitlines()[0])
+        w, h = p.stdout.strip().splitlines()[0].split(",")[:2]
+        return int(w), int(h)
     except (ValueError, IndexError):
         return None
 
 
-def endcard_problem(sg, base, width=None):
-    """An end card is the WHOLE original frame (2026-11-20/21: ffr's `wide` on a pre-cropped 836x470 file showed
-    'L FANTASY RESONANCE'; sniper's logo card in the 1:1 window showed 'NIPER ELITE'). -> reason or None."""
-    if sg.get("endcard") and not sg.get("wide"):
-        return 'an "endcard": true seg needs "wide": true (the 1:1 window keeps the middle 56 % and cuts the title)'
-    if sg.get("wide") and sg.get("src") not in (None, "master", "trailer"):
-        src = sg["src"] if os.path.isabs(sg["src"]) else os.path.join(base, sg["src"])
-        w = width if width is not None else probe_w(src)     # None = cannot measure: no verdict
-        if w is not None and w < MIN_WIDE_W:
-            return (f'"wide" on a {w} px wide file: wide shows the whole frame, so give it the ORIGINAL trailer '
-                    f"(>= {MIN_WIDE_W} px), never a pre-cropped endcard file — the crop already cut the title")
+def crop_problem(sg, size):
+    """"crop": [x, y, w, h] in source px, end card only, inside the source, at least as wide as the window."""
+    c = sg["crop"]
+    if not sg.get("endcard"):
+        return '"crop" is for the end-card seg only (add "endcard": true)'
+    if sg.get("src") == "master":
+        return '"crop" needs the trailer (or another >= 1280 px source), not the master: the master is already framed'
+    if not (isinstance(c, list) and len(c) == 4 and all(isinstance(v, int) and v >= 0 for v in c)) or not c[2] or not c[3]:
+        return f'"crop" {c!r} must be [x, y, w, h]: four ints in source px, w and h > 0'
+    x, y, w, h = c
+    if size and (x + w > size[0] or y + h > size[1]):
+        return f'"crop" {c} leaves the {size[0]}x{size[1]} source'
+    if w * WH < h * WW:
+        return (f'"crop" {w}x{h} is narrower than the {WW}x{WH} window: it is scaled to the window width, so widen it '
+                f"(w >= {int(-(-h * WW // WH))}) — sky / background around the title is fine")
     return None
+
+
+def endcard_problem(sg, base, size=None):
+    """The end card shows the whole title, unstretched (2026-11-20/21: ffr's `wide` on a pre-cropped 836x470 file
+    showed 'L FANTASY RESONANCE'; sniper's logo card in the 1:1 window showed 'NIPER ELITE'; 2026-11-22 oblivion's
+    1920x600 cut went into the 16:9 band 1.8x too tall). `size` = (w, h) of the seg's source when known.
+    -> reason or None."""
+    if sg.get("endcard") and not (sg.get("wide") or sg.get("crop")):
+        return ('an "endcard": true seg needs "wide": true or a "crop" (the 1:1 window keeps the middle 56 % and '
+                "cuts the title)")
+    if (sg.get("wide") or sg.get("crop")) and sg.get("src") not in (None, "master", "trailer"):
+        src = sg["src"] if os.path.isabs(sg["src"]) else os.path.join(base, sg["src"])
+        if size is None:
+            size = probe_wh(src)                              # None = cannot measure: no verdict
+        if size and size[0] < MIN_WIDE_W:
+            return (f'"wide" on a {size[0]} px wide file: give it the ORIGINAL trailer (>= {MIN_WIDE_W} px), never a '
+                    'pre-cropped endcard file — to drop logos / legal lines put "crop": [x, y, w, h] on the seg')
+        if size and sg.get("wide") and not sg.get("crop") and abs(size[0] / size[1] / WIDE_ASPECT - 1) > ASPECT_TOL:
+            return (f'"wide" on a {size[0]}x{size[1]} file would stretch it into the 16:9 band: use the full original '
+                    'frame and put the cut in "crop": [x, y, w, h] (scaled without stretching)')
+    if sg.get("crop") is not None:
+        return crop_problem(sg, size)
+    return None
+
+
+def wash_frames(means, stds, t0, fps):
+    """Times (source s) of washed-out frames: mean luma > WASH_MEAN and almost no detail."""
+    return [round(t0 + i / fps, 3) for i, (m, sd) in enumerate(zip(means, stds)) if m > WASH_MEAN and sd < WASH_STD]
+
+
+def seg_wash(s, paths, fps):
+    """Washed-out frames inside one resolved seg (whole source frame, 64x36 gray)."""
+    import numpy as np
+    src = paths.get(s["src"]) or s["src"]
+    vf = f"fps={fps},scale=64:36,format=gray"
+    if src == paths["master"]:
+        if WH != BAND_H:
+            src = paths["trailer"]
+        else:
+            vf = f"fps={fps},crop={WW}:{BAND_H}:0:320,scale=64:36,format=gray"
+    if s.get("crop"):
+        x, y, w, h = s["crop"]
+        vf = f"fps={fps},crop={w}:{h}:{x}:{y},scale=64:36,format=gray"
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-ss", f"{s['in']:.4f}", "-i", src, "-t", f"{s['n'] / fps:.4f}",
+                          "-an", "-vf", vf, "-f", "rawvideo", "-"], capture_output=True).stdout
+    n = len(raw) // (64 * 36)
+    if not n:
+        return []
+    fr = np.frombuffer(raw[: n * 64 * 36], np.uint8).reshape(n, 36, 64).astype(np.float32)
+    return wash_frames(fr.mean(axis=(1, 2)), fr.std(axis=(1, 2)), s["in"], fps)
 
 
 def main():
@@ -448,7 +526,9 @@ def main():
             if sg.get("mode") == "window" and abs(sg.get("win_x", 0)) > room:
                 die(f"seg{i} win_x {sg['win_x']}: the crop leaves the picture (limit ±{room})")
     for i, sg in enumerate(plan["segs"]):
-        why = endcard_problem(sg, base)
+        size = probe_wh(P("trailer", "trailer.mp4")) if sg.get("crop") is not None and sg.get("src", "master") in (
+            "master", "trailer") else None
+        why = endcard_problem(sg, base, size)
         if why:
             die(f"seg{i}: {why}")
     fps = plan.get("fps", 30)
@@ -493,6 +573,14 @@ def main():
               f"beat_off={bo * 1000:.0f}ms {'SNAP' if snapped else 'plan'}")
     if errs:
         die("; ".join(errs) + f"  gaps={[(round(x, 2), round(y, 2)) for x, y in gaps]}")
+    for i, s in enumerate(rows):
+        bad = [] if s.get("blank_ok") else seg_wash(s, paths, fps)
+        if bad:
+            errs.append(f"seg {i} has {len(bad)} washed-out (white flash) frame(s) at source "
+                        f"{bad[0]:.2f}-{bad[-1]:.2f} s: move \"in\"/\"dur\" off the trailer's flash cut "
+                        "(\"blank_ok\": true only if the flash is wanted)")
+    if errs:
+        die("; ".join(errs))
     segs = rows
     seams = [s["t0"] for s in segs[1:]]
 
@@ -634,13 +722,20 @@ def main():
          "-t", f"{NT / fps:.4f}", "-movflags", "+faststart", out],
         stdin=subprocess.PIPE, stderr=log)
     first = None
+    endcard_rect = None
     fidx = 0
     tail_buf = []
     for k, s in enumerate(segs):
         fr = seg_frames(s, paths, s["n"], fps)
-        z = s.get("zoom", zh if s["mode"] == "hero" else zw)
+        z = s.get("zoom", [1.0, 1.0] if s.get("endcard") else zh if s["mode"] == "hero" else zw)
+        if k == len(segs) - 1:
+            if s["mode"] == "hero" and not s.get("crop"):
+                endcard_rect = [0, 0, W, H]
+            else:
+                fh = fr.shape[1]
+                endcard_rect = [0, wy + (WH - fh) // 2, WW, wy + (WH - fh) // 2 + fh]
         for j in range(s["n"]):
-            if s["mode"] == "hero":
+            if s["mode"] == "hero" and not s.get("crop"):
                 f = Image.fromarray(fr[j])
                 if z[0] != 1.0 or z[1] != 1.0:
                     f = affine_zoom(f, z[0] + (z[1] - z[0]) * j / max(1, s["n"] - 1), W / 2, H / 2)
@@ -670,7 +765,8 @@ def main():
     if enc.returncode:
         die("final encode failed — see work/ffmpeg_v5.log")
     json.dump({"segs": segs, "seams": seams, "pills": pills, "subs": ev, "vo_end": vo_end,
-               "dur": NT / fps, "frames": fidx}, open(os.path.join(work, "timeline_v5.json"), "w"), indent=1,
+               "dur": NT / fps, "frames": fidx,
+               "endcard_rect": endcard_rect}, open(os.path.join(work, "timeline_v5.json"), "w"), indent=1,
               default=float)
     print(f"wrote {out}: {fidx} frames ({NT / fps:.3f}s); timeline -> work/timeline_v5.json")
 

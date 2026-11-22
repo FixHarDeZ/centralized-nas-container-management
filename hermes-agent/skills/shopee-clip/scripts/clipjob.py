@@ -47,6 +47,8 @@ This CLI is the only sanctioned way to move a Flow-mode clip forward. It refuses
                                                     # Downloads twins); the revision set, cover and workdir stay
   clipjob.py cancel JOB --reason "..."
   clipjob.py note JOB "..."                         # stage marker in the job's events (🎬: what is done, what is next)
+  clipjob.py stage JOB footage|endcard|vo|build|cover  # 🎬: a stage starts; the delivered timing splits by these
+                                                    # (note / wait / stage print the job's vision count vs budget)
   clipjob.py wait JOB "..."                         # the turn is about to end on Fix (question, turn budget): starts the wait clock;
                                                     # the next clipjob event stops it (resume with `note JOB "resumed"`)
   clipjob.py reopen JOB --reason "..."              # a delivered job gets a revision; the next deliver logs a REVISED row
@@ -285,6 +287,60 @@ def clarify_spans(a, b, db=None):
     return sorted({(asked[i], min(t, b)) for i, t in rows if i in asked and t > asked[i]})
 
 
+VISION_TIMEOUT_S = 400        # a call this long hit Hermes' 420 s tool deadline (aux vision timeout does not hold)
+
+
+def vision_calls(a, b, db=None):
+    """[(asked, answered)] epochs of Hermes `vision_analyze` calls between a and b (state.db); a call with no
+    result yet counts up to b. switch2-oblivion-rd 2026-11-22: 13 calls + one 420 s hang on a 🎬 job whose budget
+    is ~8 — the budget was prose only. Read-only, best effort: no db / a changed schema = []."""
+    db = db or HERMES_DB
+    if not os.path.exists(db):
+        return []
+    try:
+        c = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=2)
+        try:
+            asked = {}
+            for ts, tc in c.execute("SELECT timestamp, tool_calls FROM messages WHERE role='assistant' "
+                                    "AND timestamp BETWEEN ? AND ? AND tool_calls LIKE '%vision_analyze%'", (a, b)):
+                for call in json.loads(tc or "[]"):
+                    if (call.get("function") or {}).get("name") == "vision_analyze":
+                        asked[call.get("id") or call.get("call_id") or f"anon{len(asked)}"] = ts
+            done = {}
+            if asked:
+                marks = ",".join("?" * len(asked))
+                done = dict(c.execute(f"SELECT tool_call_id, timestamp FROM messages WHERE role='tool' "
+                                      f"AND tool_call_id IN ({marks})", list(asked)).fetchall())
+        finally:
+            c.close()
+    except (sqlite3.Error, ValueError, TypeError, AttributeError):
+        return []
+    return sorted((t, min(done.get(i) or b, b)) for i, t in asked.items())
+
+
+def vision_budget(j):
+    """Router 'Vision budget per job': intake 1 + photo gate 2 + post sheet 1 + cover 2 = 6, + 1 per 🤖 shot;
+    🎬 = 6 + footage windows sheet + one stage sheet = 8."""
+    if j["mode"] == "gameplay":
+        return 8
+    return 6 + sum(1 for sh in j["shots"] if any(at.get("via") == "auto" for at in sh["attempts"]))
+
+
+def job_vision(j, end=None):
+    end = end if end is not None else now()
+    start = min(_epoch(j["created"]), _epoch(j["started"])) if j.get("started") else _epoch(j["created"])
+    calls = vision_calls(start, end)
+    return {"calls": len(calls), "budget": vision_budget(j), "min": round(sum(b - a for a, b in calls) / 60),
+            "timeouts": sum(1 for a, b in calls if b - a >= VISION_TIMEOUT_S)}
+
+
+def vision_warning(v):
+    if v["calls"] < v["budget"]:
+        return None
+    return (f"vision {v['calls']}/{v['budget']} for this job ({v['min']} min) — budget used: decide on what you have "
+            "and `note` why; no more vision_analyze unless Fix asks")
+
+
 def job_asks(j, end):
     """clarify waits inside this job's clock (see timeline)."""
     start = min(_epoch(j["created"]), _epoch(j["started"])) if j.get("started") else _epoch(j["created"])
@@ -318,8 +374,14 @@ def timeline(j, end=None, asks=()):
     for a, b in sorted(spans):
         wait += max(0.0, b - max(a, upto))
         upto = max(upto, b)
+    marks = [(t, m[len("stage: "):]) for t, m in ev if m.startswith("stage: ")]
     if decides:
         stages += [["gen+รีวิว", mins(created, decides[-1])], ["post", mins(decides[-1], end)]]
+    elif marks:                                         # 🎬: `clipjob.py stage JOB footage|endcard|vo|build|cover`
+        if marks[0][0] > created + 60:
+            stages.append(["ทำคลิป", mins(created, marks[0][0])])
+        for (t, name), nxt in zip(marks, [t for t, _ in marks[1:]] + [end]):
+            stages.append([name, mins(t, nxt)])
     else:
         stages.append(["ทำคลิป", mins(created, end)])
     return {"total_min": mins(start, end), "stages": stages, "wait_fix_min": round(wait / 60)}
@@ -329,6 +391,8 @@ def timeline_text(tl):
     h, m = divmod(tl["total_min"], 60)
     parts = [f"{k} {v} น." + (f" (รอฟิกตอบ {tl['wait_fix_min']} น.)" if k in ("gen+รีวิว", "ทำคลิป") and tl["wait_fix_min"] else "")
              for k, v in tl["stages"]]
+    if tl["wait_fix_min"] and not any(k in ("gen+รีวิว", "ทำคลิป") for k, _ in tl["stages"]):
+        parts.append(f"รอฟิกตอบ {tl['wait_fix_min']} น.")      # 🎬 split by `stage`: the wait has no host stage
     return f"⏱ รวม {f'{h} ชม. ' if h else ''}{m} น. · " + " · ".join(parts)
 
 
@@ -1519,11 +1583,29 @@ def spawn_mirror(j):
 ENDCARD = os.path.join(os.path.dirname(SKILL), "gameplay-clips", "scripts", "endcard_check.py")
 
 
-def endcard_problems(final):
+def endcard_rect(j, final):
+    """The end-card picture rect build_v5 wrote (work/timeline_v5.json in the job's workdir; the last build is the
+    one shipped) -> "x0,y0,x1,y1" or None (no timeline / an older build_v5 without the key)."""
+    tl = os.path.join(j.get("workdir") or "", "work", "timeline_v5.json")
+    try:
+        r = json.load(open(tl, encoding="utf-8")).get("endcard_rect")
+    except (OSError, ValueError):
+        return None
+    if not (isinstance(r, list) and len(r) == 4):
+        return None
+    return ",".join(str(int(v)) for v in r)
+
+
+def endcard_problems(final, rect=None):
     """🎬 end card: a title cut by the 1:1 window (ffr-swt-dec04 'L FANTASY RESONANCE', sniper-elite3-sw
-    'NIPER ELITE', 2026-11-20/21). OCR of the last seconds; text touching the left/right frame edge = cut."""
-    rc, out, err = run(["uv", "run", "-q", "--with", "rapidocr-onnxruntime", "--with", "numpy", "--with", "pillow",
-                        "python", ENDCARD, final])
+    'NIPER ELITE', 2026-11-20/21) or by the card picture's own top/bottom (switch2-oblivion-rd 2026-11-22, a crop
+    that left "OUT NOW" 1 px from the edge). OCR of the last seconds; text touching the left/right frame edge
+    or, with `rect`, the picture's top/bottom = cut."""
+    cmd = ["uv", "run", "-q", "--with", "rapidocr-onnxruntime", "--with", "numpy", "--with", "pillow",
+           "python", ENDCARD, final]
+    if rect:
+        cmd += ["--rect", rect]
+    rc, out, err = run(cmd)
     try:
         v = json.loads(out.strip().splitlines()[-1])
     except (ValueError, IndexError):
@@ -1532,9 +1614,9 @@ def endcard_problems(final):
     if v.get("ok"):
         return []
     cut = "; ".join(f"'{h['text']}' at {h['t']} s ({h['side']} edge)" for h in v.get("hits", [])[:4])
-    return [f"end card text touches the frame edge = cut: {cut}. Use the FULL original frame with \"wide\": true for "
-            "the end-card seg (never a pre-cropped endcard file), rebuild. ENDCARD_OK=1 only when that text is HUD / "
-            "gameplay, not the title"]
+    return [f"end card text touches the frame / picture edge = cut: {cut}. End-card seg = the ORIGINAL trailer with "
+            "\"wide\": true, or \"crop\" from `endcard_crop.py` (margins around the title), never a pre-cropped "
+            "endcard file; rebuild. ENDCARD_OK=1 only when that text is HUD / gameplay, not the title"]
 
 
 def cmd_deliver(j, a):
@@ -1557,7 +1639,7 @@ def cmd_deliver(j, a):
     if not os.path.exists(a.cover):
         probs.append(f"no cover {a.cover}")
     if j["mode"] == "gameplay" and os.path.exists(a.final) and not os.environ.get("ENDCARD_OK"):
-        probs += endcard_problems(a.final)
+        probs += endcard_problems(a.final, endcard_rect(j, a.final))
     if probs:
         raise Refused("deliver refused:\n- " + "\n- ".join(probs))
     rc, out, err = run(["python3", os.path.join(HERE, "verify-clip.py"), a.final])
@@ -1592,7 +1674,8 @@ def cmd_deliver(j, a):
                "credits": (0 if j["mode"] == "gameplay" else
                            sum(c for c in credits if c) if credits and all(c is not None for c in credits) else None),
                **({"credits_est": True} if any(at.get("credits_est") for s in j["shots"] for at in s["attempts"]) else {}),
-               "notes": notes.strip(" |"), "timing": timeline(j, now(), job_asks(j, now()))}
+               "notes": notes.strip(" |"), "timing": timeline(j, now(), job_asks(j, now())),
+               "vision": job_vision(j)}
         os.makedirs(os.path.dirname(CLIP_LOG), exist_ok=True)
         with open(CLIP_LOG, "a", encoding="utf-8") as f:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -1627,6 +1710,7 @@ def cmd_deliver(j, a):
     log(j, "delivered")
     t_end = now()
     j["timing"] = timeline(j, t_end, job_asks(j, t_end))
+    j["timing"]["vision"] = job_vision(j, t_end)
     kept = j["delivery"]["kept"]
     j["delivery"]["mirror"] = {"job": j["job"], "sha256": digest,
                                # pending = spawn_mirror sends it once this job is saved; off = recorded anyway,
@@ -1705,6 +1789,7 @@ def main(argv=None):
     s = sub.add_parser("cancel"); s.add_argument("job"); s.add_argument("--reason", required=True)
     s = sub.add_parser("note"); s.add_argument("job"); s.add_argument("text")
     s = sub.add_parser("wait"); s.add_argument("job"); s.add_argument("text")
+    s = sub.add_parser("stage"); s.add_argument("job"); s.add_argument("text", metavar="name")
     s = sub.add_parser("reopen"); s.add_argument("job"); s.add_argument("--reason", required=True)
     s = sub.add_parser("mirror"); s.add_argument("job"); s.add_argument("--auto", action="store_true", help=argparse.SUPPRESS)
     s = sub.add_parser("close"); s.add_argument("job", nargs="?")
@@ -1758,7 +1843,8 @@ def main(argv=None):
             return out(cost(parse_seconds(a.seconds, 0), a.res))
         if a.cmd == "status":
             if a.job:
-                return out(load(a.job))
+                j = load(a.job)
+                return out({**j, "vision": job_vision(j)} if j["status"] == "open" else j)
             rows = []
             for f in sorted(os.listdir(DIR)) if os.path.isdir(DIR) else []:
                 if f.endswith(".json") and f != "pacing.json":
@@ -1837,9 +1923,14 @@ def main(argv=None):
         if a.cmd == "edit-id":
             set_edit_id(j, a.shot, a.edit_id); save(j)
             return out(summary(j))
-        if a.cmd in ("note", "wait"):
-            need_open(j); log(j, f"{a.cmd}: {a.text}"); save(j)
-            return out({**summary(j), "events": j["events"][-5:]})
+        if a.cmd in ("note", "wait", "stage"):
+            need_open(j)
+            if a.cmd == "stage":
+                j["stage"] = a.text
+            log(j, f"{a.cmd}: {a.text}"); save(j)
+            v = job_vision(j)
+            warn = vision_warning(v)
+            return out({**summary(j), "events": j["events"][-5:], "vision": v, **({"warning": warn} if warn else {})})
         if a.cmd == "mirror":
             m = (j.get("delivery") or {}).get("mirror")
             if j["status"] != "delivered" or not m:
