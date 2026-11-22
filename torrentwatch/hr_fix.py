@@ -402,6 +402,14 @@ async def _close_cleared(site_id, title, names, fix, seed_line, settings, tasks)
     return True
 
 
+def skipped_buttons(site_id: str) -> list[list[dict]]:
+    """What a skipped prompt keeps: undo to fix, or go find the file and delete it."""
+    return [
+        [{"text": "↩️ เปลี่ยนใจ fix เลย", "callback_data": f"hrfix:y:{site_id}"}],
+        [{"text": "🗑 ดูไฟล์ก่อนลบ", "callback_data": f"hrdel:ask:{site_id}"}],
+    ]
+
+
 async def _handle_callback(cb: dict):
     data = cb.get("data") or ""
     cb_id = cb.get("id") or ""
@@ -424,7 +432,11 @@ async def _handle_callback(cb: dict):
 
     _, action, site_id = data.split(":", 2)
     fix = db.hr_fix_get(site_id)
-    if fix is None or fix["status"] != "pending":
+    # `skipped` stays open to ✅: the skip button sits right next to fix, and a
+    # mis-tap used to be final. apply_fix re-reads myhr.php, so a late change of
+    # mind on a row that has since cleared or dropped off is refused there.
+    allowed = ("pending", "skipped") if action == "y" else ("pending",)
+    if fix is None or fix["status"] not in allowed:
         state = fix["status"] if fix else "ไม่พบ"
         await telegram_notify.answer_callback(cb_id, f"ปุ่มนี้ใช้ไปแล้ว ({state})")
         return
@@ -433,7 +445,11 @@ async def _handle_callback(cb: dict):
         db.hr_fix_set_status(site_id, "skipped")
         await telegram_notify.answer_callback(cb_id, "ข้ามแล้ว")
         if message_id:
-            await telegram_notify.edit_message(message_id, f"❌ ข้าม — {fix['title'][:80]}")
+            await telegram_notify.edit_message(
+                message_id,
+                f"❌ ข้าม — {fix['title'][:80]}\n\nกดผิด? เปลี่ยนใจได้จากปุ่มด้านล่าง",
+                skipped_buttons(site_id),
+            )
         return
 
     await telegram_notify.answer_callback(cb_id, "กำลังโหลด .torrent ...")
@@ -663,6 +679,38 @@ if __name__ == "__main__":
         assert db.hr_fix_get("42")["status"] == "fixed"  # silent, no "client อื่น" flood
         assert len(_notices) == _before_n + 1
         assert await check_vanished([_row("3", 0.0)], {}) == 0  # not asked twice
+
+        # ❌ keeps a way back: the edited prompt carries ↩️ fix + 🗑, and ✅ still
+        # works on a skipped row (a mis-tap used to be final, 2026-11-22)
+        config.TELEGRAM_CHAT_ID = config.TELEGRAM_CHAT_ID or "1"
+        _kb: list = []
+
+        async def _fake_edit(mid, text, buttons=None):
+            _kb.append(buttons)
+
+        async def _fake_answer(cb_id, text=""):
+            pass
+
+        _applied: list[str] = []
+
+        async def _fake_apply(site_id):
+            _applied.append(site_id)
+            return True, "x.torrent"
+
+        telegram_notify.edit_message = _fake_edit
+        telegram_notify.answer_callback = _fake_answer
+        globals()["apply_fix"] = _fake_apply
+        _cb = lambda data: {"id": "c", "data": data, "message": {  # noqa: E731
+            "message_id": 9, "chat": {"id": config.TELEGRAM_CHAT_ID}}}
+        db.hr_fix_add_pending("50", "หนัง 50", 9)
+        await _handle_callback(_cb("hrfix:n:50"))
+        assert db.hr_fix_get("50")["status"] == "skipped"
+        _datas = [b["callback_data"] for row in _kb[-1] for b in row]
+        assert _datas == ["hrfix:y:50", "hrdel:ask:50"], _datas
+        await _handle_callback(_cb("hrfix:n:50"))  # ❌ again on a skipped row = no-op
+        assert db.hr_fix_get("50")["status"] == "skipped"
+        await _handle_callback(_cb("hrfix:y:50"))
+        assert _applied == ["50"] and db.hr_fix_get("50")["status"] == "fixed"
 
         print(f"hr_fix self-check OK: {len(_prompts)} prompt(s), {len(_notices)} notice(s)")
 

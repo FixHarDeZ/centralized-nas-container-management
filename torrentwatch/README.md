@@ -246,6 +246,12 @@ Those files are **not** re-added automatically. The bot sends a Telegram message
 downloads the `.torrent` through the ad-gate, and writes it into `/downloads` — which is
 the DSM watch folder, so Download Station picks it up and resumes seeding.
 
+`❌ ข้าม` is not final: the edited message keeps `↩️ เปลี่ยนใจ fix เลย` (fix still works
+on a skipped row) and `🗑 ดูไฟล์ก่อนลบ`, which enters the two-step delete flow below.
+With no DS task left, it reads `info.name` from a fresh `.torrent` and looks only at
+`<DS default_destination>/<name>`. If the file is there, it offers a file-only delete
+and warns that H&R is not cleared yet. If not, it says so and the row stays `skipped`.
+
 Rows showing `กำลังนับอยู่` are announcing right now and are never candidates
 (`seeding_now`, parsed as its own field so it can't be confused with an unparseable cell).
 

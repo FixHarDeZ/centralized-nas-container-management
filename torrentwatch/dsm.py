@@ -101,6 +101,16 @@ class Dsm:
         )
         return data.get("tasks") or []
 
+    async def default_destination(self) -> str:
+        """Share-relative folder DS saves new tasks into (e.g. home/Torrents_Download)."""
+        data = await self._call(
+            "DownloadStation/info.cgi",
+            api="SYNO.DownloadStation.Info",
+            version="1",
+            method="getconfig",
+        )
+        return data.get("default_destination") or ""
+
     async def nudge_task(self, task_id: str):
         """Pause then resume a task so DS hash-checks it.
 

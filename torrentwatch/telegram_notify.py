@@ -182,18 +182,18 @@ async def answer_callback(callback_id: str, text: str = ""):
         print(f"[telegram] answer_callback error: {e}")
 
 
-async def edit_message(message_id: int, text: str):
-    """Rewrite a prompt after it is answered — also drops its buttons."""
+async def edit_message(message_id: int, text: str, buttons: list[list[dict]] | None = None):
+    """Rewrite a prompt after it is answered — drops its buttons unless new ones are given."""
+    payload = {
+        "chat_id": config.TELEGRAM_CHAT_ID,
+        "message_id": message_id,
+        "text": f"{text}\n\n🕒 {_now()}",
+    }
+    if buttons:
+        payload["reply_markup"] = {"inline_keyboard": buttons}
     try:
         async with httpx.AsyncClient(timeout=10) as c:
-            await c.post(
-                _url("editMessageText"),
-                json={
-                    "chat_id": config.TELEGRAM_CHAT_ID,
-                    "message_id": message_id,
-                    "text": f"{text}\n\n🕒 {_now()}",
-                },
-            )
+            await c.post(_url("editMessageText"), json=payload)
     except Exception as e:
         print(f"[telegram] edit_message error: {e}")
 

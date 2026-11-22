@@ -1043,3 +1043,14 @@ Deploy `-s torrentwatch -y` แล้ว force `check_hr` → 5 แถวเป�
 - h1 แท็บรอบทำงาน `Run Detail` → `ประวัติการทำงาน`
 - bump `?v=20261028b`. Verify: `node --check`, mock 390/360 แท็บประวัติเปิดมาที่ 2026-10-27 (67 รายการ), deploy + grep ในคอนเทนเนอร์เจอครบ
 - ปิดงาน 2026-10-28: deployed ทั้งสองรอบ (UI polish + ประวัติ auto-pick/h1 ไทย), commit+push `5a10b36`/`a41137d` (main). งานค้าง = ไม่มี. ยังไม่ได้เปิด dashboard จริงหลัง basic auth ด้วยตา (verify ผ่าน mock + grep ในคอนเทนเนอร์). ไฟล์ ai-deck/ink-reader ที่ค้าง uncommitted ใน repo เป็นของ session อื่น ไม่ได้แตะ
+
+### 2026-11-22 — H&R: กด ❌ ข้ามผิดแล้วเปลี่ยนใจได้ (↩️ fix / 🗑 ดูไฟล์ก่อนลบ)
+- อาการ: กด `❌ ข้าม` บนคำถาม auto-fix ของ "รุ่นน้องแถวบ้านมาขอโดนเอาถึงที่ kantuser…" (site 2590030, msg 1768) ผิด — เดิม `skipped` = จบ ปุ่มหาย ไม่มีทางกลับ
+- ตรวจ row จริงก่อน: DS ไม่มี task (เหตุที่บอทถาม fix), `torrents.downloaded_local=1 / downloaded_nas=0`, `Torrents_Download` ว่าง → **เรื่องนี้ไม่มีไฟล์บน NAS ให้ลบ** (ยืนยันด้วย resolver ใหม่ live: `/home/Torrents_Download/รุ่นน้องแถวบ้าน…2-1.mp4` ไม่มี). `downloaded_nas` เชื่อไม่ได้ (แถว `deleted` 67 แถวก็เป็น 0)
+- แก้:
+  - `telegram_notify.edit_message(..., buttons=None)` — ใส่ `reply_markup` ได้ (เดิม edit = ปุ่มหายเสมอ)
+  - `hr_fix`: กด ❌ แล้ว edit เป็น "❌ ข้าม … กดผิด? เปลี่ยนใจได้" + `skipped_buttons()` = `↩️ เปลี่ยนใจ fix เลย` (`hrfix:y`) / `🗑 ดูไฟล์ก่อนลบ` (`hrdel:ask`); `hrfix:y` รับ `skipped` ด้วย (`n` ยังรับแค่ `pending`)
+  - `hr_delete`: `ask` รับ `skipped`; `_resolve` (ผ่าน task) ไม่เจอและไม่ใช่ DSM error → `_resolve_file()` โหลด .torrent → `torrent_name()` (bdecode เอง, `name.utf-8` ก่อน, ปฏิเสธ `/` `\` `.` `..`) → stat `<default_destination>/<name>` ที่เดียว ไม่ค้นที่อื่น. เจอ = ยืนยันรอบสองปุ่ม `🔥 ลบไฟล์` อย่างเดียว (ไม่มี task) + บรรทัด `🚨 ยังไม่พ้น H&R — ลบแล้วจะโดน hit` เมื่อมาจาก skipped. ไม่เจอ = push แจ้ง สถานะคง `skipped` (ห้าม `del_failed` ที่ terminal). target เก็บ `from`, ยกเลิกจาก skipped = กลับ `skipped` + ปุ่มเดิม
+  - `dsm.default_destination()` (`SYNO.DownloadStation.Info getconfig`, live = `home/Torrents_Download`), `_do_delete` ข้าม `delete_task` เมื่อ `task_id` None
+- Verify: self-check `dsm`/`hr_delete`/`hr_fix` ผ่านบน Python 3.12 (uv; hr_delete ต้องตั้ง `DATA_DIR` เป็น temp dir + `init_db` ก่อน ไม่งั้นพังที่ `/data` — ของเดิม) — เพิ่มเคส: ข้ามแล้วข้อความมีปุ่ม `hrfix:y`/`hrdel:ask`, ❌ ซ้ำเป็น no-op, ✅ จาก skipped → `fixed`; ไม่มี task+ไม่มีไฟล์ คง skipped; เจอแต่ไฟล์ → ปุ่ม go/no + เตือน hit + `from`; DSM error ไม่ไปหาไฟล์; ยกเลิกกลับ skipped; ลบไฟล์อย่างเดียวไม่เรียก delete_task; bdecode/ชื่ออันตราย. ruff ผ่าน. deploy `-s torrentwatch -y`, poller ขึ้น, รัน `_resolve_file('2590030')` ในคอนเทนเนอร์ได้ path จริง
+- edit ข้อความ 1768 ให้มีปุ่มใหม่แล้ว (แถวยัง `skipped`) — ยังไม่ได้เห็นด้วยตาว่าปุ่มขึ้นใน Telegram (edit_message ไม่อ่าน response)
