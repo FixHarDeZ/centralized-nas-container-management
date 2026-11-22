@@ -144,7 +144,7 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
 
 **Vision budget per job** (11-19..22: 222 calls, ~4 h, 8 × 420 s timeouts): intake 1 · photo gate ≤2 ·
 🤖 shot 1 (+1 full-res confirm of a drift) · 📝 shot 0 · post frame sheet 1 · cover 2 (pick + the
-`check_sheet` that `make_poster_cover.py` prints) · 🎬 footage: one sheet per stage. Past the budget = ask Fix.
+`check_sheet` that `make_poster_cover.py` prints) · 🎬 footage: one sheet per stage. Past it: decide on what you have, `note` it.
 
 ## Talking to Fix
 - One status line when something blocks, sent at that moment, not at the end. Put the credit cost inside

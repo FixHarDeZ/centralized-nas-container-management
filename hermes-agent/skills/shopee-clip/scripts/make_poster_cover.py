@@ -392,7 +392,8 @@ def check_sheet(cover, slot_pics, out):
          "(b) Any price, discount, coupon, %, store logo or QR code INSIDE any photo? (c) Any Thai text with missing "
          "tone marks, empty boxes or tofu? Answer a/b/c.")
     if n:
-        q += (f" Pictures 2-{n + 1} are its {n} detail picture(s), left to right. For EACH, name the main object it "
+        which = "Picture 2 is its detail picture" if n == 1 else f"Pictures 2-{n + 1} are its {n} detail pictures, left to right"
+        q += (f" {which}. For EACH, name the main object it "
               "shows in 3-6 words, from what you see — do not guess what it is meant to show; say 'unclear' when "
               "it is a blur, a background or a cut-off part.")
     return out, q

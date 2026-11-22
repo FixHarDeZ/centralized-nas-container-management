@@ -1162,3 +1162,27 @@ def test_gameplay_deliver_refuses_a_cut_end_card(tmp_path, monkeypatch, capsys):
     assert cj.main(args) == 1 and "IPER ELITE" in capsys.readouterr().err
     monkeypatch.setenv("ENDCARD_OK", "1")
     assert cj.main(args) == 0
+
+
+def test_prompt_mode_end_to_end_needs_no_tap_and_no_ack(tmp_path, monkeypatch, capsys):
+    """The whole 📝 path after Fix's rule: pack -> two replies -> ready (auto) -> assemble-check -> deliver gates."""
+    monkeypatch.setattr(cj, "DIR", str(tmp_path)); monkeypatch.setenv("CLIPJOB_NO_TG", "1")
+    monkeypatch.setattr(cj, "tg", lambda *a, **k: {"message_id": 1})
+    monkeypatch.setattr(cj, "last_frame", lambda video, out: open(out, "wb").close() or out)
+    monkeypatch.setattr(cj, "ffprobe", lambda p: {"w": 720, "h": 1280, "dur": 8.0, "kbps": 3000, "has_audio": True})
+    j = job(shots=2, mode="product", prod="prompt"); j["workdir"] = str(tmp_path); cj.save(j)
+    for k in (1, 2):
+        (tmp_path / f"shot{k}.txt").write_text("Product b-roll, no speech.", encoding="utf-8")
+    assert cj.main(["pack", "t-1", "--no-send"]) == 0
+    capsys.readouterr()
+    for k in (1, 2):
+        f = tmp_path / f"in{k}.mp4"; f.write_bytes(b"v%d" % k)
+        assert cj.main(["ingest", "t-1", str(f), "--shot", str(k)]) == 0
+        dst = json.loads(capsys.readouterr().out)["file"]
+        assert cj.main(["ready", "t-1", str(k), "--raw", dst]) == 0
+        capsys.readouterr()
+    assert cj.main(["assemble-check", "t-1"]) == 0
+    j = cj.load("t-1")
+    assert cj.deliver_problems(j, {"flags": [], "v_dur": 16.0, "a_dur": 16.0},
+                               {"headlines": [{"text": "x"}]}, "#a #b") == []
+    assert cj.billed_credits(j) == [30, 30]

@@ -78,9 +78,17 @@ def test_tall_window_crop_width():
 
 def test_endcard_seg_must_be_wide_and_from_the_full_frame():
     """ffr-swt-dec04 / sniper-elite3-sw 2026-11-20/21: end-card titles cut."""
-    P = lambda v: v
-    assert "wide" in b.endcard_problem({"src": "trailer", "endcard": True}, P)
-    assert b.endcard_problem({"src": "trailer", "endcard": True, "wide": True}, P) is None
-    assert "836 px" in b.endcard_problem({"src": "endcard.mp4", "wide": True}, P, width=836)
-    assert b.endcard_problem({"src": "/x/trailer_launch.mp4", "wide": True}, P, width=1920) is None
-    assert b.endcard_problem({"src": "master", "mode": "window"}, P) is None
+    assert "wide" in b.endcard_problem({"src": "trailer", "endcard": True}, "/w")
+    assert b.endcard_problem({"src": "trailer", "endcard": True, "wide": True}, "/w") is None
+    assert "836 px" in b.endcard_problem({"src": "endcard.mp4", "wide": True}, "/w", width=836)
+    assert b.endcard_problem({"src": "/x/trailer_launch.mp4", "wide": True}, "/w", width=1920) is None
+    assert b.endcard_problem({"src": "master", "mode": "window"}, "/w") is None
+
+
+def test_endcard_relative_src_resolves_against_the_plan_dir(tmp_path, monkeypatch):
+    seen = []
+    monkeypatch.setattr(b, "probe_w", lambda path: seen.append(path) or 836)
+    assert "836 px" in b.endcard_problem({"src": "endcard.mp4", "wide": True}, str(tmp_path))
+    assert seen == [os.path.join(str(tmp_path), "endcard.mp4")]
+    monkeypatch.setattr(b, "probe_w", lambda path: None)          # unreadable: no verdict, no crash
+    assert b.endcard_problem({"src": "gone.mp4", "wide": True}, str(tmp_path)) is None

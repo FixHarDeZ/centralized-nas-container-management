@@ -397,6 +397,8 @@ MIN_WIDE_W = 1280
 
 
 def probe_w(path):
+    if not path or not os.path.exists(path):
+        return None
     p = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width",
                         "-of", "csv=p=0", path], capture_output=True, text=True)
     try:
@@ -405,13 +407,14 @@ def probe_w(path):
         return None
 
 
-def endcard_problem(sg, P, width=None):
+def endcard_problem(sg, base, width=None):
     """An end card is the WHOLE original frame (2026-11-20/21: ffr's `wide` on a pre-cropped 836x470 file showed
     'L FANTASY RESONANCE'; sniper's logo card in the 1:1 window showed 'NIPER ELITE'). -> reason or None."""
     if sg.get("endcard") and not sg.get("wide"):
         return 'an "endcard": true seg needs "wide": true (the 1:1 window keeps the middle 56 % and cuts the title)'
     if sg.get("wide") and sg.get("src") not in (None, "master", "trailer"):
-        w = width if width is not None else probe_w(P(sg["src"]) if not os.path.isabs(sg["src"]) else sg["src"])
+        src = sg["src"] if os.path.isabs(sg["src"]) else os.path.join(base, sg["src"])
+        w = width if width is not None else probe_w(src)     # None = cannot measure: no verdict
         if w is not None and w < MIN_WIDE_W:
             return (f'"wide" on a {w} px wide file: wide shows the whole frame, so give it the ORIGINAL trailer '
                     f"(>= {MIN_WIDE_W} px), never a pre-cropped endcard file — the crop already cut the title")
@@ -445,7 +448,7 @@ def main():
             if sg.get("mode") == "window" and abs(sg.get("win_x", 0)) > room:
                 die(f"seg{i} win_x {sg['win_x']}: the crop leaves the picture (limit ±{room})")
     for i, sg in enumerate(plan["segs"]):
-        why = endcard_problem(sg, P)
+        why = endcard_problem(sg, base)
         if why:
             die(f"seg{i}: {why}")
     fps = plan.get("fps", 30)
