@@ -81,6 +81,19 @@ def test_reserve_needs_auto_production():
         cj.reserve(j, 1, None, 1000)
 
 
+def test_switch_to_auto_unpacked_shots_can_reserve():
+    """Fix orders auto after the prompt pack went out (wellux-swatter-666 2026-11-22):
+    set_production('auto') must return packed shots to pending, or reserve() refuses them."""
+    j = job(prod="auto")
+    cj.shot(j, 1)["state"] = "packed"          # the state a pack leaves behind
+    with pytest.raises(cj.Refused, match="packed"):
+        cj.reserve(j, 1, None, 1000)
+    cj.set_production(j, "auto")               # re-running it un-packs (production was already auto)
+    assert cj.shot(j, 1)["state"] == "pending"
+    cj.reserve(j, 1, None, 1000)
+    assert cj.shot(j, 1)["state"] == "submitting"
+
+
 def test_pacing_and_chaining():
     j = job(prod="auto")
     t = cj.reserve(j, 1, None, 1000)

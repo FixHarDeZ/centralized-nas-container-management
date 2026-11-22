@@ -387,6 +387,14 @@ def set_production(j, prod):
         raise Refused("production must be auto or prompt")
     if j["production"] == "prompt" and prod == "auto" and j["fallback"]:
         raise Refused("this job already fell back to prompt pack; start a new job to retry auto")
+    if prod == "auto":
+        # a pack sent in prompt mode leaves shots at 'packed', which reserve() refuses;
+        # Fix switching to auto mid-run must un-pack them (nothing was rendered or ingested)
+        for s in j["shots"]:
+            if s["state"] == "packed":
+                s["state"] = "pending"
+                s.pop("pack_msg", None)
+                log(j, f"shot {s['k']}: packed -> pending (production switched to auto)")
     j["production"] = prod
     log(j, f"production={prod}")
 
