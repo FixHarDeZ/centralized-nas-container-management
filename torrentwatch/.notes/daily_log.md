@@ -1058,3 +1058,4 @@ Deploy `-s torrentwatch -y` แล้ว force `check_hr` → 5 แถวเป�
 - (แก้ตามรีวิว) `scan_and_prompt` เดิมข้ามแค่ `pending/fixed/skipped/wedged` → แถวที่มาทาง 🗑 จาก skipped (`del_confirm`/`deleted`/`del_*`) จะโดนถาม auto-fix ซ้ำรอบถัดไป (ทับ target ที่รอยืนยัน / ชวนโหลดไฟล์ที่ยอมโดน hit แล้วกลับมา) → กลับด้านเป็น `_REASK = (stalled, expired, failed)` เท่านั้นที่ถามใหม่ + self-check (del_confirm/deleted/skipped ไม่ถาม, expired ถาม). redeploy แล้ว
 - ยืนยันปุ่มบน msg 1768 ด้วย `editMessageReplyMarkup` → `message is not modified` = ปุ่ม ↩️/🗑 อยู่บนข้อความจริงแล้ว (งานค้างข้อก่อนหน้าปิด)
 - self-check รันด้วย `uv run --no-project` — รันแบบไม่มี flag ใน subdir ทำให้ root `uv.lock` + `.venv/bin/python` เปลี่ยน (revert ไปแล้ว)
+- ปิดงาน 2026-11-23: deployed ทั้งสองรอบ, commit+push `4cbecde` (feature) + `b66c5ec` (`_REASK`) บน main. งานค้าง = ไม่มี (ยังไม่ได้กดปุ่ม ↩️/🗑 จริงใน Telegram — เรื่อง 2590030 กด 🗑 จะได้ "ไม่เจอไฟล์บน NAS" เพราะโหลดผ่านเบราว์เซอร์ ไม่มีไฟล์บน NAS)
