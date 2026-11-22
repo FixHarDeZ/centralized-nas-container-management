@@ -1504,3 +1504,14 @@ Not done / open:
 - Not proven on a real order: 📝 auto-approve flow, name refusal on a fresh prompt, end-card gate on a new 🎬,
   cover check sheet in Hermes' hands, `reshape`. Open: mario/gta6 CTA footage shows no product (zelda item);
   น้องเอิร์ธ has no portrait (only usable with `CLIPJOB_NO_PORTRAIT_OK=1` or after saving one).
+
+### 2026-11-22 — session closed
+- Fix: "จบงาน".
+- State: commits `88ce4e0` (22 live edits ported), `930b2b9` + `5fb7c31` (tunes 1-7 + 📝 auto-approve), notes
+  `8cafddd` + this close; all pushed, tree clean. Live skills synced at `5fb7c31` (173 tests in the container).
+  No deploy, no config change, no open clip job. NAS clone reset clean; NAS scratch (`rev1122`, `tune1122`) removed.
+- Watch on the next orders: 📝 shots approved with no ✅/🔁 tap (`ready` prints `auto_approved`); no `น้อง…` name
+  in a prompt; `deliver` end-card OCR on the next 🎬 (and `build_v5 --check` endcard rule); cover vision calls ≤2
+  via `check_sheet`; clip-log rows carry `credits_est` on 📝 jobs; `reshape` used instead of cancel + reopen.
+- Open: mario/gta6 CTA footage shows no product; น้องเอิร์ธ has no portrait; older finals lego-hp + splatoon have
+  cut end-card titles (already delivered, not redone).
