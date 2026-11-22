@@ -67,8 +67,8 @@ price-like text, CTA anywhere but the last seg, vo_shift not inside a VO pause, 
 neither wide nor crop, `wide` on a file narrower than 1280 px (a pre-cropped card) or not 16:9 (it
 would be stretched: oblivion 2026-11-22 put a 1920x600 cut into the 720x405 band), a bad crop, a
 white flash frame inside a seg (switch2-oblivion-rd 2026-11-22: the trailer's white cut at 78.29 s
-blinked in the hook). work/timeline_v5.json carries "endcard_rect" (the last seg's picture in the
-720x1280 frame) for the end-card OCR at deliver.
+blinked in the hook). work/timeline_v5.json carries "endcard_rect" (a "crop" end card's picture in the
+720x1280 frame) for the end-card OCR at deliver; a full-frame card has none (its edges are the trailer's).
 """
 import argparse, datetime, json, os, re, subprocess, sys, time
 import numpy as np
@@ -728,12 +728,11 @@ def main():
     for k, s in enumerate(segs):
         fr = seg_frames(s, paths, s["n"], fps)
         z = s.get("zoom", [1.0, 1.0] if s.get("endcard") else zh if s["mode"] == "hero" else zw)
-        if k == len(segs) - 1:
-            if s["mode"] == "hero" and not s.get("crop"):
-                endcard_rect = [0, 0, W, H]
-            else:
-                fh = fr.shape[1]
-                endcard_rect = [0, wy + (WH - fh) // 2, WW, wy + (WH - fh) // 2 + fh]
+        if k == len(segs) - 1 and s.get("crop"):
+            # only a crop cuts the card vertically: a full 16:9 / 1:1 frame's top and bottom are the trailer's own
+            # edges, and titles sit there by design (gotg-encore-gp's MARVEL logo 2 px from the top, whole)
+            fh = fr.shape[1]
+            endcard_rect = [0, wy + (WH - fh) // 2, WW, wy + (WH - fh) // 2 + fh]
         for j in range(s["n"]):
             if s["mode"] == "hero" and not s.get("crop"):
                 f = Image.fromarray(fr[j])

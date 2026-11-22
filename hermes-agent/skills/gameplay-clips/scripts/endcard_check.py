@@ -7,9 +7,10 @@ and sniper-elite3-sw on "NIPER ELITE" (the logo card in the 1:1 window). gotg-en
 pills and the sticker sit well inside.
 
 2026-11-22: switch2-oblivion-rd's card sat in the window with "OUT NOW" 1 px above the picture's bottom edge —
-the frame edge never saw it. --rect x0,y0,x1,y1 (build_v5's work/timeline_v5.json "endcard_rect" = the last
-seg's picture in the 720x1280 frame) adds that picture's top and bottom: text whose box centre is inside the
-picture and that ends within 4 px of its top or bottom = cut.
+the frame edge never saw it. --rect x0,y0,x1,y1 (build_v5's work/timeline_v5.json "endcard_rect" = a "crop"
+end card's picture in the 720x1280 frame) adds that picture's top and bottom: text whose box centre is inside the
+picture and that ends within 4 px of its top or bottom = cut. Not for a full-frame card: its top/bottom are the
+trailer's own edges and titles sit there by design (gotg-encore-gp: MARVEL 2 px from the top, whole).
 
   uv run --with rapidocr-onnxruntime --with numpy --with pillow python endcard_check.py final.mp4 \
       [--at 0.4,1.0,1.6] [--rect 0,348,720,832]
