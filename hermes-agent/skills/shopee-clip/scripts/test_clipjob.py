@@ -366,8 +366,8 @@ def test_failed_paid_shot_can_be_regenerated_by_fix():
 
 def test_cli_ready_keeps_state_when_send_fails_then_resend(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(cj, "DIR", str(tmp_path)); monkeypatch.setenv("CLIPJOB_NO_TG", "1")
-    j = job(shots=1, mode="product", prod="prompt"); j["workdir"] = str(tmp_path)
-    cj.shot(j, 1)["state"] = "submitted"; cj.shot(j, 1)["attempts"].append({"via": "prompt"})
+    j = job(shots=1, mode="product", prod="auto"); j["workdir"] = str(tmp_path)
+    cj.shot(j, 1)["state"] = "submitted"; cj.shot(j, 1)["attempts"].append({"via": "auto"})
     cj.save(j)
     raw = tmp_path / "s.mp4"; raw.write_bytes(b"x")
     monkeypatch.setattr(cj, "ffprobe", lambda p: {"w": 720, "h": 1280, "dur": 10.0, "kbps": 3000, "has_audio": True})
@@ -425,8 +425,8 @@ def test_hands_mode_is_a_flow_mode_with_no_presenter_gates(tmp_path, monkeypatch
         cj.new_job("h", "hands", "x", shots=1, refs=[])
     j = cj.new_job("t-1", "hands", "Thing", "https://s.shopee.co.th/x", 1, ["/tmp/ref.jpg"])
     assert j["character"] is None and len(j["shots"]) == 1
-    j["production"] = "prompt"; j["workdir"] = str(tmp_path)
-    cj.shot(j, 1)["state"] = "submitted"; cj.shot(j, 1)["attempts"].append({"via": "prompt"})
+    j["production"] = "auto"; j["workdir"] = str(tmp_path)
+    cj.shot(j, 1)["state"] = "submitted"; cj.shot(j, 1)["attempts"].append({"via": "auto"})
     cj.save(j)
     raw = tmp_path / "s.mp4"; raw.write_bytes(b"x")
     monkeypatch.setattr(cj, "ffprobe", lambda p: {"w": 720, "h": 1280, "dur": 10.0, "kbps": 3000, "has_audio": False})
@@ -1017,6 +1017,8 @@ def test_cli_ingest_tells_fix_not_to_attach_a_faceless_start_frame(tmp_path, mon
 def test_intake_job_is_listed_then_promoted_by_new(tmp_path, monkeypatch, capsys):
     """nual-loop-240w 2026-11-18: a content_filter refusal wiped Hermes' history and `status` showed no job."""
     monkeypatch.setattr(cj, "DIR", str(tmp_path)); monkeypatch.setattr(cj, "WORK", str(tmp_path / "work"))
+    (tmp_path / "chars").mkdir(); (tmp_path / "chars" / "น้องมิลค์.jpg").write_bytes(b"p")
+    monkeypatch.setattr(cj, "CHAR_DIR", str(tmp_path / "chars"))
     assert cj.main(["intake", "n-1", "--product", "Cable", "--link", "https://s.shopee.co.th/x"]) == 0
     assert cj.main(["intake", "n-1", "--product", "Cable"]) == 1            # one record per slug
     assert cj.main(["note", "n-1", "board sent (msg 12208); next: wait for approval + Q3"]) == 0
@@ -1035,3 +1037,128 @@ def test_intake_job_is_listed_then_promoted_by_new(tmp_path, monkeypatch, capsys
     assert [e["msg"] for e in j["events"]][:2] == ["intake", "note: board sent (msg 12208); next: wait for approval + Q3"]
     assert cj.main(["new", "n-1", "--mode", "presenter", "--product", "Cable", "--shots", "2", "--ref", str(ref),
                     "--character", "น้องมิลค์"]) == 1                     # a real job is never overwritten
+
+
+# ---------------------------------------------------------------- 2026-11-22 tunes
+def reviewed_shot(tmp_path, monkeypatch, mode="product", shots=2):
+    monkeypatch.setattr(cj, "DIR", str(tmp_path))
+    j = job(shots=shots, mode=mode, prod="prompt"); j["workdir"] = str(tmp_path)
+    for s in j["shots"]:
+        s["state"] = "packed"
+    raw = tmp_path / "in.mp4"; raw.write_bytes(b"x")
+    dst = cj.ingest(j, 1, str(raw)); open(dst, "wb").write(b"x"); cj.save(j)
+    monkeypatch.setattr(cj, "ffprobe", lambda p: {"w": 720, "h": 1280, "dur": 10.0, "kbps": 3000, "has_audio": True})
+    return j, dst
+
+
+def test_prompt_reply_is_fix_review_and_approves_at_once(tmp_path, monkeypatch, capsys):
+    """Fix 2026-11-22: "gen prompt แล้วผม reply กลับ ถือว่ารีวิวแล้ว ตีผ่านหมด ไม่ต้องให้ผม confirm"."""
+    sent = []
+    monkeypatch.setattr(cj, "tg", lambda method, payload=None, files=None: sent.append((method, payload)) or {})
+    monkeypatch.setattr(cj, "id_sheet", lambda *a: (_ for _ in ()).throw(AssertionError("no idcheck in 📝")))
+    j, dst = reviewed_shot(tmp_path, monkeypatch)
+    assert cj.main(["ready", "t-1", "1", "--raw", dst]) == 0      # no --frame, no --identity, no idcheck
+    res = json.loads(capsys.readouterr().out)
+    assert res["auto_approved"] and "shot 2" in res["next"]
+    j = cj.load("t-1")
+    assert cj.shot(j, 1)["state"] == "approved" and cj.shot(j, 1)["gates"]["frame"]["note"] == cj.FIX_REVIEWED
+    assert not any((p or {}).get("reply_markup", {}).get("keyboard") for _, p in sent)   # no ✅/🔁 buttons
+    assert not sent                                               # clean shot: nothing to tell Fix
+
+
+def test_prompt_reply_with_a_gate_note_informs_without_buttons(tmp_path, monkeypatch, capsys):
+    sent = []
+    monkeypatch.setattr(cj, "tg", lambda method, payload=None, files=None: sent.append((method, payload)) or {})
+    j, dst = reviewed_shot(tmp_path, monkeypatch)
+    monkeypatch.setattr(cj, "ffprobe", lambda p: {"w": 480, "h": 854, "dur": 10.0, "kbps": 900, "has_audio": True})
+    assert cj.main(["ready", "t-1", "1", "--raw", dst]) == 0
+    assert cj.shot(cj.load("t-1"), 1)["state"] == "approved"
+    (method, payload), = sent
+    assert "ผ่านอัตโนมัติ" in payload["text"] and "720x1280" in payload["text"]
+    assert payload["reply_markup"] == {"remove_keyboard": True}
+
+
+def test_fix_can_replace_an_approved_prompt_shot(tmp_path, monkeypatch):
+    monkeypatch.setattr(cj, "tg", lambda *a, **k: {})
+    j, dst = reviewed_shot(tmp_path, monkeypatch)
+    assert cj.main(["ready", "t-1", "1", "--raw", dst]) == 0
+    j = cj.load("t-1")
+    dst2 = cj.ingest(j, 1, str(tmp_path / "in.mp4"))
+    assert dst2.endswith("shot1_a2.mp4") and cj.shot(j, 1)["state"] == "submitted"
+    auto = job(shots=1, prod="auto"); render(auto, 1, 1000); cj.decide(auto, 1, "approve")
+    with pytest.raises(cj.Refused):
+        cj.ingest(auto, 1, "/tmp/x.mp4")                          # 🤖: a regen goes through 🔁
+
+
+def test_prompt_shots_log_estimated_credits(tmp_path, monkeypatch):
+    """six 📝 jobs of 11-19..22 logged credits: null."""
+    j, _ = reviewed_shot(tmp_path, monkeypatch)
+    assert cj.billed_credits(j) == [30]
+    a = job(shots=1, prod="auto"); a["shots"][0]["seconds"] = 6
+    cj.reserve(a, 1, None, 1000); cj.submitted(a, 1)
+    assert cj.billed_credits(a) == [18] and a["shots"][0]["attempts"][-1]["credits_est"]
+
+
+def test_identity_kinds_word_the_review_and_count_puts_regen_first():
+    """eucerin 2026-11-19 read "สินค้าเพี้ยน" for a wrong presenter; onesuper 2026-11-22 shipped 2 compartments vs 3."""
+    assert cj.parse_identity("presenter:ponytail, pink blouse")["note"].startswith("หน้าคนไม่ตรงตัวละคร")
+    c = cj.parse_identity("count:2 compartments vs 3")
+    assert c["kind"] == "count" and c["note"].startswith("จำนวนชิ้น")
+    assert cj.parse_identity("drift:body thicker")["note"].startswith("สินค้าไม่ตรง")
+    with pytest.raises(cj.Refused):
+        cj.parse_identity("count:")
+    row = cj.review_keyboard("t-1", 1, regen_first=True)["keyboard"][0]
+    assert [b["text"] for b in row] == ["🔁 gen ใหม่ ช็อต 1 · t-1", "✅ ผ่าน ช็อต 1 · t-1"]
+
+
+def test_a_thai_name_outside_the_voiceover_is_refused(tmp_path):
+    """champion-trashbag-roll 2026-11-22: Flow painted 'น้องเอิร์ธ' on the wall."""
+    j = job(shots=1, prod="prompt"); j["workdir"] = str(tmp_path)
+    (tmp_path / "shot1.txt").write_text('The presenter is น้องมุก (attached chip).\n'
+                                        'Audio (Thai voiceover): "สวัสดีค่ะ ลิงก์อยู่ใต้คลิปนะ"', encoding="utf-8")
+    with pytest.raises(cj.Refused, match="น้องมุก"):
+        cj.name_check(j, 1)
+    (tmp_path / "shot1.txt").write_text('The presenter (the attached character chip).\n'
+                                        'Audio (Thai voiceover): "น้องแมวชอบมาก ลิงก์อยู่ใต้คลิปนะ"', encoding="utf-8")
+    cj.name_check(j, 1)                                          # a name inside the quoted line is spoken, fine
+
+
+def test_presenter_needs_a_portrait(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(cj, "DIR", str(tmp_path)); monkeypatch.setattr(cj, "CHAR_DIR", str(tmp_path / "chars"))
+    ref = tmp_path / "r.jpg"; ref.write_bytes(b"r")
+    args = ["new", "p-1", "--mode", "presenter", "--product", "x", "--shots", "1", "--ref", str(ref),
+            "--character", "น้องเอิร์ธ", "--workdir", str(tmp_path / "w")]
+    assert cj.main(args) == 1 and "no portrait" in capsys.readouterr().err
+    (tmp_path / "chars").mkdir(); (tmp_path / "chars" / "น้องเอิร์ธ.jpg").write_bytes(b"p")
+    assert cj.main(args) == 0
+
+
+def test_reshape_before_any_render(tmp_path, monkeypatch, capsys):
+    """gotg-encore-s2 2026-11-20: 6+4 s failed in Flow, Fix wanted one 10 s scene -> cancel + a new job."""
+    monkeypatch.setattr(cj, "DIR", str(tmp_path))
+    j = job(shots=2, prod="prompt"); j["shots"][0]["seconds"], j["shots"][1]["seconds"] = 6, 4
+    j["shots"][0]["state"] = j["shots"][1]["state"] = "packed"; cj.save(j)
+    assert cj.main(["reshape", "t-1", "--shots", "1", "--seconds", "10"]) == 0
+    j = cj.load("t-1")
+    assert [(s["k"], s["seconds"], s["state"]) for s in j["shots"]] == [(1, 10, "pending")]
+    assert "reshaped" in j["events"][-1]["msg"]
+    cj.shot(j, 1)["state"] = "packed"; cj.ingest(j, 1, "/tmp/x.mp4"); cj.save(j)
+    assert cj.main(["reshape", "t-1", "--shots", "2"]) == 1       # a file arrived: too late
+    assert "already have" in capsys.readouterr().err
+
+
+def test_gameplay_deliver_refuses_a_cut_end_card(tmp_path, monkeypatch, capsys):
+    """ffr-swt-dec04 / sniper-elite3-sw 2026-11-20/21."""
+    monkeypatch.setattr(cj, "DIR", str(tmp_path)); monkeypatch.setenv("CLIPJOB_NO_TG", "1")
+    monkeypatch.setattr(cj, "CLIP_LOG", str(tmp_path / "log.jsonl"))
+    assert cj.main(["new", "g-2", "--mode", "gameplay", "--product", "Game", "--link", "https://s.shopee.co.th/x",
+                    "--workdir", str(tmp_path / "w")]) == 0
+    final = tmp_path / "f.mp4"; final.write_bytes(b"a"); cover = tmp_path / "c.jpg"; cover.write_bytes(b"c")
+    monkeypatch.setattr(cj, "av_durations", lambda p: (20.0, 20.0))
+    cut = {"ok": False, "hits": [{"t": 24.6, "text": "IPER ELITE", "side": "right"}]}
+    monkeypatch.setattr(cj, "run", lambda cmd: (1, json.dumps(cut), "") if cmd[-2].endswith("endcard_check.py")
+                        else (0, json.dumps({"ok": True}), ""))
+    args = ["deliver", "g-2", "--final", str(final), "--hashtags", "#game", "--cover", str(cover), "--caption", "c"]
+    assert cj.main(args) == 1 and "IPER ELITE" in capsys.readouterr().err
+    monkeypatch.setenv("ENDCARD_OK", "1")
+    assert cj.main(args) == 0

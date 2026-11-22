@@ -202,7 +202,8 @@ def chip_rows(chips, maxw):
     raise Bad(f"chips do not fit in two rows of {maxw} px: {chips} — shorten them or drop one")
 
 
-def build(spec, base="."):
+def build(spec, base=".", slot_pics=None):
+    """-> the cover. slot_pics (a list) receives each detail slot exactly as it is pasted."""
     if not features.check("raqm"):
         raise Bad("Pillow has no Raqm here: Thai tone marks would be dropped. Run inside the Hermes container "
                   "(uv run --with pillow) — never on a machine without libraqm")
@@ -275,6 +276,8 @@ def build(spec, base="."):
             dh = dw * src.height / src.width
             need_pixels(src, dw, dh, what)
             slots.append(("card", rounded(contain(src, dw, dh), 24)))
+    if slot_pics is not None:
+        slot_pics.extend(im for _, im in slots)
     bsz = [fit_size(t, 260, 54 if i == 0 else 42, 30, f"badge line {i + 1}") for i, t in enumerate(badge)]
     y = 28
     title_y = []
@@ -363,6 +366,38 @@ def build(spec, base="."):
     return bg.convert("RGB")
 
 
+SHEET_H = 640
+TILE = 300
+
+
+def check_sheet(cover, slot_pics, out):
+    """ONE vision call checks the whole cover (2026-11-19..22: the per-slot pre-checks + cover reads were 47 vision
+    calls / ~99 min over 11 covers). Picture 1 = the cover, 2.. = each detail slot as pasted, no captions (vision
+    quotes captions back instead of reading the picture). -> (path, question)"""
+    tiles = [cover.resize((round(cover.width * SHEET_H / cover.height), SHEET_H))]
+    for im in slot_pics:
+        t = Image.new("RGB", (TILE, SHEET_H), (128, 128, 128))
+        pic = contain(im.convert("RGBA"), TILE - 20, SHEET_H - 20)
+        t.paste(pic, ((TILE - pic.width) // 2, (SHEET_H - pic.height) // 2), pic)
+        tiles.append(t)
+    gap = 16
+    sheet = Image.new("RGB", (sum(t.width for t in tiles) + gap * (len(tiles) - 1), SHEET_H), (255, 255, 255))
+    x = 0
+    for t in tiles:
+        sheet.paste(t, (x, 0))
+        x += t.width + gap
+    sheet.save(out, quality=88)
+    n = len(slot_pics)
+    q = ("Picture 1 (left, tall) is a finished shop posting cover. (a) Is the product shown whole and real-looking? "
+         "(b) Any price, discount, coupon, %, store logo or QR code INSIDE any photo? (c) Any Thai text with missing "
+         "tone marks, empty boxes or tofu? Answer a/b/c.")
+    if n:
+        q += (f" Pictures 2-{n + 1} are its {n} detail picture(s), left to right. For EACH, name the main object it "
+              "shows in 3-6 words, from what you see — do not guess what it is meant to show; say 'unclear' when "
+              "it is a blur, a background or a cut-off part.")
+    return out, q
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("spec")
@@ -371,12 +406,19 @@ def main(argv=None):
     try:
         with open(a.spec, encoding="utf-8") as f:
             spec = json.load(f)
-        img = build(spec, os.path.dirname(os.path.abspath(a.spec)))
+        pics = []
+        img = build(spec, os.path.dirname(os.path.abspath(a.spec)), pics)
     except (Bad, OSError, ValueError, KeyError, TypeError) as e:
         print(f"make_poster_cover: {e}", file=sys.stderr)
         return 1
     img.save(a.out, quality=92)
-    print(json.dumps({"ok": True, "out": os.path.abspath(a.out), "size": list(img.size)}))
+    sheet, q = check_sheet(img, pics, os.path.splitext(a.out)[0] + "_sheet.jpg")
+    labels = [c.get("label") for c in spec.get("circles") or []]
+    print(json.dumps({"ok": True, "out": os.path.abspath(a.out), "size": list(img.size),
+                      "check_sheet": os.path.abspath(sheet), "ask_vision": q, "slot_labels": labels,
+                      "next": "ONE vision_analyze of check_sheet with ask_vision; every slot answer must name its "
+                              "label's thing (slot_labels, same order). A miss = fix that slot, rebuild, ONE re-check"},
+                     ensure_ascii=False))
     return 0
 
 

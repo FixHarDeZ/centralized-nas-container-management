@@ -42,30 +42,24 @@ a circle and lost its top and bottom. The workdirs already held the right pictur
 
 ## Steps
 
+**Vision budget: 2 calls per cover** (pick + check), +1 re-check after a fix (2026-11-19..22: 47 cover calls /
+~99 min for 11 covers — per-slot pre-checks and repeated cover reads).
+
 1. Pick the frames: `ffmpeg -ss T -i <raw shot> -frames:v 1 -q:v 2 f.jpg` at 2–3 moments, one grid sheet, ONE vision
-   call to choose hero + circles and to read each crop box. Boxes are source pixels of that image; read them off the
-   grid, never guess — but a grid read can still hand back a box that lands on background (both the hero and a detail
-   box missed in one run), so correct any box against the pixel probe in `frame-check.md` → Locating a crop before
-   cutting. **Then pre-verify every circle box with ONE pointed vision call on that crop alone**
-   ("is <the label's thing> the main subject here?") before writing the spec: the blind slot check in step 3 costs a
-   full rebuild round, this costs one read — when the answer is no or ambiguous, switch to a detail the crop shows
-   unambiguously (charging port + LED, printed pattern) or drop the slot.
+   call to choose hero + circles and to read each crop box. Boxes are source pixels of that image; correct any box
+   against the pixel probe in `frame-check.md` → Locating a crop before cutting (a grid read can land on
+   background). No per-slot pre-check call: step 3's sheet checks every slot at once.
 2. Write `cover_spec.json`, run the script. Exit 1 names the element that does not fit or the refused word: shorten that
    text and rerun. Nothing is clipped silently.
-3. **Vision-check the finished cover** (one call): the product is the real one and whole, no price / discount / store
-   logo / QR inside any picture (the script only reads the text you typed), Thai is spelled right, no circle shows a
-   face mid-blink or an empty crop. **Per slot, blind:** "what does slot N show?" — answer must name its label's thing
-   (strap stitching, a golf-hole map, the game case) without being told the label. A vague answer ("a wrist", "a dark
-   room") = wrong picture or loose box. A failed check = fix the spec and rerun; do not deliver it.
-   **A read that reports misspellings across several unrelated strings is the misread signature, not N defects:**
-   the script draws the spec strings verbatim (PIL can drop tone marks without Raqm, but cannot swap base
-   glyphs). Never edit spec Thai to match a vision read — and do not expect zooming to settle it: Thai
-   transcription fails in BOTH forms the check takes (the full cover and a 1.5–3× band sheet each return a
-   different plausible-but-wrong string on successive calls). Split the check by script instead: **Latin**
-   (English title lines, EN chips, badges) is verified deterministically — crop the band, RapidOCR it, compare
-   to the spec strings; **Thai** rests on the verbatim-draw guarantee plus vision answering only the CLOSED
-   question (any missing tone marks, empty boxes, tofu?). Do not caption tiles on a verification sheet: vision
-   quotes the captions back instead of reading the text under them.
+3. **ONE vision call on the `check_sheet` the script prints, with its `ask_vision`** (picture 1 = the cover,
+   2.. = each detail slot exactly as pasted, no captions). Pass = (a) product whole and real, (b) no price /
+   discount / store logo / QR inside any picture (the script only reads the text you typed), (c) no missing
+   tone marks / empty boxes / tofu, and every slot answer names its `slot_labels` thing (same order) without
+   being told the label. A vague slot answer ("a wrist", "a dark room", "unclear") = wrong picture or loose box:
+   fix that slot, rebuild, ONE re-check; still failing = drop the slot. Thai spelling is NOT read back:
+   vision garbles Thai on every read and the script draws the spec strings verbatim (PIL cannot swap glyphs),
+   so a read that "finds" misspellings in several strings is the misread signature — never edit spec Thai to
+   match it. Latin lines can be OCR-checked (crop the band, RapidOCR, compare to the spec).
 4. Pass `cover.jpg` to `clipjob.py deliver --cover`.
 
 ## Traps

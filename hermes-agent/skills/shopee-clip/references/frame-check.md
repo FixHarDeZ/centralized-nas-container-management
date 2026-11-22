@@ -6,8 +6,13 @@ Standing depth for SKILL.md step 10 (per-shot review). Step 10 owns WHAT to samp
 - `clipjob.py idcheck <job> K --raw <file>` writes `shot<K>_id.jpg` (up to 2 refs + frames at 5/25/45/65/85 % and
   the last frame, one row) and prints `ask_vision`. Ask that question AND this file's questions (Flow text, sub
   band, scale, planned action, presenter identity) in ONE `vision_analyze` of the sheet. `ready` refuses a Flow
-  shot with refs until the sheet of THAT file exists and `--identity match|drift:<part, frame times>` is given.
-  The value is exactly `match` or `drift:<what>`: prose after `match:` (`match: 3 ช่อง …`) is refused by the parser.
+  shot with refs until the sheet of THAT file exists and `--identity match|drift:…|count:…|presenter:…` is given.
+  The value is exactly `match`, `drift:<product part>`, `count:<a part count that differs — compartments,
+  buttons, pieces>` or `presenter:<how her face/hair differs from the portrait>`: prose after `match:` is refused.
+  `count:` cannot be fixed in post, so the review puts 🔁 first (onesuper-basket 2026-11-22 shipped 2
+  compartments vs 3). `presenter:` words the review line as the face, not the product (eucerin 2026-11-19).
+  **📝 shots skip all of this** — Fix's reply is his review (`prompt-pack.md`); this file is for 🤖 shots and
+  the post frame sheet.
 - A product that changes BETWEEN frames is drift even when each frame looks plausible (aukey-pby92: silver →
   thick dark box with a big display → white, built-in cable turned into a loose one). DRIFT goes into the review
   as `❌ identity` with the part named; Fix decides.

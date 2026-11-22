@@ -48,7 +48,8 @@ product is tried while a voice explains). `clipjob.py new --mode hands`; clip-lo
   the storyboard message so Fix can still switch to 📦 or 🎬 at zero spend.
 
 ## Frame check, per shot (in addition to `frame-check.md`)
-**`clipjob.py scan <job> K --raw <file>` first; `ready` refuses a ✋ shot without it.** It writes
+**🤖: `clipjob.py scan <job> K --raw <file>` first; `ready` refuses a ✋ shot without it** (📝: Fix's reply is
+his review — no scan, see `prompt-pack.md`). It writes
 `shotK_scan1.jpg …` (one frame every 0.5 s, 10 tiles per sheet, tile n of sheet m = second
 `((m−1)·10 + n − 1)/2`).
 

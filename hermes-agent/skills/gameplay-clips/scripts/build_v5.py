@@ -57,9 +57,11 @@ seg keys: src master|trailer|path; in; dur; mode window|hero; optional audio_src
   hero -> both; seg 0 -> impact), hero_x (crop x offset from centre, px of the 1080p source),
   zoom [a,b] override. Tall window only: win_x (crop x offset from centre, px of the 1080p source —
   the 1:1 crop keeps the middle 56 % of the width, so move it to the subject), wide true (this seg
-  keeps the whole 16:9 picture, as a band in the middle of the window: HUD / text at the edges).
+  keeps the whole 16:9 picture, as a band in the middle of the window: HUD / text at the edges),
+  endcard true (the title / logo card: must be wide, from the ORIGINAL >= 1280 px source).
 Hard failures: seg audio outside a no-speech gap, overlapping pills, pill > 2 words / non-ASCII /
-price-like text, CTA anywhere but the last seg, vo_shift not inside a VO pause.
+price-like text, CTA anywhere but the last seg, vo_shift not inside a VO pause, an endcard seg not wide,
+`wide` on a file narrower than 1280 px (a pre-cropped card).
 """
 import argparse, datetime, json, os, re, subprocess, sys, time
 import numpy as np
@@ -391,6 +393,31 @@ def selftest_zoom():
 
 
 # ---------------------------------------------------------------- main
+MIN_WIDE_W = 1280
+
+
+def probe_w(path):
+    p = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width",
+                        "-of", "csv=p=0", path], capture_output=True, text=True)
+    try:
+        return int(p.stdout.strip().splitlines()[0])
+    except (ValueError, IndexError):
+        return None
+
+
+def endcard_problem(sg, P, width=None):
+    """An end card is the WHOLE original frame (2026-11-20/21: ffr's `wide` on a pre-cropped 836x470 file showed
+    'L FANTASY RESONANCE'; sniper's logo card in the 1:1 window showed 'NIPER ELITE'). -> reason or None."""
+    if sg.get("endcard") and not sg.get("wide"):
+        return 'an "endcard": true seg needs "wide": true (the 1:1 window keeps the middle 56 % and cuts the title)'
+    if sg.get("wide") and sg.get("src") not in (None, "master", "trailer"):
+        w = width if width is not None else probe_w(P(sg["src"]) if not os.path.isabs(sg["src"]) else sg["src"])
+        if w is not None and w < MIN_WIDE_W:
+            return (f'"wide" on a {w} px wide file: wide shows the whole frame, so give it the ORIGINAL trailer '
+                    f"(>= {MIN_WIDE_W} px), never a pre-cropped endcard file — the crop already cut the title")
+    return None
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("plan", nargs="?")
@@ -417,6 +444,10 @@ def main():
         for i, sg in enumerate(plan["segs"]):
             if sg.get("mode") == "window" and abs(sg.get("win_x", 0)) > room:
                 die(f"seg{i} win_x {sg['win_x']}: the crop leaves the picture (limit ±{room})")
+    for i, sg in enumerate(plan["segs"]):
+        why = endcard_problem(sg, P)
+        if why:
+            die(f"seg{i}: {why}")
     fps = plan.get("fps", 30)
     DUR = float(plan["dur"])
     NT = int(round(DUR * fps))

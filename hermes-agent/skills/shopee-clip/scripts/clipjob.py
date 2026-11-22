@@ -10,6 +10,7 @@ This CLI is the only sanctioned way to move a Flow-mode clip forward. It refuses
                                                     # on an intake job: fills it in (same slug)
   clipjob.py cost [JOB] [--seconds 8,6] [--res 720p|360p]   # estimated credits, Omni 1.2 Flash
   clipjob.py production JOB auto|prompt            # Fix's answer to Q2 (Flow modes only)
+  clipjob.py reshape JOB --shots N [--seconds 10]   # change the shot plan before any render (no attempt on any shot)
   clipjob.py status [JOB]
   # auto (IU drives Flow)
   clipjob.py reserve JOB K [--wait]                 # BEFORE clicking Start generation; exit 4 = pacing
@@ -24,7 +25,9 @@ This CLI is the only sanctioned way to move a Flow-mode clip forward. It refuses
   # both
   clipjob.py scan JOB K --raw FILE                  # ✋ required before ready: frame sheets every 0.5 s (a face lasts <1 s)
   clipjob.py idcheck JOB K --raw FILE               # Flow modes, required before ready: refs + 6 frames on one sheet
-  clipjob.py ready JOB K --raw FILE --frame pass|flag:<what you saw> --identity match|drift:<what differs> [--no-send]
+  clipjob.py ready JOB K --raw FILE --frame pass|flag:<what you saw> --identity match|drift:<what>|count:<what>|presenter:<what> [--no-send]
+                                                    # 📝 (Fix's own Flow file): --frame/--identity optional, no idcheck/scan —
+                                                    # Fix's reply IS the review: the shot is approved at once, no buttons
   clipjob.py startframe JOB K                       # the start-frame jpg for shot K (🧑: newest earlier shot showing her face)
   clipjob.py ready JOB K --resend                   # the review message failed to send: send it again (no re-check)
   clipjob.py decide (--text "<Fix's button text>" | JOB K approve|regen)
@@ -111,6 +114,15 @@ INFO_FLAGS = [re.compile(r"auto-added")]   # report flags that only inform (post
 FLOW_MODES = ("presenter", "product", "hands")   # hands = product pipeline, hands in frame, no face
 MODES = FLOW_MODES + ("gameplay",)
 JOB_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}$")
+# champion-trashbag-roll 2026-11-22: the prompt said "The presenter is น้องเอิร์ธ" and Flow painted that name on the
+# wall for 2 s. A Thai nickname outside the quoted voiceover is refused before credits / Fix's time are spent.
+NAME_RE = re.compile(r"น้อง[ก-๙]+")
+QUOTED_RE = re.compile(r'["“][^"”]*["”]')
+# --identity kinds: what drifted decides the wording of the review line (eucerin 2026-11-19 read "สินค้าเพี้ยน"
+# for a wrong presenter) and a count drift (onesuper 2026-11-22: 2 compartments vs 3) puts 🔁 first.
+IDENTITY_KINDS = {"drift": "สินค้าไม่ตรงรูปอ้างอิง", "count": "จำนวนชิ้น/ช่องไม่ตรงรูปอ้างอิง",
+                  "presenter": "หน้าคนไม่ตรงตัวละคร"}
+FIX_REVIEWED = "ฟิกรีวิวเองตอน gen ใน Flow"   # Fix 2026-11-22: "gen prompt แล้วผม reply กลับ ถือว่ารีวิวแล้ว ตีผ่านหมด"
 APPROVE, REGEN = "✅ ผ่าน", "🔁 gen ใหม่"
 DECISION_RE = re.compile(r"^(✅ ผ่าน|🔁 gen ใหม่) ช็อต (\d+) · ([a-z0-9][a-z0-9-]{0,40})$")
 TAG_RE = re.compile(r"\[ช็อต (\d+) · ([a-z0-9][a-z0-9-]{0,40})\]")
@@ -204,9 +216,30 @@ def new_job(job, mode, product, link="", shots=0, refs=(), workdir=None, charact
             "production": None, "character": character, "refs": [os.path.abspath(r) for r in refs],
             "workdir": workdir or os.path.join(WORK, job),
             "created": iso(t), "updated": iso(t), "fallback": None, "trouble": {},
-            "shots": [{"k": k, "seconds": secs[k - 1], "state": "pending", "attempts": [], "raw": None, "file": None,
-                       "gates": None, "pack_msg": None} for k in range(1, shots + 1)] if mode in FLOW_MODES else [],
+            "shots": fresh_shots(secs) if mode in FLOW_MODES else [],
             "events": [], "delivery": None}
+
+
+def fresh_shots(secs):
+    return [{"k": k, "seconds": sec, "state": "pending", "attempts": [], "raw": None, "file": None,
+             "gates": None, "pack_msg": None} for k, sec in enumerate(secs, 1)]
+
+
+def reshape(j, shots, seconds=None):
+    """Change the approved shot plan before anything was rendered (gotg-encore-s2 2026-11-20: 6+4 s -> one 10 s
+    scene meant cancel + a new job). -> the new seconds list."""
+    need_open(j); need_flow(j)
+    used = [s["k"] for s in j["shots"] if s["attempts"]]
+    if used:
+        raise Refused(f"shot(s) {used} already have a render or a Flow attempt — reshape is only for before any "
+                      "spend; regenerate per shot, or cancel and open a new job")
+    if not 1 <= shots <= 8:
+        raise Refused("--shots 1..8")
+    secs = parse_seconds(seconds, shots)
+    old = [shot_seconds(s) for s in j["shots"]]
+    j["shots"] = fresh_shots(secs)
+    log(j, f"reshaped: {old} -> {secs}")
+    return secs
 
 
 def workdir_started(wd, before):
@@ -368,6 +401,7 @@ def reserve(j, k, last_reserve, t=None):
     if s["state"] not in ("pending", "regen_approved"):
         raise Refused(f"shot {k} is {s['state']}; a rendered or failed shot needs Fix's 🔁 first")
     cta_order_check(j, k)
+    name_check(j, k)
     if k > 1:
         prev = shot(j, k - 1)
         if prev["state"] not in ("in_review", "approved"):
@@ -399,12 +433,18 @@ def set_edit_id(j, k, edit_id):
     log(j, f"edit id shot {k} = {edit_id.strip()}")
 
 
+def est_credits(s):
+    return shot_seconds(s) * RATE["720p"]
+
+
 def submitted(j, k, edit_id=None, credits=None):
     s = shot(j, k)
     if s["state"] != "submitting":
         raise Refused(f"shot {k} is {s['state']}, not submitting (reserve first)")
     s["state"] = "submitted"
-    s["attempts"][-1].update({"submitted_at": iso(), "edit_id": real_edit_id(edit_id), "credits": credits})
+    s["attempts"][-1].update({"submitted_at": iso(), "edit_id": real_edit_id(edit_id),
+                              "credits": credits if credits is not None else est_credits(s),
+                              **({} if credits is not None else {"credits_est": True})})
     log(j, f"submitted shot {k} edit_id={edit_id}")
 
 
@@ -501,14 +541,19 @@ def ingest(j, k, path):
     caches are pruned by age; a 📝 job can wait a day for Fix)."""
     need_open(j); need_flow(j)
     s = shot(j, k)
-    if s["state"] not in ("pending", "packed", "regen_approved", "in_review"):
+    if s["state"] == "approved" and j["production"] == "prompt":
+        log(j, f"shot {k}: Fix sent a new file for an approved shot — it replaces the old one")
+    elif s["state"] not in ("pending", "packed", "regen_approved", "in_review"):
         raise Refused(f"shot {k} is {s['state']}; cannot take a file for it")
     if s["state"] == "in_review":
         raise Refused(f"shot {k} already has a file in review — Fix taps 🔁 first, then sends the new one")
     n = len(s["attempts"]) + 1
     dst = os.path.join(j["workdir"], f"shot{k}_a{n}{os.path.splitext(path)[1] or '.mp4'}")
     s["state"] = "submitted"
-    s["attempts"].append({"via": "prompt", "submitted_at": iso(), "file_in": dst, "source": os.path.abspath(path)})
+    # 📝: Fix renders in his own Flow, so the spend is the published rate for the shot's length (clip-log had
+    # credits: null on six 📝 jobs of 11-19..22 — the board's quota line then under-counted the day)
+    s["attempts"].append({"via": "prompt", "submitted_at": iso(), "file_in": dst, "source": os.path.abspath(path),
+                          "credits": est_credits(s), "credits_est": True})
     log(j, f"ingest shot {k}: {os.path.basename(path)} -> {os.path.basename(dst)}")
     return dst
 
@@ -767,6 +812,22 @@ def cta_order_check(j, k):
     if why:
         raise Refused(f"shot {k} ({path}): {why}. แก้ลำดับใน Audio (Thai voiceover) แล้วสั่งใหม่ "
                       "(ฟิกสั่งให้เรียงแบบนี้เองเท่านั้นถึงใช้ CTA_ORDER_OK=1)")
+
+
+def name_check(j, k):
+    """No Thai nickname (or the roster name) in the prompt outside the quoted voiceover: Flow draws it as text."""
+    path = os.path.join(j["workdir"], f"shot{k}.txt")
+    if not os.path.exists(path):
+        return
+    bare = QUOTED_RE.sub("", open(path, encoding="utf-8").read())
+    hits = set(NAME_RE.findall(bare))
+    if j.get("character") and j["character"] in bare:
+        hits.add(j["character"])
+    if hits:
+        raise Refused(f"shot {k} ({path}) names {', '.join(sorted(hits))} — Flow paints a name it reads in the prompt "
+                      "(champion-trashbag-roll: 'น้องเอิร์ธ' on the wall). Refer to her as 'the presenter (the attached "
+                      "character chip)' and describe the look from the portrait; a name may appear only inside the "
+                      "quoted voiceover line")
 
 
 def cta_hits(text):
@@ -1028,8 +1089,10 @@ def html_escape(s):
     return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
-def review_keyboard(job, k, approve=True):
+def review_keyboard(job, k, approve=True, regen_first=False):
     row = ([{"text": f"{APPROVE} ช็อต {k} · {job}"}] if approve else []) + [{"text": f"{REGEN} ช็อต {k} · {job}"}]
+    if regen_first:
+        row.reverse()
     return {"keyboard": [row], "one_time_keyboard": True, "resize_keyboard": True}
 
 
@@ -1096,7 +1159,8 @@ def id_question(n_refs, times):
     return ("Tiles left to right: " + "; ".join(tiles) + ". Compare EVERY shot tile with the reference: body shape and "
             "thickness, colour/finish, screen/display size and position, ports, built-in cables, straps, printed "
             "logo. Name each part that differs and in which tiles; a product that changes BETWEEN tiles is drift too. "
-            "Answer MATCH or DRIFT: <part, tiles>. Then ready … --identity match|drift:<what>")
+            "Answer MATCH, DRIFT: <part, tiles>, COUNT: <part count that differs> (compartments, buttons, pieces) or "
+            "PRESENTER: <face/hair differs>. Then ready … --identity match|drift:<what>|count:<what>|presenter:<what>")
 
 
 def id_sheet(raw, refs, out, dur):
@@ -1141,15 +1205,17 @@ def cmd_idcheck(j, k, raw):
     log(j, f"idcheck shot {k}")
     return {"shot": k, "sheet": sheet, "ask_vision": id_question(min(len(j["refs"]), 2), times),
             "next": f"ONE vision_analyze on the sheet, then clipjob.py ready {j['job']} {k} --raw {raw} "
-                    "--frame pass|flag:<…> --identity match|drift:<…>"}
+                    "--frame pass|flag:<…> --identity match|drift:<…>|count:<…>|presenter:<…>"}
 
 
 def parse_identity(arg):
     if arg == "match":
         return {"ok": True, "note": ""}
-    if arg and arg.startswith("drift:") and arg[6:].strip():
-        return {"ok": False, "note": "สินค้าเพี้ยนจากรูปอ้างอิง: " + arg[6:].strip()}
-    raise Refused("--identity must be 'match' or 'drift:<what differs>' (from the idcheck sheet)")
+    kind, _, what = (arg or "").partition(":")
+    if kind in IDENTITY_KINDS and what.strip():
+        return {"ok": False, "kind": kind, "note": f"{IDENTITY_KINDS[kind]}: {what.strip()}"}
+    raise Refused("--identity must be match | drift:<product part that differs> | count:<part count that differs, "
+                  "e.g. 2 compartments vs 3> | presenter:<how her face/hair differs> (from the idcheck sheet)")
 
 
 def cmd_scan(j, k, raw):
@@ -1177,6 +1243,7 @@ def cmd_pack(j, only, no_send):
         raise Refused(f"write the prompt files first: {', '.join(f'{wd}/shot{k}.txt' for k in missing)}")
     for k in targets:
         cta_order_check(j, k)
+        name_check(j, k)
     sent = []
     char_img = character_image(j.get("character"))
     if not no_send and not only:
@@ -1189,7 +1256,10 @@ def cmd_pack(j, only, no_send):
                 + f"ช็อตที่ต้องทำ: {', '.join(map(str, targets))}\n\n"
                   "วิธีใช้: เซฟรูปอ้างอิงด้านล่างไปแนบใน Flow (Ingredients) → ก๊อป prompt ของแต่ละช็อต "
                   "→ gen ใน Flow → กด reply ข้อความ prompt ของช็อตนั้นแล้วแนบ mp4 กลับมา "
-                  "(ส่งแบบ 'ไฟล์' จะได้ไม่โดนบีบ ไม่เกิน 20 MB)")
+                  "(ส่งแบบ 'ไฟล์' จะได้ไม่โดนบีบ ไม่เกิน 20 MB)\n"
+                  "ไฟล์ที่ส่งกลับมา = ฟิกรีวิวแล้ว ไอยูใช้เลย ไม่ถามซ้ำ"
+                  + ("\nทำทีละช็อตตามลำดับ: ส่งช็อตก่อนหน้ากลับมาก่อน แล้วใช้รูปเฟรมเริ่มที่ไอยูส่งให้ "
+                     "(gen พร้อมกันสินค้า/ฉากจะไม่ต่อกัน)" if len(targets) > 1 else ""))
         tg("sendMessage", {"chat_id": CHAT, "text": head})
         for i, r in enumerate(j["refs"], 1):
             tg("sendPhoto", {"chat_id": CHAT, "caption": f"รูปอ้างอิง {i}/{len(j['refs'])} · {j['job']}"},
@@ -1235,11 +1305,15 @@ def send_review(j, k):
     lines = [f"🎬 รีวิวช็อต {k}/{total} · {j['product']}", ""]
     for name, g in gates.items():
         lines.append(("✅ " if g.get("ok") else "❌ ") + name + (f" — {g['note']}" if g.get("note") else ""))
+    count = (gates.get("identity") or {}).get("kind") == "count"
+    if count:
+        lines += ["", "❌ จำนวนชิ้น/ช่องไม่ตรงสินค้าจริง — แก้ใน post ไม่ได้ ไอยูแนะนำ 🔁 gen ใหม่"]
     lines += ["", "ผ่านทุกข้อ" if gates_passed(gates) else "⚠️ มีข้อไม่ผ่าน ไอยูแนะนำ gen ใหม่",
               "ผ่าน = ล็อกช็อตนี้ · gen ใหม่ = " + ("เสียเครดิต" if j["production"] == "auto" else "ฟิกทำใน Flow ใหม่")]
     if s.get("chain_stale"):
         lines += ["", f"⚠️ ช็อตนี้เริ่มจากเฟรมท้ายของช็อต {k - 1} ชุดเดิม (ช็อต {k - 1} กำลัง gen ใหม่) รอยต่ออาจไม่ต่อเนื่อง"]
-    tg("sendMessage", {"chat_id": CHAT, "text": "\n".join(lines), "reply_markup": review_keyboard(j["job"], k)})
+    tg("sendMessage", {"chat_id": CHAT, "text": "\n".join(lines),
+                       "reply_markup": review_keyboard(j["job"], k, regen_first=count)})
     s["review_sent"] = iso()
 
 
@@ -1249,13 +1323,16 @@ def cmd_ready(j, k, raw, frame_arg, no_send, resend=False, identity_arg=None):
             raise Refused(f"shot {k} is {shot(j, k)['state']}; --resend is for a shot already in review")
         send_review(j, k)
         return {"shot": k, "resent": True, "pass": gates_passed(shot(j, k)["gates"])}
-    if not raw or not frame_arg:
+    reviewed = fix_reviewed(j, k)
+    if not raw or not (frame_arg or reviewed):
         raise Refused("ready needs --raw FILE and --frame pass|flag:<what you saw>")
-    frame = parse_frame(frame_arg)
+    frame = parse_frame(frame_arg) if frame_arg else {"ok": True, "note": FIX_REVIEWED}
     if not os.path.exists(raw):
         raise Refused(f"no such file: {raw}")
     if shot(j, k)["state"] != "submitted":
         raise Refused(f"shot {k} is {shot(j, k)['state']}, not submitted")
+    if reviewed:
+        return ready_reviewed(j, k, raw, frame, identity_arg, no_send)
     if j["mode"] == "hands" and (shot(j, k).get("scan") or {}).get("sig") != file_sig(raw):
         raise Refused(f"✋ shot {k} has no frame scan of this file: run clipjob.py scan {j['job']} {k} --raw {raw}, "
                       "vision-read every sheet (a face at the frame edge lasted under 1 s in the first ✋ job), then ready")
@@ -1266,6 +1343,48 @@ def cmd_ready(j, k, raw, frame_arg, no_send, resend=False, identity_arg=None):
                           "vision-read it against the reference (aukey-pby92 2026-11-18: the powerbank morphed inside "
                           "the shot and the review went to Fix as a pass), then ready … --identity match|drift:<what>")
         identity = parse_identity(identity_arg)
+    gates, file = auto_gates(j, k, raw)
+    gates["frame"] = frame
+    if identity:
+        gates["identity"] = identity
+    mark_ready(j, k, file, gates)
+    res = {"shot": k, "pass": gates_passed(gates), "file": os.path.abspath(file), "gates": gates}
+    if not no_send:
+        save(j)                              # the checks are done: keep them even when the send fails
+        try:
+            send_review(j, k)
+        except Refused as e:
+            raise Refused(f"{e} — the shot IS in review; send it with: clipjob.py ready {j['job']} {k} --resend") from None
+    return res
+
+
+def fix_reviewed(j, k):
+    """📝: the file came from Fix's own Flow as a reply to the prompt — he watched it before sending it."""
+    at = (shot(j, k).get("attempts") or [{}])[-1]
+    return j["production"] == "prompt" and at.get("via") == "prompt"
+
+
+def ready_reviewed(j, k, raw, frame, identity_arg, no_send):
+    """Fix 2026-11-22: a 📝 reply is his review — the shot is approved now, no ✅/🔁 message. Only the gates that
+    change the file (probe, the repeated-line cut) run; a note goes to Fix only when one of them found something."""
+    gates, file = auto_gates(j, k, raw)
+    gates["frame"] = frame
+    if identity_arg:
+        gates["identity"] = parse_identity(identity_arg)
+    mark_ready(j, k, file, gates)
+    decide(j, k, "approve")
+    log(j, f"shot {k} approved: {FIX_REVIEWED}")
+    notes = [f"{n}: {g['note']}" for n, g in gates.items() if g.get("note") and g["note"] != FIX_REVIEWED]
+    if notes and not no_send:
+        notify(f"ℹ️ ช็อต {k} · {j['product']} รับแล้ว (ผ่านอัตโนมัติ)\n" + "\n".join(notes)[:900])
+    left = [s["k"] for s in j["shots"] if s["state"] != "approved"]
+    return {"shot": k, "pass": True, "auto_approved": True, "file": os.path.abspath(file), "gates": gates,
+            "next": ("all shots approved -> post-production" if not left
+                     else f"wait for Fix's file(s) for shot {', '.join(map(str, left))}")}
+
+
+def auto_gates(j, k, raw):
+    """The file checks that need no vision: probe, and for a presenter the repeated-line cut + early CTA."""
     info = ffprobe(raw)
     gates = {"probe": probe_verdict(info)}
     file = raw
@@ -1279,18 +1398,7 @@ def cmd_ready(j, k, raw, frame_arg, no_send, resend=False, identity_arg=None):
             gates["cta"] = {"ok": not hits, "note": ("คำ CTA ในช็อตที่ไม่ใช่ช็อตสุดท้าย: " + ", ".join(hits)) if hits else ""}
         if info and not info["has_audio"]:
             gates["probe"] = {"ok": False, "note": "ไม่มีเสียง — presenter ต้องมีเสียงพากย์จาก Flow"}
-    gates["frame"] = frame
-    if identity:
-        gates["identity"] = identity
-    mark_ready(j, k, file, gates)
-    res = {"shot": k, "pass": gates_passed(gates), "file": os.path.abspath(file), "gates": gates}
-    if not no_send:
-        save(j)                              # the checks are done: keep them even when the send fails
-        try:
-            send_review(j, k)
-        except Refused as e:
-            raise Refused(f"{e} — the shot IS in review; send it with: clipjob.py ready {j['job']} {k} --resend") from None
-    return res
+    return gates, file
 
 
 def adopt_gateway_env():
@@ -1400,6 +1508,27 @@ def spawn_mirror(j):
     return p.pid
 
 
+ENDCARD = os.path.join(os.path.dirname(SKILL), "gameplay-clips", "scripts", "endcard_check.py")
+
+
+def endcard_problems(final):
+    """🎬 end card: a title cut by the 1:1 window (ffr-swt-dec04 'L FANTASY RESONANCE', sniper-elite3-sw
+    'NIPER ELITE', 2026-11-20/21). OCR of the last seconds; text touching the left/right frame edge = cut."""
+    rc, out, err = run(["uv", "run", "-q", "--with", "rapidocr-onnxruntime", "--with", "numpy", "--with", "pillow",
+                        "python", ENDCARD, final])
+    try:
+        v = json.loads(out.strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        return [f"endcard_check printed no verdict (rc {rc}): {(out + err)[-300:]} — fix it or rerun with ENDCARD_OK=1 "
+                "after looking at the last 2 s yourself"]
+    if v.get("ok"):
+        return []
+    cut = "; ".join(f"'{h['text']}' at {h['t']} s ({h['side']} edge)" for h in v.get("hits", [])[:4])
+    return [f"end card text touches the frame edge = cut: {cut}. Use the FULL original frame with \"wide\": true for "
+            "the end-card seg (never a pre-cropped endcard file), rebuild. ENDCARD_OK=1 only when that text is HUD / "
+            "gameplay, not the title"]
+
+
 def cmd_deliver(j, a):
     if a.report:
         report = json.load(open(a.report, encoding="utf-8"))
@@ -1419,6 +1548,8 @@ def cmd_deliver(j, a):
         probs.append(f"no final file {a.final}")
     if not os.path.exists(a.cover):
         probs.append(f"no cover {a.cover}")
+    if j["mode"] == "gameplay" and os.path.exists(a.final) and not os.environ.get("ENDCARD_OK"):
+        probs += endcard_problems(a.final)
     if probs:
         raise Refused("deliver refused:\n- " + "\n- ".join(probs))
     rc, out, err = run(["python3", os.path.join(HERE, "verify-clip.py"), a.final])
@@ -1452,6 +1583,7 @@ def cmd_deliver(j, a):
                "duration_s": round(float(report.get("v_dur") or 0), 2),
                "credits": (0 if j["mode"] == "gameplay" else
                            sum(c for c in credits if c) if credits and all(c is not None for c in credits) else None),
+               **({"credits_est": True} if any(at.get("credits_est") for s in j["shots"] for at in s["attempts"]) else {}),
                "notes": notes.strip(" |"), "timing": timeline(j, now(), job_asks(j, now()))}
         os.makedirs(os.path.dirname(CLIP_LOG), exist_ok=True)
         with open(CLIP_LOG, "a", encoding="utf-8") as f:
@@ -1533,6 +1665,8 @@ def main(argv=None):
     s = sub.add_parser("cost"); s.add_argument("job", nargs="?"); s.add_argument("--seconds")
     s.add_argument("--res", default="720p")
     s = sub.add_parser("production"); s.add_argument("job"); s.add_argument("value", choices=["auto", "prompt"])
+    s = sub.add_parser("reshape"); s.add_argument("job"); s.add_argument("--shots", type=int, required=True)
+    s.add_argument("--seconds")
     s = sub.add_parser("status"); s.add_argument("job", nargs="?")
     s = sub.add_parser("reserve"); s.add_argument("job"); s.add_argument("shot", type=int)
     s.add_argument("--wait", action="store_true")
@@ -1591,6 +1725,13 @@ def main(argv=None):
             missing = [r for r in a.ref if not os.path.exists(r)]
             if missing:
                 raise Refused(f"ref not found: {missing}")
+            if (a.mode == "presenter" and a.character and not character_image(a.character)
+                    and not os.environ.get("CLIPJOB_NO_PORTRAIT_OK")):
+                raise Refused(f"no portrait {CHAR_DIR}/{a.character}.jpg — without it the identity check cannot compare "
+                              "her face and the prompt pack cannot give Fix's other account the character "
+                              "(champion-trashbag-roll 2026-11-22: น้องเอิร์ธ, the one MALE roster entry, came back a "
+                              "woman). Save the character's Flow image there (flow-driver templates/character-prompt.md) "
+                              "or pick a roster name that has one")
             j = new_job(a.job, a.mode, a.product, a.link, a.shots, a.ref, a.workdir, a.character, a.seconds)
             if os.path.exists(path_of(a.job)):
                 j = promote_intake(load(a.job), j)
@@ -1658,6 +1799,11 @@ def main(argv=None):
         if a.cmd == "production":
             set_production(j, a.value); save(j)
             return out(summary(j))
+        if a.cmd == "reshape":
+            secs = reshape(j, a.shots, a.seconds); save(j)
+            return out({**summary(j), "seconds": secs, "cost": cost(secs),
+                        "next": "rewrite shot<K>.txt for the new plan (delete the extra ones), then pack / reserve; a "
+                                "prompt message sent before the reshape now maps to the new shot of the same number"})
         if a.cmd == "reserve":
             try:
                 t = reserve(j, a.shot, pacing_get())
@@ -1759,7 +1905,9 @@ def main(argv=None):
                     print(f"start frame for shot {k + 1} not sent: {e}", file=sys.stderr)
             return out({**summary(j), "file": dst, "start_frame_sent": sent_sf if sf and sf["file"] else None,
                         **({"start_frame": {kk: sf[kk] for kk in ("from", "faceless", "unchecked")}} if sf else {}),
-                        "next": f"vision-check frames, then clipjob.py ready {a.job} {k} --raw {dst} --frame …"})
+                        "next": (f"clipjob.py ready {a.job} {k} --raw {dst} — Fix's reply is his review: no vision, no "
+                                 "idcheck, the shot is approved at once" if fix_reviewed(j, k) else
+                                 f"vision-check frames, then clipjob.py ready {a.job} {k} --raw {dst} --frame …")})
         if a.cmd == "scan":
             res = cmd_scan(j, a.shot, a.raw); save(j)
             return out(res)

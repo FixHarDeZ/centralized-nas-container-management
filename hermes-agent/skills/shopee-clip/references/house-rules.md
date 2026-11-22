@@ -22,32 +22,16 @@
   fixed by a reworded prompt: offer 🎬/📦 or a post insert of the real photo. A 360p generation saved at 720p
   is reported as a third of the price but softer, and is untested here: only when Fix says so (`cost --res 360p`).
   A shot under 10 s has not been through post yet (first one: check subs/graphics timing by eye).
-- **A board's quota line comes from Flow's LIVE balance, not from clip-log arithmetic alone.** Open the
-  account menu first (`flow-driver` → `flow-browser-env.md` → Desktop: `Account details` → `N Google Flow
-  credits` + its `Resets <date>` line) and quote that figure with the reset date: an account can carry a pooled
-  balance far above 50/day, and a quota line computed from today's clip-log sum against an assumed 50 then tells
-  Fix "ต้องรอรอบโควต้า" while every shot still fits — that costs a whole idle turn. The clip-log today-sum stays
-  the check on SPEND; the live figure plus its reset date is the check on what is LEFT and when it refreshes.
-- **Any plan above the 50/day quota cannot finish in one day** — not just a 40 s clip: a "20 วิ" board's
-  10 + 10 = 60, and even 8 + 8 = 48 leaves no room for the regen the board advertises (+24). Read the live
-  cost, mark on the board which option fits today's quota and that a regen may wait for the reset, and tell
-  Fix before submitting. **Today's spend = clip-log rows whose `date` is today, not the sum of their `credits`**
-  — a 📝 prompt-mode row writes `credits: null` and carries the real figure inside `notes` ("ยอดจริงจากบัญชีฟิก
-  = 2x10วิ"), so a quota line summed from the field alone under-reports a day that already spent.
-  **Therefore `deliver --notes` on a 📝 job MUST state the real spend** (`ยอดจริง = 30 เครดิต`): a null row with
-  no figure in its notes leaves the next board's quota line computed from zero, and the board then under-quotes
-  what is left today.
+- **The board's quota line = Flow's LIVE balance + its reset date** (account menu → `Account details` →
+  `N Google Flow credits`, `Resets <date>`; `flow-driver` → `flow-browser-env.md`). The account pools credits
+  far above 50/day (282 left on 2026-11-22), so never write "ต้องรอรอบโควต้า" from a 50/day sum; only when the
+  live figure is below the plan. Spend per job: clipjob records it (📝 = the published rate per shot length,
+  `credits_est` in the row, since 2026-11-22), so no figure is needed in `--notes`.
 - Never edit inside Flow (40 credits per edit). Never retry a failed submit with his credits without saying so.
-- **Do not pre-run `verify-clip.py` on the candidate before `clipjob.py deliver` in a clipjob mode.** The standalone
-  run COPIES the file it verified into a Downloads dir (its verdict names `sent_from`), and `deliver` re-runs the
-  same hash gate on the workdir file — that self-copy is then read as an earlier clip and the delivery refuses.
-  `deliver` runs verify itself; if an early sanity check already happened, delete the copy from both Downloads
-  dirs first (deleting is the fix either way, then re-run the same `deliver`).
+- **Never pre-run `verify-clip.py` before `deliver`** (its copy in Downloads makes `deliver` refuse as a resend);
+  if it already ran, delete that copy from both Downloads dirs and re-run `deliver`.
 - Credit approval is per product and per question; put the cost inside the question text.
-- **Reported spend = the sum of EVERY attempt's `credits` across all shots, regens included.** Before delivery read
-  it from the job JSON (sum `attempts[].credits`; `deliver` writes that same sum into the row's `credits` field), and
-  at wrap-up quote the clip-log row — never compute shots × 15: a 🔁d shot costs twice, and a delivery that
-  under-reports spend has to be corrected to Fix after the fact.
+- **Reported spend = the clip-log row's `credits`** (every attempt, regens included); never shots × a rate.
 
 ## Running an order
 - **After the order, run end to end without per-step confirmation** (Fix: "หลังผมสั่งครั้งแรกทำตั้งแต่ต้นจนจบได้เลยนะ").
@@ -64,11 +48,8 @@
   never `pgrep -f <name>` / `ps | grep` (the shell running the check matches itself: honma-gt6-gp 2026-11-18 polled
   a `build_v5` that had died in 2 s for 17 min), never a sleep loop inside `execute_code` (its cell dies at 300 s).
   `build_v5` ≈ 70 s, `windows.py` 0.5–5 min, `post_presenter` 2–15 min.
-- **Invoke skill scripts with an explicit `workdir` (`/opt/data`), not the shell's inherited cwd.** The terminal
-  keeps its cwd across calls; after a job's workdir is cleaned up, a stale cwd makes every command fail BEFORE
-  the script runs (`bash: cd: /opt/data/clips/work/<job>: No such file or directory`, exit 126) — that reads like
-  a broken script, so pass `workdir` (or `cd /opt/data && …`) instead of debugging the script. The same stale
-  cwd reaches `terminal()` called from `execute_code` — it inherits that shell, so set `workdir` there too.
+- **Pass `workdir` (`/opt/data`) to every terminal call**, also from `execute_code`: a stale cwd of a cleaned
+  workdir fails before the script runs (`bash: cd: … No such file or directory`, exit 126).
 - **Tell Fix early when something blocks.** At most ONE silent retry; a second failure (refusal, Failed card, login wall,
   dead picker) gets a short status at that moment: what failed, what you tried, what is next, whether credits moved.
   Also send one line at each long silent stage (Chrome up, post-production start) — `python3 S/send_status.py "<line>"`
@@ -142,17 +123,12 @@
   `character` value in clip-log — reading it alone repeats the face Fix already saw in the last clip. Take the
   newest `character` row in clip-log, exclude that name, choose at random from `character_roster` in
   `/opt/data/clips/flow-state/<project-id>.json`, and name the pick on the board.
-- **Screen the pool before the draw — gender and a portrait.** The style standard is a female presenter, but
-  `character_roster` holds male characters created on Fix's order and only clip-log `notes` carry that
-  (`ตัวละครชาย …`): read the newest rows' `notes` for each candidate name before drawing. A name with no file
-  in `/opt/data/clips/characters/` cannot be identity-checked against a local grid (the portrait set lags the
-  roster — see `frame-check.md` → identity), so prefer a candidate whose portrait exists. When the pick is not
-  a standard female presenter, say so on the board line so Fix's approval covers it.
-- **Write the prompt's presenter line from that character's recorded look, not a generic description**
-  (flow-state `roster_note` carries hair/outfit per name; clip-log notes carry the rest): a generic
-  "young Thai woman" typed for a character who is not one makes the render follow the prompt text instead of
-  the chip, and shot 1's identity check then fails for a prompt-side cause that another generation on the same
-  setup cannot fix.
+- **Draw only from female roster names that have a portrait** in `/opt/data/clips/characters/` (male ones,
+  e.g. น้องเอิร์ธ, were made for one order: clip-log `notes` say `ตัวละครชาย`). A male pick only when Fix asks.
+- **Write the prompt's presenter line from that character's recorded look (flow-state `roster_note`), never her
+  NAME and never a generic "young Thai woman"** (champion-trashbag-roll 2026-11-22: the male น้องเอิร์ธ came back a
+  woman, and Flow painted the name on the wall). `new` refuses a name with no portrait; `pack`/`reserve` refuse
+  a name in the prompt outside the quoted voiceover.
 
 ## Storyboard gate (Flow modes)
 - No Flow generation before Fix approves the board (`templates/storyboard.md`). Reason: two 10 s "hold / press / set down"

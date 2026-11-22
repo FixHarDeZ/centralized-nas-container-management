@@ -65,3 +65,47 @@ they differ (the router, `clipjob.py` and the 2026-11-10 question flow replaced 
 - **Spec numbers that conflict across listing, ad and label** (dimensions, capacity, age) are omitted from the clip until Fix picks one; several sizes in the shop means no single size can be stated.
 - **Credit approval is per product.** An approval given for one product does not cover the next one; re-confirm with the cost in the question text.
 - **Once a clip order is clear, do not repeat the same question** across several image messages. Ask at most once, then act on the answer or hold.
+
+
+## Moved out of house-rules on 2026-11-22 (budget; replaced by code or a shorter rule)
+
+- **A board's quota line comes from Flow's LIVE balance, not from clip-log arithmetic alone.** Open the
+  account menu first (`flow-driver` → `flow-browser-env.md` → Desktop: `Account details` → `N Google Flow
+  credits` + its `Resets <date>` line) and quote that figure with the reset date: an account can carry a pooled
+  balance far above 50/day, and a quota line computed from today's clip-log sum against an assumed 50 then tells
+  Fix "ต้องรอรอบโควต้า" while every shot still fits — that costs a whole idle turn. The clip-log today-sum stays
+  the check on SPEND; the live figure plus its reset date is the check on what is LEFT and when it refreshes.
+- **Any plan above the 50/day quota cannot finish in one day** — not just a 40 s clip: a "20 วิ" board's
+  10 + 10 = 60, and even 8 + 8 = 48 leaves no room for the regen the board advertises (+24). Read the live
+  cost, mark on the board which option fits today's quota and that a regen may wait for the reset, and tell
+  Fix before submitting. **Today's spend = clip-log rows whose `date` is today, not the sum of their `credits`**
+  — a 📝 prompt-mode row writes `credits: null` and carries the real figure inside `notes` ("ยอดจริงจากบัญชีฟิก
+  = 2x10วิ"), so a quota line summed from the field alone under-reports a day that already spent.
+  **Therefore `deliver --notes` on a 📝 job MUST state the real spend** (`ยอดจริง = 30 เครดิต`): a null row with
+  no figure in its notes leaves the next board's quota line computed from zero, and the board then under-quotes
+  what is left today.
+- **Do not pre-run `verify-clip.py` on the candidate before `clipjob.py deliver` in a clipjob mode.** The standalone
+  run COPIES the file it verified into a Downloads dir (its verdict names `sent_from`), and `deliver` re-runs the
+  same hash gate on the workdir file — that self-copy is then read as an earlier clip and the delivery refuses.
+  `deliver` runs verify itself; if an early sanity check already happened, delete the copy from both Downloads
+  dirs first (deleting is the fix either way, then re-run the same `deliver`).
+- **Reported spend = the sum of EVERY attempt's `credits` across all shots, regens included.** Before delivery read
+  it from the job JSON (sum `attempts[].credits`; `deliver` writes that same sum into the row's `credits` field), and
+  at wrap-up quote the clip-log row — never compute shots × 15: a 🔁d shot costs twice, and a delivery that
+  under-reports spend has to be corrected to Fix after the fact.
+- **Invoke skill scripts with an explicit `workdir` (`/opt/data`), not the shell's inherited cwd.** The terminal
+  keeps its cwd across calls; after a job's workdir is cleaned up, a stale cwd makes every command fail BEFORE
+  the script runs (`bash: cd: /opt/data/clips/work/<job>: No such file or directory`, exit 126) — that reads like
+  a broken script, so pass `workdir` (or `cd /opt/data && …`) instead of debugging the script. The same stale
+  cwd reaches `terminal()` called from `execute_code` — it inherits that shell, so set `workdir` there too.
+- **Write the prompt's presenter line from that character's recorded look, not a generic description**
+  (flow-state `roster_note` carries hair/outfit per name; clip-log notes carry the rest): a generic
+  "young Thai woman" typed for a character who is not one makes the render follow the prompt text instead of
+  the chip, and shot 1's identity check then fails for a prompt-side cause that another generation on the same
+  setup cannot fix.
+- **Screen the pool before the draw — gender and a portrait.** The style standard is a female presenter, but
+  `character_roster` holds male characters created on Fix's order and only clip-log `notes` carry that
+  (`ตัวละครชาย …`): read the newest rows' `notes` for each candidate name before drawing. A name with no file
+  in `/opt/data/clips/characters/` cannot be identity-checked against a local grid (the portrait set lags the
+  roster — see `frame-check.md` → identity), so prefer a candidate whose portrait exists. When the pick is not
+  a standard female presenter, say so on the board line so Fix's approval covers it.

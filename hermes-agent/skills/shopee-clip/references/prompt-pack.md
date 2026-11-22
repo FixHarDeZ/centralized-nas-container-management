@@ -39,15 +39,22 @@ nothing to attach in Ingredients. `--shot` is a resend of prompts only — the r
   `md5sum` both before ingesting: equal hashes mean one render, so ingest only the copy carrying the
   `[ช็อต K · job]` tag and drop the other. Do not start a frame review on a bare video either — the
   status/reply context decides the slot, the file name never does.
-- The ✅/🔁 tap comes back as plain text and `clipjob.py decide --text` accepts ONLY the button label
-  verbatim: `✅ ผ่าน ช็อต K · <job>` / `🔁 gen ใหม่ ช็อต K · <job>`. A paraphrase (`✅ ช็อต K · <job>`)
-  is REFUSED — copy the label off the keyboard message, don't retype it from memory.
-- `ready` flags anything below 720×1280 or a low bitrate. That means Telegram re-encoded a "video" send.
-- The gates JSON that `ready` prints proves the checks, not the send: confirm `review_sent` in `/opt/data/clips/jobs/<job>.json` before telling Fix the ✅/🔁 keyboard is up.
-  Tell Fix once to send shots as a **file** (📎 → File); a file keeps Flow's original 720p.
+- **Fix's file IS his review (Fix 2026-11-22: "gen prompt แล้วผม reply กลับ ถือว่ารีวิวแล้ว ตีผ่านหมด ไม่ต้องให้ผม
+  confirm").** Right after `ingest`: `clipjob.py ready <job> K --raw <file>` — no `--frame`/`--identity`, no
+  `idcheck`, no `scan`, no vision call. It runs only the file gates (ffprobe; 🧑 the repeated-line cut and the
+  early-CTA check), approves the shot and sends NO ✅/🔁 keyboard; a message goes to Fix only when a file gate
+  found something (ℹ️, no buttons). When every shot is approved, go straight to post.
+- A new file for an already-approved shot (Fix re-gens on his own) replaces it: `ingest` it the same way.
+- `ready` notes anything below 720×1280 or a low bitrate: Telegram re-encoded a "video" send. Tell Fix once to
+  send shots as a **file** (📎 → File); a file keeps Flow's original 720p.
 - The Bot API download cap is 20 MB. A 10 s 720p shot is far below it. A bigger file fails to download,
   so ask Fix to export at 720p.
-- Fix may finish the shots in any order. `ingest` accepts any shot that has been packed.
+- Fix may finish the shots in any order. `ingest` accepts any shot that has been packed. The header asks him
+  to gen them IN ORDER with the start-frame photo `ingest` sends back (onesuper-basket 2026-11-22: two shots
+  made in parallel drew a 2-compartment and a 3-compartment basket).
+- Fix changes the plan before any file (6+4 s failed → one 10 s scene): `clipjob.py reshape <job> --shots 1
+  --seconds 10`, rewrite `shot1.txt`, delete the extra shot files, `pack` again (gotg-encore-s2 was cancelled
+  and reopened instead).
 
 ## Fix's second Flow account (saved characters are per account)
 A saved character exists only in the Google account/project that made it; the other account's Characters list
@@ -61,7 +68,12 @@ from the previous shot's last frame as usual. The model line in the header (`Omn
 what Fix sets in either account.
 
 ## Credits
-Fix's own submits spend his Flow credits exactly like 🤖, and IU cannot read them, so `deliver` logs
-`credits: null` unless every attempt carried a number — but `deliver --notes` on a 📝 job MUST still state the
-real spend Fix reported (`ยอดจริง = 30 เครดิต`): a null row with no figure leaves the next board's quota line
-computed from zero (`house-rules.md` → Credits).
+Fix's own submits spend his Flow credits like 🤖. `ingest` records the published rate for the shot's length
+(3 credits/s at 720p) with `credits_est`, so the clip-log row has a number (it was `null` on six 📝 jobs of
+11-19..22). A different real figure from Fix goes into `--notes`.
+
+## Deliver acks (moved from the router, 2026-11-22)
+`deliver` refuses while the report has a flag Fix has not decided. Tell him each flag with its frame time; he
+picks "ส่งแบบนี้" or regen. As-is = `--ack "<flag text>=<his call>"` (logged), ONE `--ack` per flag: they append
+and each splits on its first `=`, so `|`-joining two flags in one `--ack` leaves the second undecided and the
+refusal repeats.

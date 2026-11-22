@@ -154,3 +154,15 @@ def test_unknown_shape_is_refused(spec, capsys):
     s["circles"][0]["shape"] = "hexagon"
     assert run(tmp, s) == 1
     assert "shape must be" in capsys.readouterr().err
+
+
+def test_one_check_sheet_carries_the_cover_and_every_slot(spec, capsys):
+    """2026-11-19..22: 47 cover vision calls / ~99 min for 11 covers — one sheet, one call."""
+    tmp, s = spec
+    assert run(tmp, s) == 0
+    res = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    sheet = Image.open(res["check_sheet"])
+    assert res["check_sheet"].endswith("cover_sheet.jpg") and sheet.height == mp.SHEET_H
+    n = len(s["circles"])
+    assert sheet.width > 1080 * mp.SHEET_H // 1920 + n * mp.TILE
+    assert f"Pictures 2-{n + 1}" in res["ask_vision"] and res["slot_labels"] == [c["label"] for c in s["circles"]]

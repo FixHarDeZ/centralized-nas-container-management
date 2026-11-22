@@ -11,6 +11,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import build_v5 as b  # noqa: E402
 from build_v5 import SUB_STYLE_V5, write_subs  # noqa: E402
 
 SRC_ASS = """[Script Info]
@@ -73,3 +74,13 @@ def test_tall_window_crop_width():
         assert build_v5.tall_crop_w() == 1920
     finally:
         build_v5.WH = old
+
+
+def test_endcard_seg_must_be_wide_and_from_the_full_frame():
+    """ffr-swt-dec04 / sniper-elite3-sw 2026-11-20/21: end-card titles cut."""
+    P = lambda v: v
+    assert "wide" in b.endcard_problem({"src": "trailer", "endcard": True}, P)
+    assert b.endcard_problem({"src": "trailer", "endcard": True, "wide": True}, P) is None
+    assert "836 px" in b.endcard_problem({"src": "endcard.mp4", "wide": True}, P, width=836)
+    assert b.endcard_problem({"src": "/x/trailer_launch.mp4", "wide": True}, P, width=1920) is None
+    assert b.endcard_problem({"src": "master", "mode": "window"}, P) is None

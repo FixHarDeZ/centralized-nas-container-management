@@ -4,7 +4,7 @@
 
 
 <Pitch sentence in Thai, 1–2 lines: the pain point, then the product as the fix. 9:16 vertical format. A short, cute product review video in 9:16 vertical format.>
-The presenter is <Nong Mint / saved character name>, <appearance: young Thai woman, straight black hair and bangs> (attached as an ingredient chip; add `entity_id: <from the Characters picker>` only if you did NOT attach the character), wearing <outfit>. She is reviewing the <product, exact description from the Shopee listing> (attached as ingredient images — say "use the attached product images so the product matches them exactly").
+The presenter is the character in the attached character chip, <appearance copied from her flow-state `roster_note`: hair, face — never her NAME (Flow paints a name it reads: champion-trashbag-roll 2026-11-22), never a generic "young Thai woman"> (add `entity_id: <from the Characters picker>` only if you did NOT attach the character), wearing <outfit>. She is reviewing the <product, exact description from the Shopee listing> (attached as ingredient images — say "use the attached product images so the product matches them exactly").
 
 Sequence of actions:
 1. <struggle / before-state with the old way — expressive>
