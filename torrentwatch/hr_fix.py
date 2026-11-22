@@ -30,6 +30,7 @@ _FIX_GRACE_H = 24.0  # DS should have picked the .torrent up long before this
 # on the DS side (hash_checking that never ends, progress that never counts).
 # Re-adding the .torrent cannot help while the task is there, so say so once instead.
 _FIX_WEDGED_H = 120.0
+_REASK = ("stalled", "expired", "failed")  # hr_fixes states scan_and_prompt may ask again
 
 
 def _fmt(v) -> str:
@@ -61,9 +62,11 @@ async def scan_and_prompt(rows: list[dict], settings: dict) -> int:
     sent = 0
     for row in hr.fix_candidates(rows, stale_h, limit=_MAX_PROMPTS_PER_ROUND * 2):
         prev = db.hr_fix_get(row["site_id"])
-        # pending = still waiting on an answer, fixed = already re-added and not yet
-        # seen by the tracker, skipped = user said no. None of those re-ask.
-        if prev and prev["status"] in ("pending", "fixed", "skipped", "wedged"):
+        # Only an attempt that went nowhere re-asks. Everything else is a decision
+        # (skipped, or 🗑 from skipped → del_confirm/deleted — re-prompting there
+        # would overwrite the delete target or re-download a file taken as a hit)
+        # or still in flight (pending, fixed, wedged).
+        if prev and prev["status"] not in _REASK:
             continue
         badge_line = f"{row['badges']}\n" if row.get("badges") else ""
         text = (
@@ -711,6 +714,20 @@ if __name__ == "__main__":
         assert db.hr_fix_get("50")["status"] == "skipped"
         await _handle_callback(_cb("hrfix:y:50"))
         assert _applied == ["50"] and db.hr_fix_get("50")["status"] == "fixed"
+
+        # the next round must not re-prompt a row the user already decided on via 🗑
+        # (del_confirm would lose its target, deleted would re-download a taken hit),
+        # but an attempt that went nowhere is still asked again
+        config.TELEGRAM_BOT_TOKEN = config.TELEGRAM_BOT_TOKEN or "t"
+        _stale = lambda sid: {**_row(sid, 20.0, "warn"), "last_seen_h": 30.0,  # noqa: E731
+                              "slack_h": 50.0, "deadline": "x", "badges": ""}
+        for sid, st in (("60", "del_confirm"), ("61", "deleted"), ("62", "skipped"), ("63", "expired")):
+            db.hr_fix_add_pending(sid, f"หนัง {sid}", 9)
+            db.hr_fix_set_status(sid, st, '{"from": "skipped"}' if st == "del_confirm" else "")
+        _before = len(_prompts)
+        sent = await scan_and_prompt([_stale(s) for s in ("60", "61", "62", "63")], {"hr_autofix_enabled": "1"})
+        assert sent == 1 and len(_prompts) == _before + 1 and "หนัง 63" in _prompts[-1], (sent, _prompts[-1:])
+        assert [db.hr_fix_get(s)["status"] for s in ("60", "61", "62")] == ["del_confirm", "deleted", "skipped"]
 
         print(f"hr_fix self-check OK: {len(_prompts)} prompt(s), {len(_notices)} notice(s)")
 
