@@ -1584,3 +1584,15 @@ Not done / open:
   source, box_crop for the case. Visible change: end cards no longer zoom.
 - Open (Fix): case sticker over the end card (3rd clip with no product in the CTA); Hermes pushing to main from
   the NAS clone (`011b26c`).
+
+### 2026-11-23 — session closed
+- Fix: "จบงาน".
+- State: commits `484c504` (6 live edits ported + check notes), `edd3849` (tunes 2-7), `9b8f78d` (rect for crop
+  cards only), `a9a8311` (notes) + this close; all pushed to main. Live skills synced at `9b8f78d` (container
+  tests pass). No deploy, no config change, no open clip job. NAS clone clean; NAS scratch (`/tmp/rev1123`,
+  `cache/scratch/t1123`) removed.
+- Not redone: the delivered oblivion final keeps its 1.8× stretched end card + hook white flash.
+- Watch next orders: `endcard_crop.py` seg on the next 🎬, `clipjob stage` marks, vision warning past budget,
+  windows.py whisper pass within 600 s on a long source, `box_crop.py` for a case/box photo.
+- Fix decides: case sticker over the 🎬 end card (no product in the CTA, 3rd time); Hermes pushing to main itself
+  from the NAS clone.
