@@ -140,7 +140,7 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
     close Chrome, report `spent_shots`. `ไม่ผ่าน` alone is a shot review failure (✅/🔁), never a cancel.
 
 **Vision budget per job**: intake 1 · photo gate ≤2 ·
-🤖 shot 1 (+1 full-res confirm of a drift) · 📝 shot 0 · post frame sheet 1 · cover 1 (`S/hero_pick.py` hero = 0;
+🤖 shot 1 (+1 full-res confirm of a drift) · 📝 shot 0 · post frame sheet 1 · cover 1 (`S/hero_pick.py` hero = 0,
 `check_sheet` of `make_poster_cover.py`) · 🎬 footage: one sheet per stage. clipjob `note`/`status` print
 `vision N/budget`; past it: decide + `note`. Every call counts (chips: `chipcheck.py`, 0 vision):
 `references/house-rules.md` → Vision budget.

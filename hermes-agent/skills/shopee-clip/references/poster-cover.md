@@ -42,12 +42,12 @@ a circle and lost its top and bottom. The workdirs already held the right pictur
 
 ## Steps
 
-**Vision budget: 1 call per cover** (the check; +1 only for a crop box no probe can place), +1 re-check after a fix (2026-11-19..22: 47 cover calls /
+**Vision budget: 1 call per cover** (the check; 🎬 +1 pick; +1 only for a crop box no probe can place), +1 re-check after a fix (2026-11-19..22: 47 cover calls /
 ~99 min for 11 covers — per-slot pre-checks and repeated cover reads).
 
-1. **Hero by measurement — `S/hero_pick.py`, no vision call** (2026-11-23: the grid pick was the day's slowest
+1. **🧑 / 📦 / ✋ hero by measurement — `/opt/data/skills/shopee-clip/scripts/hero_pick.py`, no vision call** (2026-11-23: the grid pick was the day's slowest
    vision read — 390 s, 420 s timeout, 420 s timeout — to choose one letter):
-   `uv run --with numpy --with pillow python S/hero_pick.py <raw shot | trailer> --times <the moments the frame
+   `uv run --with numpy --with pillow python /opt/data/skills/shopee-clip/scripts/hero_pick.py <raw shot> --times <the moments the frame
    check named product-forward> --out hero.jpg [--sheet cand.jpg]` → sharpest frame wins, a tie (within 85 %) goes to
    the LOWEST skin share (less face, more product); dark / white-flash frames never win. On 11-23 data it chose
    chihuahua 3.2 s (= the shipped hero) and pepita 5.5 s (the sharp back print, shipped 2.5 s = her face + small
@@ -55,6 +55,10 @@ a circle and lost its top and bottom. The workdirs already held the right pictur
    comes from the pixel probe in `frame-check.md` → Locating a crop before cutting. Only when a slot has no listing
    photo and no probe can place it: ONE vision call on one sheet for that box. No per-slot pre-check call: step 3's
    sheet checks the hero and every slot at once.
+   **🎬 keeps ONE vision pick** on a sheet of the used segs' windows.py `tiles` (text-free by construction):
+   sharpness favours crisp detail over the whole product on a trailer (tinzshop-zelda 11-23: the script chose a dock
+   close-up at 39.67 s, the right hero was the whole console at 34.5 s; with no `--times` it chose the legal card).
+   🎬 cover = 2 calls (pick + check).
 2. Write `cover_spec.json`, run the script. Exit 1 names the element that does not fit or the refused word: shorten that
    text and rerun. Nothing is clipped silently.
 3. **ONE vision call on the `check_sheet` the script prints, with its `ask_vision`** (picture 1 = the cover,
