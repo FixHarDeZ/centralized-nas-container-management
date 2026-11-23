@@ -2577,4 +2577,8 @@ pack page โชว์ `animate` + "ตั้ง Ns". render_studio: มี wav 
   - ต้นเหตุเชิงออกแบบ: `TRENDS_PROMPT_TH` สั่ง "หัวข้อที่อธิบายได้ด้วยข้อเท็จจริงที่อยู่ตัวแล้ว" + "ถ้ากระแสมาจากหนัง/ซีรีส์/เกม ให้เล่าตัวงาน (จักรวาลนี้เล่าเรื่องอะไรมาบ้าง)" = ทุกกระแสกลายเป็นคลิปพื้นหลัง ทิ้งเหตุที่มันเป็นกระแส. กฎนี้มีไว้กันบอทแต่งข่าวคนจริง — **ยังไม่แก้ รอผู้ใช้ตัดสินใจ** (ทางเลือก: มุม "ทำไมกำลังเป็นกระแส/มีอะไรใหม่" บังคับ research ค้นด้วย `from` + จำกัดความใหม่ เหมือนด่าน RESULT_TOPIC)
 - ตรวจ: sf-test บน NAS (Docker local ไม่รัน → tar app/tests ไป `/tmp/sf-test` แล้ว `docker run --network none` image `shorts-factory-shorts-factory:latest`) 609 passed/2 skipped; root 79 passed (`uv run --no-project --with pytest --with pyyaml --with jsonschema`); ruff = baseline 10. root `.venv` ไม่มี pytest/yaml แล้ว (`make test`/`make check` พัง ต้องใช้ uv)
 - deploy (bot idle) 5 containers Up, grep ในคอนเทนเนอร์เจอโค้ดใหม่, log ไม่มี error. push แล้ว
-- ค้าง: ผู้ใช้ตัดสินใจเรื่องกฎ freshness ของ trends prompt; ดูว่ารอบ /trends ถัดไปข้ามเรื่องที่ทำแล้วจริงไหม
+- dry-run picker จริงหลัง deploy (`trends.collect('th')` + `suggest_topics(covered=)` ไม่แตะ state): ยังเสนอ "GTA 6 vs GTA 5" ทั้งที่อยู่ใน list — คลิป 15:49 (`qLelO58dnBA`) ก็คือ GTA 6 vs 5 ครั้งที่ 4. แก้ `9982ecc`: list ขึ้นก่อน กระแสตามหลัง กฎย้ำท้าย "ห้ามเรื่องเดียวกัน (เกม/หนัง/สินค้า/คำศัพท์) แม้เปลี่ยนมุม". dry-run ซ้ำ (container ชั่วคราว `--env-file` + `--volumes-from :ro`): 5 หัวข้อ ไม่มีเรื่องที่ทำแล้ว แต่ยังทรง "X คืออะไร" ทั้ง 5 (LPGA/OECD/Travel Ban/…) = ยืนยันว่าความเก่าอยู่ที่กฎ prompt. deploy + push แล้ว
+- ผลข้างเคียงที่ตั้งใจ: กระแสวนซ้ำ (ราคาน้ำมัน, PM2.5, ดาวโจนส์) จะถูกข้าม ~50 วัน
+- ข้อสังเกต: `Bot.api` timeout=60 ครอบ connect ด้วย → outage จริง say() หนึ่งครั้งอาจรอ ~3 นาที (ยังไม่แก้ — `httpx.Timeout(60, connect=10)` ถ้าจะแก้)
+- E20 vs 91/95 ที่ผู้ใช้พิมพ์ 15:31 โดนปฏิเสธตอนค้าง ยังไม่ได้ทำ
+- ค้าง: ผู้ใช้ตัดสินใจเรื่องกฎ freshness ของ trends prompt
