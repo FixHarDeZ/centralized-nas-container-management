@@ -49,6 +49,7 @@ a circle and lost its top and bottom. The workdirs already held the right pictur
    call to choose hero + circles and to read each crop box. Boxes are source pixels of that image; correct any box
    against the pixel probe in `frame-check.md` → Locating a crop before cutting (a grid read can land on
    background). No per-slot pre-check call: step 3's sheet checks every slot at once.
+   **When the job's vision budget is already spent, drop pick's call and choose the hero by measurement:** extract 4–6 candidates at the moments the frame check already named as product-forward, rank them by Laplacian variance (sharpest wins) and break ties with the frame's skin share (LOWEST wins — less face, more product), then let step 3's single `check_sheet` call validate the pick: it already asks whether the product is whole and real. That halves a cover from 2 calls to 1 and still catches a bad pick.
 2. Write `cover_spec.json`, run the script. Exit 1 names the element that does not fit or the refused word: shorten that
    text and rerun. Nothing is clipped silently.
 3. **ONE vision call on the `check_sheet` the script prints, with its `ask_vision`** (picture 1 = the cover,

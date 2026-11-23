@@ -13,6 +13,16 @@ images are ads, review screenshots or crops.
 - If it is unclear whether a waiver was given, ask ONE question with the choice written as
   buttons: waive the scene review or keep it. Do not guess, and do not treat "keep going" as a waiver.
 
+## Board stamp
+- Run `clipjob.py board <job>` right after the board message goes out and BEFORE the approval clarify — every
+  board sent, a revised board too (the newest stamp counts).
+- Flow `new` refuses when the job has no intake/board record, and when `state.db` holds no reply from Fix AFTER
+  the stamp (his message, or an answered `clarify`). A last answer meaning แก้/ยกเลิก/เลิกทำ/พักงาน/ไม่ผ่าน is
+  refused too. An unreadable db is recorded as `board.unverified`, not refused.
+- A message Fix sent BEFORE the stamp is not an approval, whatever it says: it was queued while the intake turn
+  ran (plaid 11-23: "ไอยูทำใน flow ให้เลยนะ" typed before the board existed, replayed after it, 60 cr spent on a
+  board he never saw). Ask the clarify and wait.
+
 ## Reference images that are not product shots
 - A review screenshot or ad crop is not a clean product photo. Vision-check it before attaching:
   - Is the product installed in the position the shot needs (for example, on the microwave)?

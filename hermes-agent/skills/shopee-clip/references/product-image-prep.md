@@ -80,6 +80,20 @@ does (same rule as the child-in-composite case in step 5).
 5. Attach the person-free crop (LANCZOS-upscale a small one per "Small-source crops"), drop the whole photo, and
    name both in the delivery: the source was worn by a model, the person was removed by measurement.
 
+## Two-sided apparel — settle which side each photo shows before writing the prompt
+A printed garment's identity is PER SIDE (front and back carry different artwork), so a prompt that puts the back
+print on the front ships a wrong product that no frame check can un-fail. Settle it in the SAME intake/photo-gate
+read — it costs no extra vision round when folded into the question you already ask:
+- **When Fix STATES the unseen side in the order ("ด้านหลังไม่มีลาย"), that is authoritative:** no locator read
+  needed — write both sides verbatim into the prompt's product-identity block (front artwork, back plain) and
+  still require the turn-around beat for the side no photo shows.
+- The cue that works: the neck label is sewn into the inside BACK, so a folded tee showing its label through the
+  open collar is the FRONT view; a hanging shot with no collar label and one large centred graphic is usually the
+  BACK. Confirm against any worn photo (whichever side the person is showing).
+- Then name each side's artwork verbatim in the prompt (exact words, layout) and require a beat that shows the
+  OTHER side — without a turn-around beat half the product never reaches camera, which is the defect the
+  storyboard gate exists to catch.
+
 ## Salvage recipe — locate, cut, verify by pixel probes
 1. Copy the cache image into a scratch dir under a descriptive filename and `ffprobe` it for WxH (the picker lists by filename, so make it descriptive).
 2. **Locate the product, trying in this order — stop at the first that returns numbers:**
@@ -179,7 +193,7 @@ When the product covers only ~300 px of a ~950 px source (a composed ad with the
 ## Tool facts for this host
 - **Bottle-on-ad crops from a vision bbox: pad the BASE outward.** The bottle's base is the edge vision clips most often (measured on a 950 px ad: the base sat on the crop's bottom edge). Extend the bottom by 15–25 px past the vision estimate, then ask one vision read whether the base is cut; a cut base also means the cutout reads as a different product.
 - `ffmpeg` and `ffprobe` are available. **`PIL` may be missing from BOTH the PATH `python3` and the `execute_code` kernel** — probe once (`python3 -c 'import PIL'`, and inside `execute_code` if that fails), and when neither interpreter has it run the probe FILE with `uv run --with pillow python <probe.py>`: `uv` is installed on this box and pulls Pillow into an ephemeral env, so nothing is installed on the host and the probe file itself does not change. **`numpy` is NOT installed anywhere** — don't plan a numpy pipeline, and don't `import numpy` and burn a call discovering it.
-- **Write multi-line PIL probes to a scratch `.py` file and run the file — never `python3 -c "..."` and never a heredoc** (`python3 - <<'EOF' …` is refused by the command scanner with an opaque "scan budget" error). Nested quotes die in the shell, and a `%` anywhere in the same command string (a curl `-w 'HTTP %{http_code}'`, a regex) makes Python raise `ValueError: unsupported format character` before any of it runs, which reads as a broken probe rather than a quoting bug. The file also survives the session, so a re-run with one changed constant costs no re-typing.
+- **Write multi-line PIL probes to a scratch `.py` file and run the file — never `python3 -c "..."` and never a heredoc** (`python3 - <<'EOF' …` is refused by the command scanner with an opaque "scan budget" error). Nested quotes die in the shell, and a `%` anywhere in the same command string (a curl `-w 'HTTP %{http_code}'`, a regex) makes Python raise `ValueError: unsupported format character` before any of it runs, which reads as a broken probe rather than a quoting bug. The file also survives the session, so a re-run with one changed constant costs no re-typing. **Name it for the job too (`<probe>_<job>.py`):** the scratch dir persists across sessions and the write guard refuses to overwrite any file this session has not read, so a generic name (`framesheet.py`, `pillcheck.py`, `hero_pick.py`) costs a read-then-retry round before the probe can even run.
 - **Truncated probe output can misattribute rows to the wrong source.** Terminal output is auto-truncated and the
   section header can fall inside the omitted middle, so the tail rows you read back may belong to a DIFFERENT
   image than the section you started reading — two probes then look like they contradict each other on one file.
@@ -207,6 +221,11 @@ Ad layouts put headlines and badges across the product area. When the remaining 
 The listing Fix pastes and the ad he attaches can name different variants (link says one set number, the ad banner says another). Do not silently pick one: keep the variant code out of both voiceover and captions so the clip cannot contradict the box on screen, then say so plainly in the delivery and offer to re-shoot the clip from a correct photo — that spends another clip of credits, so it is his call, never a silent re-run.
 
 ## Intake sheet (misreads and late images)
+- **The sheet draws its OWN tile labels in code — `IMAGE <n>` in red at every tile's top-left
+  (`scripts/intake_images.py`).** A vision read reporting that label, or any element sitting at a tile's top-left
+  corner, is describing the SHEET, not the photo: probe the source `img<n>.jpg` for it first (a red/dark-pixel
+  scan, ~1 s in PIL). Zero hits = the annotation is never in the source, so the photo is clean as-is and no
+  photo-gate round is spent cropping an overlay that was never there.
 The sheet read can misattribute images across tiles, and one
    listing often carries SEVERAL models (a toy rack, a kitchen box set, a pet rack under one link):
    when a tile's description disagrees with what the image plainly shows, re-read that image on its own

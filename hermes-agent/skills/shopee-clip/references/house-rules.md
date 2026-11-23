@@ -25,7 +25,10 @@
 - **The board's quota line = Flow's LIVE balance + its reset date** (account menu → `Account details` →
   `N Google Flow credits`, `Resets <date>`; `flow-driver` → `flow-browser-env.md`). The account pools credits
   far above 50/day (282 left on 2026-11-22), so never write "ต้องรอรอบโควต้า" from a 50/day sum; only when the
-  live figure is below the plan. Spend per job: clipjob records it (📝 = the published rate per shot length,
+  live figure is below the plan. **When the balance has not been read in this run** (the board goes out before any
+  browser session exists, and a 📝 run may never open one), quote the LAST-read figure WITH its read date on the
+  board instead of omitting the line or launching Chrome pre-approval for that one number — a figure genuinely
+  below the plan still surfaces in the cost question Fix answers. Spend per job: clipjob records it (📝 = the published rate per shot length,
   `credits_est` in the row, since 2026-11-22), so no figure is needed in `--notes`.
 - Never edit inside Flow (40 credits per edit). Never retry a failed submit with his credits without saying so.
 - **Never pre-run `verify-clip.py` before `deliver`** (its copy in Downloads makes `deliver` refuse as a resend);
