@@ -2564,3 +2564,17 @@ pack page โชว์ `animate` + "ตั้ง Ns". render_studio: มี wav 
 
 ## 2026-11-03 — ไอเดีย Browser Use / Mobile Use กับ `/shop`: ตอบอย่างเดียว ไม่มีโค้ด
 - รายละเอียดที่ `shopee-analyst/.notes/daily_log.md` 03/11. ส่วนที่แตะ stack นี้ (ข้อเสนอ ยังไม่ทำ): ให้ shopee-analyst ส่งคำแนะนำผ่าน bot shorts-factory (sendMessage ไม่ชน getUpdates) + callback เปิด Brief `/shop` prefill ชื่อสินค้า/มุมคลิป; บรรทัดเตือนเปิดป้าย AI ใน caption คลิป 🎞 Studio สินค้า. ไม่ automate Flow/การโพสต์ (เหมือนเดิม). ไม่มี commit/deploy
+
+## 2026-11-23 — บอทค้าง "กำลังเขียนสคริปต์" 27 ชม. + คนดูบอกช่องเล่าข้อมูลเก่า (`44a61f6`, deploy + push แล้ว)
+- อาการ: ทั้งวันไม่ได้คลิป พิมพ์หัวข้อ (E20 vs 91/95) 15:31 ได้ "⏳ กำลังเขียนสคริปต์อยู่"
+- ต้นเหตุ: 22/11 12:04 รอบอัตโนมัติ (ราหูย้ายราศี) เขียนสคริปต์เสร็จ แต่ `say()` ส่งสคริปต์เข้า Telegram โดน `httpx.ConnectTimeout` → exception หลุดจาก `make_script()` (try ครอบแค่ `write()`) → `mode=writing` ค้าง ไม่มี task รัน → ทุกหัวข้อตอบ busy, รอบ /trends อัตโนมัติไม่ยิง (รอ idle)
+- ปลดทันที: `docker restart shorts-factory` 15:40 (startup คืน BUSY_MODES เป็น idle) → รอบ 12:00 ที่ค้างยิงทันที → ผู้ใช้ทำคลิปได้ อัป `qLelO58dnBA` 15:49
+- แก้ (`44a61f6`):
+  - `main.reap_orphan()` ใน poll loop: mode อยู่ใน BUSY_MODES แต่ `_running` ไม่มี task ที่ยังรัน = งานตายไม่คืนสถานะ → `to_idle`, pop `pair`, manifest ที่ยัง `drafting` → `generate_failed`/`render_failed`, `drop_orphan()` บอกในแชท. ตรวจแล้วทุกที่ที่ตั้ง writing/rendering อยู่ใน task ที่ spawn (หรือตั้งแบบ sync ก่อน spawn ใน on_callback) — task อื่นที่รันอยู่ทำให้ช้าได้เท่านั้น ไม่ปลดก่อนเวลา
+  - `shared/telegram.py` `Bot.api` retry `ConnectError`/`ConnectTimeout` 3 ครั้ง (5/10 วิ) — คำขอไม่ถึง Telegram ส่งซ้ำไม่ซ้ำข้อความ; `ReadTimeout` ไม่ retry (อาจส่งถึงแล้ว). sync-shared แล้ว
+  - `manifest.covered(locale)` = title + `trend.from` ของคลิปที่ rendered/published ใน 90 วัน (cap 150 ≈ 50 วัน, ~14k ตัวอักษร) → `suggest_topics(covered=)` ต่อท้าย user message ให้ข้ามกระแสที่ทำไปแล้ว. เดิมตัวเลือกหัวข้อไม่รู้ประวัติเลย (`recent_titles` 30 อันไปแค่ตอนเขียนสคริปต์)
+- เรื่อง "ข้อมูลเก่า" (ตรวจ manifest): Skibidi Toilet "คืออะไร" ทำ 3 รอบ (13/09, 10/10, 01/11) ทุกรอบมาจากกระแสตอนใหม่ (`skibidi toilet 81/82/83`); วัดอรุณ 08/11 จากกระแส `วัดอรุณราชวรารามราชวรมหาวิหาร` ได้คลิปสถาปัตยกรรมทั่วไป research ได้ wiki/บทความเก่า. 97 คลิปจาก trends ตั้งแต่ 20/10: evergreen 88 (91%) spike 9; ซ้ำ: Dune 3, GTA 6 3, โครงสร้างราคาน้ำมัน 4, PM2.5 2, ฝนใต้ 2, สลากออมสิน 2, iPad mini 2
+  - ต้นเหตุเชิงออกแบบ: `TRENDS_PROMPT_TH` สั่ง "หัวข้อที่อธิบายได้ด้วยข้อเท็จจริงที่อยู่ตัวแล้ว" + "ถ้ากระแสมาจากหนัง/ซีรีส์/เกม ให้เล่าตัวงาน (จักรวาลนี้เล่าเรื่องอะไรมาบ้าง)" = ทุกกระแสกลายเป็นคลิปพื้นหลัง ทิ้งเหตุที่มันเป็นกระแส. กฎนี้มีไว้กันบอทแต่งข่าวคนจริง — **ยังไม่แก้ รอผู้ใช้ตัดสินใจ** (ทางเลือก: มุม "ทำไมกำลังเป็นกระแส/มีอะไรใหม่" บังคับ research ค้นด้วย `from` + จำกัดความใหม่ เหมือนด่าน RESULT_TOPIC)
+- ตรวจ: sf-test บน NAS (Docker local ไม่รัน → tar app/tests ไป `/tmp/sf-test` แล้ว `docker run --network none` image `shorts-factory-shorts-factory:latest`) 609 passed/2 skipped; root 79 passed (`uv run --no-project --with pytest --with pyyaml --with jsonschema`); ruff = baseline 10. root `.venv` ไม่มี pytest/yaml แล้ว (`make test`/`make check` พัง ต้องใช้ uv)
+- deploy (bot idle) 5 containers Up, grep ในคอนเทนเนอร์เจอโค้ดใหม่, log ไม่มี error. push แล้ว
+- ค้าง: ผู้ใช้ตัดสินใจเรื่องกฎ freshness ของ trends prompt; ดูว่ารอบ /trends ถัดไปข้ามเรื่องที่ทำแล้วจริงไหม
