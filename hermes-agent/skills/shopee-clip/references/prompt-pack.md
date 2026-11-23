@@ -16,6 +16,19 @@ not proof that 🤖 cannot work.
    The command's JSON prints ONLY these prompt messages in `packed` — the header, reference photos and
    character portrait are sent by the same run and are not echoed, so a bare pack with a 3-entry `packed`
    list is complete; do not re-run it (that re-spams the chat) just because the output names no photos.
+4. Last, the 🤖 offer (Fix 2026-11-23): start shot + ≈credits of the shots left, with the reply-keyboard button
+   `🤖 ไอยูกด Flow แทน · <job>`. ingest's start-frame message and ready's gate note carry the same button while a
+   shot is left; none after a `fallback` (auto stays locked once Flow failed).
+
+## Fix changes his mind: 🤖 takeover
+- His tap arrives as text → `clipjob.py decide --text "<text>"` only. It switches the job to auto (packed shots
+  back to `pending`), tells Fix the shots + ≈credits, and prints `next`: `ready` first for a file he already sent
+  (still his review — no vision), then flow-driver from the named shot. Typed (`ไอยูทำให้เลย เปลี่ยนใจ`) =
+  `clipjob.py production <job> auto`, same effect, no message.
+- From then on it is a 🤖 job: per-shot review (router step 10) for every shot YOU render. A file Fix still
+  sends for a shot you have not reserved: `ingest` it first; one for a shot already reserved is refused —
+  tell him the shot is in your Flow queue and spend nothing twice.
+- `takeover: false` + `why` = nothing changed (closed job, already auto, fallback, no shot left): end the turn.
 
 `pack <job> --shot K` resends a single shot. Use it after a 🔁 tap, or when Fix asks for one prompt again.
 **A job's FIRST pack must be a bare `pack <job>`** (no `--shot`): the flag suppresses the header AND the

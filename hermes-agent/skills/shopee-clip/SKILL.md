@@ -1,6 +1,6 @@
 ---
 name: shopee-clip
-description: Use for EVERY Shopee clip order from Fix (ทำคลิป shopee, ทำคลิปจากลิงก์นี้, a product link or product photos with a clip request, gen ใหม่อีกคลิป). Asks the mode first, then routes to gameplay-clips or runs the Flow modes.
+description: Use for EVERY Shopee clip order from Fix (ทำคลิป shopee, ทำคลิปจากลิงก์นี้, a product link or product photos with a clip request, gen ใหม่อีกคลิป). Also a clipjob button tap (✅/🔁 ช็อต, 🤖 ไอยูกด Flow แทน, 🏁 จบงาน). Asks the mode first, then routes to gameplay-clips or runs the Flow modes.
 version: 2.0.0
 author: Hermes (IU) + Fix
 license: MIT
@@ -18,7 +18,7 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
 - **Source of truth is the repo** (`hermes-agent/skills/`); how a change is kept: `references/house-rules.md`
   → Skill sync. Runtime data: `/opt/data/clips/` (workdirs in `work/<job>`).
 - **A missed gate is fixed in code, not in prose.** If you skipped a rule, add the check to `clipjob.py`
-  (with a test) instead of adding another paragraph here. This file has a 15 KB budget, enforced by a test.
+  (with a test) instead of adding another paragraph here. 15 KB budget, enforced by a test.
 - File names are unique across the 3 clip skills: one not in this skill lives in flow-driver/gameplay-clips.
 
 ## Hard rules (every mode)
@@ -27,7 +27,7 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
 - Hashtags ≤150 characters, no CJK (`templates/hashtags.md`). Basket link = an https Shopee link. Both go out as ONE message with tap-to-copy buttons (`send_copy_buttons.py`, run by `deliver`); no fenced code blocks, in every mode.
 - EN pills ≤2 words. Flow must draw no on-screen text (the block in `references/presenter-post.md`).
 - One heavy job at a time (whisper, render, ffmpeg): the NAS has 12 GB, and the gateway is fenced at 4 GB.
-- Details and the reasons behind them: `references/house-rules.md`. Read it once per session before the first order.
+- Details + reasons: `references/house-rules.md` (read once per session before the first order).
 
 ## Flow of an order
 0. `python3 S/clipjob.py status` lists open jobs — run it BEFORE inspecting any bare video from Fix
@@ -35,8 +35,7 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    Resume the job that message is about (a reply with a video, a ✅/🔁 tap, "ต่อ"), never from memory.
    Rows carry `stage` + `last` (newest notes): after a context loss (a model refusal, a reset, a bare "ต่อ")
    continue from `last` and the workdir — never rebuild it from `session_search`.
-   Duplicate check before a new job: grep `clip-log.jsonl` for the product name (`delivery-log.jsonl` rows carry
-   the job slug, never the product). A duplicate is confirmed with Fix before any spend (it may ride on the
+   Duplicate check before a new job: grep `clip-log.jsonl` for the product name (`delivery-log.jsonl` = slugs only). A duplicate is confirmed with Fix before any spend (it may ride on the
    board's ⚠️ line). Same game, other platform/edition = not a duplicate: one line, new job (gameplay-clips
    reuses the old job's sources).
    Then at once: `clipjob.py intake <job> --product "…" --link <url> [--mode …]`, and
@@ -57,9 +56,8 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    → Credits). N = ceil(length / 10); size each shot to its speech (`--seconds`); clip = sum of shots.
    A mode/length already named in the order is not asked again.
 4. **🎬 → `clipjob.py new <job> --mode gameplay --product "…" --link <url>`, then load skill
-   `gameplay-clips` and follow it.** The job has no shots; it holds the state across session resets
-   (`clipjob.py note <job> "<done; next>"` at each stage) and ends with the same `deliver` as step 12
-   (`--report` may be omitted). Any other product reads its
+   `gameplay-clips` and follow it.** No shots; it holds the state across resets (`note` at each stage)
+   and ends with step 12's `deliver` (`--report` optional). Any other product reads its
    `references/product-footage.md` first (official brand video of the exact model only, gated by
    `source_check.py`). A revision of a delivered clip: `clipjob.py reopen <job> --reason …`, then
    `deliver` again (it logs a REVISED row). Stop reading here for 🎬.
@@ -90,7 +88,8 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    Unanswered / timed out = 📝 (zero spend), for ANY question that would spend credits. An order that says
    ให้ไอยูทำ/กดใน Flow เอง = auto, skip Q3 (cost still on the board). Record: `clipjob.py production <job>
    prompt|auto` right after `new` (refused at `intake`; never `fallback` for this — it locks out `auto`).
-   Fix switches to 🤖 after `pack`: `clipjob.py production <job> auto` before Flow (un-packs; never after `fallback`).
+   Fix switches to 🤖 after `pack`: tap `🤖 ไอยูกด Flow แทน · <job>` → `clipjob.py decide --text "<text>"`, typed →
+   `clipjob.py production <job> auto`; then flow-driver from the shot it names (never after `fallback`).
    Fix changes the shot plan before anything rendered (6+4 s → one 10 s): `clipjob.py reshape <job> --shots N
    [--seconds …]`, rewrite the shot files, pack again — never cancel and reopen.
 9. **Shots.**

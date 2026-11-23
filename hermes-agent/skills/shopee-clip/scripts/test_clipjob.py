@@ -611,7 +611,8 @@ def test_pack_sends_the_character_portrait_for_an_account_without_it(tmp_path, m
     head = calls[0][1]["text"]
     assert "Omni 1.2 Flash" in head and "Ingredient แทน" in head
     assert any(f and f.get("photo", "").endswith("น้องมุก.jpg") for _, _, f in calls)
-    assert "10 วิ" in calls[-1][1]["text"]
+    assert "10 วิ" in calls[-2][1]["text"]
+    assert calls[-1][1]["reply_markup"]["keyboard"][0][0]["text"] == "🤖 ไอยูกด Flow แทน · t-1"
     monkeypatch.setattr(cj, "CHAR_DIR", str(tmp_path / "none")); calls.clear()
     j2 = job(1, prod="prompt"); j2["workdir"] = str(tmp_path)
     cj.cmd_pack(j2, None, False)
@@ -1088,7 +1089,77 @@ def test_prompt_reply_with_a_gate_note_informs_without_buttons(tmp_path, monkeyp
     assert cj.shot(cj.load("t-1"), 1)["state"] == "approved"
     (method, payload), = sent
     assert "ผ่านอัตโนมัติ" in payload["text"] and "720x1280" in payload["text"]
-    assert payload["reply_markup"] == {"remove_keyboard": True}
+    # no ✅/🔁 (his file is his review); shot 2 still waits, so the 🤖 takeover button stays on screen
+    assert payload["reply_markup"]["keyboard"] == [[{"text": "🤖 ไอยูกด Flow แทน · t-1"}]]
+
+
+# ---------------------------------------------------------------- 🤖 takeover (Fix 2026-11-23)
+def test_pack_offers_the_takeover_button_with_start_shot_and_cost(tmp_path, monkeypatch):
+    """Fix 2026-11-23: a 📝 pack carries a button that hands Flow back to Hermes."""
+    calls = []
+    monkeypatch.setattr(cj, "tg", lambda m, d, files=None: calls.append((m, d)) or {"message_id": 1})
+    j = cj.new_job("t-1", "presenter", "Thing", "https://s.shopee.co.th/x", 2, ["/tmp/ref.jpg"],
+                   character="น้องมุก", seconds="8,6")
+    cj.set_production(j, "prompt"); j["workdir"] = str(tmp_path)
+    for k in (1, 2):
+        (tmp_path / f"shot{k}.txt").write_text("p", encoding="utf-8")
+    cj.cmd_pack(j, None, False)
+    m, d = calls[-1]
+    assert d["reply_markup"]["keyboard"] == [[{"text": "🤖 ไอยูกด Flow แทน · t-1"}]]
+    assert "เริ่มที่ช็อต 1" in d["text"] and "≈42 เครดิต" in d["text"]       # 8 s + 6 s at 3 cr/s
+    assert "ทำต่อ" not in d["reply_markup"]["keyboard"][0][0]["text"]       # pending-work-triage's word
+
+
+def test_no_takeover_button_after_a_fallback(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(cj, "tg", lambda m, d, files=None: calls.append((m, d)) or {"message_id": 1})
+    j = job(1, prod="auto"); j["workdir"] = str(tmp_path); (tmp_path / "shot1.txt").write_text("p", encoding="utf-8")
+    cj.fallback(j, "unusual activity")
+    cj.cmd_pack(j, None, False)
+    assert not any((d or {}).get("reply_markup", {}).get("keyboard") for _, d in calls)
+    assert "why" in cj.takeover(j) and j["production"] == "prompt"
+
+
+def test_takeover_tap_unpacks_and_reserve_accepts(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(cj, "DIR", str(tmp_path))
+    sent = []
+    monkeypatch.setattr(cj, "tg", lambda method, payload=None, files=None: sent.append((method, payload)) or {})
+    j = job(shots=2, prod="prompt")
+    for s in j["shots"]:
+        s["state"] = "packed"
+    cj.save(j)
+    assert cj.main(["decide", "--text", "🤖 ไอยูกด Flow แทน · t-1"]) == 0
+    res = json.loads(capsys.readouterr().out)
+    assert res["takeover"] and res["todo"] == [1, 2] and "flow-driver" in res["next"]
+    j = cj.load("t-1")
+    assert j["production"] == "auto" and [s["state"] for s in j["shots"]] == ["pending", "pending"]
+    assert "ไอยูกด Flow ต่อเอง" in sent[-1][1]["text"]
+    cj.reserve(j, 1, None, 1000)                                             # the switch is real
+    # a second tap is harmless
+    cj.save(j); sent.clear()
+    assert cj.main(["decide", "--text", "🤖 ไอยูกด Flow แทน · t-1"]) == 0
+    assert json.loads(capsys.readouterr().out)["takeover"] is False and "อยู่แล้ว" in sent[-1][1]["text"]
+
+
+def test_takeover_keeps_a_file_fix_already_sent_as_his_review(tmp_path, monkeypatch, capsys):
+    """Shot 1's file arrived (ingested, not readied yet), then the 🤖 tap: shot 1 is still Fix-reviewed."""
+    sent = []
+    monkeypatch.setattr(cj, "tg", lambda method, payload=None, files=None: sent.append((method, payload)) or {})
+    j, dst = reviewed_shot(tmp_path, monkeypatch)
+    assert cj.main(["decide", "--text", "🤖 ไอยูกด Flow แทน · t-1"]) == 0
+    res = json.loads(capsys.readouterr().out)
+    assert res["todo"] == [2] and "ready t-1 K" in res["next"] and "shot 1" in res["next"]
+    assert cj.main(["ready", "t-1", "1", "--raw", dst]) == 0
+    assert cj.shot(cj.load("t-1"), 1)["state"] == "approved"                  # no vision review asked
+
+
+def test_takeover_on_a_closed_job_only_says_so(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(cj, "DIR", str(tmp_path))
+    sent = []
+    monkeypatch.setattr(cj, "tg", lambda method, payload=None, files=None: sent.append((method, payload)) or {})
+    j = job(shots=1, prod="prompt"); j["status"] = "cancelled"; cj.save(j)
+    assert cj.main(["decide", "--text", "🤖 ไอยูกด Flow แทน · t-1"]) == 0
+    assert "ปิดไปแล้ว" in sent[-1][1]["text"] and cj.load("t-1")["production"] == "prompt"
 
 
 def test_fix_can_replace_an_approved_prompt_shot(tmp_path, monkeypatch):

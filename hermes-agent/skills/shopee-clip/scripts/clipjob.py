@@ -31,6 +31,7 @@ This CLI is the only sanctioned way to move a Flow-mode clip forward. It refuses
   clipjob.py startframe JOB K                       # the start-frame jpg for shot K (🧑: newest earlier shot showing her face)
   clipjob.py ready JOB K --resend                   # the review message failed to send: send it again (no re-check)
   clipjob.py decide (--text "<Fix's button text>" | JOB K approve|regen)
+                                                    # also 🤖 ไอยูกด Flow แทน · JOB (📝 -> 🤖) and 🏁
   clipjob.py assemble-check JOB                     # approved files in shot order, exit 0 only when all approved
   clipjob.py deliver JOB --final F.mp4 --report report.json --gfx gfx.json --hashtags "..." --cover C.jpg \
                          --caption "..." [--hook-id ID] [--category C] [--notes "..."] [--ack "<flag text>=<Fix's call>" ...]
@@ -109,6 +110,10 @@ CLOSE_S = int(os.environ.get("CLIPJOB_CLOSE_S", "300"))
 CLOSE_GRACE_S = 60         # the lazy sweep leaves a just-due job to its own sleeper for this long
 CLOSE_BTN = "🏁 จบงาน"
 CLOSE_RE = re.compile(r"^🏁 จบงาน · ([a-z0-9][a-z0-9-]{0,40})$")
+# Fix 2026-11-23: "เลือกให้ gen prompt ... อยากให้มีปุ่มเผื่อเปลี่ยนใจให้ hermes ทำให้ต่อเองได้" (genme switched by
+# typing). No "ทำต่อ" in the label: pending-work-triage takes that word as a resume order.
+TAKEOVER_BTN = "🤖 ไอยูกด Flow แทน"
+TAKEOVER_RE = re.compile(r"^🤖 ไอยูกด Flow แทน · ([a-z0-9][a-z0-9-]{0,40})$")
 DOWNLOADS = [d for d in os.environ.get("CLIPJOB_DOWNLOADS", "/opt/data/Downloads:/opt/data/home/Downloads").split(":") if d]
 # regenerable leftovers of a delivered job: frame/contact sheets, vision preps, start frames, logs, html dumps
 JUNK_RE = re.compile(r"(sheet[^/]*\.(jpe?g|png|webp)|\.v\.jpe?g|_last(frame)?\.jpe?g|\.(log|html))$", re.I)
@@ -718,6 +723,56 @@ def arm_close(j, t=None):
 def parse_close_text(text):
     m = CLOSE_RE.match((text or "").strip())
     return m.group(1) if m else None
+
+
+# ---------------------------------------------------------------- 🤖 takeover (📝 job, Fix changes his mind)
+def takeover_todo(j):
+    """Shots Hermes would render if Fix hands Flow back. [] = no 🤖 button (not 📝, a fallback job, nothing left)."""
+    if (j.get("status") != "open" or j.get("mode") not in FLOW_MODES or j.get("production") != "prompt"
+            or j.get("fallback")):
+        return []
+    return [s["k"] for s in j["shots"] if s["state"] in ("pending", "packed", "regen_approved")]
+
+
+def takeover_keyboard(j):
+    if not takeover_todo(j):
+        return None
+    return {"keyboard": [[{"text": f"{TAKEOVER_BTN} · {j['job']}"}]], "one_time_keyboard": True,
+            "resize_keyboard": True}
+
+
+def takeover_cost(j, todo):
+    return sum(est_credits(shot(j, k)) for k in todo)
+
+
+def takeover_offer_text(j):
+    todo = takeover_todo(j)
+    return (f"เปลี่ยนใจให้ไอยูกด Flow เองก็ได้ค่ะ: กดปุ่ม {TAKEOVER_BTN} ด้านล่าง\n"
+            f"ไอยูเริ่มที่ช็อต {todo[0]} · ช็อต {', '.join(map(str, todo))} ≈{takeover_cost(j, todo)} เครดิต\n"
+            "ถ้ากำลัง gen ช็อตไหนใน Flow อยู่ ส่งไฟล์ช็อตนั้นกลับมาก่อนแล้วค่อยกด (ไม่งั้นเสียเครดิตซ้ำ)")
+
+
+def parse_takeover_text(text):
+    m = TAKEOVER_RE.match((text or "").strip())
+    return m.group(1) if m else None
+
+
+def takeover(j):
+    """Fix's 🤖 tap: this 📝 job becomes 🤖 for the shots left. -> {"todo": [...], "credits": N} or {"why": ...}
+    (a reason Fix reads; nothing changed)."""
+    if j.get("status") != "open":
+        return {"why": f"งาน {j['job']} ปิดไปแล้วค่ะ"}
+    if j.get("production") == "auto":
+        return {"why": f"ไอยูกด Flow ให้งาน {j['job']} อยู่แล้วค่ะ"}
+    if j.get("fallback"):
+        return {"why": f"งาน {j['job']} สลับมาโหมด prompt เพราะ Flow ติด ({j['fallback'].get('reason', '')}) "
+                       "ไอยูเลยกดต่อไม่ได้ค่ะ ฟิกส่งไฟล์มาตามเดิมนะคะ"}
+    todo = takeover_todo(j)
+    if not todo:
+        return {"why": f"งาน {j['job']} ไม่มีช็อตเหลือให้ gen แล้วค่ะ"}
+    set_production(j, "auto")
+    log(j, f"🤖 takeover tap: shots {todo}")
+    return {"todo": todo, "credits": takeover_cost(j, todo)}
 
 
 def _under(path, root):
@@ -1363,6 +1418,9 @@ def cmd_pack(j, only, no_send):
         s.update({"state": "packed", "pack_msg": mid})
         sent.append({"shot": k, "message_id": mid})
     log(j, f"packed shots {targets}")
+    kb = takeover_keyboard(j)
+    if kb and not no_send:
+        tg("sendMessage", {"chat_id": CHAT, "text": takeover_offer_text(j), "reply_markup": kb})
     return sent
 
 
@@ -1433,7 +1491,7 @@ def cmd_ready(j, k, raw, frame_arg, no_send, resend=False, identity_arg=None):
 def fix_reviewed(j, k):
     """📝: the file came from Fix's own Flow as a reply to the prompt — he watched it before sending it."""
     at = (shot(j, k).get("attempts") or [{}])[-1]
-    return j["production"] == "prompt" and at.get("via") == "prompt"
+    return at.get("via") == "prompt"          # stays his review when he hands Flow to Hermes after sending it
 
 
 def ready_reviewed(j, k, raw, frame, identity_arg, no_send):
@@ -1448,7 +1506,8 @@ def ready_reviewed(j, k, raw, frame, identity_arg, no_send):
     log(j, f"shot {k} approved: {FIX_REVIEWED}")
     notes = [f"{n}: {g['note']}" for n, g in gates.items() if g.get("note") and g["note"] != FIX_REVIEWED]
     if notes and not no_send:
-        notify(f"ℹ️ ช็อต {k} · {j['product']} รับแล้ว (ผ่านอัตโนมัติ)\n" + "\n".join(notes)[:900])
+        notify(f"ℹ️ ช็อต {k} · {j['product']} รับแล้ว (ผ่านอัตโนมัติ)\n" + "\n".join(notes)[:900],
+               takeover_keyboard(j))
     left = [s["k"] for s in j["shots"] if s["state"] != "approved"]
     return {"shot": k, "pass": True, "auto_approved": True, "file": os.path.abspath(file), "gates": gates,
             "next": ("all shots approved -> post-production" if not left
@@ -1867,11 +1926,26 @@ def main(argv=None):
                 notify(close_text(j) if "closed" in res else f"งาน {job} ปิดไปแล้วค่ะ")
                 done.append(res)
             return out({"closed": done, "next": "end the turn: one short line, no cleanup of your own"})
+        if a.cmd == "decide" and parse_takeover_text(a.text):
+            j = load(parse_takeover_text(a.text)); res = takeover(j)
+            if "why" in res:
+                notify(res["why"])
+                return out({**summary(j), "takeover": False, "why": res["why"], "next": "one short line at most, end the turn"})
+            save(j)
+            notify(f"รับทราบค่ะ ไอยูกด Flow ต่อเอง · ช็อต {', '.join(map(str, res['todo']))} ≈{res['credits']} เครดิต "
+                   f"· เริ่มช็อต {res['todo'][0]}")
+            unread = [s["k"] for s in j["shots"] if s["state"] == "submitted"]
+            return out({**summary(j), "takeover": True, **res,
+                        "next": (f"first clipjob.py ready {j['job']} K --raw <file> for shot {', '.join(map(str, unread))} "
+                                 "(Fix's file = his review), then " if unread else "")
+                                + f"load skill flow-driver and render shot {res['todo'][0]} (clipjob.py reserve; shot ≥2: "
+                                  "clipjob.py startframe). A file Fix still sends for a shot: ingest it before its reserve"})
         if a.cmd == "decide":
             if a.text:
                 parsed = parse_decision_text(a.text)
                 if not parsed:
-                    raise Refused("text is not a review button (✅ ผ่าน / 🔁 gen ใหม่ ช็อต K · job)")
+                    raise Refused("text is not a review button (✅ ผ่าน / 🔁 gen ใหม่ ช็อต K · job, "
+                                  f"{TAKEOVER_BTN} · job, {CLOSE_BTN} · job)")
                 job, k, dec = parsed
             else:
                 if not (a.job and a.shot and a.decision):
@@ -1995,10 +2069,13 @@ def main(argv=None):
             sent_sf = None
             if sf and (sf["file"] or sf["faceless"]):
                 try:
+                    kb = takeover_keyboard(j)
+                    extra = {"reply_markup": kb} if kb else {}
                     if sf["file"]:
-                        tg("sendPhoto", {"chat_id": CHAT, "caption": start_frame_text(j, k + 1, sf)}, files={"photo": sf["file"]})
+                        tg("sendPhoto", {"chat_id": CHAT, "caption": start_frame_text(j, k + 1, sf), **extra},
+                           files={"photo": sf["file"]})
                     else:
-                        tg("sendMessage", {"chat_id": CHAT, "text": start_frame_text(j, k + 1, sf)})
+                        tg("sendMessage", {"chat_id": CHAT, "text": start_frame_text(j, k + 1, sf), **extra})
                     sent_sf = k + 1
                 except (Refused, OSError, ValueError) as e:
                     print(f"start frame for shot {k + 1} not sent: {e}", file=sys.stderr)
