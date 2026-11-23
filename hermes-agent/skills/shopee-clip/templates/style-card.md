@@ -13,6 +13,9 @@ caption, label, pill, ป้าย, font, ฟอนต์, subtitle or `Link bel
 
 Scanning it: cut the block out from `ON-SCREEN TEXT: NONE` through the end of the `ห้ามมีตัวอักษรใดๆ … ทีหลังเอง`
 line before grepping — the block itself contains `ป้าย`, so scanning the raw file always false-positives on it.
+Match that end marker EXACTLY: the line reads `…จะใส่ทีหลังเอง` (`ที`, not `ที่`). A mistyped marker leaves the
+block uncut, and the scan then reports the block's own `ป้าย` / `label` / `subtitle` — which reads as a failing
+prompt when the CUT is what failed, so assert the block was actually removed before trusting any hit.
 A hit in the product prose (`a green-and-white label printed …`) is still a hit: the gate is word-based, not
 intent-based, so reword the prose (`the green-and-white printed front reading …`) instead of exempting it.
 The scan matches SUBSTRINGS, not words: an innocent word containing a banned token still hits (`spills` ⊃

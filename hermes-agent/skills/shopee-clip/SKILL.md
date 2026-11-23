@@ -19,8 +19,7 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
   → Skill sync. Runtime data: `/opt/data/clips/` (workdirs in `work/<job>`).
 - **A missed gate is fixed in code, not in prose.** If you skipped a rule, add the check to `clipjob.py`
   (with a test) instead of adding another paragraph here. This file has a 15 KB budget, enforced by a test.
-- File names are unique across shopee-clip, flow-driver and gameplay-clips. A file named in `references/` or
-  `scripts/` that is not in this skill lives in one of the other two under `/opt/data/skills/`.
+- File names are unique across the 3 clip skills: one not in this skill lives in flow-driver/gameplay-clips.
 
 ## Hard rules (every mode)
 - No price, currency, discount or % anywhere: voiceover, subs, pills, cover, hashtags.
@@ -51,8 +50,7 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    `["🎬 footage จากวิดีโอทางการ (เกม/สินค้า, 0 เครดิต)", "🧑 presenter + graphic", "📦 graphic ล้วน (ภาพสินค้า ไม่มีคน)", "✋ มือ+สินค้า ลองใช้ให้ดู (ไม่เห็นหน้า)"]`.
    Do not guess from the product type. **Vocabulary in the order already names the mode → skip Q1:**
    `gameplay` / `ฟุตเตจ` / `footage` = 🎬, and `+ graphic` is not a mode — graphics are made in post in every
-   mode. For a rigid product (rack, shelf, cabinet, device) add one line to the
-   question: Flow redrew its parts/size in 3 of 3 🧑/✋ jobs (2026-11-10/11/14); 🎬/📦 hold the shape better.
+   mode. Rigid product (rack, shelf, device): add one line, Flow redrew its parts in 3 of 3 🧑/✋ jobs.
 3. **Q2 — length, 🧑/📦/✋ only** (`clarify`, one question): `["10 วิ (แนะนำ)", "20 วิ", "30 วิ", "40 วิ"]`.
    **🎬 skips Q2**: gameplay-clips picks 15–50 s from the footage. A length Fix names still wins.
    One shot = one Flow generation of 3–10 s, never 11–15 (Omni 1.2 Flash 720p = 3 credits/s; `house-rules.md`
@@ -61,7 +59,7 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
 4. **🎬 → `clipjob.py new <job> --mode gameplay --product "…" --link <url>`, then load skill
    `gameplay-clips` and follow it.** The job has no shots; it holds the state across session resets
    (`clipjob.py note <job> "<done; next>"` at each stage) and ends with the same `deliver` as step 12
-   (`--report` may be omitted). A game uses the steps as written. Any other product reads its
+   (`--report` may be omitted). Any other product reads its
    `references/product-footage.md` first (official brand video of the exact model only, gated by
    `source_check.py`). A revision of a delivered clip: `clipjob.py reopen <job> --reason …`, then
    `deliver` again (it logs a REVISED row). Stop reading here for 🎬.
@@ -92,15 +90,15 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    Unanswered / timed out = 📝 (zero spend), for ANY question that would spend credits. An order that says
    ให้ไอยูทำ/กดใน Flow เอง = auto, skip Q3 (cost still on the board). Record: `clipjob.py production <job>
    prompt|auto` right after `new` (refused at `intake`; never `fallback` for this — it locks out `auto`).
+   Fix switches to 🤖 after `pack`: `clipjob.py production <job> auto` before Flow (un-packs; never after `fallback`).
    Fix changes the shot plan before anything rendered (6+4 s → one 10 s): `clipjob.py reshape <job> --shots N
    [--seconds …]`, rewrite the shot files, pack again — never cancel and reopen.
 9. **Shots.**
    - 📝: `clipjob.py pack <job>` sends the reference photos and one tagged prompt per shot. Then wait.
      Each video from Fix: reply to a prompt → `clipjob.py ingest <job> <file> --reply-text "<replied-to text>"`;
      no reply context → ask which shot (buttons), `--shot K` (don't ask when only one shot waits for a file).
-     **Fix's file IS his review (Fix 2026-11-22):** then `clipjob.py ready <job> K --raw <file>` with NO vision,
-     no idcheck, no scan — it approves the shot at once and sends no ✅/🔁. A new file for an approved shot
-     replaces it. Full rules: `references/prompt-pack.md`.
+     **Fix's file IS his review:** `clipjob.py ready <job> K --raw <file>`, NO vision/idcheck/scan (approved at
+     once, no ✅/🔁); a new file replaces an approved shot. Full rules: `references/prompt-pack.md`.
    - 🤖: load skill `flow-driver` and follow it. It calls `reserve`/`submitted`/`submit-failed`/`trouble`.
      Start frame of shot K≥2 = `clipjob.py startframe <job> K` (🧑 skips a last frame without her face;
      `file` null = character chip + refs only). 📝 gets the same pick from `ingest`/`pack`.
@@ -142,9 +140,11 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
 13. Fix calls it off (`เลิกทำ` / `หยุด` / `พอแล้ว`, or `ไม่ผ่าน` + `ยกเลิก`) → `clipjob.py cancel <job> --reason …`,
     close Chrome, report `spent_shots`. `ไม่ผ่าน` alone is a shot review failure (✅/🔁), never a cancel.
 
-**Vision budget per job** (11-19..22: 222 calls, ~4 h, 8 × 420 s timeouts): intake 1 · photo gate ≤2 ·
+**Vision budget per job**: intake 1 · photo gate ≤2 ·
 🤖 shot 1 (+1 full-res confirm of a drift) · 📝 shot 0 · post frame sheet 1 · cover 2 (pick + the
-`check_sheet` that `make_poster_cover.py` prints) · 🎬 footage: one sheet per stage. clipjob `note`/`status` print `vision N/budget`; past it: decide + `note`.
+`check_sheet` that `make_poster_cover.py` prints) · 🎬 footage: one sheet per stage. clipjob `note`/`status` print
+`vision N/budget`; past it: decide + `note`. Every call counts (locator, chip zoom, screenshot reads):
+`references/house-rules.md` → Vision budget.
 
 ## Talking to Fix
 - One status line when something blocks, sent at that moment, not at the end. Put the credit cost inside

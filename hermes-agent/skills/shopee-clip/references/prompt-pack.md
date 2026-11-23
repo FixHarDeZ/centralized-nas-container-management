@@ -65,7 +65,9 @@ under exactly the roster name. No portrait on disk = say so in the header messag
 account he is on; never swap in another character silently. A face attached as a plain image holds less well
 than a saved character (unmeasured here): for a multi-shot 🧑 clip keep all shots on ONE account, and chain
 from the previous shot's last frame as usual. The model line in the header (`Omni 1.2 Flash · 720p · x1`) is
-what Fix sets in either account.
+what Fix sets in either account. Do NOT follow a pack with a settings restatement: the header carries the model
+line and every shot message carries `9:16 · <N> วิ`, so a follow-up line earns its place only with what the pack
+does not say — the ≥5 min gap between submits, the per-shot credit estimate, a quota line he asked for.
 
 ## Credits
 Fix's own submits spend his Flow credits like 🤖. `ingest` records the published rate for the shot's length

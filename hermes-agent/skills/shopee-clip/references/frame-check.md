@@ -23,6 +23,12 @@ Standing depth for SKILL.md step 10 (per-shot review). Step 10 owns WHAT to samp
   shot (same height, side by side) and ask the structural question only — parts present, counts, proportions of the
   product against ITSELF — explicitly splitting the two: `is the product RESHAPED, or just SMALLER in this shot's
   framing?` Smaller-in-frame = framing, record `match`; a part that differs on the full-res pairing = real drift.
+  **The same screening misreads COLOUR at tile size.** A ~150 px shot tile turned a blue-grey plaid with a teal
+  lining into `monochrome grey — matches the OTHER reference` on two shots of the same job, while the full-res
+  ref-vs-frame pair read the identical colourway both times: so a sheet verdict of `wrong colourway` / `wrong
+  lining colour` goes through that same full-res pairing (ask for the exact plaid and lining colours there)
+  before it becomes `--identity drift`. On a worn garment the lining can be in shadow or simply out of view at
+  that frame — that is `match`, not a colour flip.
   Conversely a full-res pairing that finds every part matching overrides the sheet's drift call the same way —
   the pixels decide, never the tile read. The confirmation runs BOTH ways: a part the tile claims is PRESENT is
   not cleared until the full-res pairing shows it either.
@@ -70,6 +76,11 @@ complete, NONE = the chip was never attached or not honoured, so the fix is the 
 
 ## Sending the review
 - **One shot's `ready` at a time.** Two review keyboards in flight make the answer ambiguous (which ✅/🔁 is he tapping?), so shot K's review goes out only after shot K−1 is decided; run shot K+1's frame checks while he answers, so the wait costs nothing.
+- **A shot flag's `clarify` that times out is the zero-spend KEEP, and it must be recorded:** run
+  `clipjob.py decide <job> K approve` before moving on, or the shot stays `in_review` and `deliver` refuses
+  with "unapproved shot" long after the run stopped being able to ask. Same for report flags at delivery:
+  `--ack "<flag>=zero-spend default (clarify timed out)"` — the ack must say it was the timeout default, never
+  that Fix chose it.
 
 ## Locating a crop
 A crop guessed from memory lands on the wrong region (a torso where the fan head was) and burns a vision call.

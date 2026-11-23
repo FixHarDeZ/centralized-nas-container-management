@@ -53,6 +53,33 @@ A review post (buyer photo + comment UI) is often the only photo of the exact pr
 2. **Adjudicate hands and cut edges with targeted zoom reads, not hue probes.** On warm-lit photos every skin predicate also matches the beige background and the product's own orange label art, so a skin-count probe finds "fingers" on label graphics and misses pale skin. Settle "is a hand in the crop / is the base cut" with ONE zoom read of that zone (tile several suspect zones into one sheet if there are several), and take the product's top/bottom from row profiles instead: count near-white pixels per row across the product's x-range — the first and last row with a real count are the nozzle top and the base bottom. Vision's completeness verdicts flip between runs; the row count does not.
 3. A sliver of finger at one corner is Fix's explicit call, not yours: offer it alongside the small-source options in the same clarify, then record the accepted risk in the storyboard (drift check before the next shot's submit) and in the delivery.
 
+## Product worn by a person — cut the design out instead of asking for a new photo
+A photo of the product ON someone (a tee on a model, a bag on a shoulder) fails the photo gate as a whole, but
+the element the clip is about (a back print, a chest graphic) is often croppable with NO person in it. Try that
+BEFORE asking Fix for a product-only photo or demoting the element to a prompt description: a measured crop keeps
+the design identity a text description cannot. The whole photo still ships nothing — only the person-free crop
+does (same rule as the child-in-composite case in step 5).
+1. ONE locator read: overlay a labelled 10 % grid on the source and ask for the design's box in FRACTIONS plus
+   the boxes of every head / arm / hand, and whether any skin or hair sits inside the design box. A locator sits
+   between the two verdict sheets and does not count against them.
+2. Cut the candidates with padding, tile them on ONE sheet, and spend verdict check #1 there: readable text, any
+   price / UI, any human part, and whether the whole design sits inside with margin.
+3. Settle what that check names with PIXELS, not a third sheet:
+   - "design cut off" → count dark ink (`max(rgb)<110`) in a 6–8 px band on all four sides of the crop; zero on
+     every side means the design is inside. Vision over-estimates a design's extent by ~10–15 px, so take its
+     true edge from a per-column ink profile (the last column holding real ink), not from its box.
+   - "skin / hair in frame" → paint a skin-fraction map of the crop (16×16) and read WHERE the hits cluster.
+     Hits INSIDE the design are the product's own warm art (a yellow beak, an orange foot) or the beige backdrop:
+     they never reach zero and are not a defect. Hits in a border band are the body — shrink only that edge, in
+     ~0.4 %-of-frame steps, until a 10–16 px band on all four sides measures zero while the design box stays
+     inside. The skin predicate is a LOCATOR for the body, never the cleanliness verdict; that is what the
+     zoom-read rule under "Review-screenshot salvage" is for.
+4. If a real doubt survives (a hand that could sit anywhere in the crop), spend verdict check #2 on ONE read of
+   the FINAL crops — not on another candidate sheet — and never a third sheet: after it, either ship the measured
+   crop and say in the delivery that it was verified by measurement, or ask Fix once. Zero spend while waiting.
+5. Attach the person-free crop (LANCZOS-upscale a small one per "Small-source crops"), drop the whole photo, and
+   name both in the delivery: the source was worn by a model, the person was removed by measurement.
+
 ## Salvage recipe — locate, cut, verify by pixel probes
 1. Copy the cache image into a scratch dir under a descriptive filename and `ffprobe` it for WxH (the picker lists by filename, so make it descriptive).
 2. **Locate the product, trying in this order — stop at the first that returns numbers:**
