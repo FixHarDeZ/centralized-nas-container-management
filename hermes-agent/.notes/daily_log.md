@@ -1671,3 +1671,53 @@ Not done / open:
   credits; `chipcheck.py` exits and the vision count on 🤖 jobs; a 🤖 takeover tap on a 📝 job.
 - Not redone: genme final ships without its spoken CTA (shot 2, 12.2 c/s); plaid spent 60 cr on an unanswered
   board (both before the gates).
+
+### 2026-11-23 (3) — check of 4 jobs after the 11-23 (2) close + port
+- Fix: "เริ่มงาน hermes-agent … ตรวจงานวันนี้แล้วดูหน่อยว่า enhance อะไรได้อีกไหม".
+- `make hermes-skills ARGS=--pull`: 8 live edits (flow-steps URL gate after a no-op click; frame-check chipcheck
+  first; house-rules last-read balance on the board; poster-cover hero by sharpness+skin when budget spent;
+  presenter-post pillclear `moved` = proposal, top pills timed from face boxes; presenter-rules + product-image-prep
+  worn apparel / two-sided prints / job-named probes / sheet's own IMAGE labels; router board line). The router
+  edit pointed to a `run-mode-gates.md → Board stamp` section that did not exist and dropped the refusal sentence
+  → added `## Board stamp` there. Commit `08394cc`, pushed; clone stashed (`hermes live 11-23 pm, ported`, 3
+  stashes now); `make hermes-skills` synced at `08394cc` (container tests 209 passed). No open job at sync.
+- Jobs (all delivered, Secretary copy ok, closed by tap/timer):
+  - **pepita-tee** 🧑📝 1×10 s, 61 min (prep 2, gen+review 32 = Fix in Flow, post 28), vision 6/6. Board stamp
+    10:50:54 → clarify answer 10:53 (gate held). CTA heard (whisper 6.34–8.30 `…ลิ้งอยู่ใต้คลิปนะ`).
+  - **chihuahua-croptop** 🧑📝 1×10 s, 31 min (post 22), vision 5/6 (pill_strips call 403 s). Name pill dropped
+    (face band), link pill 8.76–9.85. CTA heard 7.40–9.86. `sub_linecheck` event 0 false FAIL.
+  - **tinzshop-zelda-sw2** 🎬 15.5 s, 79 min (footage 30, build 36), vision 7/8 (hero_grid 420 s timeout, then
+    48 s for a one-word answer). Reused zelda-ctrl-stand40's `src_clean_windows.json` — written before the
+    white-flash cut, no `wash` key — so build_v5 found a flash at 27.95 the table did not have; the re-layout was
+    a 296 s / 21k-char reasoning turn. End card unusable (date + other store) → ends on footage. CTA heard.
+    `sub_linecheck` event 0 false FAIL.
+  - **ps5-discdrive** 🎬 17 s, 86 min, **no `stage` marks** (one "ทำคลิป 85" stage), vision 9/8 (cover_sheet
+    420 s timeout). Official hardware film (music only), source end card 1.9 s → CTA on the console shot. Slowest
+    turn 287 s / 23.6k chars = end-card + seg/CTA layout in its head. CTA heard 12.92–14.96. `sub_linecheck`
+    event 3 false FAIL.
+- Time split (state.db): 🧑📝 LLM 30/11 min, tools 18/16 min of which vision 12.7/10.7 min; 🎬 LLM 54/47 min,
+  vision 12/14 min. Vision calls 11-22→23 (160 rows incl. compaction duplicates): median 55 s; today 4 calls ≥390 s,
+  3 of them cover/hero picks. Hermes' aux vision path prepends "Fully describe and explain everything about this
+  image, then answer…" (`tools/vision_tools.py`), so every answer opens with a full description.
+- `sub_linecheck` false FAIL reproduced on today's subs.ass (chihuahua, zelda, ps5): `sub_bandprofile` says NO REAL
+  DEFECT on all three (fill blocks 30–50 px apart, marks bridge the lit rows). pepita passes.
+- Side finding: the compose/vault `XIAOMI_API_KEY` (`stacks.hermes_agent.xiaomi.api_key`, fp 616214…) gets 401
+  "Invalid API Key"; Hermes runs on the different key in `/opt/data/.env` (fp ae5a94…, credential pool). Any script
+  reading the process env key fails. Not changed.
+- **Vision experiment** (direct calls to Hermes' endpoint with the `/opt/data/.env` key, real question texts,
+  image ≤1600 px): pepita cover_pick — Hermes prefix 395 s (completion 15,474, reasoning 14,252); + top-level
+  `reasoning_effort: low` 358 s (12,154 reasoning = ignored); answer-only question + low 418 s (49 chars out,
+  13,245 reasoning); `thinking: {type: disabled}` **21 s** (0 reasoning, 562 completion). chihuahua pill_strips:
+  Hermes prefix 324 s (11,014 reasoning) vs thinking off **17 s**, same verdict Hermes shipped (no clear window).
+  Latency = reasoning tokens (~33/s); the describe prefix and answer length barely matter. Thinking-off quality on
+  coordinate questions not verified (pepita boxes unchecked; Hermes used `card` slots there anyway).
+- Proposals for Fix (nothing built): (1) vision thinking off via `auxiliary.vision.extra_body` (wire-verify first,
+  A/B on a few real calls; maybe keep thinking for coordinate asks); (2) fold `sub_bandprofile`'s fill-block
+  verdict into `sub_linecheck` (3/4 false FAIL today); (3) 🎬 reuse: re-run `windows.py --vtt <old speech vtt>`
+  instead of copying an old `*_windows.json` (+ build/check names a table with no `wash` key); (4) `segplan.py`:
+  windows table + DUR + end card → seg layout (the 4–5 min reasoning turns); (5) cover hero by measurement as
+  the default (script), vision only for the final `check_sheet`; (6) vault `stacks.hermes_agent.xiaomi.api_key`
+  is the dead key — refresh it from the live one (Fix's call; a redeploy keeps working only because Hermes reads
+  `/opt/data/.env`).
+- State: `08394cc` pushed + synced; notes uncommitted until close. No deploy, no config change, no open job.
+  Temp files on the NAS (`/tmp/slc`, `/tmp/vexp*`, `/tmp/vq.json`) removed.
