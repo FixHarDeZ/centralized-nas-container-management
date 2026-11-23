@@ -533,10 +533,16 @@ def _context_note(avoid: list[str], winners: list[str],
 
 
 COVERED_NOTE = {
-    "th": ("\n\nคลิปที่ช่องทำไปแล้ว (ห้ามเสนอเรื่องเดิมหรือมุมเดิมซ้ำ "
-           "ถ้ากระแสในรายการเป็นเรื่องเดียวกับข้างล่าง ให้ข้ามกระแสนั้นไปเลย):\n"),
-    "en": ("\n\nVideos this channel already made (do not suggest the same subject or "
-           "angle again; if a trend above is about one of these, skip that trend):\n"),
+    "th": ("คลิปที่ช่องทำไปแล้ว:\n{covered}\n\n"
+           "กระแสตอนนี้:\n{listing}\n\n"
+           "**ห้ามเสนอหัวข้อที่พูดถึงสิ่งเดียวกับคลิปที่ทำไปแล้ว** (เกม หนัง ซีรีส์ เพลง สินค้า "
+           "หน่วยงาน หรือคำศัพท์ตัวเดียวกัน) **แม้จะเปลี่ยนมุมก็ตาม** "
+           "กระแสไหนตรงกับคลิปที่ทำไปแล้ว ให้ข้ามกระแสนั้นไปเลย แล้วเลือกกระแสอื่นแทน"),
+    "en": ("Videos this channel already made:\n{covered}\n\n"
+           "Trending now:\n{listing}\n\n"
+           "**Do not suggest a topic about the same thing as a video already made** (the same "
+           "game, film, series, song, product, organisation or term) **even from a new angle**. "
+           "Skip any trend that matches one and pick another."),
 }
 
 
@@ -557,8 +563,8 @@ async def suggest_topics(rows: list[dict], locale: str = locales.DEFAULT,
     # was explained from scratch each time (Skibidi Toilet x3, 2026-09..11),
     # which viewers read as the channel recycling old news.
     if covered:
-        listing += COVERED_NOTE.get(locale, COVERED_NOTE["th"]) + "\n".join(
-            f"- {line}" for line in covered)
+        listing = COVERED_NOTE.get(locale, COVERED_NOTE["th"]).format(
+            covered="\n".join(f"- {line}" for line in covered), listing=listing)
     messages = [{"role": "system", "content": trends_prompt(locale)},
                 {"role": "user", "content": listing}]
     client = _client()
