@@ -1660,3 +1660,14 @@ Not done / open:
   → `fd9be45`, pushed. `make hermes-skills`: container tests 209 passed, synced at `fd9be45` (shopee-clip 6,
   flow-driver 5 files). Live verified: takeover button, board/vo gates, chipcheck.py, triage 🤖 line. No open job,
   no deploy, no config change.
+
+### 2026-11-23 (2) — session closed
+- Fix: "จบงาน".
+- State: commits `f6a5e18`, `8671e1e`, `2ec4755`, `d1289aa`, `d1b9c19`, `fd9be45`, `4aca3cc` + this close; all pushed
+  to main, tree clean. Live skills synced at `fd9be45` (container tests 209 passed). Live edit outside the repo:
+  `pending-work-triage` 🤖 line (backup `SKILL.md.bak-20261123`). No deploy, no config change, no open clip job
+  (genme-fly-duck-tee delivered + closed). NAS clone: 2 stashes of already-ported live edits (droppable).
+- Watch next orders: `clipjob.py board` before the approval clarify + `new` refusals; `vo_rate` refusals before
+  credits; `chipcheck.py` exits and the vision count on 🤖 jobs; a 🤖 takeover tap on a 📝 job.
+- Not redone: genme final ships without its spoken CTA (shot 2, 12.2 c/s); plaid spent 60 cr on an unanswered
+  board (both before the gates).
