@@ -2582,3 +2582,13 @@ pack page โชว์ `animate` + "ตั้ง Ns". render_studio: มี wav 
 - ข้อสังเกต: `Bot.api` timeout=60 ครอบ connect ด้วย → outage จริง say() หนึ่งครั้งอาจรอ ~3 นาที (ยังไม่แก้ — `httpx.Timeout(60, connect=10)` ถ้าจะแก้)
 - E20 vs 91/95 ที่ผู้ใช้พิมพ์ 15:31 โดนปฏิเสธตอนค้าง ยังไม่ได้ทำ
 - ค้าง: ผู้ใช้ตัดสินใจเรื่องกฎ freshness ของ trends prompt
+
+## 2026-11-23 (2) — หัวข้อจาก trends = มุม "มีอะไรใหม่" เขียนจากข่าว 7 วัน (`b58eca5`, deploy + push แล้ว)
+- ผู้ใช้: "ทางที่เสนอ จัดมาให้ผมเลย"
+- probe Tavily ก่อน: `topic=general`+`time_range=week` ไม่กรองจริง (ได้บทความ Mubarak, สแปมโป๊กับคำ `สลึง`); `topic=news`+`days=7` ได้แถวมีวันที่ (GTA 6 ยอดขาย 20/11, ราหูย้าย 22/11, ไต้ฝุ่น 20/11). แต่ match แบบความหมาย: `คนโง่รักเขลา` ได้ข่าว BBC คนละเรื่อง → กรองให้ title/content มีคำค้น (คำ ≥3 ตัวอักษร)
+- โค้ด: `TRENDS_PROMPT_TH/EN` ใหม่ (ต้องบอกว่าทำไมเป็นกระแสตอนนี้, ห้ามปูพื้นล้วน "X คืออะไร"/"จักรวาลนี้เล่าอะไรมาบ้าง", field `search` 1-4 คำ, ขอ 7, ยังห้ามการเมือง/คดี/ผลแข่ง/เรื่องส่วนตัวคนจริง); `research._search()` + `recent(queries)` (dated + mentions); `main.with_news()` ค้นทีละหัวข้อ 1 query (`search`→`from`→topic) โชว์ ≤5 ที่เจอข่าว + บรรทัด 📰 วันที่/หัวข่าว, ข่าวติดไปใน `suggested[].news` → `trend_origin` คืน → `make_script` pop ออกก่อนเขียน manifest `trend` แล้วใช้เป็น Fact sheet ไม่ค้นซ้ำ; ไม่มีข่าว = ปฏิเสธ (`no_recent_news`, `STALE_REFUSAL`), `!` ข้าม, ไม่มี key = แบบเดิม; `make_script` คืน False ตอนปฏิเสธ → `auto_pick` สุ่มลำดับแล้วลองหัวข้อถัดไป (หยุดถ้าคนเริ่มงานอื่น); `generate(fresh=)` + `FRESH_NOTES` hook ต้องเป็นเรื่องที่เพิ่งเกิด, `state["fresh"]` (อยู่ใน IDLE_FIELDS) ใช้ตอนแก้สคริปต์; fact sheet ใส่วันที่ข่าว
+- หัวข้อที่พิมพ์เอง (ไม่ได้มาจากลิสต์) ไม่โดนด่านนี้ ใช้ research แบบเดิม
+- dry-run จริง (container ชั่วคราว): picker 7 หัวข้อทรงข่าวแล้ว (เช่น "คนโง่รักเขลา EP.15 ไปถึงไหนแล้ว", "สายการบินเทผู้โดยสาร สิทธิอะไรบ้าง" 📰 22 Nov), 4/7 เจอข่าว ก่อนเพิ่ม relevance filter; หลังเพิ่ม `คนโง่รักเขลา` = NONE (ถูก), GTA/ราหู/skibidi ยังเจอ
+- Tavily plan Researcher 1000/เดือน ใช้ไป 71 (23/11) — ใหม่ ~7/รอบ × 3 รอบ/วัน ≈ 630/เดือน + หัวข้อพิมพ์เอง. เช็คได้ `GET https://api.tavily.com/usage`
+- ตรวจ: sf-test บน NAS 618 passed/2 skipped, root 79 passed, ruff ไม่เพิ่มจาก baseline. README stack + CLAUDE.md อัปเดต. deploy (idle) 5 containers Up, grep เจอโค้ด, log ไม่มี error
+- ค้าง/ดูต่อ: รอบ /trends ถัดไปจริงเหลือกี่หัวข้อ (ถ้าบ่อยครั้งเหลือ 0-1 = ขอเพิ่ม/ผ่อน days); ใช้ Tavily จริงต่อเดือน; คุณภาพสคริปต์ที่เปิดด้วยข่าว (ตัวเลขต้องมาจากข่าว — validate เดิม)
