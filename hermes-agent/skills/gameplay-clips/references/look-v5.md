@@ -69,9 +69,9 @@ Minimal plan that passed `--check` (no beats, no release pill, no logo, header-o
 - **ffprobe:** 20.000 s, 600 frames, 30/1, High/yuv420p/L4.0, a_dur == v_dur, faststart.
 - **Duck-only delta:** 8.47 dB (≥6 ✅). Mastered I = −14.3 LUFS, max −4.0 dB ✅.
 - **sub_linecheck:** PASS. Run it against `subs_v5.ass` copied as `subs.ass`, because the builder
-  rewrites margins into `subs_v5.ass`. A `bands=1 want=2` FAIL from marks/tails bridging the band gap
-  is a false positive — decide it with `scripts/sub_bandprofile.py <dir>` (line bodies ≥16 px apart =
-  pass + note the reason; <16 px = real collision → fix the sub text).
+  rewrites margins into `subs_v5.ass`. Marks/tails bridging two lines into one band now pass inside
+  linecheck itself (`OK (marks bridge 2 lines, bodies Npx apart)`); `bodies <16px apart` = a real collision
+  → fix the sub text.
 - **Vision sheet (8 frames):** no price/QR/shop, no tofu, no black bars, flash not harsh.
 - **Duck-only render for the delta gate:** run `uv run --with numpy python <skill>/scripts/duck_stem_gate.py`
   from the workdir — it implements the whole graph below (reads music_gain/vo_gain from plan.json, VO windows

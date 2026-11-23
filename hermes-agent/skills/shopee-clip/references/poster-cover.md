@@ -42,14 +42,19 @@ a circle and lost its top and bottom. The workdirs already held the right pictur
 
 ## Steps
 
-**Vision budget: 2 calls per cover** (pick + check), +1 re-check after a fix (2026-11-19..22: 47 cover calls /
+**Vision budget: 1 call per cover** (the check; +1 only for a crop box no probe can place), +1 re-check after a fix (2026-11-19..22: 47 cover calls /
 ~99 min for 11 covers — per-slot pre-checks and repeated cover reads).
 
-1. Pick the frames: `ffmpeg -ss T -i <raw shot> -frames:v 1 -q:v 2 f.jpg` at 2–3 moments, one grid sheet, ONE vision
-   call to choose hero + circles and to read each crop box. Boxes are source pixels of that image; correct any box
-   against the pixel probe in `frame-check.md` → Locating a crop before cutting (a grid read can land on
-   background). No per-slot pre-check call: step 3's sheet checks every slot at once.
-   **When the job's vision budget is already spent, drop pick's call and choose the hero by measurement:** extract 4–6 candidates at the moments the frame check already named as product-forward, rank them by Laplacian variance (sharpest wins) and break ties with the frame's skin share (LOWEST wins — less face, more product), then let step 3's single `check_sheet` call validate the pick: it already asks whether the product is whole and real. That halves a cover from 2 calls to 1 and still catches a bad pick.
+1. **Hero by measurement — `S/hero_pick.py`, no vision call** (2026-11-23: the grid pick was the day's slowest
+   vision read — 390 s, 420 s timeout, 420 s timeout — to choose one letter):
+   `uv run --with numpy --with pillow python S/hero_pick.py <raw shot | trailer> --times <the moments the frame
+   check named product-forward> --out hero.jpg [--sheet cand.jpg]` → sharpest frame wins, a tie (within 85 %) goes to
+   the LOWEST skin share (less face, more product); dark / white-flash frames never win. On 11-23 data it chose
+   chihuahua 3.2 s (= the shipped hero) and pepita 5.5 s (the sharp back print, shipped 2.5 s = her face + small
+   front print). Detail slots come from listing / official photos first (no read needed); a crop box INSIDE a photo
+   comes from the pixel probe in `frame-check.md` → Locating a crop before cutting. Only when a slot has no listing
+   photo and no probe can place it: ONE vision call on one sheet for that box. No per-slot pre-check call: step 3's
+   sheet checks the hero and every slot at once.
 2. Write `cover_spec.json`, run the script. Exit 1 names the element that does not fit or the refused word: shorten that
    text and rerun. Nothing is clipped silently.
 3. **ONE vision call on the `check_sheet` the script prints, with its `ask_vision`** (picture 1 = the cover,
@@ -63,7 +68,7 @@ a circle and lost its top and bottom. The workdirs already held the right pictur
    match it. Latin lines can be OCR-checked (crop the band, RapidOCR, compare to the spec).
    **`check_sheet` ที่ timeout (420 s) อย่าส่งซ้ำ**: ส่ง `cover.jpg` ที่ `vprep.py` แล้ว (≤1600 px) พร้อมคำถาม 3 ข้อสั้น ๆ
    (ราคา/QR ในรูปไหม · ซับไทยครบไหม · slot card ตัดหรือไม่) แทน — slot เป็น `card` อยู่แล้วจึงยืนยันด้วย OCR ของ
-   รูปต้นฉบับได้ ไม่ต้องอ่านจากแผ่น; นับเป็น 1 ใน 2 calls ของ cover
+   รูปต้นฉบับได้ ไม่ต้องอ่านจากแผ่น; นับเป็น call ของ cover (ไม่ใช่ call เพิ่ม)
 4. Pass `cover.jpg` to `clipjob.py deliver --cover`.
 
 ## Traps
