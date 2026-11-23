@@ -8,7 +8,8 @@ centre square of the source file, scaled to the chip, IS the chip: compare pixel
 
     uv run --with pillow --with numpy python -I chipcheck.py \
         --chip c1.png --chip c2.png            # tight chip crops (cdp_shot.py), or:
-        --shot screen.png --rects '[{"x":319,"y":269,"w":50,"h":50},…]' [--scale 2]
+        --shot shot.png --rects '[{"x":319,"y":574,"w":50,"h":50},…]'     # a full-viewport capture, or
+        --shot row.jpg --rects '<same CSS rects>' --origin 300,560 --scale 4  # a cdp_shot.py <out> 300 560 w h 4 crop
         --expect ref1.jpg --expect /opt/data/clips/characters/<name>.jpg [--expect startframe.jpg]
         [--pool other.jpg … | --pool-dir /opt/data/clips/characters]
 
@@ -16,7 +17,10 @@ centre square of the source file, scaled to the chip, IS the chip: compare pixel
 --pool   = look-alikes that must NOT be (the other roster portraits, the other colourway, an earlier product).
 Exit 0 = every expected file is matched by exactly one chip and no chip matches a pool file;
 exit 1 = a wrong / missing chip (fix the attach, nothing to read); exit 3 = a chip it cannot tell apart
-(margin too small) — only then is ONE vision read of that chip allowed. Prints one JSON object.
+(margin too small) — only then is ONE vision read of that chip allowed; exit 4 = NO chip matched anything = the
+capture is off (rects vs --origin/--scale, the box scrolled): fix the capture, never touch the attach.
+Rects are getBoundingClientRect() CSS px; --origin = the CSS x,y the image starts at (cdp_shot's x y), --scale =
+its scale (a capture_screenshot PNG of the viewport: origin 0,0, scale = image width / innerWidth).
 """
 import argparse
 import hashlib
@@ -83,8 +87,12 @@ def load_chips(a):
     if a.shot:
         shot = Image.open(a.shot)
         for i, r in enumerate(json.loads(a.rects)):
-            s = a.scale
-            box = (round(r["x"] * s), round(r["y"] * s), round((r["x"] + r["w"]) * s), round((r["y"] + r["h"]) * s))
+            s, (ox, oy) = a.scale, a.origin
+            box = (round((r["x"] - ox) * s), round((r["y"] - oy) * s),
+                   round((r["x"] - ox + r["w"]) * s), round((r["y"] - oy + r["h"]) * s))
+            if box[0] < 0 or box[1] < 0 or box[2] > shot.width or box[3] > shot.height:
+                raise SystemExit(f"rect{i + 1} {box} falls outside the {shot.width}x{shot.height} image: "
+                                 "check --origin/--scale against how it was captured")
             chips.append((f"rect{i + 1}", trim_dark(shot.crop(box))))
     for p in a.chip:
         chips.append((p, trim_dark(Image.open(p))))
@@ -146,6 +154,10 @@ def check(chips, expect, pool):
                        "- list it with --expect if it belongs. No vision read")
     else:
         out["next"] = f"one vision read of chip(s) {', '.join(unsure)} only (runner-up too close)"
+    if rows and all(r["verdict"] == "no-match" for r, _ in rows):
+        out["next"] = ("no chip matched ANY file: the capture is off (rects vs --origin/--scale, the box scrolled "
+                       "or closed). Fix the capture and rerun — do NOT remove or re-attach chips, do NOT run trouble")
+        return out, 4
     return out, (0 if ok else 1 if (wrong or missing or doubled) else 3)
 
 
@@ -155,6 +167,7 @@ def main(argv=None):
     ap.add_argument("--shot")
     ap.add_argument("--rects")
     ap.add_argument("--scale", type=float, default=1.0)
+    ap.add_argument("--origin", type=lambda v: tuple(float(x) for x in v.split(",")), default=(0.0, 0.0))
     ap.add_argument("--expect", action="append", default=[], required=True)
     ap.add_argument("--pool", action="append", default=[])
     ap.add_argument("--pool-dir")

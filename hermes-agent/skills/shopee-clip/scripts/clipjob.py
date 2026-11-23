@@ -323,6 +323,9 @@ def board_replies(since, db=None):
     return sorted(out)
 
 
+REVISE_RE = re.compile(r"แก้|ยกเลิก|เลิกทำ|พักงาน|ไม่ผ่าน")   # board answers that are not a go
+
+
 def board_gate(old, mode):
     """`new` for a Flow mode: the board went out (`clipjob.py board`) and Fix replied after it. -> board record."""
     if mode not in FLOW_MODES:
@@ -339,6 +342,9 @@ def board_gate(old, mode):
                       "(a queued 'ทำเลย' / 'ไอยูทำให้เลย') is not an approval (plaid-shoulder-blanket 2026-11-23: 60 cr "
                       "on a board he never answered). Wait for his tap; zero spend meanwhile")
     ts, txt = replies[-1]
+    if txt.startswith("clarify: ") and REVISE_RE.search(txt):
+        raise Refused(f"Fix's last answer to the board was {txt[9:]!r}: revise / cancel, not approval. A revised board "
+                      "goes out with a new `clipjob.py board <job>`, then ask again")
     return {**b, "answer": txt, "answer_at": iso(ts)}
 
 
@@ -1966,8 +1972,8 @@ def main(argv=None):
             j = load(a.job); need_open(j)
             j["board"] = {"sent": iso()}
             log(j, "board sent"); save(j)
-            return out({"job": a.job, "board": j["board"], "next": "ask approval + Q3 (one clarify), then wait. "
-                        "`new` refuses until Fix replies after this moment"})
+            return out({"job": a.job, "board": j["board"], "next": "NOW ask approval + Q3 (one clarify), then wait. "
+                        "`new` refuses until Fix replies after this moment (stamped after his answer = refused)"})
         if a.cmd == "new":
             missing = [r for r in a.ref if not os.path.exists(r)]
             if missing:

@@ -45,14 +45,17 @@ Read this BEFORE starting Chrome or touching any Flow DOM. Not needed for the `g
   baby-wash bottle came back for the frame). **Verify every chip by PIXELS, not vision (Fix 2026-11-23):** crop the
   chips of the live box in ONE capture — `scripts/cdp_shot.py <out.jpg> <x> <y> <w> <h> [scale]` over the chip row,
   or `capture_screenshot()` PNG + the chips' `getBoundingClientRect()`s — then
-  `uv run --with pillow --with numpy python -I scripts/chipcheck.py --shot <png> --rects '<json>' [--scale S]`
+  `uv run --with pillow --with numpy python -I scripts/chipcheck.py --shot <img> --rects '<json>'` (rects = the
+  chips' CSS px; a `cdp_shot.py <out> X Y w h S` crop adds `--origin X,Y --scale S`)
   (or `--chip <crop>` per chip) `--expect <every file that must be in the box: refs, the character portrait
   /opt/data/clips/characters/<name>.jpg, the start frame> --pool-dir /opt/data/clips/characters [--pool <other
   colourway / earlier product>]`. A chip is the file's centre square (`object-fit: cover`), so the match is
   measured: real chips scored 0.95–0.98 against their file, the next candidate ≥0.2 lower (genme shirt/duck/น้องเนย,
   plaid colourway). Exit 0 = verified, no vision; exit 1 = a WRONG / no-match / missing chip — fix the attach
   (cancel icon, re-attach) and rerun, no vision; exit 3 = runner-up too close — ONE vision read of that chip
-  only. A no-match chip is a stray from an earlier clip or a file you did not list (start frame). Flow re-encodes
+  only; exit 4 = no chip matched anything = the CAPTURE is off (origin/scale, box scrolled): re-capture, never
+  touch the chips or log `trouble`. A no-match chip is a stray from an earlier clip or a file you did not list
+  (start frame). Flow re-encodes
   uploads, so a sha256 of fetched chip bytes never equals the source: never hash-compare. Fetching `img.src`
   works for product chips only (a character chip's `flow.google.com/asb/...` URL answers HTML) — the screen
   crop serves both.

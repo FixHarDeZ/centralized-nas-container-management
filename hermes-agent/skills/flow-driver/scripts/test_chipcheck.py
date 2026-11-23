@@ -79,3 +79,19 @@ def test_unlisted_file_is_no_match(tmp_path, capsys):
     ref = picture(tmp_path / "ref1.jpg", 1); stray = picture(tmp_path / "start.jpg", 9)
     rc, out = run(tmp_path, capsys, [chip_of(ref, tmp_path / "c1.png"), chip_of(stray, tmp_path / "c2.png")], [ref])
     assert rc == 1 and out["chips"][1]["verdict"] == "no-match"
+
+
+def test_shot_with_rects_origin_and_scale(tmp_path, capsys):
+    """cdp_shot.py <out> X Y w h S: rects stay CSS px of the page; --origin X,Y --scale S maps them."""
+    ref = picture(tmp_path / "ref1.jpg", 1)
+    page = Image.new("RGB", (400, 300), (20, 22, 24))
+    page.paste(Image.open(chip_of(ref, tmp_path / "c.png")).resize((60, 60)), (200, 150))
+    page.crop((180, 130, 300, 230)).resize((480, 400)).save(tmp_path / "row.png")      # X=180 Y=130 S=4
+    rects = json.dumps([{"x": 200, "y": 150, "w": 60, "h": 60}])
+    assert cc.main(["--shot", str(tmp_path / "row.png"), "--rects", rects, "--origin", "180,130", "--scale", "4",
+                    "--expect", ref]) == 0
+    capsys.readouterr()
+    off = json.dumps([{"x": 185, "y": 135, "w": 20, "h": 20}])                           # inside, but not the chip
+    assert cc.main(["--shot", str(tmp_path / "row.png"), "--rects", off, "--origin", "180,130", "--scale", "4",
+                    "--expect", ref]) == 4                                             # capture off != attach wrong
+    assert "do NOT remove" in json.loads(capsys.readouterr().out)["next"]

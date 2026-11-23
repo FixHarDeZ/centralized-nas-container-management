@@ -70,8 +70,8 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
 6. **Storyboard** from `templates/storyboard.md`: N shots (seconds each from the speech, ≤10), the hook in shot 1, CTA in the last shot.
    Shots after the first chain from the previous shot's last frame, with the continuity block repeated.
    Send it and wait for approval. This is a standing gate; "don't ask me" does not waive it
-   (`references/run-mode-gates.md`). Send the board as its own message (`S/send_status.py`), then approval + Q3 as TWO questions in ONE `clarify`.
-   Then `clipjob.py board <job>`: Flow `new` refuses until Fix replies AFTER it (an older queued message is no approval).
+   (`references/run-mode-gates.md`). Send the board as its own message (`S/send_status.py`), `clipjob.py board <job>` (EVERY board sent), THEN
+   approval + Q3 as TWO questions in ONE `clarify`. Flow `new` refuses without a reply after that stamp.
    - 🧑: random pick from the roster, never the same face twice in a row, name the pick
      (`references/house-rules.md`); `new --character <name>` refuses a name with no portrait in
      `/opt/data/clips/characters/`. The Thai voiceover is spoken by the presenter inside Flow.

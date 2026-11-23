@@ -1410,3 +1410,16 @@ def test_vo_rate_skips_silent_shots_and_respects_the_override(tmp_path, monkeypa
     (tmp_path / "shot1.txt").write_text('Audio (Thai voiceover): "' + "ก" * 80 + '"', encoding="utf-8")
     monkeypatch.setenv("VO_DENSE_OK", "1")
     cj.vo_rate_check(j, 1)
+
+
+def test_board_stamped_after_the_answer_is_refused(tmp_path, monkeypatch, capsys):
+    """Order is board message -> `clipjob.py board` -> clarify: stamping after his tap leaves nothing newer."""
+    args = boarded(tmp_path, monkeypatch, [(-60, "tool", json.dumps({"responses": [{"status": "answered",
+                                            "user_response": "ผ่าน เริ่ม gen (≈30 เครดิต)"}]}), "clarify")])
+    assert cj.main(args) == 1 and "no reply from Fix since the board" in capsys.readouterr().err
+
+
+def test_a_revise_answer_is_not_approval(tmp_path, monkeypatch, capsys):
+    args = boarded(tmp_path, monkeypatch, [(120, "tool", json.dumps({"responses": [{"status": "answered",
+                                            "user_response": "แก้ storyboard"}]}), "clarify")])
+    assert cj.main(args) == 1 and "revise / cancel" in capsys.readouterr().err
