@@ -1596,3 +1596,59 @@ Not done / open:
   windows.py whisper pass within 600 s on a long source, `box_crop.py` for a case/box photo.
 - Fix decides: case sticker over the 🎬 end card (no product in the CTA, 3rd time); Hermes pushing to main itself
   from the NAS clone.
+
+### 2026-11-23 (2) — 🤖 takeover button + check of plaid / genme
+- Fix: "งานทำคลิป shopee ถ้าเลือกให้ gen prompt ให้ผมเอาไปใส่ใน flow เอง อยากให้มีปุ่มเผื่อเปลี่ยนใจให้ hermes
+  ทำให้ต่อเองได้" + "ตรวจงานเมื่อวานแล้วดูว่า enhance อะไรได้อีก".
+- `make hermes-skills ARGS=--pull`: 7 live edits (flow-browser-env: colour-only chip check, real-click → one
+  `js().click()` fallback judged by state change, perf-timeline download rung, picker pane reset, credits menu
+  keyboard open; frame-check: colour misread at tile size, timed-out flag clarify = `decide approve`;
+  product-image-prep: worn-product crop recipe; prompt-pack: no settings restatement; clip-prompt: ctarule only on
+  the final shot; style-card: end marker `ที` not `ที่`; router: vision line + step-8 later-switch line).
+  Router was 15919 B (> 15 KB) → vision detail moved to `house-rules.md` → Vision budget, lines condensed.
+  Commit `f6a5e18`.
+- **🤖 takeover** (`8671e1e`, 98 clipjob tests): a 📝 `pack` ends with an offer (start shot + ≈credits) carrying
+  the reply-keyboard button `🤖 ไอยูกด Flow แทน · <job>`; ingest's start-frame message and ready's gate note keep
+  it (plain `notify` = `remove_keyboard` would wipe it; `send_status.py` sends no markup = leaves it). Tap →
+  `clipjob.py decide --text` → `set_production(auto)` (packed → pending, existed since `011b26c`), Fix gets
+  shots + ≈credits; closed / already auto / fallback / nothing left = a reason only. `fix_reviewed` now keys on
+  the attempt's `via` (a file sent before the tap stays his review). Label has no `ทำต่อ` (pending-work-triage's
+  resume word). Live edit: `pending-work-triage` line 16 `**🤖 button (2026-11-23)**` routes the tap to
+  `decide --text` (backup `SKILL.md.bak-20261123`). Router step 8 + description, prompt-pack.md § takeover.
+- **plaid-shoulder-blanket** (🧑 auto, 3 shots 8+6+6, 60 cr, delivered 03:22, 139 min, wait 80): Fix's
+  `ไอยูทำใน flow ให้เลยนะ` (01:02, before the board existed at 01:19) sat queued through the whole intake turn
+  (two 600 s clarify timeouts: 300 px photo + board) and was replayed at 01:41:06 (`inbound msg_len=22`);
+  Hermes took it as board approval + 🤖 and spent 60 cr on a board Fix never answered. Gate break (router step 8
+  lets that wording skip Q3, not step 6). Vision 16/9. Shot 3 VO 76 Thai chars in 6 s (12.7 c/s) → CTA
+  `ลิงก์อยู่ใต้คลิปนะ` only 50% heard, shipped on the timeout default (ack worded right). Shot 2/3 frame flags
+  (no fleece stroke, no wink) kept on timeout. Pill FLEECE dropped (face band).
+- **genme-fly-duck-tee** (open at check): 📝 packed 08:10, Fix typed `ไอยูทำให้ผมเลย เปลี่ยนใจ` 08:38 →
+  `production auto` worked (the case the button is for). Shot 2 = 49 Thai chars in 4 s (12.2 c/s) — same CTA
+  cut risk as plaid.
+- Genme update (10:xx, still open): its report flags scene 2 `'ลิงก์อยู่ใต้คลิปนะ' SKIPPED` — the 12.2 c/s
+  prediction came true. Not intervened (Hermes' run); told Fix.
+
+### 2026-11-23 (2) — tunes 1-3 (Fix: "1-2 ทำได้เลย, 3 เช็คด้วยการวัดพิกเซลแทน")
+- **1 board-reply gate** (`2ec4755` + `d1289aa`): `clipjob.py board JOB` stamps `board.sent` (allowed at intake;
+  router step 6 = board message → `board` → THEN the approval/Q3 clarify, every board sent). A Flow `new` refuses
+  with no intake/board record, and refuses unless state.db holds a Fix reply after the stamp (role=user message or
+  a `clarify` tool row with `status: answered`); a last clarify answer matching แก้/ยกเลิก/เลิกทำ/พักงาน/ไม่ผ่าน =
+  refused. Unreadable db = `board.unverified`, not refused. Answer + time kept in `job.board` and the event log.
+  Live check on the real state.db: plaid at 01:41 → no reply after 01:19:57 (queued 01:02 message keeps its
+  arrival time) = would refuse; genme/tec/champion → answered clarify after the board.
+- **2 VO rate gate**: `pack`/`reserve` refuse a presenter line over 12 Thai chars/s (ก-๙ + Latin/digits inside
+  `Audio (Thai voiceover): "…"`; 11.5 in the final shot); `new` prints `vo_rate` per shot; `VO_DENSE_OK=1` only for
+  a script Fix ordered. Data (all presenter jobs on disk): CTA lost at 12.2 (genme s2) and 12.7 (plaid s3);
+  9–11.4 clean on 30+ shots; silent shots skipped. Rule also in `templates/clip-prompt.md` (size `--seconds` from
+  the line).
+- **3 `flow-driver/scripts/chipcheck.py`** (pixels, replaces the per-attach vision zoom): chip = the file's centre
+  square (`object-fit: cover`); 40×40 masked compare (rounded corners, character badge corner out), score = 0.6 grey
+  correlation + 0.4 colour; same bytes or same picture at another size (≥0.95) = one candidate (genme ref2 = ref_back
+  upscaled 2.2×). `--expect` (refs, character portrait, start frame) / `--pool` / `--pool-dir`; `--chip` crops or
+  `--shot` + `--rects` CSS px [+ `--origin X,Y --scale S` for a cdp_shot crop]. Exit 0 verified · 1 wrong/missing/
+  no-match chip (fix the attach) · 3 runner-up within 0.06 (one vision read) · 4 nothing matched = capture off.
+  Real data: genme shirt 0.982 / duck 0.963 / น้องเนย 0.96 (runner-up −0.29), plaid cape ref1 0.959 vs other
+  colourway −0.21; plaid's real 02:06 viewport PNG + saved rects: cape chip match, start-frame chip no-match
+  (unlisted). 6 tests; `sync.sh` test gate now includes `flow-driver/scripts`. Docs: flow-browser-env (chip's name),
+  flow-steps, flow-driver SKILL, house-rules → Vision budget, router vision line.
+- Router stays ≤15 KB (15325 B) after more condensing. Full sync gate locally (py3.13): 191 passed, 19 skipped.
