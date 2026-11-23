@@ -1652,3 +1652,11 @@ Not done / open:
   (unlisted). 6 tests; `sync.sh` test gate now includes `flow-driver/scripts`. Docs: flow-browser-env (chip's name),
   flow-steps, flow-driver SKILL, house-rules → Vision budget, router vision line.
 - Router stays ≤15 KB (15325 B) after more condensing. Full sync gate locally (py3.13): 191 passed, 19 skipped.
+- **Sync** (after genme delivered 10:2x, closed by timer): NAS clone's uncommitted live edits proved equal to
+  `f6a5e18` (SKILL.md = pre-trim) → `git stash` in the clone (the classifier refused `git checkout --`; stashes kept:
+  `hermes live edits 11-23, ported in f6a5e18` + `hermes live (pre-sync 11-23 10:3x)`). `--pull` again: 3 new live
+  edits from the genme run (flow-browser-env: JS click at once on a no-op card/Add-to-prompt click, stale
+  picker-trigger rect opens a grid tile `/edit/` = 40+ cr; frame-check: identity read is the gate even past budget)
+  → `fd9be45`, pushed. `make hermes-skills`: container tests 209 passed, synced at `fd9be45` (shopee-clip 6,
+  flow-driver 5 files). Live verified: takeover button, board/vo gates, chipcheck.py, triage 🤖 line. No open job,
+  no deploy, no config change.
