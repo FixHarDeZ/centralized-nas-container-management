@@ -3909,3 +3909,142 @@ def test_covered_forgets_clips_older_than_its_window(monkeypatch, tmp_path):
     clip = manifest.start("เก่า", "th")
     manifest.update(clip, published=True, created_at="2026-01-01T08:00:00")
     assert manifest.covered("th", now=datetime.datetime(2026, 11, 23)) == []
+
+
+# --- trend Topics are about what is new (2026-11-23) ----------------------------
+# Viewers said the channel retells old news: the picker turned every trend into
+# a backgrounder ("Skibidi Toilet คืออะไร" x3, Wat Arun's architecture), 88 of
+# 97 trend clips tagged evergreen. A trend Topic is now written from the last
+# seven days of news about it, and refused when there is none.
+
+TREND_TOPIC = "Skibidi Toilet ตอน 83 มีอะไรใหม่ เรื่องไปถึงไหนแล้ว"
+
+
+def _trend_state() -> dict:
+    return {"mode": "idle",
+            "suggested_at": datetime.datetime.now().isoformat(timespec="seconds"),
+            "suggested": [{"topic": TREND_TOPIC, "from": "skibidi toilet 83 (part 1)",
+                           "search": "skibidi toilet 83", "kind": "spike"}]}
+
+
+def _fresh_writing(monkeypatch, recent_found):
+    sent, seen = _writing(monkeypatch, FOUND)
+    seen["queries"] = []
+
+    async def fake_recent(queries, locale="th"):
+        seen["queries"] = list(queries)
+        return recent_found
+
+    async def fake_generate(topic, **kw):
+        seen["facts"] = kw.get("facts", "")
+        seen["fresh"] = kw.get("fresh", "")
+        raise RuntimeError("stop — research is what is under test")
+
+    monkeypatch.setattr(main.research, "recent", fake_recent)
+    monkeypatch.setattr(main.script_gen, "generate", fake_generate)
+    return sent, seen
+
+
+def test_a_trend_topic_is_written_from_this_weeks_news(monkeypatch):
+    sent, seen = _fresh_writing(monkeypatch, FOUND)
+    asyncio.run(main.make_script(None, _trend_state(), TREND_TOPIC))
+    assert seen["queries"][0] == "skibidi toilet 83", "the picker's search term goes first"
+    assert "searched" not in seen, "the undated search is not used for a trend Topic"
+    assert "12,500" in seen["facts"]
+    assert seen["fresh"] == "skibidi toilet 83 (part 1)"
+
+
+def test_a_trend_topic_with_no_news_this_week_is_refused(monkeypatch):
+    sent, seen = _fresh_writing(monkeypatch, None)
+    state = _trend_state()
+    made = asyncio.run(main.make_script(None, state, TREND_TOPIC))
+    assert made is False and "facts" not in seen
+    assert state["mode"] == "idle"
+    assert "7 วัน" in sent[-1]
+
+
+def test_a_forced_trend_topic_skips_the_news_gate(monkeypatch):
+    sent, seen = _fresh_writing(monkeypatch, None)
+    asyncio.run(main.make_script(None, _trend_state(), "!" + TREND_TOPIC))
+    assert seen["queries"] == [] and seen["searched"] == TREND_TOPIC
+    assert seen["fresh"] == ""
+
+
+def test_a_typed_topic_is_not_held_to_the_news_gate(monkeypatch):
+    sent, seen = _fresh_writing(monkeypatch, None)
+    asyncio.run(main.make_script(None, {"mode": "idle"}, "Docker คืออะไร"))
+    assert seen["queries"] == [] and seen["fresh"] == ""
+
+
+def test_recent_keeps_only_dated_news_and_falls_through_queries(monkeypatch):
+    asked = []
+
+    async def fake_search(query, **extra):
+        asked.append((query, extra))
+        if query == "first":
+            return [{"title": "old", "url": "u", "content": "c", "published": ""}]
+        return [{"title": "new", "url": "u2", "content": "about Second thing",
+                 "published": "Fri, 20 Nov 2026"},
+                {"title": "unrelated", "url": "u4", "content": "other story",
+                 "published": "Fri, 20 Nov 2026"},
+                {"title": "undated", "url": "u3", "content": "second", "published": ""}]
+
+    monkeypatch.setenv("TAVILY_API_KEY", "k")
+    monkeypatch.setattr(research, "_search", fake_search)
+    found = asyncio.run(research.recent(["first", "", "first", "second"]))
+    assert [q for q, _ in asked] == ["first", "second"], "blank and repeated queries skipped"
+    assert asked[0][1] == {"topic": "news", "days": research.RECENT_DAYS}
+    assert found["query"] == "second" and [r["title"] for r in found["results"]] == ["new"], \
+        "undated and results that never name the query are dropped"
+
+
+def test_an_unattended_pick_tries_the_next_topic_when_one_is_refused(monkeypatch):
+    tried = []
+
+    async def fake_make_script(client, state, topic, **kw):
+        tried.append(topic)
+        return len(tried) > 1
+
+    monkeypatch.setattr(main, "make_script", fake_make_script)
+    monkeypatch.setattr(main, "say", _nothing)
+    monkeypatch.setattr(main, "retire_buttons", _nothing)
+    monkeypatch.setattr(main.random, "shuffle", lambda items: None)
+    state = {"mode": "idle", "suggested": [{"topic": "a"}, {"topic": "b"}, {"topic": "c"}]}
+    asyncio.run(main.auto_pick(None, state))
+    assert tried == ["a", "b"]
+
+
+def test_the_picker_is_asked_for_a_news_search_term():
+    for prompt in (script_gen.TRENDS_PROMPT_TH, script_gen.TRENDS_PROMPT_EN):
+        assert '"search"' in prompt
+    assert "ข้อเท็จจริงที่อยู่ตัวแล้ว" not in script_gen.TRENDS_PROMPT_TH
+
+
+def test_the_list_only_offers_trends_with_news_this_week(monkeypatch):
+    asked = []
+
+    async def fake_recent(queries, locale="th"):
+        asked.append(queries)
+        return FOUND if queries[0] in {"a", "c"} else None
+
+    monkeypatch.setenv("TAVILY_API_KEY", "k")
+    monkeypatch.setattr(main.research, "recent", fake_recent)
+    topics = [{"topic": "A", "search": "a"}, {"topic": "B", "from": "b"},
+              {"topic": "C", "search": "c"}]
+    kept = asyncio.run(main.with_news(topics, "th"))
+    assert [t["topic"] for t in kept] == ["A", "C"]
+    assert kept[0]["news"] is FOUND
+    assert asked == [["a"], ["b"], ["c"]], "one query per suggestion"
+    assert "📰" in main.format_topics(kept)
+
+
+def test_a_picked_trend_reuses_the_news_found_for_the_list(monkeypatch):
+    sent, seen = _fresh_writing(monkeypatch, None)
+    state = _trend_state()
+    state["suggested"][0]["news"] = FOUND
+    updates = {}
+    monkeypatch.setattr(main.manifest, "update", lambda cid, **kw: updates.update(kw))
+    asyncio.run(main.make_script(None, state, TREND_TOPIC))
+    assert seen["queries"] == [], "no second search"
+    assert "12,500" in seen["facts"]
+    assert "news" not in updates["trend"], "the Fact sheet is `research`, not part of trend"

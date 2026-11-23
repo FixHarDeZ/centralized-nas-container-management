@@ -26,6 +26,30 @@ Result-shaped Topics (scores, who won — `RESULT_TOPIC`) are written only when
 the search finds something, refused otherwise, and always refused in the
 unattended auto-pick. `!` still skips that check. See `docs/adr/0014`.
 
+### Trend Topics are about what is new (2026-11-23)
+
+Viewers said the channel retells old news: the picker turned every trend into a
+backgrounder (Skibidi Toilet "what is it" three times, 91% of trend clips
+evergreen). Now:
+
+- the picker (`TRENDS_PROMPT_*`) must say why the thing is trending now, and
+  returns a short news `search` term per suggestion. It is asked for 7 and is
+  shown the clips made in the last 90 days (`manifest.covered`, cap 150) with
+  orders to skip the same subject even from a new angle;
+- `main.with_news()` searches each suggestion with `research.recent()`
+  (Tavily `topic=news`, `days=7`, one query each; only dated rows that name
+  the query) and the list shows at most 5 that have news, each with a 📰 line.
+  The news rides in `suggested` and becomes the Fact sheet, so picking does not
+  search again;
+- a trend Topic with no news this week is refused (`no_recent_news`), the
+  unattended pick moves on to the next suggestion, and `!` opts out;
+- `generate(fresh=)` tells the writer the hook must be about what just
+  happened; a revision keeps it (`state["fresh"]`).
+
+Tavily is 1000 searches a month: ~7 per trends round plus one per typed Topic.
+A busy mode with no live job is reaped by the poll loop (`reap_orphan`), and
+`Bot.api` retries connect failures — see the 2026-11-23 daily log.
+
 ## Waiting for the model
 
 Writing a script takes minutes, and how many depends on how long the model

@@ -41,15 +41,14 @@ def configured() -> bool:
     return bool(os.environ.get("TAVILY_API_KEY"))
 
 
-async def research(topic: str, locale: str = "th") -> dict | None:
-    """`{"query", "results": [{"title", "url", "content"}]}` or None."""
-    if not configured():
-        return None
+async def _search(query: str, **extra) -> list[dict] | None:
+    """One Tavily call. Rows with content only; None on any failure."""
     body = {
-        "query": topic,
+        "query": query,
         "max_results": MAX_RESULTS,
         "search_depth": "basic",
         "topic": "general",
+        **extra,
     }
     headers = {"Authorization": f"Bearer {os.environ['TAVILY_API_KEY']}"}
     try:
@@ -60,17 +59,60 @@ async def research(topic: str, locale: str = "th") -> dict | None:
         resp.raise_for_status()
         rows = resp.json().get("results") or []
     except Exception as exc:  # best effort: a Script without facts beats none
-        logger.warning("research failed for %r: %s", topic, exc)
+        logger.warning("research failed for %r: %s", query, exc)
         return None
-    results = [
+    return [
         {"title": str(r.get("title", ""))[:200],
          "url": str(r.get("url", "")),
-         "content": str(r.get("content", "")).strip()}
+         "content": str(r.get("content", "")).strip(),
+         "published": str(r.get("published_date") or "")}
         for r in rows if str(r.get("content", "")).strip()
     ]
+
+
+async def research(topic: str, locale: str = "th") -> dict | None:
+    """`{"query", "results": [{"title", "url", "content"}]}` or None."""
+    if not configured():
+        return None
+    results = await _search(topic)
     if not results:
         return None
     return {"query": topic, "results": results}
+
+
+# A trend Topic is about what just happened. `topic=general` with a
+# `time_range` still returned a 2011 Mubarak article and spam for Thai terms
+# (probed 2026-11-23); `topic=news` + `days` comes back dated, and a row
+# without a date is not evidence of anything recent.
+RECENT_DAYS = int(os.environ.get("RESEARCH_RECENT_DAYS", "7"))
+
+
+def _mentions(row: dict, query: str) -> bool:
+    """Whether a result names what was searched for. Tavily matches on meaning:
+    "คนโง่รักเขลา" (series "Fool in Love") came back as a BBC story about an
+    online predator. Words under 3 characters ("6" in "GTA 6") prove nothing."""
+    words = [w.casefold() for w in query.split() if len(w) >= 3]
+    if not words:
+        return True
+    text = f"{row.get('title', '')} {row.get('content', '')}".casefold()
+    return any(word in text for word in words)
+
+
+async def recent(queries: list[str], locale: str = "th") -> dict | None:
+    """This week's news for the first query that has any, or None.
+
+    Queries go in order — the picker's short search term first, then the raw
+    trend, then the Topic — because a long video title or a whole sentence
+    finds far less news than "GTA 6".
+    """
+    if not configured():
+        return None
+    for query in dict.fromkeys(q.strip() for q in queries if q and q.strip()):
+        rows = await _search(query, topic="news", days=RECENT_DAYS) or []
+        dated = [r for r in rows if r.get("published") and _mentions(r, query)]
+        if dated:
+            return {"query": query, "results": dated, "recent": True}
+    return None
 
 
 def fact_sheet(found: dict | None) -> str:
@@ -79,7 +121,8 @@ def fact_sheet(found: dict | None) -> str:
         return ""
     parts, used = [], 0
     for i, row in enumerate(found["results"], 1):
-        block = f"[{i}] {row['title']}\n{row['content']}"
+        date = f" ({row['published'][:16]})" if row.get("published") else ""
+        block = f"[{i}] {row['title']}{date}\n{row['content']}"
         room = MAX_SHEET_CHARS - used
         if room <= 0:
             break

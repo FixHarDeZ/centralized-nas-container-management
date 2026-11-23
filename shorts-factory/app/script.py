@@ -87,28 +87,36 @@ SYSTEM_PROMPT_TH = f"""คุณเป็นคนเขียนสคริป
 TRENDS_PROMPT_TH = """คุณเป็นคนเลือกหัวข้อคลิป YouTube Shorts ภาษาไทย
 
 จะได้รับรายการ "สิ่งที่คนไทยกำลังค้นหา/กำลังดู" ตอนนี้ หน้าที่คุณคือแปลงเป็น
-**หัวข้อคลิปที่ทำได้จริง 5 หัวข้อ**
+**หัวข้อคลิปที่ทำได้จริง 7 หัวข้อ** (มาจากคนละกระแสกัน)
 
 กฎเหล็ก:
-- **ห้ามเสนอหัวข้อที่เป็นข่าวสด การเมือง คดีความ ผลการแข่งขัน หรือเรื่องของบุคคลจริง**
+- **หัวข้อต้องตอบว่าทำไมเรื่องนี้กำลังเป็นกระแสตอนนี้** — มีอะไรใหม่ เพิ่งเกิดอะไร
+  เพิ่งเปิดตัว/ประกาศ/ออกตอนใหม่อะไร (ดูจากบรรทัด ข่าว: ถ้ามี) คนดูบ่นว่าช่องเอาของเก่ามาเล่า
+  **ห้ามตั้งหัวข้อปูพื้นของเก่าล้วนๆ** เช่น "X คืออะไร", "จักรวาลนี้เล่าเรื่องอะไรมาบ้าง",
+  "ประวัติของ X" ปูพื้นได้แค่เป็นส่วนเสริมของเรื่องใหม่
+  เช่น กระแส "skibidi toilet 83" → "Skibidi Toilet ตอน 83 มีอะไรใหม่ เรื่องไปถึงไหนแล้ว"
+  (ไม่ใช่ "Skibidi Toilet คืออะไร"), กระแส "ชิป M6" → "ชิป M6 ที่เพิ่งเปิดตัว ต่างจาก M4 ยังไง"
+- บอทจะค้นข่าว 7 วันล่าสุดด้วยคำใน search ก่อนเขียน **ค้นไม่เจอ = หัวข้อนั้นถูกตัดทิ้ง**
+  เลือกกระแสที่มีเรื่องใหม่จริงให้ค้นเจอ
+- **ห้ามการเมือง คดีความ ผลการแข่งขัน หรือเรื่องส่วนตัวของบุคคลจริง**
   (ดารา นักการเมือง นักกีฬา) เพราะคลิปจะกลายเป็นการกล่าวอ้างเรื่องคนจริงโดยไม่มีหลักฐาน
   ถ้ากระแสนั้นเป็นข่าวคน ให้**ข้ามไปเลย** หรือดึงเฉพาะแง่มุมที่อธิบายได้แบบไม่พาดพิงใคร
-  เช่น กระแส "ชิป M6" → "ชิป M6 ต่างจาก M4 ยังไง" (โอเค),
   กระแส "นายก..." → ข้าม
 - **ห้ามตั้งหัวข้อที่เป็นการคาดเดา/ยืนยันเรื่องของคนจริงเด็ดขาด** เช่น
   "ดาราคนนั้นจะกลับมาเล่นจริงไหม", "นักร้องคนนี้เลิกกับใคร", "ผู้บริหารคนนั้นจะลาออกไหม"
   — พวกนี้คือข่าวลือ บอทไม่มีทางรู้ แล้วจะเดาใส่ปากคนจริง
-  ถ้ากระแสมาจากหนัง/ซีรีส์/เกม ให้เล่า**ตัวงาน**แทน เช่น "จักรวาลนี้เล่าเรื่องอะไรมาบ้าง"
+  ถ้ากระแสมาจากหนัง/ซีรีส์/เกม ให้เล่า**สิ่งใหม่ของตัวงาน** (ตัวอย่างใหม่ ตอนใหม่ ภาคใหม่ ยอดขาย)
   ไม่ใช่ "ใครจะกลับมาแสดง"
-- เอาหัวข้อที่**อธิบายได้ด้วยข้อเท็จจริงที่อยู่ตัวแล้ว** ไม่ใช่เรื่องที่ต้องรู้ข่าวล่าสุดถึงจะพูดถูก
 - หัวข้อละ 1 บรรทัด เขียนแบบที่พิมพ์ส่งให้บอทเขียนสคริปต์ได้ทันที
+- search = คำค้นข่าวสั้นๆ 1-4 คำ ที่ข่าวเรื่องนี้น่าจะใช้ (ชื่อเฉพาะ + สิ่งที่เพิ่งเกิด)
+  เช่น "GTA 6 ยอดขาย", "skibidi toilet 83" ห้ามเป็นประโยคยาวหรือชื่อคลิปทั้งชื่อ
 - kind = "evergreen" ถ้าเรื่องนี้ยังน่าดูอีก 6 เดือน, "spike" ถ้าตายพร้อมกระแส
 - category = หมวดสั้นๆ ภาษาไทย เช่น เทค, การเงิน, สุขภาพ, ไลฟ์สไตล์, เกม, ความรู้รอบตัว
 - from = คำ/ชื่อคลิปต้นทางที่จุดประกายหัวข้อนี้ (ก๊อปมาจากรายการที่ให้)
 - why = เหตุผลสั้นๆ ว่าทำไมคนน่าจะดู
 
 ตอบเป็น JSON อย่างเดียว:
-{"topics": [{"topic": "...", "kind": "evergreen", "category": "...", "from": "...", "why": "..."}]}"""
+{"topics": [{"topic": "...", "search": "...", "kind": "spike", "category": "...", "from": "...", "why": "..."}]}"""
 
 
 # The English prompt is written in English on purpose: an English Script asked
@@ -180,22 +188,30 @@ Answer with JSON only, nothing outside the JSON:
 TRENDS_PROMPT_EN = """You pick topics for English-language YouTube Shorts aimed at a US audience.
 
 You will be given a list of what people in the US are searching for and
-watching right now. Turn it into **5 topics that can actually be made**.
+watching right now. Turn it into **7 topics that can actually be made** (each from a different trend).
 
 Hard rules:
-- **Never propose a topic that is breaking news, politics, a court case, a
-  match result, or anything about a real person** (celebrity, politician,
-  athlete): the clip would end up asserting things about real people with no
-  source. If a trend is about a person, **skip it**, or take only the angle
-  that can be explained without naming anyone. Trend "M6 chip" -> "how the M6
-  differs from the M4" (fine); trend "<politician>" -> skip.
+- **Every topic must answer why this is trending right now** — what is new,
+  what just happened, launched, was announced or released (see the news line
+  when there is one). **No pure backgrounders** ("what is X", "the whole
+  story of X so far", "the history of X"); background is only a side part of
+  the new thing. Trend "skibidi toilet 83" -> "What's new in Skibidi Toilet
+  episode 83" (not "What is Skibidi Toilet").
+- The bot searches the last 7 days of news with `search` before writing. **No
+  news found = the topic is dropped**, so pick trends that really have news.
+- **No politics, court cases, match results, or private matters of real
+  people** (celebrity, politician, athlete): the clip would end up asserting
+  things about real people with no source. If a trend is about a person,
+  **skip it**, or take only the angle that can be explained without naming
+  anyone. Trend "<politician>" -> skip.
 - **Never propose a topic that speculates about a real person** ("is that actor
   coming back", "who did they break up with", "will that CEO resign") — that is
   rumour, the bot cannot know, and it would put words in a real person's mouth.
-  If the trend comes from a film, series or game, cover **the work itself**.
-- Take topics explainable from settled facts, not ones that need today's news
-  to get right.
+  If the trend comes from a film, series or game, cover **what is new about the
+  work** (new trailer, episode, sequel, sales).
 - One line per topic, written so it can be sent straight to the script writer.
+- search = a short 1-4 word news query (proper name + what just happened),
+  e.g. "GTA 6 sales"; never a sentence or a whole video title.
 - kind = "evergreen" if it is still worth watching in 6 months, "spike" if it
   dies with the trend.
 - category = short English word: tech, money, health, lifestyle, gaming, general
@@ -203,7 +219,7 @@ Hard rules:
 - why = one short line on why people would watch
 
 Answer with JSON only:
-{"topics": [{"topic": "...", "kind": "evergreen", "category": "tech", "from": "...", "why": "..."}]}"""
+{"topics": [{"topic": "...", "search": "...", "kind": "spike", "category": "tech", "from": "...", "why": "..."}]}"""
 
 SYSTEM_PROMPTS = {"th": SYSTEM_PROMPT_TH, "en": SYSTEM_PROMPT_EN}
 TRENDS_PROMPTS = {"th": TRENDS_PROMPT_TH, "en": TRENDS_PROMPT_EN}
@@ -511,6 +527,23 @@ FACTS_NOTES = {
 }
 
 
+FRESH_NOTES = {
+    "th": (
+        "คลิปนี้มาจากกระแส \"{trend}\" ที่คนกำลังค้นตอนนี้ และข้อมูลค้นเว็บของคลิปนี้คือข่าว 7 วันล่าสุด "
+        "**hook (card แรก) ต้องอยู่บนเรื่องที่เพิ่งเกิด/มีอะไรใหม่** ตามข้อมูลนั้น แล้วค่อยบอกว่าสำคัญยังไง "
+        "ปูพื้นของเก่าได้ไม่เกิน 1 card ห้ามทำเป็นคลิปนิยามทั่วไป และห้ามเล่าว่าอะไรเป็นของใหม่ "
+        "ถ้าข้อมูลไม่ได้บอกว่าเพิ่งเกิด"
+    ),
+    "en": (
+        "This clip comes from the trend \"{trend}\" people are searching right now, and its web "
+        "results are the last 7 days of news. **The hook (first card) must be about what just "
+        "happened / what is new** per that material, then why it matters. At most one card of "
+        "background; never a generic explainer, and never call something new unless the material "
+        "says it just happened."
+    ),
+}
+
+
 def _sibling_note(sibling: dict, locale: str) -> str:
     """The already-approved half of a pair, as context for the other half."""
     head = SIBLING_NOTES.get(locale, SIBLING_NOTES["en"])
@@ -531,6 +564,9 @@ def _context_note(avoid: list[str], winners: list[str],
         parts.append(winners_note + "\n".join(f"- {title}" for title in winners))
     return "\n\n".join(parts)
 
+
+# More than the list shows: main.with_news() drops trends with no news this week.
+TOPICS_ASKED = 7
 
 COVERED_NOTE = {
     "th": ("คลิปที่ช่องทำไปแล้ว:\n{covered}\n\n"
@@ -580,7 +616,7 @@ async def suggest_topics(rows: list[dict], locale: str = locales.DEFAULT,
             topics = parsed.get("topics")
             if not isinstance(topics, list) or not topics:
                 raise ScriptError("โมเดลไม่ได้เสนอหัวข้อมาเลย")
-            return [t for t in topics if str(t.get("topic", "")).strip()][:5]
+            return [t for t in topics if str(t.get("topic", "")).strip()][:TOPICS_ASKED]
         except ScriptError as exc:
             if attempt == 2:
                 raise
@@ -604,6 +640,7 @@ async def generate(
     locale: str = locales.DEFAULT,
     sibling: dict | None = None,
     facts: str = "",
+    fresh: str = "",
 ) -> dict:
     """Write a Script for `topic`, optionally revising `previous` per `feedback`.
 
@@ -627,6 +664,9 @@ async def generate(
         messages.append({"role": "system", "content": style})
     if facts:
         messages.append({"role": "system", "content": FACTS_NOTES.get(locale, FACTS_NOTES["th"]) + facts})
+    if fresh:
+        messages.append({"role": "system",
+                         "content": FRESH_NOTES.get(locale, FRESH_NOTES["th"]).format(trend=fresh)})
     label = "หัวข้อ" if locale == "th" else "Topic"
     messages.append({"role": "user", "content": f"{label}: {topic}"})
     if previous is not None:

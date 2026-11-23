@@ -517,6 +517,10 @@ def trend_origin(state: dict, topic: str) -> dict | None:
                 "from": suggestion.get("from", ""),
                 "kind": suggestion.get("kind", ""),
                 "category": suggestion.get("category", ""),
+                "search": suggestion.get("search", ""),
+                # Popped by make_script() before the origin is written to the
+                # Manifest; it is the Fact sheet, recorded as `research`.
+                "news": suggestion.get("news"),
             }
     return None
 
@@ -548,6 +552,13 @@ BARE_URL = re.compile(r"https?://\S+\Z", re.IGNORECASE)
 FORCE_PREFIX = "!"
 
 
+STALE_REFUSAL = (
+    "หัวข้อนี้มาจากกระแส แต่ค้นข่าว 7 วันล่าสุดไม่เจอว่ามีอะไรใหม่ "
+    "เขียนไปก็ได้แค่คลิปปูพื้นของเก่า (คนดูบ่นว่าช่องเอาข้อมูลเก่ามาเล่า)\n\n"
+    "เลือกหัวข้ออื่นในลิสต์ หรือพิมพ์หัวข้อเอง\n"
+    f"ถ้ายืนยันว่าจะทำ ใส่ {FORCE_PREFIX} นำหน้าหัวข้อ"
+)
+
 RESULT_REFUSAL = (
     "หัวข้อนี้ต้องรู้ว่าเกิดอะไรขึ้นจริง แต่บอทไม่รู้ผลแข่ง/ผลประกาศ "
     "(ค้นเว็บไม่เจอแหล่งอ้างอิง) เขียนไปก็ได้แต่ความรู้ทั่วไปโครงเดิม แถมมีสิทธิ์แต่งตัวเลขเอง\n\n"
@@ -566,7 +577,8 @@ async def make_script(client: httpx.AsyncClient, state: dict, topic: str,
                       locale: str | None = None,
                       sibling: dict | None = None,
                       pair_id: str | None = None,
-                      supplied: dict[int, Path] | None = None) -> None:
+                      supplied: dict[int, Path] | None = None) -> bool:
+    """False when the Topic was turned away before any Script was attempted."""
     previous = state.get("script") if feedback else None
     needs_facts = False
     # A revision belongs to the Clip already open, and that Clip's Locale is
@@ -577,20 +589,29 @@ async def make_script(client: httpx.AsyncClient, state: dict, topic: str,
     # automatic pick go through the same door, and before anything is claimed:
     # a Topic that is turned away leaves the state exactly as it was. Only a
     # fresh Topic is judged — a revision is about a Script that already exists.
+    origin = None
+    news = None
+    fresh = False
     if previous is None:
         if BARE_URL.fullmatch(topic.strip()):
             await say(client, (
                 "บอทเห็นแค่ลิงก์ ไม่เห็นหัวข้อหรือข้อความใน link preview ของ Telegram\n\n"
                 "พิมพ์หัวข้อหรือพาดหัวที่อยากทำเป็นคลิปมาด้วย แล้วค่อยแปะลิงก์อ้างอิงต่อท้ายได้"
             ))
-            return
+            return False
         forced = topic.startswith(FORCE_PREFIX)
         if forced:
             topic = topic[len(FORCE_PREFIX):].strip()
         elif result_shaped(topic) and not research.configured():
             await say(client, RESULT_REFUSAL)
-            return
+            return False
         needs_facts = not forced and result_shaped(topic)
+        origin = trend_origin(state, topic)
+        news = origin.pop("news", None) if origin else None
+        # A trend Topic is about what just happened, so it is written from this
+        # week's news or not at all (2026-11-23: viewers said the channel
+        # retells old news). No key = the old behaviour; `!` opts out.
+        fresh = bool(origin) and not forced and research.configured()
     # Every way a Topic can start routes through here, and any of them means a
 
     # pending automatic pick is no longer wanted.
@@ -614,7 +635,6 @@ async def make_script(client: httpx.AsyncClient, state: dict, topic: str,
         assignment = experiment.assign(locale=locale)
         manifest.update(state["clip_id"], **assignment)
         state["style"] = assignment["style"]
-        origin = trend_origin(state, topic)
         if origin:
             manifest.update(state["clip_id"], trend=origin)
     # Retire the buttons on the script being replaced. Two live keyboards would
@@ -633,17 +653,24 @@ async def make_script(client: httpx.AsyncClient, state: dict, topic: str,
     # A revision keeps the Fact sheet its Script was written from: searching
     # again could hand the model different numbers mid-edit.
     if previous is None:
-        found = await research.research(topic, locale)
+        if fresh:
+            found = news or await research.recent(
+                [origin.get("search", ""), origin.get("from", ""), topic], locale)
+        else:
+            found = await research.research(topic, locale)
         state["research"] = found
         if found:
             manifest.update(state.get("clip_id"), research=found)
-        elif needs_facts:
-            manifest.update(state.get("clip_id"), outcome="no_sources")
+        elif fresh or needs_facts:
+            manifest.update(state.get("clip_id"),
+                            outcome="no_recent_news" if fresh else "no_sources")
             st.to_idle(state)
             state.pop("pair", None)
             save_state(state)
-            await say(client, RESULT_REFUSAL)
-            return
+            await say(client, STALE_REFUSAL if fresh else RESULT_REFUSAL)
+            return False
+        # Kept for revisions: a rewrite of a trend Script stays about the news.
+        state["fresh"] = (origin.get("from") or topic) if fresh else None
     facts = research.fact_sheet(state.get("research"))
 
     async def write() -> dict:
@@ -673,6 +700,7 @@ async def make_script(client: httpx.AsyncClient, state: dict, topic: str,
                     # Only when there is one, so a Script written without
                     # research calls generate() exactly as it always did.
                     **({"facts": facts} if facts else {}),
+                    **({"fresh": state["fresh"]} if state.get("fresh") else {}),
                 )
             except script_gen.ScriptStalled:
                 if final:
@@ -705,7 +733,7 @@ async def make_script(client: httpx.AsyncClient, state: dict, topic: str,
         if previous is not None:
             await send_pronunciation_checks(client, previous, locale)
         await say(client, f"เขียนสคริปต์ไม่สำเร็จ: {exc}")
-        return
+        return True
 
     pronunciation.normalize(script)
     manifest.add_script(state.get("clip_id"), script)
@@ -729,6 +757,7 @@ async def make_script(client: httpx.AsyncClient, state: dict, topic: str,
         # Inside the success path on purpose: a generate failure returns above
         # with no Script in state, and rendering that is a KeyError.
         await do_render(client, state, supplied=supplied)
+    return True
 
 
 async def do_render(client: httpx.AsyncClient, state: dict,
@@ -2439,6 +2468,9 @@ def format_topics(topics: list[dict]) -> str:
         )
         if topic.get("why"):
             lines.append(f"    {topic['why'][:90]}")
+        news = ((topic.get("news") or {}).get("results") or [{}])[0]
+        if news.get("title"):
+            lines.append(f"    📰 {news.get('published', '')[5:16]} {news['title'][:70]}")
     return "\n".join(lines)
 
 
@@ -2466,6 +2498,33 @@ async def on_trends(client: httpx.AsyncClient, state: dict, auto: bool = False,
         save_state(state)
 
 
+# The picker is asked for more than are shown: a trend with no news this week
+# is dropped before the list goes out (2026-11-23 dry run: 3 of 5 had none —
+# a new MV or an iQIYI episode is trending on YouTube but nobody writes it up).
+SHOWN_TOPICS = 5
+
+
+async def with_news(topics: list[dict], locale: str) -> list[dict]:
+    """The suggestions that have news from the last seven days, each carrying it.
+
+    Checked here, once per suggestion, so no button on the list leads to a
+    refusal, and the result rides along in `suggested` so make_script() does
+    not search again. One query each (Tavily is 1000 searches a month): the
+    picker's short search term, or the raw trend. Without a key, unchanged.
+    """
+    if not research.configured():
+        return topics[:SHOWN_TOPICS]
+    found = await asyncio.gather(*(
+        research.recent([t.get("search") or t.get("from") or t.get("topic", "")], locale)
+        for t in topics))
+    kept = []
+    for topic, news in zip(topics, found):
+        if news:
+            kept.append({**topic, "news": news})
+    logger.info("trends: %d/%d หัวข้อค้นเจอข่าว 7 วันล่าสุด", len(kept), len(topics))
+    return kept[:SHOWN_TOPICS]
+
+
 async def _trends_round(client: httpx.AsyncClient, state: dict, auto: bool,
                         locale: str) -> None:
     await say(client, "📈 กำลังดู trend...")
@@ -2479,6 +2538,11 @@ async def _trends_round(client: httpx.AsyncClient, state: dict, auto: bool,
     except Exception as exc:
         logger.exception("suggest_topics failed")
         await say(client, f"แปลง trend เป็นหัวข้อไม่สำเร็จ: {exc}")
+        return
+    topics = await with_news(topics, locale)
+    if not topics:
+        await say(client, "📭 รอบนี้ไม่มีกระแสไหนค้นเจอข่าว 7 วันล่าสุด — ข้ามรอบนี้ "
+                          "(พิมพ์หัวข้อเองได้ตามปกติ)")
         return
 
     # Remembered so a Topic typed back gets its origin recorded — the point of
@@ -2512,16 +2576,24 @@ async def auto_pick(client: httpx.AsyncClient, state: dict) -> None:
     The Topic goes in verbatim so trend_origin() still credits the list it came
     from — an unattended clip is the same kind of record as a chosen one.
     """
-    topics = state.get("suggested") or []
+    topics = [str(t.get("topic", "")).strip() for t in state.get("suggested") or []]
+    topics = [t for t in topics if t]
     if not topics:
         return
-    topic = str(random.choice(topics).get("topic", "")).strip()
-    if not topic:
-        return
+    # In random order, and on to the next when one is turned away: a trend
+    # Topic with no news this week is refused, and one refusal must not cost
+    # the whole unattended round.
+    random.shuffle(topics)
     await retire_buttons(client, state.pop("trends_message_id", None))
-    await say(client, f"🎲 ไม่มีใครเลือก สุ่มได้: {topic}\nเขียนสคริปต์แล้ว render ให้เลย")
-    await make_script(client, state, topic, auto=True,
-                      locale=state.get("suggested_locale", locales.DEFAULT))
+    for index, topic in enumerate(topics):
+        if index and state.get("mode", "idle") != "idle":
+            return  # the human started something while this one was refused
+        lead = "🎲 ไม่มีใครเลือก สุ่มได้" if index == 0 else "🎲 ลองหัวข้อถัดไป"
+        await say(client, f"{lead}: {topic}\nเขียนสคริปต์แล้ว render ให้เลย")
+        if await make_script(client, state, topic, auto=True,
+                             locale=state.get("suggested_locale", locales.DEFAULT)) is not False:
+            return
+    await say(client, "🎲 ทุกหัวข้อในรอบนี้ค้นข่าวล่าสุดไม่เจอ ข้ามรอบนี้ไป")
 
 
 def topics_keyboard(topics: list[dict], stamp: str,

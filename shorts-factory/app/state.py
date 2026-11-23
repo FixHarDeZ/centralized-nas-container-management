@@ -37,7 +37,7 @@ HOLDING_MODES = BUSY_MODES | {SHOP_MODE}
 #: all of these — a field left behind is the next Clip's bug.
 IDLE_FIELDS = dict(
     script=None, topic=None, clip_id=None, style="", message_id=None,
-    locale=locales.DEFAULT, review_at=None, research=None,
+    locale=locales.DEFAULT, review_at=None, research=None, fresh=None,
 )
 
 # How long a Parked Clip waits for its Footage before it is written off.
