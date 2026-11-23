@@ -26,7 +26,7 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
 - CTA words (ลิงก์ / ใต้คลิป / ตะกร้า) only in the last shot or beat.
 - Hashtags ≤150 characters, no CJK (`templates/hashtags.md`). Basket link = an https Shopee link. Both go out as ONE message with tap-to-copy buttons (`send_copy_buttons.py`, run by `deliver`); no fenced code blocks, in every mode.
 - EN pills ≤2 words. Flow must draw no on-screen text (the block in `references/presenter-post.md`).
-- One heavy job at a time (whisper, render, ffmpeg): the NAS has 12 GB, and the gateway is fenced at 4 GB.
+- One heavy job at a time (whisper, render, ffmpeg; 12 GB NAS, gateway fenced at 4 GB).
 - Details + reasons: `references/house-rules.md` (read once per session before the first order).
 
 ## Flow of an order
@@ -51,7 +51,7 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    `gameplay` / `ฟุตเตจ` / `footage` = 🎬, and `+ graphic` is not a mode — graphics are made in post in every
    mode. Rigid product (rack, shelf, device): add one line, Flow redrew its parts in 3 of 3 🧑/✋ jobs.
 3. **Q2 — length, 🧑/📦/✋ only** (`clarify`, one question): `["10 วิ (แนะนำ)", "20 วิ", "30 วิ", "40 วิ"]`.
-   **🎬 skips Q2**: gameplay-clips picks 15–50 s from the footage. A length Fix names still wins.
+   **🎬 skips Q2** (gameplay-clips picks 15–50 s; a length Fix names wins).
    One shot = one Flow generation of 3–10 s, never 11–15 (Omni 1.2 Flash 720p = 3 credits/s; `house-rules.md`
    → Credits). N = ceil(length / 10); size each shot to its speech (`--seconds`); clip = sum of shots.
    A mode/length already named in the order is not asked again.
@@ -71,6 +71,7 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    Shots after the first chain from the previous shot's last frame, with the continuity block repeated.
    Send it and wait for approval. This is a standing gate; "don't ask me" does not waive it
    (`references/run-mode-gates.md`). Send the board as its own message (`S/send_status.py`), then approval + Q3 as TWO questions in ONE `clarify`.
+   Then `clipjob.py board <job>`: Flow `new` refuses until Fix replies AFTER it (an older queued message is no approval).
    - 🧑: random pick from the roster, never the same face twice in a row, name the pick
      (`references/house-rules.md`); `new --character <name>` refuses a name with no portrait in
      `/opt/data/clips/characters/`. The Thai voiceover is spoken by the presenter inside Flow.
@@ -103,12 +104,11 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
      `file` null = character chip + refs only). 📝 gets the same pick from `ingest`/`pack`.
      🤖 download fails and Fix sends the mp4: save as `shotK_raw.mp4`, step 10's `ready` (no `ingest`).
      `"FALLBACK": true` printed: close Chrome, one line to Fix (reason, credits, shots left), `pack`, go on as 📝.
-     A shot that failed after spending credits gets its own 🔁 button from `submit-failed`; wait for the tap.
+     A paid failed shot gets its own 🔁 from `submit-failed`; wait for the tap.
 10. **Per-shot review (🤖 only — 📝 ended at step 9).** `references/frame-check.md` first. `clipjob.py idcheck
     <job> K --raw <file>` → ONE vision call on its sheet: its `ask_vision` + the frame-check questions (Flow
     text, sub band, scale, planned action). Then `clipjob.py ready <job> K --raw <file> --frame pass|flag:<what>
-    --identity match|drift:<part>|count:<2 vs 3 …>|presenter:<face/hair>`. `count:` = a part count differs
-    (compartments, buttons, pieces): post cannot fix it, the review puts 🔁 first. ready runs ffprobe + (🧑)
+    --identity match|drift:<part>|count:<2 vs 3 …>|presenter:<face/hair>`. `count:` = a part count differs (post cannot fix it; 🔁 goes first). ready runs ffprobe + (🧑)
     the repeats/CTA gates and sends ✅/🔁; a failed send → `ready <job> K --resend`. Fix's tap arrives as text →
     `clipjob.py decide --text "<text>"`; if it prints `REFUSED: text is not a review button`, run
     `clipjob.py decide <job> K approve|regen`. Never hand-edit the job JSON. On 🔁 regenerate via flow-driver;
@@ -142,7 +142,7 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
 **Vision budget per job**: intake 1 · photo gate ≤2 ·
 🤖 shot 1 (+1 full-res confirm of a drift) · 📝 shot 0 · post frame sheet 1 · cover 2 (pick + the
 `check_sheet` that `make_poster_cover.py` prints) · 🎬 footage: one sheet per stage. clipjob `note`/`status` print
-`vision N/budget`; past it: decide + `note`. Every call counts (locator, chip zoom, screenshot reads):
+`vision N/budget`; past it: decide + `note`. Every call counts (chips: `chipcheck.py`, 0 vision):
 `references/house-rules.md` → Vision budget.
 
 ## Talking to Fix

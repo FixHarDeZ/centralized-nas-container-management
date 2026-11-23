@@ -26,9 +26,11 @@ The source of truth is the repo (`hermes-agent/skills/`); every sync overwrites 
 - Picker DOM recipes: `references/flow-picker-dom.md`, `templates/picker-attach-helpers.md`. Character-creation prompt scaffold: `templates/character-prompt.md`. Failure catalogue:
   `references/pitfalls.md`. Tool-call cap: `references/session-cuts.md`. Flow-UI production facts moved from the
   house rules: `references/flow-production-notes.md`.
-- To actually SEE a region of the page (chip identity, a zoom for a vision read), capture it to a file with
+- To actually SEE a region of the page (a chip row for `chipcheck.py`, a zoom for a vision read), capture it to a file with
   `scripts/cdp_shot.py <out.jpg> <x> <y> <w> <h> [scale]` — never read `Page.captureScreenshot` through a tool
   result, whose base64 alone costs tens of thousands of tokens before the pixels can be saved.
+- **Chip identity after every attach = `scripts/chipcheck.py` (pixels, no vision):** exit 0 verified, 1 fix the
+  attach, 3 = ONE vision read of that chip only. Recipe: `references/flow-browser-env.md` → chip's name.
 
 ## The wrap — each step has its clipjob call
 | Flow step | clipjob call |

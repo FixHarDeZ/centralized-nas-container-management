@@ -47,7 +47,7 @@ fi
 
 # Tests gate the sync: router size budget, unique file names, clipjob/product_build/build_v5 behaviour.
 if [ -z "$PULL" ] && [ "${SKIP_TESTS:-}" != 1 ]; then
-  if ! uv run -q --with pytest --with numpy --with pillow pytest -q -p no:cacheprovider tests/test_hermes_skills.py "$SRC/shopee-clip/scripts" "$SRC/gameplay-clips/scripts" >/tmp/hermes-skills-tests.log 2>&1; then
+  if ! uv run -q --with pytest --with numpy --with pillow pytest -q -p no:cacheprovider tests/test_hermes_skills.py "$SRC/shopee-clip/scripts" "$SRC/gameplay-clips/scripts" "$SRC/flow-driver/scripts" >/tmp/hermes-skills-tests.log 2>&1; then
     tail -30 /tmp/hermes-skills-tests.log >&2
     echo "REFUSED: tests failed — nothing synced (fix in the repo, push, rerun)" >&2
     exit 1

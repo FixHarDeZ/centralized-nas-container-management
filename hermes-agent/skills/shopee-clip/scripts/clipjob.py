@@ -5,6 +5,7 @@ State: $CLIPJOB_DIR/<job>.json (default /opt/data/clips/jobs). Pacing clock: $CL
 This CLI is the only sanctioned way to move a Flow-mode clip forward. It refuses out-of-order steps.
 
   clipjob.py intake JOB --product "..." [--link URL] [--mode M]   # right after the duplicate check: the job exists
+  clipjob.py board JOB                              # the storyboard just went out (again): Flow `new` needs a reply after it
                                                     # (status lists it) before Q1/board, so a lost context can resume
   clipjob.py new JOB --mode presenter|product|hands|gameplay --product "..." [--link URL] [--shots N] [--seconds 8,6] [--ref IMG ...] [--character NAME]
                                                     # on an intake job: fills it in (same slug)
@@ -65,6 +66,7 @@ import datetime as dt
 import glob
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -292,6 +294,90 @@ def clarify_spans(a, b, db=None):
     return sorted({(asked[i], min(t, b)) for i, t in rows if i in asked and t > asked[i]})
 
 
+def board_replies(since, db=None):
+    """[(epoch, text)] of Fix's replies after `since`: his messages + answered `clarify` calls (state.db).
+    None = the db cannot be read (no verdict). plaid-shoulder-blanket 2026-11-23: Fix's 'ไอยูทำใน flow ให้เลยนะ'
+    (01:02, before the board existed at 01:19) sat queued through two timed-out board asks, was replayed at 01:41
+    and taken as approval: 60 cr on a board he never saw. A queued message keeps its ARRIVAL time, so it is older
+    than the board and does not count here."""
+    db = db or HERMES_DB
+    if not os.path.exists(db):
+        return None
+    try:
+        c = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=2)
+        try:
+            out = [(ts, (txt or "")[:120]) for ts, txt in c.execute(
+                "SELECT timestamp, content FROM messages WHERE role='user' AND timestamp > ? ORDER BY timestamp", (since,))]
+            for ts, txt in c.execute("SELECT timestamp, content FROM messages WHERE role='tool' AND tool_name='clarify' "
+                                     "AND timestamp > ? ORDER BY timestamp", (since,)):
+                try:
+                    for r in json.loads(txt or "{}").get("responses", []):
+                        if r.get("status") == "answered":
+                            out.append((ts, "clarify: " + str(r.get("user_response", ""))[:110]))
+                except (ValueError, AttributeError):
+                    continue
+        finally:
+            c.close()
+    except sqlite3.Error:
+        return None
+    return sorted(out)
+
+
+def board_gate(old, mode):
+    """`new` for a Flow mode: the board went out (`clipjob.py board`) and Fix replied after it. -> board record."""
+    if mode not in FLOW_MODES:
+        return None
+    b = (old or {}).get("board") or {}
+    if not b.get("sent"):
+        raise Refused("no storyboard on record: send the board, run `clipjob.py board <job>`, wait for Fix's reply "
+                      "(router step 6 — a standing gate, \"don't ask me\" does not waive it)")
+    replies = board_replies(_epoch(b["sent"]))
+    if replies is None:
+        return {**b, "answer": None, "unverified": "state.db unreadable"}
+    if not replies:
+        raise Refused(f"no reply from Fix since the board went out at {b['sent'][11:16]} — a message he sent BEFORE it "
+                      "(a queued 'ทำเลย' / 'ไอยูทำให้เลย') is not an approval (plaid-shoulder-blanket 2026-11-23: 60 cr "
+                      "on a board he never answered). Wait for his tap; zero spend meanwhile")
+    ts, txt = replies[-1]
+    return {**b, "answer": txt, "answer_at": iso(ts)}
+
+
+# Thai chars per second Flow can speak in a shot (codepoints ก-๙ + Latin/digits, the measure of 2026-11-23):
+# CTA cut at 12.2 (genme-fly-duck-tee shot 2, 4 s: 'ลิงก์อยู่ใต้คลิปนะ' SKIPPED) and 12.7 (plaid shot 3, 6 s: 50% heard);
+# 9-11.4 c/s shipped clean on 30+ presenter shots. The last shot carries the link line and gets the tighter cap.
+VO_RATE_MAX = 12.0
+VO_RATE_MAX_LAST = 11.5
+VO_RE = re.compile(r'Audio \(Thai voiceover\)[^"“]*["“](.+?)["”]', re.S)
+
+
+def vo_rate(j, k):
+    """-> (chars, seconds, chars/s) of shot k's spoken line, or None (no shot file / a silent shot)."""
+    path = os.path.join(j["workdir"], f"shot{k}.txt")
+    if j.get("mode") != "presenter" or not os.path.exists(path):
+        return None
+    m = VO_RE.search(open(path, encoding="utf-8").read())
+    if not m:
+        return None
+    n = len(re.findall(r"[ก-๙A-Za-z0-9]", m.group(1)))
+    sec = shot_seconds(shot(j, k))
+    return n, sec, round(n / sec, 1)
+
+
+def vo_rate_check(j, k):
+    """Before credits / Fix's time: a line too long for its shot loses its tail (the CTA) in Flow."""
+    r = vo_rate(j, k)
+    if not r or os.environ.get("VO_DENSE_OK"):
+        return
+    cap = VO_RATE_MAX_LAST if k == len(j["shots"]) else VO_RATE_MAX
+    n, sec, rate = r
+    if rate > cap:
+        need = min(10, math.ceil(n / cap))
+        raise Refused(f"shot {k}: {n} Thai chars in {sec} s = {rate}/s > {cap}/s — Flow drops the end of the line "
+                      f"(genme shot 2 12.2/s and plaid shot 3 12.7/s lost 'ลิงก์อยู่ใต้คลิปนะ'). Cut the line to "
+                      f"≤{int(cap * sec)} chars" + (f" or make the shot {need} s (clipjob.py reshape)" if need > sec else "")
+                      + " (VO_DENSE_OK=1 only when Fix ordered this exact script)")
+
+
 VISION_TIMEOUT_S = 400        # a call this long hit Hermes' 420 s tool deadline (aux vision timeout does not hold)
 
 
@@ -422,7 +508,7 @@ def need_flow(j):
         raise Refused(f"mode {j['mode']} has no Flow shots")
 
 
-INTAKE_CMDS = ("note", "wait", "cancel", "status")
+INTAKE_CMDS = ("note", "wait", "cancel", "status", "board")
 
 
 def intake_job(job, product, link="", mode=None, workdir=None):
@@ -479,6 +565,7 @@ def reserve(j, k, last_reserve, t=None):
         raise Refused(f"shot {k} is {s['state']}; a rendered or failed shot needs Fix's 🔁 first")
     cta_order_check(j, k)
     name_check(j, k)
+    vo_rate_check(j, k)
     if k > 1:
         prev = shot(j, k - 1)
         if prev["state"] not in ("in_review", "approved"):
@@ -1371,6 +1458,7 @@ def cmd_pack(j, only, no_send):
     for k in targets:
         cta_order_check(j, k)
         name_check(j, k)
+        vo_rate_check(j, k)
     sent = []
     char_img = character_image(j.get("character"))
     if not no_send and not only:
@@ -1809,6 +1897,7 @@ def main(argv=None):
     s.add_argument("--shots", type=int, default=0); s.add_argument("--ref", action="append", default=[])
     s.add_argument("--workdir"); s.add_argument("--character")
     s.add_argument("--seconds", help="per-shot length: 8 or 8,6,8 (3-10, default 10)")
+    s = sub.add_parser("board"); s.add_argument("job")
     s = sub.add_parser("intake"); s.add_argument("job"); s.add_argument("--product", required=True)
     s.add_argument("--link", default=""); s.add_argument("--mode", choices=MODES); s.add_argument("--workdir")
     s = sub.add_parser("idcheck"); s.add_argument("job"); s.add_argument("shot", type=int); s.add_argument("--raw")
@@ -1873,6 +1962,12 @@ def main(argv=None):
             log(j, "intake"); save(j)
             return out({**summary(j), "next": "clipjob.py note <job> \"<done; next>\" after each stage (Q1, photo gate, "
                                                "board sent/approved); clipjob.py new <job> … after the board"})
+        if a.cmd == "board":
+            j = load(a.job); need_open(j)
+            j["board"] = {"sent": iso()}
+            log(j, "board sent"); save(j)
+            return out({"job": a.job, "board": j["board"], "next": "ask approval + Q3 (one clarify), then wait. "
+                        "`new` refuses until Fix replies after this moment"})
         if a.cmd == "new":
             missing = [r for r in a.ref if not os.path.exists(r)]
             if missing:
@@ -1885,15 +1980,23 @@ def main(argv=None):
                               "woman). Save the character's Flow image there (flow-driver templates/character-prompt.md) "
                               "or pick a roster name that has one")
             j = new_job(a.job, a.mode, a.product, a.link, a.shots, a.ref, a.workdir, a.character, a.seconds)
-            if os.path.exists(path_of(a.job)):
-                j = promote_intake(load(a.job), j)
+            old = load(a.job) if os.path.exists(path_of(a.job)) else None
+            board = board_gate(old, a.mode)
+            if old:
+                j = promote_intake(old, j)
                 log(j, "created (from intake)")
             else:
                 log(j, "created")
+            if board:
+                j["board"] = board
+                log(j, "board approved: " + (f"{board['answer']!r} at {board['answer_at'][11:16]}" if board.get("answer")
+                                             else f"unverified ({board.get('unverified')})"))
             os.makedirs(j["workdir"], exist_ok=True)
             j.setdefault("started", iso(workdir_started(j["workdir"], now())))
             save(j)
-            return out(summary(j))
+            rates = {k: vo_rate(j, k) for k in range(1, len(j["shots"]) + 1)}
+            return out({**summary(j), **({"board": j["board"]} if j.get("board") else {}),
+                        "vo_rate": {k: f"{r[0]} chars / {r[1]} s = {r[2]}/s" for k, r in rates.items() if r}})
         if a.cmd == "cost":
             if a.job:
                 return out(cost([shot_seconds(s) for s in load(a.job)["shots"]], a.res))

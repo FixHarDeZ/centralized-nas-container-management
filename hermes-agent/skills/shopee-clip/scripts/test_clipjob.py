@@ -285,6 +285,10 @@ def test_cli_new_status_cancel(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("CLIPJOB_NO_TG", "1")
     ref = tmp_path / "ref.jpg"; ref.write_bytes(b"x")
     wd = tmp_path / "wd"
+    assert cj.main(["new", "c-1", "--mode", "product", "--product", "P", "--shots", "2", "--ref", str(ref)]) == 1
+    assert "no storyboard on record" in capsys.readouterr().err      # a Flow job needs intake + board first
+    assert cj.main(["intake", "c-1", "--product", "P", "--workdir", str(wd)]) == 0
+    assert cj.main(["board", "c-1"]) == 0                             # no state.db in tests: reply unverified
     assert cj.main(["new", "c-1", "--mode", "product", "--product", "P", "--link", "https://s.shopee.co.th/a",
                     "--shots", "2", "--ref", str(ref), "--workdir", str(wd)]) == 0
     assert cj.main(["new", "c-1", "--mode", "product", "--product", "P", "--shots", "2", "--ref", str(ref)]) == 1
@@ -1043,12 +1047,14 @@ def test_intake_job_is_listed_then_promoted_by_new(tmp_path, monkeypatch, capsys
     assert cj.main(["pack", "n-1", "--no-send"]) == 1                       # nothing runs before `new`
     assert "still at intake" in capsys.readouterr().err
     ref = tmp_path / "ref1.jpg"; ref.write_bytes(b"r")
+    assert cj.main(["board", "n-1"]) == 0
     created = cj.load("n-1")["created"]
     assert cj.main(["new", "n-1", "--mode", "presenter", "--product", "Cable", "--link", "https://s.shopee.co.th/x",
                     "--shots", "2", "--ref", str(ref), "--character", "น้องมิลค์"]) == 0
     j = cj.load("n-1")
     assert "stage" not in j and len(j["shots"]) == 2 and j["created"] == created
-    assert [e["msg"] for e in j["events"]][:2] == ["intake", "note: board sent (msg 12208); next: wait for approval + Q3"]
+    assert [e["msg"] for e in j["events"]][:3] == ["intake", "note: board sent (msg 12208); next: wait for approval + Q3",
+                                                   "board sent"]
     assert cj.main(["new", "n-1", "--mode", "presenter", "--product", "Cable", "--shots", "2", "--ref", str(ref),
                     "--character", "น้องมิลค์"]) == 1                     # a real job is never overwritten
 
@@ -1212,6 +1218,8 @@ def test_presenter_needs_a_portrait(tmp_path, monkeypatch, capsys):
     ref = tmp_path / "r.jpg"; ref.write_bytes(b"r")
     args = ["new", "p-1", "--mode", "presenter", "--product", "x", "--shots", "1", "--ref", str(ref),
             "--character", "น้องเอิร์ธ", "--workdir", str(tmp_path / "w")]
+    assert cj.main(["intake", "p-1", "--product", "x", "--workdir", str(tmp_path / "w")]) == 0
+    assert cj.main(["board", "p-1"]) == 0
     assert cj.main(args) == 1 and "no portrait" in capsys.readouterr().err
     (tmp_path / "chars").mkdir(); (tmp_path / "chars" / "น้องเอิร์ธ.jpg").write_bytes(b"p")
     assert cj.main(args) == 0
@@ -1326,3 +1334,79 @@ def test_stage_marks_split_a_gameplay_timeline():
     assert tl["stages"] == [["เตรียม", 0], ["ทำคลิป", 10], ["footage", 17], ["endcard", 26], ["vo", 20],
                             ["build", 19], ["cover", 21]]
     assert tl["total_min"] == 113
+
+
+# ---------------------------------------------------------------- board reply gate + VO rate (Fix 2026-11-23)
+def hermes_db(path, rows):
+    """A state.db with Hermes' messages columns the gate reads: (timestamp, role, content, tool_name)."""
+    import sqlite3
+    c = sqlite3.connect(path)
+    c.execute("CREATE TABLE messages (id INTEGER PRIMARY KEY, role TEXT, content TEXT, tool_name TEXT, "
+              "tool_calls TEXT, tool_call_id TEXT, timestamp REAL)")
+    c.executemany("INSERT INTO messages (timestamp, role, content, tool_name) VALUES (?,?,?,?)", rows)
+    c.commit(); c.close()
+    return str(path)
+
+
+def boarded(tmp_path, monkeypatch, rows):
+    monkeypatch.setattr(cj, "DIR", str(tmp_path)); monkeypatch.setattr(cj, "WORK", str(tmp_path / "work"))
+    monkeypatch.setattr(cj, "CHAR_DIR", str(tmp_path)); (tmp_path / "น้องมุก.jpg").write_bytes(b"p")
+    assert cj.main(["intake", "b-1", "--product", "Cape"]) == 0
+    assert cj.main(["board", "b-1"]) == 0
+    sent = cj._epoch(cj.load("b-1")["board"]["sent"])
+    monkeypatch.setattr(cj, "HERMES_DB", hermes_db(tmp_path / "state.db", [(sent + dt, *r) for dt, *r in rows]))
+    ref = tmp_path / "r.jpg"; ref.write_bytes(b"r")
+    return ["new", "b-1", "--mode", "presenter", "--product", "Cape", "--shots", "1", "--ref", str(ref),
+            "--character", "น้องมุก"]
+
+
+def test_a_message_queued_before_the_board_is_not_its_approval(tmp_path, monkeypatch, capsys):
+    """plaid-shoulder-blanket 2026-11-23: 'ไอยูทำใน flow ให้เลยนะ' (01:02) replayed after the board asks timed out."""
+    args = boarded(tmp_path, monkeypatch, [(-1020, "user", "ไอยูทำใน flow ให้เลยนะ", None),
+                                           (600, "tool", json.dumps({"responses": [{"status": "unanswered"}]}), "clarify")])
+    assert cj.main(args) == 1 and "no reply from Fix since the board" in capsys.readouterr().err
+    assert cj.load("b-1")["stage"] == "intake"
+
+
+def test_a_tap_after_the_board_lets_new_through_and_is_recorded(tmp_path, monkeypatch, capsys):
+    args = boarded(tmp_path, monkeypatch, [(-1020, "user", "ไอยูทำใน flow ให้เลยนะ", None),
+                                           (300, "tool", json.dumps({"responses": [{"status": "answered",
+                                            "user_response": "ผ่าน + ให้ไอยูกด 🤖"}]}), "clarify")])
+    assert cj.main(args) == 0
+    b = cj.load("b-1")["board"]
+    assert b["answer"].endswith("ผ่าน + ให้ไอยูกด 🤖") and b["answer_at"]
+
+
+def test_gameplay_new_needs_no_board(tmp_path, monkeypatch):
+    monkeypatch.setattr(cj, "DIR", str(tmp_path))
+    assert cj.main(["new", "g-9", "--mode", "gameplay", "--product", "G", "--workdir", str(tmp_path / "w")]) == 0
+
+
+def vo_job(tmp_path, seconds, lines):
+    j = cj.new_job("v-1", "presenter", "Tee", "https://s.shopee.co.th/x", len(seconds), ["/tmp/ref.jpg"],
+                   workdir=str(tmp_path), character="น้องเนย", seconds=",".join(map(str, seconds)))
+    for k, line in enumerate(lines, 1):
+        (tmp_path / f"shot{k}.txt").write_text(f'Scene.\nAudio (Thai voiceover): "{line}"\nmore', encoding="utf-8")
+    return j
+
+
+def test_a_line_too_long_for_its_shot_is_refused_before_credits(tmp_path):
+    """genme-fly-duck-tee 2026-11-23 shot 2: 49 chars in 4 s = 12.2/s, the link line was not spoken."""
+    j = vo_job(tmp_path, [6, 4], ["เสื้อยืดสีขาวตัวนี้ พิมพ์เล็กที่อก ชิ้นเดียวแมตช์ได้หลายลุค ลองดูสิ",
+                                  "ดูด้านหลังนะ เป็ดตัวใหญ่เต็มหลัง ลิงก์อยู่ใต้คลิปนะ"])
+    assert cj.vo_rate(j, 2) == (49, 4, 12.2)
+    cj.vo_rate_check(j, 1)                                     # 64 chars / 6 s = 10.7: fine
+    with pytest.raises(cj.Refused, match=r"12.2/s > 11.5/s.*make the shot 5 s"):
+        cj.vo_rate_check(j, 2)
+    cj.set_production(j, "prompt")
+    with pytest.raises(cj.Refused, match="Flow drops the end"):
+        cj.cmd_pack(j, None, True)                             # pack (and reserve) run the same check
+
+
+def test_vo_rate_skips_silent_shots_and_respects_the_override(tmp_path, monkeypatch):
+    j = vo_job(tmp_path, [6], ["x" * 80])
+    (tmp_path / "shot1.txt").write_text("hands fold the cape, no speech", encoding="utf-8")
+    assert cj.vo_rate(j, 1) is None
+    (tmp_path / "shot1.txt").write_text('Audio (Thai voiceover): "' + "ก" * 80 + '"', encoding="utf-8")
+    monkeypatch.setenv("VO_DENSE_OK", "1")
+    cj.vo_rate_check(j, 1)

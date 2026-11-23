@@ -89,9 +89,9 @@
   immediately and name the wrong word; do not leave the corrupted line as the last word.
 
 ## Vision budget
-**Every `vision_analyze` counts** — the photo-gate locator, chip-identity zoom (one per attach, mandatory) and
-page-state screenshot reads alike — so batch the chips of one submit into ONE read and settle edges/positions
-with pixel probes and DOM reads: the budget runs out exactly when post needs its frame sheet and cover reads.
+**Every `vision_analyze` counts** — the photo-gate locator and page-state screenshot reads alike — so settle
+edges/positions with pixel probes and DOM reads: the budget runs out exactly when post needs its frame sheet
+and cover reads. Chip identity is `flow-driver/scripts/chipcheck.py` (pixels, 0 vision; Fix 2026-11-23).
 
 ## Style standard (every clip)
 - Female presenter, cute tone, no hard sell; modern Thai teen slang (ปัง, เริ่ด, ของมันต้องมี, ดี๊ดี, คุ้มเว่อร์), not cringe.
