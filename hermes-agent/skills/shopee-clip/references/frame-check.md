@@ -13,6 +13,7 @@ Standing depth for SKILL.md step 10 (per-shot review). Step 10 owns WHAT to samp
   compartments vs 3). `presenter:` words the review line as the face, not the product (eucerin 2026-11-19).
   **📝 shots skip all of this** — Fix's reply is his review (`prompt-pack.md`); this file is for 🤖 shots and
   the post frame sheet.
+- **This read is the GATE, not a discretionary check — it runs even when `note`/`status` prints `vision N/budget … no more vision_analyze`.** That warning exists to stop the extra rounds (crop locators, chip zooms, a second opinion on a question the pixels already settled); an `--identity` verdict cannot be invented and `ready` refuses without one, so spend the read on the sheet, then `note` the overage and name what you cut to stay near budget.
 - A product that changes BETWEEN frames is drift even when each frame looks plausible (aukey-pby92: silver →
   thick dark box with a big display → white, built-in cable turned into a loose one). DRIFT goes into the review
   as `❌ identity` with the part named; Fix decides.
