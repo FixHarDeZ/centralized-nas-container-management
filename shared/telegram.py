@@ -29,6 +29,7 @@ can say why.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -47,6 +48,13 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 
 TEXT_LIMIT = 4096
 CAPTION_LIMIT = 1024
+
+# A connect failure means the request never reached Telegram, so sending it
+# again cannot post twice. shorts-factory lost a finished Script to one
+# ConnectTimeout (2026-11-22) and sat "busy" for 27 hours. A read timeout is
+# NOT retried: the message may already be in the chat.
+CONNECT_ATTEMPTS = 3
+RETRY_DELAY = 5.0
 
 
 def chunks(text: str, limit: int = TEXT_LIMIT) -> list[str]:
@@ -98,7 +106,16 @@ class Bot:
     # --- raw ------------------------------------------------------------------
 
     async def api(self, method: str, **payload):
-        reply = await self.client.post(f"{self._base}/{method}", json=payload, timeout=60)
+        for attempt in range(1, CONNECT_ATTEMPTS + 1):
+            try:
+                reply = await self.client.post(f"{self._base}/{method}", json=payload, timeout=60)
+                break
+            except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
+                if attempt == CONNECT_ATTEMPTS:
+                    raise
+                logger.warning("telegram %s: %r, ส่งใหม่ (%d/%d)", method, exc,
+                               attempt + 1, CONNECT_ATTEMPTS)
+                await asyncio.sleep(RETRY_DELAY * attempt)
         body = reply.json()
         if not body.get("ok"):
             logger.error("telegram %s: %s", method, body.get("description"))

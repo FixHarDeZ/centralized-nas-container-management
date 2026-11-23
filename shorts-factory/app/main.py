@@ -1314,6 +1314,38 @@ async def drop_review(client: httpx.AsyncClient, stale: dict) -> None:
     await say(client, note)
 
 
+def reap_orphan(state: dict) -> dict | None:
+    """A busy mode with no job left running behind it: free the bot.
+
+    Every job that claims "writing"/"rendering" runs in a spawn()ed task, so a
+    busy mode while `_running` is empty means a job died without handing the
+    bot back. 2026-11-22 12:04: the Script was written, posting it hit
+    ConnectTimeout, and every Topic for 27 hours got "busy" while the
+    automatic rounds -- which wait for idle -- never fired. Any live task
+    counts, so this can only ever be late, never early.
+    """
+    mode = state.get("mode")
+    if mode not in BUSY_MODES or any(not task.done() for task in _running):
+        return None
+    stale = {"mode": mode, "clip_id": state.get("clip_id"), "pair": state.pop("pair", None)}
+    record = manifest.load(stale["clip_id"]) if stale["clip_id"] else None
+    if record and record.get("outcome") == "drafting":
+        manifest.update(stale["clip_id"],
+                        outcome="generate_failed" if mode == "writing" else "render_failed",
+                        error="งานล้มกลางทางโดยไม่คืนสถานะบอท (orphaned)")
+    st.to_idle(state)
+    return stale
+
+
+async def drop_orphan(client: httpx.AsyncClient, stale: dict) -> None:
+    job = "เขียนสคริปต์" if stale.get("mode") == "writing" else "render"
+    note = (f"⚠️ งาน{job}ล้มกลางทาง (ดู log) บอทเลยค้างสถานะไม่ว่าง — ปลดให้แล้ว\n"
+            "ส่งหัวข้อใหม่มาได้เลย")
+    if stale.get("pair"):
+        note += "\n(ยกเลิกภาษาอังกฤษของหัวข้อนี้ด้วย)"
+    await say(client, note)
+
+
 async def drop_clip_wait(client: httpx.AsyncClient, wait: dict) -> None:
     """The storyboard's clip never came. Said out loud, like a dropped Park."""
     title = (wait.get("script") or {}).get("title", "")
@@ -2442,7 +2474,8 @@ async def _trends_round(client: httpx.AsyncClient, state: dict, auto: bool,
     if not rows:
         return
     try:
-        topics = await script_gen.suggest_topics(rows, locale)
+        topics = await script_gen.suggest_topics(rows, locale,
+                                                 covered=manifest.covered(locale))
     except Exception as exc:
         logger.exception("suggest_topics failed")
         await say(client, f"แปลง trend เป็นหัวข้อไม่สำเร็จ: {exc}")
@@ -3520,6 +3553,10 @@ async def main() -> None:
             # fetch it itself. Off the loop so a slow endpoint never stalls polling.
             if model_choice.refresh_due():
                 spawn(model_choice.refresh(), "model_catalog")
+            orphan = reap_orphan(state)
+            if orphan:
+                save_state(state)
+                spawn(drop_orphan(client, orphan), "drop_orphan")
             owed = auto_slots(state)
             # One round at a time, and only from a standing start. Two rounds
             # in flight would overwrite each other's `suggested` list and the

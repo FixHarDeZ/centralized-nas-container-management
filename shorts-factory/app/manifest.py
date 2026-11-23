@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -148,3 +148,42 @@ def load_all() -> list[dict]:
         except json.JSONDecodeError:
             logger.warning("manifest %s พัง ข้ามไป", path.name)
     return out
+
+
+# Long enough to span a franchise's release cycle (Skibidi's episodes trended
+# 22-27 days apart). At ~3 Clips a day the 150-line cap is what binds (~50
+# days); lines are clipped so the whole list stays around 15k characters.
+COVERED_DAYS = 90
+COVERED_LIMIT = 150
+
+
+def covered(locale: str, days: int = COVERED_DAYS, now: datetime | None = None) -> list[str]:
+    """What this channel already made, newest first, for the Topic picker.
+
+    One line per Clip that reached a file -- the Script title plus the trend
+    that sparked it, because a returning trend ("skibidi toilet 83") matches on
+    its source term long before it matches on any title.
+    """
+    cutoff = (now or datetime.now()) - timedelta(days=days)
+    lines = []
+    for record in reversed(load_all()):
+        if (record.get("locale") or "th") != locale:
+            continue
+        if not (record.get("published") or record.get("outcome") == "rendered"):
+            continue
+        try:
+            if datetime.fromisoformat(record.get("created_at", "")) < cutoff:
+                continue
+        except ValueError:
+            continue
+        scripts = record.get("scripts") or []
+        last = (scripts[-1].get("script") or {}) if scripts else {}
+        title = last.get("title") or record.get("topic") or ""
+        source = (record.get("trend") or {}).get("from")
+        if title:
+            title = title[:70]
+            lines.append(f"{title} (กระแส: {source[:40]})" if source else title)
+        if len(lines) >= COVERED_LIMIT:
+            break
+    return lines
+

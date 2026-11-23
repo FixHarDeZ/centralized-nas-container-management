@@ -532,7 +532,16 @@ def _context_note(avoid: list[str], winners: list[str],
     return "\n\n".join(parts)
 
 
-async def suggest_topics(rows: list[dict], locale: str = locales.DEFAULT) -> list[dict]:
+COVERED_NOTE = {
+    "th": ("\n\nคลิปที่ช่องทำไปแล้ว (ห้ามเสนอเรื่องเดิมหรือมุมเดิมซ้ำ "
+           "ถ้ากระแสในรายการเป็นเรื่องเดียวกับข้างล่าง ให้ข้ามกระแสนั้นไปเลย):\n"),
+    "en": ("\n\nVideos this channel already made (do not suggest the same subject or "
+           "angle again; if a trend above is about one of these, skip that trend):\n"),
+}
+
+
+async def suggest_topics(rows: list[dict], locale: str = locales.DEFAULT,
+                         covered: list[str] | None = None) -> list[dict]:
     """Turn raw trend rows into Topics the bot could actually be given.
 
     Kept separate from `generate()`: this decides *what* to make, which is the
@@ -544,6 +553,12 @@ async def suggest_topics(rows: list[dict], locale: str = locales.DEFAULT) -> lis
         + (f" — ข่าว: {row['headline']}" if row.get("headline") else "")
         for row in rows
     )
+    # The picker had no memory: a franchise that trends with every new episode
+    # was explained from scratch each time (Skibidi Toilet x3, 2026-09..11),
+    # which viewers read as the channel recycling old news.
+    if covered:
+        listing += COVERED_NOTE.get(locale, COVERED_NOTE["th"]) + "\n".join(
+            f"- {line}" for line in covered)
     messages = [{"role": "system", "content": trends_prompt(locale)},
                 {"role": "user", "content": listing}]
     client = _client()

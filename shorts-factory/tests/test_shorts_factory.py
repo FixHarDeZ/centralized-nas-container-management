@@ -13,6 +13,7 @@ import pathlib
 import subprocess
 import time
 
+import httpx
 import pytest
 
 os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test-token")
@@ -3778,3 +3779,133 @@ def test_pronunciation_invalid_optional_metadata_does_not_reject_a_valid_script(
     assert cleaned["cards"][0]["pronunciation_checks"] == [
         {"term": "CPU", "spoken": "ซีพียู", "kind": "acronym"},
     ]
+
+
+# --- a job that dies without handing the bot back (2026-11-22) -----------------
+
+def _no_research_writing(monkeypatch, tmp_path):
+    monkeypatch.setattr(manifest, "DIR", tmp_path / "clips")
+    monkeypatch.setattr(main, "save_state", lambda state: None)
+    monkeypatch.setattr(history, "recent_titles", lambda locale=None: [])
+    monkeypatch.setattr(main, "close_prompt", _nothing)
+
+    async def no_winners(limit=3, locale="th"):
+        return []
+
+    async def no_research(topic, locale="th"):
+        return None
+
+    async def fake_generate(topic, **kwargs):
+        return a_script()
+
+    monkeypatch.setattr(analytics, "winning_examples", no_winners)
+    monkeypatch.setattr(main.research, "research", no_research)
+    monkeypatch.setattr(script_gen, "generate", fake_generate)
+
+
+def test_a_script_that_cannot_be_posted_does_not_hold_the_bot_forever(monkeypatch, tmp_path):
+    """2026-11-22 12:04: the Script was written, posting it hit ConnectTimeout,
+    the exception left make_script() with mode still "writing" and nothing
+    running. Every Topic for the next 27 hours was answered "busy", and the
+    automatic rounds never fired because they wait for idle."""
+    _no_research_writing(monkeypatch, tmp_path)
+    said = []
+
+    async def say(client, text, **extra):
+        said.append(text)
+        if len(said) > 1:
+            raise httpx.ConnectTimeout("")
+        return {"message_id": 7}
+
+    monkeypatch.setattr(main, "say", say)
+    state = {"mode": "idle"}
+
+    async def scenario():
+        task = main.spawn(main.make_script(None, state, "หัวข้อ"), "make_script")
+        assert main.reap_orphan(state) is None, "a job still running is not an orphan"
+        await asyncio.gather(task, return_exceptions=True)
+        return main.reap_orphan(state)
+
+    stale = asyncio.run(scenario())
+    assert stale is not None and stale["mode"] == "writing"
+    assert state["mode"] == "idle"
+    record = manifest.load(stale["clip_id"])
+    assert record["outcome"] == "generate_failed", "a Script nobody saw is not a Clip"
+
+
+def test_a_reaped_render_is_not_relabelled_once_it_has_an_outcome(monkeypatch, tmp_path):
+    monkeypatch.setattr(manifest, "DIR", tmp_path / "clips")
+    clip_id = manifest.start("หัวข้อ", "th")
+    manifest.update(clip_id, outcome="rendered")
+    state = {"mode": "rendering", "clip_id": clip_id, "pair": {"topic": "x"}}
+    stale = main.reap_orphan(state)
+    assert stale["pair"] == {"topic": "x"} and "pair" not in state
+    assert manifest.load(clip_id)["outcome"] == "rendered"
+
+
+def test_telegram_retries_a_request_that_never_left(monkeypatch):
+    """A connect failure means Telegram never saw the request: safe to send again.
+    A read timeout may have delivered it, so that one is not retried."""
+    calls = []
+
+    class Reply:
+        @staticmethod
+        def json():
+            return {"ok": True, "result": {"message_id": 9}}
+
+    class Client:
+        def __init__(self, failures):
+            self.failures = list(failures)
+
+        async def post(self, url, json=None, timeout=None):
+            calls.append(url)
+            if self.failures:
+                raise self.failures.pop(0)
+            return Reply()
+
+    monkeypatch.setattr(main.telegram, "RETRY_DELAY", 0)
+    bot = main.telegram.Bot(Client([httpx.ConnectTimeout(""), httpx.ConnectError("")]), "t", 1)
+    assert asyncio.run(bot.api("sendMessage", text="x")) == {"message_id": 9}
+    assert len(calls) == 3
+
+    calls.clear()
+    bot = main.telegram.Bot(Client([httpx.ReadTimeout("")]), "t", 1)
+    with pytest.raises(httpx.ReadTimeout):
+        asyncio.run(bot.api("sendMessage", text="x"))
+    assert len(calls) == 1
+
+
+def test_the_topic_picker_is_told_what_the_channel_already_made(monkeypatch, tmp_path):
+    """Skibidi Toilet was explained three times (09/13, 10/10, 11/01) because
+    every new episode trended and the picker had no memory; only the Script
+    writer saw the last 30 titles, by which point the Topic was chosen."""
+    monkeypatch.setattr(manifest, "DIR", tmp_path / "clips")
+    old = manifest.start("skibidi toilet คืออะไร", "th")
+    manifest.add_script(old, {**a_script(), "title": "Skibidi Toilet คืออะไร"})
+    manifest.update(old, published=True, trend={"from": "skibidi toilet 82"})
+    unmade = manifest.start("ไม่ได้ทำต่อ", "th")
+    english = manifest.start("dune", "en")
+    manifest.update(english, published=True)
+
+    covered = manifest.covered("th")
+    assert covered == ["Skibidi Toilet คืออะไร (กระแส: skibidi toilet 82)"]
+    assert unmade not in " ".join(covered)
+
+    asked = []
+
+    async def fake_say(client, messages, temperature, budget, model=None):
+        asked.append(messages)
+        return '{"topics": [{"topic": "โดรนส่งของ"}]}'
+
+    monkeypatch.setattr(script_gen, "_client", lambda: None)
+    monkeypatch.setattr(script_gen, "_say", fake_say)
+    asyncio.run(script_gen.suggest_topics(
+        [{"source": "yt", "term": "skibidi toilet 83", "traffic": 1}], "th", covered=covered))
+    assert "Skibidi Toilet คืออะไร" in asked[0][-1]["content"]
+
+
+def test_covered_forgets_clips_older_than_its_window(monkeypatch, tmp_path):
+    monkeypatch.setattr(manifest, "DIR", tmp_path / "clips")
+    clip = manifest.start("เก่า", "th")
+    manifest.update(clip, published=True, created_at="2026-01-01T08:00:00")
+    assert manifest.covered("th", now=datetime.datetime(2026, 11, 23)) == []
