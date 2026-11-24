@@ -1812,3 +1812,12 @@ Not done / open:
   files in the NAS clone, `--pull` again (house-rules is 20 471/20 480 B), port, commit, `make hermes-skills`.
 - ps2 finding (proposal only): photo gate 07:21→09:32 ran ~40 scratch crop/probe scripts on an ad graphic
   (box_crop.py exists), plus board revision loops 09:42→10:13.
+
+## 2026-11-24 (3)
+- Fix: Flow Image tab = 0 credits (read by Fix); A/B re-run of huawei dropped — "ลองที่งานหน้า".
+- `6f330c5`: `scene-plate.md` rewritten as a one-order TRIAL (🤖 🧑/✋; 📝/📦 skip): Image tab must read 0
+  credits, plate → `<workdir>/plate.jpg`, facecheck + ≤1 vision gate, back to Video tab before `reserve`,
+  shot 1 chips = plate + product ref (🧑 drops character chip), clip-log `plate: used|skipped`, one line in
+  delivery. Pointer in `flow-driver/SKILL.md` "Before anything" (7463/8192 B). Router untouched (15353/15360).
+- Not synced: ps2-hdd-175 delivered, ps2-hdd-175-pres still open (post; heartbeat line 15:15).
+- After the trial order: Fix's verdict → adopt (router step 9 link, drop TRIAL) or remove the pointer.
