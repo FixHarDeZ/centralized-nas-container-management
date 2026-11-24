@@ -1856,3 +1856,14 @@ Fix: "ตรวจงานล่าสุด … เรื่อง prompt scen
   had "A/B the MODEL TILE" from an earlier 🤖 case — 📝 runs never read flow-driver docs, hence prompt-pack now.
 - To tell Fix: switch the Flow project back to Omni 1.2; -pres can be rebuilt at 0 credits with corrected subs;
   day spend 63 not 72; Omni 1.1 leaves 2026-12-05 (then Veo 3.1 Lite, cost unread).
+
+## 2026-11-24 — session closed (จบงาน)
+- All hermes-agent work pushed: last code `85b1b76`, notes `cc59b8c` + this close. Live skills synced at
+  `85b1b76` (285 container tests), no open clip job, heartbeat cron live, no stack deploy needed.
+- NAS clone: stash@{0} "hermes live 11-24 pm, ported in 3071842", stash@{1} "hermes live 11-24 am, ported in
+  41cc172" — both already in the repo.
+- Waiting on Fix: switch the Flow project back to Omni 1.2; yes/no on a 0-credit rebuild of ps2-hdd-175-pres with
+  corrected subs; whether to build the 3 open items (max-iterations stop with two jobs, Chinese image
+  pre-analysis, pills dropped on close-ups).
+- Watch next order: plate TRIAL (🤖 🧑/✋), number subs, box_crop panels, refusal → Omni 1.1, pack `warn`,
+  second job packed at once. Omni 1.1 leaves Flow 2026-12-05.
