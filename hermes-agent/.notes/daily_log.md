@@ -1821,3 +1821,32 @@ Not done / open:
   delivery. Pointer in `flow-driver/SKILL.md` "Before anything" (7463/8192 B). Router untouched (15353/15360).
 - Not synced: ps2-hdd-175 delivered, ps2-hdd-175-pres still open (post; heartbeat line 15:15).
 - After the trial order: Fix's verdict → adopt (router step 9 link, drop TRIAL) or remove the pointer.
+
+## 2026-11-24 (4) — review of ps2-hdd-175 (✋ 🤖) + ps2-hdd-175-pres (🧑 📝)
+Fix: "ตรวจงานล่าสุด … เรื่อง prompt scene 2 สรุปผมไปใช้ omni 1.1 ถึงจะผ่าน".
+- Timeline ✋: order 07:14 → small-source ask 08:23 → Fix photo 08:42 → board 09:41 (photo-panel probing ~15
+  scratch scripts, 50 min) → 3 revisions (each = menu clarify + free-text clarify) → approved 10:15 📝, 🤖
+  takeover 10:28 → max-iterations stop 12:20 (Fix "ต่อ") → delivered 13:10. Gemini subs boundary 1.38 vs 3.55 s,
+  hand-fixed by Hermes.
+- Timeline 🧑: board 11:47 approved 11:50, packed only 13:09 (✋ post first) → shot 2 refused on Omni 1.2 at
+  13:17/13:57/14:21/(14:24 pack) — Hermes changed tiles, chip, start frame; the "no start frame" pack still told
+  Fix to attach it → Fix used Omni 1.1, rendered → post 14:55→15:36, delivered with 2 sub flags acked
+  (numbers sub 2.5 s late, เลือกได้ 4 s on screen). First answer about credits was wrong (refund misread).
+- Root causes + fixes:
+  - `post_presenter.norm` kept only whole tokens 0..10 as words, then letters only → "175,225,275" = "" →
+    zero-width fallback. `gen_vo_natural` counted Whisper "175" (3) vs say "หนึ่งร้อยเจ็ดสิบห้า" (19). New
+    `shopee-clip/scripts/thainum.py` (lists vs thousands, decimals, %, Thai digits, split-token merge); 
+    `vo_split.estimate_bounds` (moved out of gen_vo_natural for tests). Verified on NAS copies: -pres flags 2→0;
+    ✋ take `--from-take --probe` cuts 3.50/4.97/9.39 (old estimates 2.42/3.3/9.76). `a9b9822`.
+  - `box_crop.py` panels fallback (gutter XY-cut, 2-pass trim, 12 px margin, cells keep small-object tiles):
+    img2 → photo 794×604 + 3 step tiles. `a9b9822`.
+  - `clipjob pack --no-start-frame` (refuses if the prompt still names a start/last frame), `ingest --credits N`.
+    Refusal order doc (🤖 pitfalls: switch to 1.1 on the FIRST refusal since a 2nd submit-failed = fallback;
+    📝 prompt-pack: model first, then one change per round). `3071842`.
+  - Ported Hermes live edits (router `ready`≠approved → flow-driver table; ✋ 3 vision/shot; chipcheck exit 4 →
+    chip bytes; VO timing check rewritten; deliver/gfx/label-crop facts). Morning files unchanged since 41cc172.
+- Synced `3071842` (285 passed). NAS clone: stash@{0} "hermes live 11-24 pm, ported in 3071842".
+- Spend: -pres real 27 (shot 1 18 + shot 2 9 on 1.1); clip-log row says 36 (`note` refused on delivered job; not
+  hand-edited). Day total told to Fix 72 → real 63.
+- Not built (reported): max-iterations stop with two jobs in one session; gateway image pre-analysis in Chinese
+  (CJK source); pills dropped on close-ups ("Clear Case"/"Plug In"), link pill over her face.
