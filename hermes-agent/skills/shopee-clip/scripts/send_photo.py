@@ -8,6 +8,7 @@ Appends the attempt to logs/delivery-log.jsonl with kind=photo (check_delivery i
 import json, os, subprocess, sys, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from send_clip import read_token
+from send_status import refuse_cjk, stamp_sent
 
 def main():
     if len(sys.argv) < 3:
@@ -15,8 +16,10 @@ def main():
     path, cap = sys.argv[1], sys.argv[2]
     chat = sys.argv[3] if len(sys.argv) > 3 else "8663614341"
     label = sys.argv[4] if len(sys.argv) > 4 else os.path.basename(path)
+    refuse_cjk(cap)                                   # same gate as send_status: exit 3, nothing sent
     tok = read_token()
-    r = subprocess.run(["curl", "-s", "-m", "120", "-F", f"chat_id={chat}", "-F", f"caption={cap}",
+    # --form-string: a caption starting with @ or < is text, not a file for curl to read
+    r = subprocess.run(["curl", "-s", "-m", "120", "-F", f"chat_id={chat}", "--form-string", f"caption={cap}",
                         "-F", f"photo=@{path}", f"https://api.telegram.org/bot{tok}/sendPhoto"],
                        capture_output=True, text=True)
     try:
@@ -30,6 +33,8 @@ def main():
     with open(os.environ.get("CLIP_LEDGER", "/opt/data/clips/logs/delivery-log.jsonl"), "a") as f:
         f.write(json.dumps(row, ensure_ascii=False) + "\n")
     print(json.dumps({"ok": ok, "message_id": row["message_id"], "file": path}))
+    if ok:
+        stamp_sent("photo")
     sys.exit(0 if ok else 1)
 
 if __name__ == "__main__":

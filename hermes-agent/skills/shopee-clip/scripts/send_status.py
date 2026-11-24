@@ -43,6 +43,21 @@ def refuse_cjk(text):
         sys.exit(3)
 
 
+SENT_STAMP = os.environ.get("CLIP_SENT_STAMP", "/opt/data/clips/logs/last-sent.json")
+
+
+def stamp_sent(kind):
+    """Record that Fix just got a message (clip_heartbeat.py counts silence from here). Never fails the send."""
+    try:
+        import time
+        os.makedirs(os.path.dirname(SENT_STAMP), exist_ok=True)
+        with open(SENT_STAMP + ".tmp", "w", encoding="utf-8") as f:
+            json.dump({"ts": time.time(), "kind": kind}, f)
+        os.replace(SENT_STAMP + ".tmp", SENT_STAMP)
+    except OSError:
+        pass
+
+
 def main():
     args = sys.argv[1:]
     check = bool(args) and args[0] == "--check"
@@ -66,6 +81,7 @@ def main():
                       "message_id": (out.get("result") or {}).get("message_id")}))
     if not out.get("ok"):
         sys.exit(1)
+    stamp_sent("status")
 
 
 if __name__ == "__main__":

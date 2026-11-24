@@ -16,7 +16,7 @@
 #   reported and left in place.
 # - A file that was synced before and is no longer tracked is deleted (manifest .repo-synced; its first
 #   line records the synced commit, the baseline for drift detection).
-# - shopee-clip/scripts/check_delivery.py is also copied to /opt/data/scripts/ (the watchdog cron
+# - shopee-clip/scripts/check_delivery.py + clip_heartbeat.py are also copied to /opt/data/scripts/ (the cron
 #   can only run scripts from there).
 # `sync.sh --pull` (or PULL=1) goes the other way for in-place edits: each drifted live file is copied INTO
 #   the clone's working tree and nothing live is touched. Review with git diff, commit, push, then sync.
@@ -153,10 +153,12 @@ for s in "${SKILLS[@]}"; do
     "$HERMES" curator pin "$s" >/dev/null 2>&1 || echo "WARN: curator pin $s failed" >&2
   fi
 done
-if ! cmp -s "$SRC/shopee-clip/scripts/check_delivery.py" "$SCRIPTS_DST/check_delivery.py" 2>/dev/null; then
-  run mkdir -p "$SCRIPTS_DST"
-  run cp -p "$SRC/shopee-clip/scripts/check_delivery.py" "$SCRIPTS_DST/check_delivery.py"
-  echo "updated $SCRIPTS_DST/check_delivery.py"
-fi
+for cron_script in check_delivery.py clip_heartbeat.py; do     # Hermes' no-agent cron runs scripts from here only
+  if ! cmp -s "$SRC/shopee-clip/scripts/$cron_script" "$SCRIPTS_DST/$cron_script" 2>/dev/null; then
+    run mkdir -p "$SCRIPTS_DST"
+    run cp -p "$SRC/shopee-clip/scripts/$cron_script" "$SCRIPTS_DST/$cron_script"
+    echo "updated $SCRIPTS_DST/$cron_script"
+  fi
+done
 [ "$drift_n" -gt 0 ] && echo "⚠️  $drift_n in-place edit(s) captured in $DRIFT_ROOT/$TS — review and port to the repo"
 echo "synced at $(git rev-parse --short HEAD)"

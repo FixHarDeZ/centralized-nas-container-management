@@ -10,8 +10,7 @@
 - **Model = Omni 1.2 Flash** (Omni 1.1 Flash and Veo 3.1 Fast/Quality leave Flow on 2026-12-05; Veo 3.1 Lite stays,
   4/6/8 s, cost not known here). 720p = 3 credits/s for seconds 1–10 — **now measured on Fix's account** from the
   Settings panel's `Generating will use N credits` (Omni 1.2: 6 s → 18, 7 s → 21, 8 s → 24; Omni 1.1 measured
-  cheaper at 1.5/s: 8 s → 12). Still unmeasured here: 6/s for seconds 11–15 and the 360p rates (1/s, 2/s for
-  11–15) — third-party write-ups only. So 720p: 6 s = 18, 8 s = 24, 10 s = 30, 15 s = 60. Estimate with
+  cheaper at 1.5/s: 8 s → 12). Unmeasured: 6/s for seconds 11–15, the 360p rates. So 720p: 6 s = 18, 8 s = 24, 10 s = 30, 15 s = 60. Estimate with
   `clipjob.py cost --seconds 8,6`. Every account has 50/day (≈16 s at 720p); Pro adds 1,000/month.
 - **Spend less on 1.2 (twice the 1.1 price):** (1) a shot is as long as its speech needs (~4 Thai syllables/s):
   6–8 s is normal, 10 s only when the line fills it — pass `--seconds`. The clip is the SUM of its shots (post
@@ -21,7 +20,6 @@
   generations for the same wrong cover. (4) A product Flow cannot hold (new game cover art, rigid rack) is not
   fixed by a reworded prompt: offer 🎬/📦 or a post insert of the real photo. A 360p generation saved at 720p
   is reported as a third of the price but softer, and is untested here: only when Fix says so (`cost --res 360p`).
-  A shot under 10 s has not been through post yet (first one: check subs/graphics timing by eye).
 - **The board's quota line = Flow's LIVE balance + its reset date** (account menu → `Account details` →
   `N Google Flow credits`, `Resets <date>`; `flow-driver` → `flow-browser-env.md`). The account pools credits
   far above 50/day (282 left on 2026-11-22), so never write "ต้องรอรอบโควต้า" from a 50/day sum; only when the
@@ -85,7 +83,8 @@
 - **Answer repeated image sends once per batch**: one short line per image (usable or not, what is still missing).
 - Once an order is clear, never repeat a question across several image messages.
 - **Every outbound Thai message passes the CJK/full-width gate** (a stray pair typed into Thai reads as corruption
-  to Fix). `send_status.py` refuses such a line itself (exit 3, nothing sent; emoji pass); a `clarify` is typed
+  to Fix). `send_status.py` / `send_photo.py` refuse such a line (exit 3, nothing sent; emoji pass) — send through
+  them, never a scratch sender (they also stamp the time `clip_heartbeat` reads); a `clarify` is typed
   straight into the tool call, so run `send_status.py --check "<exact question>"` on that exact string first. Never
   send a flagged line, and never quote the characters when correcting — describe the word instead
   ("พิมพ์ผิด 1 คำเป็นอักขระแปลก ๆ ที่บรรทัดนั้น"). Do not leave the corrupted line as the last word.
@@ -201,7 +200,7 @@ and cover reads. Chip identity is `flow-driver/scripts/chipcheck.py` (pixels, 0 
 - **A long silent stretch also needs a line.** Post, the 🤖 browser drive, the per-shot frame review and the final
   QC (verify-clip → sub_linecheck → frame sheet → cover) run 15+ min with nothing to ask, and one vision call that
   times out is 7 min alone — so the line goes out BEFORE the reads: one short line per stage ("Chrome ขึ้นแล้ว →
-  กำลังแปะ chip", "ช็อต 2 มาแล้ว → กำลังสแกน/รีวิว").
+  กำลังแปะ chip", "ช็อต 2 มาแล้ว → กำลังสแกน/รีวิว"). The `clip_heartbeat` cron (⏳ after 15 silent min) is a backstop only.
 - **The line for a stage goes out when the stage STARTS, not when it ends — every mode, 🎬 included.** 0 credits
   still means 20–40 min of sourcing, OCR, gates and post with nothing to ask. Keep ≤ ~5 min between two lines:
   he reads the gap, not the progress, and a silent first stage pulls "ยังทำอยู่เนาะ / ทำไมเงียบไป" out of him while
