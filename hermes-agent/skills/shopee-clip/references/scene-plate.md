@@ -21,7 +21,7 @@ Run it only as the A/B below, with Fix's go, until he approves it for real order
 2. Chips: the character only. Prompt = the board's continuity block (set, light, wardrobe) + "hands empty,
    no product, no text, no logo, no screen content".
 3. Gate before use (0–1 vision): `facecheck.py` finds her face; `chipcheck.py --expect <portrait>` on the
-   chip; ONE vision read only when the face is unclear. No text in the image (`cover_check.py` price rules on it).
+   chip; ONE vision read only when the face is unclear. No text, logo or screen content in it (that same read, or reject).
 4. Attach as the start frame of shot 1 exactly as `ingest` attaches a last frame (`flow-steps.md`).
 
 ## A/B before adoption (needs Fix's go: the video half costs credits)

@@ -22,6 +22,7 @@ import datetime as dt
 import glob
 import json
 import os
+import re
 import sqlite3
 import sys
 import time
@@ -32,8 +33,10 @@ DB = os.environ.get("HERMES_STATE_DB", "/opt/data/state.db")
 JOBS = os.environ.get("CLIPJOB_DIR", "/opt/data/clips/jobs")
 STAMP = os.environ.get("HEARTBEAT_STAMP", "/opt/data/clips/logs/heartbeat.json")
 SENT = os.environ.get("CLIP_SENT_STAMP", "/opt/data/clips/logs/last-sent.json")   # send_status / send_photo
-# a call whose text names one of these put something on his phone (a scratch sender too: sendphoto_x.py)
-SENDERS = ("send", "status", "clipjob.py ready", "clipjob.py pack", "clipjob.py deliver", "api.telegram.org")
+# a call naming a sender script put something on his phone — send_status.py, send_photo.py and a scratch
+# sendphoto_x.py / status1_x.py alike — but `clipjob.py status` (run all the time) sends nothing
+SENDER_RX = re.compile(r"\b\w*(?:send|status)\w*\.py\b|clipjob\.py (?:ready|pack|deliver)\b|api\.telegram\.org")
+FRESH_H = 12                                    # an open job untouched this long is abandoned, not running
 TOOL_TH = {"vision_analyze": "อ่านภาพ", "terminal": "รันสคริปต์", "execute_code": "รันสคริปต์",
            "browser_exec": "คุม Chrome", "write_file": "เขียนไฟล์", "read_file": "อ่านไฟล์", "patch": "แก้ไฟล์"}
 
@@ -52,11 +55,17 @@ def is_visible(msg):
     cs = calls(msg)
     if not cs:
         return bool((msg.get("content") or "").strip())
-    return any(c.get("name") == "clarify" or any(s in (c.get("arguments") or "") for s in SENDERS) for c in cs)
+    return any(c.get("name") == "clarify" or SENDER_RX.search(c.get("arguments") or "") for c in cs)
 
 
-def open_job(jobs):
-    live = [j for j in jobs if j.get("status") == "open"]
+def open_job(jobs, now=None):
+    now = now or dt.datetime.now().astimezone()
+    def fresh(j):
+        try:
+            return (now - dt.datetime.fromisoformat(j.get("updated") or "")).total_seconds() < FRESH_H * 3600
+        except (TypeError, ValueError):
+            return False
+    live = [j for j in jobs if j.get("status") == "open" and fresh(j)]
     return max(live, key=lambda j: j.get("updated") or "") if live else None
 
 

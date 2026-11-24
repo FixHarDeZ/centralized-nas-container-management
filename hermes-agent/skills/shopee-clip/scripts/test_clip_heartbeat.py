@@ -43,7 +43,11 @@ def test_turn_ended_or_clarify_waits_on_fix():
 
 
 def test_no_open_job_no_line():
-    assert hb.open_job([{**JOB, "status": "delivered"}]) is None
+    import datetime as dt
+    now = dt.datetime(2026, 11, 24, 12, 0, tzinfo=dt.timezone(dt.timedelta(hours=7)))
+    assert hb.open_job([{**JOB, "status": "delivered", "updated": "2026-11-24T11:00:00+07:00"}], now) is None
+    assert hb.open_job([{**JOB, "updated": "2026-11-22T11:00:00+07:00"}], now) is None          # abandoned
+    assert hb.open_job([{**JOB, "updated": "2026-11-24T11:00:00+07:00"}], now)["job"] == JOB["job"]
     assert hb.decide(5000, None, [result("terminal", 4990)], {})[0] is None
 
 
@@ -70,3 +74,12 @@ def test_no_cjk_in_lines():
 def test_scratch_sender_counts_as_seen():
     msgs = [result("terminal", 1000), call("terminal", '{"command": "python3 sendphoto_ps2hdd.py ref.jpg"}', 950)]
     assert hb.decide(1000 + 10 * 60, JOB, msgs, {})[0] is None
+
+
+def test_clipjob_status_is_not_a_message():
+    msgs = [result("terminal", 1000), call("terminal", '{"command": "python3 scripts/clipjob.py status ps2"}', 990),
+            call("terminal", '{"command": "python3 scripts/send_status.py hi"}', 0)]
+    assert hb.decide(1000 + 16 * 60, JOB, msgs, {})[0] is not None
+    assert hb.decide(1000 + 10 * 60, JOB, msgs, {})[0] is not None     # 'clipjob.py status' did not reset it
+    msgs[2] = call("terminal", '{"command": "python3 status1_ps2hdd.py"}', 980)
+    assert hb.decide(1000 + 10 * 60, JOB, msgs, {})[0] is None         # a scratch sender did
