@@ -93,16 +93,16 @@ Fix's own submits spend his Flow credits like 🤖. `ingest` records the publish
   and the wrong number then went out as a status line that had to be retracted. A policy refusal
   (`การสร้างนี้อาจละเมิดนโยบายของเรา`) IS refunded: it costs nothing, and the answer is never "budget N extra credits".
 - **First move = the model, not the prompt: ask Fix to switch that shot to Omni 1.1 Flash** (Settings → model; same
-  prompt, same chips) and to switch back to 1.2 for the next shot. ps2-hdd-175-pres shot 2 (2026-11-24): an
+  prompt, same chips), and back to 1.2 for the next shot — Flow keeps the last model per project. ps2-hdd-175-pres shot 2 (2026-11-24): an
   unchanged retry, plain gradient tiles instead of game covers, no character chip, no start frame — all refused on
-  1.2 (80 min); Fix tried 1.1 and it rendered first time. 1.1 = 1.5 cr/s (6 s = 9): ingest his file with
+  1.2 (80 min); Fix tried 1.1 and it rendered first time. 1.1 = 1.5 cr/s (6 s = 9): ingest that file with
   `--credits 9` (the default records the 1.2 estimate). Omni 1.1 leaves Flow on 2026-12-05; after that the
   fallback model is Veo 3.1 Lite (cost unread — ask Fix to read its credit line).
 - Refused on 1.1 too: ONE change per round — the single structural difference from a shot of the clip that passed
   (most often the action that forces Flow to render an IP-bearing asset: real game covers, brand art), edit only
   that, `pack --shot K`, and tell Fix which words changed and why. Testing without the start frame =
-  `pack --shot K --no-start-frame` (it refuses while the prompt still asks for one); a plain re-pack tells him to
-  attach the frame again, so that round would not test what you think it tests.
+  `pack --shot K --no-start-frame` (it refuses while the prompt still asks for one); a plain re-pack says to attach
+  the frame again (pack prints a `warn` for it), so that round would not test what you think it tests.
 
 ## Deliver acks (moved from the router, 2026-11-22)
 `deliver` refuses while the report has a flag Fix has not decided. Tell him each flag with its frame time; he

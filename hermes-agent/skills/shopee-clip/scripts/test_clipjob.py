@@ -1444,9 +1444,13 @@ def test_pack_no_start_frame_says_so_and_sends_no_frame(tmp_path, monkeypatch):
     assert "รอบนี้ไม่ต้องแนบ" in texts and "แนบรูปเฟรมเริ่มที่ส่งไปเมื่อกี้" not in texts
     assert not [c for c in calls if c[0] == "sendPhoto" and "เฟรมเริ่ม" in (c[1].get("caption") or "")]
     calls.clear()
-    cj.cmd_pack(j, 2, False)                                    # the default still chains the frame
+    sent = cj.cmd_pack(j, 2, False)                             # the default still chains the frame
     texts = " ".join(d.get("text", "") for m, d, f in calls if m == "sendMessage")
     assert "แนบรูปเฟรมเริ่มที่ส่งไปเมื่อกี้" in texts
+    assert "--no-start-frame" in sent[0]["warn"]                # ...and says the prompt never asks for it
+    (tmp_path / "shot2.txt").write_text("Start exactly on the attached last-frame image. She plugs it in.",
+                                        encoding="utf-8")
+    assert "warn" not in cj.cmd_pack(j, 2, False)[0]
 
 
 def test_ingest_records_the_real_credits_when_given(tmp_path):

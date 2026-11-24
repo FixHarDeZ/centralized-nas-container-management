@@ -1463,6 +1463,7 @@ def cmd_pack(j, only, no_send, no_start_frame=False):
     says so and no frame photo goes out. ps2-hdd-175-pres 2026-11-24: the 'no start frame' re-pack still told
     Fix to attach it, so that round never tested what Hermes said it tested."""
     targets = pack_targets(j, only)
+    no_frame_text = set()
     if not targets:
         raise Refused("nothing to pack (every shot is submitted, in review or approved)")
     wd = j["workdir"]
@@ -1475,6 +1476,8 @@ def cmd_pack(j, only, no_send, no_start_frame=False):
         vo_rate_check(j, k)
         with open(os.path.join(wd, f"shot{k}.txt"), encoding="utf-8") as f:
             asks_frame = START_FRAME_RX.search(f.read())
+        if not asks_frame:
+            no_frame_text.add(k)
         if no_start_frame and asks_frame:
             raise Refused(f"--no-start-frame but shot{k}.txt still asks for a start / last-frame image: "
                           "take that sentence out first")
@@ -1525,7 +1528,11 @@ def cmd_pack(j, only, no_send, no_start_frame=False):
                 mid = mid or r["message_id"]
         s = shot(j, k)
         s.update({"state": "packed", "pack_msg": mid})
-        sent.append({"shot": k, "message_id": mid})
+        row = {"shot": k, "message_id": mid}
+        if "แนบรูปเฟรมเริ่ม" in chain and k in no_frame_text:
+            row["warn"] = (f"shot {k}: Fix was told to attach the start frame, but shot{k}.txt never mentions one — "
+                           "if this round is meant to run WITHOUT it (a refusal test), re-pack with --no-start-frame")
+        sent.append(row)
     log(j, f"packed shots {targets}")
     kb = takeover_keyboard(j)
     if kb and not no_send:
