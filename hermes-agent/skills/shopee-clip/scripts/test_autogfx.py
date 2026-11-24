@@ -92,3 +92,90 @@ def test_nothing_measured_free_means_no_sticker_and_a_warning():
     assert plan["stickers"] == [] and "NO sticker placed" in skipped[-1]
     plan, _ = ag.plan_gfx([{"scene": 0, "t0": 0.1, "t1": 2.5, "face": [100, 300, 320, 560], "busy": None}])
     assert plan["stickers"][0]["x"] > 360                               # unmeasured: beside the face
+
+
+# ---- board-named beats / elements (huawei-watchfit5 2026-11-23: 73 min of hand geometry)
+def test_parse_span_and_spread():
+    assert ag.parse_span("4.4-6.4:product") == (4.4, 6.4, "product")
+    assert ag.parse_span("4.4-6.4", "auto") == (4.4, 6.4, "auto")
+    (c, far) = ag.spread([(100, 100), (110, 100), (100, 120)])
+    assert c == (100, 100) and round(far) == 20
+    try:
+        ag.parse_span("6-4")
+        assert False
+    except ValueError:
+        pass
+
+
+def test_image_fits_on_free_wall_first():
+    fit = ag.fit_image(wall([440, 262, 720, 700]), FACE, 1.0, [ag.RAIL])
+    h, cx, cy, how = fit
+    r = ag.image_rect(cx, cy, h, 1.0)
+    assert how == "free wall" and r[0] >= 440 and r[3] <= ag.SUB_TOP and r[1] >= ag.PILL_BOTTOM
+    assert not ag.overlap(r, ag.RAIL)
+
+
+def test_image_goes_beside_the_face_in_a_busy_room():
+    busy = np.ones((ag.H // ag.S, ag.W // ag.S), np.uint8)
+    h, cx, cy, how = ag.fit_image(busy, FACE, 1.0, [ag.RAIL])
+    r = ag.image_rect(cx, cy, h, 1.0)
+    assert how == "beside face" and h >= 110
+    assert not ag.overlap(r, ag.pad(FACE, 20)) and not ag.overlap(r, [FACE[0] - 20, FACE[1], FACE[2] + 20, ag.H])
+    assert r[3] <= ag.SUB_TOP
+
+
+def test_no_room_means_no_sticker():
+    face = [60, 300, 660, 640]                     # a close-up: the face fills the band
+    busy = np.ones((ag.H // ag.S, ag.W // ag.S), np.uint8)
+    assert ag.fit_image(busy, face, 1.0, [ag.RAIL]) is None
+    entry, note = ag.place_product_sticker([{"t0": 11.1, "t1": 13.7, "face": face, "busy": busy}],
+                                           "ref.jpg", 1.0, 11.0, 20.0)
+    assert entry is None and "left out" in note
+
+
+def test_product_sticker_picks_the_window_where_it_is_biggest():
+    busy = np.ones((ag.H // ag.S, ag.W // ag.S), np.uint8)
+    wins = [{"t0": 11.1, "t1": 13.7, "face": [60, 300, 660, 640], "busy": busy},
+            {"t0": 13.7, "t1": 16.3, "face": FACE, "busy": busy},
+            {"t0": 2.0, "t1": 4.6, "face": [500, 300, 700, 500], "busy": busy}]       # outside --sticker-at
+    entry, note = ag.place_product_sticker(wins, "ref.jpg", 1.0, 11.0, 20.0)
+    assert entry["start"] == 13.9 and entry["end"] == 16.3 and entry["w_est"] == entry["h"]
+
+
+def rect_fn(text, size, y):
+    w = len(text) * size * 0.5
+    return (360 - w / 2, y, 360 + w / 2, y + size * 1.3 + 12)
+
+
+def test_headline_clears_face_pill_and_sub_bands():
+    faces = [(8.0, 10.5, [200, 150, 540, 580])]
+    entry, note = ag.place_headline("No Phone", 8.5, 10.4, faces, [[8.0, 9.0, "x"]], [[8.4, 10.0, "s"]], rect_fn)
+    r = rect_fn(entry["text"], entry["size"], entry["y"])
+    assert not ag.overlap(r, faces[0][2]) and r[1] >= 262 and r[3] <= 700
+
+
+def test_headline_left_out_when_nothing_fits():
+    faces = [(0, 5, [80, 192, 592, 832])]
+    entry, note = ag.place_headline("No Phone", 1, 3, faces, [], [], rect_fn)
+    assert entry is None and "left out" in note
+
+
+def test_headline_avoids_a_placed_sticker():
+    taken = [(8.0, 11.0, (80, 192, 592, 400))]
+    entry, _ = ag.place_headline("No Phone", 8.5, 10.4, [], [], [], rect_fn, taken)
+    assert entry["y"] >= 400
+
+
+def test_knit_read_as_a_face_gives_no_beside_face_spot():
+    busy = np.ones((ag.H // ag.S, ag.W // ag.S), np.uint8)
+    assert not ag.plausible_face([300, 992, 460, 1157])
+    assert ag.fit_image(busy, [300, 992, 460, 1157], 1.0, [ag.RAIL]) is None
+
+
+def test_cut_out_stays_off_the_product_on_screen():
+    busy = np.ones((ag.H // ag.S, ag.W // ag.S), np.uint8)
+    free = ag.fit_image(busy, FACE, 1.0, [ag.RAIL])
+    r = ag.image_rect(free[1], free[2], free[0], 1.0)
+    prod = [int(r[0]), int(r[1]), int(r[2]), int(r[3])]           # the product sits exactly there
+    again = ag.fit_image(busy, FACE, 1.0, [ag.RAIL, prod])
+    assert again is None or not ag.overlap(ag.image_rect(again[1], again[2], again[0], 1.0), prod)

@@ -9,9 +9,16 @@ gates on its output: `graphics_layer.py --check` and ONE vision look at a frame 
   # per RAW scene, before presenter_fx.py (scene-local seconds):
   autogfx.py fx shot1_a1.mp4 --out fx1.json --hook --product ref1.jpg      # scene 1: hook card + punch
   autogfx.py fx shot2_a1.mp4 --out fx2.json                                # later scenes: punch only
+  # the board named the beats: one punch per --punch-at (replaces the automatic one); `:face`, `:product`
+  # or `:auto` (default: a steady face, else the product found by the ref's colour, else by detail)
+  autogfx.py fx shot1_a1.mp4 --out fx1.json --product ref1.jpg --punch-at 0.6-2.6:face --punch-at 4.4-6.4:product
 
   # once, on post_presenter's out.mp4, before graphics_layer.py (final-clip seconds):
-  autogfx.py gfx out.mp4 --report report.json --out gfx.json [--fx1 fx1.json]
+  autogfx.py gfx out.mp4 --report report.json --out gfx.json [--fx1 fx1.json] \
+      [--product-sticker ref1.jpg [--sticker-at 11.1-20.2]] [--headline "No Phone@8.5-10.4"]
+  # --product-sticker: the board's product cut-out as an `image_stickers` entry, in the window of
+  #   --sticker-at (default: the last scene) where it fits biggest — on free wall, else beside her face;
+  # --headline TEXT@T0-T1: a headline (e.g. a pill post_presenter dropped off her face) at a measured y.
 
 Run with: uv run --with "opencv-python-headless<5" --with numpy python autogfx.py …
 It prints what it wrote plus `skipped` reasons (no face found, no wall big enough for the hook card). A skipped
@@ -180,6 +187,194 @@ def plan_gfx(windows, hook=None):
     return {"stickers": stickers, "avoid": avoid, "auto_sfx": True, "sfx_gain": 0.35}, skipped
 
 
+# ---------------------------------------------------------------- board-named beats and elements
+SUB_TOP, PILL_BOTTOM = 700, 262          # graphics_layer SUB_BAND top / PILL_BAND bottom
+IMG_PAD = 42                             # image sticker border + shadow (graphics_layer: w_est + 42, h + 42)
+# only strongly saturated pixels count as product colour: at 70 blonde hair, skin and a cream sweater matched an
+# orange strap (huawei-watchfit5: the "product" landed on her hair, 300 px off the watch)
+COLOUR_SAT = 110
+
+
+def parse_span(text, default_on=None):
+    """'4.4-6.4' / '4.4-6.4:product' -> (4.4, 6.4, on)."""
+    span, _, on = text.partition(":")
+    a, _, b = span.partition("-")
+    t0, t1 = float(a), float(b)
+    if t1 <= t0:
+        raise ValueError(f"bad window {text!r}: end must be after start")
+    return t0, t1, (on or default_on)
+
+
+def spread(points):
+    """Median point of [(x, y)] and the largest distance of any point from it."""
+    xs, ys = sorted(p[0] for p in points), sorted(p[1] for p in points)
+    mx, my = xs[len(xs) // 2], ys[len(ys) // 2]
+    return (mx, my), max(((p[0] - mx) ** 2 + (p[1] - my) ** 2) ** 0.5 for p in points)
+
+
+def image_rect(cx, cy, h, aspect):
+    w = aspect * h + IMG_PAD
+    return (cx - w / 2, cy - (h + IMG_PAD) / 2, cx + w / 2, cy + (h + IMG_PAD) / 2)
+
+
+def plausible_face(face):
+    """Haar reads cable-knit as a face: a box whose top sits in the lower half of the frame, or that is taller
+    than a close-up face, is not one to place a sticker beside (huawei-watchfit5: a 'face' at y 992 put the
+    cut-out over her mouth)."""
+    return bool(face) and face[1] < 560 and 90 <= face[3] - face[1] <= 620 and 80 <= face[2] - face[0] <= 560
+
+
+def fit_image(busy, face, aspect, blocked, h_max=220, h_min=110):
+    """Biggest product cut-out (h, cx, cy, how) for one window. First on free wall (every busy-mask cell
+    under it empty); else beside her face, ignoring the wall mask (a real room reads busy everywhere) but
+    never on the face, the body column under it, the sub band, the pill band or the right rail."""
+    tries = []
+    if busy is not None:
+        tries.append(("free wall", busy, blocked))
+    if plausible_face(face):
+        body = [max(0, face[0] - 20), face[1], min(W, face[2] + 20), H]
+        tries.append(("beside face", None, blocked + [pad(face, 20), body]))
+    for how, mask, blk in tries:
+        for h in range(h_max, h_min - 1, -10):
+            hh, w = h + IMG_PAD, aspect * h + IMG_PAD
+            best = None
+            for cy in range(int(PILL_BOTTOM + hh / 2), int(SUB_TOP - hh / 2) + 1, 10):
+                for cx in range(int(5 + w / 2), int(W - 5 - w / 2) + 1, 10):
+                    r = image_rect(cx, cy, h, aspect)
+                    if any(overlap(r, b) for b in blk):
+                        continue
+                    if mask is not None and mask[int(r[1]) // S:int(r[3] + S - 1) // S,
+                                                 int(r[0]) // S:int(r[2] + S - 1) // S].any():
+                        continue
+                    fx, fy = ((face[0] + face[2]) / 2, (face[1] + face[3]) / 2) if face else (W / 2, 420)
+                    d = (cx - fx) ** 2 + (cy - fy) ** 2
+                    if best is None or d < best[0]:
+                        best = (d, cx, cy)
+            if best:
+                return h, best[1], best[2], how
+    return None
+
+
+def place_product_sticker(windows, image, aspect, t0, t1, hook=None):
+    """windows (final-clip chunks with face + busy) inside [t0, t1] -> (image_stickers entry, note)."""
+    best = None
+    for w in windows:
+        if w["t0"] < t0 - 0.05 or w["t1"] > t1 + 0.05:
+            continue
+        blocked = [RAIL] + list(w.get("product") or []) + ([hook["rect"]] if hook and w["t0"] < hook["end"] else [])
+        fit = fit_image(w.get("busy"), w.get("face"), aspect, blocked)
+        # free wall beats beside-face, then the bigger cut-out, then the later window (the CTA beat)
+        if fit and (best is None or (fit[3] == "free wall", fit[0], w["t0"]) > (best[1][3] == "free wall", best[1][0], best[0]["t0"])):
+            best = (w, fit)
+    if not best:
+        return None, (f"product sticker {t0}-{t1}s: no window holds a {110} px cut-out beside her face or on free "
+                      "wall — left out (put it in a later beat, or drop the board's promise and say so)")
+    w, (h, cx, cy, how) = best
+    entry = {"image": image, "x": cx, "y": cy, "h": h, "w_est": int(round(aspect * h)), "rot": -6,
+             "start": round(w["t0"] + 0.2, 2), "end": round(w["t1"], 2)}
+    return entry, f"product sticker {entry['start']}-{entry['end']}s h {h} ({how})"
+
+
+def place_headline(text, t0, t1, faces, pills, subs, rect_fn, taken=()):
+    """faces = [(t0, t1, rect)], pills/subs = report rows, taken = [(t0, t1, rect)] of elements already placed
+    -> (headline entry, note). Tries sizes 58/52/46 and every y from the top of the safe box down; the first
+    rect that is inside the safe box and clear of every face, of the pill band while a pill shows, of the sub
+    band while a sub shows and of the taken rects wins."""
+    live = lambda rows: [r for r in rows if r[0] < t1 and t0 < r[1]]
+    blk = [f[2] for f in live(faces)] + [x[2] for x in live(list(taken))]
+    if live(pills):
+        blk.append((0, 186, W, PILL_BOTTOM))
+    if live(subs):
+        blk.append((0, SUB_TOP, W, 835))
+    for size in (58, 52, 46):
+        for y in range(192, 832, 10):
+            r = rect_fn(text, size, y)
+            if r[0] < 80 or r[2] > 592 or r[1] < 192 or r[3] > 832:
+                continue
+            if not any(overlap(r, b) for b in blk):
+                return ({"text": text, "start": round(t0, 2), "end": round(t1, 2), "y": y, "style": "pop",
+                         "size": size}, f"headline '{text}' {t0}-{t1}s y {y} size {size}")
+    return None, (f"headline '{text}' {t0}-{t1}s: no y clear of her face and the pill/sub bands — left out "
+                  "(a shorter text, or another beat)")
+
+
+# ---------------------------------------------------------------- product locator (OpenCV)
+def ref_colour_model(img):
+    """Product crop -> HS histogram of its colourful foreground, or None when the product is not colourful
+    enough to be found by colour (white / black / grey: the locator centres on fine detail instead)."""
+    import cv2
+    import numpy as np
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    edge = np.concatenate([img[:4].reshape(-1, 3), img[-4:].reshape(-1, 3), img[:, :4].reshape(-1, 3),
+                           img[:, -4:].reshape(-1, 3)]).astype(int)
+    fg = np.sqrt(((img.astype(int) - np.median(edge, axis=0)) ** 2).sum(axis=2)) > 40
+    col = fg & (hsv[..., 1] > COLOUR_SAT) & (hsv[..., 2] > 50)
+    if col.sum() < max(200, 0.12 * fg.sum()):
+        return None
+    hist = cv2.calcHist([hsv], [0, 1], col.astype(np.uint8) * 255, [30, 32], [0, 180, 0, 256])
+    cv2.normalize(hist, hist, 0, 255, cv2.NORM_MINMAX)
+    return hist
+
+
+def colour_centre(img, hist):
+    import cv2
+    import numpy as np
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    bp = cv2.calcBackProject([hsv], [0, 1], hist, [0, 180, 0, 256], 1)
+    bp[hsv[..., 1] <= COLOUR_SAT] = 0
+    m = cv2.threshold(cv2.GaussianBlur(bp, (9, 9), 0), 60, 255, cv2.THRESH_BINARY)[1]
+    m = cv2.morphologyEx(m, cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
+    n, _, stats, cent = cv2.connectedComponentsWithStats(m)
+    if n < 2:
+        return None
+    k = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
+    return None if stats[k, cv2.CC_STAT_AREA] < 0.0005 * W * H else (int(cent[k][0]), int(cent[k][1]))
+
+
+def colour_box(img, hist, margin=30):
+    """Bounding box (padded) of the biggest ref-coloured blob in a frame, or None."""
+    import cv2
+    import numpy as np
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    bp = cv2.calcBackProject([hsv], [0, 1], hist, [0, 180, 0, 256], 1)
+    bp[hsv[..., 1] <= COLOUR_SAT] = 0
+    m = cv2.morphologyEx(cv2.threshold(cv2.GaussianBlur(bp, (9, 9), 0), 60, 255, cv2.THRESH_BINARY)[1],
+                         cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
+    n, _, st, _ = cv2.connectedComponentsWithStats(m)
+    if n < 2:
+        return None
+    k = 1 + int(np.argmax(st[1:, cv2.CC_STAT_AREA]))
+    if st[k, cv2.CC_STAT_AREA] < 0.0005 * W * H:
+        return None
+    x, y, w, h = (int(v) for v in st[k, :4])
+    return [max(0, x - margin), max(0, y - margin), min(W, x + w + margin), min(H, y + h + margin)]
+
+
+def detail_centre(img, face=None):
+    import cv2
+    import numpy as np
+    dens = cv2.blur(cv2.Canny(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY), 80, 160).astype(np.float32), (121, 121))
+    if face:
+        dens[max(0, face[1]):face[3], max(0, face[0]):face[2]] = 0
+    y, x = np.unravel_index(int(np.argmax(dens)), dens.shape)
+    return int(x), int(y)
+
+
+def product_centre(video, t0, t1, hist, face=None, n=7):
+    """(cx, cy, how) of the product across [t0, t1], or (None, reason)."""
+    grab = lp().frame
+    ts = [t0 + (t1 - t0) * (i + 0.5) / n for i in range(n)]
+    how = "colour" if hist is not None else "detail"
+    pts = [p for p in ((colour_centre(grab(video, t), hist) if hist is not None else detail_centre(grab(video, t), face))
+                       for t in ts) if p]
+    if len(pts) < (n + 1) // 2:
+        return None, f"the ref's colour was found in {len(pts)}/{n} frames"
+    (cx, cy), far = spread(pts)
+    if far > 140:
+        return None, f"the product moves {int(far)} px across the beat ({how})"
+    return (cx, cy, how), None
+
+
 # ---------------------------------------------------------------- measuring (ffmpeg + OpenCV)
 def duration(video):
     r = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", video],
@@ -217,6 +412,11 @@ def cmd_fx(a):
             t = hit[0] + 0.3                    # a punch re-frames the video under a fixed sticker: keep them apart
         else:
             skipped.append("hook card: no empty wall holds a card of 110 px for 1.4 s — left out")
+    if a.punch_at:
+        punches, skipped = board_punches(a, probe, dur, t if fx.get("hook_card") else 0.0, skipped)
+        if punches:
+            fx["punch"] = punches
+        return fx, skipped
     end = min(t + PUNCH_LEN, dur - 0.5)
     if not a.no_punch and end - t >= 1.0:
         face = probe(a.video, t, end, 0.25)["face"]
@@ -230,17 +430,65 @@ def cmd_fx(a):
     return fx, skipped
 
 
+def board_punches(a, probe, dur, hook_end, skipped):
+    """One punch per --punch-at beat (scene-local), centred on her steady face or on the product."""
+    hist = None
+    if a.product:
+        import cv2
+        hist = ref_colour_model(cv2.imread(a.product))
+    out = []
+    for spec in a.punch_at:
+        t0, t1, on = parse_span(spec, "auto")
+        t1 = min(t1, dur - 0.5)
+        tag = f"punch {t0:.1f}-{t1:.1f}s"
+        if t1 - t0 < 1.0:
+            skipped.append(f"{tag}: under 1 s inside the scene (end capped at dur - 0.5) — left out")
+            continue
+        if t0 < hook_end:
+            skipped.append(f"{tag}: overlaps the hook card (ends {hook_end - 0.3:.1f}s) — left out")
+            continue
+        if any(t0 < p["end"] and p["start"] < t1 for p in out):
+            skipped.append(f"{tag}: overlaps another punch — left out")
+            continue
+        face = probe(a.video, t0, t1, 0.25)["face"] if on in ("face", "auto") else None
+        steady = face and face[1] >= 80 and face[3] - face[1] <= 420
+        if steady:
+            out.append({**punch_for(face, t0, t1), "on": "face"})
+            continue
+        if on == "face":
+            skipped.append(f"{tag}: no steady face (box {face}) — left out; `:product` centres on the product")
+            continue
+        if not a.product:
+            skipped.append(f"{tag}: no steady face and no --product to find the product by — left out")
+            continue
+        got, why = product_centre(a.video, t0, t1, hist, face)
+        if not got:
+            skipped.append(f"{tag}: product not located ({why}) — left out")
+            continue
+        out.append({"start": round(t0, 2), "end": round(t1, 2), "zoom": PUNCH_ZOOM, "cx": got[0], "cy": got[1],
+                    "ease": 0.12, "on": "product:" + got[2]})
+    return sorted(out, key=lambda p: p["start"]), skipped
+
+
 def cmd_gfx(a):
     probe, grab = lp().probe, lp().frame
     with open(a.report, encoding="utf-8") as f:
         report = json.load(f)
+    hist = None
+    if a.product_sticker:
+        import cv2
+        hist = ref_colour_model(cv2.imread(a.product_sticker))
     wins = []
     for scene, t0, t1 in scene_windows(report):
         p = probe(a.video, t0, t1, 0.4)
-        busy = p["busy"]
+        busy, prod = p["busy"], []
         for t in (t0 + 0.3, (t0 + t1) / 2, t1 - 0.1):
-            busy = busy | detail_mask(grab(a.video, t))
-        wins.append({"scene": scene, "t0": t0, "t1": t1, "face": p["face"], "busy": busy})
+            img = grab(a.video, t)
+            busy = busy | detail_mask(img)
+            box = colour_box(img, hist) if hist is not None else None
+            if box:
+                prod.append(box)                # the cut-out never covers the real product on screen
+        wins.append({"scene": scene, "t0": t0, "t1": t1, "face": p["face"], "busy": busy, "product": prod})
     if not wins:
         sys.exit("report.json has no scene long enough to probe")
     hook = None
@@ -251,7 +499,48 @@ def cmd_gfx(a):
             hw = hc["h"] + 42                                    # square bound: wide enough for any product crop
             hook = {"end": float(hc["dur"]), "rect": [hc["x"] - hw // 2, hc["y"] - hw // 2 - 6, hc["x"] + hw // 2,
                                                       hc["y"] + hw // 2 + 46]}
-    return plan_gfx(wins, hook)
+    plan, skipped = plan_gfx(wins, hook)
+    placed = []
+    if a.product_sticker:
+        import cv2
+        im = cv2.imread(a.product_sticker)
+        scenes = report.get("scenes") or []
+        last0 = float(scenes[-1].get("global_start") or 0) if scenes else 0.0
+        t0, t1, _ = parse_span(a.sticker_at) if a.sticker_at else (last0, float(report.get("v_dur") or 0), None)
+        entry, note = place_product_sticker(wins, a.product_sticker, im.shape[1] / im.shape[0], t0, t1, hook)
+        skipped.append(note)
+        if entry:
+            plan["image_stickers"] = [entry]
+            r = image_rect(entry["x"], entry["y"], entry["h"], im.shape[1] / im.shape[0])
+            placed.append((entry["start"], entry["end"], r))
+            # a vector sticker under the cut-out would be hidden by it
+            plan["stickers"] = [st for st in plan["stickers"] if not (st["start"] < entry["end"] and entry["start"] < st["end"]
+                                and overlap((st["x"] - 40, st["y"] - 40, st["x"] + 40, st["y"] + 40), r))]
+    if a.headline:
+        gl = graphics_layer()
+        faces = [(av["start"], av["end"], av["rect"]) for av in plan["avoid"]]
+        rect_fn = lambda text, size, y: gl.text_rect(text, size, 360, y)
+        for spec in a.headline:
+            text, _, span = spec.rpartition("@")
+            if not text:
+                sys.exit(f"--headline needs TEXT@T0-T1, got {spec!r}")
+            t0, t1, _ = parse_span(span)
+            entry, note = place_headline(text, t0, t1, faces, report.get("pills") or [], report.get("subs") or [],
+                                         rect_fn, placed)
+            skipped.append(note)
+            if entry:
+                plan.setdefault("headlines", []).append(entry)
+                placed.append((t0, t1, rect_fn(text, entry["size"], entry["y"])))
+    return plan, skipped
+
+
+def graphics_layer():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("graphics_layer",
+                                                  os.path.join(os.path.dirname(os.path.abspath(__file__)), "graphics_layer.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 def main(argv=None):
@@ -264,13 +553,18 @@ def main(argv=None):
     s.add_argument("--product")
     s.add_argument("--bg", default="yellow")
     s.add_argument("--no-punch", action="store_true")
+    s.add_argument("--punch-at", action="append", default=[], metavar="T0-T1[:face|product|auto]")
     s = sub.add_parser("gfx")
     s.add_argument("video")
     s.add_argument("--report", required=True)
     s.add_argument("--out", required=True)
     s.add_argument("--fx1")
+    s.add_argument("--product-sticker", metavar="IMG")
+    s.add_argument("--sticker-at", metavar="T0-T1")
+    s.add_argument("--headline", action="append", default=[], metavar="TEXT@T0-T1")
     a = ap.parse_args(argv)
-    for f in [a.video] + ([a.report] if a.cmd == "gfx" else [a.product] if a.product else []):
+    for f in [a.video] + ([a.report] + ([a.product_sticker] if a.product_sticker else []) if a.cmd == "gfx"
+                          else [a.product] if a.product else []):
         if not os.path.exists(f):
             sys.exit(f"autogfx: no such file: {f}")
     plan, skipped = cmd_fx(a) if a.cmd == "fx" else cmd_gfx(a)

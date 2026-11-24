@@ -29,6 +29,25 @@ $R fx sceneN_cut.mp4 --out fx2.json                               # later scenes
 $R gfx out.mp4 --report report.json --out gfx.json --fx1 fx1.json # after post_presenter (step 3 input)
 ```
 
+**Every element the board promised is a flag, not a hand job** (huawei-watchfit5 11-23: 73 min of hand geometry,
+fx → post re-run, Fix asked "ค้างไหม"). Read the board's กราฟิก lines BEFORE `fx` and pass them:
+```
+$R fx shot1_cut.mp4 --out fx1.json --product ref1.jpg --punch-at 0.6-2.6:face --punch-at 4.4-6.4:product
+$R gfx out.mp4 --report report.json --out gfx.json --fx1 fx1.json \
+    --product-sticker ref1.jpg [--sticker-at 11.1-20.2] --headline "No Phone@1.5-3.8"
+```
+- `--punch-at T0-T1[:face|:product|:auto]` (scene-local, repeatable) REPLACES the automatic punch: `:face` = her
+  steady face, `:product` = the ref's saturated colour found in the frames (a scan / screen / label close-up has no
+  face), `:auto` = face, else product. End capped at `dur − 0.5`. At zoom 1.12 the crop moves ≤ 40 px, so the
+  measured centre is enough; never refine it by hand.
+- `--product-sticker` = the board's cut-out as `image_stickers`, in the `--sticker-at` window (default: the last
+  scene) where it fits biggest: on free wall, else beside a plausible face box, never on the face, the body under
+  it, the product's colour blob, the pill/sub bands or the right rail.
+- `--headline TEXT@T0-T1` (repeatable) = a text the board promised, e.g. a pill `post_presenter` dropped off her
+  face; size 58→46, y measured clear of faces, live pills/subs and the sticker.
+- Anything printed `left out` stays out: tell Fix in the delivery line which promise did not fit, never place it
+  by hand.
+
 **Quote the opencv pin exactly once.** Inline it as `uv run --with 'opencv-python-headless<5' …` — a bare `<5` is parsed as input redirection by the shell — while inside the single-quoted `$R` assignment it stays unquoted, because double quotes there are handed to uv verbatim and uv rejects a quoted spec.
 
 - About 20 s per call. Each prints the plan it wrote and a `skipped` list. On the real hatari shots its hook card
@@ -78,8 +97,9 @@ Run once per RAW scene, BEFORE post_presenter. It touches video only and copies 
 - **Find the hook card's `dur` by probing successive windows, not by picking a duration.** The empty side shrinks as she moves, so run `--window 0 1.4 --window 0 2.0 --window 0 2.5` and take the LAST window whose rect still passes the cap: that window's end is the hard `dur` cap, and a card sized for the first window clips or covers her by its end.
 - Keep every `punch` window OUT of the hook card's window: punch re-frames the base video while the composited sticker stays at fixed coordinates, so an overlap drags her arm under a sticker you already cleared.
 - **Settle the whole `fx.json` before `post_presenter` runs.** A punch or hook card added later invalidates every face box, pill-clearance decision and sub timing the chain already measured — that is a full re-run of fx → post → gfx → graphics_layer, not an edit.
-- **When `fx` skips everything, the board's product sticker still has a home: `gfx.json`'s `image_stickers`.** A punch is the one skip worth filling by hand — the script invites it (`add one by hand on a steadier beat`). Probe `layout_probe` over 2 s sub-windows and take the first whose `face` box passes the test `autogfx` applies itself (`face[1] >= 80` and `face[3] - face[1] <= 420` — a box Haar still finds there IS the steadiness test; a box it cannot find is a beat to drop), then write the `punch` entry into `fx.json` by hand with that box's centre as `cx`/`cy`, taking `zoom` and the window length from `PUNCH_ZOOM`/`PUNCH_LEN` in `autogfx.py` rather than guessing them.
-- **Reconcile the `punch` list against the board's graphics line before `post_presenter`: `autogfx` puts its ONE punch on the first steady face, which is often NOT the beat the board named.** A promised beat with no entry gets its own — `punch` is a list and `presenter_fx` renders several (two in one scene is normal). On a beat with NO face at all (a product close-up: the scan, the screen, the label) `layout_probe` returns `face: null` and the face-box recipe cannot apply: centre on the PRODUCT instead — sample 6–8 frames across the beat and take the centroid of the densest Canny-edge region (that is where the detail is), or of a strict-hue mask when the product is one colour — then take `zoom`/length from `PUNCH_ZOOM`/`PUNCH_LEN` and cap `end` at `dur − 0.5` as below. Confirm the centre on the frame sheet: the punched frame must still hold the product, not merely the middle of the shot. **Cap `end` at `dur − 0.5` exactly as the script does:** scene K+1's start frame is cut from the RAW file, so a punch still running at the last frame makes the seam jump from zoomed to unzoomed. A hook card or insert with no wall at all is NOT worth forcing: a ~70 px sticker reads as a speck and `autogfx`'s 110 px minimum exists for that reason — put the cut-out product in `gfx.json` instead, placed right of the measured face box (`x − (w_est+42)/2 ≥ face_x2`, `x1 ≤ 720`) — or LEFT of it when the free rect the probe measured is `empty_left` (`x + (w_est+42)/2 ≤ face_x1`) — which `--check` verifies, so the board promise is kept with measured coordinates rather than a guessed one.
+- **Settle the board's punches and its product sticker with `--punch-at` / `--product-sticker` (top of this file)
+  BEFORE `post_presenter`.** A punch added after post re-runs fx → post (whisper) → gfx; a cut-out or punch
+  the flags leave out is reported to Fix as not fitting, never placed by hand.
 
 ### 2. `post_presenter.py`
 Run it as before, with each scene's `video` pointing at its `scene_fx.mp4`.
