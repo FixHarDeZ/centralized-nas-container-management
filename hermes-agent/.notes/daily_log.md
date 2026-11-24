@@ -1784,3 +1784,31 @@ Not done / open:
   what autogfx can place; (2) a status heartbeat from clipjob (`stage` + last `send_status` time) so a 70-min
   reasoning stretch still sends a line; (3) cover price/QR check by OCR (rapidocr already used) instead of the
   vision check_sheet that timed out again; (4) Nano Banana plate A/B as above.
+
+### 2026-11-24 (2) — proposals 1-4 built (Fix: "ทำ 1-4 ได้เลยนะ")
+- **1 autogfx board elements** (`06d77c1`): `fx --punch-at T0-T1[:face|product|auto]` (replaces the auto punch;
+  product = ref's colour with S>110 — at 70 blonde hair/skin matched the orange strap); `gfx --product-sticker IMG
+  [--sticker-at]` (free wall, else beside a PLAUSIBLE face — Haar read cable-knit as a face at y 992 and the first
+  try covered her mouth — never on the product's colour blob/body column/bands); `gfx --headline TEXT@T0-T1`.
+  Real huawei files: product punch (228,721) vs hand (335,665) = 15 px crop difference; sticker 11.25-13.35 h 160
+  clear of face + watch on 3 frames; headline y 582; `graphics_layer --check` OK. presenter-graphics manual recipes
+  replaced; storyboard: กราฟิก promises only what a flag places.
+- **2 heartbeat** (`a7fffe4`, `1d00cc6`): `clip_heartbeat.py` (no-agent cron): ⏳ line when a job is open (updated
+  <12 h), the agent is mid-turn (not final reply/clarify) and nothing visible went out 15 min; ⚠️ once at 20 min
+  without a new row. Replay: huawei 5 lines over the 73-min gap, ps2 8 lines in 4.3 h (10 min = 17, too many).
+  `send_status`/`send_photo` stamp `logs/last-sent.json`; send_photo gets the CJK gate + `--form-string` caption
+  (a caption starting @/< was read as a file by curl). ps2 finding: Hermes wrote scratch senders (sendphoto_*.py,
+  status1_*.py) because send_status had no CJK gate. **Cron LIVE**: script copied to `/opt/data/scripts/`, `hermes cron
+  create "every 5m" --name "clip heartbeat" --no-agent --script clip_heartbeat.py --deliver telegram:<chat>
+  --failure-deliver local` (sync.sh copies it from now on).
+- **3 cover_check.py** (`2e720d3`): RapidOCR price/promo + decoded QR + tofu glyph check on hero + slot pictures, 0
+  vision; `check_sheet` vision only for covers with detail slots (slots-only question). Real: huawei ad as hero → 3
+  price hits; 32 shipped covers clean once QR must decode (detect() flagged 5 false); pasted Shopee QR → hit.
+- **4 scene plate** (`3a15767`): `references/scene-plate.md` EXPERIMENT, not linked from the router — plate =
+  character + set, NO product; product stays the real photo chip; identity checks on real refs. **Not run:** image
+  credit cost unread (Chrome busy with ps2 🤖), A/B (≈60 cr, re-run huawei shots) needs Fix's go.
+- Container gate on HEAD (git archive in /tmp): 274 passed. **Skills NOT synced**: ps2-hdd-175 (✋ 🤖, shot 2
+  submitting) and ps2-hdd-175-pres (🧑, intake) open. Live skills still `08394cc`. Before sync: stash the 3 pulled
+  files in the NAS clone, `--pull` again (house-rules is 20 471/20 480 B), port, commit, `make hermes-skills`.
+- ps2 finding (proposal only): photo gate 07:21→09:32 ran ~40 scratch crop/probe scripts on an ad graphic
+  (box_crop.py exists), plus board revision loops 09:42→10:13.
