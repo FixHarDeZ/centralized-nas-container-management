@@ -1850,3 +1850,9 @@ Fix: "ตรวจงานล่าสุด … เรื่อง prompt scen
   hand-edited). Day total told to Fix 72 → real 63.
 - Not built (reported): max-iterations stop with two jobs in one session; gateway image pre-analysis in Chinese
   (CJK source); pills dropped on close-ups ("Clear Case"/"Plug In"), link pill over her face.
+- Follow-up `85b1b76` (synced): `pack` row `warn` when the frame is chained but shotK.txt never mentions it (13/28
+  past chained prompts are silent, so no refusal); flow-driver SKILL "Model check before every reserve" (a 1.5/s
+  line = still on 1.1); stale "Omni Flash ≈1.5 cr/s" / "Omni 1.1 Flash" panel facts fixed. Note: pitfalls already
+  had "A/B the MODEL TILE" from an earlier 🤖 case — 📝 runs never read flow-driver docs, hence prompt-pack now.
+- To tell Fix: switch the Flow project back to Omni 1.2; -pres can be rebuilt at 0 credits with corrected subs;
+  day spend 63 not 72; Omni 1.1 leaves 2026-12-05 (then Veo 3.1 Lite, cost unread).
