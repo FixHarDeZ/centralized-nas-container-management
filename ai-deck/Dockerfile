@@ -16,7 +16,7 @@ FROM node:22-bookworm-slim@sha256:e9f565d32859f0cbfb52125eafe8be39390f24dac302dc
 
 FROM debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc AS desk_runtime
 
-ARG CODEX_VERSION=0.171.0
+ARG CODEX_VERSION=0.172.0
 ARG CLAUDE_VERSION=2.1.272
 ARG SKILLS_REF=34040c9c568585f6929bedeaad110ad08f079624
 ARG TTYD_VERSION=1.7.7
@@ -113,7 +113,7 @@ COPY --chmod=0644 upload.py /opt/ai-deck/upload.py
 COPY --chmod=0644 codex_backend.py /opt/ai-deck/codex_backend.py
 COPY --chmod=0644 mimo_backend.py /opt/ai-deck/mimo_backend.py
 COPY --chmod=0644 agent_options.py claude_metadata.py /opt/ai-deck/
-COPY --chmod=0644 usage_status.py /opt/ai-deck/usage_status.py
+COPY --chmod=0644 usage_status.py login_link.py /opt/ai-deck/
 COPY --chmod=0644 chat.py /opt/ai-deck/chat.py
 COPY --chmod=0644 healthcheck.py /opt/ai-deck/healthcheck.py
 COPY --chmod=0644 workspace_api.py workspaces.py chat_attachments.py deploy_bridge.py coding_terminal.py /opt/ai-deck/
