@@ -1,0 +1,86 @@
+"""Numbers as they are SPOKEN in Thai, for lining up a script with a Whisper transcript.
+
+ps2-hdd-175 (2026-11-24): the line "เลือกได้ 175 225 275 เกม" broke the subtitles twice.
+- post_presenter.norm() mapped only the whole tokens 0..10 to words and then kept letters only, so "175,225,275"
+  normalised to "" — the phrase had no characters to align, its subtitle got a zero-width slot after the speech,
+  and "เลือกได้" stayed on screen for 4 s while she read the numbers.
+- gen_vo_natural.align_bounds() weighed each phrase by its `say` length (Thai words: "หนึ่งร้อยเจ็ดสิบห้า" =
+  19 chars) against Whisper's text ("175" = 3 chars), so every boundary estimate after the numbers slid early
+  (sub 1 ended at 1.38 s; she spoke it until 3.55 s).
+Whisper also splits a number across word tokens (" 22" + "5", " 27" + "5"): `merge_digit_tokens` joins them.
+
+Both sides of an alignment go through `digits_to_thai`, so it only has to be consistent, not perfect Thai
+grammar. Comma rule: one comma, or a 1-2 digit first group = thousands (1,290 / 12,000 / 2,500,000); two or more
+commas after a 3-digit group = a LIST read number by number (175,225,275). Thai digits (U+0E50-0E59) count.
+"""
+import re
+import unicodedata
+
+DIG = ["ศูนย์", "หนึ่ง", "สอง", "สาม", "สี่", "ห้า", "หก", "เจ็ด", "แปด", "เก้า"]
+POS = ["", "สิบ", "ร้อย", "พัน", "หมื่น", "แสน"]
+THAI_DIGITS = str.maketrans("๐๑๒๓๔๕๖๗๘๙", "0123456789")
+NUM = re.compile(r"\d+(?:,\d{3})*(?:\.\d+)?%?")
+DIGITISH = re.compile(r"^[\d,.]+%?$")
+
+
+def _below_million(n):
+    s, out = str(n), []
+    for i, ch in enumerate(s):
+        d, p = int(ch), len(s) - i - 1
+        if d == 0:
+            continue
+        if p == 1:
+            out.append({1: "สิบ", 2: "ยี่สิบ"}.get(d, DIG[d] + "สิบ"))
+        elif p == 0 and d == 1 and n > 10:
+            out.append("เอ็ด")
+        else:
+            out.append(DIG[d] + POS[p])
+    return "".join(out)
+
+
+def int_to_thai(n):
+    """175 -> หนึ่งร้อยเจ็ดสิบห้า, 21 -> ยี่สิบเอ็ด, 2_500_000 -> สองล้านห้าแสน."""
+    if n == 0:
+        return DIG[0]
+    if n >= 1_000_000:
+        hi, lo = divmod(n, 1_000_000)
+        return int_to_thai(hi) + "ล้าน" + (_below_million(lo) if lo else "")
+    return _below_million(n)
+
+
+def read_number(tok):
+    """One numeric token as spoken: '1,290' / '2.5' / '97%' / '175,225,275' (a list)."""
+    pct = tok.endswith("%")
+    tok = tok.rstrip("%")
+    groups = tok.split(".")[0].split(",")
+    if len(groups) > 2 and len(groups[0]) == 3:               # 175,225,275 = three numbers
+        words = "".join(int_to_thai(int(g)) for g in groups)
+    else:
+        whole, _, frac = tok.replace(",", "").partition(".")
+        words = int_to_thai(int(whole)) + ("จุด" + "".join(DIG[int(c)] for c in frac) if frac else "")
+    return words + ("เปอร์เซ็นต์" if pct else "")
+
+
+def digits_to_thai(text):
+    """Every number in `text` replaced by its spoken Thai words (the rest unchanged)."""
+    return NUM.sub(lambda m: read_number(m.group()), text.translate(THAI_DIGITS))
+
+
+def spoken_len(text):
+    """Letters a line is spoken with: numbers read out, spaces / punctuation / digits gone."""
+    return sum(1 for c in digits_to_thai(text) if unicodedata.category(c)[0] in "LM")
+
+
+def merge_digit_tokens(words):
+    """[(text, t0, t1)] -> the same with a number Whisper split over tokens (' 22', '5') joined into one.
+    A token that starts with a space starts a new word; a digit token glued to a digit token is one number."""
+    out = []
+    for text, t0, t1 in words:
+        tok = text.translate(THAI_DIGITS)
+        if out and DIGITISH.match(tok.strip() or "x") and not tok[:1].isspace() \
+                and DIGITISH.match(out[-1][0].strip() or "x"):
+            prev = out.pop()
+            out.append((prev[0] + tok, prev[1], t1))
+            continue
+        out.append((tok, t0, t1))
+    return out

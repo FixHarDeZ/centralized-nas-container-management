@@ -176,25 +176,10 @@ def align_bounds(fr):
     heavylock.acquire("gen_vo_natural")
     st = np.frombuffer(fr, np.int16).reshape(-1, 2).mean(1)
     mono16 = st[::3].astype(np.float32) / 32768.0           # 48k -> 16k
-    words = []
     segs, _ = WhisperModel("small", device="cpu", compute_type="int8").transcribe(
         mono16, language="th", word_timestamps=True)
-    for sg in segs:
-        for w in sg.words:
-            words.append((w.start, w.end, len(w.word.strip()) or 1))
-    tot_asr = sum(w[2] for w in words)
-    say = [len(ph["say"].replace(" ", "")) for ph in P["phrases"]]
-    tot = sum(say)
-    est, acc = [], 0
-    for n in say[:-1]:
-        acc += n
-        target = acc / tot * tot_asr
-        c, t = 0, words[-1][1]
-        for a, b, k in words:
-            c += k
-            if c >= target:
-                t = b; break
-        est.append(float(t))
+    words = [(w.word, w.start, w.end) for sg in segs for w in sg.words]
+    est = vo_split.estimate_bounds(words, [ph["say"] for ph in P["phrases"]])
     runs = vo_split.pauses(st, SR)
     chosen = vo_split.pick(runs, est)
     if chosen is None:  # fewer real pauses than boundaries: old snap, loudly

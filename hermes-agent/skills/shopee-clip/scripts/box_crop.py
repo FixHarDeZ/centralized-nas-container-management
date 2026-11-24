@@ -17,7 +17,14 @@ product-image-prep.md's "frame scan" done once, in code:
   uv run --with opencv-python-headless --with numpy --with pillow [--with rapidocr-onnxruntime] \
       python box_crop.py img1.jpg [--out-dir .] [--n 4] [--pad 0]
   -> box_C<n>.jpg + box_crop_sheet.jpg + box_crop.json; one JSON line on stdout
-Exit 1 when no rectangle was found (not a boxed product: crop by position, product-image-prep.md §d).
+
+4. no rectangle (or --panels): PANELS — a collage / how-to sheet / catalog page split at its uniform gutters
+   (recursive XY cut: a row or column whose pixels sit within GUTTER_TOL of their median >= GUTTER_NEAR is a
+   gutter). ps2-hdd-175 (2026-11-24): a product photo above a strip of three numbered step panels on white;
+   no contour rectangle, so Hermes wrote ~15 scratch pixel probes (50 min) to find the photo's extent and
+   cropped flush against the cable loop (x 779, content ends at 782). Tiles carry `"src": "panel"`; a
+   trimmed margin keeps MARGIN px.
+Exit 1 when neither a rectangle nor a panel was found (crop by position, product-image-prep.md §d).
 """
 import argparse
 import json
@@ -30,6 +37,11 @@ EXTEND = 0.35        # max push of a side, x image size
 LINE_FULL = 0.85     # share of the side's span that must cross a colour step for a "full" edge line
 STEP = 40.0          # Lab colour distance between neighbouring pixels = an edge
 SAME = 0.9           # IoU above this = the same candidate
+GUTTER_TOL = 6       # grey levels from the line median
+GUTTER_NEAR = 0.98   # share of a line within GUTTER_TOL = a gutter line (a page margin, a white band)
+GUTTER_RUN = 4       # consecutive gutter lines needed to cut
+PANEL_MIN = 0.08     # a panel side >= this share of the image side (drops icons, text lines)
+MARGIN = 12          # px of a trimmed uniform margin kept around a panel
 
 
 def iou(a, b):
@@ -104,12 +116,102 @@ def candidates(img):
     return dedupe(ext + raw)
 
 
+def gutter_lines(region, axis):
+    """Boolean per row (axis=1) or column (axis=0): the line is a uniform gutter."""
+    import numpy as np
+    med = np.median(region, axis=axis, keepdims=True)
+    return (np.abs(region - med) <= GUTTER_TOL).mean(axis=axis) >= GUTTER_NEAR
+
+
+def split_runs(flags):
+    """[start, end) pieces between gutter runs of >= GUTTER_RUN; leading/trailing gutters are trimmed off."""
+    n, pieces, start, k = len(flags), [], None, 0
+    while k < n:
+        if flags[k]:
+            j = k
+            while j < n and flags[j]:
+                j += 1
+            if j - k >= GUTTER_RUN or k == 0 or j == n:
+                if start is not None:
+                    pieces.append((start, k))
+                    start = None
+                k = j
+                continue
+            k = j
+            continue
+        if start is None:
+            start = k
+        k += 1
+    if start is not None:
+        pieces.append((start, n))
+    return pieces
+
+
+def cells(pieces, n):
+    """Each piece widened to the middle of the gutters around it (the first / last to the region's ends)."""
+    out = []
+    for i, (a, b) in enumerate(pieces):
+        lo = 0 if i == 0 else (pieces[i - 1][1] + a) // 2
+        hi = n if i == len(pieces) - 1 else (b + pieces[i + 1][0]) // 2
+        out.append((lo, hi))
+    return out
+
+
+def panels(gray, depth=4):
+    """Recursive XY cut of a 2-D grey array at uniform gutters -> leaf rects (x, y, w, h), biggest first.
+    A region is cut into cells at the middle of its gutters; a cell whose content trims down to something too
+    small (a small object on a plain tile) is kept whole. Trimmed margins keep MARGIN px of breathing room so
+    an edge of the product is never flush with the crop."""
+    h, w = gray.shape
+    out = []
+
+    def fits(rw, rh):
+        return rw >= PANEL_MIN * w and rh >= PANEL_MIN * h and rw * rh >= MIN_AREA * w * h
+
+    def cut(x0, y0, x1, y1, d):
+        tx0, ty0, tx1, ty1 = x0, y0, x1, y1
+        for _ in range(2):          # twice: a white band under a photo hides the photo's plain side margin
+            rows = split_runs(gutter_lines(gray[ty0:ty1, tx0:tx1], 1))
+            if not rows:
+                return 0
+            ty0, ty1 = ty0 + rows[0][0], ty0 + rows[-1][1]
+            cols = split_runs(gutter_lines(gray[ty0:ty1, tx0:tx1], 0))
+            if not cols:
+                return 0
+            tx0, tx1 = tx0 + cols[0][0], tx0 + cols[-1][1]
+        rows = split_runs(gutter_lines(gray[ty0:ty1, tx0:tx1], 1))
+        cols = split_runs(gutter_lines(gray[ty0:ty1, tx0:tx1], 0))
+        n = 0
+        if d > 0 and len(rows) > 1:
+            n = sum(cut(tx0, ty0 + a, tx1, ty0 + b, d - 1) for a, b in cells(rows, ty1 - ty0))
+        elif d > 0 and len(cols) > 1:
+            n = sum(cut(tx0 + a, ty0, tx0 + b, ty1, d - 1) for a, b in cells(cols, tx1 - tx0))
+        if n:
+            return n
+        rx0, ry0 = max(x0, tx0 - MARGIN), max(y0, ty0 - MARGIN)
+        rx1, ry1 = min(x1, tx1 + MARGIN), min(y1, ty1 + MARGIN)
+        if not fits(rx1 - rx0, ry1 - ry0):
+            if not fits(x1 - x0, y1 - y0) or (x1 - x0) * (y1 - y0) >= 0.9 * w * h:
+                return 0
+            rx0, ry0, rx1, ry1 = x0, y0, x1, y1                 # a small object on a plain tile: the tile
+        out.append((rx0, ry0, rx1 - rx0, ry1 - ry0))
+        return 1
+
+    cut(0, 0, w, h, depth)
+    if len(out) == 1 and out[0][2] * out[0][3] >= 0.9 * w * h:
+        return []                                   # no real gutter: one photo, nothing to offer
+    big = max(out, key=lambda r: r[2] * r[3])
+    return [big, *sorted((r for r in out if r != big), key=lambda r: (r[1] // 40, r[0]))]   # then reading order
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("image")
     ap.add_argument("--out-dir", default=".")
     ap.add_argument("--n", type=int, default=4)
     ap.add_argument("--pad", type=int, default=0, help="px added around each crop (clamped to the image)")
+    ap.add_argument("--panels", action="store_true",
+                    help="also offer gutter-split panels when rectangles were found (always on when none were)")
     a = ap.parse_args(argv)
     import cv2
     from PIL import Image, ImageDraw, ImageFont
@@ -118,9 +220,15 @@ def main(argv=None):
         print(json.dumps({"problem": f"cannot read {a.image}"}))
         return 1
     h, w = img.shape[:2]
-    rects = candidates(img)[: a.n]
+    import numpy as np
+    boxes = candidates(img)
+    pans = panels(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.float32)) if a.panels or not boxes else []
+    src_of = {r: "panel" for r in pans}
+    src_of.update({r: "box" for r in boxes})
+    rects = dedupe(boxes + pans)[: a.n] if a.panels else (boxes or pans)[: a.n]
     if not rects:
-        print(json.dumps({"image": a.image, "candidates": [], "problem": "no rectangle: not a boxed product shot"}))
+        print(json.dumps({"image": a.image, "candidates": [],
+                          "problem": "no rectangle and no panel gutter: crop by position (product-image-prep.md §d)"}))
         return 1
     try:
         from rapidocr_onnxruntime import RapidOCR
@@ -136,7 +244,8 @@ def main(argv=None):
         crop = src.crop((x0, y0, x1, y1))
         crop.save(path, "JPEG", quality=92)
         row = {"n": i, "file": path, "rect": [x0, y0, x1 - x0, y1 - y0], "wh": [x1 - x0, y1 - y0],
-               "touches_edge": x0 == 0 or y0 == 0 or x1 == w or y1 == h}
+               "touches_edge": x0 == 0 or y0 == 0 or x1 == w or y1 == h,
+               "src": src_of.get((x, y, cw, ch), "box")}
         if ocr:
             found, _ = ocr(path)
             row["text"] = [t.strip() for _, t, sc in (found or []) if float(sc) >= 0.6 and t.strip()]
@@ -165,7 +274,7 @@ def main(argv=None):
     with open(os.path.join(a.out_dir, "box_crop.json"), "w", encoding="utf-8") as f:
         json.dump(res, f, ensure_ascii=False, indent=1)
     for r in out:
-        print(f"C{r['n']} rect={r['rect']}" + (" EDGE" if r["touches_edge"] else "")
+        print(f"C{r['n']} {r['src']} rect={r['rect']}" + (" EDGE" if r["touches_edge"] else "")
               + (f" text={r['text']}" if r.get("text") else ""))
     print(json.dumps(res, ensure_ascii=False))
     return 0

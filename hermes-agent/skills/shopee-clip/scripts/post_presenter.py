@@ -36,6 +36,8 @@ Outputs in workdir: subs.ass, pills.txt, out.mp4 (mastered), report.json, [sheet
 import argparse, json, math, os, re, shutil, subprocess, sys, unicodedata
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import thainum  # noqa: E402
 GP = os.path.normpath(os.path.join(HERE, "..", "..", "gameplay-clips"))
 FONTS = os.path.join(GP, "fonts")
 MASTER = os.path.join(GP, "scripts", "master.sh")
@@ -86,8 +88,6 @@ def head_freeze(video, noise=0.003, mind=0.08):
 
 
 # ---------------------------------------------------------------- 2. ASR + alignment
-TH_DIGIT = {"0": "ศูนย์", "1": "หนึ่ง", "2": "สอง", "3": "สาม", "4": "สี่", "5": "ห้า",
-            "6": "หก", "7": "เจ็ด", "8": "แปด", "9": "เก้า", "10": "สิบ"}
 
 
 def expand_mai_yamok(s):
@@ -106,7 +106,8 @@ def expand_mai_yamok(s):
 
 
 def norm(s):
-    s = re.sub(r"\d+", lambda m: TH_DIGIT.get(m.group(), m.group()), s)
+    # numbers as spoken (175 -> หนึ่งร้อยเจ็ดสิบห้า): letters-only would drop digits and leave the phrase empty
+    s = thainum.digits_to_thai(s)
     s = expand_mai_yamok(s).lower()
     return "".join(c for c in s if unicodedata.category(c)[0] in "LM")
 
@@ -148,13 +149,14 @@ def asr(audio, model_name, prompt=None):
     segs = list(segs)
     chars = []   # (normalized char, t0, t1)
     for s in segs:
-        for w in s.words:
-            n = norm(w.word)
+        # a number comes split over tokens (' 22', '5'): join it so it reads as one number
+        for word, w0, w1 in thainum.merge_digit_tokens([(w.word, w.start, w.end) for w in s.words]):
+            n = norm(word)
             if not n:
                 continue
-            step = (w.end - w.start) / len(n)
+            step = (w1 - w0) / len(n)
             for k, c in enumerate(n):
-                chars.append((c, w.start + k * step, w.start + (k + 1) * step))
+                chars.append((c, w0 + k * step, w0 + (k + 1) * step))
     return {"text": "".join(s.text for s in segs).strip(),
             "segments": [(s.start, s.end, s.text.strip()) for s in segs], "chars": chars}
 
