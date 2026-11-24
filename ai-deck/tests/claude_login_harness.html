@@ -104,6 +104,15 @@
       check(doc.activeElement === field && field.selectionStart === 0 && field.selectionEnd === url.length,
         width + ': denied clipboard leaves full URL selected for manual copy');
       check(doc.getElementById('claude-login-status').textContent.includes('selected'), width + ': manual copy guidance');
+      // Claude Code 2.1.330 prints a short opaque link: claude.ai/oauth/authorize?z-<token>.
+      const short = 'https://claude.ai/oauth/authorize?z-' + 'Fx_8-Qa9'.repeat(5) + 'zE3';
+      win.output('\r\nIf the browser didn\'t open, visit:\r\n' + short.replace('claude.ai/', 'claude.ai.evil.example/') + '\r\n');
+      win.output('https://claude.ai/oauth/authorize?z-\r\nhttps://claude.ai/oauth/authorize?z-abc&x=1\r\n');
+      await delay(150);
+      check(link.href === url, width + ': malformed short links ignored');
+      win.output('If the browser didn\'t open, visit:\r\n' + short + '\r\nPaste code here if prompted > ');
+      await delay(150);
+      check(link.href === short && field.value === short, width + ': short opaque sign-in link offered');
       win.output('\r\n' + url.replace('state=fixture%2Bstate', 'state=second') + '\r\nPaste code here if prompted > ');
       await delay(150);
       check(link.href.endsWith('state=second'), width + ': new login replaces previous link');

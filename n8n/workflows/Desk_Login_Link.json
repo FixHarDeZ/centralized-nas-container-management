@@ -1,0 +1,168 @@
+{
+  "name": "Desk Login Link (ai-deck)",
+  "nodes": [
+    {
+      "id": "wh",
+      "name": "Desk Login",
+      "webhookId": "0226a5cd-776f-4fa5-add7-8f2950af4161",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 4.5,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "desk-login",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "check",
+      "name": "Check link",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        0
+      ],
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Relay a Claude sign-in link from ai-deck to the owner's Telegram.\n// /webhook/ is public (homepage nginx skips basic auth for Telegram), so a\n// stranger could otherwise make the Secretary Bot send a fake \"sign in\" link:\n// a ready-made phishing channel. Caller must present X-Desk-Token, and the URL\n// must pass the same allowlist as ai-deck/login_link.py + ui/app.js.\n// Rejections return ok:false (answered 401/400) instead of throwing, so\n// hammering the URL cannot spam the Error Alerter.\nconst { createHash, timingSafeEqual } = require('crypto');\nconst item = $input.first().json;\nconst b = item.body || {};\nconst h = item.headers || {};\nconst reject = (code, reason) => [{ json: { ok: false, code, reason } }];\nconst digest = (s) => createHash('sha256').update(String(s)).digest();\n\nconst want = $env.DESK_LOGIN_TOKEN;\nif (!want) return reject(401, 'desk login token is not configured');   // fail closed\nif (!timingSafeEqual(digest(h['x-desk-token'] || ''), digest(want))) return reject(401, 'bad token');\n\nconst raw = String(b.url ?? '');\nif (raw.length > 2048) return reject(400, 'url too long');\nlet url;\ntry { url = new URL(raw); } catch (_) { return reject(400, 'not a url'); }\nconst hosts = ['claude.com', 'claude.ai', 'console.anthropic.com', 'platform.claude.com'];\nconst shortForm = /^\\?z-[A-Za-z0-9_-]{16,}$/.test(url.search);\nconst longForm = ['client_id', 'state', 'code_challenge'].every(k => url.searchParams.has(k));\nif (url.protocol !== 'https:' || url.username || url.password || url.port\n    || !hosts.includes(url.hostname) || !/^(\\/[a-z]+)?\\/oauth\\/authorize$/.test(url.pathname)\n    || !(shortForm || longForm)) {\n  return reject(400, 'not a Claude sign-in link');\n}\n\nconst desk = String(b.desk ?? '');\nif (!/^[a-z0-9_-]{1,32}$/.test(desk)) return reject(400, 'bad desk');\n\nreturn [{ json: { ok: true, desk, url: raw } }];\n"
+      }
+    },
+    {
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        440,
+        0
+      ],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify($json.ok ? {status:'sent'} : {status:'rejected', reason:$json.reason}) }}",
+        "options": {
+          "responseCode": "={{ $json.ok ? 200 : $json.code }}"
+        }
+      }
+    },
+    {
+      "id": "if",
+      "name": "Accepted?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        660,
+        0
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "ok",
+              "leftValue": "={{ $('Check link').item.json.ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "send",
+      "name": "Send link",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        880,
+        -20
+      ],
+      "webhookId": "744dba2b-b852-4e27-8a45-d07fe5039c8f",
+      "credentials": {
+        "telegramApi": {
+          "id": "QiUZ8rINLwwPL1qu",
+          "name": "Secretary Bot"
+        }
+      },
+      "parameters": {
+        "chatId": "8663614341",
+        "text": "=🔑 AI Deck ({{ $('Check link').item.json.desk }}) — Claude sign-in\n\n{{ $('Check link').item.json.url }}\n\n1. เปิดลิงก์ใน Chrome แล้ว login\n2. ก๊อปโค้ดที่ได้\n3. กลับไป deck กด ⎘ Paste วางที่ \"Paste code here\"",
+        "additionalFields": {
+          "appendAttribution": false,
+          "disable_web_page_preview": true
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Desk Login": {
+      "main": [
+        [
+          {
+            "node": "Check link",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check link": {
+      "main": [
+        [
+          {
+            "node": "Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond": {
+      "main": [
+        [
+          {
+            "node": "Accepted?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Accepted?": {
+      "main": [
+        [
+          {
+            "node": "Send link",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "none",
+    "saveManualExecutions": false,
+    "executionTimeout": 60,
+    "timezone": "Asia/Bangkok",
+    "errorWorkflow": "SzcBUowHn6PKGUlF"
+  },
+  "active": false
+}

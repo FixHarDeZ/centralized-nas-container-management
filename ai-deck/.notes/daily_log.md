@@ -851,3 +851,21 @@ User requested commit + push. Delivered AI Deck rename/features/quota fixes and 
 - Also found: OAuth token revoked on desk since ≥11:41 — user must sign in again.
 - Status: uncommitted, undeployed; awaiting user OK. Deploy only when desk idle.
 - Closed: user said commit+push+deploy. `b29cace` pushed; deployed 62s, all 3 containers up. Verified file SHA match (chat.py, app.js, style.css) and live transcript parse 11/11 + ctx 54k in `ai-deck`. Not checked in a real browser. User must still re-sign-in Claude.
+
+## 2026-11-23 — Claude sign-in panel silent again: short `?z-` link (local; NOT committed / NOT deployed)
+
+- User: sign-in dropped, phone Chrome cannot copy login URL. Live pane `fixhardez` (Claude Code 2.1.330): `claude auth login` prints `https://claude.ai/oauth/authorize?z-<43-char token>` — no `client_id`/`state`/`code_challenge` → `findClaudeLoginURL` rejected it, panel never showed. (Pane later shows `Login successful.` — user got in some other way.)
+- Fix `ui/app.js`: also accept query exactly `?z-[A-Za-z0-9_-]{16,}` on the same host/path allowlist. Long form still accepted.
+- Harness `tests/claude_login_harness.html`: short link offered (red before fix: `short opaque sign-in link offered`), evil host / empty token / extra params ignored.
+- Verify: `node --check` ok; full ai-deck suite **366 passed** (system `pytest`; root `.venv` has no pytest now).
+- Status: uncommitted, undeployed. Deploy = `scripts/deploy.sh -s ai-deck -y` when desk idle (only nginx `app.js` changes).
+
+## 2026-11-23 (2) — Sign-in link → Secretary Telegram (local; NOT committed / NOT deployed / vault not edited)
+
+- User asked: also send the auth URL to the Secretary Telegram bot. Bot token lives only in n8n credential `Secretary Bot` (`QiUZ8rINLwwPL1qu`), not vault → relay through n8n; ai-deck (agent runs `--dangerously-skip-permissions`, env readable) holds only a narrow shared token.
+- `login_link.py` (new, COPY'd in Dockerfile): Python port of `findClaudeLoginURL` rules (host allowlist, path, long params or `?z-` short form). `/api/login` (claude only): snapshot links already on screen → type `claude auth login` → background thread polls `tmux capture-pane -p -J` 20 s → POST `{url, desk}` + `X-Desk-Token` to `DESK_LOGIN_WEBHOOK`. Off unless webhook+token+`DESK_LOGIN_NOTIFY` set; only desks in NOTIFY (compose: `fixhardez`) → Pookzii's link never goes to owner chat. Coding sessions never match.
+- compose: `DESK_LOGIN_WEBHOOK=http://host.docker.internal:5678/webhook/desk-login`, `DESK_LOGIN_NOTIFY=fixhardez`, `extra_hosts: host-gateway` (new on ai-deck). Manifest line `DESK_LOGIN_TOKEN: stacks.ai_desk.login_link_token` **commented** until vault has it.
+- n8n `n8n/workflows/Desk_Login_Link.json` (inactive): Webhook POST `desk-login` → Code gate (timingSafeEqual `$env.DESK_LOGIN_TOKEN`, fail closed, same URL allowlist re-checked, desk `[a-z0-9_-]`) → Respond → IF → Telegram `8663614341` no parse_mode, no attribution, no preview. `saveDataSuccessExecution/Error: none` so links not stored. Code node checked with node harness (9 cases OK).
+- Tests: `tests/test_login_link.py` 10 (shapes shared with harness, lookalikes, watcher skips old link, send once, desk filter, handler wiring). ai-deck suite **376 passed**; root 70 + manifest schema 9 passed.
+- Scope: Telegram only carries the link; code still pasted via ⎘ Paste. No Telegram→pane path (by design). Codex device-auth not covered.
+- Pending (needs user OK): vault add `stacks.ai_desk.login_link_token` → uncomment both manifests → `make secrets` → deploy n8n (recreate for env) → `n8n_import.sh` + activate → deploy ai-deck → smoke (press login, Telegram arrives). Also `?z-` fix still uncommitted.

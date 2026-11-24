@@ -218,3 +218,7 @@ test jobs; no real clip yet; all test jobs cancelled (no open jobs as of 2026-11
 ## Presenter Shots — SUPERSEDED by clipjob (2026-11-10)
 Hermes now keeps shot state locally (`hermes-agent/skills/shopee-clip/scripts/clipjob.py`). Workflow stays active until
 the new path delivers one real clip, then deactivate. `CLIP_INTAKE_TOKEN` is only used by it after that.
+
+## Desk Login Link (ai-deck) — `Desk_Login_Link.json` (2026-11-23, local, not imported)
+- POST `/webhook/desk-login` (public path via homepage nginx; internal caller uses `host.docker.internal:5678`). Gate: `X-Desk-Token` == `$env.DESK_LOGIN_TOKEN` (timingSafeEqual, unset = reject), URL must be a Claude OAuth authorize link (same rule as `ai-deck/login_link.py` + `ui/app.js` — change all three together), desk `[a-z0-9_-]{1,32}`. Sends via `Secretary Bot` (`QiUZ8rINLwwPL1qu`) to 8663614341, no parse_mode. `saveDataSuccessExecution`/`Error` = none.
+- Go-live: vault `stacks.ai_desk.login_link_token` → uncomment manifest line → `make secrets` → recreate n8n → `scripts/n8n_import.sh n8n/workflows/Desk_Login_Link.json` → activate.

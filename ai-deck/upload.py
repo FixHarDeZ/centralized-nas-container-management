@@ -46,6 +46,7 @@ import mimo_backend
 import workspace_api
 import shlex
 import agent_options
+import login_link
 import usage_status
 
 WORK_DIR = os.environ.get("WORK_DIR", "/work")
@@ -454,7 +455,13 @@ class Handler(BaseHTTPRequestHandler):
             code, message = type_into_pane(command, self._desk())
         elif path == "/api/login" and provider in ("claude", "codex"):
             command = "claude auth login" if provider == "claude" else "codex login --device-auth"
-            code, message = type_into_pane(command, self._desk())
+            desk = self._desk()
+            cfg = login_link.config() if provider == "claude" else None
+            # Links already on screen (an earlier attempt) are not news.
+            before = set(login_link.find_login_urls(login_link._screen(desk))) if cfg else set()
+            code, message = type_into_pane(command, desk)
+            if code == 200 and cfg:
+                login_link.start(desk, desk.split(":", 1)[0], {target_for(u) for u in cfg[2]}, before, cfg)
         elif path == "/api/quit":
             code, message = quit_pane(self._desk())
         elif path == "/api/resume":

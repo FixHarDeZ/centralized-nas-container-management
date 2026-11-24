@@ -155,7 +155,9 @@
         // claude.com/ai/... to claude.com/cai/... and the panel went silent.
         if (!['claude.com', 'claude.ai', 'console.anthropic.com', 'platform.claude.com'].includes(url.hostname)) continue;
         if (!/^(\/[a-z]+)?\/oauth\/authorize$/.test(url.pathname)) continue;
-        if (url.searchParams.has('client_id') && url.searchParams.has('state') && url.searchParams.has('code_challenge')) {
+        // Claude Code 2.1.330+ prints a short opaque form: /oauth/authorize?z-<token>.
+        if (/^\?z-[A-Za-z0-9_-]{16,}$/.test(url.search)
+            || (url.searchParams.has('client_id') && url.searchParams.has('state') && url.searchParams.has('code_challenge'))) {
           found = match[0];
         }
       } catch (_) { /* not a URL */ }

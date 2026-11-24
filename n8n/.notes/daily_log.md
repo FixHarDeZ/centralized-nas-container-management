@@ -351,3 +351,6 @@ API, homepage `/webhooks/` proxy removed. JSON kept in `workflows/Clip_Intake.js
 `CLIP_INTAKE_TOKEN` still used by Presenter Shots.
 - Presenter Shots (`yd3FsdXVEHSADE0D`) superseded by Hermes-local `clipjob.py` (decision C, 2026-11-10). It stays
   ACTIVE until the new path ships one real clip, then deactivate (keep the JSON + core.js in the repo).
+
+## 2026-11-23 — Desk Login Link workflow (local; NOT imported / NOT active)
+- `workflows/Desk_Login_Link.json`: ai-deck POSTs a Claude sign-in URL to `/webhook/desk-login` with `X-Desk-Token`; Code node checks token against `$env.DESK_LOGIN_TOKEN` (fail closed) + URL allowlist, Telegram via `Secretary Bot` to 8663614341, no parse_mode. Executions not saved (links are sensitive). compose passes `DESK_LOGIN_TOKEN=${DESK_LOGIN_TOKEN:-}`; manifest line commented until vault has `stacks.ai_desk.login_link_token`. Needs n8n recreate + import + activate. Details: `ai-deck/.notes/daily_log.md`.
