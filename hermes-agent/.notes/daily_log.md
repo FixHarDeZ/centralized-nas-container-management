@@ -1751,3 +1751,36 @@ Not done / open:
   Hermes reads `/opt/data/.env`); the container env keeps the dead key until the next hermes-agent deploy.
 - Another session had uncommitted ai-deck / n8n / uv.lock / .venv changes in the tree — not touched, not committed.
 - New job during the work: `huawei-watchfit5` (🧑📝, open 18:39). Sync of `ff12f1c` waits for it to close.
+
+### 2026-11-24 — check of huawei-watchfit5 + live-edit port + Nano Banana idea
+- Fix: "ตรวจงานเมื่อวานว่ามีตรงไหน enhance … material ในฉากถ้ารูปไม่ชัด generate จาก google flow (nano banana) …".
+- `--pull`: 3 live edits from the huawei run (run-mode-gates: stamped-late board → one confirmation clarify;
+  presenter-graphics: reconcile autogfx's ONE punch vs the board before post + reverse `bands=2 want=1` case;
+  house-rules: status line before the final QC reads, verify-clip wording, long CJK-scan paragraph). house-rules
+  went to 21.9 KB > 20 KB budget → CJK rule moved into `send_status.py` (refuses CJK/full-width, exit 3, emoji
+  pass, same class as clipjob `CJK_RE`; `--check "<clarify>"` scans only; `test_send_status.py` 6); verify-clip
+  edit cut back to the short rule (it softened the rule on one run). 214 passed. Commit `41cc172`, pushed.
+  **Not synced**: ps2-hdd-175 (✋ hands, 🤖 auto) open since 07:17; live still at `08394cc` (so `ff12f1c`
+  segplan/hero_pick/sub_linecheck verdict + `41cc172` wait). NAS clone holds the 3 pulled files uncommitted →
+  stash them (`hermes live 11-23 night, ported in 41cc172`) before the next `make hermes-skills`; `--pull` again first.
+- **huawei-watchfit5** 🧑📝 2×10 s, 165 min (prep 3, gen+review 53 incl. Fix in Flow, **post 109**), vision 7/6,
+  1 timeout (cover check_sheet 420 s). Ref = `ref_fit5_pro.jpg` **437×450** crop of Fix's ad (price/code) — board
+  warned drift risk. Delivered + Secretary ok, auto-closed.
+  - Post 19:32→21:21: LLM 92.5 min, vision 10.5, tools ~7. **19:32:40 → 20:45:27 no status line (73 min)**; Fix
+    "ค้างไหม" 20:39. Cause: the board promised graphics autogfx cannot place — punch "at the scan beat" (autogfx
+    puts its one punch on the hook 0.6–2.6), pill "No Phone" (dropped, face) → headline, shot-2 product cutout
+    sticker (no measured home). Hermes read `graphics_layer.py`/`autogfx.py` source, wrote edge-density and
+    orange-hue scratch scripts for the watch centre, re-ran presenter_fx + post_presenter (whisper) after adding
+    the punch post-hoc; turns of 15–66k reasoning chars, 150–380 s each.
+  - Hand-written hero grid + 168 s vision pick and the hand-settled sub event = what `hero_pick.py` / the
+    `sub_linecheck` verdict (`ff12f1c`) already fix — cost of the delayed sync, not new.
+- Nano Banana (Flow image gen) idea — not built. Web search did not confirm "free"; read the real number in Flow
+  Settings (Image mode, "Generating will use N credits") on Fix's account. Constraint: product pixels must stay the
+  real photo (generated clean-up of a 437 px ref would invent screen/buttons/print = the drift gates catch it, and
+  misrepresents the item). Fits as a character+room **plate** (shared start frame for every shot), product chip
+  still the real ref, idcheck/chipcheck ref stays the real photo. Proposal: A/B on one past job before building.
+- Proposals for Fix (nothing built): (1) `autogfx fx --punch-at T0-T1 [--on face|product]` (centre from face box or
+  a ref colour mask) + gfx product-sticker placement from `layout_probe` free rect; board graphics line limited to
+  what autogfx can place; (2) a status heartbeat from clipjob (`stage` + last `send_status` time) so a 70-min
+  reasoning stretch still sends a line; (3) cover price/QR check by OCR (rapidocr already used) instead of the
+  vision check_sheet that timed out again; (4) Nano Banana plate A/B as above.
