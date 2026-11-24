@@ -87,6 +87,23 @@ Fix's own submits spend his Flow credits like 🤖. `ingest` records the publish
 (3 credits/s at 720p) with `credits_est`, so the clip-log row has a number (it was `null` on six 📝 jobs of
 11-19..22). A different real figure from Fix goes into `--notes`.
 
+## Flow refuses a generation (`สร้างไม่สำเร็จ`)
+- **Read the error dialog yourself with a vision call before telling Fix anything about credits.** The gateway's
+  auto-description of a Thai screenshot inverted `คุณจะได้รับเครดิตคืน` into "will NOT receive a refund" once,
+  and the wrong number then went out as a status line that had to be retracted. A policy refusal
+  (`การสร้างนี้อาจละเมิดนโยบายของเรา`) IS refunded: it costs nothing, and the answer is never "budget N extra credits".
+- **First move = the model, not the prompt: ask Fix to switch that shot to Omni 1.1 Flash** (Settings → model; same
+  prompt, same chips) and to switch back to 1.2 for the next shot. ps2-hdd-175-pres shot 2 (2026-11-24): an
+  unchanged retry, plain gradient tiles instead of game covers, no character chip, no start frame — all refused on
+  1.2 (80 min); Fix tried 1.1 and it rendered first time. 1.1 = 1.5 cr/s (6 s = 9): ingest his file with
+  `--credits 9` (the default records the 1.2 estimate). Omni 1.1 leaves Flow on 2026-12-05; after that the
+  fallback model is Veo 3.1 Lite (cost unread — ask Fix to read its credit line).
+- Refused on 1.1 too: ONE change per round — the single structural difference from a shot of the clip that passed
+  (most often the action that forces Flow to render an IP-bearing asset: real game covers, brand art), edit only
+  that, `pack --shot K`, and tell Fix which words changed and why. Testing without the start frame =
+  `pack --shot K --no-start-frame` (it refuses while the prompt still asks for one); a plain re-pack tells him to
+  attach the frame again, so that round would not test what you think it tests.
+
 ## Deliver acks (moved from the router, 2026-11-22)
 `deliver` refuses while the report has a flag Fix has not decided. Tell him each flag with its frame time; he
 picks "ส่งแบบนี้" or regen. As-is = `--ack "<flag text>=<his call>"` (logged), ONE `--ack` per flag: they append

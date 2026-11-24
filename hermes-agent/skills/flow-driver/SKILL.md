@@ -41,9 +41,9 @@ The source of truth is the repo (`hermes-agent/skills/`); every sync overwrites 
 | right before clicking Start generation for shot K | `S/clipjob.py reserve <job> K --wait`. Exit 4 = pacing: it slept ≤150 s (the terminal tool times out at 180 s), so run the same command again. Exit 1 = a rule refused: shot K-1 not rendered, shot K-1 in review with a failed gate (wait for Fix's ✅/🔁), or a regen Fix has not approved. **Never click Start on a non-zero exit.** |
 | the submit went out (two signals: prompt cleared + button state) | `clipjob.py submitted <job> K [--credits N]` — add `--edit-id <id>` only when the real id is already known |
 | the shot's tile is opened on its own `/edit/<id>` | `clipjob.py edit-id <job> K <id>` |
-| Flow refused before rendering, or a Failed card | `clipjob.py submit-failed <job> K --reason "<card text>" [--credits-spent]`. With `--credits-spent` it sends Fix the 🔁 button for that shot itself |
+| Flow refused before rendering, or a Failed card | `clipjob.py submit-failed <job> K --reason "<card text>" [--credits-spent]`. With `--credits-spent` it sends Fix the 🔁 button for that shot itself. A refunded POLICY refusal: `references/pitfalls.md` → Policy refusal order (Omni 1.1 before any prompt edit) |
 | a picker, chip, upload or CDP step failed (overlay empty, wrong chip, screenshot timeout) | `clipjob.py trouble <job> --step <picker\|chip\|upload\|cdp\|download> --reason "…"` |
-| downloaded + 3-frame vision check | `clipjob.py ready <job> K --raw <file> --frame pass\|flag:<what>` |
+| downloaded + 3-frame vision check | `clipjob.py ready <job> K --raw <file> --frame pass\|flag:<what>`. Its `pass: true` only means the review went to Fix (`in_review`): never call a shot passed before `decide` lands — `assemble-check` is the proof |
 
 **Fallback is decided by clipjob, not by you.** It fires on the first `unusual activity`, the second submit
 failure in the job, or the second `trouble` on the same step. When an output says `"FALLBACK": true`:

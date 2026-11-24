@@ -61,6 +61,8 @@ themselves the drift signal: settle them on that hstack, not on more sheet reads
 
 Read EVERY sheet, one `vision_analyze` per sheet, with the question the command
 prints, and look at the tile edges: three sampled frames missed a face that was on screen for under a second.
+
+**Budget: one ✋ 🤖 shot legitimately costs 3 vision calls** — `idcheck`'s sheet plus one read per `scan` sheet are mandatory gates, on top of intake / photo gate / post frame sheet / cover. That is by design, not an overrun: when clipjob warns `vision N/budget`, `note` it and keep reading the sheets. Never skip a gate to stay under the number.
 Any one of these is `--frame flag:<what>`:
 - an arm shown above the forearm, a shoulder, hair or clothing of a body;
 - text or a brand name drawn on a prop;

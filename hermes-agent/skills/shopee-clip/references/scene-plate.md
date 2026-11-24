@@ -33,7 +33,9 @@ whether it stays. 📝 and 📦 jobs skip it.
    character chip (her face is in the plate, as with a chained start frame). `chipcheck.py --expect
    <workdir>/plate.jpg` on the plate chip.
 
+- **A policy refusal with the plate attached:** drop the plate, run shot 1 the normal way, log `plate: refused`. The plate is never what a refusal is debugged on (`flow-driver/references/pitfalls.md` → Policy refusal order covers the shot itself).
+
 ## Report it
-- Clip-log `--notes`: `plate: used|skipped (<why>)`.
+- Clip-log `--notes`: `plate: used|skipped|refused (<why>)`.
 - Delivery message, one line: plate used or skipped, and what to compare (her face shot 1↔2, room/light,
   product drift). Fix's verdict decides adoption; then link this file from router step 9 and drop "TRIAL".

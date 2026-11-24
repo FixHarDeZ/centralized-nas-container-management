@@ -13,6 +13,8 @@ images are ads, review screenshots or crops.
 - If it is unclear whether a waiver was given, ask ONE question with the choice written as
   buttons: waive the scene review or keep it. Do not guess, and do not treat "keep going" as a waiver.
 
+- **Two jobs at once: a 📝 approval for job B while job A is mid-run = `new` + `pack B` NOW (two calls), then back to A.** Fix renders B's shots in his Flow while A's post runs. ps2-hdd-175-pres 11-24: approved 11:50, packed 13:09 after the ✋ job delivered — 78 min with Fix holding an approved board and nothing to render.
+
 ## Board stamp
 - Run `clipjob.py board <job>` right after the board message goes out and BEFORE the approval clarify — every
   board sent, a revised board too (the newest stamp counts).

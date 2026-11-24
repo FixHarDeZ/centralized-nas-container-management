@@ -706,9 +706,10 @@ def parse_tag(text):
     return (m.group(2), int(m.group(1))) if m else None
 
 
-def ingest(j, k, path):
+def ingest(j, k, path, credits=None):
     """Record Fix's file for shot k. -> the durable copy's path inside the job workdir (inbound media
-    caches are pruned by age; a 📝 job can wait a day for Fix)."""
+    caches are pruned by age; a 📝 job can wait a day for Fix). credits: the real figure when Fix says it
+    (a shot rendered on Omni 1.1 = half the 1.2 estimate; ps2-hdd-175-pres shot 2, 2026-11-24)."""
     need_open(j); need_flow(j)
     s = shot(j, k)
     if s["state"] == "approved" and j["production"] == "prompt":
@@ -723,7 +724,8 @@ def ingest(j, k, path):
     # 📝: Fix renders in his own Flow, so the spend is the published rate for the shot's length (clip-log had
     # credits: null on six 📝 jobs of 11-19..22 — the board's quota line then under-counted the day)
     s["attempts"].append({"via": "prompt", "submitted_at": iso(), "file_in": dst, "source": os.path.abspath(path),
-                          "credits": est_credits(s), "credits_est": True})
+                          **({"credits": credits} if credits is not None
+                             else {"credits": est_credits(s), "credits_est": True})})
     log(j, f"ingest shot {k}: {os.path.basename(path)} -> {os.path.basename(dst)}")
     return dst
 
@@ -1453,7 +1455,13 @@ def cmd_scan(j, k, raw):
 
 
 # ---------------------------------------------------------------- commands
-def cmd_pack(j, only, no_send):
+START_FRAME_RX = re.compile(r"last[- ]frame image|start[- ]frame", re.I)
+
+
+def cmd_pack(j, only, no_send, no_start_frame=False):
+    """no_start_frame: this pack attaches NO start frame (a Flow refusal test, a scene plate): the chain line
+    says so and no frame photo goes out. ps2-hdd-175-pres 2026-11-24: the 'no start frame' re-pack still told
+    Fix to attach it, so that round never tested what Hermes said it tested."""
     targets = pack_targets(j, only)
     if not targets:
         raise Refused("nothing to pack (every shot is submitted, in review or approved)")
@@ -1465,6 +1473,11 @@ def cmd_pack(j, only, no_send):
         cta_order_check(j, k)
         name_check(j, k)
         vo_rate_check(j, k)
+        with open(os.path.join(wd, f"shot{k}.txt"), encoding="utf-8") as f:
+            asks_frame = START_FRAME_RX.search(f.read())
+        if no_start_frame and asks_frame:
+            raise Refused(f"--no-start-frame but shot{k}.txt still asks for a start / last-frame image: "
+                          "take that sentence out first")
     sent = []
     char_img = character_image(j.get("character"))
     if not no_send and not only:
@@ -1492,7 +1505,9 @@ def cmd_pack(j, only, no_send):
         prompt = open(os.path.join(wd, f"shot{k}.txt"), encoding="utf-8").read().strip()
         prev = shot(j, k - 1) if k > 1 else None
         chain = ""
-        if prev and shot_file(prev):
+        if prev and no_start_frame:
+            chain = "\nเฟรมเริ่ม: รอบนี้ไม่ต้องแนบ แนบแค่ตัวละคร + รูปสินค้าเหมือนช็อต 1"
+        elif prev and shot_file(prev):
             sf = start_frame_for(j, k)
             if sf["file"]:
                 if not no_send:
@@ -1926,8 +1941,11 @@ def main(argv=None):
     s = sub.add_parser("fallback"); s.add_argument("job"); s.add_argument("--reason", required=True)
     s = sub.add_parser("pack"); s.add_argument("job"); s.add_argument("--shot", type=int)
     s.add_argument("--no-send", action="store_true")
+    s.add_argument("--no-start-frame", action="store_true",
+                   help="attach no start frame this round (the chain line says so; the prompt must not ask for one)")
     s = sub.add_parser("ingest"); s.add_argument("job"); s.add_argument("file")
     s.add_argument("--reply-text"); s.add_argument("--shot", type=int)
+    s.add_argument("--credits", type=int, help="the real spend when Fix names it (Omni 1.1 = 1.5/s)")
     s = sub.add_parser("scan"); s.add_argument("job"); s.add_argument("shot", type=int); s.add_argument("--raw")
     s = sub.add_parser("ready"); s.add_argument("job"); s.add_argument("shot", type=int)
     s.add_argument("--raw"); s.add_argument("--frame"); s.add_argument("--identity")
@@ -2157,7 +2175,7 @@ def main(argv=None):
             todo = fallback(j, a.reason); save(j)
             return out({**summary(j), "pack_shots": todo, "next": f"clipjob.py pack {a.job}"})
         if a.cmd == "pack":
-            sent = cmd_pack(j, a.shot, a.no_send); save(j)
+            sent = cmd_pack(j, a.shot, a.no_send, a.no_start_frame); save(j)
             return out({"packed": sent, "next": "wait for Fix's replies; each reply -> clipjob.py ingest"})
         if a.cmd == "ingest":
             if a.shot:
@@ -2170,7 +2188,7 @@ def main(argv=None):
                 if tag[0] != a.job:
                     raise Refused(f"reply belongs to job {tag[0]}, not {a.job}")
                 k = tag[1]
-            dst = ingest(j, k, a.file)
+            dst = ingest(j, k, a.file, a.credits)
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             shutil.copy2(a.file, dst)
             save(j)

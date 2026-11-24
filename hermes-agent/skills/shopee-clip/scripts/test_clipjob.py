@@ -1423,3 +1423,38 @@ def test_a_revise_answer_is_not_approval(tmp_path, monkeypatch, capsys):
     args = boarded(tmp_path, monkeypatch, [(120, "tool", json.dumps({"responses": [{"status": "answered",
                                             "user_response": "แก้ storyboard"}]}), "clarify")])
     assert cj.main(args) == 1 and "revise / cancel" in capsys.readouterr().err
+
+
+def test_pack_no_start_frame_says_so_and_sends_no_frame(tmp_path, monkeypatch):
+    """ps2-hdd-175-pres 2026-11-24: a re-pack meant to test 'no start frame' still told Fix to attach one."""
+    calls = []
+    monkeypatch.setattr(cj, "tg", lambda m, d, files=None: calls.append((m, d, files)) or {"message_id": 1})
+    monkeypatch.setattr(cj, "start_frame_for", lambda j, k: {"file": str(tmp_path / "last.jpg"), "from": 1,
+                                                             "faceless": [], "unchecked": False})
+    j = job(2, prod="prompt"); j["workdir"] = str(tmp_path)
+    (tmp_path / "shot2.txt").write_text("Start exactly on the attached last-frame image. She plugs it in.",
+                                        encoding="utf-8")
+    cj.shot(j, 1).update({"state": "approved", "file": str(tmp_path / "s1.mp4")})
+    (tmp_path / "s1.mp4").write_bytes(b"x")
+    with pytest.raises(cj.Refused, match="no-start-frame"):
+        cj.cmd_pack(j, 2, False, no_start_frame=True)
+    (tmp_path / "shot2.txt").write_text("She plugs it in.", encoding="utf-8")
+    cj.cmd_pack(j, 2, False, no_start_frame=True)
+    texts = " ".join(d.get("text", "") for m, d, f in calls if m == "sendMessage")
+    assert "รอบนี้ไม่ต้องแนบ" in texts and "แนบรูปเฟรมเริ่มที่ส่งไปเมื่อกี้" not in texts
+    assert not [c for c in calls if c[0] == "sendPhoto" and "เฟรมเริ่ม" in (c[1].get("caption") or "")]
+    calls.clear()
+    cj.cmd_pack(j, 2, False)                                    # the default still chains the frame
+    texts = " ".join(d.get("text", "") for m, d, f in calls if m == "sendMessage")
+    assert "แนบรูปเฟรมเริ่มที่ส่งไปเมื่อกี้" in texts
+
+
+def test_ingest_records_the_real_credits_when_given(tmp_path):
+    """A 📝 shot Fix rendered on Omni 1.1 costs 9, not the 1.2 estimate of 18 (ps2-hdd-175-pres 2026-11-24)."""
+    j = job(2, prod="prompt"); j["workdir"] = str(tmp_path)
+    cj.shot(j, 1)["seconds"] = 6
+    cj.ingest(j, 1, str(tmp_path / "a.mp4"), credits=9)
+    assert cj.shot(j, 1)["attempts"][-1]["credits"] == 9 and "credits_est" not in cj.shot(j, 1)["attempts"][-1]
+    cj.shot(j, 2)["seconds"] = 6
+    cj.ingest(j, 2, str(tmp_path / "b.mp4"))
+    assert cj.shot(j, 2)["attempts"][-1] == {**cj.shot(j, 2)["attempts"][-1], "credits": 18, "credits_est": True}

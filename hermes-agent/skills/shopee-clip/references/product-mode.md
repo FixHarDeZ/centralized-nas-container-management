@@ -37,7 +37,14 @@ Fix 2026-11-10: the voice copies the gameplay recipe ("ลอกแนวเส�
   `max_inner_pause` save under 1 s). Keep a 10 s script to ~4 phrases ≈ 60–65 Thai chars; when `vo_end`
   overshoots by more than ~1.5 s, cut phrases and take a NEW take — re-timing cannot fix it.
 - ASR the take with `gameplay-clips/scripts/asr_th.py` and compare it phrase by phrase with the script before
-  building.
+  building — **then compare the TIMING as well as the words**: each `subs.ass` Dialogue window must overlap the
+  ASR span of its own phrase. ps2-hdd-175 (2026-11-24) cut phrase 1 at 1.38 s (spoken to 3.55 s) because the
+  boundary estimate counted Whisper's digits ("175") against the `say` line's Thai number words; `vo_split`
+  now counts both as spoken (`thainum.py`) and that take re-cuts at 3.50 / 4.97 / 9.39 by itself. A window
+  that still misses its span (stdout `ch/s` twice the median is the quick tell): re-cut from word-level
+  timestamps (`word_timestamps=True`; segment ends hide the cut), edit BOTH `subs.ass` and
+  `subs.timeline.json` (`product_build` reads `vo_end` from the timeline) and pass them as prebuilt files —
+  `--from-take` re-derives the same split.
 - **Hand THAT take to the build:** `plan.json` with `"vo": "vo_plan.json"` re-rolls a FRESH Gemini take, so
   the ASR'd take is discarded and an unverified one ships. Two ways out, both keeping the verified audio:
   add `"from_take": "<the saved take.wav>"` (the build re-times THAT take from the plan — 0 requests, no
@@ -70,6 +77,16 @@ uv run --with edge-tts --with faster-whisper --with numpy \
   via `--from-take` (0 requests) before asking Fix. Never re-cut a verified VO just to silence it.
 - `graphics_layer.py out.mp4 gfx.json final.mp4 --report <workdir>/report.json --check` runs the layout
   check only and exits without writing the output — render with the same command minus `--check`.
+- **`deliver` refuses an empty graphics plan on any Flow-mode clip** (`graphics plan is empty — graphics are
+  mandatory`), and `gfx_elements` counts only `headlines` / `stickers` / `callouts` / `badges` / `endcard` /
+  `image_stickers` — the `cover` (watermark) element does NOT count. So "that shot ships without a headline"
+  still leaves ≥1 element owed across the clip: when no measured window in ANY shot is clear, put a `sticker`
+  in a spot you measured clear yourself rather than shipping an empty plan into `deliver`.
+- **`--check` gives plain `stickers` no safety net**: `layout_check` builds its item list from headlines,
+  callouts, badges and image_stickers only, so a sticker is never tested against `avoid`, the sub band or the
+  pill band — verify its rect by hand from the same measurements before rendering. To decide whether a
+  `cover` element is needed at all, crop the four corners of two frames into one sheet and ask whether any
+  watermark is burned in.
 - **`layout_probe.py` does not fit here.** It looks for a face and a pastel studio wall. For b-roll, use
   `headlines` / `stickers` / `badges` / `endcard`. Keep the subtitle band (y 700–835) and the pill band
   (y 186–262) clear, as the layout check enforces.
@@ -103,6 +120,10 @@ uv run --with edge-tts --with faster-whisper --with numpy \
   - After render, re-verify each headline on a grid frame plus a ~3× full-res crop of its y-band checked
     glyph-by-glyph against the plan string (`frame-check.md`); when a sheet read and a crop read disagree,
     the targeted full-res crop wins.
+  - The same rule covers text printed ON the product: a coarse sheet read that quotes a capacity number or
+    a serial has inferred it, not read it — settle it with a ~3× crop of the label before treating it as a
+    no-capacity violation, since text the eye cannot read must not become a claim, and text printed on the
+    product is excluded by the style card anyway.
 - The board's "punch-in at the money moment" has NO implementation in this chain (graphics_layer has no
   zoom effect): substitute a sticker (arrow/sparkle, `anim: pop`) aimed at the money moment and name the
   substitution in the delivery.
