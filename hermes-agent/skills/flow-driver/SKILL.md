@@ -29,6 +29,9 @@ The source of truth is the repo (`hermes-agent/skills/`); every sync overwrites 
 - To actually SEE a region of the page (a chip row for `chipcheck.py`, a zoom for a vision read), capture it to a file with
   `scripts/cdp_shot.py <out.jpg> <x> <y> <w> <h> [scale]` — never read `Page.captureScreenshot` through a tool
   result, whose base64 alone costs tens of thousands of tokens before the pixels can be saved.
+- **TRIAL (Fix 2026-11-24, next 🧑 / ✋ order only): a scene plate before shot 1** — Image tab, 0 credits,
+  the set (+ her) with no product, used as shot 1's start frame: `/opt/data/skills/shopee-clip/references/scene-plate.md`.
+  Switch back to the Video tab before `reserve`.
 - **Chip identity after every attach = `scripts/chipcheck.py` (pixels, no vision):** exit 0 verified, 1 fix the
   attach, 3 = ONE vision read of that chip only. Recipe: `references/flow-browser-env.md` → chip's name.
 
