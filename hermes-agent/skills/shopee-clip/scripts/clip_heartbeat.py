@@ -66,8 +66,9 @@ def stage_of(job):
         return job["stage"]
     if not shots:
         return "เตรียมงาน"
-    if any(s.get("state") in ("reserved", "submitted") for s in shots):
-        k = next(s["k"] for s in shots if s.get("state") in ("reserved", "submitted"))
+    gen = ("reserved", "submitting", "submitted")
+    if any(s.get("state") in gen for s in shots):
+        k = next(s["k"] for s in shots if s.get("state") in gen)
         return f"gen ช็อต {k}"
     if all(s.get("state") == "approved" for s in shots):
         return "post (ซับ/กราฟิก/ปก)"
