@@ -31,8 +31,8 @@
   below the plan still surfaces in the cost question Fix answers. Spend per job: clipjob records it (📝 = the published rate per shot length,
   `credits_est` in the row, since 2026-11-22), so no figure is needed in `--notes`.
 - Never edit inside Flow (40 credits per edit). Never retry a failed submit with his credits without saying so.
-- **Never pre-run `verify-clip.py` before `deliver`** (its copy in Downloads makes `deliver` refuse as a resend);
-  if it already ran, delete that copy from both Downloads dirs and re-run `deliver`.
+- **Do not pre-run `verify-clip.py` before `deliver`** (`deliver` runs it; the copy it leaves in Downloads can make
+  `deliver` refuse as a resend). If `deliver` refuses so, delete that copy from both Downloads dirs and re-run it.
 - Credit approval is per product and per question; put the cost inside the question text.
 - **Reported spend = the clip-log row's `credits`** (every attempt, regens included); never shots × a rate.
 
@@ -84,12 +84,11 @@
   images (headline text, staged lifestyle shots) are storyboard input only; apply that default and say so in one line.
 - **Answer repeated image sends once per batch**: one short line per image (usable or not, what is still missing).
 - Once an order is clear, never repeat a question across several image messages.
-- **Run the CJK/full-width scan over EVERY outbound Thai message too** (clarify questions, status lines), not just
-  hashtags and prompts: a stray full-width/CJK pair typed into a Thai sentence goes out verbatim and reads as
-  corruption to Fix. The same codepoint check from the hashtag gate is one line before `send_status.py`/`clarify`.
-  **Run it on the exact string in the same call that sends it** — scanning a draft and then re-typing the message is
-  how a clean scan ends up checking a string other than the one that goes out. On a miss, resend the corrected line
-  immediately and name the wrong word; do not leave the corrupted line as the last word.
+- **Every outbound Thai message passes the CJK/full-width gate** (a stray pair typed into Thai reads as corruption
+  to Fix). `send_status.py` refuses such a line itself (exit 3, nothing sent; emoji pass); a `clarify` is typed
+  straight into the tool call, so run `send_status.py --check "<exact question>"` on that exact string first. Never
+  send a flagged line, and never quote the characters when correcting — describe the word instead
+  ("พิมพ์ผิด 1 คำเป็นอักขระแปลก ๆ ที่บรรทัดนั้น"). Do not leave the corrupted line as the last word.
 
 ## Vision budget
 **Every `vision_analyze` counts** — the photo-gate locator and page-state screenshot reads alike — so settle
@@ -199,9 +198,10 @@ and cover reads. Chip identity is `flow-driver/scripts/chipcheck.py` (pixels, 0 
   `verify-clip.py` checks this and `clipjob.py deliver` runs it; a 4:4:4 reading = re-encode, never deliver.
 
 ## Status lines (long silent stretches)
-- **A long silent stretch also needs a line.** Post, the 🤖 browser drive and the per-shot frame review can run
-  15+ min with nothing to ask: send one short line at each stage transition ("Chrome ขึ้นแล้ว → กำลังแปะ chip",
-  "ช็อต 2 มาแล้ว → กำลังสแกน/รีวิว"). Silence on his phone reads as the run having died.
+- **A long silent stretch also needs a line.** Post, the 🤖 browser drive, the per-shot frame review and the final
+  QC (verify-clip → sub_linecheck → frame sheet → cover) run 15+ min with nothing to ask, and one vision call that
+  times out is 7 min alone — so the line goes out BEFORE the reads: one short line per stage ("Chrome ขึ้นแล้ว →
+  กำลังแปะ chip", "ช็อต 2 มาแล้ว → กำลังสแกน/รีวิว").
 - **The line for a stage goes out when the stage STARTS, not when it ends — every mode, 🎬 included.** 0 credits
   still means 20–40 min of sourcing, OCR, gates and post with nothing to ask. Keep ≤ ~5 min between two lines:
   he reads the gap, not the progress, and a silent first stage pulls "ยังทำอยู่เนาะ / ทำไมเงียบไป" out of him while

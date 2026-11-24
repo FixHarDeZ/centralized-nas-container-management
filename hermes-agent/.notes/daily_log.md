@@ -1721,3 +1721,33 @@ Not done / open:
   `/opt/data/.env`).
 - State: `08394cc` pushed + synced; notes uncommitted until close. No deploy, no config change, no open job.
   Temp files on the NAS (`/tmp/slc`, `/tmp/vexp*`, `/tmp/vq.json`) removed.
+
+### 2026-11-23 (3) — proposals 1-6 (Fix: "ข้อเสนอทั้งหมดจัดมาเลย")
+- **1 vision thinking off — verified, NOT applied.** Wire: `hermes config set auxiliary.vision.extra_body
+  '{"thinking": {"type": "disabled"}}'` stores a dict and reaches the request body (temp HERMES_HOME + local echo
+  server, Hermes' own `vision_analyze_tool`: body keys model/temperature/thinking). A/B on 6 sheets with known
+  answers (state.db thinking-on answers vs think-off, 10–20 s each): think-off MISSED plaid shot 3's wrong colourway
+  + missing wink (said MATCH and invented a wink), champion's missing wink, plaid shot 2's missing stroke, and said
+  genme's presenter matched "tile 1's wearer" (tile 1 has no person). Global switch = frame/identity gates go blind.
+  Live config untouched. Possible later: think-off only for pure classification calls (needs a per-call path).
+- **2 `sub_linecheck` verdict** (`ff12f1c`): fill blocks == lines and ≥16 px apart = `OK (marks bridge …)`;
+  `test_sub_linecheck.py` (6). Real subs.ass: chihuahua/zelda/ps5 FAIL → PASS (bodies 30/32/31 px), pepita PASS.
+  Docs: gameplay SKILL step, look-v5, gameplay-pitfalls.
+- **3 + 4 `gameplay-clips/scripts/segplan.py`** (`ff12f1c`, `test_segplan.py` 7): `--picks "W4@31.9:hero,W1,…"`
+  (Hermes chooses shots/order; script never picks), frame-exact in/dur, last seg ≥ `--last-min` 4.0, prints last
+  t0 + CTA ceiling, `--write` merges segs+dur only; exit 1 = max DUR, 2 = table without `wash` (prints the
+  windows.py re-run), 3 = end card short / crop null. Real data: zelda table (synthetic copy with the flash cut) →
+  16 s refused, 15.5 s fits (segs ≈ the shipped 3.43/1.47/1.73/1.2/3.43/4.23); real zelda table → exit 2 (old,
+  no wash); ps5 c1 table + shipped picks → segs pass `build_v5 --check` (only the old caps overlap the new t0);
+  ps5 card (0.5 s) → exit 3. footage-sourcing §2b: never copy `*_windows.json`. gameplay SKILL 30718/30720 B
+  (end-card anecdote trimmed). The real zelda windows.py re-run (timing) NOT done — huawei job open.
+- **5 `shopee-clip/scripts/hero_pick.py`** (`ff12f1c`, `test_hero_pick.py` 4): sharpest frame (Laplacian var),
+  within 85 % → lowest skin share, dark/flash out. Real shots: chihuahua → 3.2 s (= shipped), pepita → 5.5 s (sharp
+  back print; shipped 2.5 s = face + small front print — both fine). poster-cover step 1 + router: cover vision
+  1 call (check_sheet); the grid pick call is gone.
+- **6 vault**: `stacks.hermes_agent.xiaomi.api_key` set from `/opt/data/.env` via `sops set --value-stdin` (key
+  never in argv/output); vault diff = that path only; rendered `hermes-agent/.env` fp ae5a94 ✓ (`render_env.py
+  --stack hermes-agent` via uv — `.venv` had no yaml: another session ran `uv sync`). **No deploy** (job open;
+  Hermes reads `/opt/data/.env`); the container env keeps the dead key until the next hermes-agent deploy.
+- Another session had uncommitted ai-deck / n8n / uv.lock / .venv changes in the tree — not touched, not committed.
+- New job during the work: `huawei-watchfit5` (🧑📝, open 18:39). Sync of `ff12f1c` waits for it to close.

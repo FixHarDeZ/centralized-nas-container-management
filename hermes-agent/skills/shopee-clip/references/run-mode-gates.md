@@ -22,6 +22,14 @@ images are ads, review screenshots or crops.
 - A message Fix sent BEFORE the stamp is not an approval, whatever it says: it was queued while the intake turn
   ran (plaid 11-23: "ไอยูทำใน flow ให้เลยนะ" typed before the board existed, replayed after it, 60 cr spent on a
   board he never saw). Ask the clarify and wait.
+- **Stamped late — the stamp went out AFTER Fix already answered the approval clarify** (you sent the board,
+  asked, got the tap, and only then ran `board`): `new` refuses with `no reply from Fix since the board went out at
+  <time>` although his approval is real, because the gate can only see replies newer than the stamp. Do NOT re-run
+  `board` (it moves the stamp even later, still after his answer) and never hand-edit the job JSON. Recovery = ONE
+  short confirmation clarify — a single line naming the board and the credit total with ผ่าน / แก้ / ยกเลิก buttons;
+  his answer lands after the stamp and `new` passes. That is the allowed second ask of the same approval, not a new
+  question, and it costs zero while unanswered. Prevention: `board` belongs in the same breath as the send, before
+  the approval clarify is even composed.
 
 ## Reference images that are not product shots
 - A review screenshot or ad crop is not a clean product photo. Vision-check it before attaching:
