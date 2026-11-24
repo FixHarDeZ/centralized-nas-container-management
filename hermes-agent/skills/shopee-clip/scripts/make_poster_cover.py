@@ -388,14 +388,12 @@ def check_sheet(cover, slot_pics, out):
         x += t.width + gap
     sheet.save(out, quality=88)
     n = len(slot_pics)
-    q = ("Picture 1 (left, tall) is a finished shop posting cover. (a) Is the product shown whole and real-looking? "
-         "(b) Any price, discount, coupon, %, store logo or QR code INSIDE any photo? (c) Any Thai text with missing "
-         "tone marks, empty boxes or tofu? Answer a/b/c.")
-    if n:
-        which = "Picture 2 is its detail picture" if n == 1 else f"Pictures 2-{n + 1} are its {n} detail pictures, left to right"
-        q += (f" {which}. For EACH, name the main object it "
-              "shows in 3-6 words, from what you see — do not guess what it is meant to show; say 'unclear' when "
-              "it is a blur, a background or a cut-off part.")
+    if not n:          # price / QR / tofu are cover_check.py's (pixels, no vision); a hero-only cover needs no read
+        return out, None
+    which = "Picture 2 is its detail picture" if n == 1 else f"Pictures 2-{n + 1} are its {n} detail pictures, left to right"
+    q = (f"Picture 1 (left, tall) is a shop posting cover. {which}. For EACH detail picture, name the main object "
+         "it shows in 3-6 words, from what you see — do not guess what it is meant to show; say 'unclear' when it is "
+         "a blur, a background or a cut-off part — and say whether a store logo or watermark is inside it.")
     return out, q
 
 
@@ -417,8 +415,10 @@ def main(argv=None):
     labels = [c.get("label") for c in spec.get("circles") or []]
     print(json.dumps({"ok": True, "out": os.path.abspath(a.out), "size": list(img.size),
                       "check_sheet": os.path.abspath(sheet), "ask_vision": q, "slot_labels": labels,
-                      "next": "ONE vision_analyze of check_sheet with ask_vision; every slot answer must name its "
-                              "label's thing (slot_labels, same order). A miss = fix that slot, rebuild, ONE re-check"},
+                      "next": "cover_check.py " + os.path.basename(a.spec) + " (price/QR/tofu, no vision); then " + (
+                          "ONE vision_analyze of check_sheet with ask_vision; every slot answer must name its label's "
+                          "thing (slot_labels, same order). A miss = fix that slot, rebuild, ONE re-check" if q else
+                          "no vision call (hero-only cover)")},
                      ensure_ascii=False))
     return 0
 

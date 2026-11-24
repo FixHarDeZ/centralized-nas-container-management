@@ -42,7 +42,7 @@ a circle and lost its top and bottom. The workdirs already held the right pictur
 
 ## Steps
 
-**Vision budget: 1 call per cover** (the check; 🎬 +1 pick; +1 only for a crop box no probe can place), +1 re-check after a fix (2026-11-19..22: 47 cover calls /
+**Vision budget: 1 call per cover with detail slots, 0 for a hero-only cover** (🎬 +1 pick; +1 only for a crop box no probe can place), +1 re-check after a fix (2026-11-19..22: 47 cover calls /
 ~99 min for 11 covers — per-slot pre-checks and repeated cover reads).
 
 1. **🧑 / 📦 / ✋ hero by measurement — `/opt/data/skills/shopee-clip/scripts/hero_pick.py`, no vision call** (2026-11-23: the grid pick was the day's slowest
@@ -61,18 +61,19 @@ a circle and lost its top and bottom. The workdirs already held the right pictur
    🎬 cover = 2 calls (pick + check).
 2. Write `cover_spec.json`, run the script. Exit 1 names the element that does not fit or the refused word: shorten that
    text and rerun. Nothing is clipped silently.
-3. **ONE vision call on the `check_sheet` the script prints, with its `ask_vision`** (picture 1 = the cover,
-   2.. = each detail slot exactly as pasted, no captions). Pass = (a) product whole and real, (b) no price /
-   discount / store logo / QR inside any picture (the script only reads the text you typed), (c) no missing
-   tone marks / empty boxes / tofu, and every slot answer names its `slot_labels` thing (same order) without
-   being told the label. A vague slot answer ("a wrist", "a dark room", "unclear") = wrong picture or loose box:
-   fix that slot, rebuild, ONE re-check; still failing = drop the slot. Thai spelling is NOT read back:
-   vision garbles Thai on every read and the script draws the spec strings verbatim (PIL cannot swap glyphs),
-   so a read that "finds" misspellings in several strings is the misread signature — never edit spec Thai to
-   match it. Latin lines can be OCR-checked (crop the band, RapidOCR, compare to the spec).
-   **`check_sheet` ที่ timeout (420 s) อย่าส่งซ้ำ**: ส่ง `cover.jpg` ที่ `vprep.py` แล้ว (≤1600 px) พร้อมคำถาม 3 ข้อสั้น ๆ
-   (ราคา/QR ในรูปไหม · ซับไทยครบไหม · slot card ตัดหรือไม่) แทน — slot เป็น `card` อยู่แล้วจึงยืนยันด้วย OCR ของ
-   รูปต้นฉบับได้ ไม่ต้องอ่านจากแผ่น; นับเป็น call ของ cover (ไม่ใช่ call เพิ่ม)
+3. **`cover_check.py cover_spec.json` — pixels, no vision** (huawei / ps5 11-23: the check_sheet read timed out at
+   420 s): `uv run -q --with rapidocr-onnxruntime --with 'opencv-python-headless<5' --with numpy --with pillow python
+   /opt/data/skills/shopee-clip/scripts/cover_check.py cover_spec.json`. OCR of the hero + every slot picture (a
+   currency sign, `6,990.-`, `-30%`, SALE / CODE / ส่งฟรี … = hit; a product screen's `97%` / `10:08` passes), a QR
+   that DECODES (a Flow-drawn screen code does not), a typed character with no glyph (tofu). Exit 1 = fix the named
+   picture (crop / another frame) and rebuild. `--qr-ok "<what>"` only for the product's own screen. It reads Latin
+   and digits; Thai promo text in a picture is the photo gate's job (`product-image-prep.md`), before the cover.
+3b. **Vision only for detail slots: ONE call on `check_sheet` with `ask_vision`** (null for a hero-only cover = no
+   call). Each answer must name its `slot_labels` thing (same order) without being told the label, and no store
+   logo / watermark. A vague answer ("a wrist", "a dark room", "unclear") = wrong picture or loose box: fix that
+   slot, rebuild, ONE re-check; still failing = drop the slot. Thai spelling is NOT read back (vision garbles Thai;
+   the script draws the spec strings verbatim). **A timed-out read is not re-sent as is:** drop to the slot tiles
+   alone (`vprep.py`, ≤1600 px) — still the same one call of the budget.
 4. Pass `cover.jpg` to `clipjob.py deliver --cover`.
 
 ## Traps
