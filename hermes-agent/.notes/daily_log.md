@@ -1880,7 +1880,10 @@ Fix: "ตรวจงานเมื่อวานกับวันนี้�
   - **huawei-freebuds-neo** 🎬 film 21.9 s, 66 min. Music to the end; the last 2.4 s after the CTA line have no
     sub/pill/sticker (sticker off from ~16.5 s). The pink "pixel" shot is a tufted rug, not an upscale.
   - **promom-cal-d-kiiz** 🧑📝 10 s, 95 min (photo gate 45 min: one vision call timed out 420 s, next 271 s).
-    Fine; sub shows "หนึ่งปีขึ้นไป" under a "1 ปีขึ้นไป" label at the same time.
+    ⚠️ Box front drifted too: the clip's box has a cartoon kid on a white face and a pale top band at ~5 s; the
+    real box (Fix's 3 images + ref1) = deep navy top band, lilac face, text bullets, no illustration (prompt said
+    "no cartoon graphics"). 📝 = Fix approved in Flow, no idcheck on that path. Sub shows "หนึ่งปีขึ้นไป" under a
+    "1 ปีขึ้นไป" label at the same time.
   - **cal-d-protein-1mo** 🧑🤖 10 s, 257 min, 30 cr. ❌ **Product colour drift shipped**: refs have navy bottom
     bands; from ~2 s the chocolate box's band is brown and the strawberry box turns pink (5 of 6 idcheck tiles).
     The idcheck vision call answered "MATCH, COUNT 0" and named the first box wrong; the question listed face/top
@@ -1909,10 +1912,14 @@ Fix: "ตรวจงานเมื่อวานกับวันนี้�
   that does not converge goes to Fix). gameplay SKILL sentence → pointer; house-rules roster note compressed,
   incident → house-rules-history (budgets). `7be59bb`, pushed; clone stash "hermes live 11-25, ported in
   7be59bb"; `make hermes-skills` synced `7be59bb` (285 container tests). No open job at sync.
+  Follow-up `496b651` (synced, 285): "not converging" was still Hermes' call → concrete STOP: one measured pass
+  may replace sheet 2; both checks spent, or that pass's free verdicts not all clean → clarify to Fix, no more
+  pixel work. Open for Fix: the live badge paint recipe repaints the product's own pixels (conflicts with
+  "product pixels stay the real photo", 11-24) — keep or drop.
 - The sync's own `uv run` re-dirtied the clone's `.venv/bin/python` (→ /usr/bin/python): `.venv/` is tracked in
   git, so any later commit touching it blocks the clone's `git pull` again. Not committed (other session's file).
 - Proposals for Fix (nothing built): (1) pixel colour check of the ref palette on late frames inside `idcheck`
-  (vision cannot be trusted on colour); (2) photo-gate wall-clock cap enforced by clipjob/heartbeat + `box_crop`
+  and on 📝 `ingest` (both 🧑 clips today drifted; vision said MATCH on one, the other had no check); (2) photo-gate wall-clock cap enforced by clipjob/heartbeat + `box_crop`
   badge/banner split; (3) `segplan` multi-table (src/audio_src/audio_in per seg) + windows.py lyrics-as-music and
   0.5 s OCR option; (4) `started` clamp (cancelled order / copied files); (5) subs keep number+unit together and
   show digits; (6) plate TRIAL: gate in `reserve` or drop; (7) untrack `.venv/` from the repo (owner's call).
