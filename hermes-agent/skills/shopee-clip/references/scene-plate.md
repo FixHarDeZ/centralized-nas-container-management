@@ -24,11 +24,16 @@ whether it stays. 📝 and 📦 jobs skip it.
 2. Chips: 🧑 the character chip only; ✋ none. Prompt = the board's continuity block (set, light, wardrobe) +
    "hands empty, no product, no text, no logo, no screen content, 9:16".
 3. Download it like a shot (`flow-browser-env.md` → Download) to `<workdir>/plate.jpg`.
-4. Gate (0–1 vision): 🧑 `facecheck.py` finds her face; ONE vision read of the plate only when the face is
-   unclear or to confirm no text / logo / screen content / product. Fails = skip the plate (normal shot 1),
-   no second plate.
-5. **Settings trigger → back to the Video tab** and check the credit line equals `clipjob.py cost` for shot 1
-   before `reserve`. Submitting from the Image tab makes a picture, not the shot.
+4. Gate (0–1 vision): 🧑 `facecheck.py <plate.jpg>` — the image path is its ONLY argument; a second one (a
+   `--portrait` flag, `--help`) makes it return `{"error": "unreadable image"}` and exit 2. On a full-body
+   plate Haar normally answers `{"face": false, "hits": []}` because her face is a few dozen px, so budget the
+   ONE vision read as the normal path, not the exception: in that single call confirm the face is hers AND that
+   there is no text / logo / screen content / product. Fails = skip the plate (normal shot 1), no second plate.
+5. **Return to the project root FIRST, then Settings trigger → Video tab.** Generating the plate opens its own
+   `/edit/<id>`, and that page's Settings trigger is the IMAGE editor's own panel (crop / model, no Image/Video
+   tabs) — clicking a tab there is a no-op. `goto_url` the project root (the box comes back empty with 0 chips:
+   retype the shot prompt and re-attach after the switch), then switch tabs and check the credit line equals
+   `clipjob.py cost` for shot 1 before `reserve`. Submitting from the Image tab makes a picture, not the shot.
 6. Shot 1 chips = the plate (from the project's media in the picker) + the product ref; 🧑 drops the
    character chip (her face is in the plate, as with a chained start frame). `chipcheck.py --expect
    <workdir>/plate.jpg` on the plate chip.

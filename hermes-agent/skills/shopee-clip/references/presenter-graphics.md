@@ -40,6 +40,13 @@ $R gfx out.mp4 --report report.json --out gfx.json --fx1 fx1.json \
   steady face, `:product` = the ref's saturated colour found in the frames (a scan / screen / label close-up has no
   face), `:auto` = face, else product. End capped at `dur − 0.5`. At zoom 1.12 the crop moves ≤ 40 px, so the
   measured centre is enough; never refine it by hand.
+- **A close-up beat often comes back `product not located (the product moves N px across the beat)`** — iterate
+  neighbouring windows of the SAME beat (and drop to `:auto`/`:face`) until one lands: the promise is the beat,
+  not the exact seconds. Judge candidates from the WRITTEN PLAN FILE, not stdout — stdout wraps the run as
+  `{wrote, plan, skipped}` while `--out` holds the plan itself (`{"punch": […]}`), so a loop reading stdout's
+  `plan` key sees `null` on every working candidate. And reject a punch whose centre lands on a frame edge (a
+  corner cx/cy = the colour lock caught the background or her leggings, not the product): a usable centre sits
+  inside the frame with margin, and the fix is the next window, never a hand-edited coordinate.
 - `--product-sticker` = the board's cut-out as `image_stickers`, in the `--sticker-at` window (default: the last
   scene) where it fits biggest: on free wall, else beside a plausible face box, never on the face, the body under
   it, the product's colour blob, the pill/sub bands or the right rail.
@@ -87,7 +94,7 @@ It is CONSERVATIVE: the mottled wall makes it reserve more than vision does, e.g
 Run once per RAW scene, BEFORE post_presenter. It touches video only and copies audio, so duration, ASR and sub timing are unchanged.
 - `hook_card` (`"mode": "overlay"`, ~1.4 s): a cut-out product sticker appears beside the presenter from frame 0. Dur: aim ≥3 s (a 1.2 s card reads as a flicker), but the last clean frame of the rect — the both-ends check above — is the hard cap.
 - `punch`: snap zoom ≤1.15 on each new selling point. (cx,cy) = the face or the product in hand.
-  - **Verify head clearance by measurement, not by a side-by-side read.** The decisive check counts a WIDE dark span (luminance < 90 over >60 % of the head columns) in rows 0–30 of a frame cropped straight from the OUTPUT at a punched time: zero dark rows = background above the head = CLEAR, a wide span = clipped. A bare "topmost dark row" comparison false-OKs whenever the detector latches onto brows or a raised hand instead of the hair, and a vision read of a sheet reports `hair cut flat by the top edge` off the sheet's own black label bar — either way a false verdict costs a re-render of the scene, so pixels on the output frame decide it.
+  - **Verify head clearance by measurement, not by a side-by-side read.** The decisive check counts a WIDE dark span (luminance < 90 over >60 % of the head columns) in rows 0–30 of a frame cropped straight from the OUTPUT at a punched time: zero dark rows = background above the head = CLEAR, a wide span = clipped. A bare "topmost dark row" comparison false-OKs whenever the detector latches onto brows or a raised hand instead of the hair, and a vision read of a sheet reports `hair cut flat by the top edge` off the sheet's own black label bar — either way a false verdict costs a re-render of the scene, so pixels on the output frame decide it. **Run `facecheck.py` on that punched frame FIRST when the punch window is a product close-up:** with no head in frame the dark rows are the product or background filling the top of the frame, and the wide-dark-span test would otherwise report a clipped head that does not exist.
 - `inserts` (`"mode": "overlay"`, 1.2–1.5 s): put one on a word that names the product or its label art.
   - Without `mode` you get the old full-screen card. Use that only to hide a seam or a looped phrase, because it hides the presenter.
 - Source images must be CLEAN crops (no price/QR/claims, see `product-image-prep.md`), on a plain light background so the flood-fill cutout works.
