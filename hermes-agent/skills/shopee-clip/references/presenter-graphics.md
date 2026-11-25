@@ -51,7 +51,9 @@ $R gfx out.mp4 --report report.json --out gfx.json --fx1 fx1.json \
   scene) where it fits biggest: on free wall, else beside a plausible face box, never on the face, the body under
   it, the product's colour blob, the pill/sub bands or the right rail.
 - `--headline TEXT@T0-T1` (repeatable) = a text the board promised, e.g. a pill `post_presenter` dropped off her
-  face; size 58→46, y measured clear of faces, live pills/subs and the sticker.
+  face; size 58→46, y measured clear of faces, live pills/subs and the sticker. `report.json` `headlines` (the
+  CTA `post_presenter` could not fit beside her head) are added the same way without a flag; `--check` fails
+  while one is missing from gfx.json.
 - Anything printed `left out` stays out: tell Fix in the delivery line which promise did not fit, never place it
   by hand.
 

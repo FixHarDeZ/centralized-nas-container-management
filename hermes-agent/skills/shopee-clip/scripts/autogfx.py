@@ -19,6 +19,7 @@ gates on its output: `graphics_layer.py --check` and ONE vision look at a frame 
   # --product-sticker: the board's product cut-out as an `image_stickers` entry, in the window of
   #   --sticker-at (default: the last scene) where it fits biggest — on free wall, else beside her face;
   # --headline TEXT@T0-T1: a headline (e.g. a pill post_presenter dropped off her face) at a measured y.
+  # report.json `headlines` (the CTA post_presenter could not fit beside her head) are added the same way.
 
 Run with: uv run --with "opencv-python-headless<5" --with numpy python autogfx.py …
 It prints what it wrote plus `skipped` reasons (no face found, no wall big enough for the hook card). A skipped
@@ -516,11 +517,15 @@ def cmd_gfx(a):
             # a vector sticker under the cut-out would be hidden by it
             plan["stickers"] = [st for st in plan["stickers"] if not (st["start"] < entry["end"] and entry["start"] < st["end"]
                                 and overlap((st["x"] - 40, st["y"] - 40, st["x"] + 40, st["y"] + 40), r))]
-    if a.headline:
+    specs = list(a.headline or [])
+    for h in report.get("headlines") or []:      # post_presenter could not draw the CTA pill beside her head
+        if not any(s.rpartition("@")[0] == h["text"] for s in specs):
+            specs.append(f"{h['text']}@{h['start']}-{h['end']}")
+    if specs:
         gl = graphics_layer()
         faces = [(av["start"], av["end"], av["rect"]) for av in plan["avoid"]]
         rect_fn = lambda text, size, y: gl.text_rect(text, size, 360, y)
-        for spec in a.headline:
+        for spec in specs:
             text, _, span = spec.rpartition("@")
             if not text:
                 sys.exit(f"--headline needs TEXT@T0-T1, got {spec!r}")

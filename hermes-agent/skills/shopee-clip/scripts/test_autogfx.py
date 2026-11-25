@@ -179,3 +179,19 @@ def test_cut_out_stays_off_the_product_on_screen():
     prod = [int(r[0]), int(r[1]), int(r[2]), int(r[3])]           # the product sits exactly there
     again = ag.fit_image(busy, FACE, 1.0, [ag.RAIL, prod])
     assert again is None or not ag.overlap(ag.image_rect(again[1], again[2], again[0], 1.0), prod)
+
+
+def _gl():
+    spec = importlib.util.spec_from_file_location("graphics_layer", os.path.join(HERE, "graphics_layer.py"))
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+def test_a_cta_handed_over_by_post_must_be_in_the_plan():
+    gl = _gl()
+    report = {"pills": [], "subs": [], "headlines": [{"text": "Link below!", "start": 7.6, "end": 9.8}]}
+    probs = list(gl.layout_check({"headlines": []}, report, gl.FONTS))
+    assert any("handed 'Link below!'" in p for p in probs)
+    plan = {"headlines": [{"text": "Link below!", "start": 7.6, "end": 9.8, "y": 400, "style": "pop", "size": 52}]}
+    assert not any("handed" in p for p in gl.layout_check(plan, report, gl.FONTS))

@@ -599,39 +599,64 @@ def main():
                     if q is not p and q["scene"] == last and q["t0"] < p["t0"] < q["t1"] + 0.1:
                         q["t1"] = p["t0"] - 0.1
         pills = [q for q in pills if q["t1"] - q["t0"] >= 0.8]
-    # ---- 3b. a pill never sits on her face: move it inside its scene, or drop it (pillclear.py)
+    # ---- 3b. a pill never sits on her face or hair: slide it beside her head inside the pill band, else move it
+    # in time inside its scene, else drop it; the CTA keeps its time and goes to autogfx as a headline (pillclear.py)
     if not os.environ.get("NO_PILL_CLEAR"):
         import pillclear
         starts = [s["global_start"] for s in report["scenes"]]
+        wfn = pillclear.width_fn(os.path.join(wd, "fonts", "Fredoka-SemiBold.ttf"))
+        heads = {}
         kept = []
         for p in sorted(pills, key=lambda p: (p["text"] != CTA, p["t0"])):     # the CTA is placed first: it cannot move
             k, g = p["scene"], starts[p["scene"]]
             sc = scenes[k]
+            if k not in heads:
+                heads[k] = pillclear.measure_faces(P(sc["video"]), sc["_T"], sc["_D"])
+                if heads[k] is None:
+                    report.setdefault("notes", []).append(f"scene {k+1}: head not measured (uv/cv2) - pills checked "
+                                                          "by skin share only")
             try:
                 series = pillclear.skin_series(P(sc["video"]), p["text"], sc["_T"], sc["_D"])
             except Exception as e:                                           # a measuring error never blocks post
                 report.setdefault("notes", []).append(f"pill '{p['text']}': face check not run ({e})")
                 kept.append(p)
                 continue
+
+            def fit(a, b, p=p, k=k, series=series):
+                head = pillclear.head_box(pillclear.window(heads[k], a, b)) if heads[k] else None
+                spot = pillclear.slot(head, lambda f: wfn(p["text"], f))
+                if spot is None or (head is None and pillclear.on_face(series, a, b)):
+                    return None
+                return spot
+
             if p["text"] == CTA:
-                if pillclear.on_face(series, p["t0"] - g, p["t1"] - g):
-                    report.setdefault("notes", []).append(f"pill '{CTA}' sits on her face (close-up at the end); "
-                                                          "it is tied to the link line and was left there")
-                kept.append(p)
-                continue
-            taken = [(q["t0"] - g, q["t1"] - g) for q in kept]
-            hi = sc["_D"] - (xf if k < len(scenes) - 1 else 0.0) - 0.15
-            spot = pillclear.place(series, p["t0"] - g, p["t1"] - g, 0.1 + (xf if k else 0.0), hi, taken)
-            if spot is None:
+                spot = fit(p["t0"] - g, p["t1"] - g)
+                if spot is None:
+                    report.setdefault("headlines", []).append({"text": CTA, "start": round(p["t0"], 2),
+                                                               "end": round(p["t1"], 2)})
+                    report.setdefault("notes", []).append(
+                        f"pill '{CTA}' {p['t0']:.2f}-{p['t1']:.2f} NOT drawn: her head fills the pill band (close-up "
+                        f"at the end) - `autogfx.py gfx` places it as a headline from report.json `headlines`")
+                    continue
+                p["x"], p["font"] = spot
+            else:
+                taken = [(q["t0"] - g, q["t1"] - g) for q in kept if q["scene"] == k]
+                hi = sc["_D"] - (xf if k < len(scenes) - 1 else 0.0) - 0.15
+                got = pillclear.relocate(fit, p["t0"] - g, p["t1"] - g, 0.1 + (xf if k else 0.0), hi, taken)
+                if got is None:
+                    report.setdefault("notes", []).append(
+                        f"pill '{p['text']}' DROPPED: her face fills the pill band of scene {k+1} wherever no other "
+                        f"pill shows (close-up) - put that word in gfx.json as a headline or callout instead")
+                    continue
+                if abs(got[0] - (p["t0"] - g)) > 0.01 or abs(got[1] - (p["t1"] - g)) > 0.01:
+                    report.setdefault("notes", []).append(
+                        f"pill '{p['text']}' moved {p['t0']:.2f}-{p['t1']:.2f} -> {g+got[0]:.2f}-{g+got[1]:.2f}: "
+                        f"it was on her face (close-up)")
+                    p["t0"], p["t1"] = g + got[0], g + got[1]
+                p["x"], p["font"] = got[2]
+            if p["x"] is not None:
                 report.setdefault("notes", []).append(
-                    f"pill '{p['text']}' DROPPED: her face fills the pill band of scene {k+1} wherever no other "
-                    f"pill shows (close-up) - put that word in gfx.json as a headline or callout instead")
-                continue
-            if abs(spot[0] - (p["t0"] - g)) > 0.01 or abs(spot[1] - (p["t1"] - g)) > 0.01:
-                report.setdefault("notes", []).append(
-                    f"pill '{p['text']}' moved {p['t0']:.2f}-{p['t1']:.2f} -> {g+spot[0]:.2f}-{g+spot[1]:.2f}: "
-                    f"it was on her face (close-up)")
-                p["t0"], p["t1"] = g + spot[0], g + spot[1]
+                    f"pill '{p['text']}' {p['t0']:.2f}-{p['t1']:.2f} beside her head: x {p['x']}, {p['font']} pt")
             kept.append(p)
         pills = kept
     pills.sort(key=lambda p: p["t0"])
@@ -650,9 +675,11 @@ def main():
     for i, p in enumerate(pills):
         tf = os.path.join(wd, f"pill_{i}.txt")
         open(tf, "w", encoding="utf-8").write(p["text"])
+        fs = p.get("font") or 40
+        x = "(w-text_w)/2" if p.get("x") is None else str(p["x"] + 17)    # box edge -> text origin (14 box + 3 outline)
         chain.append(f"drawtext=fontfile={wd}/fonts/Fredoka-SemiBold.ttf:textfile={tf}:fontcolor=white:"
-                     f"fontsize=40:borderw=3:bordercolor=0x5A2A4A:box=1:"
-                     f"boxcolor={PILL_COLORS[i % 4]}@0.92:boxborderw=14:x=(w-text_w)/2:y={a.pill_y}:"
+                     f"fontsize={fs}:borderw=3:bordercolor=0x5A2A4A:box=1:"
+                     f"boxcolor={PILL_COLORS[i % 4]}@0.92:boxborderw=14:x={x}:y={a.pill_y + (40 - fs) // 2}:"
                      f"enable='between(t,{p['t0']:.3f},{p['t1']:.3f})'")
     with open(os.path.join(wd, "pills.txt"), "w") as f:
         for p in pills:
@@ -713,6 +740,9 @@ def main():
     report["v_dur"] = ffdur(out, "v:0")
     report["a_dur"] = ffdur(out, "a:0")
     report["pills"] = [(round(p["t0"], 2), round(p["t1"], 2), p["text"]) for p in pills]
+    # pills that slid beside her head (x = box left edge, same band y): the rows above stay [t0, t1, text]
+    report["pill_slots"] = [{"text": p["text"], "start": round(p["t0"], 2), "end": round(p["t1"], 2), "x": p["x"],
+                             "font": p["font"]} for p in pills if p.get("x") is not None]
     report["subs"] = [(round(e["t0"], 2), round(e["t1"], 2), " / ".join(e["lines"])) for e in events]
     report["whoosh_at"] = [round(h, 2) for h in hits]
     json.dump(report, open(os.path.join(wd, "report.json"), "w"), ensure_ascii=False, indent=1)

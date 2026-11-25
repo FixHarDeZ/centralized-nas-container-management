@@ -32,3 +32,52 @@ def test_no_clear_window_drops_the_pill():
 
 def test_pill_width_tracks_the_text():
     assert pc.pill_width("NEW") < pc.pill_width("GEL TEXTURE") <= 560
+
+
+# ---- sideways slot (yuedpao-rushbag 2026-11-25: full-body, ~140 px face, pills on her forehead)
+# Fredoka-SemiBold box widths measured with PIL (advance + 34)
+LINK = {40: 236, 38: 226, 36: 215, 34: 203, 32: 190, 30: 183}
+YUED = [301, 202, 441, 342]          # Haar face box at 9.5 s
+
+
+def test_head_box_pads_for_hair_and_drops_a_stray_box():
+    head = pc.head_box([YUED, None, [305, 198, 444, 337], [320, 382, 451, 513]])   # last = her neck/shirt
+    assert head[1] < 202 - 0.4 * 140 and head[0] < 301 - 20 and head[2] > 444 + 20
+    assert head[3] < 382                     # the stray low box is not part of her head
+    assert pc.head_box([None, None]) is None
+
+
+def test_no_face_or_a_low_face_keeps_the_centred_pill():
+    assert pc.slot(None, LINK.get) == (None, 40)
+    assert pc.slot([280, 300, 440, 520], LINK.get) == (None, 40)    # head starts under the band
+
+
+def test_full_body_face_moves_the_pill_beside_her_head():
+    head = pc.head_box([YUED] * 8)
+    x, font = pc.slot(head, LINK.get)
+    assert font >= 30 and pc.X_MIN <= x and x + LINK[font] <= head[0] - pc.SLOT_GAP
+
+
+def test_the_side_with_more_room_wins():
+    x, font = pc.slot([60, 150, 380, 400], LINK.get)       # head pushed left: only the right side has room
+    assert x >= 390 and x + LINK[font] <= pc.X_MAX
+
+
+def test_close_up_has_no_side_room():
+    assert pc.slot([90, 120, 640, 760], LINK.get) is None
+
+
+def test_relocate_moves_to_the_nearest_window_with_a_slot():
+    fit = lambda a, b: (100, 36) if a >= 5.0 else None
+    assert pc.relocate(fit, 1.0, 3.0, 0.1, 9.5) == (5.1, 7.1, (100, 36))    # grid from lo = 0.1 in 0.25 s steps
+    assert pc.relocate(lambda a, b: None, 1.0, 3.0, 0.1, 9.5) is None
+
+
+def test_window_indexes_like_on_face():
+    s = list(range(40))
+    assert pc.window(s, 1.0, 2.0) == s[4:9]
+
+
+def test_width_fn_falls_back_without_the_font():
+    w = pc.width_fn("/nonexistent/font.ttf")
+    assert w("NEW", 32) < w("NEW", 40) == pc.pill_width("NEW")

@@ -277,6 +277,11 @@ def layout_check(plan, report, fonts):
                 if float(c["start"]) < s1 and s0 < float(c["end"]) and overlap(seg, SUB_BAND):
                     yield f"callout '{c['label']}' line crosses the subtitle band while sub '{txt[:12]}' shows"
                     break
+        for h in report.get("headlines", []):    # handed over by post_presenter (no room for the CTA pill)
+            if not any(x.get("text") == h["text"] for x in plan.get("headlines", [])):
+                yield (f"post_presenter handed '{h['text']}' {h['start']}-{h['end']} to the graphics layer (her head "
+                       f"filled the pill band) and gfx.json has no headline for it - run `autogfx.py gfx` with this "
+                       f"report, or place it by hand; no CTA on screen needs Fix's call (NO_AUTO_CTA=1 re-post)")
         for n, t0, t1, r in items:
             for p0, p1, txt in report.get("pills", []):
                 if t0 < p1 and p0 < t1 and overlap(r, PILL_BAND):
