@@ -131,9 +131,9 @@ and cover reads. Chip identity is `flow-driver/scripts/chipcheck.py` (pixels, 0 
   `/opt/data/clips/flow-state/<project-id>.json`, and name the pick on the board.
 - **Draw only from female roster names that have a portrait** in `/opt/data/clips/characters/` (male ones,
   e.g. น้องเอิร์ธ, were made for one order: clip-log `notes` say `ตัวละครชาย`). A male pick only when Fix asks.
-- **Write the prompt's presenter line from that character's recorded look (flow-state `roster_note`), never her
-  NAME and never a generic "young Thai woman"** (champion-trashbag-roll 2026-11-22: the male น้องเอิร์ธ came back a
-  woman, and Flow painted the name on the wall). `new` refuses a name with no portrait; `pack`/`reserve` refuse
+- **Write the prompt's presenter line from that character's recorded look, never her NAME and never a generic
+  "young Thai woman"** (see house-rules-history). Looks of all twelve: `flow-driver` `references/flow-steps.md`
+  step 2; flow-state `roster_note` = only the last three added. `new` refuses a name with no portrait; `pack`/`reserve` refuse
   a name in the prompt outside the quoted voiceover.
 
 ## Storyboard gate (Flow modes)

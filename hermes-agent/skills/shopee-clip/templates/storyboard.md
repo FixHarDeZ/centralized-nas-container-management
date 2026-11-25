@@ -20,6 +20,10 @@ Why: two 10 s takes of "hold it up / press / set down" read as filler (vacuum-ba
   - `R` result / before-after (product in place, wide).
 - **The order text's own selling points go on the FIRST board** — the counts, specs and compatibility Fix pasted with the link ("175เกมส์", "(PC/PS2)", "2.5 นิ้ว"): each one is in a พากย์ line or a shot, or the board says why not; price / promo words never. ps2-hdd-175 11-24: the first board left out 175 games and plugged the drive into a PS2 instead of a PC, and both came back as revision rounds.
 - Voiceover line per shot must describe what is on screen in that shot. Count it: ~3.5-4.5 Thai syllables/s, speech >= 70 % of a talking shot. H shots may carry no speech (music + SFX, our sub/pill only).
+- **Count each shot's พากย์ against the LENGTH gate before the board goes out**: `ก-๙` + Latin/digits inside the
+  quotes, ≤11.5 per second on the final shot and ≤12/s elsewhere (`clipjob.py new` prints it as `vo_rate`; `pack`
+  refuses past it). The gate fires only after Fix has approved, so a line over it can then be fixed only by
+  editing the script he signed off on — measure first, send second.
 - **The พากย์ lines printed on the board ARE the approved script** — the scene's `Audio` line (🧑) and the post TTS plan (📦) take them verbatim, with length-fit edits only: expanding the content contradicts the approved board and burns a TTS take just to learn it overshoots the shot.
 - Plan the graphics v2 layer per shot: punch-in at the money moment, EN pill (<=2 words), product cutout, before/after card. **Count the pill's whitespace tokens while writing the board**: `&` is its own token, so `Tie & Go` = 3 and `post_presenter.py` refuses it — that gate fires only after the approved board is already running, so word pills ≤2 tokens from the start. **📦/✋ have no punch-in** — `graphics_layer.py` has no zoom effect — so for those modes the board plans a sticker (arrow/sparkle, `anim: pop`) at the money moment instead; never promise in an approved board what post cannot render.
 - Flag risky actions (zips, valves, fine finger work, text on product) and name a fallback shot.

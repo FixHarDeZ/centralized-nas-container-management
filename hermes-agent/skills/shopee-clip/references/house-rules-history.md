@@ -109,3 +109,10 @@ they differ (the router, `clipjob.py` and the 2026-11-10 question flow replaced 
   in `/opt/data/clips/characters/` cannot be identity-checked against a local grid (the portrait set lags the
   roster — see `frame-check.md` → identity), so prefer a candidate whose portrait exists. When the pick is not
   a standard female presenter, say so on the board line so Fix's approval covers it.
+
+## Presenter line from the recorded look (moved from house-rules 2026-11-25)
+- champion-trashbag-roll 2026-11-22: the prompt named the male น้องเอิร์ธ; he came back a woman, and Flow painted the
+  name on the wall. Since then the presenter line is the character's recorded look, never the name.
+- 2026-11-25 (Hermes live edit): flow-state `roster_note` describes only the three characters added most recently;
+  reading it alone left the original nine with no look to copy and tempted a generic description back in. The full
+  roster (hair / outfit / backdrop, one entry per name) is `flow-driver/references/flow-steps.md` step 2.
