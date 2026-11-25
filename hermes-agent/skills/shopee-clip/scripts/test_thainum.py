@@ -55,3 +55,37 @@ def test_align_times_the_number_phrase_where_it_is_spoken():
     sel, num = phr[0], phr[1]
     assert num["status"] == "matched" and abs(num["t0"] - 1.54) < 0.1 and abs(num["t1"] - 4.22) < 0.1
     assert sel["t1"] <= 1.6                       # was 4.07: เลือกได้ sat on screen through the numbers
+
+
+def test_spelled_number_before_a_unit_shows_as_digits():
+    """promom-cal-d-kiiz 2026-11-25: the sub read "หนึ่งปีขึ้นไป" under a "1 ปีขึ้นไป" label."""
+    assert tn.display_numbers("หนึ่งปีขึ้นไป") == "1 ปีขึ้นไป"
+    assert tn.display_numbers("ยี่สิบกรัมโปรตีน") == "20 กรัมโปรตีน"
+    assert tn.display_numbers("แคลเซียมสามพันมิลลิกรัม") == "แคลเซียม 3,000 มิลลิกรัม"
+    assert tn.display_numbers("ใช้ได้สองแบบ") == "ใช้ได้ 2 แบบ"
+    assert tn.display_numbers("วัยแปดปีขึ้นไป") == "วัย 8 ปีขึ้นไป"
+
+
+def test_display_numbers_leaves_words_that_only_contain_a_digit_word():
+    for s in ["ความสามารถ", "พันธุ์ดี", "สองคนนี้หรือ", "หนึ่งเดียว", "ร้อยแปดพันเก้า", "ลิงก์อยู่ใต้คลิปนะ", "20 กรัม"]:
+        if s == "สองคนนี้หรือ":
+            assert tn.display_numbers(s) == "2 คนนี้หรือ"      # คน is a unit: a count reads fine as a digit
+            continue
+        assert tn.display_numbers(s) == s, s
+
+
+def test_a_number_phrase_glues_to_the_next_phrase():
+    """cal-d-protein-1mo 2026-11-25: "…8 ปีขึ้นไป 20" then "กรัมโปรตีน" in the next sub event."""
+    phr = [{"text": "โปรตีนเชค", "status": "matched", "t0": 3.0, "t1": 3.6},
+           {"text": "วัย", "status": "matched", "t0": 3.7, "t1": 3.9},
+           {"text": "8", "status": "matched", "t0": 4.0, "t1": 4.3},
+           {"text": "ปีขึ้นไป", "status": "matched", "t0": 4.3, "t1": 4.9},
+           {"text": "20", "status": "partial", "t0": 5.0, "t1": 5.4},
+           {"text": "กรัมโปรตีน", "status": "matched", "t0": 5.4, "t1": 6.2},
+           {"text": "หนึ่งปีขึ้นไป", "status": "matched", "t0": 6.3, "t1": 7.0}]
+    out = pp.glue_numbers(phr)
+    assert [p["text"] for p in out] == ["โปรตีนเชค", "วัย", "8 ปีขึ้นไป", "20 กรัมโปรตีน", "1 ปีขึ้นไป"]
+    assert out[3]["t0"] == 5.0 and out[3]["t1"] == 6.2 and out[3]["status"] == "partial"
+    assert [p["text"] for p in phr][4] == "20"                   # the report keeps the script's phrases
+    skipped = [{"text": "20", "status": "SKIPPED", "t0": 1, "t1": 1}, {"text": "กรัม", "status": "matched", "t0": 1, "t1": 2}]
+    assert [p["text"] for p in pp.glue_numbers(skipped)] == ["20", "กรัม"]

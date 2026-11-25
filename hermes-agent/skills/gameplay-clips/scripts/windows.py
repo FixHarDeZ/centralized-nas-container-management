@@ -26,6 +26,13 @@ Each window also carries its motion (mean frame difference; `static` = a card or
 cuts inside it and the best 3 tile times. The sheet shows those tiles labelled `W<n> <t>`, for ONE
 vision call: gameplay / cutscene / card / logo per window. Pick segs from the table; don't re-measure.
 
+--song: the soundtrack is a SONG with no narration (lyrics under music, footage-sourcing §0): no VAD, no whisper,
+no caption spans — speech is empty and <stem>_speech.vtt is header-only (the build_v5 "vtt"). gta6-codebox-gp2
+2026-11-25: the "Now Playing" clips' lyrics counted as speech left 1.5 s of 19 s; Hermes worked the rule out in
+a 20-min reasoning turn. With --vtt the script prints a SONG? hint when the captions have [Music] / ♪ cues and
+no ">>" speaker mark.
+--ocr-step S: OCR sample step (default 1.0). Game footage with button prompts that flash for under a second
+(gta6: an L2 prompt at 12.5 s, between the 1 s samples) wants 0.5.
 --rebase S: the master was encoded from `-ss S`; table and JSON also give master times (t - S).
 Exit 0 always when it ran; the last line says USABLE (>= 15 s) or STOP (ask Fix, SKILL.md rule).
 """
@@ -141,14 +148,15 @@ def refine_times(ocr_map, skip, lo, hi):
     return sorted(t for t in want if lo <= t <= hi and t not in have)
 
 
-def ocr_grid(spans):
-    """1 s samples covering each candidate span, both ends included."""
+def ocr_grid(spans, step=None):
+    """Samples every `step` s (default OCR_STEP) covering each candidate span, both ends included."""
+    step = step or OCR_STEP
     out = set()
     for a, b in spans:
         t = a
-        while t < b:
+        while t < b - 1e-9:
             out.add(round(t, 2))
-            t += OCR_STEP
+            t += step
         out.add(round(b, 2))
     return sorted(out)
 
@@ -258,6 +266,13 @@ def vtt_spans(path):
     return out
 
 
+def vtt_is_song(path):
+    """Auto-captions of a song: [Music] / ♪ cues and no ">>" speaker change mark anywhere."""
+    with open(path, encoding="utf-8", errors="replace") as f:
+        txt = f.read()
+    return ">>" not in txt and bool(re.search(r"\[\s*music\s*\]|♪", txt, re.I))
+
+
 def frame_stats(src):
     import numpy as np
     w, h = 160, 90
@@ -361,6 +376,8 @@ def main():
     ap.add_argument("--min", type=float, default=1.2, help="shortest window kept (s)")
     ap.add_argument("--max-tiles", type=int, default=36)
     ap.add_argument("--no-asr", action="store_true", help="no --vtt: skip the whisper pass (VAD only)")
+    ap.add_argument("--song", action="store_true", help="soundtrack is a song, no narration: no speech spans")
+    ap.add_argument("--ocr-step", type=float, default=OCR_STEP, help="OCR sample step, s (0.5 for button prompts)")
     ap.add_argument("--out")
     ap.add_argument("--sheet")
     a = ap.parse_args()
@@ -375,9 +392,11 @@ def main():
     scratch = os.path.dirname(os.path.abspath(out))
     dur = probe_dur(a.src)
 
-    vad = vad_spans(a.src)
     asr_n, vtt_out = None, None
-    if a.vtt:
+    vad = [] if a.song else vad_spans(a.src)
+    if a.song:
+        speech_raw = []
+    elif a.vtt:
         speech_raw = vad + vtt_spans(a.vtt)
     elif a.no_asr:
         speech_raw = vad
@@ -385,8 +404,8 @@ def main():
         asr = asr_segments(a.src)
         speech_raw = asr_extend(vad, asr)
         asr_n = len(asr)
-    speech = pad(speech_raw, PAD, 0.0, dur)
-    if not a.vtt:
+    speech = pad(speech_raw, PAD, 0.0, dur) if speech_raw else []
+    if a.song or not a.vtt:
         vtt_out = write_vtt(speech, stem + "_speech.vtt", a.rebase)
     times, luma, diff = frame_stats(a.src)
     dark, cuts, med = frame_flags(times, luma, diff)
@@ -395,7 +414,7 @@ def main():
 
     from rapidocr_onnxruntime import RapidOCR
     ocr = RapidOCR()
-    ocr_map = ocr_frames(a.src, ocr_grid(cand), ocr, scratch, dur)
+    ocr_map = ocr_frames(a.src, ocr_grid(cand, a.ocr_step), ocr, scratch, dur)
     skip = set(overlays(ocr_map))
     more = refine_times(ocr_map, skip, 0.0, dur)
     ocr_map.update(ocr_frames(a.src, more, ocr, scratch, dur))
@@ -438,6 +457,9 @@ def main():
     if vtt_out:
         print(f"speech VTT (VAD{' + whisper' if asr_n is not None else ' only'}) -> {vtt_out} = build_v5 \"vtt\"")
     print(f"-> {out}" + (f" + sheet {sheet_path} (W{', W'.join(str(n) for n in res['sheet_windows'])})" if sheet_path else ""))
+    if a.vtt and not a.song and vtt_is_song(a.vtt):
+        print(f"SONG? {a.vtt} has [Music]/♪ cues and no >> speaker mark = lyrics, not narration (footage-sourcing §0). "
+              f"If no one speaks over the music, re-run with --song (speech-free = the whole song)")
     verdict = "USABLE" if moving >= USABLE_S else "STOP"
     print(f"{verdict}: {usable:.1f} s clean in {len(wins)} windows, {moving:.1f} s moving"
           + ("" if verdict == "USABLE" else f" < {USABLE_S:.0f} s -> try the next official source or ask Fix"))

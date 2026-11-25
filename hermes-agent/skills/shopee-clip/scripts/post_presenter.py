@@ -340,6 +340,29 @@ def split_thai(s):
     return [bi, s[len(bi):]] if bi else [s]
 
 
+RANK = {"matched": 0, "partial": 1, "fallback": 2, "unmatched": 3}
+
+
+def glue_numbers(phr):
+    """Subtitle phrases with numbers as viewers read them: digits, and a count never split from its unit.
+    cal-d-protein-1mo 2026-11-25: "…8 ปีขึ้นไป 20" / "กรัมโปรตีน" landed in two sub events. A phrase that is only
+    a number joins the next phrase (t0 of the number, t1 of the unit); every text goes through display_numbers.
+    Returns new dicts: the report keeps the script's own phrases."""
+    out = []
+    for p in phr:
+        q = dict(p, text=thainum.display_numbers(p["text"]))
+        prev = out[-1] if out else None
+        if (prev and prev.get("_num") and q["status"] != "SKIPPED" and prev["status"] != "SKIPPED"):
+            prev.update(text=prev["text"] + " " + q["text"], t1=q["t1"], _num=False,
+                        status=max(prev["status"], q["status"], key=lambda s: RANK.get(s, 9)))
+            continue
+        q["_num"] = thainum.is_number(p["text"])
+        out.append(q)
+    for q in out:
+        q.pop("_num", None)
+    return out
+
+
 def build_events(phr, max_dur=3.2, max_gap=0.35):
     """Greedy merge of consecutive timed phrases into <=2-line events."""
     ev = []
@@ -475,7 +498,7 @@ def main():
         # silence snapping: speech edges from silencedetect beat Whisper's cross-attention times
         starts = [b for a_, b in sil]           # speech resumes
         ends = [a_ for a_, b in sil]            # speech stops
-        evs = build_events(phr)
+        evs = build_events(glue_numbers(phr))
         nsnap = 0
         for e in evs:
             s = snap(e["t0"], starts, 0.30)

@@ -83,3 +83,21 @@ def test_clipjob_status_is_not_a_message():
     assert hb.decide(1000 + 10 * 60, JOB, msgs, {})[0] is not None     # 'clipjob.py status' did not reset it
     msgs[2] = call("terminal", '{"command": "python3 status1_ps2hdd.py"}', 980)
     assert hb.decide(1000 + 10 * 60, JOB, msgs, {})[0] is None         # a scratch sender did
+
+
+def test_photo_gate_past_the_cap_tells_fix_once():
+    """cal-d-protein-1mo 2026-11-25: 191 min from intake to the board, all on one ad photo, Fix never asked.
+    The ⏳ lines said "still working"; past the cap the line tells him the photo is the problem."""
+    import datetime as dt
+    t0 = dt.datetime(2026, 11, 25, 11, 43, tzinfo=dt.timezone(dt.timedelta(hours=7)))
+    job = {"job": "cal-d-protein-1mo", "status": "open", "stage": "intake", "shots": [],
+           "started": t0.isoformat()}
+    now = t0.timestamp() + 31 * 60
+    msgs = [result("terminal", now - 30), call("terminal", "python3 /opt/data/cache/scratch/paint_cald.py", now - 40),
+            call("terminal", "send_status.py x", now - 60)]          # a status line a minute ago
+    line, st = hb.decide(now, job, msgs, {})
+    assert line and "31" in line and "รูป" in line and st["prep_cap"] == "cal-d-protein-1mo"
+    assert hb.decide(now + 600, job, msgs, st)[0] is None or "รูป" not in hb.decide(now + 600, job, msgs, st)[0]
+    assert hb.decide(t0.timestamp() + 20 * 60, job, msgs, {})[0] is None          # under the cap: quiet rules
+    boarded = {**job, "board": {"sent": t0.isoformat()}}
+    assert hb.decide(now, boarded, msgs, {})[0] is None                          # board out: not the photo gate

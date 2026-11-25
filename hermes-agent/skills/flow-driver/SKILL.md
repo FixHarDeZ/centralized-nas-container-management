@@ -31,7 +31,7 @@ The source of truth is the repo (`hermes-agent/skills/`); every sync overwrites 
   result, whose base64 alone costs tens of thousands of tokens before the pixels can be saved.
 - **TRIAL (Fix 2026-11-24, next 🧑 / ✋ order only): a scene plate before shot 1** — Image tab, 0 credits,
   the set (+ her) with no product, used as shot 1's start frame: `/opt/data/skills/shopee-clip/references/scene-plate.md`.
-  Switch back to the Video tab before `reserve`.
+  Switch back to the Video tab before `reserve`; it refuses shot 1 until `clipjob.py plate <job> used|skipped`.
 - **Model check before every `reserve`:** the Settings panel reads `Omni 1.2 Flash` and its credit line 3/s (6 s = 18).
   1.5/s = the project is still on Omni 1.1 (settings persist after a refusal workaround): switch back first.
 - **Chip identity after every attach = `scripts/chipcheck.py` (pixels, no vision):** exit 0 verified, 1 fix the

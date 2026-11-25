@@ -84,3 +84,38 @@ def merge_digit_tokens(words):
             continue
         out.append((tok, t0, t1))
     return out
+
+
+# ---------------------------------------------------------------- display (subtitles show digits)
+UNITS = sorted("""ปี เดือน วัน สัปดาห์ อาทิตย์ ชั่วโมง นาที วินาที วิ กรัม กิโลกรัม กิโล มิลลิกรัม มก มิลลิลิตร มล ลิตร ซอง
+ชิ้น ขวด กล่อง หลอด แพ็ค แพ็ก ชุด คู่ อัน ตัว คน ครั้ง เท่า สี รส แบบ ช่อง ด้าน ขนาด ระดับ โหมด เกม นิ้ว เซนติเมตร
+ซม เมตร วัตต์ องศา ปุ่ม ข้อ ใบ แผ่น ม้วน เม็ด แคปซูล ลูก ช่อ ห้อง ชั้น เครื่อง""".split(), key=len, reverse=True)
+NUM_WORDS = re.compile("((?:หนึ่ง|สอง|สาม|สี่|ห้า|หก|เจ็ด|แปด|เก้า|ยี่|สิบ|เอ็ด|ร้อย|พัน|หมื่น)+)(?=(?:"
+                       + "|".join(UNITS) + "))")
+_WORD_INT = {}
+
+
+def word_to_int(words):
+    """'ยี่สิบ' -> 20; None unless int_to_thai gives the same words back (ร้อยแปด, สองสาม stay words)."""
+    if not _WORD_INT:
+        _WORD_INT.update({int_to_thai(n): n for n in range(1, 20001)})
+    return _WORD_INT.get(words)
+
+
+def display_numbers(text):
+    """A spelled count before a unit shows as digits on screen: หนึ่งปีขึ้นไป -> 1 ปีขึ้นไป, สามพันมิลลิกรัม ->
+    3,000 มิลลิกรัม (promom-cal-d-kiiz 2026-11-25: the sub read หนึ่งปีขึ้นไป under a 1 ปีขึ้นไป label). Only an
+    exact Thai reading followed by a unit word changes; the VO line itself is not touched."""
+    def sub(m):
+        n = word_to_int(m.group(1))
+        if n is None:
+            return m.group(0)
+        lead = " " if m.start() and unicodedata.category(text[m.start() - 1])[0] in "LM" else ""
+        return f"{lead}{n:,} "
+    return NUM_WORDS.sub(sub, text)
+
+
+def is_number(text):
+    """A phrase that is only a count: '20', '3,000', '97%', 'ยี่สิบ'."""
+    t = text.strip().translate(THAI_DIGITS)
+    return bool(t) and (bool(DIGITISH.match(t)) or word_to_int(t) is not None)

@@ -65,3 +65,49 @@ def test_panels_photo_above_a_strip_of_three_steps():
 def test_panels_offers_nothing_for_one_photo():
     rng = np.random.default_rng(1)
     assert bc.panels(rng.uniform(0, 255, (300, 300)).astype(np.float32)) == []
+
+
+def test_extend_ignores_the_screenshot_border_line():
+    """cal-d-protein-1mo 2026-11-25: a 1-px grey border at y 0 and y 950 was the 'farthest full edge line', so every
+    candidate ran the full image height (box + x2 badge + OFFICIAL STORE banner) and Hermes probed pixels for 3 h."""
+    gy, gx = steps(951, 950, rows=(0, 802, 949))
+    assert bc.extend((149, 226, 303, 484), gy, gx, 950, 951) == (149, 226, 303, 577)
+
+
+def badge_listing():
+    """Two lavender boxes with a navy bottom band on white, a red 'x2' disc on each top-right corner."""
+    import pytest
+    cv2 = pytest.importorskip("cv2")
+    img = np.full((951, 950, 3), 255, np.uint8)
+    img[0, :] = img[950, :] = 129
+    for x0 in (149, 504):
+        img[226:803, x0:x0 + 303] = (230, 200, 215)          # BGR lavender face
+        img[710:803, x0:x0 + 303] = (110, 40, 30)            # navy band
+        cv2.circle(img, (x0 + 290, 230), 45, (40, 20, 150), -1)
+        cv2.putText(img, "x2", (x0 + 268, 245), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 3)
+        cv2.circle(img, (x0 + 60, 640), 34, (20, 120, 240), -1)   # printed "20g" disc on the face: never painted
+    return img
+
+
+def test_badge_on_the_box_corner_is_reported_and_can_be_painted(tmp_path):
+    import pytest
+    cv2 = pytest.importorskip("cv2")
+    p = str(tmp_path / "img1.jpg")
+    cv2.imwrite(p, badge_listing())
+    assert bc.main([p, "--out-dir", str(tmp_path), "--n", "6"]) == 0
+    res = __import__("json").loads((tmp_path / "box_crop.json").read_text())
+    rects = [c["rect"] for c in res["candidates"]]
+    assert any(abs(r[1] - 226) <= 4 and abs(r[1] + r[3] - 803) <= 4 for r in rects), rects   # the box, not full height
+    assert all(r[3] < 900 for r in rects)
+    box = next(c for c in res["candidates"] if abs(c["rect"][1] - 226) <= 4)
+    assert box["badges"] and not box.get("painted")
+    assert bc.main([p, "--out-dir", str(tmp_path), "--n", "6", "--paint-badge"]) == 0
+    res = __import__("json").loads((tmp_path / "box_crop.json").read_text())
+    box = next(c for c in res["candidates"] if abs(c["rect"][1] - 226) <= 4)
+    assert box["painted"]
+    crop = cv2.imread(box["file"])
+    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+    red = ((hsv[..., 1] > 110) & ((hsv[..., 0] < 10) | (hsv[..., 0] > 170))).mean()
+    assert red < 0.002, red
+    ox, oy = box["rect"][:2]
+    assert hsv[640 - oy, 60 + 149 - ox][1] > 150                   # the printed disc is still there

@@ -31,3 +31,6 @@ __pycache__/
 hermes-agent/skills/*/logs/
 hermes-agent/skills/*/state/
 hermes-agent/skills/**/.pytest_cache/
+
+# local virtualenv (uv re-creates it; tracked symlinks blocked the Hermes clone pull 2026-11-25)
+.venv/

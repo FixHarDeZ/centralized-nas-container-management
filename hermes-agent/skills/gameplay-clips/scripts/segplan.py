@@ -12,7 +12,18 @@ end card against the CTA rule). It places every pick inside its window's clean s
 --dur in whole frames, keeps the last seg >= --last-min, and prints the last seg's t0 (the input to the
 CTA-gap math in natural-vo.md). It never chooses a shot.
 
-Pick syntax: W<n>[@<t>][:hero|:window][+wide][+win_x=N][+hero_x=N][+max=S]
+Several sources (gta6-codebox-gp2 2026-11-25: hero from the raw clip, windows from two square crops of other
+clips; Hermes merged three tables and patched src/audio by hand, reading build_v5's source 4 times):
+  segplan.py tr_np20_windows.json winsqa_np20_windows.json winsqa_np19_windows.json --dur 19 \
+      --picks "A:W1@10.4:hero,B:W1,B:W2,C:W2" --write plan.json
+Tables are A, B, C… in the order given (no prefix = A). A seg whose table's "src" is the plan's "trailer" is
+"src": "trailer" as before; any other is "src": <that file> with "audio_src": <that file>. Music: consecutive
+segs from one source share ONE continuous bed (audio_in runs on from the previous seg's end), so the music jumps
+only where the source changes — unless that bed would run into the source's "speech" spans; then that seg's
+audio starts at its picture (printed as a music jump). --music follow = every seg's audio at its picture
+(the one-table default, unchanged); --music continuous = the bed rule for one table too.
+
+Pick syntax: [A:]W<n>[@<t>][:hero|:window][+wide][+win_x=N][+hero_x=N][+max=S]
   W<n>   window number from the table; @t = start there (source s, inside the window), default start
          of the window (or right after the previous pick of the same window). A pick ends at the
          window end or at the next pick that starts later in the same window, whichever comes first.
@@ -40,7 +51,7 @@ WIN_MAX = 6.0         # s, a window seg longer than this reads as a slow static 
 HERO_MAX = 3.5        # s, the hero shots in the delivered plans ran 2.8-3.6 s
 CTA_TAIL = 1.6        # s, vo_end <= DUR - 1.6 (natural-vo.md)
 
-PICK = re.compile(r"^W(\d+)(?:@([\d.]+))?(?::(hero|window))?((?:\+[a-z_]+(?:=-?[\d.]+)?)*)$")
+PICK = re.compile(r"^(?:([A-Z]):)?W(\d+)(?:@([\d.]+))?(?::(hero|window))?((?:\+[a-z_]+(?:=-?[\d.]+)?)*)$")
 
 
 def parse_picks(spec):
@@ -49,9 +60,9 @@ def parse_picks(spec):
         m = PICK.match(raw)
         if not m:
             raise SystemExit(f"bad pick {raw!r} (W<n>[@t][:hero|:window][+wide][+win_x=N][+hero_x=N][+max=S])")
-        p = {"w": int(m.group(1)), "at": float(m.group(2)) if m.group(2) else None,
-             "mode": m.group(3) or "window", "raw": raw, "extra": {}, "max": None}
-        for opt in [o for o in m.group(4).split("+") if o]:
+        p = {"t": m.group(1) or "A", "w": int(m.group(2)), "at": float(m.group(3)) if m.group(3) else None,
+             "mode": m.group(4) or "window", "raw": raw, "extra": {}, "max": None}
+        for opt in [o for o in m.group(5).split("+") if o]:
             k, _, v = opt.partition("=")
             if k == "wide":
                 p["extra"]["wide"] = True
@@ -67,21 +78,28 @@ def parse_picks(spec):
 
 def place(picks, wins, fps):
     """-> picks with in (s) and cap_f (max whole frames) inside their windows. The table's windows are
-    already padded off dark / flash / text / speech, so the edge margin is only EDGE s."""
+    already padded off dark / flash / text / speech, so the edge margin is only EDGE s.
+    wins: {table letter: {n: window}} (or one table's {n: window})."""
+    if wins and not isinstance(next(iter(wins)), str):
+        wins = {"A": wins}
     by_w = {}
     for p in picks:
-        w = wins.get(p["w"])
+        p.setdefault("t", "A")
+        if p["t"] not in wins:
+            raise SystemExit(f"{p['raw']}: no table {p['t']} (tables given: {', '.join(sorted(wins))})")
+        tw = wins[p["t"]]
+        w = tw.get(p["w"])
         if w is None:
-            raise SystemExit(f"{p['raw']}: no window W{p['w']} in the table (have W{', W'.join(map(str, sorted(wins)))})")
+            raise SystemExit(f"{p['raw']}: no window W{p['w']} in table {p['t']} (have W{', W'.join(map(str, sorted(tw)))})")
         if p["at"] is not None and not (w["start"] <= p["at"] < w["end"]):
             raise SystemExit(f"{p['raw']}: {p['at']} is outside W{p['w']} {w['start']:.2f}-{w['end']:.2f}")
         p["lo"], p["hi"] = w["start"] + EDGE, w["end"] - EDGE
         p["in"] = max(p["lo"], p["at"]) if p["at"] is not None else None
-        by_w.setdefault(p["w"], []).append(p)
+        by_w.setdefault((p["t"], p["w"]), []).append(p)
     for n, group in by_w.items():
         free = [p for p in group if p["in"] is None]
         if len(free) > 1:
-            raise SystemExit(f"W{n} is picked {len(free)} times without a start: pin all but one with @t")
+            raise SystemExit(f"{n[0]}:W{n[1]} is picked {len(free)} times without a start: pin all but one with @t")
         for p in free:
             p["in"] = p["lo"]
         for p in group:
@@ -124,9 +142,17 @@ def fit(segs, total_f, fps, last_min_f):
     return alloc
 
 
+def overlaps(a, b, spans, pad=0.05):
+    return any(a < e + pad and s - pad < b for s, e in spans or [])
+
+
+def same_file(a, b):
+    return bool(a and b) and os.path.abspath(a) == os.path.abspath(b)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("table")
+    ap.add_argument("tables", nargs="+", metavar="table")
     ap.add_argument("--dur", type=float, required=True)
     ap.add_argument("--picks", required=True)
     ap.add_argument("--fps", type=int, default=30)
@@ -136,10 +162,21 @@ def main(argv=None):
     ap.add_argument("--endcard-wide", action="store_true")
     ap.add_argument("--short-card-ok", action="store_true")
     ap.add_argument("--write")
+    ap.add_argument("--music", choices=["follow", "continuous"])
     a = ap.parse_args(argv)
 
-    with open(a.table, encoding="utf-8") as fh:
-        tab = json.load(fh)
+    tabs = {}
+    for i, path in enumerate(a.tables):
+        with open(path, encoding="utf-8") as fh:
+            tabs[chr(65 + i)] = (path, json.load(fh))
+    for path, tab in tabs.values():
+        rc = old_table(path, tab)
+        if rc:
+            return rc
+    return layout(a, tabs)
+
+
+def old_table(path, tab):
     if "wash" not in tab:
         src = tab.get("src", "<source>.mp4")
         vtt = tab.get("speech_vtt") or tab.get("vtt")
@@ -147,21 +184,33 @@ def main(argv=None):
                "/opt/data/skills/gameplay-clips/scripts/windows.py " + os.path.basename(src)
                + (f" --vtt {os.path.basename(vtt)}" if vtt else "")
                + (f" --rebase {tab['rebase']}" if tab.get("rebase") else ""))
-        print(f"TABLE TOO OLD: {a.table} has no \"wash\" key (made before white-flash detection or copied from "
+        print(f"TABLE TOO OLD: {path} has no \"wash\" key (made before white-flash detection or copied from "
               f"another job) — its windows can hold white flash frames build_v5 refuses. Re-run on a copy of the "
               f"source in this workdir:\n  {cmd}")
         return 2
+    return 0
+
+
+def layout(a, tabs):
     fps = a.fps
     total_f = round(a.dur * fps)
     if abs(total_f / fps - a.dur) > 1e-6:
         raise SystemExit(f"--dur {a.dur} is not a whole number of frames at {fps} fps")
-    wins = {w["n"]: w for w in tab["windows"]}
-    rebase = float(tab.get("rebase") or 0.0)
+    wins = {t: {w["n"]: w for w in tab["windows"]} for t, (_, tab) in tabs.items()}
     picks = place(parse_picks(a.picks), wins, fps)
     for p in picks:
         if p["cap_f"] < round(SEG_MIN * fps):
             raise SystemExit(f"{p['raw']}: only {p['cap_f'] / fps:.2f} s clean from {p['in']:.2f} "
-                             f"(W{p['w']} ends {wins[p['w']]['end']:.2f}) — under {SEG_MIN} s, drop or move it")
+                             f"(W{p['w']} ends {wins[p['t']][p['w']]['end']:.2f}) — under {SEG_MIN} s, drop or move it")
+    trailer = None
+    if a.write and os.path.exists(a.write):
+        with open(a.write, encoding="utf-8") as fh:
+            tr = json.load(fh).get("trailer")
+        if tr:
+            trailer = tr if os.path.isabs(tr) else os.path.join(os.path.dirname(os.path.abspath(a.write)), tr)
+    is_trailer = {t: (len(tabs) == 1 if trailer is None else same_file(tab.get("src"), trailer))
+                  for t, (_, tab) in tabs.items()}
+    music = a.music or ("follow" if len(tabs) == 1 else "continuous")
 
     card = None
     if a.endcard:
@@ -210,7 +259,7 @@ def main(argv=None):
                 print(f"  {s['raw']:<16} in {s['in']:7.2f}  clean {s['cap_f'] / fps:5.2f} s")
         return 1
 
-    out, t0 = [], 0.0
+    out, t0, prev, jumps = [], 0.0, None, []
     print("seg   t0      in     dur  mode    pick")
     for i, (s, f) in enumerate(zip(segs, alloc)):
         d = round(f / fps, 4)
@@ -218,11 +267,26 @@ def main(argv=None):
             seg = {k: v for k, v in s.items() if k != "fixed_f"}
             seg["dur"] = d
             label = "endcard"
+            prev = None
         else:
-            seg = {"src": "trailer", "in": round(s["in"], 3), "dur": d, "mode": s["mode"], "snap": False}
+            _, tab = tabs[s["t"]]
+            rebase = float(tab.get("rebase") or 0.0)
+            src = "trailer" if is_trailer[s["t"]] else tab["src"]
+            seg = {"src": src, "in": round(s["in"], 3), "dur": d, "mode": s["mode"], "snap": False}
             seg.update(s["extra"])
-            if rebase:
-                seg["audio_src"], seg["audio_in"] = "master", round(s["in"] - rebase, 3)
+            ain = round(s["in"] - rebase, 3)
+            if prev and prev["t"] == s["t"] and music == "continuous":
+                bed = round(prev["ain"] + prev["dur"], 3)
+                if bed + d <= float(tab.get("dur") or 1e9) and not overlaps(bed + rebase, bed + rebase + d, tab.get("speech")):
+                    ain = bed
+                else:
+                    jumps.append(f"music jump at seg {i} ({s['raw']}): the bed from seg {i - 1} would run into "
+                                 "speech / past the source end; audio starts at the picture")
+            if src != "trailer":
+                seg["audio_src"], seg["audio_in"] = tab["src"], ain
+            elif rebase or ain != round(s["in"], 3):
+                seg["audio_src"], seg["audio_in"] = "master", ain
+            prev = {"t": s["t"], "ain": ain, "dur": d}
             label = s["raw"]
         print(f"{i:<4} {t0:6.2f} {seg['in']:7.2f} {d:6.3f}  {seg['mode']:<7} {label}")
         out.append(seg)
@@ -230,6 +294,8 @@ def main(argv=None):
     last_t0 = sum(alloc[:-1]) / fps
     print(f"dur {a.dur} = {sum(alloc)} frames; last seg t0 = {last_t0:.3f} s, length {alloc[-1] / fps:.3f} s "
           f"-> CTA speech <= {alloc[-1] / fps - CTA_TAIL:.2f} s (starts >= {last_t0:.2f}, vo_end <= {a.dur - CTA_TAIL:.2f})")
+    for j in jumps:
+        print(j)
     print(json.dumps(out, ensure_ascii=False))
     if a.write:
         with open(a.write, encoding="utf-8") as fh:

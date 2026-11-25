@@ -106,6 +106,9 @@ PROC = "/proc"
 ADOPT_ENV = (MIRROR_TOKEN_ENV, MIRROR_CHAT_ENV, "TZ")
 FINALS_DIR = os.environ.get("CLIPJOB_FINALS", "/opt/data/clips/finals")   # delivered final + cover, for review
 KEEP_DAYS = 7              # Fix 2026-11-16: keep them a week (cleanup deletes the workdir and Downloads copies)
+PLATE_TRIAL = os.environ.get("CLIPJOB_PLATE_TRIAL", "1") == "1"   # Fix 2026-11-24: try a scene plate on the next 🤖 🧑/✋
+PLATE_MODES = ("presenter", "hands")
+PLATE_STATES = ("used", "skipped", "refused")
 CHAR_DIR = os.environ.get("CLIPJOB_CHARS", "/opt/data/clips/characters")   # <name>.jpg portrait per roster name
 # Fix 2026-11-16: "หลังส่งงาน ... ขึ้นปุ่มกดจบงาน ถ้าไม่กดภายใน 5 นาทีให้จบงานเอง"
 CLOSE_S = int(os.environ.get("CLIPJOB_CLOSE_S", "300"))
@@ -251,12 +254,18 @@ def reshape(j, shots, seconds=None):
     return secs
 
 
-def workdir_started(wd, before):
+INTAKE_LOOKBACK_S = 20 * 60   # intake runs in the order's first minutes; older files are not this order's
+
+
+def workdir_started(wd, before, lookback=None):
     """Earliest file mtime in the workdir when it is older than `before`: intake and the photo gate run
-    before `new`, so the job's clock starts at the first file they wrote."""
+    before `new`, so the job's clock starts at the first file they wrote. With `lookback`, files older than
+    before − lookback are ignored (gta6-codebox-gp2 2026-11-25: the image of an order Fix had cancelled 3 h
+    earlier started the clock; copied sources keep their old mtime too)."""
+    floor = before - lookback if lookback else float("-inf")
     ts = [before]
     for root, _, files in os.walk(wd) if os.path.isdir(wd) else ():
-        ts += [os.path.getmtime(os.path.join(root, f)) for f in files]
+        ts += [m for m in (os.path.getmtime(os.path.join(root, f)) for f in files) if m >= floor]
     return min(ts)
 
 
@@ -560,6 +569,46 @@ def set_production(j, prod):
     log(j, f"production={prod}")
 
 
+def plate_trial_done(exclude=None):
+    """The job that already delivered with a used plate, if any: the trial has run and Fix's verdict decides
+    the rest, so the gate stops asking."""
+    for p in glob.glob(os.path.join(DIR, "*.json")):
+        try:
+            with open(p, encoding="utf-8") as f:
+                o = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if (isinstance(o, dict) and o.get("job") != exclude and o.get("status") == "delivered"
+                and (o.get("plate") or {}).get("state") == "used"):
+            return o["job"]
+    return None
+
+
+def plate_check(j, k):
+    """Fix 2026-11-24: the scene-plate TRIAL runs on the next 🤖 🧑/✋ order. cal-d-protein-1mo 2026-11-25 was
+    that order; the pointer was read and the plate silently skipped. Shot 1 waits for a recorded verdict."""
+    if not PLATE_TRIAL or k != 1 or j["mode"] not in PLATE_MODES or j.get("plate") or plate_trial_done(j["job"]):
+        return
+    raise Refused("scene-plate TRIAL first (Fix 2026-11-24): follow /opt/data/skills/shopee-clip/references/"
+                  f"scene-plate.md, then `clipjob.py plate {j['job']} used` (needs <workdir>/plate.jpg), or "
+                  f"`clipjob.py plate {j['job']} skipped|refused --why \"<Image tab credits / face gate / refusal>\"`")
+
+
+def set_plate(j, state, why=None, file=None):
+    if state not in PLATE_STATES:
+        raise Refused(f"plate state must be one of {PLATE_STATES}")
+    if state == "used":
+        file = file or os.path.join(j["workdir"], "plate.jpg")
+        if not os.path.exists(file):
+            raise Refused(f"no plate image at {file} (download it from Flow first, scene-plate.md step 3)")
+    elif not (why or "").strip():
+        raise Refused(f"plate {state} needs --why (one line: what you read or what failed)")
+    j["plate"] = {"state": state, "at": iso(), **({"file": os.path.abspath(file)} if state == "used" else {}),
+                  **({"why": why.strip()} if why else {})}
+    log(j, f"plate: {state}" + (f" ({why.strip()})" if why else ""))
+    return j["plate"]
+
+
 def reserve(j, k, last_reserve, t=None):
     """-> new last_reserve. Raises Pacing / Refused."""
     t = now() if t is None else t
@@ -572,6 +621,7 @@ def reserve(j, k, last_reserve, t=None):
     cta_order_check(j, k)
     name_check(j, k)
     vo_rate_check(j, k)
+    plate_check(j, k)
     if k > 1:
         prev = shot(j, k - 1)
         if prev["state"] not in ("in_review", "approved"):
@@ -1411,6 +1461,40 @@ def id_sheet(raw, refs, out, dur):
     return (out if os.path.exists(out) else None), times
 
 
+BAND_TH = {"top": "บนสุด", "upper": "บน", "upper-middle": "กลางบน", "lower-middle": "กลางล่าง", "lower": "ล่าง",
+           "bottom": "ล่างสุด"}
+
+
+def prod_check(raw, refs, out):
+    """prodcheck.py: does the product change colour inside the shot (pixels, 0 vision)."""
+    args = [a for r in refs if os.path.exists(r) for a in ("--ref", r)]
+    if not args:
+        return {"verdict": "no-ref"}
+    try:
+        p = subprocess.run(["uv", "run", "--with", "opencv-python-headless<5", "--with", "numpy", "python",
+                            os.path.join(HERE, "prodcheck.py"), raw, *args, "--sheet", out],
+                           capture_output=True, text=True, timeout=600)
+        return json.loads(p.stdout.strip().splitlines()[-1])
+    except (subprocess.TimeoutExpired, ValueError, IndexError) as e:
+        return {"verdict": "error", "why": str(e)[:200]}
+
+
+def pixel_flags(px, thai=False):
+    out = []
+    for name, r in ((px or {}).get("refs") or {}).items():
+        for f in r.get("flags") or []:
+            out.append(f"สีส่วน{BAND_TH.get(f['band'], f['band'])}ของสินค้าเปลี่ยน {f['from']:.1f}–{f['to']:.1f} วิ "
+                       f"(ΔE {f['de']}, {name})" if thai else
+                       f"{f['band']} band of the product changed colour {f['from']:.1f}-{f['to']:.1f} s "
+                       f"(ΔE {f['de']} vs its first matched frame, {name})")
+    return out
+
+
+def pixel_summary(px):
+    return {"verdict": (px or {}).get("verdict"), "flags": pixel_flags(px), **({"sheet": px["sheet"]} if
+                                                                                (px or {}).get("sheet") else {})}
+
+
 def cmd_idcheck(j, k, raw):
     need_flow(j)
     if not j["refs"]:
@@ -1423,11 +1507,19 @@ def cmd_idcheck(j, k, raw):
     sheet, times = id_sheet(raw, j["refs"], os.path.join(j["workdir"], f"shot{k}_id.jpg"), info["dur"])
     if not sheet:
         raise Refused(f"ffmpeg made no identity sheet from {raw}")
-    shot(j, k)["idcheck"] = {"sig": file_sig(raw), "sheet": sheet}
-    log(j, f"idcheck shot {k}")
-    return {"shot": k, "sheet": sheet, "ask_vision": id_question(min(len(j["refs"]), 2), times),
-            "next": f"ONE vision_analyze on the sheet, then clipjob.py ready {j['job']} {k} --raw {raw} "
-                    "--frame pass|flag:<…> --identity match|drift:<…>|count:<…>|presenter:<…>"}
+    px = pixel_summary(prod_check(raw, j["refs"], os.path.join(j["workdir"], f"shot{k}_prod.jpg")))
+    shot(j, k)["idcheck"] = {"sig": file_sig(raw), "sheet": sheet, "pixel": px}
+    log(j, f"idcheck shot {k}" + (f" pixel: {'; '.join(px['flags'])}" if px["flags"] else ""))
+    q = id_question(min(len(j["refs"]), 2), times)
+    nxt = (f"ONE vision_analyze on the sheet, then clipjob.py ready {j['job']} {k} --raw {raw} "
+           "--frame pass|flag:<…> --identity match|drift:<…>|count:<…>|presenter:<…>")
+    if px["verdict"] == "change":
+        q += (" PIXEL CHECK (measured): " + "; ".join(px["flags"]) + ". Look at that part of the product in every "
+              "shot tile against the reference and say whether its colour really changed.")
+        nxt += (" — the pixel check found a colour change: `--identity match` also needs --pixel-ok \"<what "
+                "covers or lights it>\"; a real change is --identity drift:<part, from s>. "
+                f"{px.get('sheet') or ''} shows the product straightened at those moments if the id sheet is unclear")
+    return {"shot": k, "sheet": sheet, "pixel": px, "ask_vision": q, "next": nxt}
 
 
 def parse_identity(arg):
@@ -1563,7 +1655,7 @@ def send_review(j, k):
     s["review_sent"] = iso()
 
 
-def cmd_ready(j, k, raw, frame_arg, no_send, resend=False, identity_arg=None):
+def cmd_ready(j, k, raw, frame_arg, no_send, resend=False, identity_arg=None, pixel_ok=None):
     if resend:
         if shot(j, k)["state"] != "in_review":
             raise Refused(f"shot {k} is {shot(j, k)['state']}; --resend is for a shot already in review")
@@ -1589,10 +1681,13 @@ def cmd_ready(j, k, raw, frame_arg, no_send, resend=False, identity_arg=None):
                           "vision-read it against the reference (aukey-pby92 2026-11-18: the powerbank morphed inside "
                           "the shot and the review went to Fix as a pass), then ready … --identity match|drift:<what>")
         identity = parse_identity(identity_arg)
+    pixel = pixel_gate(j, k, identity, pixel_ok)
     gates, file = auto_gates(j, k, raw)
     gates["frame"] = frame
     if identity:
         gates["identity"] = identity
+    if pixel:
+        gates["pixel"] = pixel
     mark_ready(j, k, file, gates)
     res = {"shot": k, "pass": gates_passed(gates), "file": os.path.abspath(file), "gates": gates}
     if not no_send:
@@ -1602,6 +1697,22 @@ def cmd_ready(j, k, raw, frame_arg, no_send, resend=False, identity_arg=None):
         except Refused as e:
             raise Refused(f"{e} — the shot IS in review; send it with: clipjob.py ready {j['job']} {k} --resend") from None
     return res
+
+
+def pixel_gate(j, k, identity, pixel_ok):
+    """cal-d-protein-1mo 2026-11-25: the pixels said the navy band went brown at 3 s, vision said MATCH. A match
+    over a measured change needs the reason in words; a drift verdict carries the change itself."""
+    px = (shot(j, k).get("idcheck") or {}).get("pixel") or {}
+    if px.get("verdict") != "change" or not identity:
+        return None
+    if not identity["ok"]:
+        return {"ok": False, "note": "; ".join(px["flags"])}
+    if not (pixel_ok or "").strip():
+        raise Refused("the pixel check measured a colour change on the product (" + "; ".join(px["flags"]) + ") and "
+                      "the verdict is match. Re-look at that part (" + (px.get("sheet") or "the id sheet") + "): "
+                      "a real change = --identity drift:<part, from s>; a hand / shadow / glare over it = keep match "
+                      "and add --pixel-ok \"<what covers it>\"")
+    return {"ok": True, "note": f"pixel change answered: {pixel_ok.strip()}"}
 
 
 def fix_reviewed(j, k):
@@ -1617,6 +1728,10 @@ def ready_reviewed(j, k, raw, frame, identity_arg, no_send):
     gates["frame"] = frame
     if identity_arg:
         gates["identity"] = parse_identity(identity_arg)
+    if j["refs"]:              # kiiz / cal-d 2026-11-25: 📝 had no product read at all; this one costs no vision
+        px = prod_check(file, j["refs"], os.path.join(j["workdir"], f"shot{k}_prod.jpg"))
+        if px.get("verdict") == "change":
+            gates["pixel"] = {"ok": True, "note": "; ".join(pixel_flags(px, thai=True)) + " — ดูก่อนโพสต์"}
     mark_ready(j, k, file, gates)
     decide(j, k, "approve")
     log(j, f"shot {k} approved: {FIX_REVIEWED}")
@@ -1850,7 +1965,7 @@ def cmd_deliver(j, a):
                            sum(c for c in credits if c) if credits and all(c is not None for c in credits) else None),
                **({"credits_est": True} if any(at.get("credits_est") for s in j["shots"] for at in s["attempts"]) else {}),
                "notes": notes.strip(" |"), "timing": timeline(j, now(), job_asks(j, now())),
-               "vision": job_vision(j)}
+               "vision": job_vision(j), **({"plate": j["plate"]["state"]} if j.get("plate") else {})}
         os.makedirs(os.path.dirname(CLIP_LOG), exist_ok=True)
         with open(CLIP_LOG, "a", encoding="utf-8") as f:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
@@ -1955,7 +2070,7 @@ def main(argv=None):
     s.add_argument("--credits", type=int, help="the real spend when Fix names it (Omni 1.1 = 1.5/s)")
     s = sub.add_parser("scan"); s.add_argument("job"); s.add_argument("shot", type=int); s.add_argument("--raw")
     s = sub.add_parser("ready"); s.add_argument("job"); s.add_argument("shot", type=int)
-    s.add_argument("--raw"); s.add_argument("--frame"); s.add_argument("--identity")
+    s.add_argument("--raw"); s.add_argument("--frame"); s.add_argument("--identity"); s.add_argument("--pixel-ok")
     s.add_argument("--no-send", action="store_true"); s.add_argument("--resend", action="store_true")
     s = sub.add_parser("decide"); s.add_argument("job", nargs="?"); s.add_argument("shot", nargs="?", type=int)
     s.add_argument("decision", nargs="?", choices=["approve", "regen"]); s.add_argument("--text")
@@ -1969,6 +2084,8 @@ def main(argv=None):
     s = sub.add_parser("note"); s.add_argument("job"); s.add_argument("text")
     s = sub.add_parser("wait"); s.add_argument("job"); s.add_argument("text")
     s = sub.add_parser("stage"); s.add_argument("job"); s.add_argument("text", metavar="name")
+    s = sub.add_parser("plate"); s.add_argument("job"); s.add_argument("state", choices=PLATE_STATES)
+    s.add_argument("--why"); s.add_argument("--file")
     s = sub.add_parser("reopen"); s.add_argument("job"); s.add_argument("--reason", required=True)
     s = sub.add_parser("mirror"); s.add_argument("job"); s.add_argument("--auto", action="store_true", help=argparse.SUPPRESS)
     s = sub.add_parser("close"); s.add_argument("job", nargs="?")
@@ -1989,7 +2106,7 @@ def main(argv=None):
                 raise Refused(f"job {a.job} exists (pick another slug, or `status {a.job}` to resume it)")
             j = intake_job(a.job, a.product, a.link, a.mode, a.workdir)
             os.makedirs(j["workdir"], exist_ok=True)
-            j["started"] = iso(workdir_started(j["workdir"], now()))
+            j["started"] = iso(workdir_started(j["workdir"], now(), lookback=INTAKE_LOOKBACK_S))
             log(j, "intake"); save(j)
             return out({**summary(j), "next": "clipjob.py note <job> \"<done; next>\" after each stage (Q1, photo gate, "
                                                "board sent/approved); clipjob.py new <job> … after the board"})
@@ -2131,6 +2248,10 @@ def main(argv=None):
         if a.cmd == "edit-id":
             set_edit_id(j, a.shot, a.edit_id); save(j)
             return out(summary(j))
+        if a.cmd == "plate":
+            need_open(j); need_flow(j)
+            p = set_plate(j, a.state, a.why, a.file); save(j)
+            return out({"job": a.job, "plate": p, "next": "reserve shot 1 (Video tab, credit line = clipjob.py cost)"})
         if a.cmd in ("note", "wait", "stage"):
             need_open(j)
             if a.cmd == "stage":
@@ -2231,7 +2352,7 @@ def main(argv=None):
             return out({"shot": a.shot, **start_frame_for(j, a.shot),
                         "next": "attach `file` as the start frame; file null = character chip + refs only"})
         if a.cmd == "ready":
-            res = cmd_ready(j, a.shot, a.raw, a.frame, a.no_send, a.resend, a.identity); save(j)
+            res = cmd_ready(j, a.shot, a.raw, a.frame, a.no_send, a.resend, a.identity, a.pixel_ok); save(j)
             return out(res)
         if a.cmd == "assemble-check":
             files = assemble_files(j)

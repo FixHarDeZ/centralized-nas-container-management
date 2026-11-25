@@ -55,8 +55,9 @@ nothing to attach in Ingredients. `--shot` is a resend of prompts only — the r
 - **Fix's file IS his review (Fix 2026-11-22: "gen prompt แล้วผม reply กลับ ถือว่ารีวิวแล้ว ตีผ่านหมด ไม่ต้องให้ผม
   confirm").** Right after `ingest`: `clipjob.py ready <job> K --raw <file>` — no `--frame`/`--identity`, no
   `idcheck`, no `scan`, no vision call. It runs only the file gates (ffprobe; 🧑 the repeated-line cut and the
-  early-CTA check), approves the shot and sends NO ✅/🔁 keyboard; a message goes to Fix only when a file gate
-  found something (ℹ️, no buttons). When every shot is approved, go straight to post.
+  early-CTA check) plus the pixel check (`prodcheck.py`, 0 vision: a product band that changes colour inside
+  the shot), approves the shot and sends NO ✅/🔁 keyboard; a message goes to Fix only when one of them found
+  something (ℹ️, no buttons — kiiz/cal-d 2026-11-25 shipped box drift with no product read at all). When every shot is approved, go straight to post.
 - A new file for an already-approved shot (Fix re-gens on his own) replaces it: `ingest` it the same way.
 - `ready` notes anything below 720×1280 or a low bitrate: Telegram re-encoded a "video" send. Tell Fix once to
   send shots as a **file** (📎 → File); a file keeps Flow's original 720p.

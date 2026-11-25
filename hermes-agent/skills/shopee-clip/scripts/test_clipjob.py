@@ -23,6 +23,8 @@ cj.DIR = tempfile.mkdtemp(prefix="clipjob-jobs-")               # main() sweeps 
 cj.WORK = tempfile.mkdtemp(prefix="clipjob-work-")
 cj.GATEWAY_PID = os.path.join(cj.WORK, "no-gateway.pid")            # never adopt the real gateway env
 cj.has_face = lambda img: True                                  # no test runs OpenCV; face tests override it
+cj.PLATE_TRIAL = False                                          # the plate tests switch it back on
+cj.prod_check = lambda raw, refs, out: {"verdict": "no-match"}  # no test runs OpenCV; prodcheck tests override it
 
 
 def job(shots=3, mode="presenter", prod=None):
@@ -92,6 +94,46 @@ def test_switch_to_auto_unpacked_shots_can_reserve():
     assert cj.shot(j, 1)["state"] == "pending"
     cj.reserve(j, 1, None, 1000)
     assert cj.shot(j, 1)["state"] == "submitting"
+
+
+def test_plate_trial_gates_shot_1_of_an_auto_presenter(tmp_path, monkeypatch, capsys):
+    """cal-d-protein-1mo 2026-11-25 was the trial order (🤖 🧑): the pointer was read, scene-plate.md never
+    opened, nothing logged. reserve shot 1 now waits for a plate verdict."""
+    monkeypatch.setattr(cj, "PLATE_TRIAL", True)
+    monkeypatch.setattr(cj, "DIR", str(tmp_path))
+    j = job(prod="auto")
+    j["workdir"] = str(tmp_path / "w"); os.makedirs(j["workdir"])
+    with pytest.raises(cj.Refused, match="scene-plate"):
+        cj.reserve(j, 1, None, 1000)
+    cj.save(j)
+    assert cj.main(["plate", "t-1", "used"]) == 1                      # no plate.jpg yet
+    open(os.path.join(j["workdir"], "plate.jpg"), "wb").write(b"x")
+    assert cj.main(["plate", "t-1", "used"]) == 0
+    j = cj.load("t-1")
+    assert j["plate"]["state"] == "used"
+    cj.reserve(j, 1, None, 1000)
+    assert cj.shot(j, 1)["state"] == "submitting"
+
+
+def test_plate_skip_needs_a_reason_and_other_modes_are_not_gated(tmp_path, monkeypatch):
+    monkeypatch.setattr(cj, "PLATE_TRIAL", True)
+    monkeypatch.setattr(cj, "DIR", str(tmp_path))
+    j = job(prod="auto"); cj.save(j)
+    assert cj.main(["plate", "t-1", "skipped"]) == 1
+    assert cj.main(["plate", "t-1", "skipped", "--why", "Image tab read 4 credits"]) == 0
+    cj.reserve(cj.load("t-1"), 1, None, 1000)
+    p = cj.new_job("p-1", "product", "Thing", "", 1, ["/tmp/ref.jpg"])   # 📦 skips the trial
+    cj.set_production(p, "auto")
+    cj.reserve(p, 1, None, 1000)
+
+
+def test_plate_trial_ends_after_one_delivered_plate(tmp_path, monkeypatch):
+    monkeypatch.setattr(cj, "PLATE_TRIAL", True)
+    monkeypatch.setattr(cj, "DIR", str(tmp_path))
+    done = job(prod="auto"); done["job"] = "done-1"; done["status"] = "delivered"
+    done["plate"] = {"state": "used"}; cj.save(done)
+    j = job(prod="auto")
+    cj.reserve(j, 1, None, 1000)                                       # Fix's verdict decides from here
 
 
 def test_pacing_and_chaining():
@@ -519,6 +561,31 @@ def test_workdir_started_uses_the_oldest_file(tmp_path):
     os.utime(f, (1000, 1000))
     assert cj.workdir_started(str(tmp_path), 5000) == 1000
     assert cj.workdir_started(str(tmp_path / "none"), 5000) == 5000
+
+
+def test_workdir_started_ignores_files_older_than_the_lookback(tmp_path):
+    """gta6-codebox-gp2 2026-11-25: the image of an order Fix cancelled at 20:14 sat in the workdir; the real order
+    came at 23:06, intake at 23:10, and the job's clock started at 20:15 (+3 h in the total and in เตรียม)."""
+    old, fresh = tmp_path / "img2.jpg", tmp_path / "img1.jpg"
+    old.write_bytes(b"x"); fresh.write_bytes(b"x")
+    os.utime(old, (1000, 1000)); os.utime(fresh, (20000, 20000))
+    assert cj.workdir_started(str(tmp_path), 20600, lookback=cj.INTAKE_LOOKBACK_S) == 20000
+    old2 = tmp_path / "copied_source.mp4"                 # copy2 keeps a days-old mtime
+    old2.write_bytes(b"x"); os.utime(old2, (5, 5))
+    assert cj.workdir_started(str(tmp_path), 20600, lookback=cj.INTAKE_LOOKBACK_S) == 20000
+    assert cj.workdir_started(str(tmp_path), 20600) == 5    # no lookback: unchanged behaviour
+
+
+def test_cli_intake_clock_skips_a_cancelled_orders_file(tmp_path, monkeypatch):
+    wd = tmp_path / "w"; wd.mkdir()
+    stale = wd / "img2.jpg"; stale.write_bytes(b"x")
+    t0 = cj.now()
+    os.utime(stale, (t0 - 3 * 3600, t0 - 3 * 3600))
+    fresh = wd / "intake_sheet.jpg"; fresh.write_bytes(b"x")
+    os.utime(fresh, (t0 - 240, t0 - 240))
+    assert cj.main(["intake", "clk-1", "--product", "P", "--workdir", str(wd)]) == 0
+    j = cj.load("clk-1")
+    assert abs(cj._epoch(j["started"]) - (t0 - 240)) < 5
 
 
 def test_billed_credits_skip_a_refunded_failed_card():
@@ -961,6 +1028,59 @@ def test_ready_needs_an_identity_verdict_of_this_file(tmp_path, monkeypatch, cap
     assert cj.main(ready + ["--identity", "drift:display bigger at 2-4 s, colour white at 5 s"]) == 0
     g = cj.load("t-1")["shots"][0]["gates"]["identity"]
     assert g["ok"] is False and "display bigger" in g["note"]
+
+
+CHANGE = {"verdict": "change", "sheet": "/w/shot1_prod.jpg",
+          "refs": {"ref1.jpg": {"matched": 20, "of": 20, "baseline_t": 0.0, "peak": 36.0,
+                                "flags": [{"band": "bottom", "from": 3.0, "to": 5.5, "de": 37.6}]}}}
+
+
+def test_pixel_change_blocks_a_match_verdict_until_answered(tmp_path, monkeypatch, capsys):
+    """cal-d-protein-1mo 2026-11-25: the boxes' navy bottom band went brown/pink at 3 s; the vision read said MATCH."""
+    monkeypatch.setattr(cj, "DIR", str(tmp_path))
+    j = job(shots=1, mode="product", prod="auto"); j["workdir"] = str(tmp_path)
+    cj.shot(j, 1)["state"] = "submitted"; cj.shot(j, 1)["attempts"].append({"via": "auto"})
+    cj.save(j)
+    raw = tmp_path / "s.mp4"; raw.write_bytes(b"x")
+    monkeypatch.setattr(cj, "ffprobe", lambda p: {"w": 720, "h": 1280, "dur": 10.0, "kbps": 3000, "has_audio": True})
+    monkeypatch.setattr(cj, "id_sheet", lambda raw, refs, out, dur: (out, [0.5, 2.5, 4.5, 6.5, 8.5, 9.9]))
+    monkeypatch.setattr(cj, "prod_check", lambda raw, refs, out: CHANGE)
+    assert cj.main(["idcheck", "t-1", "1", "--raw", str(raw)]) == 0
+    res = json.loads(capsys.readouterr().out)
+    assert res["pixel"]["verdict"] == "change" and "bottom" in res["ask_vision"] and "3.0" in res["ask_vision"]
+    ready = ["ready", "t-1", "1", "--raw", str(raw), "--frame", "pass", "--no-send"]
+    assert cj.main(ready + ["--identity", "match"]) == 1
+    assert "pixel" in capsys.readouterr().err
+    assert cj.main(ready + ["--identity", "match", "--pixel-ok", "hand covers the band 3-5 s, colour same after"]) == 0
+    g = cj.load("t-1")["shots"][0]["gates"]
+    assert g["identity"]["ok"] and "hand covers" in g["pixel"]["note"]
+
+
+def test_pixel_change_with_a_drift_verdict_needs_no_answer(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(cj, "DIR", str(tmp_path))
+    j = job(shots=1, mode="product", prod="auto"); j["workdir"] = str(tmp_path)
+    cj.shot(j, 1)["state"] = "submitted"; cj.shot(j, 1)["attempts"].append({"via": "auto"})
+    cj.save(j)
+    raw = tmp_path / "s.mp4"; raw.write_bytes(b"x")
+    monkeypatch.setattr(cj, "ffprobe", lambda p: {"w": 720, "h": 1280, "dur": 10.0, "kbps": 3000, "has_audio": True})
+    monkeypatch.setattr(cj, "id_sheet", lambda raw, refs, out, dur: (out, [0.5, 2.5, 4.5, 6.5, 8.5, 9.9]))
+    monkeypatch.setattr(cj, "prod_check", lambda raw, refs, out: CHANGE)
+    assert cj.main(["idcheck", "t-1", "1", "--raw", str(raw)]) == 0
+    capsys.readouterr()
+    assert cj.main(["ready", "t-1", "1", "--raw", str(raw), "--frame", "pass", "--no-send",
+                    "--identity", "drift:bottom band brown from 3 s"]) == 0
+    assert cj.load("t-1")["shots"][0]["gates"]["identity"]["ok"] is False
+
+
+def test_prompt_reply_runs_the_pixel_check_and_tells_fix(tmp_path, monkeypatch, capsys):
+    """kiiz/cal-d 2026-11-25: 📝 has no identity read at all; the pixel check costs no vision, so it still runs."""
+    sent = []
+    monkeypatch.setattr(cj, "tg", lambda method, payload=None, files=None: sent.append((method, payload)) or {})
+    monkeypatch.setattr(cj, "prod_check", lambda raw, refs, out: CHANGE)
+    j, dst = reviewed_shot(tmp_path, monkeypatch)
+    assert cj.main(["ready", "t-1", "1", "--raw", dst]) == 0
+    assert cj.shot(cj.load("t-1"), 1)["state"] == "approved"            # still his review
+    assert sent and "ล่างสุด" in sent[-1][1]["text"] and "3.0" in sent[-1][1]["text"]
 
 
 def test_identity_sheet_is_tied_to_the_file(tmp_path, monkeypatch, capsys):

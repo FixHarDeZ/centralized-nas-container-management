@@ -113,3 +113,22 @@ def test_write_vtt_rebases_to_master_time(tmp_path):
     p = w.write_vtt([(10.0, 14.0), (2.0, 3.0)], str(tmp_path / "s.vtt"), rebase=5.0)
     txt = open(p).read()
     assert txt.startswith("WEBVTT") and "00:00:05.000 --> 00:00:09.000" in txt and "00:00:02" not in txt
+
+
+def test_ocr_grid_takes_a_finer_step():
+    """gta6-codebox-gp2 2026-11-25: an L2 button prompt flashed at 12.5 s between the 1 s samples."""
+    assert w.ocr_grid([(10.0, 13.0)], step=0.5) == [10.0, 10.5, 11.0, 11.5, 12.0, 12.5, 13.0]
+    assert w.ocr_grid([(10.0, 13.0)]) == [10.0, 11.0, 12.0, 13.0]
+
+
+def test_song_lyrics_vtt_is_recognised(tmp_path):
+    """footage-sourcing §0: lyric cues with [Music] / ♪ and no >> speaker mark = a song, not narration
+    (gta6-codebox-gp2 2026-11-25: the "Now Playing" clips' lyrics left 1.5 s of 19 s as speech-free)."""
+    song = tmp_path / "s.vtt"
+    song.write_text("WEBVTT\n\n00:00:01.000 --> 00:00:04.000\n[Music]\n\n00:00:04.000 --> 00:00:07.000\n"
+                    "I've had nothing but bad luck\n")
+    talk = tmp_path / "t.vtt"
+    talk.write_text("WEBVTT\n\n00:00:01.000 --> 00:00:04.000\n>> Welcome to Vice City\n")
+    assert w.vtt_is_song(str(song)) and not w.vtt_is_song(str(talk))
+    p = w.write_vtt([], str(tmp_path / "none.vtt"))
+    assert open(p).read().strip() == "WEBVTT"

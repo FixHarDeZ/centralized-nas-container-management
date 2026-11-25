@@ -15,7 +15,9 @@ It prints ONE line when all hold:
   - nothing Fix could see went out for QUIET_MIN minutes: a final reply, a `clarify`, a call naming a sender
     (send_* / *status* scripts, clipjob ready|pack|deliver, the Bot API), the last-sent stamp send_status.py /
     send_photo.py write, or this heartbeat's own last line.
-A turn with no new message for STUCK_MIN minutes gets a different line (maybe hung) once.
+A turn with no new message for STUCK_MIN minutes gets a different line (maybe hung) once. A job still before its
+board PREP_CAP_MIN after intake gets one line naming the photo gate, so Fix can answer it (his message interrupts
+the turn) — cal-d-protein-1mo 2026-11-25: 191 min of hand pixel work on one ad photo, never asked.
 Always exits 0 (a failing cron job only notifies `local`).
 """
 import datetime as dt
@@ -29,6 +31,7 @@ import time
 
 QUIET_MIN = 15                          # replayed on ps2-hdd-175: 10 min = 17 lines in 4 h, noise
 STUCK_MIN = 20
+PREP_CAP_MIN = 30                       # intake -> board; cal-d-protein-1mo 2026-11-25 spent 191 min on one photo
 DB = os.environ.get("HERMES_STATE_DB", "/opt/data/state.db")
 JOBS = os.environ.get("CLIPJOB_DIR", "/opt/data/clips/jobs")
 STAMP = os.environ.get("HEARTBEAT_STAMP", "/opt/data/clips/logs/heartbeat.json")
@@ -84,6 +87,16 @@ def stage_of(job):
     return "รีวิวช็อต"
 
 
+def prep_minutes(job, now):
+    """Minutes since intake while the job is still before its board (photo gate / storyboard), else None."""
+    if job.get("stage") != "intake" or job.get("board") or job.get("shots"):
+        return None
+    try:
+        return (now - dt.datetime.fromisoformat(job.get("started") or job.get("created") or "").timestamp()) / 60
+    except (TypeError, ValueError):
+        return None
+
+
 def decide(now, job, msgs, stamp, sent=0):
     """now: epoch s, msgs: newest first [{role, content, tool_calls, tool_name, timestamp}], stamp: dict,
     sent: epoch of the last send_status / send_photo. -> (line or None, new stamp)."""
@@ -94,6 +107,11 @@ def decide(now, job, msgs, stamp, sent=0):
         return None, stamp                                     # turn ended, or waiting on Fix
     if last["role"] not in ("assistant", "tool"):
         return None, stamp
+    prep = prep_minutes(job, now)
+    if prep is not None and prep >= PREP_CAP_MIN and stamp.get("prep_cap") != job["job"]:
+        line = (f"⚠️ {job['job']} · เตรียมรูปสินค้ามา {int(prep)} นาทีแล้ว ยังไม่ถึงบอร์ด — ถ้ารูปมีปัญหา "
+                "ตอบไอยูได้เลย: ใช้รูปที่ดีที่สุดไปก่อน / จะส่งรูปสินค้าใหม่")
+        return line, {**stamp, "sent": now, "prep_cap": job["job"], "job": job["job"]}
     seen = max([m["timestamp"] for m in msgs if is_visible(m)] + [stamp.get("sent", 0), sent])
     quiet, idle = (now - seen) / 60, (now - last["timestamp"]) / 60
     tool = last.get("tool_name") or next((c.get("name") for c in calls(last)), "") or ""

@@ -35,6 +35,13 @@ whether it stays. 📝 and 📦 jobs skip it.
 
 - **A policy refusal with the plate attached:** drop the plate, run shot 1 the normal way, log `plate: refused`. The plate is never what a refusal is debugged on (`flow-driver/references/pitfalls.md` → Policy refusal order covers the shot itself).
 
+## The gate (2026-11-25)
+cal-d-protein-1mo was the trial order and the plate was skipped without a word. `clipjob.py reserve` now refuses
+shot 1 of a 🤖 🧑/✋ job until a verdict is recorded: `clipjob.py plate <job> used` (needs `<workdir>/plate.jpg`)
+or `clipjob.py plate <job> skipped|refused --why "<Image tab read N credits / face gate failed / refusal>"`.
+The gate stops once one delivered job used a plate (Fix's verdict decides the rest); the clip-log row carries
+`plate`. `CLIPJOB_PLATE_TRIAL=0` switches it off.
+
 ## Report it
 - Clip-log `--notes`: `plate: used|skipped|refused (<why>)`.
 - Delivery message, one line: plate used or skipped, and what to compare (her face shot 1↔2, room/light,

@@ -24,6 +24,12 @@ product-image-prep.md's "frame scan" done once, in code:
    no contour rectangle, so Hermes wrote ~15 scratch pixel probes (50 min) to find the photo's extent and
    cropped flush against the cable loop (x 779, content ends at 782). Tiles carry `"src": "panel"`; a
    trimmed margin keeps MARGIN px.
+5. a promo BADGE (a saturated disc: "x2", a quantity / sale sticker) crossing a candidate's edge is listed in that
+   candidate's `badges`, and the tile label says +badge. cal-d-protein-1mo (2026-11-25): a red "x2" disc on each
+   box's top-right corner plus a 1-px grey screenshot border (which `extend` took for the farthest edge line, so
+   every candidate ran the full image height) cost 3 h of hand pixel probes. `--paint-badge` inpaints the discs
+   before cropping (flat-faced packaging only, and only when Fix chose "ระบายออก" in the photo-gate clarify:
+   it repaints the product's own pixels); painted tiles say so (`painted`, label "painted").
 Exit 1 when neither a rectangle nor a panel was found (crop by position, product-image-prep.md §d).
 """
 import argparse
@@ -42,6 +48,10 @@ GUTTER_NEAR = 0.98   # share of a line within GUTTER_TOL = a gutter line (a page
 GUTTER_RUN = 4       # consecutive gutter lines needed to cut
 PANEL_MIN = 0.08     # a panel side >= this share of the image side (drops icons, text lines)
 MARGIN = 12          # px of a trimmed uniform margin kept around a panel
+BORDER = 2           # lines this close to the image edge are the screenshot's own border, never the product's
+BADGE_SAT, BADGE_VAL = 110, 50
+BADGE_R = (0.015, 0.09)   # disc radius as a share of the image width
+BADGE_ROUND = 0.6    # component area / its enclosing circle's area
 
 
 def iou(a, b):
@@ -66,7 +76,7 @@ def full_line(strength, lo, hi, step, limit):
     best = None
     for k in range(1, limit + 1):
         i = lo + step * k
-        if i < 0 or i >= hi:
+        if i < BORDER or i >= hi - BORDER + 1:
             break
         if strength(i) >= LINE_FULL:
             best = i
@@ -114,6 +124,46 @@ def candidates(img):
     gx = np.abs(np.diff(lab, axis=1)).sum(axis=2)
     ext = [extend(r, gy, gx, w, h) for r in raw]
     return dedupe(ext + raw)
+
+
+def badges(img):
+    """Saturated, round blobs: promo stickers ("x2", "-50%") pasted on a listing. -> [(cx, cy, r)]."""
+    import cv2
+    import numpy as np
+    w = img.shape[1]
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    m = ((hsv[..., 1] >= BADGE_SAT) & (hsv[..., 2] >= BADGE_VAL)).astype(np.uint8)
+    m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((9, 9), np.uint8))
+    cs, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    out = []
+    for c in cs:
+        (cx, cy), r = cv2.minEnclosingCircle(c)
+        if not BADGE_R[0] * w <= r <= BADGE_R[1] * w:
+            continue
+        if cv2.contourArea(cv2.convexHull(c)) / (np.pi * r * r) >= BADGE_ROUND:
+            out.append((int(cx), int(cy), int(r)))
+    return out
+
+
+def edge_badges(rect, discs):
+    """Discs that cross or touch the rect's boundary: a sticker on the product's edge, not printed art inside it."""
+    x, y, w, h = rect
+    out = []
+    for cx, cy, r in discs:
+        inside = x - r < cx < x + w + r and y - r < cy < y + h + r
+        to_edge = min(abs(cx - x), abs(cx - x - w), abs(cy - y), abs(cy - y - h))
+        if inside and to_edge <= r + 2:
+            out.append({"center": [cx, cy], "r": r})
+    return out
+
+
+def paint(img, discs):
+    import cv2
+    import numpy as np
+    mask = np.zeros(img.shape[:2], np.uint8)
+    for cx, cy, r in discs:
+        cv2.circle(mask, (cx, cy), r + 4, 255, -1)
+    return cv2.inpaint(img, mask, 7, cv2.INPAINT_TELEA)
 
 
 def gutter_lines(region, axis):
@@ -210,6 +260,8 @@ def main(argv=None):
     ap.add_argument("--out-dir", default=".")
     ap.add_argument("--n", type=int, default=4)
     ap.add_argument("--pad", type=int, default=0, help="px added around each crop (clamped to the image)")
+    ap.add_argument("--paint-badge", action="store_true",
+                    help="inpaint promo discs before cropping (only after Fix chose it; repaints product pixels)")
     ap.add_argument("--panels", action="store_true",
                     help="also offer gutter-split panels when rectangles were found (always on when none were)")
     a = ap.parse_args(argv)
@@ -235,7 +287,11 @@ def main(argv=None):
         ocr = RapidOCR()
     except ImportError:
         ocr = None
-    src = Image.open(a.image).convert("RGB")
+    discs = badges(img)                           # printed art on the box is round and saturated too
+    sticker = sorted({tuple(b["center"] + [b["r"]]) for r in rects for b in edge_badges(r, discs)})
+    painted = bool(a.paint_badge and sticker)     # paint ONLY discs that cross a candidate's edge
+    src = (Image.fromarray(cv2.cvtColor(paint(img, sticker), cv2.COLOR_BGR2RGB)) if painted
+           else Image.open(a.image).convert("RGB"))
     out, tiles = [], []
     for i, (x, y, cw, ch) in enumerate(rects, 1):
         x0, y0 = max(0, x - a.pad), max(0, y - a.pad)
@@ -246,11 +302,15 @@ def main(argv=None):
         row = {"n": i, "file": path, "rect": [x0, y0, x1 - x0, y1 - y0], "wh": [x1 - x0, y1 - y0],
                "touches_edge": x0 == 0 or y0 == 0 or x1 == w or y1 == h,
                "src": src_of.get((x, y, cw, ch), "box")}
+        on_edge = edge_badges((x, y, cw, ch), discs)
+        if on_edge:
+            row["badges"] = on_edge
+            row["painted"] = painted
         if ocr:
             found, _ = ocr(path)
             row["text"] = [t.strip() for _, t, sc in (found or []) if float(sc) >= 0.6 and t.strip()]
         out.append(row)
-        tiles.append((f"C{i} {x1 - x0}x{y1 - y0}", crop))
+        tiles.append((f"C{i} {x1 - x0}x{y1 - y0}" + ((" painted" if painted else " +badge") if on_edge else ""), crop))
     th = 420
     sized = [(lab, im.resize((max(1, round(im.width * th / im.height)), th))) for lab, im in tiles]
     sheet = Image.new("RGB", (sum(im.width for _, im in sized) + 12 * (len(sized) + 1), th + 40), (30, 30, 30))
@@ -268,6 +328,7 @@ def main(argv=None):
     sheet_path = os.path.join(a.out_dir, "box_crop_sheet.jpg")
     sheet.save(sheet_path, "JPEG", quality=85)
     res = {"image": a.image, "size": [w, h], "candidates": out, "sheet": sheet_path,
+           **({"badges": [list(d) for d in sticker]} if sticker else {}),
            "ask_vision": "Tiles C1..Cn are crops of one listing photo. Which ONE shows the WHOLE product (no part cut "
                          "off) with no shop wordmark, price, search bar or banner? Answer the tile label, or NONE "
                          "and what is wrong."}
