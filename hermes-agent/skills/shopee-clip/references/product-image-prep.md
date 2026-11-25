@@ -25,11 +25,11 @@ A vision call takes 20–150 s here. One job spent 55 min on ~14 crop → check 
 - Use pixel probes (recipe below), not vision, to find edges and to confirm a fix.
 - A second sheet is allowed after fixing what the first check named. A defect that measurement can settle (banner
   text above the product → tighter rect, then OCR; a badge on a flat face → the paint recipe below, then a
-  residual-hue scan) may close with those free verdicts instead of that sheet; the people/UI question still stands on
-  the source's own vision read. Measurement does NOT lift the cap: no third sheet, and a measured fix that is not
-  converging goes to Fix the same way — send him the best candidate with the remaining defect in one line and ask
-  `clarify` (use it / he sends another photo). Zero spend while waiting. (cal-d-protein 2026-11-25: 3 h of
-  hand-written pixel probes painting out an ×2 badge, Fix never asked.)
+  residual-hue scan) may close with those free verdicts instead of that sheet — ONE measured pass; the people/UI
+  question still stands on the source's own vision read. Then STOP: both checks spent, or the measured pass's free
+  verdicts not all clean → the next action is `clarify` to Fix (best candidate + the remaining defect in one line:
+  use it / he sends another photo), no more pixel work on that image. Zero spend while waiting. (cal-d-protein
+  2026-11-25: both checks spent by 12:03, then 2.5 h of hand probes painting out an ×2 badge, Fix never asked.)
   **Say in that question whether the defect is crop-fixable or baked into the SOURCE** (headline printed across
   the product, the source photo's own frame cutting the object) — ONE diagnostic read of that single best crop
   (not a third verdict sheet) is how you tell which it is: a source-limited defect cannot be re-cut, and
