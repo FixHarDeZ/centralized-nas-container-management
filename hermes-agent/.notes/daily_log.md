@@ -1925,3 +1925,37 @@ Fix: "ตรวจงานเมื่อวานกับวันนี้�
   show digits; (6) plate TRIAL: gate in `reserve` or drop; (7) untrack `.venv/` from the repo (owner's call).
 - Still open from 11-19: 🎬 CTA without the product (fit5, freeclip2s, neo today; the sticker rule keeps the
   sticker off the CTA seg).
+
+### 2026-11-25 (2) — the 7 proposals built (Fix: "ที่แนะนำมาทั้งหมดทำได้เลย")
+- **1 pixel drift check** `shopee-clip/scripts/prodcheck.py` (0 vision): SIFT + homography locates each ref in
+  frames every 0.5 s, warps back, compares the product with ITSELF band by band (6 bands, inside the inlier hull,
+  frame-wide shift removed); a band held ΔE ≥ 15 for ≥ 1 s = `change`. Ref-vs-frame was tried first and dropped:
+  Flow's grade + ref crops with shop text give 14–30 cell diffs on clean shots, and absolute palette matching read
+  0 % even on matching frames. Calibration on 42 past shots (23 jobs): cal-d holds 34–36 (bottom band from 2.5–3 s),
+  19 matched clean shots peak ≤ 5.7, 23 never matched (round / glossy / soft / small products = `no-match`, not a
+  pass). kiiz (wrong art from its first frame) stays stable — vision's job. ~7–16 s per shot on the NAS.
+  `clipjob idcheck` runs it, adds the band + seconds to `ask_vision`, writes `shot<K>_prod.jpg` (product
+  straightened at those moments — on cal-d the navy→pink/brown is obvious); `ready --identity match` over a change
+  needs `--pixel-ok "<what covers it>"`; 📝 `ready` runs it too and puts it in the ℹ️ note (non-blocking).
+- **2a photo-gate cap** `clip_heartbeat.py`: a job still before its board 30 min after intake gets ONE ⚠️ line to Fix
+  naming the photo (his reply interrupts the turn). **2b `box_crop.py`**: a 1-px grey screenshot border (cal-d img1
+  rows 0 and 950) was the "farthest full edge line" → every candidate full height; lines within 2 px of the edge now
+  ignored → C3/C4 = 303×578 boxes (Hermes' hand crop 307×581). Promo discs crossing a candidate edge listed
+  (`badges`, `+badge`); `--paint-badge` inpaints only those (the box's own printed discs untouched), only after Fix
+  picks "ให้ไอยูระบายป้ายออก" in the photo-gate clarify (product-image-prep a00).
+- **3** `segplan.py` takes several tables (`A:W1@…:hero,B:W1,C:W2`): src "trailer" only for the plan's trailer,
+  else src + audio_src = that file; one continuous music bed per same-source block unless it would hit that source's
+  speech (`music jump` printed); one table = old output. `windows.py --song` (no VAD/whisper, header-only speech vtt)
+  + `SONG?` hint from a lyrics VTT; `--ocr-step 0.5` for flashing button prompts.
+- **4** intake clock ignores workdir files older than 20 min (gta6's cancelled-order image).
+- **5** subs: `thainum.display_numbers` (spelled count before a unit → digits, round-trip guarded: ร้อยแปด / สองสาม
+  stay words) + `post_presenter.glue_numbers` (a number-only phrase joins the next phrase; report keeps the script).
+- **6** `clipjob.py plate <job> used|skipped|refused [--why]`; `reserve` refuses shot 1 of 🤖 🧑/✋ until a verdict,
+  stops once one delivered job used a plate; clip-log `plate`; `CLIPJOB_PLATE_TRIAL=0` off.
+- **7** `.venv/` untracked + in `.gitignore` (only 2 symlinks were tracked; `2bfefa3` had committed a workstation
+  path). Clone: `git checkout -- .venv/bin/python` before the pull that deletes it.
+- Docs: frame-check (pixel check), prompt-pack, product-image-prep a00, scene-plate gate, flow-driver pointer,
+  footage-sourcing (song / ocr-step), gameplay-pitfalls (segplan multi-table replaces the hand merge). Budgets ok
+  (gameplay SKILL 30707/30720, flow-driver 8015/8192).
+- Tests: 291 passed, 20 skipped (cv2 tests skip in the gate). Commit `9963564`, pushed. **Not synced yet**:
+  `metroid-ravenous` (🎬) opened ~18:xx, stage build at 19:04 — sync after it closes (`--pull` first).
