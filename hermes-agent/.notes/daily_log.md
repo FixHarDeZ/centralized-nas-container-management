@@ -1959,3 +1959,19 @@ Fix: "ตรวจงานเมื่อวานกับวันนี้�
   (gameplay SKILL 30707/30720, flow-driver 8015/8192).
 - Tests: 291 passed, 20 skipped (cv2 tests skip in the gate). Commit `9963564`, pushed. **Not synced yet**:
   `metroid-ravenous` (🎬) opened ~18:xx, stage build at 19:04 — sync after it closes (`--pull` first).
+- Review fixes `292fb95` (pushed): prodcheck restarts its baseline when the match centre jumps > 25 % of the frame
+  width (cal-d ref2 locked onto the strawberry box at 0 s and the chocolate box from 2.5 s); re-calibration: cal-d
+  29.1 (flagged via ref1), ref2 5.0, clean ≤ 5.7, kiiz 13.5 (a top-band lighting shift; at threshold 12 it flagged
+  only that, not the cartoon art) → threshold stays 15. segplan `--audio L=master|<file>` (bed keyed by audio
+  source; a block's bed starts at its first picture if the whole block fits, else at the first speech-free stretch
+  that holds it; a source with no audio stream = exit 4). Replay on gta6's real tables with Hermes' picks: every
+  seg's in/dur/audio_src/audio_in = his hand plan (ms rounding). build_v5 `audio_on_master`: the master-vtt gap
+  check only for master-timeline audio (a second source's master raised a false PLAN ERROR). product-image-prep:
+  what Fix's answer to the 30-min photo line means.
+- Sync attempt after metroid-ravenous closed: REFUSED (nothing changed) — 5 live edits from metroid's
+  post-delivery pass, made on the 496b651 files. Applying their diff would have reverted 9963564's song /
+  multi-source lines → 3-way merge (base 496b651) per file, all clean; gameplay SKILL trimmed back to
+  30682/30720 B. `719ed9a`, pushed; clone stash "hermes live 11-25 metroid, ported 3-way". Lesson: a live edit
+  pulled after a repo change is NOT a patch onto HEAD — merge it against the live base.
+- **Still not synced**: `yuedpao-rushbag` (🧑) opened 19:40 (intake). Live = `496b651`. Sync after it closes:
+  plain `make hermes-skills` (refuses on new drift → `--pull` + 3-way merge again).
