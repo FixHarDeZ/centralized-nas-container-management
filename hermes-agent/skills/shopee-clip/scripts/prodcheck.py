@@ -8,8 +8,11 @@ Each reference is located in frames every --step s (SIFT + RANSAC homography) an
 reference's coordinates. The first matched frame is the baseline; later frames are compared with it band by band
 (6 horizontal bands of the product, only inside the matched area, after removing the frame's overall colour shift).
 A band whose colour moves ΔE ≥ 15 and stays moved for ≥ 1 s is a CHANGE: cal-d-protein-1mo 2026-11-25, the boxes'
-navy bottom band went brown / pink at 3 s (held ΔE 34-36) and the vision identity read said MATCH. 42 past shots:
-19 matched and stayed stable (held ΔE ≤ 5.7), 23 never matched. `peak` = the highest ΔE a band held for 1 s.
+navy bottom band went brown / pink at 3 s (held ΔE 29) and the vision identity read said MATCH. 42 past shots:
+19 matched and stayed stable (held ΔE ≤ 5.7), 23 never matched; kiiz (wrong art from frame 1) held 13.5 on a top-band
+lighting shift, under the line. `peak` = the highest ΔE a band held for 1 s. A match that jumps > JUMP of the frame
+width starts a new track with its own baseline (two near-identical variants side by side: the ref locks onto the
+other box, and a comparison across that switch read the other box's colour as drift).
 
 Why not compare with the reference itself: Flow renders every product in its own colour grade, and the reference
 crop carries background and shop text, so ref-vs-frame cell differences are 14-30 on clean shots too. A shot compared
@@ -26,10 +29,11 @@ import os
 import sys
 
 BANDS = 6
-DE_CHANGE = 15.0          # 2026-11-25 calibration: cal-d holds 34-36; 19 clean matched shots peak <= 5.7
+DE_CHANGE = 15.0          # 2026-11-25 calibration: cal-d holds 29; clean shots <= 5.7; kiiz 13.5 (top-band light)
 PERSIST_S = 1.0
 MIN_INLIERS = 15
 BAND_MIN_PX = 300
+JUMP = 0.25               # match centre moving this share of the frame width between samples = another object
 BAND_NAMES = ["top", "upper", "upper-middle", "lower-middle", "lower", "bottom"]
 
 
@@ -88,7 +92,7 @@ class Matcher:
         self.rk, self.rd = self.sift.detectAndCompute(cv2.cvtColor(ref, cv2.COLOR_BGR2GRAY), None)
 
     def match(self, frame):
-        """(warped frame in ref coords, ref-space mask of the matched area) or None."""
+        """(warped frame in ref coords, ref-space mask of the matched area, (centre x / frame width, centre y))."""
         cv2, np = _cv()
         if self.rd is None or len(self.rk) < MIN_INLIERS:
             return None
@@ -112,7 +116,7 @@ class Matcher:
         hull = cv2.convexHull(src[mask.ravel() == 1].astype(np.int32))
         area = np.zeros((h, w), np.uint8)
         cv2.fillConvexPoly(area, hull, 1)
-        return warped, area.astype(bool)
+        return warped, area.astype(bool), (float(quad[:, 0].mean()) / frame.shape[1], float(quad[:, 1].mean()))
 
 
 def band_means(L, mask):
@@ -174,28 +178,41 @@ def analyze(video, refs, step=0.5):
     for rp in refs:
         ref = load_ref(rp)
         m = Matcher(ref)
-        base = base_mask = base_t = None
-        crops, series = {}, []
+        base = base_mask = base_t = last_c = None
+        crops, series, tracks, first_t = {}, [], [], None
         for t, f in frames:
             got = m.match(f)
             if not got:
                 continue
-            warped, mask = got
+            warped, mask, c = got
             L = lab(warped)
+            if base is not None and new_track(last_c, c):
+                tracks.append((base_t, series))       # the ref locked onto the other box / colourway
+                base = None
+            last_c = c
+            crops[t] = warped
             if base is None:
-                base, base_mask, base_t = L, mask, t
-                crops[t] = warped
-                series.append((t, {}))
+                base, base_mask, base_t, series = L, mask, t, [(t, {})]
+                first_t = t if first_t is None else first_t
                 continue
             both = base_mask & mask
             series.append((t, band_shift(band_means(base, both), band_means(L, both))))
-            crops[t] = warped
-        flags = find_changes(series, step)
+        if base is not None:
+            tracks.append((base_t, series))
+        flags = [dict(f, baseline_t=bt) for bt, sr in tracks for f in find_changes(sr, step)]
         result[os.path.basename(rp)] = {
-            "matched": len(series), "of": len(frames), "baseline_t": base_t, "flags": flags,
-            "peak": sustained_peak(series, step),
+            "matched": sum(len(sr) for _, sr in tracks), "of": len(frames), "baseline_t": first_t,
+            "tracks": len(tracks), "flags": flags,
+            "peak": max([sustained_peak(sr, step) for _, sr in tracks] or [0.0]),
             "_crops": crops, "_ref": ref}
     return result
+
+
+def new_track(prev, cur, jump=JUMP):
+    """The match moved more than `jump` of the frame width since the last matched sample: with two near-identical
+    variants in frame (cal-d: strawberry and chocolate boxes side by side) SIFT can lock onto the other one, and a
+    comparison across that switch would read the other box's colour as drift."""
+    return prev is not None and abs(cur[0] - prev[0]) > jump
 
 
 def verdict(res):
@@ -210,8 +227,9 @@ def write_sheet(res, out, h=300):
     for name, r in res.items():
         if not r["flags"]:
             continue
-        times = [r["baseline_t"], *sorted({f["from"] for f in r["flags"]} | {f["to"] for f in r["flags"]})]
-        tiles = [("REF " + name, r["_ref"]), *[(f"{t:.1f}s" + (" BASE" if t == r["baseline_t"] else ""), r["_crops"][t])
+        bases = sorted({f["baseline_t"] for f in r["flags"]})
+        times = sorted(set(bases) | {f["from"] for f in r["flags"]} | {f["to"] for f in r["flags"]})
+        tiles = [("REF " + name, r["_ref"]), *[(f"{t:.1f}s" + (" BASE" if t in bases else ""), r["_crops"][t])
                                                for t in times if t in r["_crops"]]]
         row = []
         for label, im in tiles:

@@ -339,6 +339,17 @@ def affine_zoom(img, z, cx, cy):
                          resample=Image.BICUBIC)
 
 
+def audio_on_master(s, paths, base):
+    """Is this seg's music on the master's timeline (the one the plan's "vtt" describes)? A seg whose audio_src
+    is another file (a second source's master, segplan multi-table 2026-11-25) is on that file's timeline, and
+    the master's speech gaps say nothing about it."""
+    a = s.get("audio_src", "master")
+    if a == "master":
+        return True
+    p = paths.get(a) or (a if os.path.isabs(a) else os.path.join(base, a))
+    return os.path.abspath(p) == os.path.abspath(paths["master"])
+
+
 def crop_h(c):
     """Picture height of a "crop" end card scaled to the window width (even)."""
     return int(round(WW * c[3] / c[2] / 2)) * 2
@@ -560,7 +571,10 @@ def main():
             die(f"seg {i} too short ({n} frames) — total of earlier segs exceeds dur?")
         s["n"] = n
         ain = s.get("audio_in", s["in"])
-        g = in_gap(gaps, ain, ain + n / fps)
+        if not audio_on_master(s, paths, base):
+            g = (float("nan"), float("nan"))    # another file's timeline: segplan kept its own speech out
+        else:
+            g = in_gap(gaps, ain, ain + n / fps)
         if not g:
             errs.append(f"seg {i} audio {ain:.2f}-{ain + n / fps:.2f} not inside a no-speech gap")
             g = (float("nan"), float("nan"))

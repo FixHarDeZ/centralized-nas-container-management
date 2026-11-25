@@ -93,11 +93,11 @@ def test_write_merges_only_segs_and_dur(tmp_path, capsys):
 
 def two_tables(tmp_path):
     """gta6-codebox-gp2 2026-11-25: hero from the raw clip, windows from two square crops of the vertical clips."""
-    raw = {"src": "/w/tr_np20.mp4", "rebase": 0.0, "wash": [], "speech": [],
+    raw = {"src": "/w/tr_np20.mp4", "rebase": 0.0, "wash": [], "speech": [], "dur": 19.26,
            "windows": [{"n": 1, "start": 10.38, "end": 13.62, "dur": 3.24}]}
-    a = {"src": "/w/winsqa_np20.mp4", "rebase": 0.0, "wash": [], "speech": [],
+    a = {"src": "/w/winsqa_np20.mp4", "rebase": 0.0, "wash": [], "speech": [], "dur": 19.26,
          "windows": [{"n": 1, "start": 0.0, "end": 7.75, "dur": 7.75}, {"n": 2, "start": 10.25, "end": 13.62, "dur": 3.37}]}
-    b = {"src": "/w/winsqa_np19.mp4", "rebase": 0.0, "wash": [], "speech": [[14.0, 19.0]],
+    b = {"src": "/w/winsqa_np19.mp4", "rebase": 0.0, "wash": [], "speech": [[14.0, 19.0]], "dur": 19.0,
          "windows": [{"n": 1, "start": 0.0, "end": 8.0, "dur": 8.0}, {"n": 2, "start": 10.0, "end": 12.4, "dur": 2.4}]}
     out = []
     for name, t in (("raw", raw), ("a", a), ("b", b)):
@@ -126,14 +126,28 @@ def test_several_tables_set_src_and_audio_per_source(tmp_path, capsys):
 
 
 def test_continuous_bed_never_runs_into_that_sources_speech(tmp_path, capsys):
+    """The block C:W2@10.0 + C:W1 would run its bed from 10.0 into C's speech at 14 s: the bed moves to the first
+    speech-free stretch that holds the whole block (0.1), the way Hermes laid gta6's np20 bed by hand."""
     (raw, a, b), plan = two_tables(tmp_path)
     rc = sp.main([raw, a, b, "--dur", "10", "--picks", "A:W1@10.4:hero,C:W2,C:W1@0.1", "--write", plan])
     out = capsys.readouterr().out
     assert rc == 0, out
     segs = json.load(open(plan))["segs"]
     s1, s2 = segs[1], segs[2]
-    assert s1["audio_in"] + s1["dur"] + s2["dur"] > 14.0             # the bed would reach C's speech at 14 s
-    assert s2["audio_in"] == s2["in"] and "music jump at seg 2" in out
+    assert s1["audio_in"] == 0.1 and abs(s2["audio_in"] - (0.1 + s1["dur"])) < 1e-3
+    assert "music jump" not in out
+
+
+def test_a_block_that_fits_nowhere_follows_the_pictures(tmp_path, capsys):
+    (raw, a, b), plan = two_tables(tmp_path)
+    from pathlib import Path
+    t = json.loads(Path(b).read_text()); t["speech"] = [[3.0, 4.0], [9.0, 10.0], [12.5, 14.0]]
+    Path(b).write_text(json.dumps(t))
+    rc = sp.main([raw, a, b, "--dur", "10", "--picks", "A:W1@10.4:hero,C:W2,C:W1@0.1", "--write", plan])
+    out = capsys.readouterr().out
+    assert rc == 0 and "music jump inside segs 1-2" in out
+    segs = json.load(open(plan))["segs"]
+    assert segs[1]["audio_in"] == segs[1]["in"] and segs[2]["audio_in"] == segs[2]["in"]
 
 
 def test_one_table_keeps_the_old_output(tmp_path, capsys):
@@ -145,3 +159,26 @@ def test_unknown_table_letter(tmp_path, capsys):
     import pytest
     with pytest.raises(SystemExit, match="table B"):
         run(tmp_path, capsys, "--dur", "15.5", "--picks", "B:W1")
+
+
+def test_audio_override_keeps_one_bed_across_the_raw_and_its_crop(tmp_path, capsys):
+    """gta6's hand plan: the hero (raw np20) and the np20 crop's windows ran ONE bed on master_np20; np19 its own."""
+    (raw, a, b), plan = two_tables(tmp_path)
+    rc = sp.main([raw, a, b, "--dur", "15", "--picks", "A:W1@10.4:hero,B:W1@0.1,B:W1@3.85,C:W1@0.1,C:W2",
+                  "--audio", "B=master", "--audio", "C=/w/master_np19.mp4", "--write", plan])
+    assert rc == 0, capsys.readouterr().out
+    segs = json.load(open(plan))["segs"]
+    assert segs[1]["audio_src"] == "master" and segs[1]["src"] == "/w/winsqa_np20.mp4"
+    # hero + 2 windows = 9.5 s does not fit after 10.4 in a 19.26 s clip: one bed from 0.1, as in his hand plan
+    assert segs[0]["audio_in"] == 0.1 and abs(segs[1]["audio_in"] - (0.1 + segs[0]["dur"])) < 1e-3
+    assert abs(segs[2]["audio_in"] - (segs[1]["audio_in"] + segs[1]["dur"])) < 1e-3
+    assert segs[3]["audio_src"] == "/w/master_np19.mp4" and segs[3]["audio_in"] == segs[3]["in"]
+    assert abs(segs[4]["audio_in"] - (segs[3]["audio_in"] + segs[3]["dur"])) < 1e-3
+
+
+def test_a_source_without_audio_is_refused(tmp_path, capsys, monkeypatch):
+    (raw, a, b), plan = two_tables(tmp_path)
+    monkeypatch.setattr(sp, "has_audio", lambda p: p != "/w/winsqa_np19.mp4")
+    rc = sp.main([raw, a, b, "--dur", "12", "--picks", "A:W1@10.4:hero,C:W1@0.1", "--write", plan])
+    out = capsys.readouterr().out
+    assert rc == 4 and "NO AUDIO" in out and "--audio C=" in out

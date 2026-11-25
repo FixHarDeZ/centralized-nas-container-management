@@ -22,6 +22,10 @@ segs from one source share ONE continuous bed (audio_in runs on from the previou
 only where the source changes — unless that bed would run into the source's "speech" spans; then that seg's
 audio starts at its picture (printed as a music jump). --music follow = every seg's audio at its picture
 (the one-table default, unchanged); --music continuous = the bed rule for one table too.
+--audio B=master (or B=<file>): table B's music comes from that source instead of its own file — a square crop
+of the trailer clip shares the trailer's timeline, so "B=master" keeps ONE bed across the raw hero and the crop's
+windows (Hermes' gta6 hand plan). The bed is keyed by the audio source, not the table. A source file with no
+audio stream is refused (exit 4: silent music, the "bed ran out" failure) — point --audio at its master.
 
 Pick syntax: [A:]W<n>[@<t>][:hero|:window][+wide][+win_x=N][+hero_x=N][+max=S]
   W<n>   window number from the table; @t = start there (source s, inside the window), default start
@@ -146,6 +150,64 @@ def overlaps(a, b, spans, pad=0.05):
     return any(a < e + pad and s - pad < b for s, e in spans or [])
 
 
+def bed_start(block, segs, meta):
+    """Where one continuous bed for the block (consecutive segs, one audio source) starts on that source: at the
+    first seg's picture when the whole block fits there, else at the first speech-free stretch long enough
+    (gta6 hand plan: hero at 10.4 + two crop windows = 9.5 s did not fit after 10.4 in a 19.3 s clip; the bed ran
+    from 0.1). None = no stretch holds it."""
+    i0 = block[0]
+    tab, reb = meta[i0]["tab"], meta[i0]["rebase"]
+    need = sum(segs[i]["dur"] for i in block)
+    total = float(tab.get("dur") or 1e9)
+    speech = tab.get("speech") or []
+    first = round(segs[i0]["in"] - reb, 3)
+    starts = [first, *sorted({round(EDGE * 10, 3)} | {round(b - reb + EDGE * 10, 3) for _, b in speech})]
+    for a in starts:
+        if a >= 0 and a + reb + need <= total and not overlaps(a + reb, a + reb + need, speech):
+            return a
+    return None
+
+
+def assign_audio(segs, meta, music, jumps):
+    """audio_src / audio_in per seg. follow = each seg's audio at its picture; continuous = one bed per run of
+    consecutive segs with the same audio source."""
+    i = 0
+    while i < len(segs):
+        m = meta[i]
+        if m is None:
+            i += 1
+            continue
+        block = [i]
+        while music == "continuous" and block[-1] + 1 < len(segs) and meta[block[-1] + 1] \
+                and meta[block[-1] + 1]["a"] == m["a"]:
+            block.append(block[-1] + 1)
+        a0 = bed_start(block, segs, meta) if len(block) > 1 else None
+        if len(block) > 1 and a0 is None:
+            jumps.append(f"music jump inside segs {block[0]}-{block[-1]}: no speech-free stretch of the source holds "
+                         "one bed for all of them; each seg's audio starts at its picture")
+        for k in block:
+            s, mk = segs[k], meta[k]
+            ain = round(a0, 3) if a0 is not None else round(s["in"] - mk["rebase"], 3)
+            if a0 is not None:
+                a0 += s["dur"]
+            if mk["a"] != "master":
+                s["audio_src"], s["audio_in"] = mk["a"], ain
+            elif s["src"] != "trailer" or mk["rebase"] or ain != s["in"]:
+                s["audio_src"], s["audio_in"] = "master", ain
+        i = block[-1] + 1
+
+
+def has_audio(path):
+    """True / False from ffprobe; None when it cannot tell (no ffprobe, no file)."""
+    import shutil
+    import subprocess
+    if not shutil.which("ffprobe") or not os.path.exists(path):
+        return None
+    p = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "a", "-show_entries", "stream=index",
+                        "-of", "csv=p=0", path], capture_output=True, text=True)
+    return bool(p.stdout.strip()) if p.returncode == 0 else None
+
+
 def same_file(a, b):
     return bool(a and b) and os.path.abspath(a) == os.path.abspath(b)
 
@@ -163,6 +225,8 @@ def main(argv=None):
     ap.add_argument("--short-card-ok", action="store_true")
     ap.add_argument("--write")
     ap.add_argument("--music", choices=["follow", "continuous"])
+    ap.add_argument("--audio", action="append", default=[], metavar="L=SRC",
+                    help="music source of table L: master or a file on the same timeline as that table")
     a = ap.parse_args(argv)
 
     tabs = {}
@@ -211,6 +275,18 @@ def layout(a, tabs):
     is_trailer = {t: (len(tabs) == 1 if trailer is None else same_file(tab.get("src"), trailer))
                   for t, (_, tab) in tabs.items()}
     music = a.music or ("follow" if len(tabs) == 1 else "continuous")
+    audio = {}
+    for spec in a.audio:
+        k, _, v = spec.partition("=")
+        if k not in tabs or not v:
+            raise SystemExit(f"--audio {spec!r}: want L=master|<file> with L one of {', '.join(sorted(tabs))}")
+        audio[k] = v
+    for t, (_, tab) in tabs.items():
+        src = audio.get(t) or ("master" if is_trailer[t] else tab.get("src"))
+        if src != "master" and any(p["t"] == t for p in picks) and has_audio(src) is False:
+            print(f"NO AUDIO: {src} (table {t}) has no audio stream — its segs would get silent music. Pass "
+                  f"--audio {t}=<that source's master or original clip>")
+            return 4
 
     card = None
     if a.endcard:
@@ -259,7 +335,7 @@ def layout(a, tabs):
                 print(f"  {s['raw']:<16} in {s['in']:7.2f}  clean {s['cap_f'] / fps:5.2f} s")
         return 1
 
-    out, t0, prev, jumps = [], 0.0, None, []
+    out, t0, jumps, meta = [], 0.0, [], []
     print("seg   t0      in     dur  mode    pick")
     for i, (s, f) in enumerate(zip(segs, alloc)):
         d = round(f / fps, 4)
@@ -267,30 +343,19 @@ def layout(a, tabs):
             seg = {k: v for k, v in s.items() if k != "fixed_f"}
             seg["dur"] = d
             label = "endcard"
-            prev = None
+            meta.append(None)
         else:
             _, tab = tabs[s["t"]]
-            rebase = float(tab.get("rebase") or 0.0)
             src = "trailer" if is_trailer[s["t"]] else tab["src"]
             seg = {"src": src, "in": round(s["in"], 3), "dur": d, "mode": s["mode"], "snap": False}
             seg.update(s["extra"])
-            ain = round(s["in"] - rebase, 3)
-            if prev and prev["t"] == s["t"] and music == "continuous":
-                bed = round(prev["ain"] + prev["dur"], 3)
-                if bed + d <= float(tab.get("dur") or 1e9) and not overlaps(bed + rebase, bed + rebase + d, tab.get("speech")):
-                    ain = bed
-                else:
-                    jumps.append(f"music jump at seg {i} ({s['raw']}): the bed from seg {i - 1} would run into "
-                                 "speech / past the source end; audio starts at the picture")
-            if src != "trailer":
-                seg["audio_src"], seg["audio_in"] = tab["src"], ain
-            elif rebase or ain != round(s["in"], 3):
-                seg["audio_src"], seg["audio_in"] = "master", ain
-            prev = {"t": s["t"], "ain": ain, "dur": d}
+            meta.append({"a": audio.get(s["t"]) or ("master" if src == "trailer" else tab["src"]), "tab": tab,
+                         "rebase": float(tab.get("rebase") or 0.0), "raw": s["raw"]})
             label = s["raw"]
         print(f"{i:<4} {t0:6.2f} {seg['in']:7.2f} {d:6.3f}  {seg['mode']:<7} {label}")
         out.append(seg)
         t0 += f / fps
+    assign_audio(out, meta, music, jumps)
     last_t0 = sum(alloc[:-1]) / fps
     print(f"dur {a.dur} = {sum(alloc)} frames; last seg t0 = {last_t0:.3f} s, length {alloc[-1] / fps:.3f} s "
           f"-> CTA speech <= {alloc[-1] / fps - CTA_TAIL:.2f} s (starts >= {last_t0:.2f}, vo_end <= {a.dur - CTA_TAIL:.2f})")

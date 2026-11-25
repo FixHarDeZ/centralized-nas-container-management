@@ -124,3 +124,15 @@ def test_wash_frames_finds_the_white_flash_only():
     means = [120, 205.1, 231.9, 250.3, 255.0, 250.6, 233.9, 209.3, 120, 229.9]
     stds = [40, 13.0, 5.5, 1.4, 0.0, 1.0, 3.9, 9.1, 40, 20.2]     # last: a bright frame WITH detail (12.20 s)
     assert b.wash_frames(means, stds, 78.154, 30) == [78.221, 78.254, 78.287, 78.321, 78.354]
+
+
+def test_only_master_timeline_audio_is_checked_against_the_master_vtt(tmp_path):
+    """segplan multi-table (2026-11-25): a seg whose music comes from a second source's master is on THAT file's
+    timeline; checking it against the trailer's speech gaps raised a false PLAN ERROR."""
+    paths = {"master": str(tmp_path / "master_np20.mp4"), "trailer": str(tmp_path / "tr_np20.mp4")}
+    base = str(tmp_path)
+    assert b.audio_on_master({}, paths, base)
+    assert b.audio_on_master({"audio_src": "master"}, paths, base)
+    assert b.audio_on_master({"audio_src": "master_np20.mp4"}, paths, base)        # the master by its path
+    assert not b.audio_on_master({"audio_src": "master_np19.mp4"}, paths, base)
+    assert not b.audio_on_master({"audio_src": "/w/winsqa_np19.mp4"}, paths, base)

@@ -41,3 +41,10 @@ def test_verdict():
     assert pc.verdict({"r": {"flags": [{"band": "bottom"}], "matched": 9}}) == "change"
     assert pc.verdict({"r": {"flags": [], "matched": 9}}) == "stable"
     assert pc.verdict({"r": {"flags": [], "matched": 0}}) == "no-match"
+
+
+def test_a_jump_to_the_other_box_starts_a_new_track():
+    """cal-d: ref2 matched the strawberry box at 0 s and the chocolate box from 2.5 s (35 % of the width away)."""
+    assert pc.new_track((0.30, 500), (0.65, 520))
+    assert not pc.new_track((0.30, 500), (0.40, 560))        # she moves the box: same object
+    assert not pc.new_track(None, (0.65, 520))
