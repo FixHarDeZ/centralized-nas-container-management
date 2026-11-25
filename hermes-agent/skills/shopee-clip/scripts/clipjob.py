@@ -103,7 +103,8 @@ MIRROR_CHAT_ENV = "SECRETARY_TELEGRAM_CHAT_ID"
 HERMES_DB = os.environ.get("CLIPJOB_STATE_DB", "/opt/data/state.db")   # Hermes sessions: clarify waits
 GATEWAY_PID = os.environ.get("CLIPJOB_GATEWAY_PID", "/opt/data/gateway.pid")
 PROC = "/proc"
-ADOPT_ENV = (MIRROR_TOKEN_ENV, MIRROR_CHAT_ENV, "TZ")
+REEL_ENV = ("FB_PAGE_ID", "FB_PAGE_TOKEN")      # vault stacks.hermes_agent.facebook.* (Page token, posts drafts)
+ADOPT_ENV = (MIRROR_TOKEN_ENV, MIRROR_CHAT_ENV, "TZ", *REEL_ENV)
 FINALS_DIR = os.environ.get("CLIPJOB_FINALS", "/opt/data/clips/finals")   # delivered final + cover, for review
 KEEP_DAYS = 7              # Fix 2026-11-16: keep them a week (cleanup deletes the workdir and Downloads copies)
 PLATE_TRIAL = os.environ.get("CLIPJOB_PLATE_TRIAL", "1") == "1"   # Fix 2026-11-24: try a scene plate on the next 🤖 🧑/✋
@@ -2019,6 +2020,36 @@ def cmd_deliver(j, a):
     return j["delivery"]
 
 
+def cmd_reel(j, again=False):
+    """Fix 2026-11-25: the delivered final goes to the Facebook Page as a DRAFT Reel with the caption, the hashtags
+    and the AI label (reels.py); Fix adds the Shopee affiliate basket in the Facebook app and publishes it. The
+    Reels API has no product-tag field, so the draft is as far as a script can take it."""
+    m = (j.get("delivery") or {}).get("mirror")
+    if j["status"] != "delivered" or not m:
+        raise Refused(f"job {j['job']} is not delivered (or was delivered before the caption was recorded)")
+    if (j.get("reel") or {}).get("video_id") and not again:
+        return {"job": j["job"], "reel": j["reel"], "note": "draft already uploaded; --again uploads another"}
+    page, token = (os.environ.get(n, "").strip() for n in REEL_ENV)
+    if not page or not token:
+        raise Refused("FB_PAGE_ID / FB_PAGE_TOKEN not set in this container (vault stacks.hermes_agent.facebook.*)")
+    if not os.path.exists(m["file"]):
+        raise Refused(f"final {m['file']} is gone (clips/finals keeps {KEEP_DAYS} days)")
+    sys.path.insert(0, HERE)
+    import reels
+    try:
+        r = reels.draft(m["file"], reels.description_for(m.get("caption"), m.get("hashtags")), page, token)
+    except (reels.GraphError, OSError) as e:
+        log(j, f"reel draft failed: {e}")
+        save(j)
+        raise Refused(f"Facebook did not take the draft: {e}") from None
+    j["reel"] = {"video_id": r["video_id"], "state": "draft", "at": iso(), "status": r["status"]}
+    log(j, f"reel draft uploaded: {r['video_id']}")
+    save(j)
+    return {"job": j["job"], "reel": j["reel"],
+            "next": "tell Fix: ร่าง Reel (แคปชัน + hashtag + ป้าย AI) อยู่ในเพจแล้ว — เปิดร่างในแอป/Meta Business Suite "
+                    "ปักตะกร้า Shopee แล้วกดโพสต์"}
+
+
 def summary(j):
     out = {"job": j["job"], "mode": j["mode"], "production": j["production"], "status": j["status"],
            "product": j["product"], "updated": j["updated"],
@@ -2088,6 +2119,8 @@ def main(argv=None):
     s.add_argument("--why"); s.add_argument("--file")
     s = sub.add_parser("reopen"); s.add_argument("job"); s.add_argument("--reason", required=True)
     s = sub.add_parser("mirror"); s.add_argument("job"); s.add_argument("--auto", action="store_true", help=argparse.SUPPRESS)
+    s = sub.add_parser("reel"); s.add_argument("job")
+    s.add_argument("--again", action="store_true", help="upload another draft of the same final")
     s = sub.add_parser("close"); s.add_argument("job", nargs="?")
     s.add_argument("--auto", action="store_true", help=argparse.SUPPRESS)       # the deliver timer
     s.add_argument("--token", help=argparse.SUPPRESS); s.add_argument("--after", type=float, help=argparse.SUPPRESS)
@@ -2276,6 +2309,8 @@ def main(argv=None):
                     notify(mirror_fail_text(m), close_keyboard(a.job) if c.get("state") == "pending" else None)
                 raise Refused(f"Secretary copy failed: {m['sent']}")
             return out({"job": a.job, "mirror": m["sent"]})
+        if a.cmd == "reel":
+            return out(cmd_reel(j, a.again))
         if a.cmd == "reopen":
             if j["status"] != "delivered":
                 raise Refused(f"job {a.job} is {j['status']}; only a delivered job is reopened for a revision")
