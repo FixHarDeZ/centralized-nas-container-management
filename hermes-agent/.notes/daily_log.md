@@ -2011,3 +2011,18 @@ Fix: "ตรวจงานเมื่อวานกับวันนี้�
   pages_show_list / pages_read_engagement / pages_manage_posts, start → rupload → finish (`video_state`
   PUBLISHED/SCHEDULED, `description`), 30 posts / 24 h, 9:16, ≥540×960, 3–90 s, AAC 48 kHz — yuedpao final fits
   (720×1280 H.264 24 fps, AAC 48k stereo 197 kbps). Not built; waiting for Fix: Page or profile, button vs auto.
+- Fix answered: posts Reels on a **Facebook Page**, Shopee Affiliates menu works on his account, flow = **ไอยูอัป
+  ร่าง → Fix ปักตะกร้า + โพสต์**. Research: Shopee basket on FB = Facebook Affiliate Partnerships (Thailand live,
+  Pages + professional profiles), tagging only in-app (Professional dashboard → Monetization → Affiliate
+  Partnerships → Shopee Affiliates); Reels Publishing API has no product-tag/affiliate field; draft editability
+  in the app not documented.
+- Built `a6658e9`: `scripts/reels.py` (stdlib; start → rupload → finish `video_state=DRAFT`, `description` =
+  caption + hashtags, `is_ai_generated=true`; token only in POST body/headers; status poll ≤2 min) +
+  `clipjob.py reel <job> [--again]` (uses `delivery.mirror` file/caption/hashtags; FB_PAGE_ID/FB_PAGE_TOKEN adopted
+  from the gateway env). 7 tests (fake Graph). Dormant: no vault key yet, deliver does not call it, no doc points
+  Hermes at it.
+- Next: Fix creates the Meta app + long-lived Page token and puts `stacks.hermes_agent.facebook.page_id` /
+  `.page_token` in the vault himself → manifest `FB_PAGE_ID`/`FB_PAGE_TOKEN` + `make secrets` + `make
+  sync-test-vault` + deploy hermes-agent (no open job) → test draft of yuedpao's final (kept until 12-02) → Fix
+  checks the basket can be added to that draft. Pass = deliver auto-drafts every clip + router line; fail =
+  fallback (first-comment link or manual post).
