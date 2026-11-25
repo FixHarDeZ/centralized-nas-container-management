@@ -1867,3 +1867,54 @@ Fix: "ตรวจงานล่าสุด … เรื่อง prompt scen
   pre-analysis, pills dropped on close-ups).
 - Watch next order: plate TRIAL (🤖 🧑/✋), number subs, box_crop panels, refusal → Omni 1.1, pack `warn`,
   second job packed at once. Omni 1.1 leaves Flow 2026-12-05.
+
+## 2026-11-25 — check of the 11-24 pm → 11-25 clip jobs + live-edit port
+Fix: "ตรวจงานเมื่อวานกับวันนี้ว่างานออกมาโอเคไหม ต้อง enhance อะไรเพิ่ม … งานวันนี้ดูนานๆผิดปกติ".
+- 6 jobs, all delivered, Secretary copy ok, closed (tap/auto):
+  - **huawei-freeclip2s** 🎬 film 17.1 s, 41 min. Clean. Ends on the black "FreeClip 2 Special Edition" card, no product.
+  - **hw-fit5** 🎬 film 20 s, 126 min (footage gate: every product shot carries watch-UI text; Fix said UI ≠ caption).
+    Clean; CTA = brand end card, no product.
+  - **gta6-codebox-gp2** 🎬 game 19 s. Logged 498 min, real 23:06→04:33 = 327 incl. 62 min Fix wait (two clarify
+    timeouts on reuse-vs-new; 11-19's gta6-codebox-gp). Footage window soft (494 px crop of the vertical "Now
+    Playing" clips upscaled to 720), same as 11-19. Box sticker on through the CTA.
+  - **huawei-freebuds-neo** 🎬 film 21.9 s, 66 min. Music to the end; the last 2.4 s after the CTA line have no
+    sub/pill/sticker (sticker off from ~16.5 s). The pink "pixel" shot is a tufted rug, not an upscale.
+  - **promom-cal-d-kiiz** 🧑📝 10 s, 95 min (photo gate 45 min: one vision call timed out 420 s, next 271 s).
+    Fine; sub shows "หนึ่งปีขึ้นไป" under a "1 ปีขึ้นไป" label at the same time.
+  - **cal-d-protein-1mo** 🧑🤖 10 s, 257 min, 30 cr. ❌ **Product colour drift shipped**: refs have navy bottom
+    bands; from ~2 s the chocolate box's band is brown and the strawberry box turns pink (5 of 6 idcheck tiles).
+    The idcheck vision call answered "MATCH, COUNT 0" and named the first box wrong; the question listed face/top
+    colours but not the bottom band. Also: subs sit on the boxes, "…8 ปีขึ้นไป 20" / "กรัมโปรตีน" split across
+    two sub events, "Link below!" on her face (noted in the row).
+- Why slow (state.db + agent.log):
+  - cal-d photo gate 11:43→14:54 = 191 min, LLM 185, Fix wait 0. One image: two boxes, a red "x2" disc on each
+    top-right corner + "OFFICIAL STORE" banner. `box_crop.py` returned full-height rects (box+badge+banner); Hermes
+    then wrote 27 scratch pixel-probe scripts, downloaded promom.co.th packshots (vision: none clean), painted the
+    badge out by hand. Turns of 50–180k reasoning chars. Never asked Fix. Heartbeat ⏳ went out 10× (cron works).
+  - gta6: `started` = earliest workdir mtime = img2.jpg of the order Fix cancelled at 20:14 ("ยกเลิกก่อนผม
+    สั่งผิด") → +3 h phantom in the total and "เตรียม 175". Footage 01:26→04:07: two sources but `segplan.py` takes
+    one table; Hermes read build_v5/segplan source 6× for the `audio_in` mapping; song lyrics counted as speech
+    (window 1.5 s) → blank vtt + re-run; windows.py 1 s OCR missed an L2 prompt at 12.5 s (own 0.5 s probe).
+    Longest turn 1255 s / 245k reasoning chars. The 23:06–23:45 turn (34 API calls in agent.log) has no rows in
+    state.db (ids 62124→62125 consecutive) — Hermes core, not traced; the 00:42 turn rebuilt state from files.
+  - kiiz: vision 15.5 of 45 min.
+- Plate TRIAL: cal-d was the qualifying order (🤖 🧑). flow-driver SKILL (with the pointer) was read,
+  `scene-plate.md` never opened, no `plate:` in the clip-log row → skipped silently.
+- `--pull`: blocked first — `2bfefa3` (ai-deck session) committed workstation `.venv/bin/python` + `uv.lock`, the
+  clone had its own uv drift on both. Stashed in the clone ("clone uv drift …, not skills"). 9 live edits pulled
+  (chipcheck tie on near-identical variants; multi-source segplan merge + audio_in; product-film 0.5 s OCR +
+  legal-band crop; bed ≥ Σ shots; DAM RGBA renders; storyboard vo_rate first; roster look source; box_crop fixed
+  names; OCR before verdict sheets; flat-face badge paint recipe). **Changed on port:** product-image-prep's new
+  "measured fix → PASS, no second sheet, no ask-Fix" → kept measurement-instead-of-sheet-2, restored the cap (a fix
+  that does not converge goes to Fix). gameplay SKILL sentence → pointer; house-rules roster note compressed,
+  incident → house-rules-history (budgets). `7be59bb`, pushed; clone stash "hermes live 11-25, ported in
+  7be59bb"; `make hermes-skills` synced `7be59bb` (285 container tests). No open job at sync.
+- The sync's own `uv run` re-dirtied the clone's `.venv/bin/python` (→ /usr/bin/python): `.venv/` is tracked in
+  git, so any later commit touching it blocks the clone's `git pull` again. Not committed (other session's file).
+- Proposals for Fix (nothing built): (1) pixel colour check of the ref palette on late frames inside `idcheck`
+  (vision cannot be trusted on colour); (2) photo-gate wall-clock cap enforced by clipjob/heartbeat + `box_crop`
+  badge/banner split; (3) `segplan` multi-table (src/audio_src/audio_in per seg) + windows.py lyrics-as-music and
+  0.5 s OCR option; (4) `started` clamp (cancelled order / copied files); (5) subs keep number+unit together and
+  show digits; (6) plate TRIAL: gate in `reserve` or drop; (7) untrack `.venv/` from the repo (owner's call).
+- Still open from 11-19: 🎬 CTA without the product (fit5, freeclip2s, neo today; the sticker rule keeps the
+  sticker off the CTA seg).
