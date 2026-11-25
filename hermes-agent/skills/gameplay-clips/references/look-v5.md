@@ -98,6 +98,12 @@ Minimal plan that passed `--check` (no beats, no release pill, no logo, header-o
     Levers: lower `music_gain`, raise `vo_gain`. The window that fails is normally the FIRST phrase, since the
     cold open carries the loudest music — or the LAST (CTA) window when the end card's audio is cut from the
     trailer's climax music. Either way size the nudge from THAT window's number, not from the average.
+    **Sweep the two knobs instead of sizing one nudge:** the gate re-renders from the raw stems in ~1 s, so loop
+    `music_gain`/`vo_gain` pairs in plan.json, re-run the gate, and take the MILDEST pair whose MIN delta clears 6
+    with ≥1.5 dB of margin — a first swing of "music halved, VO doubled" passes but buries the music under the
+    voice. Do NOT compute the swing from the failing delta: `vo_gain` also drives the sidechain KEY, so raising it
+    deepens the duck as well as lifting the voice, and delta moves faster than a static ratio predicts (a 2.2 dB
+    window passed at 0.75→0.5 / 1.25→1.75). Measure each pair; rebuild once with the winner.
   - The NAS `python3` has no numpy: run the delta reader with `uv run --with numpy python <file>.py`, and write that reader as a file (a heredoc that references a multi-MB wav trips the lifecycle guard).
   Compare RMS over the VO-phrase windows in `work/timeline_v5.json`.
   Both numbers must be pre-master — master's gain scales them equally so the ratio is unchanged,

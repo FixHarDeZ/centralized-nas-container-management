@@ -69,7 +69,7 @@ a circle and lost its top and bottom. The workdirs already held the right pictur
    picture (crop / another frame) and rebuild. `--qr-ok "<what>"` only for the product's own screen. It reads Latin
    and digits; Thai promo text in a picture is the photo gate's job (`product-image-prep.md`), before the cover.
 3b. **Vision only for detail slots: ONE call on `check_sheet` with `ask_vision`** (null for a hero-only cover = no
-   call). Each answer must name its `slot_labels` thing (same order) without being told the label, and no store
+   call). **Skip the call when the slot's picture was already vision-verified in THIS job after its final edit (the photo gate or the cover-crop pick read that exact file): the answer is known — cite the earlier verdict and spend the budget where no verdict exists. The call exists to catch a WRONG picture, not to re-see the same bytes.** Each answer must name its `slot_labels` thing (same order) without being told the label, and no store
    logo / watermark. A vague answer ("a wrist", "a dark room", "unclear") = wrong picture or loose box: fix that
    slot, rebuild, ONE re-check; still failing = drop the slot. Thai spelling is NOT read back (vision garbles Thai;
    the script draws the spec strings verbatim). **A timed-out read is not re-sent as is:** drop to the slot tiles
