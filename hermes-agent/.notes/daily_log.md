@@ -1985,3 +1985,29 @@ Fix: "ตรวจงานเมื่อวานกับวันนี้�
   the job json had no `plate` key (gate not live yet) and `clipjob plate` refuses delivered jobs → backfilled
   `plate: used` via `set_plate` + `save` as `hermes` (event line says backfilled), so `plate_trial_done()` =
   yuedpao-rushbag and the reserve gate stops asking. Fix's verdict on the plate decides adopt / remove.
+
+## 2026-11-25 (3) — pills on the presenter's head + FB Reels question
+
+- Fix: "คลิปล่าสุดข้อความด้านบน และคำ link below! ทับตัวละคร" (yuedpao-rushbag). Measured: full-body shots, Haar
+  face 103–145 px at y≈190–340, hair top y≈145 → the fixed centred pill band (y196–252) is her forehead/eyes.
+  pillclear's skin share under the 230 px pill read 0.44–0.65 (< 0.62 / peak < 0.75: small face + orange hair +
+  trees) so `No Bounce` never tripped it, and the CTA is exempt from moving by design.
+- Ported first: Hermes' 2 yuedpao live edits (presenter-graphics punch-window loop, scene-plate facecheck args +
+  project-root tab switch) `ca2a9d9`; clone stash "hermes live 11-25 yuedpao, ported".
+- Built `7ad72bb`: `pillclear.head_box/slot/relocate/face_boxes/measure_faces` — head = Haar face (minSize 60,
+  middle-skin ≥0.35, biggest) + 0.2 w a side + 0.5 h above, over the pill's window; a centred pill that touches it
+  slides left/right of the head INSIDE the band at 40→30 pt (X 60–660; band sides are free on all apps). Pill
+  stays in y196–252 so graphics_layer PILL_BAND / autogfx PILL_BOTTOM / frame-check crop stay valid. No side room:
+  non-CTA → old time-move/drop; CTA → not drawn, `report.json` `headlines` → `autogfx gfx` adds it as a headline by
+  itself, `graphics_layer --check` fails while it is missing. `report.json` `pill_slots` lists slid pills. cv2 via
+  `uv run --with opencv-python-headless<5` subprocess (post's own env has none); unmeasured = skin-only + NOTE.
+- Verified: replay of post_presenter on yuedpao's real `shot1_fx.mp4` on the NAS → `No Bounce` x 469 @32 (right of
+  her head), `Link below!` x 62 @30 (left, above the product cut-out); real gfx.json `--check` = layout OK; frame
+  sheet old vs new checked. Tests 297 passed / 20 skipped. Docs: presenter-post pillclear bullet, presenter-graphics.
+- **Not synced**: `grand-bazaar-ps5` (🎬) opened 21:07. Sync after it closes (plain `make hermes-skills`; drift →
+  `--pull` first).
+- Seen, not fixed: yuedpao's product cut-out has a small detached white island (brand tag) beside it.
+- FB Reels auto-upload (Fix asked): Meta Reels Publishing API = Pages only (no personal profile), Page token with
+  pages_show_list / pages_read_engagement / pages_manage_posts, start → rupload → finish (`video_state`
+  PUBLISHED/SCHEDULED, `description`), 30 posts / 24 h, 9:16, ≥540×960, 3–90 s, AAC 48 kHz — yuedpao final fits
+  (720×1280 H.264 24 fps, AAC 48k stereo 197 kbps). Not built; waiting for Fix: Page or profile, button vs auto.
