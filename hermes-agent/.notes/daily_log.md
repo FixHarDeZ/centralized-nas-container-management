@@ -2026,3 +2026,7 @@ Fix: "ตรวจงานเมื่อวานกับวันนี้�
   sync-test-vault` + deploy hermes-agent (no open job) → test draft of yuedpao's final (kept until 12-02) → Fix
   checks the basket can be added to that draft. Pass = deliver auto-drafts every clip + router line; fail =
   fallback (first-comment link or manual post).
+- **Live synced `f8a726c`** 23:00 after grand-bazaar-ps5 closed (no drift, 330 container tests, shopee-clip 11
+  files updated). Live check: `pillclear.py` has `X_MIN` + `measure_faces`, `post_presenter.py` writes
+  `pill_slots`, `reels.py` + `clipjob.py reel` present (dormant until the Page token is in the vault). Watch the
+  next 🧑 order: `pill_slots` / `beside her head` NOTE lines, CTA handed to autogfx when no side room.
