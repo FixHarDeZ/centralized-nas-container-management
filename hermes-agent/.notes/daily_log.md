@@ -1975,3 +1975,13 @@ Fix: "ตรวจงานเมื่อวานกับวันนี้�
   pulled after a repo change is NOT a patch onto HEAD — merge it against the live base.
 - **Still not synced**: `yuedpao-rushbag` (🧑) opened 19:40 (intake). Live = `496b651`. Sync after it closes:
   plain `make hermes-skills` (refuses on new drift → `--pull` + 3-way merge again).
+- **Synced live `a4672e9`** at 20:46 after yuedpao-rushbag closed (20:48 auto close): plain `make hermes-skills`,
+  no live drift, container gate 314 passed / 2 skipped. shopee-clip 15 files, flow-driver 1, gameplay-clips 9,
+  `/opt/data/scripts/clip_heartbeat.py` updated (`PREP_CAP_MIN` present; run with no open job = silent, exit 0).
+  Live smoke as `hermes`: `clipjob.prod_check` on cal-d shot1 + ref1/ref2 → `change`, bottom band 3.0–4.0 s
+  ΔE 35.2 via ref1, ref2 stable 5.0, 15 s; Thai flag line renders.
+- yuedpao-rushbag (🧑 🤖, under `496b651`): delivered 20:43, 65 min (prep 1 / gen+review 53 / post 11), wait Fix
+  10, vision 5/7, 0 timeouts, 30 cr, no trouble. **Scene plate used** (Nano Banana, 0 cr — first trial run) but
+  the job json had no `plate` key (gate not live yet) and `clipjob plate` refuses delivered jobs → backfilled
+  `plate: used` via `set_plate` + `save` as `hermes` (event line says backfilled), so `plate_trial_done()` =
+  yuedpao-rushbag and the reserve gate stops asking. Fix's verdict on the plate decides adopt / remove.
