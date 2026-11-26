@@ -2054,3 +2054,18 @@ Fix: "ตรวจงานเมื่อวานกับวันนี้�
   Clone stash `metroid live edits ported 91800b1`. **Live synced `fddb96d`** (335 container tests); live
   `pick-hook --category game` = game-5, game-2 excluded. Run `tests/test_hermes_skills.py` too before syncing.
 
+## 2026-11-26 (2) — 🪝 copy button for a new post hook (Fix: "อยากได้ปุ่ม copy คำ hook … ไม่ใช้คำซ้ำเดิมๆ")
+- `064d205`: `clipjob.py deliver --post-hook "<Thai line>"` required in every mode → 3rd copy button
+  "🪝 Copy hook" + Hook block in the copy-button message (Fix's chat + Secretary copy). Gate: refused when it
+  repeats a hooks.md hook line (list/table rows + retired wording) or an earlier clip's `post_hook` (char-bigram
+  Dice ≥ 0.6 after the product's own name words are removed, or one inside the other), or carries price / CJK /
+  เบื่อ…จำเจ; the job's own earlier rows (same sha or `job <job> production=`) don't count. Calibrated: template
+  with another genre/name refused, fresh lines and a 2nd clip of the same product pass. Stored on the clip-log
+  row (`post_hook`) + `delivery.mirror.post_hook`. `send_copy_buttons.py` 5th arg optional (mirror resends of
+  older deliveries keep 2 buttons), `build()` unit-tested. Guidance: hooks.md → Post hook. Both routers updated.
+- Same commit ports Hermes' metroid live edits (presenter-graphics: 0/N colour = colour-model failure, hand
+  headline recipe, title from a full-res frame; house-rules: one sheet per beat set). house-rules hit its 20 KB
+  budget again → Character pick moved to `templates/storyboard.md` (pointer left). 322 tests incl. budgets.
+- **Not synced**: village-shade (🧑 game, intake 07:50) open; waiter running. Clone holds the 2 pulled files
+  (ported) → stash, then `make hermes-skills`. Copy button with 3 rows not yet seen live: first real deliver.
+
