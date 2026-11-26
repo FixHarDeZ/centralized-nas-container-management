@@ -26,7 +26,9 @@
   live figure is below the plan. **When the balance has not been read in this run** (the board goes out before any
   browser session exists, and a 📝 run may never open one), quote the LAST-read figure WITH its read date on the
   board instead of omitting the line or launching Chrome pre-approval for that one number — a figure genuinely
-  below the plan still surfaces in the cost question Fix answers. Spend per job: clipjob records it (📝 = the published rate per shot length,
+  below the plan still surfaces in the cost question Fix answers.
+  **The last-read figure is on disk:** grep `/opt/data/clips/jobs/*.json` and clip-log `notes` for `balance`/`เหลือ` before concluding you have none — another open job's note usually carries the newest reading, and going to the browser for that one number costs a Chrome launch you did not need pre-approval for.
+  Spend per job: clipjob records it (📝 = the published rate per shot length,
   `credits_est` in the row, since 2026-11-22), so no figure is needed in `--notes`.
 - Never edit inside Flow (40 credits per edit). Never retry a failed submit with his credits without saying so.
 - **Do not pre-run `verify-clip.py` before `deliver`** (`deliver` runs it; the copy it leaves in Downloads can make
@@ -85,7 +87,8 @@
 - **Every outbound Thai message passes the CJK/full-width gate** (a stray pair typed into Thai reads as corruption
   to Fix). `send_status.py` / `send_photo.py` refuse such a line (exit 3, nothing sent; emoji pass) — send through
   them, never a scratch sender (they also stamp the time `clip_heartbeat` reads); a `clarify` is typed
-  straight into the tool call, so run `send_status.py --check "<exact question>"` on that exact string first. Never
+  straight into the tool call, so run `send_status.py --check "<exact question>"` on that exact string first.
+  **A multi-line board goes out from its file:** write it to `<workdir>/board.txt`, then run `send_status.py --check "$(cat <file>)"` and send with the SAME `"$(cat <file>)"` substitution — the checked string and the sent string are then identical, which retyping the board into the send can never guarantee (and that file is the copy the job rules require you to keep anyway). Never
   send a flagged line, and never quote the characters when correcting — describe the word instead
   ("พิมพ์ผิด 1 คำเป็นอักขระแปลก ๆ ที่บรรทัดนั้น"). Do not leave the corrupted line as the last word.
 
