@@ -2091,3 +2091,41 @@ Fix: "ตรวจงานเมื่อวานกับวันนี้�
 - Watch next deliveries: 3-button copy message (🪝 first live send), `post_hook` refusals and what Hermes writes,
   `pill_slots` notes on the next 🧑, `--hook-id` on every board.
 
+## 2026-11-26 (3) 🛠 — "รับคิวแล้ว" for an order sent mid-run (Fix: "ทำเรื่องตอบ รับคิวแล้ว ด้วยเลย")
+- **Correction of (2):** a mid-turn message does NOT wait unseen. Live `busy_input_mode: interrupt`:
+  - photos/album → the turn stops (`Interrupt requested (soft): user sent a new message`) and the next turn reads it;
+  - plain text → `redirect`, folded into the running turn (agent `_supports_active_turn_redirect: True`);
+  - during compression/subagents → demoted to queue.
+  
+  The gateway's own busy ack goes out at once, in English, e.g. "⚡ Interrupting current task (2 min elapsed,
+  iteration 4/250, running: terminal). I'll respond to your message shortly."
+  Real case today: yuedpao-hoodie order 13:30 (agent idle) → barrel-pants 13:32 mid-turn → only that English
+  line, then nothing until hoodie's board 13:39. Intake of barrel-pants (`gated until hoodie`) sent Fix nothing.
+  11-21 comulytic: same English ack, then Hermes' own Thai line 3.5 min later.
+  Ack send is not logged anywhere; inferred from the code path (ack runs right after the interrupt, no
+  `HERMES_GATEWAY_BUSY_ACK_ENABLED`, onboarding `busy_input_prompt: true` = composed before).
+- Built `c2969e6` (pushed):
+  - `hermes-agent/locales/en.yaml`: i18n overlay (partial; layer 2 over bundled `/opt/hermes/locales/en.yaml`).
+    Every `gateway.busy.*_head` = "📥 รับคิวแล้วค่ะ" + Thai tails that read true for an order, a reply or a
+    question; `ack_detail_wrap: ""` drops the iteration/tool detail.
+  - `sync.sh` copies `hermes-agent/locales/*.yaml` → `$HERMES_HOME/locales/` (`/opt/data/locales/`); gate adds
+    `--with pyyaml` + `tests/test_hermes_locales.py` (keys must exist in the bundled catalog — Hermes renaming one
+    brings English back silently; runs only inside the container).
+  - `clipjob.py intake`: another fresh open job (≤12 h) → sends "📥 รับคิวแล้วค่ะ · <product>\nคิวที่ N ต่อจาก
+    <jobs>" via `tg` with NO reply_markup (`notify()` would remove the job ahead's ✅/🔁 keyboard), stamps
+    `queued_behind`, event `queued behind X (queue line msg N)`; send failure (incl. `read_token` SystemExit) is
+    logged, intake still saves. `next` tells Hermes: send no other, note gated, finish the job ahead.
+  - `clip_heartbeat.open_job`: skips a job whose `queued_behind` job is still open (it would name the queued job
+    and fire the 30-min photo-gate line on an order that only waits).
+  - house-rules: intake sends the queue line, no second "รับออเดอร์".
+  - test_clipjob sets `CLIPJOB_NO_TG=1` module-wide: the container gate holds the real token.
+- Verified: overlay resolved in a fresh container process with a throwaway `HERMES_HOME` (all 6 modes Thai, detail
+  gone, other strings English); 328 local + 347 container tests (bundled-key test ran there).
+- **NOT live yet**: yuedpao-barrel-pants open (board approved 14:42). After it closes: `make hermes-skills
+  ARGS=--pull` → port → `make hermes-skills` (copies the overlay) → **gateway restart** (overlay is cached per
+  process; `docker restart hermes-gateway` only with no open job and the last turn ended). Then check
+  `/opt/data/locales/en.yaml` + a fresh-process `t()`; first live proof = the next order sent mid-turn.
+- Not changed: interrupt mode itself (a new order mid-turn still stops the running tool call; 11-21 it dropped a
+  31 s vision read). Open: an order sent while a `clarify` is pending is taken as the clarify's answer
+  (run_inbound `_hm_clarify_reply` runs before the busy path).
+
