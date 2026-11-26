@@ -452,7 +452,7 @@ def test_cli_gameplay_job_note_deliver_reopen(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(cj, "av_durations", lambda p: (20.0, 20.0))
     monkeypatch.setattr(cj, "run", lambda cmd: (0, json.dumps({"ok": True}), ""))
     args = ["deliver", "g-1", "--final", str(final), "--hashtags", "#game", "--cover", str(cover), "--caption", "c",
-            "--hook-id", "gph-1", "--category", "game"]
+            "--hook-id", "gph-1", "--category", "game", "--post-hook", "ใครเล่นเกมนี้จบแล้วต้องลองโหมดใหม่"]
     assert cj.main(args) == 0
     row = json.loads(log.read_text(encoding="utf-8").splitlines()[-1])
     assert row["style"] == "gameplay" and row["credits"] == 0 and row["duration_s"] == 20.0 and row["edit_id"] is None
@@ -755,7 +755,7 @@ def closing(tmp_path, monkeypatch):
                     "--workdir", str(wd)]) == 0
     final = wd / "final.mp4"; final.write_bytes(b"FINAL"); cover = wd / "thumb.jpg"; cover.write_bytes(b"COVER")
     args = ["deliver", "g-1", "--final", str(final), "--hashtags", "#game", "--cover", str(cover), "--caption", "c",
-            "--hook-id", "gph-1", "--category", "game"]
+            "--hook-id", "gph-1", "--category", "game", "--post-hook", "ใครเล่นเกมนี้จบแล้วต้องลองโหมดใหม่"]
     sent.clear()
     assert cj.main(args) == 0
     return {"wd": wd, "dl": dl, "sent": sent, "args": args, "final": final}
@@ -882,7 +882,7 @@ def mirroring(tmp_path, monkeypatch):
                     "--workdir", str(wd)]) == 0
     final = wd / "final.mp4"; final.write_bytes(b"FINAL"); cover = wd / "thumb.jpg"; cover.write_bytes(b"COVER")
     args = ["deliver", "g-1", "--final", str(final), "--hashtags", "#game", "--cover", str(cover), "--caption", "cap",
-            "--hook-id", "gph-1", "--category", "game"]
+            "--hook-id", "gph-1", "--category", "game", "--post-hook", "ใครเล่นเกมนี้จบแล้วต้องลองโหมดใหม่"]
     return {"args": args, "calls": calls, "fail": fail, "sent": sent, "monkeypatch": monkeypatch}
 
 
@@ -898,6 +898,7 @@ def test_secretary_copy_sends_clip_and_buttons_as_the_secretary_bot(mirroring):
     assert all(c[1] == f"TG_TOKEN_ENV={cj.MIRROR_TOKEN_ENV}" and "555" in c for c in mc)
     assert mc[0][4].endswith("finals/g-1.mp4")                  # the kept copy, which cleanup never deletes
     assert mc[1][4:6] == ["#game", "https://s.shopee.co.th/x"]
+    assert mc[1][-1] == "ใครเล่นเกมนี้จบแล้วต้องลองโหมดใหม่"            # the 🪝 button
     assert not any("SECRET-TOKEN-VALUE" in x for c in mirroring["calls"] for x in c)   # token never on argv
     j = cj.load("g-1")
     assert j["status"] == "delivered" and j["delivery"]["mirror"]["state"] == "ok"
@@ -1370,7 +1371,7 @@ def test_gameplay_deliver_refuses_a_cut_end_card(tmp_path, monkeypatch, capsys):
     cut = {"ok": False, "hits": [{"t": 24.6, "text": "IPER ELITE", "side": "right"}]}
     monkeypatch.setattr(cj, "run", lambda cmd: (1, json.dumps(cut), "") if cmd[-2].endswith("endcard_check.py")
                         else (0, json.dumps({"ok": True}), ""))
-    args = ["deliver", "g-2", "--final", str(final), "--hashtags", "#game", "--cover", str(cover), "--caption", "c"]
+    args = ["deliver", "g-2", "--final", str(final), "--hashtags", "#game", "--cover", str(cover), "--caption", "c", "--post-hook", "ใครเล่นเกมนี้จบแล้วต้องลองโหมดใหม่"]
     assert cj.main(args) == 1 and "IPER ELITE" in capsys.readouterr().err
     monkeypatch.setenv("ENDCARD_OK", "1")
     assert cj.main(args) == 0
@@ -1596,3 +1597,41 @@ def test_board_needs_the_hook_id_and_keeps_every_boarded_hook(tmp_path, monkeypa
     b = cj.load("h-1")["board"]
     assert b["hook_id"] == "custom-metroid-1"
     assert [h["id"] for h in b["hooks"]] == ["game-2", "custom-metroid-1"]   # the first pick still counts as used
+
+
+def test_post_hook_must_be_new(tmp_path, monkeypatch):
+    """Fix 2026-11-26: a 🪝 copy button with a NEW hook — never a hooks.md line or an earlier post hook."""
+    log = tmp_path / "log.jsonl"
+    log.write_text(json.dumps({"date": "2026-11-24", "product": "HUAWEI WATCH FIT 5 Series", "sha256": "aa",
+                               "post_hook": "HUAWEI WATCH FIT 5 วัดหัวใจได้ทั้งวัน ไม่ต้องชาร์จบ่อย",
+                               "notes": "job hw-fit5 production=auto"}, ensure_ascii=False) + "\n", encoding="utf-8")
+    monkeypatch.setattr(cj, "CLIP_LOG", str(log))
+    game = {"job": "m-1", "product": "SWITCH-2 METROID RAVENOUS (GAME)"}
+    assert "missing --post-hook" in cj.post_hook_problems("", game)[0]
+    assert any("retired" in p for p in cj.post_hook_problems("เบื่อเกมเดิมๆ อยู่ใช่ไหม", game))
+    assert "hooks.md" in cj.post_hook_problems("แฟน Metroid ภาคนี้ต้องมีติดเครื่อง", game)[0]   # template, name filled
+    assert "hooks.md" in cj.post_hook_problems("สายเกม RPG ฟังทางนี้", game)[0]                 # retired, other genre
+    assert cj.post_hook_problems("Samus กลับมาแล้ว รอบนี้ต้องหนีจากดาวที่ทั้งดาวล่าเธอ", game) == []
+    assert cj.post_hook_problems("ลด 50% วันนี้", game)                                         # price wording
+    watch = {"job": "watch-2", "product": "HUAWEI WATCH FIT 5 Series สมาร์ทวอทช์"}
+    assert cj.post_hook_problems("จอใหญ่ขึ้น ใส่วิ่งแล้วเบาข้อมือ HUAWEI WATCH FIT 5", watch) == []  # same product, new line
+    assert "2026-11-24" in cj.post_hook_problems("HUAWEI WATCH FIT 5 วัดหัวใจได้ทั้งวัน ไม่ต้องชาร์จบ่อยเลย", watch)[0]
+    same = {"job": "hw-fit5", "product": "HUAWEI WATCH FIT 5 Series"}                       # its own rerun / revision
+    assert cj.post_hook_problems("HUAWEI WATCH FIT 5 วัดหัวใจได้ทั้งวัน ไม่ต้องชาร์จบ่อย", same) == []
+
+
+def test_deliver_refuses_without_a_post_hook_and_logs_it(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(cj, "DIR", str(tmp_path)); monkeypatch.setenv("CLIPJOB_NO_TG", "1")
+    monkeypatch.setattr(cj, "FINALS_DIR", str(tmp_path / "finals"))
+    log = tmp_path / "clip-log.jsonl"; monkeypatch.setattr(cj, "CLIP_LOG", str(log))
+    assert cj.main(["new", "g-9", "--mode", "gameplay", "--product", "Game", "--link", "https://s.shopee.co.th/x",
+                    "--workdir", str(tmp_path / "w")]) == 0
+    final = tmp_path / "f.mp4"; final.write_bytes(b"a"); cover = tmp_path / "c.jpg"; cover.write_bytes(b"c")
+    monkeypatch.setattr(cj, "av_durations", lambda p: (20.0, 20.0))
+    monkeypatch.setattr(cj, "run", lambda cmd: (0, json.dumps({"ok": True}), ""))
+    args = ["deliver", "g-9", "--final", str(final), "--hashtags", "#game", "--cover", str(cover), "--caption", "c"]
+    assert cj.main(args) == 1 and "missing --post-hook" in capsys.readouterr().err
+    assert cj.main([*args, "--post-hook", "ปลูกผักขายในหมู่บ้านกลางป่า"]) == 0
+    row = json.loads(log.read_text(encoding="utf-8").splitlines()[-1])
+    assert row["post_hook"] == "ปลูกผักขายในหมู่บ้านกลางป่า"
+    assert cj.load("g-9")["delivery"]["mirror"]["post_hook"] == "ปลูกผักขายในหมู่บ้านกลางป่า"

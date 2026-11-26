@@ -78,3 +78,16 @@ Router Q3 (who drives Flow, step 8) may ride as the SECOND question in that same
 3. [H 4s] fingers run the zip slider closed (risky: zip detail)
 4. [H 4s] hands press the bag, it visibly deflates, air out at the white valve - punch-in + pill `No Pump`
 5. [R/P 4s] flat bags stacked neatly in the wardrobe, presenter smiles - before/after card
+
+## Character pick (🧑)
+- **Pick the face from `clip-log.jsonl`, never from flow-state's `last_character_used`.** That field is only
+  written when the agent drives Flow, so a 📝 prompt-mode run never updates it and it lags behind the newest
+  `character` value in clip-log — reading it alone repeats the face Fix already saw in the last clip. Take the
+  newest `character` row in clip-log, exclude that name, choose at random from `character_roster` in
+  `/opt/data/clips/flow-state/<project-id>.json`, and name the pick on the board.
+- **Draw only from female roster names that have a portrait** in `/opt/data/clips/characters/` (male ones,
+  e.g. น้องเอิร์ธ, were made for one order: clip-log `notes` say `ตัวละครชาย`). A male pick only when Fix asks.
+- **Write the prompt's presenter line from that character's recorded look, never her NAME and never a generic
+  "young Thai woman"** (`references/house-rules-history.md`). Looks of all twelve: `flow-driver` `references/flow-steps.md`
+  step 2; flow-state `roster_note` = only the last three added. `new` refuses a name with no portrait; `pack`/`reserve` refuse
+  a name in the prompt outside the quoted voiceover.

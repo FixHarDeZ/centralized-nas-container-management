@@ -159,3 +159,18 @@ Pick with the script instead of by hand:
 - `cta-1` — "ลิงก์อยู่ใต้คลิปนะจ๊ะ ไปดูรายละเอียดกันได้เลย"
 - `cta-2` — "พิกัดอยู่ใต้คลิปจ้า"
 - `cta-3` — "สนใจกดดูรายละเอียดที่ลิงก์ใต้คลิปได้เลยนะ"
+
+## Post hook — the 🪝 copy button (Fix 2026-11-26)
+Fix: "อยากได้ปุ่ม copy คำ hook ของคลิปเพิ่มอีกปุ่ม เป็นคำ hook ใหม่ที่ไม่ใช้คำซ้ำเดิมๆ". `clipjob.py deliver --post-hook
+"<line>"` (every mode, 🎬 too) puts it on a third copy button next to the basket link and hashtags (Fix's chat and
+the Secretary copy); he pastes it as the first line of his post.
+- **Write it new for this clip at deliver time.** It is not a template above and need not be the spoken opener:
+  one Thai line, ≤120 chars (aim 40–80), 1–2 emoji at most.
+- **Build it on something only this product has** — the facts the board already confirmed (the game's premise /
+  hero / mechanic, the gadget's one spec, the cream's texture, the toy's sound) — as a scroll-stopper: a question,
+  a POV, a surprising fact, a challenge.
+- No price/discount wording, no CJK, no เบื่อ…เดิม / จำเจ, no line from this file with the noun swapped.
+- `deliver` refuses a line that repeats any hook line in this file or the post hook of an earlier clip
+  (char-bigram ≥ 0.6 after the product's own name words are removed, or one inside the other). The refusal quotes
+  the line it matched and its date: write ONE line from a different angle, never re-word the matched one. A rerun
+  or revision of the same job may reuse its own line.

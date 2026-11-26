@@ -124,12 +124,12 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
     - Read `report.json` and every `FLAG:` line. Then make a frame sheet (`references/frame-check.md`) and
       make the cover: `references/poster-cover.md`.
 12. **Deliver — one command, nothing else sends the final clip:**
-    `clipjob.py deliver <job> --final <final.mp4> --report <report.json> --gfx <gfx.json> --hashtags "<tags>" --cover <cover.jpg> --caption "<short Thai caption>" --hook-id <id> --category <cat> [--notes "…"] [--ack "<flag>=<Fix's call>"]`
-    It refuses on an unapproved shot, empty graphics, bad hashtags, a failed verify-clip, a 🎬 end-card title
-    cut by the frame edge, or a report flag Fix has not decided (a shot flag he already passed is not one —
-    carry it into `--notes`). Each undecided flag: ask with its frame time; as-is = one `--ack "<flag>=<his
+    `clipjob.py deliver <job> --final <final.mp4> --report <report.json> --gfx <gfx.json> --hashtags "<tags>" --cover <cover.jpg> --caption "<short Thai caption>" --post-hook "<new hook: hooks.md>" --hook-id <id> --category <cat> [--notes "…"] [--ack "<flag>=<Fix's call>"]`
+    It refuses on unapproved shots, empty graphics, bad hashtags, a repeated post hook, a failed verify-clip,
+    a cut 🎬 end-card title, or a report flag Fix has not decided (one he passed is not — put it in `--notes`).
+    Undecided flag: ask with its frame time; as-is = one `--ack "<flag>=<his
     call>"` per flag (`references/prompt-pack.md` → Deliver acks). Never edit `report.json`. A failed send =
-    rerun the same command. No extra MEDIA/hashtag text. Last message has 🏁: no cleanup, end the turn (🤖: close
+    rerun it. No extra MEDIA/hashtag text. Last message has 🏁: no cleanup, end the turn (🤖: close
     Chrome first). A 🏁 tap → only `clipjob.py decide --text "<text>"`; no tap = it closes itself in 5 min.
 12b. **Close-out with no clip** (Fix orders the skip, `status` shows no shot file): `references/run-mode-gates.md`
    → Close-out. Never stage or imply a clip.

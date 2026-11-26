@@ -40,9 +40,13 @@ $R gfx out.mp4 --report report.json --out gfx.json --fx1 fx1.json \
   steady face, `:product` = the ref's saturated colour found in the frames (a scan / screen / label close-up has no
   face), `:auto` = face, else product. End capped at `dur − 0.5`. At zoom 1.12 the crop moves ≤ 40 px, so the
   measured centre is enough; never refine it by hand.
-- **A close-up beat often comes back `product not located (the product moves N px across the beat)`** — iterate
-  neighbouring windows of the SAME beat (and drop to `:auto`/`:face`) until one lands: the promise is the beat,
-  not the exact seconds. Judge candidates from the WRITTEN PLAN FILE, not stdout — stdout wraps the run as
+- **A close-up beat often comes back `product not located …` — read WHICH message before iterating.**
+  `the product moves N px across the beat` is a window problem: iterate neighbouring windows of the SAME beat
+  (and drop to `:auto`/`:face`) until one lands — the promise is the beat, not the exact seconds.
+  `the ref's colour was found in 0/N frames`, in EVERY window tried, is a colour-model failure rather than a
+  timing one: Flow redrew the product (or the ref is not colourful enough to model), so the next window reads 0
+  as well — stop after one retry and go straight to `:auto`/`:face`, and spend the time on the rest of the chain.
+  Judge candidates from the WRITTEN PLAN FILE, not stdout — stdout wraps the run as
   `{wrote, plan, skipped}` while `--out` holds the plan itself (`{"punch": […]}`), so a loop reading stdout's
   `plan` key sees `null` on every working candidate. And reject a punch whose centre lands on a frame edge (a
   corner cx/cy = the colour lock caught the background or her leggings, not the product): a usable centre sits
@@ -54,8 +58,11 @@ $R gfx out.mp4 --report report.json --out gfx.json --fx1 fx1.json \
   face; size 58→46, y measured clear of faces, live pills/subs and the sticker. `report.json` `headlines` (the
   CTA `post_presenter` could not fit beside her head) are added the same way without a flag; `--check` fails
   while one is missing from gfx.json.
-- Anything printed `left out` stays out: tell Fix in the delivery line which promise did not fit, never place it
-  by hand.
+- Anything printed `left out` stays out — tell Fix in the delivery line which promise did not fit. That bar is
+  absolute for GEOMETRY (punch centre, sticker rect, hook card): never hand-guess a coordinate. A TEXT headline
+  is the one exception, because `graphics_layer --check` itself asks for it ("… gfx.json has no headline for it
+  — run `autogfx.py gfx` with this report, or place it by hand; no CTA on screen needs Fix's call") and it
+  refuses to render a CTA it was handed: place it by hand from the recipe under Practical slots.
 
 **Quote the opencv pin exactly once.** Inline it as `uv run --with 'opencv-python-headless<5' …` — a bare `<5` is parsed as input redirection by the shell — while inside the single-quoted `$R` assignment it stays unquoted, because double quotes there are handed to uv verbatim and uv rejects a quoted spec.
 
@@ -199,6 +206,17 @@ Practical slots:
 - **A scene's single sub-free gap hosts ONE text element.** A headline in the `face_bottom → sub_top` strip and a callout label in the same strip collide in time + rect. Put the callout on the product close-up (the ring is that moment's job) and give the headline to another scene or drop it — two text elements cannot share the gap.
 - Callout labels go beside the product.
 - Badges go in the left column, x≈120.
+- **When `autogfx gfx` drops a headline with `no y clear of her face and the pill/sub bands` — routine on a
+  10 s close-up, where Haar unions cover the whole frame — place it by hand from boxes already on disk:**
+  1. Use the `avoid` rects gfx.json carries for that span. `--check` enforces THOSE (unions over ~2.4 s spans),
+     not the tighter boxes a fresh `layout_probe --window` returns — they are a superset of her real face, so
+     clearing them clears reality; a fine probe is only for confirming the strip is genuinely empty of her.
+  2. `gap = sub_top − face_bottom` (sub_top = 700 while a sub shows, else 832). One line needs
+     `h = size*1.3 + 12`, so 46 needs 72 px of gap, 40 needs 64, 30 needs 51. Take the largest size that fits,
+     `y = face_bottom + 2`, require `bottom ≤ sub_top`. A gap under ~51 px has no legal size: drop it and say so.
+  3. Keep the whole window inside ONE avoid span — a window straddling two spans inherits the taller box.
+  4. Still bound by the two rules above: never centred over the identity art she holds, and only one text
+     element in a gap. Then `--check`, render, and confirm on the frame sheet as usual.
 
 ## Fonts
 - **Fredoka-SemiBold.ttf is a VARIABLE font, and libass cannot select it from fontsdir.** fontselect falls back to DejaVuSans, so labels come out in a plain system font.
@@ -218,6 +236,10 @@ Practical slots:
 ## Lessons
 - **post_presenter.py drops a short Thai phrase when it sits between two short gaps** (FLAG: `script phrase ... SKIPPED`, and its subtitle line is missing from `subs.ass`). Spaces in the `script` string are phrase breaks, so a 2–3-word phrase flanked by short pauses becomes its own event and gets rejected. Fix: remove the space inside that phrase in the plan's `script` (merging it with its neighbour), re-run post_presenter, then grep `subs.ass` to confirm the phrase now has its own event. Read every FLAG line before sending.
 - **A Flow thumbnail is a poor check.** Scene 1's first frame showed no bottle while later frames did. Download the 720p file and check frames before judging a scene.
+- **Judge a rendered product's TITLE from one full-resolution frame, never from a contact-sheet tile.** At
+  thumbnail scale vision substitutes the nearest real product name for a stylised printed title — a fictional
+  sequel reads as the real game it continues — and acting on that false verdict costs a paid regen of a shot
+  that was correct. Sheets are for presence and position; identity is one full-frame read.
 - **Chaining two scenes:**
   - Upload the last frame as an ingredient, attach it, and say "start exactly on the attached image" in scene 2.
   - The chip shows no filename, so verify it from the thumbnail.

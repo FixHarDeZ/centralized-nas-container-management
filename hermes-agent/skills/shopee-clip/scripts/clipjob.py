@@ -36,7 +36,9 @@ This CLI is the only sanctioned way to move a Flow-mode clip forward. It refuses
                                                     # also 🤖 ไอยูกด Flow แทน · JOB (📝 -> 🤖) and 🏁
   clipjob.py assemble-check JOB                     # approved files in shot order, exit 0 only when all approved
   clipjob.py deliver JOB --final F.mp4 --report report.json --gfx gfx.json --hashtags "..." --cover C.jpg \
-                         --caption "..." [--hook-id ID] [--category C] [--notes "..."] [--ack "<flag text>=<Fix's call>" ...]
+                         --caption "..." --post-hook "..." [--hook-id ID] [--category C] [--notes "..."] [--ack "<flag text>=<Fix's call>" ...]
+                         # --post-hook = a NEW Thai hook for Fix's post (3rd copy button); refused when it repeats an
+                         # earlier one or a hooks.md line (templates/hooks.md -> Post hook)
                          # 🎬 only: --report may be omitted; --style footage for a brand product film
                          # a re-run after a failed send skips the steps already done and logs the clip once
                          # its last message carries the 🏁 จบงาน button; the job closes itself CLOSE_S (300 s) later
@@ -63,6 +65,7 @@ Shot states: pending -> submitting -> submitted -> in_review -> approved
 Shot prompts live in <workdir>/shot<K>.txt (written by IU from the approved storyboard before `pack`/`reserve`).
 """
 import argparse
+import collections
 import datetime as dt
 import glob
 import hashlib
@@ -1201,6 +1204,94 @@ def hashtag_problems(tags):
     return out
 
 
+# The 🪝 copy button (Fix 2026-11-26: "อยากได้ปุ่ม copy คำ hook … เป็นคำ hook ใหม่ที่ไม่ใช้คำซ้ำเดิมๆ").
+HOOKS_MD = os.path.join(os.path.dirname(HERE), "templates", "hooks.md")
+POST_HOOK_MAX = 120
+POST_HOOK_DUP = 0.6          # char-bigram Dice after product words are removed; template + other genre = 0.84
+BANNED_HOOK_RE = re.compile(r"เบื่อ.{0,15}(เดิม|จำเจ|ซ้ำ)|จำเจ")
+THAI_RE = re.compile(r"[ก-๙]")
+
+
+def _hook_norm(text, product=""):
+    t = re.sub(r"<[^>]*>", "", (text or "").lower())
+    for w in sorted(re.findall(r"[a-z0-9ก-๙]{3,}", (product or "").lower()), key=len, reverse=True):
+        t = t.replace(w, "")
+    return "".join(re.findall(r"[a-z0-9ก-๙]", t)).replace("ๆ", "")
+
+
+def _dice(a, b):
+    x = collections.Counter(a[i:i + 2] for i in range(len(a) - 1))
+    y = collections.Counter(b[i:i + 2] for i in range(len(b) - 1))
+    n = sum(x.values()) + sum(y.values())
+    return 2 * sum((x & y).values()) / n if n else 0.0
+
+
+def stock_hook_lines():
+    """Every quoted Thai line in hooks.md: templates, table examples, retired wording, banned stock phrases."""
+    try:
+        with open(HOOKS_MD, encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return []
+    a = text.find("ถ้อยคำที่เลิกใช้แล้ว")
+    retired = text[a:text.find("\n- ", a)] if a >= 0 else ""
+    hook_rows = "\n".join(ln for ln in text.splitlines() if ln.startswith(("- `", "| `"))) + "\n" + retired
+    return [q for q in re.findall(r'"([^"\n]{4,160})"', hook_rows) if THAI_RE.search(q)]
+
+
+def read_jsonl(path):
+    out = []
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    out.append(json.loads(line))
+                except ValueError:
+                    continue
+    except OSError:
+        pass
+    return [r for r in out if isinstance(r, dict)]
+
+
+def earlier_post_hooks(j, digest=None):
+    """[(date, line, product)] from clip-log rows of OTHER jobs (a rerun or a revision of this job is not a repeat)."""
+    out = []
+    for r in read_jsonl(CLIP_LOG):
+        if not r.get("post_hook") or (digest and r.get("sha256") == digest):
+            continue
+        if f"job {j['job']} production=" in (r.get("notes") or ""):
+            continue
+        out.append((r.get("date") or "?", r["post_hook"], r.get("product") or ""))
+    return out
+
+
+def post_hook_problems(text, j, digest=None):
+    text = (text or "").strip()
+    if not text:
+        return ["missing --post-hook: write a NEW Thai hook line for Fix's post (templates/hooks.md -> Post hook); "
+                "it becomes the 🪝 copy button next to hashtags and the basket link"]
+    probs = []
+    if len(text) > POST_HOOK_MAX:
+        probs.append(f"{len(text)} chars > {POST_HOOK_MAX}")
+    if not THAI_RE.search(text):
+        probs.append("no Thai in it")
+    if CJK_RE.search(text):
+        probs.append("CJK/full-width characters")
+    if MONEY_RE.search(text):
+        probs.append("price/discount wording")
+    if BANNED_HOOK_RE.search(text):
+        probs.append("เบื่อ…เดิม / จำเจ wording is retired (Fix 2026-11-26: hooks that all sound the same)")
+    mine = _hook_norm(text, j.get("product"))
+    for when, line, prod in [("hooks.md", q, "") for q in stock_hook_lines()] + earlier_post_hooks(j, digest):
+        old = _hook_norm(line, prod)
+        short, long_ = sorted((mine, old), key=len)
+        if (len(short) >= 8 and short in long_) or _dice(mine, old) >= POST_HOOK_DUP:
+            probs.append(f"repeats {'a hooks.md line' if when == 'hooks.md' else 'the post hook of ' + when}: "
+                         f"{line!r} — write a new line from something only this product has")
+            break
+    return probs
+
+
 def gfx_elements(plan):
     keys = ("headlines", "stickers", "callouts", "badges", "endcard", "image_stickers")
     return sum(len(plan[k]) if isinstance(plan.get(k), list) else (1 if plan.get(k) else 0) for k in keys)
@@ -1820,7 +1911,8 @@ def send_mirror(job):
         return m
     via = ["env", f"TG_TOKEN_ENV={MIRROR_TOKEN_ENV}", "python3"]
     steps = [("clip", via + [os.path.join(HERE, "send_clip.py"), m["file"], m["caption"], chat, m["label"] + "_secretary"]),
-             ("copy_buttons", via + [os.path.join(HERE, "send_copy_buttons.py"), m["hashtags"], m["link"], chat, m["product"]])]
+             ("copy_buttons", via + [os.path.join(HERE, "send_copy_buttons.py"), m["hashtags"], m["link"], chat, m["product"]]
+              + ([m["post_hook"]] if m.get("post_hook") else []))]
     if m.get("cover"):                              # Fix 2026-11-17: the cover goes to the Secretary chat too
         steps.append(("cover", via + [os.path.join(HERE, "send_photo.py"), m["cover"], "ปกคลิป", chat,
                                       m["label"] + "_cover_secretary"]))
@@ -1925,6 +2017,7 @@ def cmd_deliver(j, a):
     gfx = json.load(open(a.gfx, encoding="utf-8")) if a.gfx else {}
     acks = parse_acks(a.ack)
     probs = deliver_problems(j, report, gfx, a.hashtags, acks)
+    probs += [f"post hook: {p}" for p in post_hook_problems(a.post_hook, j, sha256(a.final) if os.path.exists(a.final) else None)]
     if a.style and not (j["mode"] == "gameplay" and a.style in ("gameplay", "footage")):
         probs.append("--style is only for 🎬 jobs: gameplay (a game) or footage (a brand product film)")
     if not os.path.exists(a.final):
@@ -1962,7 +2055,7 @@ def cmd_deliver(j, a):
         notes += "".join(f" | {n}" for n in report.get("notes") or [])
         row = {"date": dt.date.today().isoformat(), "product": j["product"], "category": a.category,
                "style": a.style or j["mode"], "character": j.get("character"), "edit_id": edit_ids[-1] if edit_ids else None,
-               "sha256": digest, "hook_id": a.hook_id, "hashtags": a.hashtags,
+               "sha256": digest, "hook_id": a.hook_id, "post_hook": a.post_hook.strip(), "hashtags": a.hashtags,
                "duration_s": round(float(report.get("v_dur") or 0), 2),
                "credits": (0 if j["mode"] == "gameplay" else
                            sum(c for c in credits if c) if credits and all(c is not None for c in credits) else None),
@@ -1975,7 +2068,8 @@ def cmd_deliver(j, a):
     j["delivery"] = {"sha256": digest, "logged": True, "partial": done}
     label = j["job"] + ("-rev" if j.get("revision") else "")
     steps = [("clip", ["python3", os.path.join(HERE, "send_clip.py"), final, a.caption[:1000], CHAT, label]),
-             ("copy_buttons", ["python3", os.path.join(HERE, "send_copy_buttons.py"), a.hashtags, j["link"], CHAT, j["product"]]),
+             ("copy_buttons", ["python3", os.path.join(HERE, "send_copy_buttons.py"), a.hashtags, j["link"], CHAT, j["product"],
+                               a.post_hook.strip()]),
              ("cover", ["python3", os.path.join(HERE, "send_photo.py"), a.cover, "ปกคลิป", CHAT, f"{label}_cover"])]
     for name, cmd in steps:
         if done.get(name) == "ok":
@@ -2014,7 +2108,8 @@ def cmd_deliver(j, a):
                                "file": kept[0] if isinstance(kept, list) and kept else final,
                                "cover": kept[1] if isinstance(kept, list) and len(kept) > 1 else a.cover,
                                "caption": a.caption[:1000], "hashtags": a.hashtags,
-                               "link": j["link"], "product": j["product"], "label": label}
+                               "link": j["link"], "product": j["product"], "label": label,
+                               "post_hook": a.post_hook.strip()}
     arm_close(j)
     notify(f"ส่งงาน {j['job']} ครบแล้วค่ะ\n{timeline_text(j['timing'])}\n"
            f"กด {CLOSE_BTN} เพื่อปิดงาน · ไม่กดภายใน {CLOSE_S // 60} นาที ปิดให้เอง",
@@ -2112,6 +2207,7 @@ def main(argv=None):
     s = sub.add_parser("deliver"); s.add_argument("job")
     for k in ("--final", "--hashtags", "--cover", "--caption"):
         s.add_argument(k, required=True)
+    s.add_argument("--post-hook", default="")
     s.add_argument("--report"); s.add_argument("--style"); s.add_argument("--gfx"); s.add_argument("--hook-id"); s.add_argument("--category")
     s.add_argument("--notes"); s.add_argument("--ack", action="append", default=[])
     s = sub.add_parser("cancel"); s.add_argument("job"); s.add_argument("--reason", required=True)

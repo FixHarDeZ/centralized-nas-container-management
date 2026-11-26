@@ -28,7 +28,7 @@ metadata:
   not a reason to refuse). Say in the delivery that the footage is cinematic/trailer, not gameplay.
 - House rules: `/opt/data/skills/shopee-clip/references/house-rules.md` + the router's hard rules (no price/currency/
   discount, EN caption ≤2 words per beat, no shop name/watermark, soft CTA `Link below!` only in the last beat,
-  hashtag gate). Delivery = `clipjob.py deliver` (clip + one copy-button message for hashtags and the basket link).
+  hashtag gate). Delivery = `clipjob.py deliver` (clip + copy buttons: link, hashtags, hook).
 - **Fix attached a reference clip = our audio must sound like it:** measure F0/band/loudness/music-under-VO first,
   then send 2 voice tones in one round (`references/audio-reference-matching.md`, `scripts/measure_audio.py`).
 - **Heavy work one at a time** (whisper, build, post): enforced by `heavylock.py` since 2026-11-12. A second heavy
@@ -100,7 +100,7 @@ metadata:
    - verify-clip: **don't run it yourself** — `clipjob.py deliver` runs `/opt/data/skills/shopee-clip/scripts/verify-clip.py`; a manual run plants a byte-identical twin in Downloads and `deliver` refuses (delete it from both Downloads dirs).
    - frame check: แผ่นเดียว (cold open / seam / hero / CTA / loop tail) ถาม vision ให้ flag ราคา/฿/%/QR/ชื่อร้าน, pill EN ≤2 คำ, ไทยบนจอเฉพาะซับเรา — **closed questions only (is a sub showing / are vowels and tone marks complete / any empty box); vision garbles Thai sub text even when the sub is right, never compare its transcription with the script**; ความถูกต้องของข้อความเช็คจาก subs.ass + sub_linecheck, แถบดำว่าง, แฟลชแรงเกิน; วันที่ในการ์ดท้ายที่ยืมมายืนยันด้วย crop zoom เสมอ; ป้าย pill เช็คด้วยแผ่น crop แถบป้าย และ **ห้ามใช้แผ่นหลายเฟรมยืนยัน *เวลา* ของซับ** → เช็คเวลาจาก plan/timeline; **ปิดท้ายด้วย OCR บนเฟรม *render แล้ว* 1 รอบ** (ผัง OCR ก่อนล็อก seg เห็นแค่ฟุตเทจ ไม่เห็น pill/ซับ/โลโก้ที่ burn ทับ → เลข-สกุลเงินต้องดูจากเฟรม render เท่านั้น); vision บอกแถบดำให้เช็ค luma ขอบเฟรมจริงก่อนแก้ — วิธีทั้งหมดใน `references/gameplay-pitfalls.md` §Vision checks
 10. **Deliver — one command:** copy the final into `/opt/data/home/Downloads/<job>.mp4`, then
-    `python3 /opt/data/skills/shopee-clip/scripts/clipjob.py deliver <job> --final /opt/data/home/Downloads/<job>.mp4 --hashtags "<tags>" --cover <thumb.jpg> --caption "<short Thai caption>" --hook-id gph-N --category game [--notes "…"]` (a non-game product: add `--style footage`, its own category and a `pft-N` hook — `references/product-footage.md`)
+    `python3 /opt/data/skills/shopee-clip/scripts/clipjob.py deliver <job> --final /opt/data/home/Downloads/<job>.mp4 --hashtags "<tags>" --cover <thumb.jpg> --caption "<short Thai caption>" --post-hook "<new hook: shopee-clip hooks.md>" --hook-id gph-N --category game [--notes "…"]` (a non-game product: add `--style footage`, its own category and a `pft-N` hook — `references/product-footage.md`)
     (`--report` is optional for gameplay: deliver checks audio == video duration itself). It runs verify-clip, appends
     the clip-log row (`style: gameplay`, `credits: 0`), sends the clip, the copy-button message (hashtags + basket
     link) and the cover, then check_delivery. A failed send = rerun the same command. Send no MEDIA line and no

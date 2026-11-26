@@ -96,6 +96,11 @@
 **Every `vision_analyze` counts** — the photo-gate locator and page-state screenshot reads alike — so settle
 edges/positions with pixel probes and DOM reads: the budget runs out exactly when post needs its frame sheet
 and cover reads. Chip identity is `flow-driver/scripts/chipcheck.py` (pixels, 0 vision; Fix 2026-11-23).
+Frames you pull yourself to place a beat or identify a product count the same way: ONE labelled sheet of ~8
+frames answers every beat (when she lifts the product, where the graphics can go) in a single call, and a
+printed TITLE is settled by ONE full-res frame — a sheet tile substitutes the nearest real product name for a
+stylised one (`presenter-graphics.md` → Lessons). Prefer a pixel probe (hue/row profiles) over either when the
+question is a coordinate.
 
 ## Style standard (every clip)
 - Female presenter, cute tone, no hard sell; modern Thai teen slang (ปัง, เริ่ด, ของมันต้องมี, ดี๊ดี, คุ้มเว่อร์), not cringe.
@@ -117,17 +122,7 @@ and cover reads. Chip identity is `flow-driver/scripts/chipcheck.py` (pixels, 0 
 - Style reference: Shopee Video `sv.shopee.co.th/share-video/KUNZuOMsCgCKQAICAAAAAA==`.
 
 ## Character pick (🧑)
-- **Pick the face from `clip-log.jsonl`, never from flow-state's `last_character_used`.** That field is only
-  written when the agent drives Flow, so a 📝 prompt-mode run never updates it and it lags behind the newest
-  `character` value in clip-log — reading it alone repeats the face Fix already saw in the last clip. Take the
-  newest `character` row in clip-log, exclude that name, choose at random from `character_roster` in
-  `/opt/data/clips/flow-state/<project-id>.json`, and name the pick on the board.
-- **Draw only from female roster names that have a portrait** in `/opt/data/clips/characters/` (male ones,
-  e.g. น้องเอิร์ธ, were made for one order: clip-log `notes` say `ตัวละครชาย`). A male pick only when Fix asks.
-- **Write the prompt's presenter line from that character's recorded look, never her NAME and never a generic
-  "young Thai woman"** (see house-rules-history). Looks of all twelve: `flow-driver` `references/flow-steps.md`
-  step 2; flow-state `roster_note` = only the last three added. `new` refuses a name with no portrait; `pack`/`reserve` refuse
-  a name in the prompt outside the quoted voiceover.
+Rules (clip-log not flow-state, female + portrait only, look not name): `templates/storyboard.md` → Character pick.
 
 ## Storyboard gate (Flow modes)
 - No Flow generation before Fix approves the board (`templates/storyboard.md`). Reason: two 10 s "hold / press / set down"
