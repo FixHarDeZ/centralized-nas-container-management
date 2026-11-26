@@ -19,6 +19,19 @@ clips. This includes when LRU lands on a template whose wording plainly does not
 before/after hook for a product with no before state): write the opener from the ad's own creative and
 log the custom id — rotation never justifies a mismatched hook.
 
+## Picking (moved from house-rules 2026-11-26)
+The category argument is the `hooks.md` section id (`game|gadget|home|beauty|fashion|food`); an id outside that
+set returns `no candidate hook ids` with no list — read the `##` sections of `hooks.md` to get the id, don't
+invent one from the product noun.
+When the picked hook's subject does not fit the product (a desk line for a wearable), keep the returned
+`hook_id` and swap only the subject noun — the LRU tracks ids, not wording, so a rewritten line with the
+original id keeps the history intact; do not re-pick for a subject mismatch.
+For a placeholder that must name ANOTHER game (`gph-1`'s `<เกมที่คล้าย>`), choose by genre *and* by how certainly
+the name reads in Thai (house-rules → brand name): sharing the genre is enough — the technically closest title is
+the wrong pick if its Thai reading is uncertain, and the id still stays. The same holds for a verb that
+contradicts the product's state: `gph-3` ("ต้องพรีฯ") is wrong once the game is already on sale → swap that
+verb only (ต้องมี / ต้องโดน), keep the id, and name the change in the delivery notes.
+
 ## เกม / ตลับเกม (`game`)
 **กติกาใหม่ของ Fix (2026-10-28): คลิปแผ่นเกมห้ามใช้ hook/เสียงพากย์แนวนี้ "วางบนชั้นแล้วเพื่อนทักทุกครั้งที่มาบ้าน"** (ใช้ไปแล้วในคลิป FINAL FANTASY RESONANCE — เขาสั่งเลิกเด็ดขาด) ให้ hook + voiceover พูดถึง **ตัวเกม** แทน: แนวเกม (RPG / แอคชัน / ผจญภัย / สยองขวัญ / ไฟต์เตอร์ / แข่งรถ / จำลองสถานการณ์), เนื้อเรื่อง, เกมเพลย์ หรือระบบการเล่น — แนวเกมนั้น **หาจาก `web_search` ครั้งเดียว** (ชื่อเกม + publisher/แพลตฟอร์มทางการ): ลิสติ้ง Shopee อ่านไม่ได้เพราะ WAF จึงเป็นแหล่งข้อมูลที่ใช้ไม่ได้จริง, และผลค้นหาทางการยืนยันได้ทั้ง แนวเกม + วันวางจำหน่าย (ใช้เป็นวันที่ในคลิปได้) + ภาษาที่รองรับ (ใช้ยืนยัน region/language ที่ Fix ส่งมา) แล้วเติมลง `<แนวเกม>` ใน hook ที่เป็น template — **ค้นครั้งแรกให้ใช้ภาษาของ publisher ด้วย**: query ชื่อเกมภาษาอังกฤษล้วนคืนผลว่างได้จริงสำหรับเกมที่ marketing ญี่ปุ่น (เช่น FINAL FANTASY RESONANCE ค้นอังกฤษได้ 0 รายการ แต่ `ชื่อเกม + スクウェア・エニックス + 発売日` ได้ press release ทางการทันที) ซึ่งให้ แนวเกม (ジャンル) + วันวางจำหน่าย + ตาราง対応言語 ที่ยืนยัน region/language ของตลับที่ Fix ส่งมา — ถ้า query แรกคืนว่าง ให้สลับภาษาอีกครั้งเดียวแล้วหยุด อย่าวนลูป
 

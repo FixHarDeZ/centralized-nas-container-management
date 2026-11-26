@@ -67,10 +67,10 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    **Crop budget: 2 vision checks**, all candidates on ONE sheet; every candidate clean AS IS = no question,
    `note` it and go to the board. Sheet build, the ask, no-clean-photo: `product-image-prep.md` → Photo gate.
    Under ~1000 px = drift risk on the board. References: `<workdir>/ref1.jpg …`.
-6. **Storyboard** from `templates/storyboard.md`: N shots (seconds each from the speech, ≤10), the hook in shot 1 (`S/perf.py pick-hook --category <cat>`, `templates/hooks.md`), CTA in the last shot.
+6. **Storyboard** from `templates/storyboard.md`: N shots (seconds each from the speech, ≤10), the hook in shot 1 (`S/perf.py pick-hook --category <cat>`), CTA in the last shot.
    Shots after the first chain from the previous shot's last frame, with the continuity block repeated.
    Send it and wait for approval. This is a standing gate; "don't ask me" does not waive it
-   (`references/run-mode-gates.md`). Send the board as its own message (`S/send_status.py`), `clipjob.py board <job> --hook-id <id of the hook on this board>` (EVERY board sent) BEFORE the approval `clarify`, then approval + Q3 as TWO questions in ONE `clarify`
+   (`references/run-mode-gates.md`). Send the board as its own message (`S/send_status.py`), `clipjob.py board <job> --hook-id <id>` (EVERY board sent) BEFORE the approval `clarify`, then approval + Q3 as TWO questions in ONE `clarify`
    (`references/run-mode-gates.md` → Board stamp).
    - 🧑: random pick from the roster, never the same face twice in a row, name the pick
      (`references/house-rules.md`); `new --character <name>` refuses a name with no portrait in

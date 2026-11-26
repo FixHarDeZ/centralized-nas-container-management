@@ -110,17 +110,7 @@ and cover reads. Chip identity is `flow-driver/scripts/chipcheck.py` (pixels, 0 
 - Per-run artifacts: `templates/style-card.md` block in every prompt; hook by category, least recently used
   (`perf.py pick-hook`, never the same `hook_id` for a category within 5 rows); hashtags from the category pool in
   `templates/hashtags.md` (4 product + 3 vibe + 1 platform).
-  The category argument is the `hooks.md` section id (`game|gadget|home|beauty|fashion|food`); an id outside that
-  set returns `no candidate hook ids` with no list — read the `##` sections of `hooks.md` to get the id, don't
-  invent one from the product noun.
-  When the picked hook's subject does not fit the product (a desk line for a wearable), keep the returned
-  `hook_id` and swap only the subject noun — the LRU tracks ids, not wording, so a rewritten line with the
-  original id keeps the history intact; do not re-pick for a subject mismatch.
-  For a placeholder that must name ANOTHER game (`gph-1`'s `<เกมที่คล้าย>`), choose by genre *and* by how certainly
-  the name reads in Thai (the brand-name rule above): sharing the genre is enough — the technically closest title is
-  the wrong pick if its Thai reading is uncertain, and the id still stays. The same holds for a verb that
-  contradicts the product's state: `gph-3` ("ต้องพรีฯ") is wrong once the game is already on sale → swap that
-  verb only (ต้องมี / ต้องโดน), keep the id, and name the change in the delivery notes.
+  Picking rules (category id, subject swap, placeholders): `templates/hooks.md` → Picking.
 - Presenter build = graphics v2 (default since 2026-11-07): `presenter_fx.py` → `post_presenter.py` →
   `graphics_layer.py --report report.json` (`references/presenter-graphics.md`). Product stills are cut-out stickers
   beside the presenter, never full-screen cards that hide her.
