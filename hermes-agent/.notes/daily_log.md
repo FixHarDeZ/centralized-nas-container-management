@@ -2048,4 +2048,9 @@ Fix: "ตรวจงานเมื่อวานกับวันนี้�
   ported in `91800b1`) → stash them in the clone, then plain `make hermes-skills`.
 - Other categories (gadget-1 used 6×, incl. a mosquito swatter) still have 6 fixed lines each; the picker fix
   rotates them properly but the pool is small — offered to Fix, not built.
+- metroid-ravenous-10s closed 07:42. First sync REFUSED by root `tests/test_hermes_skills.py` doc budgets (SKILL.md
+  15405 > 15360 after the step-6 line; house-rules 21167 > 20480 after the ported live edits) — I had run only the
+  skills suite. `fddb96d` moved the hook picking rules from house-rules into hooks.md → Picking, trimmed the router.
+  Clone stash `metroid live edits ported 91800b1`. **Live synced `fddb96d`** (335 container tests); live
+  `pick-hook --category game` = game-5, game-2 excluded. Run `tests/test_hermes_skills.py` too before syncing.
 
