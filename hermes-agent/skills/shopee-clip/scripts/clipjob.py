@@ -571,8 +571,10 @@ def jobs_ahead(job, t=None):
 
 def queue_text(j, ahead):
     """Fix 2026-11-26 "ตอบ รับคิวแล้ว": yuedpao-barrel-pants (13:32) was intaken behind yuedpao-hoodie and he heard
-    nothing for 7 min apart from the gateway's English "Interrupting current task"."""
-    return (f"📥 รับคิวแล้วค่ะ · {j['product']}\nคิวที่ {len(ahead) + 1} ต่อจาก {', '.join(a['job'] for a in ahead)}"
+    nothing for 7 min apart from the gateway's English "Interrupting current task". The product name comes from
+    Hermes (gateway image pre-analysis slips Chinese in): CJK -> the job slug, like send_status' gate."""
+    name = j["job"] if CJK_RE.search(j.get("product") or "") else j["product"]
+    return (f"📥 รับคิวแล้วค่ะ · {name}\nคิวที่ {len(ahead) + 1} ต่อจาก {', '.join(a['job'] for a in ahead)}"
             " — ไอยูทำงานก่อนหน้าให้เสร็จก่อน แล้วเริ่มงานนี้ต่อเลยค่ะ")
 
 

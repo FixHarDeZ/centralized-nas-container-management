@@ -1661,6 +1661,8 @@ def test_intake_behind_an_open_job_tells_fix_the_queue(tmp_path, monkeypatch, ca
     assert "send no other" in res["next"] and "gated until hoodie delivered" in res["next"]
     assert cj.main(["intake", "third", "--product", "Cap"]) == 0
     assert "คิวที่ 3 ต่อจาก hoodie, pants" in sent[-1][1]["text"]
+    assert cj.main(["intake", "cn-1", "--product", "Yuedpao 卫衣 Hoodie"]) == 0     # Chinese from image pre-analysis
+    assert "· cn-1\n" in sent[-1][1]["text"] and not cj.CJK_RE.search(sent[-1][1]["text"])
 
 
 def test_intake_saves_even_when_the_queue_line_fails(tmp_path, monkeypatch):
