@@ -2030,3 +2030,22 @@ Fix: "ตรวจงานเมื่อวานกับวันนี้�
   files updated). Live check: `pillclear.py` has `X_MIN` + `measure_faces`, `post_presenter.py` writes
   `pill_slots`, `reels.py` + `clipjob.py reel` present (dormant until the Page token is in the vault). Watch the
   next 🧑 order: `pill_slots` / `beside her head` NOTE lines, CTA handed to autogfx when no side room.
+
+## 2026-11-26 — presenter game hooks repeat (Fix: "คำ hook ดูซ้ำๆ ตลอด น่าเบื่อ")
+- Ported Hermes' metroid live edits `91800b1` (house-rules: last balance is on disk, multi-line board from file;
+  hooks.md: Fix's hook direction attributes are claims to verify).
+- Cause: `game` had 4 fixed lines used 30× (game-1 7, game-2 7, game-3 8, game-4 8). `perf.py pick-hook` took its
+  recent window from the last 3 rows of the CATEGORY, which were always gameplay gph-N, so no game-N was ever
+  excluded; and when Fix rewrote the board hook the row logged `custom-*`, so game-2 ("เบื่อเกมเดิมๆ … จำเจ",
+  last logged 11-02) stayed the LRU pick: boards gundam-ro 11-14, gotg 11-20, metroid 11-26 all opened with it.
+- Fix `f6d48e9`: pick-hook = same id family only, uses = clip-log rows + every board (`board.hooks`, legacy
+  "board … hook <id>" notes), last 5 distinct excluded / ≥2 eligible; `clipjob.py board` requires `--hook-id`
+  and keeps every boarded id; hooks.md game = 9 hooks built on a fact only that game has (series / premise /
+  hero / mechanic / world / similar game / co-op count / new port / title fallback game-9), เบื่อ/จำเจ banned,
+  retired wording listed; router step 6 picks the hook. Tests 309 passed (+test_perf.py 4, board test).
+  Live dry run on real data: game → game-5 (game-2 excluded via metroid's board note), other categories rotate.
+- **Not synced**: metroid-ravenous-10s open (waiter running). NAS clone holds the 2 pulled live files (already
+  ported in `91800b1`) → stash them in the clone, then plain `make hermes-skills`.
+- Other categories (gadget-1 used 6×, incl. a mosquito swatter) still have 6 fixed lines each; the picker fix
+  rotates them properly but the pool is small — offered to Fix, not built.
+
