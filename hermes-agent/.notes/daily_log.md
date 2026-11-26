@@ -2068,4 +2068,13 @@ Fix: "ตรวจงานเมื่อวานกับวันนี้�
   budget again → Character pick moved to `templates/storyboard.md` (pointer left). 322 tests incl. budgets.
 - **Not synced**: village-shade (🧑 game, intake 07:50) open; waiter running. Clone holds the 2 pulled files
   (ported) → stash, then `make hermes-skills`. Copy button with 3 rows not yet seen live: first real deliver.
+- village-shade (🧑 game 📝) delivered 08:58, closed 08:59 — first board under the hook fix: `board --hook-id game-5`
+  (picker's pick), stamped in `board.hooks`. It delivered on the old deliver (no post hook yet).
+- Clone stashes: `metroid live edits 2 ported 064d205`, `house-rules live = ported 064d205` (live = repo apart from
+  the Character-pick move). **Live synced `aa8170a`** 09:0x (340 container tests); live check: 🪝 button in
+  `send_copy_buttons.py`, `post_hook_problems` refuses a retired template, both routers carry `--post-hook`.
+  First real 3-button message = next delivery.
+- Fix asked whether a new order can queue while a clip runs: answered (yes, captured at intake + `gated until`,
+  serial except a 📝 pack for job B; a link sent mid-turn waits unseen until the turn ends). Offered, not built:
+  heartbeat replies "รับคิวแล้ว" when a new link sits unanswered while the agent is mid-turn.
 
