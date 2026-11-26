@@ -2119,6 +2119,10 @@ Fix: "ตรวจงานเมื่อวานกับวันนี้�
     and fire the 30-min photo-gate line on an order that only waits).
   - house-rules: intake sends the queue line, no second "รับออเดอร์".
   - test_clipjob sets `CLIPJOB_NO_TG=1` module-wide: the container gate holds the real token.
+  - `83a1dbc`: queue line uses the job slug when the product name carries CJK (send_status' gate).
+- Restart facts: gateway home = `/opt/data` (no `profiles/`); a restart posts the "home-channel startup
+  notification" to Fix's chat (00:56 boot) — tell him first. Post-delivery review passes (13:30:40 budget 16
+  turn, skill-patch pass) write live edits: wait ~5 min of no `agent.conversation_loop`/curator lines before `--pull`.
 - Verified: overlay resolved in a fresh container process with a throwaway `HERMES_HOME` (all 6 modes Thai, detail
   gone, other strings English); 328 local + 347 container tests (bundled-key test ran there).
 - **NOT live yet**: yuedpao-barrel-pants open (board approved 14:42). After it closes: `make hermes-skills
