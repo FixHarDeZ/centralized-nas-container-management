@@ -2078,3 +2078,15 @@ Fix: "ตรวจงานเมื่อวานกับวันนี้�
   serial except a 📝 pack for job B; a link sent mid-turn waits unseen until the turn ends). Offered, not built:
   heartbeat replies "รับคิวแล้ว" when a new link sits unanswered while the agent is mid-turn.
 
+## 2026-11-26 — session close ✅
+- Done this session (11-25 → 11-26): pill slide beside the head (`7ad72bb`), FB Reels draft uploader (`a6658e9`,
+  dormant), presenter game hooks rewritten + picker counts boarded hooks (`f6d48e9`, `fddb96d`), 🪝 post-hook copy
+  button with novelty gate (`064d205`), 3 rounds of Hermes live edits ported (`ca2a9d9`, `91800b1`, `064d205`).
+- State: all pushed (`6cd3b0b`), tree clean, **live synced `aa8170a`**, no open job, no deploy (hermes-agent
+  container unchanged).
+- Waiting on Fix: Page token in vault `stacks.hermes_agent.facebook.page_id` / `.page_token` (then manifest +
+  deploy + yuedpao test draft + basket check); veto on the 9 game hook lines; whether other categories get the
+  game-style hook rewrite; Reel description using the post hook; heartbeat "รับคิวแล้ว" for mid-turn links.
+- Watch next deliveries: 3-button copy message (🪝 first live send), `post_hook` refusals and what Hermes writes,
+  `pill_slots` notes on the next 🧑, `--hook-id` on every board.
+
