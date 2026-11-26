@@ -2123,6 +2123,17 @@ Fix: "ตรวจงานเมื่อวานกับวันนี้�
 - Restart facts: gateway home = `/opt/data` (no `profiles/`); a restart posts the "home-channel startup
   notification" to Fix's chat (00:56 boot) — tell him first. Post-delivery review passes (13:30:40 budget 16
   turn, skill-patch pass) write live edits: wait ~5 min of no `agent.conversation_loop`/curator lines before `--pull`.
+
+## 2026-11-26 (3) — session close ✅ (go-live NOT done)
+- barrel-pants delivered ~15:2x (close pending at 15:21); the idle watcher was stopped at "จบงาน" (16:14) without
+  a sync. A new job **yuedpao-sleep is open** (16:14). Live still `aa8170a`, `/opt/data/locales/` absent.
+- Repo: all pushed (`c2969e6` feature, `83a1dbc` CJK fallback, `dd8c290` + this close), tree clean. No deploy.
+- **Next session, first thing** (only with no open job + ~5 min agent quiet): `make hermes-skills ARGS=--pull` →
+  port pulled edits → commit/push → `make hermes-skills` (prints "updated /opt/data/locales/en.yaml") → warn Fix →
+  `docker restart hermes-gateway` → check `Sent home-channel startup notification` in agent.log + fresh-process
+  `HERMES_HOME=/opt/data` `t("gateway.busy.interrupting_head")` = "📥 รับคิวแล้วค่ะ".
+- Waiting on Fix: whether an order sent while a board `clarify` is pending should stop being read as its answer;
+  FB Page token; veto on 9 game hooks; other-category hook rewrite; Reel description = post hook.
 - Verified: overlay resolved in a fresh container process with a throwaway `HERMES_HOME` (all 6 modes Thai, detail
   gone, other strings English); 328 local + 347 container tests (bundled-key test ran there).
 - **NOT live yet**: yuedpao-barrel-pants open (board approved 14:42). After it closes: `make hermes-skills
