@@ -16,8 +16,9 @@ images are ads, review screenshots or crops.
 - **Two jobs at once: a 📝 approval for job B while job A is mid-run = `new` + `pack B` NOW (two calls), then back to A.** Fix renders B's shots in Flow while A's post runs. ps2-hdd-175-pres 11-24: approved 11:50, packed 13:09 after the ✋ job delivered — 78 min with Fix holding an approved board and nothing to render.
 
 ## Board stamp
-- Run `clipjob.py board <job>` right after the board message goes out and BEFORE the approval clarify — every
-  board sent, a revised board too (the newest stamp counts).
+- Run `clipjob.py board <job> --hook-id <id>` right after the board message goes out and BEFORE the approval
+  clarify — every board sent, a revised board too (the newest stamp counts). `<id>` = the hook on THAT board
+  (`hooks.md` id, or `custom-<slug>-N` for Fix's own line); every stamped id counts as used in `perf.py pick-hook`.
 - Flow `new` refuses when the job has no intake/board record, and when `state.db` holds no reply from Fix AFTER
   the stamp (his message, or an answered `clarify`). A last answer meaning แก้/ยกเลิก/เลิกทำ/พักงาน/ไม่ผ่าน is
   refused too. An unreadable db is recorded as `board.unverified`, not refused.

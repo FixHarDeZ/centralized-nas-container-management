@@ -1,18 +1,16 @@
 # Hook rotation — vary the opener per clip without inventing one each time
 
-Pick ONE hook per clip by category, choosing the LEAST-RECENTLY-USED entry of
-that category in `/opt/data/clips/logs/clip-log.jsonl` (look at `hook_id` of the last few rows
-with the same `category`). Write the chosen `hook_id` into the log row.
+Pick ONE hook per clip by category with `perf.py pick-hook --category <cat>` (least recently used over the
+clip-log rows AND every storyboard that carried an id of the same family), put its id on the board stamp
+(`clipjob.py board <job> --hook-id <id>`, every board) and in the deliver row (`--hook-id`).
 
 Rule: never reuse a `hook_id` for the same category within 5 consecutive rows.
 
 **Same-date ties break on FILE ORDER.** The log records a date, not a time, so when every candidate's most recent use carries the same `date`, LRU picks the id whose last row sits EARLIEST in the file — that is the least-recently-used one, and the wording tie-break below only applies after that.
 
-**A category with ≤5 hooks makes that rule unsatisfiable** (`game` has 4), so every
-candidate technically violates it — do not stall or invent a new id. Parse the log
-for that category, take the id whose most recent use is the OLDEST (LRU decides
-alone), record it, and move on. Only when the LRU id is wrong for the product does
-a tie-break matter: prefer the id whose wording the product actually fits.
+**The 5-row rule bends for small families:** `perf.py` excludes at most (candidates − 2) recent ids, so a 6-hook
+category keeps 2 eligible. Take its pick — do not stall or invent a new id. Only when the pick is wrong for the
+product does a tie-break matter: prefer the eligible id whose wording the product actually fits.
 
 **A VO opener that is NOT one of the templates below gets a `custom-<slug>-N` id** (written bespoke for
 the clip from the ad/creative): template ids exist to track template rotation, so logging a template id
@@ -23,12 +21,38 @@ log the custom id — rotation never justifies a mismatched hook.
 
 ## เกม / ตลับเกม (`game`)
 **กติกาใหม่ของ Fix (2026-10-28): คลิปแผ่นเกมห้ามใช้ hook/เสียงพากย์แนวนี้ "วางบนชั้นแล้วเพื่อนทักทุกครั้งที่มาบ้าน"** (ใช้ไปแล้วในคลิป FINAL FANTASY RESONANCE — เขาสั่งเลิกเด็ดขาด) ให้ hook + voiceover พูดถึง **ตัวเกม** แทน: แนวเกม (RPG / แอคชัน / ผจญภัย / สยองขวัญ / ไฟต์เตอร์ / แข่งรถ / จำลองสถานการณ์), เนื้อเรื่อง, เกมเพลย์ หรือระบบการเล่น — แนวเกมนั้น **หาจาก `web_search` ครั้งเดียว** (ชื่อเกม + publisher/แพลตฟอร์มทางการ): ลิสติ้ง Shopee อ่านไม่ได้เพราะ WAF จึงเป็นแหล่งข้อมูลที่ใช้ไม่ได้จริง, และผลค้นหาทางการยืนยันได้ทั้ง แนวเกม + วันวางจำหน่าย (ใช้เป็นวันที่ในคลิปได้) + ภาษาที่รองรับ (ใช้ยืนยัน region/language ที่ Fix ส่งมา) แล้วเติมลง `<แนวเกม>` ใน hook ที่เป็น template — **ค้นครั้งแรกให้ใช้ภาษาของ publisher ด้วย**: query ชื่อเกมภาษาอังกฤษล้วนคืนผลว่างได้จริงสำหรับเกมที่ marketing ญี่ปุ่น (เช่น FINAL FANTASY RESONANCE ค้นอังกฤษได้ 0 รายการ แต่ `ชื่อเกม + スクウェア・エニックス + 発売日` ได้ press release ทางการทันที) ซึ่งให้ แนวเกม (ジャンル) + วันวางจำหน่าย + ตาราง対応言語 ที่ยืนยัน region/language ของตลับที่ Fix ส่งมา — ถ้า query แรกคืนว่าง ให้สลับภาษาอีกครั้งเดียวแล้วหยุด อย่าวนลูป
-- `game-1` — "สายเกม<แนวเกม>ฟังทางนี้…" (แทนที่ "แอคชันซูเปอร์ฮีโร่" ด้วยแนวจริงของเกมนั้น)
-- `game-2` — "เบื่อเกมเดิมๆ ที่เล่นยังไงก็จำเจอยู่ไหม?" (hook กลาง ไม่แตะชั้นวาง ไม่แตะเพื่อน)
-- `game-3` — "<แนวเกม>ที่เล่นแล้ววางจอยไม่ลง ตัวนี้ต้องมี" (id เดิม เนื้อหาใหม่ — แทน hook "เพื่อนทักทุกครั้ง" ที่ถูกยกเลิก)
-- `game-4` — "ของมันต้องมีสำหรับคนที่รอเกมแนวนี้อยู่"
+
+**Fix 2026-11-26: "คำ hook ซ้ำๆ ตลอด น่าเบื่อ"** (ตัวอย่างที่เขายก: "เบื่อเกมจำเจเดิมๆ อยู่ใช่ไหม") — เดิมมีแค่ 4 ประโยค
+ใช้ไป 30 คลิป และ `game-2` "เบื่อเกมเดิมๆ ที่เล่นยังไงก็จำเจอยู่ไหม?" ขึ้นบอร์ดซ้ำ 3 ครั้งใน 12 วัน (gundam-ro 11-14,
+gotg 11-20, metroid 11-26) เพราะทุกครั้งที่ฟิกสั่งแก้ แถว log เป็น custom id แล้ว template ไม่เคยแก่ลง. กติกา:
+- **ทุก hook ต้องมีของที่เกมนี้มีเกมเดียว** — ชื่อซีรีส์ / เนื้อเรื่อง / ตัวเอก / ระบบเด่น / โลกของเกม / จำนวนผู้เล่น /
+  แพลตฟอร์มที่เพิ่งมาลง — มาจาก `web_search` ครั้งเดียวข้างบน หรือจากชื่อสินค้าเอง. ประโยคที่ยกไปใส่เกมอื่นได้ทั้งดุ้น
+  = ใช้ไม่ได้ ให้ข้ามไป id ถัดไปที่ข้อมูลครบ.
+- **ห้าม:** "เบื่อเกมเดิม / จำเจ / เกมซ้ำๆ" ทุกรูปแบบ, "เกมแนวนี้" ลอยๆ ไม่บอกแนว, "ของมันต้องมี" เปิดคลิป, และชั้นวาง/เพื่อนทัก (กฎ 10-28).
+- **ยาว ≤ ~36 ตัวอักษร** (นับแบบ `vo_rate`: ก-๙ + ละติน/ตัวเลข ≈ 3 วิ) — hook เป็นแค่ต้นประโยคของช็อต 1 ที่เหลือต้องพอให้จุดขาย.
+- เลือก id ด้วย `perf.py pick-hook --category game` แล้วส่ง id เดียวกันใน `clipjob.py board <job> --hook-id <id>`
+  ทุกบอร์ด: picker นับทุกบอร์ดเป็นการใช้ (ฟิกเปลี่ยนเป็นประโยคของเขาเอง template นั้นก็ถือว่าใช้ไปแล้ว). id ที่ได้มา
+  แต่ข้อมูลไม่ครบ (ไม่มีซีรีส์ / ไม่มี co-op) → `--candidates` เฉพาะ id ที่ข้อมูลครบ แล้วรันใหม่.
+
+| id | ประโยคเปิด (เติม `<…>` จากผลค้น) | ต้องมีจากแหล่ง | ตัวอย่าง |
+|---|---|---|---|
+| `game-1` | "แฟน <ซีรีส์> ภาคนี้ต้องมีติดเครื่อง" | เกมเป็นภาคหนึ่งของซีรีส์จริง | แฟน Metroid ภาคนี้ต้องมีติดเครื่อง |
+| `game-2` | "ถ้าต้อง<สถานการณ์ของเกม> จะรอดไหม" | เนื้อเรื่อง/สถานการณ์เปิดเกม ≤6 คำ | ถ้าต้องติดอยู่บนดาวสัตว์ประหลาด จะรอดไหม |
+| `game-3` | "เกมนี้ได้เล่นเป็น<ตัวเอก/บทบาท>" | ตัวเอกหรือบทบาทผู้เล่น | เกมนี้ได้เล่นเป็นนักล่าค่าหัวในชุดเกราะ |
+| `game-4` | "เกมนี้<ระบบเด่น>ได้ด้วยนะ" | ระบบการเล่นที่ทางการโปรโมต 1 อย่าง | เกมนี้ม้วนตัวเป็นลูกบอลกลิ้งหนีได้ด้วยนะ |
+| `game-5` | "พาไปเดินเล่นใน<โลกของเกม>กัน" | ฉาก/ยุค/โลกของเกม | พาไปเดินเล่นในญี่ปุ่นยุคซามูไรกัน |
+| `game-6` | "ใครชอบ <เกมที่คล้าย> ตัวนี้ต้องลอง" | เกมดังแนวเดียวกันที่เทียบได้ชัด (ไม่มี = ข้าม) | ใครชอบ Hollow Knight ตัวนี้ต้องลอง |
+| `game-7` | "ชวนเพื่อนมาเล่นด้วยกันได้<จำนวน>คน" | multiplayer/co-op + จำนวนคน (พูดเป็นคำ) | ชวนเพื่อนมาเล่นด้วยกันได้สี่คน |
+| `game-8` | "<ชื่อเกมสั้น> มาลง <แพลตฟอร์ม> แล้ว" | ฉบับแพลตฟอร์มนี้วางขายไม่เกิน 12 เดือน | Oblivion ฉบับรีมาสเตอร์ มาลง Switch 2 แล้ว |
+| `game-9` | "<ชื่อเกมสั้น> ตลับนี้มีอะไรให้เล่น ดูกัน" | ชื่อเกมจากชื่อสินค้า (ตัวสำรองเมื่อค้นไม่เจออะไร) | Metroid ตลับนี้มีอะไรให้เล่น ดูกัน |
+
+ตัวอย่างในตารางห้ามพูดตามคำต่อคำกับเกมอื่น — เป็นแค่รูปประโยค. ชื่อเกม/ซีรีส์อังกฤษพูดตามที่อ่านออกเสียงแน่ใจ
+(house-rules → brand name) ไม่แน่ใจ = ใช้ id ที่ไม่ต้องพูดชื่อ.
+ถ้อยคำที่เลิกใช้แล้ว (id เดิมถูกเขียนทับ 2026-11-26 ห้ามพูด): game-1 "สายเกม<แนวเกม>ฟังทางนี้…",
+game-2 "เบื่อเกมเดิมๆ ที่เล่นยังไงก็จำเจอยู่ไหม?", game-3 "<แนวเกม>ที่เล่นแล้ววางจอยไม่ลง ตัวนี้ต้องมี",
+game-4 "ของมันต้องมีสำหรับคนที่รอเกมแนวนี้อยู่".
 - **ก่อนค้น ให้สแกน `/opt/data/clips/logs/clip-log.jsonl` หาชื่อเกมเดียวกันก่อน** (อีกแพลตฟอร์ม / อีกรุ่นของเกมที่เคยทำคลิปไว้) — แถว log *อาจ* ทิ้งแนวเกม + วันวางจำหน่าย + ภาษาที่ยืนยันจากแหล่งทางการไว้ใน `notes` (notes ส่วนใหญ่เป็นบันทึกเทคนิคเรื่องเสียง/ซับ ไม่ใช่ข้อมูลเกม จึงไม่ใช่ทุกแถวที่มี) ถ้าแถวของเกมเดิมมีครบก็ใช้ซ้ำและข้าม `web_search` ไปได้ (เกมเดียวกันเพิ่งทำคลิป Switch แล้วมาทำ PS5 = ข้อมูลชุดเดิม ไม่ต้องค้นใหม่); **ถ้าแถวไม่ได้ทิ้งไว้ อย่าสมมติว่ามีใน log — ค้นตามกฎข้างบนหนึ่งครั้ง แล้วใช้ผลค้นนั้น**
-- **ถ้าไม่แน่ใจว่าเกมเป็นแนวไหน** ให้ `web_search` ชื่อเกมก่อน (หนึ่งครั้งพอ) — ถ้ายังไม่มีแหล่งยืนยันแนว อย่าเดา ใช้ hook กลาง `game-2` แล้วเว้นการอ้างแนวเกมในเสียงพากย์ไว้ 1 จุดแทน
+- **ค้นแล้วไม่เจอแนว/ข้อมูลเกมเลย** → `game-9` (ใช้แค่ชื่อเกมจากชื่อสินค้า) และอย่าเดาแนวในเสียงพากย์
 - **ทิศทาง hook ของฟิกก็เป็น claim เช่นกัน:** ถ้าเขาสั่ง hook แนวนั้นแน่นี้พร้อมระบุ attribute (2D / open-world / co-op / เล่นคนเดียว) ให้ยืนยัน attribute นั้นจากแหล่งเดียวกับที่ค้นแนวเกมก่อนใส่เสียงพากย์ — ผลค้นยืนยัน "แนว" ได้ แต่ไม่ได้ยืนยันทุกอย่างที่ direction บอก, และกับเกม "label สินค้า" คือแหล่งนั้นเอง: ยืนยันไม่ได้ = ตัดคำนั้นทิ้งแล้วคงเจตนาไว้ ไม่ใช่พูดตาม
 
 ## เกมเพลย์ / trailer footage (preset `gameplay` — `gph-N`)

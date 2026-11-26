@@ -12,16 +12,21 @@ Usage:
   perf.py report [--by hook_id|style|category] [--min-views 0]
       -> table: clips, views, CTR (clicks/views), CVR (orders/clicks)
   perf.py pick-hook --category game|gadget|... [--prefix gph-] [--candidates id1,id2,...]
-      -> recommended hook id: excludes ids used in the last 3 rows of the category,
-         ranks the rest by CTR (Bayesian-smoothed, needs perf data), falls back to LRU.
+      -> recommended hook id: excludes the last 5 distinct ids of the SAME FAMILY (game-N, gph-N, ...;
+         at least 2 stay eligible), ranks the rest by CTR (Bayesian-smoothed, needs perf data), else LRU.
+         A use = a clip-log row OR a storyboard that carried the id (`clipjob.py board --hook-id`, every
+         board of every job, cancelled ones too): a template Fix rewrote on the board was still heard.
 Exit codes: 0 ok, 2 bad args / no match, 3 ambiguous match.
 """
-import argparse, collections, datetime, json, os, re, sys
+import argparse, collections, datetime, glob, json, os, re, sys
 
 SKILL = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CLIP_LOG = os.environ.get("CLIP_LOG", "/opt/data/clips/logs/clip-log.jsonl")
 PERF_LOG = os.environ.get("PERF_LOG", "/opt/data/clips/logs/perf-log.jsonl")
 HOOKS_MD = os.path.join(SKILL, "templates", "hooks.md")
+JOBS_DIR = os.environ.get("CLIPJOB_DIR", "/opt/data/clips/jobs")
+RECENT = 5
+LEGACY_HOOK_RE = re.compile(r"\bhook(?:_id)?[ =:]+(?:-> ?)?((?:[a-z]+|custom-[a-z0-9-]+)-\d+)\b")
 
 
 def rows(path):
@@ -111,15 +116,51 @@ def hook_ids_from_md(category, prefix):
                   key=lambda s: int(re.findall(r"\d+", s)[-1]))
 
 
+def board_uses(jobs_dir=None):
+    """[(iso time, hook id)] for every storyboard sent with `clipjob.py board --hook-id`."""
+    out = []
+    for p in glob.glob(os.path.join(jobs_dir or JOBS_DIR, "*.json")):
+        try:
+            with open(p, encoding="utf-8") as f:
+                j = json.load(f)
+        except (OSError, ValueError):
+            continue
+        if not isinstance(j, dict):
+            continue
+        hooks = (j.get("board") or {}).get("hooks")
+        if hooks:
+            out += [(h["at"], h["id"]) for h in hooks if h.get("id") and h.get("at")]
+            continue
+        for e in j.get("events") or []:      # jobs boarded before --hook-id: Hermes' own "board … hook <id>" notes
+            m = LEGACY_HOOK_RE.search(e.get("msg") or "")
+            if m and e.get("ts") and "board" in e["msg"]:
+                out.append((e["ts"], m.group(1)))
+    return out
+
+
+def hook_uses(cat_rows, family):
+    """Time-ordered uses of the candidate ids: clip-log rows (date only, file order) + board picks (timestamp).
+    Only ids in `family` count: the `game` category holds presenter game-N rows AND gameplay gph-N rows, and the
+    last 3 rows of the category were all gph-N, so the presenter rotation never excluded anything (2026-11-26)."""
+    uses = [((c.get("date") or "", "", i), c.get("hook_id")) for i, c in enumerate(cat_rows)
+            if c.get("hook_id") in family]
+    uses += [((at[:10], at, 0), h) for at, h in board_uses() if h in family]
+    return uses
+
+
 def cmd_pick(a):
     cands = a.candidates.split(",") if a.candidates else hook_ids_from_md(a.category, a.prefix)
     if not cands:
         print("no candidate hook ids", file=sys.stderr); return 2
     cat_rows = [c for c in rows(CLIP_LOG) if c.get("category") == a.category]
-    recent = [c.get("hook_id") for c in cat_rows[-3:]]
-    last_use = {}
-    for i, c in enumerate(cat_rows):
-        last_use[c.get("hook_id")] = i
+    uses = sorted(hook_uses(cat_rows, set(cands)))
+    seq = [h for _, h in uses]
+    recent = []
+    for h in reversed(seq):                   # last N distinct ids of this family, newest first
+        if h not in recent:
+            recent.append(h)
+    recent = recent[:min(RECENT, max(1, len(cands) - 2))]
+    last_use = {h: i for i, h in enumerate(seq)}
     perf = latest_perf()
     hook_perf = collections.defaultdict(lambda: [0, 0])
     for c in cat_rows:

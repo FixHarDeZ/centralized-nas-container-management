@@ -330,7 +330,7 @@ def test_cli_new_status_cancel(tmp_path, monkeypatch, capsys):
     assert cj.main(["new", "c-1", "--mode", "product", "--product", "P", "--shots", "2", "--ref", str(ref)]) == 1
     assert "no storyboard on record" in capsys.readouterr().err      # a Flow job needs intake + board first
     assert cj.main(["intake", "c-1", "--product", "P", "--workdir", str(wd)]) == 0
-    assert cj.main(["board", "c-1"]) == 0                             # no state.db in tests: reply unverified
+    assert cj.main(["board", "c-1", "--hook-id", "home-2"]) == 0                             # no state.db in tests: reply unverified
     assert cj.main(["new", "c-1", "--mode", "product", "--product", "P", "--link", "https://s.shopee.co.th/a",
                     "--shots", "2", "--ref", str(ref), "--workdir", str(wd)]) == 0
     assert cj.main(["new", "c-1", "--mode", "product", "--product", "P", "--shots", "2", "--ref", str(ref)]) == 1
@@ -1167,14 +1167,14 @@ def test_intake_job_is_listed_then_promoted_by_new(tmp_path, monkeypatch, capsys
     assert cj.main(["pack", "n-1", "--no-send"]) == 1                       # nothing runs before `new`
     assert "still at intake" in capsys.readouterr().err
     ref = tmp_path / "ref1.jpg"; ref.write_bytes(b"r")
-    assert cj.main(["board", "n-1"]) == 0
+    assert cj.main(["board", "n-1", "--hook-id", "custom-cable-1"]) == 0
     created = cj.load("n-1")["created"]
     assert cj.main(["new", "n-1", "--mode", "presenter", "--product", "Cable", "--link", "https://s.shopee.co.th/x",
                     "--shots", "2", "--ref", str(ref), "--character", "น้องมิลค์"]) == 0
     j = cj.load("n-1")
     assert "stage" not in j and len(j["shots"]) == 2 and j["created"] == created
     assert [e["msg"] for e in j["events"]][:3] == ["intake", "note: board sent (msg 12208); next: wait for approval + Q3",
-                                                   "board sent"]
+                                                   "board sent (hook custom-cable-1)"]
     assert cj.main(["new", "n-1", "--mode", "presenter", "--product", "Cable", "--shots", "2", "--ref", str(ref),
                     "--character", "น้องมิลค์"]) == 1                     # a real job is never overwritten
 
@@ -1339,7 +1339,7 @@ def test_presenter_needs_a_portrait(tmp_path, monkeypatch, capsys):
     args = ["new", "p-1", "--mode", "presenter", "--product", "x", "--shots", "1", "--ref", str(ref),
             "--character", "น้องเอิร์ธ", "--workdir", str(tmp_path / "w")]
     assert cj.main(["intake", "p-1", "--product", "x", "--workdir", str(tmp_path / "w")]) == 0
-    assert cj.main(["board", "p-1"]) == 0
+    assert cj.main(["board", "p-1", "--hook-id", "gadget-1"]) == 0
     assert cj.main(args) == 1 and "no portrait" in capsys.readouterr().err
     (tmp_path / "chars").mkdir(); (tmp_path / "chars" / "น้องเอิร์ธ.jpg").write_bytes(b"p")
     assert cj.main(args) == 0
@@ -1472,7 +1472,7 @@ def boarded(tmp_path, monkeypatch, rows):
     monkeypatch.setattr(cj, "DIR", str(tmp_path)); monkeypatch.setattr(cj, "WORK", str(tmp_path / "work"))
     monkeypatch.setattr(cj, "CHAR_DIR", str(tmp_path)); (tmp_path / "น้องมุก.jpg").write_bytes(b"p")
     assert cj.main(["intake", "b-1", "--product", "Cape"]) == 0
-    assert cj.main(["board", "b-1"]) == 0
+    assert cj.main(["board", "b-1", "--hook-id", "gadget-2"]) == 0
     sent = cj._epoch(cj.load("b-1")["board"]["sent"])
     monkeypatch.setattr(cj, "HERMES_DB", hermes_db(tmp_path / "state.db", [(sent + dt, *r) for dt, *r in rows]))
     ref = tmp_path / "r.jpg"; ref.write_bytes(b"r")
@@ -1582,3 +1582,17 @@ def test_ingest_records_the_real_credits_when_given(tmp_path):
     cj.shot(j, 2)["seconds"] = 6
     cj.ingest(j, 2, str(tmp_path / "b.mp4"))
     assert cj.shot(j, 2)["attempts"][-1] == {**cj.shot(j, 2)["attempts"][-1], "credits": 18, "credits_est": True}
+
+
+def test_board_needs_the_hook_id_and_keeps_every_boarded_hook(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(cj, "DIR", str(tmp_path / "jobs"))
+    monkeypatch.setenv("CLIPJOB_NO_TG", "1")
+    assert cj.main(["intake", "h-1", "--product", "Game", "--mode", "presenter"]) == 0
+    assert cj.main(["board", "h-1"]) == 1
+    assert "--hook-id" in capsys.readouterr().err
+    assert cj.main(["board", "h-1", "--hook-id", "เบื่อเกม"]) == 1           # an id, not the line
+    assert cj.main(["board", "h-1", "--hook-id", "game-2"]) == 0
+    assert cj.main(["board", "h-1", "--hook-id", "custom-metroid-1"]) == 0   # Fix rewrote the hook: v2 board
+    b = cj.load("h-1")["board"]
+    assert b["hook_id"] == "custom-metroid-1"
+    assert [h["id"] for h in b["hooks"]] == ["game-2", "custom-metroid-1"]   # the first pick still counts as used

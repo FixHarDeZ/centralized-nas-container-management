@@ -67,10 +67,10 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    **Crop budget: 2 vision checks**, all candidates on ONE sheet; every candidate clean AS IS = no question,
    `note` it and go to the board. Sheet build, the ask, no-clean-photo: `product-image-prep.md` → Photo gate.
    Under ~1000 px = drift risk on the board. References: `<workdir>/ref1.jpg …`.
-6. **Storyboard** from `templates/storyboard.md`: N shots (seconds each from the speech, ≤10), the hook in shot 1, CTA in the last shot.
+6. **Storyboard** from `templates/storyboard.md`: N shots (seconds each from the speech, ≤10), the hook in shot 1 (`S/perf.py pick-hook --category <cat>`, `templates/hooks.md`), CTA in the last shot.
    Shots after the first chain from the previous shot's last frame, with the continuity block repeated.
    Send it and wait for approval. This is a standing gate; "don't ask me" does not waive it
-   (`references/run-mode-gates.md`). Send the board as its own message (`S/send_status.py`), `clipjob.py board <job>` (EVERY board sent) BEFORE the approval `clarify`, then approval + Q3 as TWO questions in ONE `clarify`
+   (`references/run-mode-gates.md`). Send the board as its own message (`S/send_status.py`), `clipjob.py board <job> --hook-id <id of the hook on this board>` (EVERY board sent) BEFORE the approval `clarify`, then approval + Q3 as TWO questions in ONE `clarify`
    (`references/run-mode-gates.md` → Board stamp).
    - 🧑: random pick from the roster, never the same face twice in a row, name the pick
      (`references/house-rules.md`); `new --character <name>` refuses a name with no portrait in
@@ -80,8 +80,8 @@ Fix orders every clip in Telegram. This skill asks the questions, runs intake, a
    - ✋: every 📦 step from here on (no speech, VO in post), but hands use the product in frame and no
      face ever shows. Read `references/hands-mode.md` first; step 10 needs `clipjob.py scan` before `ready`.
 7. **Prompts → files.** Write `<workdir>/shot<K>.txt` for every shot. Build them from
-   `templates/clip-prompt.md` + `templates/style-card.md` + a hook from `templates/hooks.md`
-   (`S/perf.py pick-hook --category <cat>`), plus the no-on-screen-text block. **Never write the character's
+   `templates/clip-prompt.md` + `templates/style-card.md` + the board's hook line,
+   plus the no-on-screen-text block. **Never write the character's
    name (or any น้อง… name) outside the quoted voiceover** — Flow paints it on screen; `pack`/`reserve` refuse it. Then:
    `clipjob.py new <job> --mode presenter|product|hands --product "…" --link <url> --shots N [--seconds 8,6] [--ref <workdir>/ref1.jpg [--ref …]] [--character <name>]` (🧑 only; fills in the intake job). Credits (board, Q3): `clipjob.py cost --seconds 8,6`. workdir = `/opt/data/clips/work/<job>`
 8. **Q3 — who drives Flow** (`clarify`, one question, cost in the text):

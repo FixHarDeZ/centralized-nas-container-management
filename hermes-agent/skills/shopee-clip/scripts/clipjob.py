@@ -5,7 +5,8 @@ State: $CLIPJOB_DIR/<job>.json (default /opt/data/clips/jobs). Pacing clock: $CL
 This CLI is the only sanctioned way to move a Flow-mode clip forward. It refuses out-of-order steps.
 
   clipjob.py intake JOB --product "..." [--link URL] [--mode M]   # right after the duplicate check: the job exists
-  clipjob.py board JOB                              # the storyboard just went out (again): Flow `new` needs a reply after it
+  clipjob.py board JOB --hook-id ID                 # the storyboard just went out (again): Flow `new` needs a reply after it;
+                                                    # ID = the hooks.md id (or custom-…) of the hook ON THIS board
                                                     # (status lists it) before Q1/board, so a lost context can resume
   clipjob.py new JOB --mode presenter|product|hands|gameplay --product "..." [--link URL] [--shots N] [--seconds 8,6] [--ref IMG ...] [--character NAME]
                                                     # on an intake job: fills it in (same slug)
@@ -333,6 +334,7 @@ def board_replies(since, db=None):
     return sorted(out)
 
 
+HOOK_ID_RE = re.compile(r"^(?:[a-z]+-\d+|custom-[a-z0-9-]+-\d+)$")   # hooks.md ids (game-3, gph-2) or custom-<slug>-N
 REVISE_RE = re.compile(r"แก้|ยกเลิก|เลิกทำ|พักงาน|ไม่ผ่าน")   # board answers that are not a go
 
 
@@ -2072,6 +2074,7 @@ def main(argv=None):
     s.add_argument("--workdir"); s.add_argument("--character")
     s.add_argument("--seconds", help="per-shot length: 8 or 8,6,8 (3-10, default 10)")
     s = sub.add_parser("board"); s.add_argument("job")
+    s.add_argument("--hook-id")
     s = sub.add_parser("intake"); s.add_argument("job"); s.add_argument("--product", required=True)
     s.add_argument("--link", default=""); s.add_argument("--mode", choices=MODES); s.add_argument("--workdir")
     s = sub.add_parser("idcheck"); s.add_argument("job"); s.add_argument("shot", type=int); s.add_argument("--raw")
@@ -2145,8 +2148,15 @@ def main(argv=None):
                                                "board sent/approved); clipjob.py new <job> … after the board"})
         if a.cmd == "board":
             j = load(a.job); need_open(j)
-            j["board"] = {"sent": iso()}
-            log(j, "board sent"); save(j)
+            if not HOOK_ID_RE.match(a.hook_id or ""):
+                raise Refused("board needs --hook-id: the hooks.md id of the hook on this board (`perf.py pick-hook`), "
+                              "or custom-<slug>-N for a line written for this clip. The picker counts every board as a "
+                              "use: game-2 went on 3 boards in 12 days because Fix's rewrite logged a custom id and "
+                              "the template never aged (Fix 2026-11-26: hooks all sound the same)")
+            t = iso()
+            hooks = [*((j.get("board") or {}).get("hooks") or []), {"id": a.hook_id, "at": t}]
+            j["board"] = {"sent": t, "hook_id": a.hook_id, "hooks": hooks}
+            log(j, f"board sent (hook {a.hook_id})"); save(j)
             return out({"job": a.job, "board": j["board"], "next": "NOW ask approval + Q3 (one clarify), then wait. "
                         "`new` refuses until Fix replies after this moment (stamped after his answer = refused)"})
         if a.cmd == "new":
