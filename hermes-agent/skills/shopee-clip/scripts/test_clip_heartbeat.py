@@ -101,3 +101,16 @@ def test_photo_gate_past_the_cap_tells_fix_once():
     assert hb.decide(t0.timestamp() + 20 * 60, job, msgs, {})[0] is None          # under the cap: quiet rules
     boarded = {**job, "board": {"sent": t0.isoformat()}}
     assert hb.decide(now, boarded, msgs, {})[0] is None                          # board out: not the photo gate
+
+
+def test_queued_order_is_not_the_running_job():
+    """clipjob intake behind an open job stamps queued_behind; the heartbeat keeps naming the job ahead
+    (and never sends the 30-min photo-gate line for an order that is only waiting its turn)."""
+    import datetime as dt
+    now = dt.datetime(2026, 11, 26, 14, 0, tzinfo=dt.timezone(dt.timedelta(hours=7)))
+    hoodie = {"job": "yuedpao-hoodie", "status": "open", "updated": (now - dt.timedelta(minutes=40)).isoformat()}
+    pants = {"job": "yuedpao-barrel-pants", "status": "open", "stage": "intake", "queued_behind": ["yuedpao-hoodie"],
+             "updated": (now - dt.timedelta(minutes=5)).isoformat()}
+    assert hb.open_job([hoodie, pants], now)["job"] == "yuedpao-hoodie"
+    assert hb.open_job([{**hoodie, "status": "delivered"}, pants], now)["job"] == "yuedpao-barrel-pants"
+    assert hb.open_job([pants], now)["job"] == "yuedpao-barrel-pants"       # the job ahead is gone: it runs now

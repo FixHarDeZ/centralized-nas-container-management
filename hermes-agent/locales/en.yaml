@@ -1,0 +1,33 @@
+# Hermes i18n overlay (partial): only the keys below override the bundled locales/en.yaml.
+# sync.sh copies it to $HERMES_HOME/locales/en.yaml (/opt/data/locales/en.yaml). The gateway caches catalogs
+# per process, so a changed file needs a gateway restart to show.
+#
+# Busy ack = the gateway's own reply when Fix writes while IU is mid-turn (Fix 2026-11-26: "ตอบ รับคิวแล้ว").
+# yuedpao-barrel-pants 13:32: the second order arrived while yuedpao-hoodie ran. The only reply before
+# the board 7 min later was "⚡ Interrupting current task (2 min elapsed, iteration 4/250, running: terminal).
+# I'll respond to your message shortly.", which reads as if the first clip was killed.
+#
+# Live mode is busy_input_mode: interrupt. Which ack a message gets:
+#   photos / album           -> interrupting_*  (turn stops at its next check point, next turn reads it)
+#   plain text (link, reply) -> redirected_*    (folded into the running turn)
+#   compression / subagents  -> compressing_head / subagent_working_head + demoted_tail (waits for them)
+#   /busy queue | steer      -> queued_* / steered_*
+# Every line must read true for a new order, a typed reply and a question alike.
+# ack_detail_wrap "" drops the English "(N min elapsed, iteration N/M, running: <tool>)" detail.
+# clipjob.py intake sends the specific line (คิวที่ N ต่อจาก <job>) once the order is captured.
+gateway:
+  busy:
+    ack_detail_wrap: ""
+    interrupting_head: "📥 รับคิวแล้วค่ะ"
+    interrupting_tail: " — ไอยูพักงานที่ทำอยู่แป๊บเดียวเพื่ออ่านข้อความนี้ ถ้าเป็นออเดอร์ใหม่จะต่อคิวหลังงานที่ทำอยู่ค่ะ"
+    redirected_head: "📥 รับคิวแล้วค่ะ"
+    redirected_tail: " — ไอยูอ่านข้อความนี้ระหว่างทำงานได้เลย ถ้าเป็นออเดอร์ใหม่จะต่อคิวหลังงานที่ทำอยู่ค่ะ"
+    queued_head: "📥 รับคิวแล้วค่ะ"
+    queued_tail: " — ไอยูจะอ่านข้อความนี้ทันทีที่จบขั้นที่ทำอยู่ ถ้าเป็นออเดอร์ใหม่จะต่อคิวหลังงานที่ทำอยู่ค่ะ"
+    steered_head: "📥 รับคิวแล้วค่ะ"
+    steered_tail: " — ไอยูจะเห็นข้อความนี้หลังขั้นที่ทำอยู่ ถ้าเป็นออเดอร์ใหม่จะต่อคิวหลังงานที่ทำอยู่ค่ะ"
+    steered_subagents_head: "📥 รับคิวแล้วค่ะ"
+    steered_subagents_tail: " — ไอยูกับผู้ช่วยจะเห็นข้อความนี้หลังขั้นที่ทำอยู่ ถ้าเป็นออเดอร์ใหม่จะต่อคิวหลังงานที่ทำอยู่ค่ะ"
+    compressing_head: "📥 รับคิวแล้วค่ะ (ไอยูกำลังสรุปความจำ)"
+    subagent_working_head: "📥 รับคิวแล้วค่ะ (ผู้ช่วยของไอยูกำลังทำงาน)"
+    demoted_tail: " — เสร็จแล้วจะอ่านข้อความนี้ต่อ ถ้าเป็นออเดอร์ใหม่จะต่อคิวหลังงานที่ทำอยู่ค่ะ (/stop = ยกเลิกทั้งหมด)"

@@ -18,6 +18,8 @@
 #   line records the synced commit, the baseline for drift detection).
 # - shopee-clip/scripts/check_delivery.py + clip_heartbeat.py are also copied to /opt/data/scripts/ (the cron
 #   can only run scripts from there).
+# - hermes-agent/locales/*.yaml (i18n overlay: the gateway's Thai busy ack "📥 รับคิวแล้วค่ะ") is copied to
+#   $HERMES_HOME/locales/. The gateway caches catalogs per process: a changed file shows after a gateway restart.
 # `sync.sh --pull` (or PULL=1) goes the other way for in-place edits: each drifted live file is copied INTO
 #   the clone's working tree and nothing live is touched. Review with git diff, commit, push, then sync.
 #   This is how a lesson written into a live skill reaches the repo. A plain sync refuses while the
@@ -47,7 +49,7 @@ fi
 
 # Tests gate the sync: router size budget, unique file names, clipjob/product_build/build_v5 behaviour.
 if [ -z "$PULL" ] && [ "${SKIP_TESTS:-}" != 1 ]; then
-  if ! uv run -q --with pytest --with numpy --with pillow pytest -q -p no:cacheprovider tests/test_hermes_skills.py "$SRC/shopee-clip/scripts" "$SRC/gameplay-clips/scripts" "$SRC/flow-driver/scripts" >/tmp/hermes-skills-tests.log 2>&1; then
+  if ! uv run -q --with pytest --with numpy --with pillow --with pyyaml pytest -q -p no:cacheprovider tests/test_hermes_skills.py tests/test_hermes_locales.py "$SRC/shopee-clip/scripts" "$SRC/gameplay-clips/scripts" "$SRC/flow-driver/scripts" >/tmp/hermes-skills-tests.log 2>&1; then
     tail -30 /tmp/hermes-skills-tests.log >&2
     echo "REFUSED: tests failed — nothing synced (fix in the repo, push, rerun)" >&2
     exit 1
@@ -160,5 +162,13 @@ for cron_script in check_delivery.py clip_heartbeat.py; do     # Hermes' no-agen
     echo "updated $SCRIPTS_DST/$cron_script"
   fi
 done
+LOCALES_DST=${HERMES_LOCALES_DIR:-/opt/data/locales}
+while IFS= read -r f; do               # i18n overlay (partial catalog over the bundled locales/)
+  if ! cmp -s "$f" "$LOCALES_DST/$(basename "$f")" 2>/dev/null; then
+    run mkdir -p "$LOCALES_DST"
+    run cp -p "$f" "$LOCALES_DST/$(basename "$f")"
+    echo "updated $LOCALES_DST/$(basename "$f") — restart the gateway to load it (catalogs are cached per process)"
+  fi
+done < <(git ls-files 'hermes-agent/locales/*.yaml')
 [ "$drift_n" -gt 0 ] && echo "⚠️  $drift_n in-place edit(s) captured in $DRIFT_ROOT/$TS — review and port to the repo"
 echo "synced at $(git rev-parse --short HEAD)"

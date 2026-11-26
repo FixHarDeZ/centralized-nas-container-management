@@ -18,6 +18,7 @@ spec.loader.exec_module(cj)
 cj.FINALS_DIR = tempfile.mkdtemp(prefix="clipjob-finals-")
 cj.HERMES_DB = "/nonexistent/state.db"                          # no test reads the real Hermes sessions     # no test writes into the real kept-finals dir
 os.environ["CLIPJOB_NO_TIMER"] = "1"                            # no test leaves a 5-minute close sleeper behind
+os.environ["CLIPJOB_NO_TG"] = "1"     # no unpatched send reaches the real bot: the container gate holds the token
 cj.DOWNLOADS = []                                               # nor deletes from the real Downloads dirs
 cj.DIR = tempfile.mkdtemp(prefix="clipjob-jobs-")               # main() sweeps DIR: never the real jobs dir
 cj.WORK = tempfile.mkdtemp(prefix="clipjob-work-")
@@ -1635,3 +1636,41 @@ def test_deliver_refuses_without_a_post_hook_and_logs_it(tmp_path, monkeypatch, 
     row = json.loads(log.read_text(encoding="utf-8").splitlines()[-1])
     assert row["post_hook"] == "ปลูกผักขายในหมู่บ้านกลางป่า"
     assert cj.load("g-9")["delivery"]["mirror"]["post_hook"] == "ปลูกผักขายในหมู่บ้านกลางป่า"
+
+
+# ---------------------------------------------------------------- queue line (Fix 2026-11-26 "ตอบ รับคิวแล้ว")
+def test_intake_behind_an_open_job_tells_fix_the_queue(tmp_path, monkeypatch, capsys):
+    """yuedpao-barrel-pants 2026-11-26 13:32: intaken behind yuedpao-hoodie, Fix heard nothing for 7 min."""
+    monkeypatch.setattr(cj, "DIR", str(tmp_path / "jobs")); monkeypatch.setattr(cj, "WORK", str(tmp_path / "work"))
+    sent = []
+    monkeypatch.setattr(cj, "tg", lambda m, p=None, files=None: sent.append((m, p)) or {"message_id": 77})
+    assert cj.main(["intake", "hoodie", "--product", "Hoodie"]) == 0
+    assert sent == [] and "queued_behind" not in cj.load("hoodie")          # nothing ahead: no queue line
+    old = cj.intake_job("old-open", "Stale", ""); old["updated"] = cj.iso(cj.now() - 13 * 3600)
+    done = cj.intake_job("done-1", "Shipped", ""); done["status"] = "delivered"
+    cj.save(old); cj.save(done)                      # abandoned 13 h ago / delivered: neither is ahead
+    capsys.readouterr()
+    assert cj.main(["intake", "pants", "--product", "Barrel Pants"]) == 0
+    res = json.loads(capsys.readouterr().out)
+    (method, payload), = sent
+    assert method == "sendMessage" and "reply_markup" not in payload        # hoodie's ✅/🔁 keyboard stays up
+    assert "📥 รับคิวแล้วค่ะ · Barrel Pants" in payload["text"] and "คิวที่ 2 ต่อจาก hoodie" in payload["text"]
+    j = cj.load("pants")
+    assert j["queued_behind"] == ["hoodie"] and res["queued_behind"] == ["hoodie"]
+    assert j["events"][-1]["msg"] == "queued behind hoodie (queue line msg 77)"
+    assert "send no other" in res["next"] and "gated until hoodie delivered" in res["next"]
+    assert cj.main(["intake", "third", "--product", "Cap"]) == 0
+    assert "คิวที่ 3 ต่อจาก hoodie, pants" in sent[-1][1]["text"]
+
+
+def test_intake_saves_even_when_the_queue_line_fails(tmp_path, monkeypatch):
+    monkeypatch.setattr(cj, "DIR", str(tmp_path / "jobs")); monkeypatch.setattr(cj, "WORK", str(tmp_path / "work"))
+    monkeypatch.setattr(cj, "tg", lambda m, p=None, files=None: {"message_id": 1})
+    assert cj.main(["intake", "a-1", "--product", "A"]) == 0
+
+    def no_token(m, p=None, files=None):
+        raise SystemExit("TELEGRAM_BOT_TOKEN missing from /opt/data/.env")
+    monkeypatch.setattr(cj, "tg", no_token)
+    assert cj.main(["intake", "b-1", "--product", "B"]) == 0
+    j = cj.load("b-1")
+    assert j["queued_behind"] == ["a-1"] and "queue line not sent: TELEGRAM_BOT_TOKEN missing" in j["events"][-1]["msg"]

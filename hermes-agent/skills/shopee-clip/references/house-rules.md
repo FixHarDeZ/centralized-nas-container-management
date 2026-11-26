@@ -68,6 +68,8 @@
 - **A new ORDER arriving while another job is mid-run:** capture it at once — `intake` + a note
   `gated until <job> delivered` — then finish the open job first. Intaking immediately is what survives a context
   loss; the gate keeps one heavy job at a time and stops the two jobs' submits/paces from interleaving.
+  `intake` itself sends Fix "📥 รับคิวแล้วค่ะ · คิวที่ N ต่อจาก <job>" (the gateway already said รับคิวแล้ว
+  the moment it arrived): send no second "รับออเดอร์" line, go straight back to the open job.
 - **Called off (`เลิกทำ` / `หยุด` / `พอแล้ว`):** `clipjob.py cancel`, no clip-log row. There is no cancel control in Flow:
   a queued render may still finish server-side, so say so. Record the abort (edit ids opened, the reason) in the
   flow-state file, close Chrome with CDP `Browser.close` (pkill only when CDP is dead), verify `:9222` is gone, and

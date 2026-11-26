@@ -5,6 +5,7 @@ State: $CLIPJOB_DIR/<job>.json (default /opt/data/clips/jobs). Pacing clock: $CL
 This CLI is the only sanctioned way to move a Flow-mode clip forward. It refuses out-of-order steps.
 
   clipjob.py intake JOB --product "..." [--link URL] [--mode M]   # right after the duplicate check: the job exists
+                                                    # another job open = sends Fix "📥 รับคิวแล้วค่ะ · คิวที่ N" itself
   clipjob.py board JOB --hook-id ID                 # the storyboard just went out (again): Flow `new` needs a reply after it;
                                                     # ID = the hooks.md id (or custom-…) of the hook ON THIS board
                                                     # (status lists it) before Q1/board, so a lost context can resume
@@ -545,6 +546,34 @@ def intake_job(job, product, link="", mode=None, workdir=None):
             "production": None, "character": None, "refs": [], "workdir": workdir or os.path.join(WORK, job),
             "created": iso(t), "updated": iso(t), "fallback": None, "trouble": {}, "shots": [],
             "events": [], "delivery": None}
+
+
+QUEUE_FRESH_H = 12   # = clip_heartbeat FRESH_H: an open job untouched this long is abandoned, not ahead in the queue
+
+
+def jobs_ahead(job, t=None):
+    """Open jobs other than `job` touched in the last QUEUE_FRESH_H h, oldest first: what a new intake waits behind."""
+    t = now() if t is None else t
+    rows = []
+    for f in sorted(os.listdir(DIR)) if os.path.isdir(DIR) else []:
+        if not f.endswith(".json") or f in ("pacing.json", f"{job}.json"):
+            continue
+        try:
+            with open(os.path.join(DIR, f), encoding="utf-8") as fh:
+                jj = json.load(fh)
+            fresh = t - _epoch(jj["updated"]) < QUEUE_FRESH_H * 3600
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+        if jj.get("status") == "open" and fresh:
+            rows.append(jj)
+    return sorted(rows, key=lambda r: r.get("created") or "")
+
+
+def queue_text(j, ahead):
+    """Fix 2026-11-26 "ตอบ รับคิวแล้ว": yuedpao-barrel-pants (13:32) was intaken behind yuedpao-hoodie and he heard
+    nothing for 7 min apart from the gateway's English "Interrupting current task"."""
+    return (f"📥 รับคิวแล้วค่ะ · {j['product']}\nคิวที่ {len(ahead) + 1} ต่อจาก {', '.join(a['job'] for a in ahead)}"
+            " — ไอยูทำงานก่อนหน้าให้เสร็จก่อน แล้วเริ่มงานนี้ต่อเลยค่ะ")
 
 
 def promote_intake(old, new):
@@ -2239,9 +2268,23 @@ def main(argv=None):
             j = intake_job(a.job, a.product, a.link, a.mode, a.workdir)
             os.makedirs(j["workdir"], exist_ok=True)
             j["started"] = iso(workdir_started(j["workdir"], now(), lookback=INTAKE_LOOKBACK_S))
-            log(j, "intake"); save(j)
-            return out({**summary(j), "next": "clipjob.py note <job> \"<done; next>\" after each stage (Q1, photo gate, "
-                                               "board sent/approved); clipjob.py new <job> … after the board"})
+            log(j, "intake")
+            ahead = jobs_ahead(j["job"])
+            if ahead:
+                names = ", ".join(x["job"] for x in ahead)
+                j["queued_behind"] = [x["job"] for x in ahead]      # clip_heartbeat skips it until those close
+                try:          # no reply_markup: the job ahead may have its ✅/🔁 keyboard up
+                    sent = tg("sendMessage", {"chat_id": CHAT, "text": queue_text(j, ahead)})
+                    log(j, f"queued behind {names} (queue line msg {sent.get('message_id')})")
+                except (Refused, OSError, ValueError, SystemExit) as e:   # read_token exits; intake must still save
+                    log(j, f"queued behind {names} (queue line not sent: {str(e)[:120]})")
+            save(j)
+            nxt = ("clipjob.py note <job> \"<done; next>\" after each stage (Q1, photo gate, board sent/approved); "
+                   "clipjob.py new <job> … after the board")
+            if ahead:
+                nxt = (f"queue line (คิวที่ {len(ahead) + 1}) already sent to Fix — send no other. clipjob.py note "
+                       f"{j['job']} \"gated until {ahead[-1]['job']} delivered\", then finish {ahead[0]['job']} first")
+            return out({**summary(j), **({"queued_behind": j["queued_behind"]} if ahead else {}), "next": nxt})
         if a.cmd == "board":
             j = load(a.job); need_open(j)
             if not HOOK_ID_RE.match(a.hook_id or ""):

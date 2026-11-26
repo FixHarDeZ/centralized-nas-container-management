@@ -69,6 +69,10 @@ def open_job(jobs, now=None):
         except (TypeError, ValueError):
             return False
     live = [j for j in jobs if j.get("status") == "open" and fresh(j)]
+    # a queued order (clipjob intake behind another open job) is not the one running: naming it, or its
+    # 30-min photo-gate line, would be wrong while the job ahead is still open
+    names = {j["job"] for j in live}
+    live = [j for j in live if not names & set(j.get("queued_behind") or ())] or live
     return max(live, key=lambda j: j.get("updated") or "") if live else None
 
 
