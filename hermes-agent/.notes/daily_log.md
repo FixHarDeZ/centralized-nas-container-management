@@ -2312,3 +2312,15 @@ Fix: "ตรวจงานเมื่อวานกับวันนี้�
   product (`sub_rects`). Limits: product-box avoidance needs a colourful ref — keem (black/copper, copper is a
   skin-like hue) and airnub (black, small orange buttons) would read "not located" and keep the old behaviour with
   a note; decker-type colourful products are covered. 350 local tests.
+
+### 2026-11-27 (closed) ✅ — session end
+- All pushed (last code `4a32f6a`, notes after it); live synced `4a32f6a` (clone clean, `.repo-synced` = `4a32f6a`),
+  gateway restarted once today (12:54, locales overlay live), no open job, agent idle since 15:51. No deploy.
+- Local tree: only `shopee-analyst/.notes/*` modified — not this session's, left untouched.
+- Container temp `/tmp/pptest` removed; `/tmp/quiet.py` (watcher helper) left in the container.
+- Waiting on Fix: keem 800A vs the photo's 300A (check the listing variant before posting), wo-long end-card date
+  keep/drop, HUD gameplay TRIAL verdict on the next short 🎬, status line when the character changes after the
+  board (proposal 3, not built), older proposals (tiny lower headline, windows.py visible-region OCR, core image
+  prompt in Chinese, fashion post hooks restate VO, a job parked on Fix counts as 'ahead').
+- Watch next orders: queue START after delivery (still unproven live), `spec_conflict` at intake, post notes
+  "moved off the product", cut-out never on the held product, `--hud-ok` on a short 🎬.
