@@ -208,6 +208,14 @@ def test_headline_avoids_the_held_product_and_a_moved_sub():
     assert not ag.overlap(r, moved[0]) and not ag.overlap(r, held[0][2])
 
 
+def test_the_cut_out_stays_off_a_sub_moved_up_off_the_product():
+    free = np.zeros((ag.H // ag.S, ag.W // ag.S), np.uint8)
+    wins = [{"t0": 0.0, "t1": 2.6, "face": None, "busy": free}]
+    assert ag.place_product_sticker(wins, "ref.jpg", 1.0, 0.0, 2.6)[0]
+    sub = [(0.5, 2.0, (0, 262, ag.W, 700))]                      # a sub between chin and product filling the zone
+    assert ag.place_product_sticker(wins, "ref.jpg", 1.0, 0.0, 2.6, None, sub)[0] is None
+
+
 def _hsv_frame(w, h, bg=(0, 0, 200)):
     import cv2
     hsv = np.zeros((h, w, 3), np.uint8); hsv[:] = bg

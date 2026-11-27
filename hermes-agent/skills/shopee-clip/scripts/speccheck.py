@@ -32,7 +32,9 @@ UNIT_MAP = {"a": "A", "amp": "A", "amps": "A", "แอมป์": "A", "แอ�
             "mah": "MAH", "ah": "AH", "wh": "WH", "nm": "NM", "n.m": "NM", "n·m": "NM", "rpm": "RPM", "hz": "HZ",
             "gb": "GB", "tb": "TB"}
 _UNITS = sorted(UNIT_MAP, key=len, reverse=True)
-SPEC_RE = re.compile(r"(?<![\w.,])(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)\s?(" + "|".join(re.escape(u) for u in _UNITS)
+# ASCII-only lookbehind: Python's \w is Unicode, so Thai glued to the number ("คีมเชื่อมลวด800A", a common Shopee
+# title) would hide it and switch the whole gate off
+SPEC_RE = re.compile(r"(?<![A-Za-z0-9_.,])(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)\s?(" + "|".join(re.escape(u) for u in _UNITS)
                      + r")(?![A-Za-z0-9])", re.I)
 THAI_UNIT = {"A": ("แอมป์", "แอมแปร์", "แอมป"), "V": ("โวลต์", "โวลท์"), "W": ("วัตต์",), "KW": ("กิโลวัตต์",),
              "MAH": ("มิลลิแอมป์",)}

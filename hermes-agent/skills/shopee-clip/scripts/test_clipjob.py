@@ -1778,6 +1778,16 @@ def test_a_spec_conflict_found_at_the_board_gates_the_prompt_until_fix_picks(tmp
     cj.spec_check(j, 1)                                          # the product without the number: fine
     db = str(tmp_path / "state.db"); _hermes_db(db, []); monkeypatch.setattr(cj, "HERMES_DB", db)
     assert cj.main(["spec", "keem", "--ok", "800A"]) == 1 and "no reply from Fix" in capsys.readouterr().err
+    import sqlite3
+    c = sqlite3.connect(db)
+    c.execute("INSERT INTO messages (role, content, timestamp) VALUES ('user', 'ผ่าน', ?)", (cj.now() + 5,))
+    c.commit()
+    assert cj.main(["spec", "keem", "--ok", "800A"]) == 1 and "a plain ผ่าน is not his pick" in capsys.readouterr().err
+    c.execute("INSERT INTO messages (role, content, timestamp) VALUES ('user', 'ใช้ ๘๐๐A ตาม listing', ?)", (cj.now() + 6,))
+    c.commit(); c.close()
+    assert cj.main(["spec", "keem", "--ok", "800A"]) == 0
+    assert cj.load("keem")["spec"]["answer"] == "ใช้ ๘๐๐A ตาม listing"
+    j = cj.load("keem"); j["spec"]["ok"] = []; j["spec"].pop("answer"); cj.save(j)
     monkeypatch.setattr(cj, "HERMES_DB", "/nonexistent/state.db")    # unreadable db: recorded as unverified
     assert cj.main(["spec", "keem", "--ok", "900A"]) == 1 and "not a number in conflict" in capsys.readouterr().err
     assert cj.main(["spec", "keem", "--ok", "800a"]) == 0

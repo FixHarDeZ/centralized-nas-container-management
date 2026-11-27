@@ -143,7 +143,7 @@ def pad(rect, px):
     return [max(0, rect[0] - px), max(0, rect[1] - px), min(W, rect[2] + px), min(H, rect[3] + px)]
 
 
-def plan_gfx(windows, hook=None):
+def plan_gfx(windows, hook=None, subs=()):
     """windows = [{"scene", "t0", "t1", "face", "busy"}] in final-clip time -> (gfx plan, skipped notes).
     One avoid rect per window with a face (a window without one inherits its scene's last face), a sticker
     on up to 6 windows spread over the clip, and a bouncing arrow in the last window for the CTA."""
@@ -168,6 +168,7 @@ def plan_gfx(windows, hook=None):
         blocked = [RAIL] + ([pad(face, 30), [max(0, face[0] - 40), face[1], min(W, face[2] + 40), H]] if face else [])
         if hook and w["t0"] < hook["end"]:
             blocked.append(hook["rect"])
+        blocked += [r for s0, s1, r in subs if s0 < w["t1"] and w["t0"] < s1]     # a sub moved off the product
         last = i == len(windows) - 1 and len(windows) > 1
         zone = (ZONE[0], 480, ZONE[2], ZONE[3]) if last else ZONE
         if w.get("busy") is None:               # nothing was measured: beside the face
@@ -263,13 +264,15 @@ def fit_image(busy, face, aspect, blocked, h_max=220, h_min=110):
     return None
 
 
-def place_product_sticker(windows, image, aspect, t0, t1, hook=None):
-    """windows (final-clip chunks with face + busy) inside [t0, t1] -> (image_stickers entry, note)."""
+def place_product_sticker(windows, image, aspect, t0, t1, hook=None, subs=()):
+    """windows (final-clip chunks with face + busy) inside [t0, t1] -> (image_stickers entry, note).
+    subs = [(t0, t1, rect)] of subtitles post_presenter moved off the band (report `sub_rects`)."""
     best = None
     for w in windows:
         if w["t0"] < t0 - 0.05 or w["t1"] > t1 + 0.05:
             continue
-        blocked = [RAIL] + list(w.get("product") or []) + ([hook["rect"]] if hook and w["t0"] < hook["end"] else [])
+        blocked = [RAIL] + list(w.get("product") or []) + ([hook["rect"]] if hook and w["t0"] < hook["end"] else []) \
+            + [r for s0, s1, r in subs if s0 < w["t1"] and w["t0"] < s1]
         fit = fit_image(w.get("busy"), w.get("face"), aspect, blocked)
         # free wall beats beside-face, then the bigger cut-out, then the later window (the CTA beat)
         if fit and (best is None or (fit[3] == "free wall", fit[0], w["t0"]) > (best[1][3] == "free wall", best[1][0], best[0]["t0"])):
@@ -564,7 +567,9 @@ def cmd_gfx(a):
             hw = hc["h"] + 42                                    # square bound: wide enough for any product crop
             hook = {"end": float(hc["dur"]), "rect": [hc["x"] - hw // 2, hc["y"] - hw // 2 - 6, hc["x"] + hw // 2,
                                                       hc["y"] + hw // 2 + 46]}
-    plan, skipped = plan_gfx(wins, hook)
+    rows, rects = report.get("subs") or [], report.get("sub_rects") or []
+    moved = [(r[0], r[1], tuple(b)) for r, b in zip(rows, rects) if len(rects) == len(rows) and b[1] < SUB_TOP - 10]
+    plan, skipped = plan_gfx(wins, hook, moved)
     skipped += notes
     placed = []
     held = [(w["t0"], w["t1"], b) for w in wins for b in w["product"]]
@@ -574,7 +579,7 @@ def cmd_gfx(a):
         scenes = report.get("scenes") or []
         last0 = float(scenes[-1].get("global_start") or 0) if scenes else 0.0
         t0, t1, _ = parse_span(a.sticker_at) if a.sticker_at else (last0, float(report.get("v_dur") or 0), None)
-        entry, note = place_product_sticker(wins, a.product_sticker, im.shape[1] / im.shape[0], t0, t1, hook)
+        entry, note = place_product_sticker(wins, a.product_sticker, im.shape[1] / im.shape[0], t0, t1, hook, moved)
         skipped.append(note)
         if entry:
             plan["image_stickers"] = [entry]

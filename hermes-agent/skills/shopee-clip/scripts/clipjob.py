@@ -2676,11 +2676,15 @@ def main(argv=None):
                 if bad:
                     raise Refused(f"--ok {', '.join(bad)}: not a number in conflict (in conflict: {', '.join(every) or 'none'})")
                 replies = board_replies(_epoch(s["at"]))
-                if replies is not None and not replies:
-                    raise Refused(f"no reply from Fix since the conflict was found at {s['at'][11:16]} — ask him first "
-                                  "(one button per number in the approval clarify); --ok records HIS pick")
+                named = [(ts, txt) for ts, txt in replies or [] if all(re.search(rf"(?<!\d){re.escape(re.match(r'[\d.]+', x).group())}(?!\d)",
+                                                                                   txt.translate(speccheck.thainum.THAI_DIGITS)) for x in toks)]
+                if replies is not None and not named:
+                    raise Refused(f"no reply from Fix naming {', '.join(toks)} since the conflict was found at "
+                                  f"{s['at'][11:16]} — a plain ผ่าน is not his pick (keem-herm-loud-800a). Put one "
+                                  "button per number in the approval clarify (e.g. 'ใช้ 800A ตาม listing' / 'ใช้ 300A "
+                                  "ตามรูป' / 'ไม่พูดตัวเลข'); --ok records the number HE tapped")
                 s["ok"] = sorted(set(s.get("ok") or []) | set(toks))
-                s["answer"] = replies[-1][1] if replies else "unverified (state.db unreadable)"
+                s["answer"] = named[-1][1] if named else "unverified (state.db unreadable)"
                 log(j, f"spec ok {', '.join(s['ok'])}: {s['answer'][:80]}")
             save(j)
             return out({"job": a.job, "spec": s, "banned": spec_banned(j),

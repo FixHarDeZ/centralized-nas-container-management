@@ -10,6 +10,8 @@ def test_spec_tokens_read_number_and_unit():
     got = s.spec_tokens("คีมเชื่อมลวด 800A · 2,000mAh · 20V MAX · 1.5 A · 999VF · 3 วัตต์ · ๑๒V")
     assert got == {"A": {"800", "1.5"}, "MAH": {"2000"}, "V": {"20", "12"}, "W": {"3"}}   # 999VF: not a spec
     assert s.spec_tokens("รุ่น A1 2A2 Ver.2") == {}
+    assert s.spec_tokens("คีมเชื่อมลวด800A ด้ามจับ") == {"A": {"800"}}         # Thai glued to the number (Shopee titles)
+    assert s.hits("ใช้คีมเชื่อมลวด800Aตัวนี้", ["800A"]) == ["800A"]
 
 
 def test_conflict_only_when_no_listing_value_is_printed():
