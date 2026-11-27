@@ -2277,3 +2277,31 @@ Fix: "ตรวจงานเมื่อวานกับวันนี้�
   title, conflict → keep the number out of VO/pill/cover and put it to Fix on the board; (2) product-box
   avoidance for sticker / headline / sub band; (3) a status line when the character changes after the board.
 - No queue in play (airnub closed 14:38, decker came 14:50): queue START still unproven live.
+
+### 2026-11-27 (6) ✅ — Fix: "ทำข้อ 1 กับ 2" → spec gate + product-box avoidance, LIVE `01263f9`
+- **1. Spec numbers** (`scripts/speccheck.py`): number + unit (A V W kW mAh Ah Wh Nm rpm Hz GB TB, แอมป์/โวลต์/วัตต์;
+  a letter/digit glued after the unit = model code, ignored). Conflict per unit = no listing value printed on any
+  photo while a photo prints another value of the same order (0.1-10×). OCR turns each photo 0/±30/±45/90° (keem
+  img1: 0° read nothing, the turned passes read "300A" at 0.88-0.99). `intake_images.py` runs it when the job's
+  title names a spec → `<workdir>/spec.json` + `spec_conflict`/`next` before the photo gate; `clipjob.py board`
+  records `j["spec"]`; `pack`/`reserve` refuse a shot prompt carrying either number (digits or Thai words); `deliver`
+  refuses it in caption / post hook / hashtags / pills / subs / gfx `text` / cover OCR; `clipjob.py spec <job> --ok
+  800A` = Fix's pick (refused before a Fix reply after the conflict). Live check in the container on keem's photo:
+  `{"A": {"listing": ["800"], "photos": ["300"]}}` in 10.8 s.
+- **2. Product box** (`autogfx.hue_model`/`product_box`): the ref's dominant vivid hue, sat floor 45 (muted video
+  colours) or 140 + ±6 band for skin-like hues (red handle vs orange vest), every patch joined (dilate 25, parts
+  within 220 px, ≥ 15 % of the biggest) and padded 15 % + 10 px for black parts; black/white/grey ref = None.
+  Decker frames: the old saturation-110 blob caught teal accents only; the new box covers drill + battery.
+  `autogfx gfx` samples 5 frames a window; cut-out + headlines avoid it (`--product`, default the sticker ref);
+  `autogfx boxes` CLI for post. `subclear.py`: post_presenter moves each sub event (worst of 3 moments, overlap =
+  max(share of product covered, share of sub on product), insert close-ups > 30 % of the frame left out, never
+  on the head, x 60-580 / y 270-832, no head measured = never climbs); moved = note, stuck = note (not a flag);
+  `report.json` `sub_rects` → autogfx headlines + `graphics_layer --check` (`sub_spans`). Container replay of
+  post_presenter on the decker clip: "แบตสองก้อน" 80 → 37 %, "เจาะเหล็กเจาะ / คอนกรีตได้" 77 → 38 % (moved right
+  off the drill), 3 others left with notes; libass honoured the per-event margins.
+- Docs: product-image-prep (spec gate), presenter-post (subclear bullet), presenter-graphics (hue box). Tests:
+  test_speccheck (3), test_subclear (6), test_autogfx (+4, cv2 ones run in the container), test_clipjob (+3).
+  Local gate 349 passed; container 368 passed; `--pull` found 0 live edits; no restart (skills only).
+- **Watch next 🧑 order:** `intake_images` output carries `spec_conflict` when the title has a number; post notes
+  "moved off the product"; the cut-out never on the held product. Board text still written by IU: the gate bites
+  at pack/reserve/deliver if the board kept the number.
