@@ -88,6 +88,8 @@ EN pill = the caption for the hook beat (≤2 words, EN only).
 | `gph-10` | "วันที่ <วันวางขาย> นี้ ใครยังไม่พรีฯ ระวังตกขบวน" | FOMO / release date | `DAY ONE` | 📅 |
 
 Notes: `gph-10`'s `<วันวางขาย>` is spoken as words ("สิบห้าพฤศจิกายน"); on the pill use `DAY ONE` or `25 FEB` style (≤2 words), never the full date with year. `gph-1`/`gph-4`/`gph-7` without a confirmed `<เกมที่คล้าย>`/`<แนวเกม>` → choose another id rather than guessing.
+- **The pill column must fit `build_v5`'s 2-word pill gate**: `gph-4`'s `WAIT FOR IT` is 4 words and the build hard-fails any pill over 2 → use `DON'T SKIP` (same callout meaning) as the pill when gph-4 is picked, keep the id, and name the swap in the delivery notes.
+- **`gph-7`'s "มาแน่" fits only a game that is not on sale yet** (pre-order / upcoming). Once it ships, swap the verb (ต้องมี / ต้องโดน) and keep the id — the same rule as `gph-3` above.
 
 ## สินค้า — footage จากวิดีโอทางการ (preset `footage` — `pft-N`, added 2026-11-10)
 For 🎬 product clips cut from the brand's own film (gameplay-clips `references/product-footage.md`). Pick with

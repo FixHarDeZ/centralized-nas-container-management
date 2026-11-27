@@ -132,3 +132,34 @@ def test_song_lyrics_vtt_is_recognised(tmp_path):
     assert w.vtt_is_song(str(song)) and not w.vtt_is_song(str(talk))
     p = w.write_vtt([], str(tmp_path / "none.vtt"))
     assert open(p).read().strip() == "WEBVTT"
+
+
+def test_a_big_single_glyph_is_typography_not_a_suspect():
+    """fate-extra-record-ps5 2026-11-27: '8' / '7' read at 32 % of the frame height in the release-date animation."""
+    big = [{"text": "8", "score": 1.0, "h": 0.32}]
+    assert w.classify(big, set()) == ("text", ["8"])
+    assert w.classify([{"text": "8", "score": 0.65, "h": 0.32}], set())[0] == "suspect"   # unsure read
+    assert w.classify([{"text": "8", "score": 1.0, "h": 0.05}], set())[0] == "suspect"    # small: noise
+    assert w.classify([{"text": "I", "score": 1.0, "h": 0.4}], set())[0] == "suspect"     # a pole, not a letter
+    assert w.classify(hit("C"), set())[0] == "suspect"                                     # no box height: as before
+
+
+def test_the_seconds_before_a_date_are_dirty():
+    """fate: windows 175.62-180.38 and 180.62-184.64 sat right before the 'JAN 28, 2027' card at 185."""
+    ocr = {"174.5": hit("11") + hit("12"), "176.0": [], "180.0": hit("G"), "185.0": hit("JAN 28,2") + hit("2027"),
+           "185.5": hit("JAN 28,") + hit("2027"), "100.0": hit("WINGS OF EMBER")}
+    assert w.date_leads(ocr, set()) == [(175.0, 185.5)]
+    assert w.date_leads(ocr, {"2027", "JAN28", "JAN282"}) == []                    # a persistent overlay is not a reveal
+    assert w.date_leads({"5.0": hit("MARVEL 2"), "6.0": hit("LEVEL 20")}, set()) == []
+
+
+def test_ocr_frames_keeps_each_boxs_height(monkeypatch, tmp_path):
+    def fake_grab(src, t, out, dur=None):
+        open(out, "wb").write(b"png")
+        return True
+    monkeypatch.setattr(w, "grab", fake_grab)
+    monkeypatch.setattr(w, "frame_height", lambda png: 1000)
+    found = [([[0, 100], [50, 100], [50, 420], [0, 420]], "8", 0.99), ([[0, 0], [9, 0], [9, 9], [0, 9]], " ", 0.9)]
+    out = w.ocr_frames("x.mp4", [1.0], lambda f: (found, None), str(tmp_path), dur=2.0)
+    assert out == {"1.0": [{"text": "8", "score": 0.99, "h": 0.32}]}
+    assert w.box_h(None, 1000) == {} and w.box_h([[0, 0]] * 4, None) == {}

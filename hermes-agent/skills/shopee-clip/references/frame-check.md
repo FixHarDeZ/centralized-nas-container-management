@@ -40,6 +40,11 @@ Standing depth for SKILL.md step 10 (per-shot review). Step 10 owns WHAT to samp
   Conversely a full-res pairing that finds every part matching overrides the sheet's drift call the same way —
   the pixels decide, never the tile read. The confirmation runs BOTH ways: a part the tile claims is PRESENT is
   not cleared until the full-res pairing shows it either.
+  **The same screening turns a WORN garment into a HELD one** — a ~150 px tile of a presenter in a hoodie read
+  `she holds the hoodie up` while full-res frames showed it on her body (the chip outfit she no longer wears
+  still read as her outfit at tile size). For apparel, put `is she WEARING it, or HOLDING it while wearing
+  something else?` on the full-res pairing alongside the structural question, and let that answer overrule the
+  sheet: wearing vs held decides both the identity verdict and whether the planned action (wear/fit beats) happened.
 - **The product's own mechanism moving as the board planned is NOT drift** — a clicker's halves springing apart,
   a lid opening, a fold unfolding all change the silhouette between frames while the object is doing exactly what
   the storyboard asked. Check the planned-action answer in the same read before flagging: drift is a part or
@@ -113,3 +118,10 @@ A crop guessed from memory lands on the wrong region (a torso where the fan head
   - "Probe once" = re-send the SAME sheet downscaled to ≤1800 px wide with a one-line question (a full-resolution 2880 px sheet times out on its size, and the resized copy answers in seconds), then — only if that fails — ONE retry with the question cut to its core: a timeout on a large multi-tile sheet is often the long question rather than the provider, and the same image can return normally under a 1-line question. If that trimmed probe also fails, the provider is down — move on, no third attempt.
 - Everything except the pixel gate runs without vision: render poll, download, `verify-clip.py`, log/state writes, and the next clip's submit. Do that work while the provider recovers, then slot the pending frame reads back in.
 - If it never recovers in this run, state exactly which frame times went unread in the delivery — an unrun frame check is reported as NOT RUN, never as clean and never as an implied pass.
+
+## Past the vision budget
+Decide from substitutes and `note` which you used: RapidOCR boxes for text bounding boxes (card/logo layout, crop
+margins), row/column brightness probes for edges and for "is there content up here", a 10 ms RMS envelope for
+audio cut timing, pixel-diff means for "did that overlay render". The post frame sheet and the cover read are not
+optional: when the count says the budget is spent, check `clipjob.py status <job>` → `vision` first (a queued
+job's count was inflated by the job ahead until 2026-11-27).

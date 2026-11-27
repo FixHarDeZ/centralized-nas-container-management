@@ -45,7 +45,12 @@ $R gfx out.mp4 --report report.json --out gfx.json --fx1 fx1.json \
   (and drop to `:auto`/`:face`) until one lands — the promise is the beat, not the exact seconds.
   `the ref's colour was found in 0/N frames`, in EVERY window tried, is a colour-model failure rather than a
   timing one: Flow redrew the product (or the ref is not colourful enough to model), so the next window reads 0
-  as well — stop after one retry and go straight to `:auto`/`:face`, and spend the time on the rest of the chain.
+  as well — with TWO product refs on the shot, first retry the OTHER ref (the board's named garment can be the
+  one that will not model: a dark green dress read 0–2/7 frames under mall light while the second ref locked at
+  once), and verify where the lock landed by pixels before accepting it: mean RGB of a patch around the centre
+  against each ref's own garment mean — matching the OTHER garment is a product punch, matching NEITHER is a
+  background lock the frame-edge rule cannot catch. Only then stop after one retry and go straight to
+  `:auto`/`:face`, and spend the time on the rest of the chain.
   Judge candidates from the WRITTEN PLAN FILE, not stdout — stdout wraps the run as
   `{wrote, plan, skipped}` while `--out` holds the plan itself (`{"punch": […]}`), so a loop reading stdout's
   `plan` key sees `null` on every working candidate. And reject a punch whose centre lands on a frame edge (a

@@ -52,7 +52,7 @@ Apply the warm EQ chain from SKILL.md pitfalls ("เสียงเหมือ�
   ±0.35 s" snap cut inside words (ดรา|ก้อน, โลก|เปิด on dragonddogma2, 2026-11-17) and `gap_after` then
   opened a 0.5 s hole mid-word. stdout `pauses used: 3.94(0.44s) …` shows each cut + pause length.
   `GATE WARN: … likely INSIDE a word` (pause <0.15 s, or too few pauses) = Gemini ran two lines
-  together: listen at that time; fix by joining those two lines into one phrase, not by nudging gaps.
+  together: **check the take's envelope before acting** — decode it and print 10 ms RMS around the cut; digital silence straddling the cut means the pause is real and whisper's word boundaries (which run long) only made it look mid-word, so keep the take and re-gap with `--from-take` (a re-gen on that guess burns a request for nothing). Speech on both sides inside the dip is the real defect: fix by joining those two lines into one phrase, not by nudging gaps.
   Never use per-phrase mode (`"mode": "phrase"`) on the free tier: it burns 6 requests per clip.
 - The raw take is saved (`--take-out`). Re-time or re-gap with `--from-take` at **0 requests**.
 - Fallback models when one is 429: `gemini-3.8-flash-tts` → `gemini-3.1-flash-tts-preview` →

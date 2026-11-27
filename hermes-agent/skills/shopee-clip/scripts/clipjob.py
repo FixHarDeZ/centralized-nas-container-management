@@ -403,22 +403,33 @@ def vo_rate_check(j, k):
 VISION_TIMEOUT_S = 400        # a call this long hit Hermes' 420 s tool deadline (aux vision timeout does not hold)
 
 
-def vision_calls(a, b, db=None):
+def _image_url(call):
+    try:
+        args = (call.get("function") or {}).get("arguments") or "{}"
+        return str((json.loads(args) if isinstance(args, str) else args).get("image_url") or "")
+    except (ValueError, AttributeError):
+        return ""
+
+
+def vision_calls(a, b, db=None, urls=False):
     """[(asked, answered)] epochs of Hermes `vision_analyze` calls between a and b (state.db); a call with no
     result yet counts up to b. switch2-oblivion-rd 2026-11-22: 13 calls + one 420 s hang on a 🎬 job whose budget
-    is ~8 — the budget was prose only. Read-only, best effort: no db / a changed schema = []."""
+    is ~8 — the budget was prose only. `urls` adds the call's image_url as a third item (job_vision attributes
+    calls by workdir). Hermes core stores some rows twice (same call id): counted once. Read-only, best effort:
+    no db / a changed schema = []."""
     db = db or HERMES_DB
     if not os.path.exists(db):
         return []
     try:
         c = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=2)
         try:
-            asked = {}
+            asked, where = {}, {}
             for ts, tc in c.execute("SELECT timestamp, tool_calls FROM messages WHERE role='assistant' "
                                     "AND timestamp BETWEEN ? AND ? AND tool_calls LIKE '%vision_analyze%'", (a, b)):
                 for call in json.loads(tc or "[]"):
                     if (call.get("function") or {}).get("name") == "vision_analyze":
-                        asked[call.get("id") or call.get("call_id") or f"anon{len(asked)}"] = ts
+                        cid = call.get("id") or call.get("call_id") or f"anon{len(asked)}"
+                        asked[cid], where[cid] = ts, _image_url(call)
             done = {}
             if asked:
                 marks = ",".join("?" * len(asked))
@@ -428,6 +439,8 @@ def vision_calls(a, b, db=None):
             c.close()
     except (sqlite3.Error, ValueError, TypeError, AttributeError):
         return []
+    if urls:
+        return sorted((t, min(done.get(i) or b, b), where[i]) for i, t in asked.items())
     return sorted((t, min(done.get(i) or b, b)) for i, t in asked.items())
 
 
@@ -439,10 +452,61 @@ def vision_budget(j):
     return 6 + sum(1 for sh in j["shots"] if any(at.get("via") == "auto" for at in sh["attempts"]))
 
 
-def job_vision(j, end=None):
+def job_start(j):
+    return min(_epoch(j["created"]), _epoch(j["started"])) if j.get("started") else _epoch(j["created"])
+
+
+def _finished(jj):
+    """When an earlier job stopped holding the line: its last delivery, or its cancel / last event."""
+    d = jj.get("delivery") or {}
+    if jj.get("status") == "delivered" and d.get("at"):
+        return _epoch(d["at"])
+    if jj.get("status") == "cancelled":
+        return _epoch((jj.get("events") or [{}])[-1].get("ts") or jj["updated"])
+    return None                                         # still open
+
+
+def queue_gate(j, end=None):
+    """Epoch at which this job's own work could start: the end of every job that was open ahead of it when it
+    arrived (its `queued_behind`, or for a job intaken before that stamp existed, any job created before it and
+    still unfinished at its start, touched within QUEUE_FRESH_H). A job ahead that is still open holds the gate
+    at `end`. None = it queued behind nothing.
+    yuedpao-barrel-pants 2026-11-26 (intake 13:33 behind yuedpao-hoodie, delivered 14:33): its timing (108 min,
+    real 46) and vision count (10/7: 7 were hoodie's) started at its intake, and the 10/7 made Hermes skip the
+    post frame sheet."""
     end = end if end is not None else now()
-    start = min(_epoch(j["created"]), _epoch(j["started"])) if j.get("started") else _epoch(j["created"])
-    calls = vision_calls(start, end)
+    start, names, gate = job_start(j), j.get("queued_behind"), None
+    for f in sorted(os.listdir(DIR)) if os.path.isdir(DIR) else []:
+        if not f.endswith(".json") or f in ("pacing.json", f"{j['job']}.json"):
+            continue
+        try:
+            with open(os.path.join(DIR, f), encoding="utf-8") as fh:
+                jj = json.load(fh)
+            if names is not None:
+                if jj.get("job") not in names:
+                    continue
+            elif not (_epoch(jj["created"]) < start and start - _epoch(jj["updated"]) < QUEUE_FRESH_H * 3600):
+                continue
+            fin = _finished(jj)
+        except (OSError, ValueError, KeyError, TypeError, IndexError):
+            continue
+        fin = min(end, fin) if fin is not None else end
+        if fin > start:
+            gate = max(gate or fin, fin)
+    return gate
+
+
+def job_vision(j, end=None):
+    """Vision calls that belong to this job: any call on an image under its own workdir, plus calls on images
+    outside every job workdir (Fix's photos in Hermes' cache) once its queue gate opened. Calls on another
+    job's workdir never count."""
+    end = end if end is not None else now()
+    start = job_start(j)
+    gate = max(start, queue_gate(j, end) or start)
+    work = WORK.rstrip("/") + "/"
+    mine = j["workdir"].rstrip("/") + "/"
+    calls = [(a, b) for a, b, url in vision_calls(start, end, urls=True)
+             if url.startswith(mine) or (not url.startswith(work) and a >= gate)]
     return {"calls": len(calls), "budget": vision_budget(j), "min": round(sum(b - a for a, b in calls) / 60),
             "timeouts": sum(1 for a, b in calls if b - a >= VISION_TIMEOUT_S)}
 
@@ -455,14 +519,15 @@ def vision_warning(v):
 
 
 def job_asks(j, end):
-    """clarify waits inside this job's clock (see timeline)."""
-    start = min(_epoch(j["created"]), _epoch(j["started"])) if j.get("started") else _epoch(j["created"])
-    return clarify_spans(start, end)
+    """clarify waits inside this job's clock (see timeline): from its queue gate, not the job ahead's asks."""
+    start = job_start(j)
+    return clarify_spans(max(start, queue_gate(j, end) or start), end)
 
 
-def timeline(j, end=None, asks=()):
+def timeline(j, end=None, asks=(), gate=None):
     """Where the time went, in minutes, from the job's own events. A revision counts from its reopen.
-    `asks` = extra (start, end) waits on Fix that left no event (Hermes clarify calls, job_asks)."""
+    `asks` = extra (start, end) waits on Fix that left no event (Hermes clarify calls, job_asks).
+    `gate` = queue_gate: the minutes before it are `queue_min` (waiting behind another job), not this job's."""
     ev = [(_epoch(e["ts"]), e["msg"]) for e in j["events"]]
     end = end if end is not None else (ev[-1][0] if ev else now())
     created = _epoch(j["created"])
@@ -471,6 +536,11 @@ def timeline(j, end=None, asks=()):
     if reopened:
         return {"total_min": mins(reopened[-1], end), "stages": [["แก้งาน", mins(reopened[-1], end)]], "wait_fix_min": 0}
     start = min(created, _epoch(j["started"])) if j.get("started") else created
+    queued = 0
+    if gate and gate > start:
+        queued = mins(start, min(gate, end))
+        start, created = min(gate, end), max(created, min(gate, end))
+        ev = [(max(t, start), m) for t, m in ev]
     stages = [["เตรียม", mins(start, created)]]
     decides = [t for t, m in ev if m.startswith("decide shot")]
     spans, ready_at = list(asks), {}
@@ -497,7 +567,8 @@ def timeline(j, end=None, asks=()):
             stages.append([name, mins(t, nxt)])
     else:
         stages.append(["ทำคลิป", mins(created, end)])
-    return {"total_min": mins(start, end), "stages": stages, "wait_fix_min": round(wait / 60)}
+    return {"total_min": mins(start, end), "stages": stages, "wait_fix_min": round(wait / 60),
+            **({"queue_min": queued} if queued else {})}
 
 
 def timeline_text(tl):
@@ -506,7 +577,8 @@ def timeline_text(tl):
              for k, v in tl["stages"]]
     if tl["wait_fix_min"] and not any(k in ("gen+รีวิว", "ทำคลิป") for k, _ in tl["stages"]):
         parts.append(f"รอฟิกตอบ {tl['wait_fix_min']} น.")      # 🎬 split by `stage`: the wait has no host stage
-    return f"⏱ รวม {f'{h} ชม. ' if h else ''}{m} น. · " + " · ".join(parts)
+    q = f" (+รอคิว {tl['queue_min']} น.)" if tl.get("queue_min") else ""
+    return f"⏱ รวม {f'{h} ชม. ' if h else ''}{m} น.{q} · " + " · ".join(parts)
 
 
 def shot(j, k):
@@ -567,6 +639,22 @@ def jobs_ahead(job, t=None):
         if jj.get("status") == "open" and fresh:
             rows.append(jj)
     return sorted(rows, key=lambda r: r.get("created") or "")
+
+
+def queue_next(job):
+    """The order waiting behind `job`, as a `next` instruction, or None. wo-long-2-sw 2026-11-26: queued at
+    10:07 behind village-shade-sw; after that delivery `next` said "end the turn", Hermes wrote "ไปต่อ Wo Long 2
+    เมื่อฟิกสั่งนะคะ" and the order sat 38 min until Fix typed "ต่อ" (barrel-pants the same day: "ต่อได้เลย").
+    Fix already ordered it when he sent it: start it in this turn, never ask."""
+    q = jobs_ahead(job)
+    if not q:
+        return None
+    n = q[0]
+    more = f" ({len(q) - 1} more after it)" if len(q) > 1 else ""
+    return (f"START the next order now: {n['job']} (Fix sent it at {n['created'][11:16]}, stage "
+            f"{n.get('stage') or 'open'}){more} — `clipjob.py status {n['job']}`, continue from its last note in "
+            f"this same turn. Do NOT ask Fix whether to start it; he ordered it. A {CLOSE_BTN} tap that arrives "
+            "mid-turn: `clipjob.py decide --text` it, then carry on")
 
 
 def queue_text(j, ahead):
@@ -2091,7 +2179,7 @@ def cmd_deliver(j, a):
                "credits": (0 if j["mode"] == "gameplay" else
                            sum(c for c in credits if c) if credits and all(c is not None for c in credits) else None),
                **({"credits_est": True} if any(at.get("credits_est") for s in j["shots"] for at in s["attempts"]) else {}),
-               "notes": notes.strip(" |"), "timing": timeline(j, now(), job_asks(j, now())),
+               "notes": notes.strip(" |"), "timing": timeline(j, now(), job_asks(j, now()), queue_gate(j)),
                "vision": job_vision(j), **({"plate": j["plate"]["state"]} if j.get("plate") else {})}
         os.makedirs(os.path.dirname(CLIP_LOG), exist_ok=True)
         with open(CLIP_LOG, "a", encoding="utf-8") as f:
@@ -2127,7 +2215,7 @@ def cmd_deliver(j, a):
         j["delivery"]["kept"] = f"not kept: {e}"
     log(j, "delivered")
     t_end = now()
-    j["timing"] = timeline(j, t_end, job_asks(j, t_end))
+    j["timing"] = timeline(j, t_end, job_asks(j, t_end), queue_gate(j, t_end))
     j["timing"]["vision"] = job_vision(j, t_end)
     kept = j["delivery"]["kept"]
     j["delivery"]["mirror"] = {"job": j["job"], "sha256": digest,
@@ -2360,7 +2448,9 @@ def main(argv=None):
                 j = load(job); res = close_job(j, "tap" if a.cmd == "decide" else "manual"); save(j)
                 notify(close_text(j) if "closed" in res else f"งาน {job} ปิดไปแล้วค่ะ")
                 done.append(res)
-            return out({"closed": done, "next": "end the turn: one short line, no cleanup of your own"})
+            q = queue_next(jobs[0]) if len(jobs) == 1 else None
+            return out({"closed": done, "next": (f"one short line, no cleanup of your own; then {q}" if q else
+                                                 "end the turn: one short line, no cleanup of your own")})
         if a.cmd == "decide" and parse_takeover_text(a.text):
             j = load(parse_takeover_text(a.text)); res = takeover(j)
             if "why" in res:
@@ -2562,8 +2652,9 @@ def main(argv=None):
             rc, o, e = run(["python3", os.path.join(HERE, "check_delivery.py")])
             return out({"delivered": d, "check_delivery_exit": rc, "check_delivery": (o + e)[-600:],
                         "close": {**j["close"], "timer_pid": pid}, "secretary_copy": mirror,
-                        "next": f"one short line to Fix, then end the turn. No cleanup: Fix's {CLOSE_BTN} tap or the "
-                                f"timer runs clipjob.py close in {CLOSE_S // 60} min"})
+                        "next": (f"one short line to Fix, then {q}. No cleanup" if (q := queue_next(j["job"])) else
+                                 "one short line to Fix, then end the turn. No cleanup")
+                                + f": Fix's {CLOSE_BTN} tap or the timer runs clipjob.py close in {CLOSE_S // 60} min"})
         if a.cmd == "cancel":
             need_open(j)
             j["status"] = "cancelled"; log(j, f"cancelled: {a.reason}"); save(j)

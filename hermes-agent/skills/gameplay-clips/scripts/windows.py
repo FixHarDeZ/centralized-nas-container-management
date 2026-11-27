@@ -21,7 +21,11 @@ turn. This script does that join once. A window here is a run of the source that
     one blinked in the hook; 4 fps misses them), padded WASH_PAD;
   * text-free: RapidOCR at 1 s over the candidates only, every text run's edges re-scanned at 0.25 s.
     A string seen on >= half the scanned frames is a persistent overlay (watermark, HUD, rating bug):
-    reported, never dirty. One-character hits are listed as `suspect`, never dirty.
+    reported, never dirty. One-character hits are listed as `suspect`, never dirty — unless the glyph is BIG
+    (box >= BIG_GLYPH of the frame height, confident, not a thin I/L/1): typography, dirty;
+  * not a date reveal: the DATE_LEAD s before any date / year hit are dirty. fate-extra-record-ps5 2026-11-27
+    shipped giant "2" / "02" / "JA" fragments (the release-date animation before "JAN 28, 2027"): OCR read only a
+    few of those frames, as single characters (`suspect`), and both windows there were offered as clean.
 Each window also carries its motion (mean frame difference; `static` = a card or a still), the hard
 cuts inside it and the best 3 tile times. The sheet shows those tiles labelled `W<n> <t>`, for ONE
 vision call: gameplay / cutscene / card / logo per window. Pick segs from the table; don't re-measure.
@@ -52,6 +56,13 @@ ASR_NEAR = 1.5      # s: a whisper word this close to a VAD span is the same spe
 OCR_STEP = 1.0
 REFINE = (0.25, 0.5, 0.75)
 MIN_SCORE = 0.6     # RapidOCR confidence for a hit
+BIG_GLYPH = 0.12    # x frame height: a one-character hit this tall is typography (fate: '8' 0.32, '21' 0.14)
+BIG_SCORE = 0.8     # ... and this confident
+THIN = {"I", "L", "1"}   # poles, edges and rails read as these: never "big typography" on their own
+DATE_LEAD = 10.0    # s before a date hit: the reveal animation (fate: 175.6-184.6 before "JAN 28, 2027" at 185)
+DATE_RE = re.compile(r"\b(19|20)\d\d\b|\b\d{1,2}[./-]\d{1,2}[./-](19|20)?\d\d\b|\b(JAN(UARY)?|FEB(RUARY)?|MAR(CH)?|"
+                     r"APR(IL)?|MAY|JUNE?|JULY?|AUG(UST)?|SEPT?(EMBER)?|OCT(OBER)?|NOV(EMBER)?|DEC(EMBER)?)\.?\s*\d{1,2}\b",
+                     re.I)
 STATIC = 1.5        # mean abs frame diff (0-255, 160x90 gray) under this = static card / still
 CUT_MIN = 20.0      # a frame diff above max(CUT_MIN, 6 x median) = hard cut
 USABLE_S = 15.0
@@ -112,8 +123,37 @@ def classify(items, skip):
         k = norm(i["text"])
         if not k or k in skip or float(i.get("score", 1)) < MIN_SCORE:
             continue
-        (real if len(k) >= 2 else sus).append(i["text"])
+        big = float(i.get("h", 0)) >= BIG_GLYPH and float(i.get("score", 1)) >= BIG_SCORE and k not in THIN
+        (real if len(k) >= 2 or big else sus).append(i["text"])
     return ("text", real) if real else ("suspect", sus) if sus else ("clean", [])
+
+
+def date_leads(ocr_map, skip, lead=DATE_LEAD):
+    """[(t - lead, t)] before every sampled frame that shows a date / year (overlays excluded)."""
+    out = []
+    for t, items in ocr_map.items():
+        if any(DATE_RE.search(i["text"]) for i in items
+               if norm(i["text"]) not in skip and float(i.get("score", 1)) >= MIN_SCORE):
+            out.append((float(t) - lead, float(t)))
+    return merge(out)
+
+
+def box_h(box, frame_h):
+    """{'h': box height / frame height} for an OCR box (4 points), {} when either is unknown."""
+    try:
+        ys = [float(p[1]) for p in box]
+        return {"h": round((max(ys) - min(ys)) / frame_h, 3)} if frame_h else {}
+    except (TypeError, ValueError, IndexError):
+        return {}
+
+
+def frame_height(png):
+    try:
+        from PIL import Image
+        with Image.open(png) as im:
+            return im.size[1]
+    except Exception:
+        return None
 
 
 def dirty_spans(ocr_map, skip):
@@ -329,10 +369,12 @@ def ocr_frames(src, times, ocr, scratch, dur=None):
             continue
         try:
             found, _ = ocr(f)
+            fh = frame_height(f)
         finally:
             if os.path.exists(f):
                 os.remove(f)
-        out[str(t)] = [{"text": txt.strip(), "score": round(float(sc), 3)} for _, txt, sc in (found or []) if txt.strip()]
+        out[str(t)] = [{"text": txt.strip(), "score": round(float(sc), 3), **box_h(box, fh)}
+                       for box, txt, sc in (found or []) if txt.strip()]
     return out
 
 
@@ -418,7 +460,7 @@ def main():
     skip = set(overlays(ocr_map))
     more = refine_times(ocr_map, skip, 0.0, dur)
     ocr_map.update(ocr_frames(a.src, more, ocr, scratch, dur))
-    text = dirty_spans(ocr_map, skip)
+    text = merge(dirty_spans(ocr_map, skip) + date_leads(ocr_map, skip))
 
     clean = [s for s in subtract(cand, text) if s[1] - s[0] >= a.min]
     wins = [describe(x, y, times, luma, diff, cuts, ocr_map, skip) for x, y in clean]

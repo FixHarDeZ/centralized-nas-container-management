@@ -46,6 +46,13 @@ shot 1 of a 🤖 🧑/✋ job until a verdict is recorded: `clipjob.py plate <jo
 or `clipjob.py plate <job> skipped|refused --why "<Image tab read N credits / face gate failed / refusal>"`.
 The gate stops once one delivered job used a plate (Fix's verdict decides the rest); the clip-log row carries
 `plate`. `CLIPJOB_PLATE_TRIAL=0` switches it off.
+- **Ordering:** `clipjob.py plate` and `clipjob.py production` both REFUSE while the job is still at `intake`
+  (`run clipjob.py new … after Fix approves the board`) — record them right after `new`, in that sequence:
+  `new` → `production` → `plate` → `note`.
+- **When the session's vision budget is already spent, skip the plate instead of gating it half-blind:** the
+  gate's ONE read (face + no text/logo/product) cannot be substituted cheaply, so run
+  `plate <job> skipped --why "vision budget spent — plate gate needs its read"` and shoot shot 1 the normal way
+  (character chip + refs). A skipped plate costs nothing and is reported like any other skip.
 
 ## Report it
 - Clip-log `--notes`: `plate: used|skipped|refused (<why>)`.

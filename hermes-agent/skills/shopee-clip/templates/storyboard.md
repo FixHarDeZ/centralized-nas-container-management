@@ -28,6 +28,12 @@ Why: two 10 s takes of "hold it up / press / set down" read as filler (vacuum-ba
 - Plan the graphics v2 layer per shot: punch-in at the money moment, EN pill (<=2 words), product cutout, before/after card. **Count the pill's whitespace tokens while writing the board**: `&` is its own token, so `Tie & Go` = 3 and `post_presenter.py` refuses it — that gate fires only after the approved board is already running, so word pills ≤2 tokens from the start. **📦/✋ have no punch-in** — `graphics_layer.py` has no zoom effect — so for those modes the board plans a sticker (arrow/sparkle, `anim: pop`) at the money moment instead; never promise in an approved board what post cannot render.
 - Flag risky actions (zips, valves, fine finger work, text on product) and name a fallback shot.
 - Rigid product (rack, shelf, cabinet, device) in 🧑/✋ and Fix named the mode in the order (router Q1 skipped): put the Q1 warning on the board's ⚠️ line — Flow redrew its parts/size in 3 of 3 such jobs (2026-11-10/11/14); the risk does not disappear with the question.
+- **The order asks to SHOW two variants in one 10 วิ ("โชว์ทั้งแบบ A และ B ใน 10 วิ"): one shot, not two.** Two
+  gens double the submit risk and need a second on-screen price read; instead WEAR one variant and HOLD the other
+  up (on a hanger / folded), attach BOTH refs as ingredients (chipcheck verifies each), and lock both in the
+  prompt's structure block — exact piece counts for each, "never merge them, never add a third garment" — so one
+  idcheck verifies both. Split 2×5 s only if Fix insists both be worn, and read that duration's credit line from
+  Settings before putting the number on a board.
 - CTA: only on the final shot, and only if the clip is light (heavy-content clips skip it).
 - No price, no unverified claims (%, seconds, certifications) in any line.
 

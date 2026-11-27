@@ -70,6 +70,8 @@
   loss; the gate keeps one heavy job at a time and stops the two jobs' submits/paces from interleaving.
   `intake` itself sends Fix "📥 รับคิวแล้วค่ะ · คิวที่ N ต่อจาก <job>" (the gateway already said รับคิวแล้ว
   the moment it arrived): send no second "รับออเดอร์" line, go straight back to the open job.
+  **When that job delivers, start the queued one in the same turn** (`next: START …`): he ordered it already.
+- **`note` is refused after `deliver`** (`REFUSED: job <x> is delivered`): put a wrap-up in a `send_status.py` line.
 - **Called off (`เลิกทำ` / `หยุด` / `พอแล้ว`):** `clipjob.py cancel`, no clip-log row. There is no cancel control in Flow:
   a queued render may still finish server-side, so say so. Record the abort (edit ids opened, the reason) in the
   flow-state file, close Chrome with CDP `Browser.close` (pkill only when CDP is dead), verify `:9222` is gone, and
@@ -97,12 +99,14 @@
 ## Vision budget
 **Every `vision_analyze` counts** — the photo-gate locator and page-state screenshot reads alike — so settle
 edges/positions with pixel probes and DOM reads: the budget runs out exactly when post needs its frame sheet
-and cover reads. Chip identity is `flow-driver/scripts/chipcheck.py` (pixels, 0 vision; Fix 2026-11-23).
+and cover reads. The counter is per job (another job's workdir and the queue wait do not count). Reserve the
+reads that cannot be substituted (idcheck, plate gate, post frame sheet, cover). Chip identity is `flow-driver/scripts/chipcheck.py` (pixels, 0 vision; Fix 2026-11-23).
 Frames you pull yourself to place a beat or identify a product count the same way: ONE labelled sheet of ~8
 frames answers every beat (when she lifts the product, where the graphics can go) in a single call, and a
 printed TITLE is settled by ONE full-res frame — a sheet tile substitutes the nearest real product name for a
 stylised one (`presenter-graphics.md` → Lessons). Prefer a pixel probe (hue/row profiles) over either when the
 question is a coordinate.
+**Past the budget, decide from substitutes and `note` which** (`frame-check.md` → Past the vision budget).
 
 ## Style standard (every clip)
 - Female presenter, cute tone, no hard sell; modern Thai teen slang (ปัง, เริ่ด, ของมันต้องมี, ดี๊ดี, คุ้มเว่อร์), not cringe.

@@ -2144,3 +2144,44 @@ Fix: "ตรวจงานเมื่อวานกับวันนี้�
   31 s vision read). Open: an order sent while a `clarify` is pending is taken as the clarify's answer
   (run_inbound `_hm_clarify_reply` runs before the busy path).
 
+
+## 2026-11-27 — check of the 11-26 → 11-27 clip jobs (Fix: "ตรวจงานเมื่อวานกับวันนี้ว่าโอเคไหม เผื่อมีอะไร enhance")
+- 8 jobs, all delivered + closed, Secretary copy ok (clip + 3-button copy message + cover). 🪝 post hook live on all 5
+  deliveries since village-shade-sw. Open now: **keem-herm-loud-800a** (🧑, intake 10:14) → no sync/restart yet.
+  - **metroid-ravenous-10s** 🧑📝 10 s, 33 min, 30 cr. Subs sit on the held case 3.5–6.5 s; the two lower
+    headlines ("Action Adventure" 7.5 s, "Link below!" 9.5 s) are ~26 px tall on her shoulder — barely readable.
+  - **village-shade** 🧑📝 8 s, 68 min (Fix wait 27). Sub over the case 3.6–5.2 s. Otherwise clean.
+  - **village-shade-sw** 🎬 28 s, 84 min. Clean (date cropped off the end card).
+  - **wo-long-2-sw** 🎬 26 s, logged 193 min, real work ≈ 73: queued 10:07 behind village-shade-sw, which delivered
+    11:28; Hermes then said "ไปต่อ Wo Long 2 เมื่อฟิกสั่งนะคะ" and sat idle until Fix typed "ต่อ" at 12:08 (38 min).
+    End card: `endcard_crop.py` (tail scan) picked the Digital Deluxe comparison card; Hermes hand-cropped the
+    logo + "March 4, 2027" card at 93.6 s without `--at` → `deliver` refused 3× ("LONG2" on the top edge), 5
+    build_v5 runs, ~25 min. The on-screen date stayed (village-shade-sw dropped its date) — Fix's call.
+  - **yuedpao-hoodie** 🧑🤖 61 min, plate used (0 cr). Clean.
+  - **yuedpao-barrel-pants** 🧑🤖 logged 108 min, real ≈ 46 (queued behind hoodie; after hoodie closed Hermes
+    asked "สั่งมาได้เลยค่ะ" and Fix had to type "ต่อได้เลย"). ❌ `vision 10/7` → Hermes **skipped the post frame
+    sheet** ("เกินงบ"), but only 3 calls were its own: `clipjob.job_vision` counts every vision call since
+    `created`, so it inherited hoodie's 7. Sub line break "เอวยางยืด มีกระเป๋า มี / 6 สี". Post hook = the VO's
+    feature list ("เอวยางยืด ผ้านุ่ม ใส่ได้ทั้งวัน").
+  - **yuedpao-sleep** 🧑🤖 54 min. Clean. Flow's duration slider drifted to 15 s mid-probe; Hermes set
+    `localStorage['flow-prompt-box-settings'].videoDuration` = 10 + reload, re-read 30 cr before submit (live edit
+    in flow-browser-env).
+  - **fate-extra-record-ps5** 🎬 15 s, 175 min at 01:40–04:36 (two board clarifies timed out, Fix asleep).
+    ❌ **Date-reveal fragments shipped**: giant "2" (2.6–3.3 s), "02" (5.0–5.6 s) and "JA" under the CTA
+    (12.0–13.0 s) — segs at 175.63 and 181.0 of the release trailer = the animation just before the "JAN 28, 2027"
+    card (185 s). `windows.py` offered 175.62–180.38 / 180.62–184.64 as clean: its OCR hits there were single
+    characters ('7', '8', 'G', '福') → `suspect`, never dirty, though the boxes were ~20–37 % of the frame height.
+    Time: 4 windows.py runs = 50 min (tr_tgs alone 24 min; two re-runs on re-encoded crops of the visible window,
+    cropc 227 MB / crop_rel 143 MB) + ~25 min of Hermes' own OCR passes + 20 min of clarify timeouts.
+- Cross-job causes:
+  - **Queue stall:** `clipjob deliver` → `next: "one short line to Fix, then end the turn"` and the 🏁 close →
+    `next: "end the turn"` even when another order is open → the queued job waits for Fix to say "ต่อ".
+  - **Per-job counters leak:** `job_vision` / `timeline` start at `created`; a job intaken while another runs gets
+    the other job's vision calls and minutes. Hermes' live house-rules edit (11-26 15:07) turned the symptom into a
+    rule: "the counter is per-SESSION … budget ONE pool for the whole session" — to be replaced with the fix.
+  - **Chinese image pre-analysis** (wo-long, again): Hermes core `gateway/run_inbound.py` `_enrich_message_with_vision`
+    prompt literally says "(~200 Chinese characters or ~150 English words)". Core code, not a skill.
+  - Hermes core stores some messages twice in long sessions (5 of 35 sessions since 11-20, 59–135 rows each,
+    identical ids/outputs = storage only, actions not doubled). Not ours; noted.
+- Live drift since `aa8170a`: 11 doc files (frame-check, house-rules, presenter-graphics, presenter-post,
+  scene-plate, hooks, storyboard, flow-browser-env, cover-sticker, footage-sourcing, natural-vo); no script drift.

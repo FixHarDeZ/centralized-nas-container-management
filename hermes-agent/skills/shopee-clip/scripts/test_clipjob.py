@@ -805,6 +805,20 @@ def test_tap_then_timer_and_timer_then_tap(closing, capsys):
     assert len(closing["sent"]) == n and "skipped" in capsys.readouterr().out
 
 
+def test_deliver_and_close_start_the_queued_order(closing, capsys):
+    """wo-long-2-sw 2026-11-26: `next` said "end the turn" with an order queued; it sat 38 min until Fix typed ต่อ."""
+    j = cj.load("g-1"); j["status"] = "open"; j.pop("close", None); cj.save(j)
+    assert cj.main(["intake", "next-1", "--product", "Second", "--link", "https://s.shopee.co.th/y"]) == 0
+    capsys.readouterr()
+    assert cj.main(closing["args"]) == 0                                          # re-deliver with next-1 waiting
+    nxt = json.loads(capsys.readouterr().out)["next"]
+    assert "START the next order now: next-1" in nxt and "Do NOT ask Fix" in nxt and "end the turn" not in nxt
+    assert cj.main(["decide", "--text", "🏁 จบงาน · g-1"]) == 0
+    assert "START the next order now: next-1" in json.loads(capsys.readouterr().out)["next"]
+    j = cj.load("next-1"); j["status"] = "cancelled"; cj.save(j)                    # nothing left in the queue
+    assert cj.queue_next("g-1") is None
+
+
 def test_reopen_voids_the_timer_and_redeliver_arms_a_new_one(closing, capsys):
     old = cj.load("g-1")["close"]["token"]
     assert cj.main(["reopen", "g-1", "--reason", "ฟิก: แก้ซับ"]) == 0
@@ -1434,6 +1448,70 @@ def test_vision_calls_counts_this_jobs_calls_and_the_420s_hang(tmp_path):
     _vision_db(db, [(10, 70), (100, 520), (600, None), (5000, 5050)])
     assert cj.vision_calls(0, 1000, db) == [(10, 70), (100, 520), (600, 1000)]
     assert cj.vision_calls(0, 1000, str(tmp_path / "none.db")) == []
+
+
+def _queued_pair(tmp_path, monkeypatch, stamped):
+    """yuedpao-hoodie (intake 13:32, delivered 14:33) and yuedpao-barrel-pants (intake 13:33, queued behind it)."""
+    monkeypatch.setattr(cj, "DIR", str(tmp_path / "jobs")); os.makedirs(cj.DIR)
+    monkeypatch.setattr(cj, "WORK", "/opt/data/clips/work")
+    t = lambda hhmm: f"2026-11-26T{hhmm}:00+07:00"
+    hoodie = {"job": "hoodie", "status": "delivered", "created": t("13:32"), "updated": t("14:34"),
+              "delivery": {"at": t("14:33")}, "events": [], "workdir": "/opt/data/clips/work/hoodie"}
+    pants = {"job": "pants", "mode": "presenter", "status": "open", "created": t("13:33"), "updated": t("15:20"),
+             "started": t("13:33"), "workdir": "/opt/data/clips/work/pants", "shots": [], "events": []}
+    if stamped:
+        pants["queued_behind"] = ["hoodie"]
+    for j in (hoodie, pants):
+        with open(os.path.join(cj.DIR, j["job"] + ".json"), "w") as f:
+            json.dump(j, f)
+    return pants, cj._epoch(t("14:33"))
+
+
+@pytest.mark.parametrize("stamped", [True, False])
+def test_a_queued_job_counts_only_its_own_vision_and_minutes(tmp_path, monkeypatch, stamped):
+    """yuedpao-barrel-pants 2026-11-26: vision 10/7 (7 were hoodie's) -> Hermes skipped its frame sheet; timing 108
+    min for 46 of its own. A job intaken before `queued_behind` existed finds the job ahead by its clock."""
+    import sqlite3
+    pants, gate = _queued_pair(tmp_path, monkeypatch, stamped)
+    assert cj.queue_gate(pants, gate + 3600) == gate
+    db = str(tmp_path / "state.db"); monkeypatch.setattr(cj, "HERMES_DB", db)
+    c = sqlite3.connect(db)
+    c.execute("CREATE TABLE messages (role TEXT, timestamp REAL, tool_calls TEXT, tool_call_id TEXT)")
+    calls = [(gate - 3500, "/opt/data/clips/work/hoodie/intake_sheet.jpg"),    # the job ahead's: never
+             (gate - 3400, "/opt/data/cache/documents/x.jpg"),                 # Fix's photo before the gate: hoodie's
+             (gate - 3300, "/opt/data/clips/work/pants/intake_sheet.jpg"),     # its own, even inside the queue
+             (gate - 600, "/opt/data/clips/work/hoodie/frame_sheet.jpg"),
+             (gate + 60, "/opt/data/clips/work/pants/intake_sheet.v.jpg"),
+             (gate + 120, "/opt/data/cache/documents/y.jpg")]
+    for i, (ts, url) in enumerate(calls):
+        tc = json.dumps([{"id": f"v{i}", "function": {"name": "vision_analyze",
+                                                      "arguments": json.dumps({"image_url": url})}}])
+        c.execute("INSERT INTO messages VALUES ('assistant', ?, ?, NULL)", (ts, tc))
+        c.execute("INSERT INTO messages VALUES ('tool', ?, NULL, ?)", (ts + 30, f"v{i}"))
+    c.execute("INSERT INTO messages VALUES ('assistant', ?, ?, NULL)", (gate + 60, json.dumps(  # stored twice
+        [{"id": "v4", "function": {"name": "vision_analyze", "arguments": "{}"}}])))
+    c.commit(); c.close()
+    assert cj.job_vision(pants, gate + 3600)["calls"] == 3
+    pants["events"] = [{"ts": "2026-11-26T13:33:00+07:00", "msg": "intake"},
+                       {"ts": "2026-11-26T15:00:00+07:00", "msg": "ready shot 1 pass=True"},
+                       {"ts": "2026-11-26T15:09:00+07:00", "msg": "decide shot 1: approve"}]
+    tl = cj.timeline(pants, gate + 48 * 60, gate=cj.queue_gate(pants, gate + 48 * 60))
+    assert tl["queue_min"] == 60 and tl["total_min"] == 48
+    assert tl["stages"] == [["เตรียม", 0], ["gen+รีวิว", 36], ["post", 12]]
+    assert "รวม 48 น. (+รอคิว 60 น.)" in cj.timeline_text(tl)
+
+
+def test_a_job_with_nothing_ahead_keeps_its_whole_clock(tmp_path, monkeypatch):
+    pants, gate = _queued_pair(tmp_path, monkeypatch, True)
+    pants["queued_behind"] = []
+    assert cj.queue_gate(pants, gate) is None
+    with open(os.path.join(cj.DIR, "hoodie.json")) as f:
+        j = json.load(f)
+    j["delivery"]["at"] = "2026-11-26T13:20:00+07:00"; j["updated"] = j["delivery"]["at"]
+    with open(os.path.join(cj.DIR, "hoodie.json"), "w") as f:
+        json.dump(j, f)
+    pants.pop("queued_behind")
+    assert cj.queue_gate(pants, gate) is None                               # delivered before pants arrived
 
 
 def test_vision_budget_and_warning():
