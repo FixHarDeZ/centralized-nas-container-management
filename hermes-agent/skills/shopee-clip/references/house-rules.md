@@ -27,7 +27,7 @@
   browser session exists, and a 📝 run may never open one), quote the LAST-read figure WITH its read date on the
   board instead of omitting the line or launching Chrome pre-approval for that one number — a figure genuinely
   below the plan still surfaces in the cost question Fix answers.
-  **The last-read figure is on disk:** grep `/opt/data/clips/jobs/*.json` and clip-log `notes` for `balance`/`เหลือ` before concluding you have none — another open job's note usually carries the newest reading, and going to the browser for that one number costs a Chrome launch you did not need pre-approval for.
+  A later live read that differs, and where the last read sits on disk: `templates/storyboard.md` → Quota line.
   Spend per job: clipjob records it (📝 = the published rate per shot length,
   `credits_est` in the row, since 2026-11-22), so no figure is needed in `--notes`.
 - Never edit inside Flow (40 credits per edit). Never retry a failed submit with his credits without saying so.
@@ -97,7 +97,9 @@
   ("พิมพ์ผิด 1 คำเป็นอักขระแปลก ๆ ที่บรรทัดนั้น"). Do not leave the corrupted line as the last word.
 
 ## Vision budget
-**Every `vision_analyze` counts** — the photo-gate locator and page-state screenshot reads alike — so settle
+**Every `vision_analyze` counts, a TIMED-OUT call included** (it burns the check whether or not it answered —
+a 420 s timeout is one of the two photo-gate verdicts gone) — the photo-gate locator and page-state screenshot
+reads alike — so settle
 edges/positions with pixel probes and DOM reads: the budget runs out exactly when post needs its frame sheet
 and cover reads. The counter is per job (another job's workdir and the queue wait do not count). Reserve the
 reads that cannot be substituted (idcheck, plate gate, post frame sheet, cover). Chip identity is `flow-driver/scripts/chipcheck.py` (pixels, 0 vision; Fix 2026-11-23).

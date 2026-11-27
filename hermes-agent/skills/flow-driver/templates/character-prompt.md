@@ -42,3 +42,18 @@ Portrait of a young Thai man in his late 20s, K-idol visual style. <hair: short 
   `fetch(img.currentSrc, {credentials:'include'})` → blob → an anchor with `download` → the file lands in
   `/opt/data/home/Downloads/`. Copy it to `/opt/data/clips/characters/<name>.jpg` and run OCR on it (free) to
   confirm no stray text reached the portrait.
+
+## Export an EXISTING character's portrait (no create flow)
+`clipjob.py new --character <name>` refuses a roster name with **no portrait file on disk** — even when the shot
+will describe the presenter in the prompt instead of attaching the chip, because that field is what the review and
+the next clip's face-exclusion are keyed on. When the name already exists in Flow, download its tile instead of
+running the create → rename → export cycle; create a character only for a look Fix's order demands.
+- On the project page find the SPAN whose text is exactly the character's name, then climb to its `img`
+  (`alt="Character thumbnail"`, e.g. 1376×768). Read the span text BEFORE climbing: a file saved under the wrong
+  name passes every later check while poisoning that character's identity comparison.
+- Pull the bytes in-page and carry them out as base64 — `fetch(img.currentSrc, {credentials:'include'})` →
+  `blob.arrayBuffer()` → `btoa` → decode in Python. The src answers an HTML page to a cookie-less fetch, so only
+  the in-page credentials fetch returns the picture; the anchor-`download` route above is the alternative when a
+  download is available.
+- Convert with PIL (the tile is usually WEBP), save as `/opt/data/clips/characters/<name>.jpg`, and OCR it (free)
+  to confirm no stray text reached the image.

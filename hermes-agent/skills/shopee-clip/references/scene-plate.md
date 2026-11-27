@@ -53,6 +53,12 @@ The gate stops once one delivered job used a plate (Fix's verdict decides the re
   gate's ONE read (face + no text/logo/product) cannot be substituted cheaply, so run
   `plate <job> skipped --why "vision budget spent — plate gate needs its read"` and shoot shot 1 the normal way
   (character chip + refs). A skipped plate costs nothing and is reported like any other skip.
+- **A single-shot clip has nothing for the plate to protect** — holding set, light and face is the whole point,
+  and it only pays across shots; a 🧑 plate also puts the character's face into an ATTACHED start frame, the same
+  person-bearing image class that has already refused a submission. Put the trial decision in the approval
+  clarify as its own 0-credit question instead of deciding alone, then record `plate <job> skipped --why
+  "<his choice> — 1 shot, no cross-shot continuity to protect"` (or `used` when he picks ลอง). The verdict still
+  goes in after `new` → `production`, before `reserve`.
 
 ## Report it
 - Clip-log `--notes`: `plate: used|skipped|refused (<why>)`.

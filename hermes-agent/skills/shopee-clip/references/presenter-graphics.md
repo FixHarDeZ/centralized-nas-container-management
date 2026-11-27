@@ -45,6 +45,11 @@ $R gfx out.mp4 --report report.json --out gfx.json --fx1 fx1.json \
 - **A close-up beat often comes back `product not located …` — read WHICH message before iterating.**
   `the product moves N px across the beat` is a window problem: iterate neighbouring windows of the SAME beat
   (and drop to `:auto`/`:face`) until one lands — the promise is the beat, not the exact seconds.
+  **But the magnitude is the stop signal:** a beat where the tool and the presenter are in continuous MOTION
+  (drilling, hammering, sanding) reports the same ~300+ px move in EVERY window and `:face` answers
+  `no steady face` — several windows × both levers × a second ref all failing means the beat cannot be locked,
+  not that the window was wrong. `presenter_fx` runs fine on an empty `fx.json`: leave the punch out and name it
+  in the delivery line; never hand-place a centre on a beat that will not lock.
   `the ref's colour was found in 0/N frames`, in EVERY window tried, is a colour-model failure rather than a
   timing one: Flow redrew the product (or the ref is not colourful enough to model), so the next window reads 0
   as well — with TWO product refs on the shot, first retry the OTHER ref (the board's named garment can be the

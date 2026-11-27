@@ -94,13 +94,24 @@ Router Q3 (who drives Flow, step 8) may ride as the SECOND question in that same
   `character` value in clip-log — reading it alone repeats the face Fix already saw in the last clip. Take the
   newest `character` row in clip-log, exclude that name, choose at random from `character_roster` in
   `/opt/data/clips/flow-state/<project-id>.json`, and name the pick on the board.
-- **Draw only from female roster names that have a portrait** in `/opt/data/clips/characters/` (male ones,
-  e.g. น้องเอิร์ธ, were made for one order: clip-log `notes` say `ตัวละครชาย`). A male pick only when Fix asks.
+- **Draw only from roster names that have a portrait** in `/opt/data/clips/characters/` (a male pick only when
+  Fix asks). `--character` is MANDATORY for a presenter job — `new` refuses without it and refuses a name with no
+  file on disk — so when the exclude-the-last-use rule leaves a roster name that exists in Flow but not on disk,
+  export that tile (`flow-driver` `templates/character-prompt.md` → Export an EXISTING character) rather than
+  creating a character: one fetch beats a create → rename → export cycle, and it costs no browser round of its
+  own beyond the session the run already has open.
 - **When Fix's order names the character's OUTFIT or work setting (ชุดช่าง / ชุดทำงาน / ฉากไซต์งาน), create a new
   character whose PORTRAIT wears it** — Flow reproduces the chip's wardrobe, so a prompt-line outfit override loses
   to the chip; reuse a roster character only when he names the person, not the clothes. The create flow and its
   click/page pitfalls: `flow-driver` `templates/character-prompt.md`.
 - **Write the prompt's presenter line from that character's recorded look, never her NAME and never a generic
   "young Thai woman"** (`references/house-rules-history.md`). Looks of all twelve: `flow-driver` `references/flow-steps.md`
-  step 2; flow-state `roster_note` = only the last three added. `new` refuses a name with no portrait; `pack`/`reserve` refuse
-  a name in the prompt outside the quoted voiceover.
+  step 2; flow-state `roster_note` = only the last three added. `pack`/`reserve` refuse a name in the prompt
+  outside the quoted voiceover.
+
+## Quota line
+(Moved from house-rules → Credits for its size budget, 2026-11-27.)
+- **When Chrome is up later anyway and the live read differs from the board's dated figure, send the live number
+  as a status line BEFORE the submit** — a stale quota line is what makes the "ยังพอไหม" answer wrong, and the
+  board's own number stays as the record of when it was read.
+- **The last-read figure is on disk:** grep `/opt/data/clips/jobs/*.json` and clip-log `notes` for `balance`/`เหลือ` before concluding you have none — another open job's note usually carries the newest reading, and going to the browser for that one number costs a Chrome launch you did not need pre-approval for.
