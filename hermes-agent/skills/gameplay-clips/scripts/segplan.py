@@ -247,7 +247,8 @@ def old_table(path, tab):
         cmd = ("uv run --with faster-whisper --with rapidocr-onnxruntime --with numpy --with pillow python "
                "/opt/data/skills/gameplay-clips/scripts/windows.py " + os.path.basename(src)
                + (f" --vtt {os.path.basename(vtt)}" if vtt else "")
-               + (f" --rebase {tab['rebase']}" if tab.get("rebase") else ""))
+               + (f" --rebase {tab['rebase']}" if tab.get("rebase") else "")
+               + (" --hud-ok" if tab.get("hud_ok") else ""))
         print(f"TABLE TOO OLD: {path} has no \"wash\" key (made before white-flash detection or copied from "
               f"another job) — its windows can hold white flash frames build_v5 refuses. Re-run on a copy of the "
               f"source in this workdir:\n  {cmd}")

@@ -8,7 +8,7 @@ recipe and the traps. Template: `templates/short_clip_build.py` (copy, edit the 
 1. **Pick the window from measured gaps, then verify it by frames.** Gap seconds come from
    `asr_speech_spans.py` (`--start 0 --dur <full>`). Before cutting, sample the window at 1 fps
    on a tile sheet and check: no on-screen text (subtitle boxes, dialogue panes, title cards,
-   HUD prompts that read as text), no logos, no cutscene if gameplay is the promise. Start ≥1 s
+   HUD prompts that read as text, unless the table was made with `--hud-ok`), no logos, no cutscene if gameplay is the promise. Start ≥1 s
    after a scene change, end ≥0.5 s before one.
 2. **Check the source audio of that exact window** before designing the mix:
    `ffmpeg -ss T -t D -i src -af volumedetect -vn -f null -`. A window can be completely silent

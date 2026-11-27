@@ -165,3 +165,20 @@ def test_ocr_frames_keeps_each_boxs_height(monkeypatch, tmp_path):
     out = w.ocr_frames("x.mp4", [1.0], lambda f: (found, None), str(tmp_path), dur=2.0)
     assert out == {"1.0": [{"text": "8", "score": 0.99, "h": 0.32}]}
     assert w.box_h(None, 1000) == {} and w.box_h([[0, 0]] * 4, None) == {}
+
+
+def test_hud_ok_lets_short_small_game_labels_through():
+    """Fix 2026-11-27: real gameplay with HUD (the fate TGS capture) beats an 8 s clean cinematic cut."""
+    lab = [{"text": "Saber Lv. 3", "score": 0.95, "h": 0.03}, {"text": "MP 11/11", "score": 0.9, "h": 0.025}]
+    assert w.classify(lab, set())[0] == "text"                                    # default: HUD is text
+    assert w.classify(lab, set(), hud=True) == ("hud", ["Saber Lv. 3", "MP 11/11"])
+    line = [{"text": "Judging by the red gate at its", "score": 0.95, "h": 0.045}]
+    assert w.classify(line, set(), hud=True)[0] == "text"                         # a dialogue line
+    banner = [{"text": "ENEMY TURN", "score": 0.95, "h": 0.098}]
+    assert w.classify(banner, set(), hud=True)[0] == "text"                       # a banner: too tall
+    assert w.classify([{"text": "JAN 28", "score": 0.9, "h": 0.03}], set(), hud=True)[0] == "text"   # a date
+    assert w.classify(hit("Lv. 3"), set(), hud=True)[0] == "text"                 # no box height: never HUD
+    assert w.classify([{"text": "8", "score": 1.0, "h": 0.32}], set(), hud=True)[0] == "text"        # big glyph
+    ocr = {"10.0": [], "11.0": lab, "12.0": lab + line, "13.0": lab, "14.0": []}
+    assert w.dirty_spans(ocr, set()) == [(10.0, 14.0)]
+    assert w.dirty_spans(ocr, set(), hud=True) == [(11.0, 13.0)]                  # only the dialogue frame

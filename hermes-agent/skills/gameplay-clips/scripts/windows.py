@@ -37,6 +37,13 @@ a 20-min reasoning turn. With --vtt the script prints a SONG? hint when the capt
 no ">>" speaker mark.
 --ocr-step S: OCR sample step (default 1.0). Game footage with button prompts that flash for under a second
 (gta6: an L2 prompt at 12.5 s, between the 1 s samples) wants 0.5.
+--hud-ok: a gameplay capture where Fix accepts the game's HUD (Fix 2026-11-27, fate-extra-record-ps5: real gameplay with
+HUD beats an 8 s clean cinematic cut). A short small string (<= HUD_WORDS words, <= HUD_CHARS chars, box under
+HUD_MAX_H of the frame: "Saber Lv. 3", "MP 11/11", "/3") is listed per window as `hud`, never dirty. Still text:
+dialogue lines and other sentences, anything HUD_MAX_H or taller (BATTLE START / ENEMY TURN banners, big damage
+popups, title supers), big glyphs, dates and the date reveal. Measured on the TGS 2026 Saber capture (292 s): its text
+runs 1.7-4.1 % of the frame height (p10-p99) and the dialogue lines sit in the same 3.5-6 % band as the labels, so
+length, not size, splits them. Replay: default STOP 1.2 s; --hud-ok USABLE 21.5 s in 8 battle windows.
 --rebase S: the master was encoded from `-ss S`; table and JSON also give master times (t - S).
 Exit 0 always when it ran; the last line says USABLE (>= 15 s) or STOP (ask Fix, SKILL.md rule).
 """
@@ -59,6 +66,9 @@ MIN_SCORE = 0.6     # RapidOCR confidence for a hit
 BIG_GLYPH = 0.12    # x frame height: a one-character hit this tall is typography (fate: '8' 0.32, '21' 0.14)
 BIG_SCORE = 0.8     # ... and this confident
 THIN = {"I", "L", "1"}   # poles, edges and rails read as these: never "big typography" on their own
+HUD_MAX_H = 0.06    # --hud-ok: a short string under this x frame height is game HUD, not a super
+HUD_WORDS = 3       # ... of at most this many words
+HUD_CHARS = 14      # ... and this many characters ("Saber Lv. 3", "MP 11/11", "Flash Edge")
 DATE_LEAD = 10.0    # s before a date hit: the reveal animation (fate: 175.6-184.6 before "JAN 28, 2027" at 185)
 # years 2020-2039 only (hw-fit5's watch UI read "1952"); d/m/y needs the full year (specs read "1.5-10")
 DATE_RE = re.compile(r"\b20[23]\d\b|\b\d{1,2}[./-]\d{1,2}[./-]20\d\d\b|\b(JAN(UARY)?|FEB(RUARY)?|MAR(CH)?|"
@@ -117,16 +127,28 @@ def overlays(ocr_map):
     return sorted(k for k, c in seen.items() if n >= 4 and c >= max(4, n / 2) and k != failed)
 
 
-def classify(items, skip):
-    """-> ('text', [strings]) | ('suspect', [strings]) | ('clean', [])"""
-    real, sus = [], []
+def is_hud(i):
+    """--hud-ok: a short, small string (unit name, level, MP, damage number, skill name) = game HUD. A hit with no
+    box height (older maps, a failed grab) is never HUD."""
+    s = i["text"].strip()
+    return "h" in i and float(i["h"]) < HUD_MAX_H and len(s.split()) <= HUD_WORDS and len(s) <= HUD_CHARS
+
+
+def classify(items, skip, hud=False):
+    """-> ('text', [strings]) | ('suspect', [strings]) | ('hud', [strings]) | ('clean', []).
+    hud=True (--hud-ok): short small strings are 'hud' (never dirty); sentences (dialogue lines, edition cards),
+    anything HUD_MAX_H or taller, big glyphs and dates stay text."""
+    real, sus, small = [], [], []
     for i in items:
         k = norm(i["text"])
         if not k or k in skip or float(i.get("score", 1)) < MIN_SCORE:
             continue
         big = float(i.get("h", 0)) >= BIG_GLYPH and float(i.get("score", 1)) >= BIG_SCORE and k not in THIN
-        (real if len(k) >= 2 or big else sus).append(i["text"])
-    return ("text", real) if real else ("suspect", sus) if sus else ("clean", [])
+        if len(k) >= 2 or big:
+            (small if hud and not big and is_hud(i) and not DATE_RE.search(i["text"]) else real).append(i["text"])
+        else:
+            sus.append(i["text"])
+    return (("text", real) if real else ("suspect", sus) if sus else ("hud", small) if small else ("clean", []))
 
 
 def date_hits(ocr_map, skip):
@@ -163,11 +185,11 @@ def frame_height(png):
         return None
 
 
-def dirty_spans(ocr_map, skip):
+def dirty_spans(ocr_map, skip, hud=False):
     """Text ranges from sampled OCR: each run of hits spans from the clean sample before it to the
     clean sample after it (conservative: the text may start right after the last clean look)."""
     ts = sorted(ocr_map, key=float)
-    hit = [classify(ocr_map[t], skip)[0] == "text" for t in ts]
+    hit = [classify(ocr_map[t], skip, hud)[0] == "text" for t in ts]
     out = []
     for i, t in enumerate(ts):
         if not hit[i]:
@@ -178,10 +200,10 @@ def dirty_spans(ocr_map, skip):
     return merge(out)
 
 
-def refine_times(ocr_map, skip, lo, hi):
+def refine_times(ocr_map, skip, lo, hi, hud=False):
     """0.25 s probes at each edge of a 1 s text run (only where a probe was not taken yet)."""
     ts = sorted(ocr_map, key=float)
-    hit = [classify(ocr_map[t], skip)[0] == "text" for t in ts]
+    hit = [classify(ocr_map[t], skip, hud)[0] == "text" for t in ts]
     want = set()
     for i, t in enumerate(ts):
         if not hit[i]:
@@ -219,19 +241,20 @@ def frame_flags(times, luma, diff):
     return dark, cuts, med
 
 
-def describe(a, b, times, luma, diff, cuts, ocr_map, skip):
+def describe(a, b, times, luma, diff, cuts, ocr_map, skip, hud=False):
     sel = [i for i, t in enumerate(times) if a <= t <= b]
     ys = [luma[i] for i in sel] or [0.0]
     ds = [diff[i] for i in sel[1:]] or [0.0]
     motion = sum(ds) / len(ds)
-    sus = sorted({s for t, items in ocr_map.items() if a - 0.5 <= float(t) <= b + 0.5
-                  for s in classify(items, skip)[1] if classify(items, skip)[0] == "suspect"})
+    near = [classify(items, skip, hud) for t, items in ocr_map.items() if a - 0.5 <= float(t) <= b + 0.5]
+    sus = sorted({s for kind, strs in near if kind == "suspect" for s in strs})
+    hud_s = sorted({s for kind, strs in near if kind == "hud" for s in strs})
     inner = [c for c in cuts if a + 0.1 < c < b - 0.1]
     dur = b - a
     tiles = [round(a + 0.2, 2), round((a + b) / 2, 2), round(b - 0.2, 2)] if dur >= 1.0 else [round((a + b) / 2, 2)]
     return {"start": round(a, 2), "end": round(b, 2), "dur": round(dur, 2),
             "luma_min": round(min(ys), 1), "motion": round(motion, 2), "static": motion < STATIC,
-            "cuts": inner, "suspect": sus, "tiles": tiles,
+            "cuts": inner, "suspect": sus, **({"hud": hud_s} if hud else {}), "tiles": tiles,
             "score": round(dur * (0.3 if motion < STATIC else 1.0), 2)}
 
 
@@ -427,6 +450,8 @@ def main():
     ap.add_argument("--no-asr", action="store_true", help="no --vtt: skip the whisper pass (VAD only)")
     ap.add_argument("--song", action="store_true", help="soundtrack is a song, no narration: no speech spans")
     ap.add_argument("--ocr-step", type=float, default=OCR_STEP, help="OCR sample step, s (0.5 for button prompts)")
+    ap.add_argument("--hud-ok", action="store_true",
+                    help="gameplay capture, Fix accepts HUD: short small strings do not make a window dirty")
     ap.add_argument("--out")
     ap.add_argument("--sheet")
     a = ap.parse_args()
@@ -465,16 +490,16 @@ def main():
     ocr = RapidOCR()
     ocr_map = ocr_frames(a.src, ocr_grid(cand, a.ocr_step), ocr, scratch, dur)
     skip = set(overlays(ocr_map))
-    more = refine_times(ocr_map, skip, 0.0, dur)
+    more = refine_times(ocr_map, skip, 0.0, dur, a.hud_ok)
     ocr_map.update(ocr_frames(a.src, more, ocr, scratch, dur))
     leads = date_leads(ocr_map, skip)
-    text = merge(dirty_spans(ocr_map, skip) + leads)
+    text = merge(dirty_spans(ocr_map, skip, a.hud_ok) + leads)
     hits = date_hits(ocr_map, skip)
     reveal = [{"span": [round(max(0.0, x), 2), y], "before": next((txt for t, txt in hits if x < t <= y + 1e-6), "")}
               for x, y in leads]
 
     clean = [s for s in subtract(cand, text) if s[1] - s[0] >= a.min]
-    wins = [describe(x, y, times, luma, diff, cuts, ocr_map, skip) for x, y in clean]
+    wins = [describe(x, y, times, luma, diff, cuts, ocr_map, skip, a.hud_ok) for x, y in clean]
     for i, w in enumerate(wins, 1):
         w["n"] = i
         if a.rebase:
@@ -490,7 +515,7 @@ def main():
     picked.sort(key=lambda w: w["start"])
     sheet_path = sheet(a.src, picked, sheet_out, scratch, dur=dur)
 
-    res = {"src": os.path.abspath(a.src), "dur": round(dur, 2), "vtt": a.vtt, "rebase": a.rebase,
+    res = {"src": os.path.abspath(a.src), "dur": round(dur, 2), "vtt": a.vtt, "rebase": a.rebase, "hud_ok": a.hud_ok,
            "speech": speech, "speech_vtt": vtt_out, "asr_segments": asr_n, "dark": dark, "wash": wash, "text": text,
            "date_reveal": reveal, "overlays": sorted(skip), "cuts": cuts,
            "motion_median": round(med, 2), "ocr_frames": len(ocr_map), "windows": wins,
@@ -505,7 +530,8 @@ def main():
         print(f"date reveal {r['span'][0]:.2f}-{r['span'][1]:.2f} = text (before {r['before']!r}): footage there is not clean")
     print(" W    start    end   dur  luma  motion  cuts  flags" + ("   master" if a.rebase else ""))
     for w in wins:
-        flags = ("STATIC " if w["static"] else "") + (f"suspect={w['suspect']}" if w["suspect"] else "")
+        flags = (("STATIC " if w["static"] else "") + (f"suspect={w['suspect']} " if w["suspect"] else "")
+                 + (f"hud={w['hud'][:4]}" if w.get("hud") else ""))
         cut = ",".join(f"{c:.1f}" for c in w["cuts"]) or "-"
         m = f"   {w['master'][0]:.2f}-{w['master'][1]:.2f}" if a.rebase else ""
         print(f"W{w['n']:<3} {w['start']:7.2f} {w['end']:7.2f} {w['dur']:5.2f} {w['luma_min']:5.0f} {w['motion']:7.1f}"
@@ -517,7 +543,8 @@ def main():
         print(f"SONG? {a.vtt} has [Music]/♪ cues and no >> speaker mark = lyrics, not narration (footage-sourcing §0). "
               f"If no one speaks over the music, re-run with --song (speech-free = the whole song)")
     verdict = "USABLE" if moving >= USABLE_S else "STOP"
-    print(f"{verdict}: {usable:.1f} s clean in {len(wins)} windows, {moving:.1f} s moving"
+    print(f"{verdict}: {usable:.1f} s clean{' (HUD accepted)' if a.hud_ok else ''} in {len(wins)} windows, "
+          f"{moving:.1f} s moving"
           + ("" if verdict == "USABLE" else f" < {USABLE_S:.0f} s -> try the next official source or ask Fix"))
 
 
