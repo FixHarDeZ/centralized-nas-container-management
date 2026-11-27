@@ -2185,3 +2185,27 @@ Fix: "ตรวจงานเมื่อวานกับวันนี้�
     identical ids/outputs = storage only, actions not doubled). Not ours; noted.
 - Live drift since `aa8170a`: 11 doc files (frame-check, house-rules, presenter-graphics, presenter-post,
   scene-plate, hooks, storyboard, flow-browser-env, cover-sticker, footage-sourcing, natural-vo); no script drift.
+
+### 2026-11-27 (2) 🛠 — fixes built (`6e693c9`, pushed, NOT synced: keem-herm-loud-800a open)
+- **Queue continuation:** `clipjob.queue_next(job)` → `deliver` and 🏁 close `next` = "START the next order now:
+  <job> … Do NOT ask Fix" when another fresh open job exists (else the old "end the turn"). A 🏁 tap that lands
+  mid-turn of the next job: `decide --text` it and carry on. house-rules queue bullet says the same.
+- **Per-job counters:** `queue_gate(j)` = latest delivery/cancel of the jobs ahead (`queued_behind`, or for older
+  jobs any job created before it, unfinished at its start, touched ≤12 h). `job_vision` counts calls on its own
+  workdir always, calls outside every workdir only after the gate, never another job's workdir; `vision_calls`
+  dedups Hermes' doubled rows by call id. `timeline(…, gate)` → `queue_min` + total from the gate; text
+  "⏱ รวม 47 น. (+รอคิว 60 น.)". Replayed read-only on live jobs: barrel-pants 47 min (+60) vision 3/7 (was
+  108 / 10/7); wo-long 112 (+81) vision 2/8 (was 193 / 8/8); village-shade-sw 7/8 (wo-long's intake call
+  dropped); hoodie, sleep, fate unchanged. Live house-rules "counter is per-SESSION … one pool" replaced.
+- **windows.py:** OCR items keep `h` (box height / frame height); a 1-char hit with h ≥ 0.12, score ≥ 0.8, not
+  I/L/1 = text; `date_leads`: the 10 s before any date / year hit (DATE_RE: 19xx/20xx, d/m/y, month name + day)
+  = text. Fate crop_rel (local run, `--vtt`): W4 175.62–180.38 + W5 180.62–184.64 gone, W1–W3 identical, USABLE
+  17.2 → STOP 8.4. village-shade-sw trailer_releasedate: same 14 windows. In-container OCR probe of Fate 175.5–
+  185.5 at 0.5 s: only 4 of 21 frames read anything (giant glyphs mostly unread) → the size rule alone was not
+  enough, hence the date lead-in.
+- Docs: frame-check "Past the vision budget" (moved from house-rules for the 20 KB budget, house-rules 20310 B),
+  footage-sourcing (big glyph / date reveal / STOP is honest; hand-picked end card = `endcard_crop.py --at`).
+- Ported the 11 live doc edits (3-way vs `aa8170a`; one conflict in house-rules = keep both).
+- Gate: 335 passed / 21 skipped (sync's exact suite set incl. root budgets + locales).
+- keem-herm-loud-800a (🧑 welding electrode holder): photo gate 10:18→10:50 (32 min), clarify to Fix pending
+  (needs a clean product photo).
