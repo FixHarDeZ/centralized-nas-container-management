@@ -2214,3 +2214,24 @@ Fix: "ตรวจงานเมื่อวานกับวันนี้�
   stated reason. Replayed old vs new on 3 kept brand-film sources (hw-fit5 src_hk / src_mini, freeclip2s hqc):
   identical tables; src_mini read "1952" (watch UI) as a year → DATE_RE now takes years 2020–2039 only and d/m/y
   with a full 20xx year (specs like "1.5-10"). 335 passed.
+
+### 2026-11-27 (3) ✅ — go-live: synced `97ed244`, gateway restarted once
+- Watcher READY 12:49 (no open job, last agent activity 12:44:20). keem-herm-loud-800a had delivered 12:37 and the
+  🏁 timer closed it 12:42 (7 files, 6.5 MB). Not reviewed this session.
+- `make hermes-skills ARGS=--pull` → 9 files. frame-check, house-rules, footage-sourcing = byte-identical to the 11-27
+  snapshot (already merged in `6e693c9`) → repo version kept. presenter-graphics (+`fx --product` needed for
+  `:product`/`:auto`, word-level ASR for pill windows, do not pre-run verify-clip) and storyboard (photo-gate fork on
+  the board buttons, outfit order = new character) → `git merge-file` ours=HEAD base=snapshot theirs=pulled, clean.
+  flow-driver SKILL / pitfalls / character-prompt + shopee-clip SKILL: HEAD = `aa8170a` there → pulled taken as-is.
+- IU's router additions broke the sync's size gate: shopee-clip/SKILL.md 16454 B (budget 15 KB = 15360), flow-driver
+  SKILL 8539 B (8 KB). Moved, not dropped: photo-gate "free probes first, ONE vision read" → product-image-prep.md;
+  "refused on BOTH Omni 1.2 and 1.1 = an attached image" → prompt-pack.md → Flow refuses; "portrait on disk before
+  `new`" → `clipjob.py new`'s own refusal text (0 credits, also in 📝); click-routing bullet → one-line pointer to
+  character-prompt.md. "session vision pool" → "job's vision budget". Router back to 15351 B, flow-driver 8149 B.
+- `97ed244` pushed; 335 passed / 21 skipped locally. Clone: `git checkout -- hermes-agent/skills` (pulled copies),
+  then `make hermes-skills`: 354 passed in the container; shopee-clip 9 / flow-driver 1 / gameplay-clips 3 updated,
+  `/opt/data/locales/en.yaml` updated. Rechecked quiet (age 607 s) → `docker restart hermes-gateway` 12:54:37,
+  started 12:54:44, restarts=0, startup notification to Fix 12:55:13. Fresh process: `agent.i18n.t(
+  "gateway.busy.interrupting_head")` = '📥 รับคิวแล้วค่ะ'.
+- Watch next orders: queued job STARTs on delivery without asking; `+รอคิว` in the timing line; vision count per job;
+  windows.py `date reveal` lines on 🎬.
