@@ -2235,3 +2235,22 @@ Fix: "ตรวจงานเมื่อวานกับวันนี้�
   "gateway.busy.interrupting_head")` = '📥 รับคิวแล้วค่ะ'.
 - Watch next orders: queued job STARTs on delivery without asking; `+รอคิว` in the timing line; vision count per job;
   windows.py `date reveal` lines on 🎬.
+
+### 2026-11-27 (4) ✅ — Fix picks (a) for short footage; `--hud-ok` TRIAL live (`a62d553`)
+- Fix: "เอาแบบ (a) แต่เอาไว้ลองตอนงานหน้าก็ได้" → Fate is not recut; from the next 🎬 order, real gameplay with HUD
+  beats a short clean cinematic cut.
+- `windows.py --hud-ok`: a string ≤ 3 words, ≤ 14 chars, box < 6 % of the frame height and not a date = `hud`
+  (listed per window, never dirty). Text even then: dialogue lines, BATTLE START / ENEMY TURN banners and damage
+  popups ≥ 6 %, big glyphs, dates + the date reveal. Measured on the TGS 2026 Saber capture (the source IU offered
+  at 03:51, `youtu.be/6eSsDugfVlk`, 292 s): text p10–p99 = 1.7–4.1 % of the height and its dialogue lines sit in the
+  same 3.5–6 % band as the labels, so length splits them. Replay: default STOP 1.2 s (1 window); `--hud-ok` USABLE
+  21.5 s in 8 battle windows, `hud=` lists hold only labels/numbers (sheet checked by eye). segplan's re-run hint
+  keeps the flag. Test `test_hud_ok_lets_short_small_game_labels_through`.
+- Docs: footage-sourcing §2 TRIAL bullet + the HUD / "Readable HUD" / STOP lines point at it; gameplay SKILL Length
+  rule (HUD TRIAL before asking) + frame check (`hud_ok` = HUD is not a defect; the rendered-frame OCR reason moved
+  to pitfalls §Vision checks) → SKILL 30578 B; short-clip-ffmpeg fallback.
+- Two orders ran on the new clipjob after the 12:54 go-live: airnub-screwdriver (🧑, 13:04 → delivered 14:37, 🏁 tap)
+  and decker-cordless-drill (🧑, 14:52 → 15:40, auto close). Not reviewed. Their live edits (5 files) ported as-is
+  (`edccdef`); house-rules hit 20752 B → the two quota-line paragraphs moved to storyboard.md → Quota line (20237 B).
+- Go-live: quiet READY (age 1890 s) → clone checkout → `make hermes-skills` 355 passed, shopee-clip 2 / gameplay 7
+  updated, synced `a62d553`. No gateway restart (no locales change).
