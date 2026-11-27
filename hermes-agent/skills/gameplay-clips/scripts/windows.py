@@ -60,7 +60,8 @@ BIG_GLYPH = 0.12    # x frame height: a one-character hit this tall is typograph
 BIG_SCORE = 0.8     # ... and this confident
 THIN = {"I", "L", "1"}   # poles, edges and rails read as these: never "big typography" on their own
 DATE_LEAD = 10.0    # s before a date hit: the reveal animation (fate: 175.6-184.6 before "JAN 28, 2027" at 185)
-DATE_RE = re.compile(r"\b(19|20)\d\d\b|\b\d{1,2}[./-]\d{1,2}[./-](19|20)?\d\d\b|\b(JAN(UARY)?|FEB(RUARY)?|MAR(CH)?|"
+# years 2020-2039 only (hw-fit5's watch UI read "1952"); d/m/y needs the full year (specs read "1.5-10")
+DATE_RE = re.compile(r"\b20[23]\d\b|\b\d{1,2}[./-]\d{1,2}[./-]20\d\d\b|\b(JAN(UARY)?|FEB(RUARY)?|MAR(CH)?|"
                      r"APR(IL)?|MAY|JUNE?|JULY?|AUG(UST)?|SEPT?(EMBER)?|OCT(OBER)?|NOV(EMBER)?|DEC(EMBER)?)\.?\s*\d{1,2}\b",
                      re.I)
 STATIC = 1.5        # mean abs frame diff (0-255, 160x90 gray) under this = static card / still
@@ -128,14 +129,20 @@ def classify(items, skip):
     return ("text", real) if real else ("suspect", sus) if sus else ("clean", [])
 
 
-def date_leads(ocr_map, skip, lead=DATE_LEAD):
-    """[(t - lead, t)] before every sampled frame that shows a date / year (overlays excluded)."""
+def date_hits(ocr_map, skip):
+    """[(t, text)] of sampled frames that show a date / year (overlays and unsure reads excluded), by time."""
     out = []
     for t, items in ocr_map.items():
-        if any(DATE_RE.search(i["text"]) for i in items
-               if norm(i["text"]) not in skip and float(i.get("score", 1)) >= MIN_SCORE):
-            out.append((float(t) - lead, float(t)))
-    return merge(out)
+        hit = [i["text"] for i in items if norm(i["text"]) not in skip
+               and float(i.get("score", 1)) >= MIN_SCORE and DATE_RE.search(i["text"])]
+        if hit:
+            out.append((float(t), hit[0]))
+    return sorted(out)
+
+
+def date_leads(ocr_map, skip, lead=DATE_LEAD):
+    """[(t - lead, t)] before every sampled frame that shows a date / year (overlays excluded)."""
+    return merge([(t - lead, t) for t, _ in date_hits(ocr_map, skip)])
 
 
 def box_h(box, frame_h):
@@ -460,7 +467,11 @@ def main():
     skip = set(overlays(ocr_map))
     more = refine_times(ocr_map, skip, 0.0, dur)
     ocr_map.update(ocr_frames(a.src, more, ocr, scratch, dur))
-    text = merge(dirty_spans(ocr_map, skip) + date_leads(ocr_map, skip))
+    leads = date_leads(ocr_map, skip)
+    text = merge(dirty_spans(ocr_map, skip) + leads)
+    hits = date_hits(ocr_map, skip)
+    reveal = [{"span": [round(max(0.0, x), 2), y], "before": next((txt for t, txt in hits if x < t <= y + 1e-6), "")}
+              for x, y in leads]
 
     clean = [s for s in subtract(cand, text) if s[1] - s[0] >= a.min]
     wins = [describe(x, y, times, luma, diff, cuts, ocr_map, skip) for x, y in clean]
@@ -480,7 +491,8 @@ def main():
     sheet_path = sheet(a.src, picked, sheet_out, scratch, dur=dur)
 
     res = {"src": os.path.abspath(a.src), "dur": round(dur, 2), "vtt": a.vtt, "rebase": a.rebase,
-           "speech": speech, "speech_vtt": vtt_out, "asr_segments": asr_n, "dark": dark, "wash": wash, "text": text, "overlays": sorted(skip), "cuts": cuts,
+           "speech": speech, "speech_vtt": vtt_out, "asr_segments": asr_n, "dark": dark, "wash": wash, "text": text,
+           "date_reveal": reveal, "overlays": sorted(skip), "cuts": cuts,
            "motion_median": round(med, 2), "ocr_frames": len(ocr_map), "windows": wins,
            "usable_s": usable, "moving_s": moving, "sheet": sheet_path,
            "sheet_windows": [w["n"] for w in picked]}
@@ -489,6 +501,8 @@ def main():
 
     print(f"src={a.src} dur={dur:.1f}s speech={len(speech)} spans dark={len(dark)} wash={len(wash)} text={len(text)} "
           f"ocr_frames={len(ocr_map)} overlays={sorted(skip) or '-'}")
+    for r in reveal:
+        print(f"date reveal {r['span'][0]:.2f}-{r['span'][1]:.2f} = text (before {r['before']!r}): footage there is not clean")
     print(" W    start    end   dur  luma  motion  cuts  flags" + ("   master" if a.rebase else ""))
     for w in wins:
         flags = ("STATIC " if w["static"] else "") + (f"suspect={w['suspect']}" if w["suspect"] else "")

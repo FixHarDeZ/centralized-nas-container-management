@@ -150,7 +150,9 @@ def test_the_seconds_before_a_date_are_dirty():
            "185.5": hit("JAN 28,") + hit("2027"), "100.0": hit("WINGS OF EMBER")}
     assert w.date_leads(ocr, set()) == [(175.0, 185.5)]
     assert w.date_leads(ocr, {"2027", "JAN28", "JAN282"}) == []                    # a persistent overlay is not a reveal
-    assert w.date_leads({"5.0": hit("MARVEL 2"), "6.0": hit("LEVEL 20")}, set()) == []
+    assert w.date_leads({"5.0": hit("MARVEL 2"), "6.0": hit("LEVEL 20"), "7.0": hit("1952"), "8.0": hit("1.5-10 m")},
+                        set()) == []
+    assert w.date_leads({"20.0": hit("coming october 27"), "30.0": hit("12/03/2027")}, set()) == [(10.0, 30.0)]
 
 
 def test_ocr_frames_keeps_each_boxs_height(monkeypatch, tmp_path):

@@ -2209,3 +2209,8 @@ Fix: "ตรวจงานเมื่อวานกับวันนี้�
 - Gate: 335 passed / 21 skipped (sync's exact suite set incl. root budgets + locales).
 - keem-herm-loud-800a (🧑 welding electrode holder): photo gate 10:18→10:50 (32 min), clarify to Fix pending
   (needs a clean product photo).
+- Follow-up `windows.py` (advisor: brand films carry mid-film date supers): the reveal spans are printed
+  ("date reveal A-B = text (before '<hit>')") and kept in the JSON (`date_reveal`), so a vanished window has a
+  stated reason. Replayed old vs new on 3 kept brand-film sources (hw-fit5 src_hk / src_mini, freeclip2s hqc):
+  identical tables; src_mini read "1952" (watch UI) as a year → DATE_RE now takes years 2020–2039 only and d/m/y
+  with a full 20xx year (specs like "1.5-10"). 335 passed.
