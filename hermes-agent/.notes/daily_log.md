@@ -2254,3 +2254,26 @@ Fix: "ตรวจงานเมื่อวานกับวันนี้�
   (`edccdef`); house-rules hit 20752 B → the two quota-line paragraphs moved to storyboard.md → Quota line (20237 B).
 - Go-live: quiet READY (age 1890 s) → clone checkout → `make hermes-skills` 355 passed, shopee-clip 2 / gameplay 7
   updated, synced `a62d553`. No gateway restart (no locales change).
+
+### 2026-11-27 (5) 🔎 — check of keem / airnub / decker (all 🧑 10 s, delivered + closed)
+| job | mode | min (wait Fix) | vision | verdict |
+|---|---|---|---|---|
+| keem-herm-loud-800a | 🧑📝 | 143 (37) | 6/6 at the photo gate | ⚠ spec: Fix's photo prints **300A ELECTRODE HOLDER**, VO + pill + cover say **800A** (listing title) |
+| airnub-screwdriver | 🧑🤖 | 97 (24) | 7/7, 2 timeouts | ⚠ drift: pen-shaped driver turns pistol-grip from ~2.5 s (IU said 6.5 s), Fix ✅; sub over the case 5.4–7.5 |
+| decker-cordless-drill | 🧑🤖 | 50 (2) | 6/7, 1 timeout | ⚠ product sticker sits on the held drill 0.3–1.8 s (doubled drill); "2 BATTERIES" headline over the drill body; subs over the drill at chest 5.4–9.6 (IU flagged, Fix ✅) |
+- keem: IU saw the conflict (web_search "300A 800A") yet wrote 800A into board, VO, pill and cover and never told Fix —
+  product-image-prep "When the listing and the art disagree" says keep the number out and say so. Fix's order text
+  says 800A (listing title); the variant is unknown. Flow refused on Omni 1.2 + 1.1 → chip dropped, presenter
+  described in the prompt → passed (lesson already ported). Ran before the 12:54 go-live: photo gate burned the whole
+  vision budget, post frame sheet + cover checked by OCR/pixel only.
+- Product in keem matches the photo (black body, copper jaws, red handle). Covers of all three look clean.
+- decker board/status said "new character น้องคิม", production used the existing น้องเอิร์ธ (exported tile) with
+  no line to Fix. Punch left out on continuous motion = the new rule working.
+- Flow balance read 15:19 = 74, reset 29 พ.ย. 14:42 → ≈44 after decker: one 10 s 🤖 clip + one regen.
+- Recurring (3/3 today): our text over the held product — subs at chest height, a headline, a sticker on top of
+  the product. autogfx already finds the product (`--product`) for the punch; nothing keeps sticker / headline /
+  sub band off that box. Proposal, not built.
+- Proposals: (1) spec-number gate: OCR every order image for A/V/W/mAh/model numbers, compare with the listing
+  title, conflict → keep the number out of VO/pill/cover and put it to Fix on the board; (2) product-box
+  avoidance for sticker / headline / sub band; (3) a status line when the character changes after the board.
+- No queue in play (airnub closed 14:38, decker came 14:50): queue START still unproven live.
