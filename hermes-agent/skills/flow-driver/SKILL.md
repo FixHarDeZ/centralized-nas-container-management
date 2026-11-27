@@ -23,7 +23,7 @@ The source of truth is the repo (`hermes-agent/skills/`); every sync overwrites 
   references, typing the prompt, Start generation, wait, download, verify.
   - Its delivery steps 9–12 are **replaced by `clipjob.py deliver`**.
   - Its multi-scene review is **replaced by `clipjob.py ready`/`decide`**.
-- Picker DOM recipes: `references/flow-picker-dom.md`, `templates/picker-attach-helpers.md`. Character-creation prompt scaffold: `templates/character-prompt.md`. Failure catalogue:
+- Picker DOM recipes: `references/flow-picker-dom.md`, `templates/picker-attach-helpers.md`. Character creation (prompt + how to run it): `templates/character-prompt.md`. Failure catalogue:
   `references/pitfalls.md`. Tool-call cap: `references/session-cuts.md`. Flow-UI production facts moved from the
   house rules: `references/flow-production-notes.md`.
 - To actually SEE a region of the page (a chip row for `chipcheck.py`, a zoom for a vision read), capture it to a file with
@@ -36,6 +36,7 @@ The source of truth is the repo (`hermes-agent/skills/`); every sync overwrites 
   1.5/s = the project is still on Omni 1.1 (settings persist after a refusal workaround): switch back first.
 - **Chip identity after every attach = `scripts/chipcheck.py` (pixels, no vision):** exit 0 verified, 1 fix the
   attach, 3 = ONE vision read of that chip only. Recipe: `references/flow-browser-env.md` → chip's name.
+- **Clicks that change nothing = routing:** CDP pointer events, `templates/character-prompt.md` → Running the create flow.
 
 ## The wrap — each step has its clipjob call
 | Flow step | clipjob call |

@@ -40,6 +40,8 @@ $R gfx out.mp4 --report report.json --out gfx.json --fx1 fx1.json \
   steady face, `:product` = the ref's saturated colour found in the frames (a scan / screen / label close-up has no
   face), `:auto` = face, else product. End capped at `dur − 0.5`. At zoom 1.12 the crop moves ≤ 40 px, so the
   measured centre is enough; never refine it by hand.
+  **`:product` and `:auto` need `--product <ref.jpg>` on the `fx` call itself** — without it the punch is skipped
+  with `no --product to find the product by`, which reads like a failed detection rather than a missing argument.
 - **A close-up beat often comes back `product not located …` — read WHICH message before iterating.**
   `the product moves N px across the beat` is a window problem: iterate neighbouring windows of the SAME beat
   (and drop to `:auto`/`:face`) until one lands — the promise is the beat, not the exact seconds.
@@ -124,6 +126,12 @@ Run once per RAW scene, BEFORE post_presenter. It touches video only and copies 
 
 ### 2. `post_presenter.py`
 Run it as before, with each scene's `video` pointing at its `scene_fx.mp4`.
+- **Pill `start`/`end` are scene-local seconds you write into `plan.json` BEFORE this run, so measure them first**:
+  one word-level ASR pass over the raw scene gives the real window — ffmpeg the audio to 16 kHz mono, load it with
+  the stdlib `wave` module and hand the FLOAT ARRAY to `transcribe(..., word_timestamps=True)` (that skips
+  faster-whisper's own av-based file decoder entirely, which is the part that breaks on the av build `uv` ships),
+  then place each EN pill ~0.1 s before its word starts to its end + 0.3 s. Guessing lands the pill on the face or
+  a beat late; post's own ASR runs only AFTER the plan is fixed and times the SUBS, never the pills.
 - The plan path is opened from the process CWD, NOT from `--workdir` (which only sets where the scene
   `video` paths and the outputs resolve): pass the plan ABSOLUTE, or `cd` into the workdir first — a bare
   `plan.json` dies with `FileNotFoundError` before any work runs.
@@ -168,7 +176,9 @@ Elements:
 - make_cover now uses `FredokaSB-Static.ttf`: the variable Fredoka loads a thin default instance in PIL.
 
 ### 4. Check and send
-1. Run `verify-clip.py` on final.mp4.
+1. **Do NOT pre-run `verify-clip.py`** — `clipjob.py deliver` runs it, and a copy it stages in Downloads can make
+   deliver refuse as a resend (if it does, delete that copy from both Downloads dirs and re-run deliver). The QC
+   that belongs here is `sub_linecheck` (1b) and the frame sheet (2–3).
 1b. `uv run --with pillow python /opt/data/skills/gameplay-clips/scripts/sub_linecheck.py <workdir>` (symlink `fonts/` into the workdir first): the per-event band count is deterministic, while vision OCR misreads small Thai and will invent a "truncated" subtitle that is not there — never clear a sub defect from a vision read alone. When it reports `bands=1 want=2`, settle it without OCR: crop the sub area at the event's mid-time (`-vf crop=720:340:0:580`) and count lit-row clusters of the subtitle FILL colour only (mask R≈255, G≈214, B≈102 with a TIGHT tolerance plus yellow dominance `(g−b)>70 and (r−b)>90`, rows with >4 px lit): two base-glyph clusters split by zero-ink rows = two lines = false fail — count only sustained clusters
 (~≥10 lit rows): a 1–3 row stray between the two tall ones is a tone mark or a descender, not a third line. A loose tolerance (±70 per channel) also matches skin and wall, so every row in the band reads lit, the two lines merge into one continuous cluster, and the check reports exactly the genuine-looking single-line defect it was meant to disprove — tighten the mask and find the zero-ink gap instead of trusting the merged result.
    The REVERSE case (`bands=2 want=1`, an EXTRA band) settles the same way and its `x=` runs name it first: one

@@ -99,6 +99,10 @@ Fix's own submits spend his Flow credits like 🤖. `ingest` records the publish
   1.2 (80 min); Fix tried 1.1 and it rendered first time. 1.1 = 1.5 cr/s (6 s = 9): ingest that file with
   `--credits 9` (the default records the 1.2 estimate). Omni 1.1 leaves Flow on 2026-12-05; after that the
   fallback model is Veo 3.1 Lite (cost unread — ask Fix to read its credit line).
+- **Refused on BOTH Omni 1.2 and 1.1 = an attached IMAGE, not the model** (keem-herm-loud-800a 2026-11-27: a person
+  portrait attached as an Ingredient rather than a Character chip is the usual culprit): drop that image, describe
+  the presenter in the prompt with the gender stated explicitly, rewrite, then `clipjob.py pack <job> --shot K` —
+  prompt only, the refs and character portrait are not re-sent.
 - Refused on 1.1 too: ONE change per round — the single structural difference from a shot of the clip that passed
   (most often the action that forces Flow to render an IP-bearing asset: real game covers, brand art), edit only
   that, `pack --shot K`, and tell Fix which words changed and why. Testing without the start frame =

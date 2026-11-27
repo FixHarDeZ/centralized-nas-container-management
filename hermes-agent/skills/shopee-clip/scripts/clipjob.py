@@ -2397,7 +2397,8 @@ def main(argv=None):
                 raise Refused(f"no portrait {CHAR_DIR}/{a.character}.jpg — without it the identity check cannot compare "
                               "her face and the prompt pack cannot give Fix's other account the character "
                               "(champion-trashbag-roll 2026-11-22: น้องเอิร์ธ, the one MALE roster entry, came back a "
-                              "woman). Save the character's Flow image there (flow-driver templates/character-prompt.md) "
+                              "woman). Create the character in Flow first (0 credits, also in 📝) or open its tile, "
+                              "and save its image there (flow-driver templates/character-prompt.md) "
                               "or pick a roster name that has one")
             j = new_job(a.job, a.mode, a.product, a.link, a.shots, a.ref, a.workdir, a.character, a.seconds)
             old = load(a.job) if os.path.exists(path_of(a.job)) else None

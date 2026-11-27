@@ -4,6 +4,13 @@ Fix's screenshot is always the primary ingredient (the Shopee listing itself is 
 
 **Decision before any salvage — vision-read the source once, then branch.** ONE read on the FULL image asking for every readable text plus any price / currency / discount / coupon / QR / shop wordmark. Any of those present → run the salvage recipe below. NONE present → attach the ORIGINAL file un-cropped: the no-price rule bans price / promo / wordmark TEXT, not ad layout, and cropping a clean ad only throws away product context (branding, spec badges, feature icons) the model can use as reference. Name the branch in the delivery — which file was attached, and that the source was checked clean.
 
+**Photo gate — free probes first, ONE vision read (keem-herm-loud-800a 2026-11-27):** the job's vision budget
+also has to cover post, so settle text with OCR + pixel/component probes first — free — and spend ONE vision read
+on the decisive question (does the whole product fit inside the largest text-free rect?). Claim text printed OVER
+the product is source-limited: that answer goes to Fix in ONE clarify (use the best partial crop / send a clean
+photo / cancel), never another candidate sheet. While a storyboard is pending, that fork rides on the board's
+approval buttons instead (`templates/storyboard.md` → button cap).
+
 **A shop's graphic overlay on an otherwise clean product photo (brand wordmark bar, mascot, logo lock-up) is NOT a gate failure** — the gate bans price / promo / rating / UI / people, and a brand mark on the brand's own product photo is context the model can use. Do not spend the 2-check budget cropping it away and do not ask Fix about it: (1) `md5sum img* ref*` in the workdir first — a ref whose hash equals its img is an un-cropped copy, so no salvage has happened yet and you are deciding fresh; (2) ask for the overlay's position as FRACTIONS of the frame IN THE SAME first vision call as the verdict, so crop candidates are designed before the last check; (3) when the report shows the product spanning the overlay's rows, every crop that loses the overlay also loses product — attach the original and add one line to the Flow prompt (`the reference images carry graphic overlays at the bottom: ignore them completely and reproduce no logo, cartoon or text from them`) beside the standing ON-SCREEN TEXT block, which is what actually stops Flow drawing it. Only a real gate defect (price, people, UI) earns the ask-Fix branch.
 
 ## Time budget — 2 vision checks per reference (Fix 2026-11-12)
