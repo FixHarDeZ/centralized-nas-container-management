@@ -1754,3 +1754,68 @@ def test_intake_saves_even_when_the_queue_line_fails(tmp_path, monkeypatch):
     assert cj.main(["intake", "b-1", "--product", "B"]) == 0
     j = cj.load("b-1")
     assert j["queued_behind"] == ["a-1"] and "queue line not sent: TELEGRAM_BOT_TOKEN missing" in j["events"][-1]["msg"]
+
+
+# ---------------------------------------------------------------- spec numbers (keem-herm-loud-800a 2026-11-27)
+SPEC_800 = json.dumps({"title": {"A": ["800"]}, "images": {"img1.jpg": {"A": ["300"]}},
+                       "conflicts": {"A": {"listing": ["800"], "photos": ["300"]}}})
+
+
+def test_a_spec_conflict_found_at_the_board_gates_the_prompt_until_fix_picks(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(cj, "DIR", str(tmp_path / "jobs")); monkeypatch.setenv("CLIPJOB_SPEC_JSON", SPEC_800)
+    wd = tmp_path / "w"; wd.mkdir(); (wd / "img1.jpg").write_bytes(b"i")
+    assert cj.main(["intake", "keem", "--product", "คีมเชื่อมลวด 800A ด้ามจับถนัดมือ", "--workdir", str(wd)]) == 0
+    capsys.readouterr()
+    assert cj.main(["board", "keem", "--hook-id", "gadget-2"]) == 0
+    res = json.loads(capsys.readouterr().out)
+    assert "SPEC CONFLICT" in res["next"] and "800A" in res["next"] and res["spec"]["conflicts"]["A"]
+    j = cj.load("keem")
+    assert any("spec conflict: listing says 800A" in e["msg"] for e in j["events"])
+    (wd / "shot1.txt").write_text('Audio (Thai voiceover): "ใช้คีมเชื่อมลวด 800A ตัวนี้มาสักพัก"', encoding="utf-8")
+    with pytest.raises(cj.Refused, match="800A"):
+        cj.spec_check(j, 1)
+    (wd / "shot1.txt").write_text('Audio (Thai voiceover): "ใช้คีมเชื่อมลวดตัวนี้มาสักพัก"', encoding="utf-8")
+    cj.spec_check(j, 1)                                          # the product without the number: fine
+    db = str(tmp_path / "state.db"); _hermes_db(db, []); monkeypatch.setattr(cj, "HERMES_DB", db)
+    assert cj.main(["spec", "keem", "--ok", "800A"]) == 1 and "no reply from Fix" in capsys.readouterr().err
+    monkeypatch.setattr(cj, "HERMES_DB", "/nonexistent/state.db")    # unreadable db: recorded as unverified
+    assert cj.main(["spec", "keem", "--ok", "900A"]) == 1 and "not a number in conflict" in capsys.readouterr().err
+    assert cj.main(["spec", "keem", "--ok", "800a"]) == 0
+    j = cj.load("keem")
+    assert j["spec"]["ok"] == ["800A"] and j["spec"]["answer"].startswith("unverified")
+    (wd / "shot1.txt").write_text('Audio (Thai voiceover): "ใช้คีมเชื่อมลวด 800A ตัวนี้มาสักพัก"', encoding="utf-8")
+    cj.spec_check(j, 1)                                          # Fix picked the listing's number
+    with pytest.raises(cj.Refused, match="300A"):
+        (wd / "shot1.txt").write_text('Audio (Thai voiceover): "คีมสามร้อยแอมป์"', encoding="utf-8")
+        cj.spec_check(j, 1)
+
+
+def test_a_title_without_a_spec_number_runs_no_scan(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(cj, "DIR", str(tmp_path / "jobs"))
+    monkeypatch.setattr(cj, "run", lambda cmd: pytest.fail(f"no OCR expected: {cmd}"))
+    wd = tmp_path / "w"; wd.mkdir(); (wd / "img1.jpg").write_bytes(b"i")
+    assert cj.main(["intake", "drill", "--product", "สว่านไร้สาย 2/3 ระบบ", "--workdir", str(wd)]) == 0
+    assert cj.main(["board", "drill", "--hook-id", "gadget-5"]) == 0
+    assert "spec" not in cj.load("drill") and "SPEC" not in capsys.readouterr().out
+
+
+def test_deliver_refuses_a_conflicting_number_in_caption_graphics_and_subs(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(cj, "DIR", str(tmp_path)); monkeypatch.setenv("CLIPJOB_NO_TG", "1")
+    monkeypatch.setattr(cj, "FINALS_DIR", str(tmp_path / "finals")); monkeypatch.setenv("CLIPJOB_SPEC_JSON", SPEC_800)
+    monkeypatch.setattr(cj, "CLIP_LOG", str(tmp_path / "clip-log.jsonl"))
+    wd = tmp_path / "w"; wd.mkdir(); (wd / "img1.jpg").write_bytes(b"i")
+    assert cj.main(["new", "g-8", "--mode", "gameplay", "--product", "คีมเชื่อมลวด 800A", "--link",
+                    "https://s.shopee.co.th/x", "--workdir", str(wd)]) == 0
+    final = tmp_path / "f.mp4"; final.write_bytes(b"a"); cover = tmp_path / "c.jpg"; cover.write_bytes(b"c")
+    monkeypatch.setattr(cj, "av_durations", lambda p: (20.0, 20.0))
+    monkeypatch.setattr(cj, "run", lambda cmd: (0, json.dumps({"ok": True}), ""))
+    gfx = tmp_path / "gfx.json"; gfx.write_text(json.dumps({"headlines": [{"text": "800A", "start": 1, "end": 2}],
+                                                           "image_stickers": [{"image": "keem-800a/ref1.jpg"}]}))
+    base = ["deliver", "g-8", "--final", str(final), "--hashtags", "#weld", "--cover", str(cover),
+            "--post-hook", "งานเชื่อมทั้งวันด้ามจับก็ยังเย็น"]
+    assert cj.main([*base, "--caption", "คีมเชื่อมลวด 800A ด้ามจับถนัดมือ", "--gfx", str(gfx)]) == 1
+    err = capsys.readouterr().err
+    assert "caption says 800A" in err and "graphics says 800A" in err and "listing says 800A" in err
+    gfx.write_text(json.dumps({"headlines": [{"text": "COOL GRIP", "start": 1, "end": 2}],
+                               "image_stickers": [{"image": "keem-800a/ref1.jpg"}]}))   # a path is not text
+    assert cj.main([*base, "--caption", "คีมเชื่อมลวด ด้ามจับถนัดมือ", "--gfx", str(gfx)]) == 0

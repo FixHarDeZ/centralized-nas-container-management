@@ -29,7 +29,9 @@ plan.json:
   "xfade": 0.25,            # seconds; 0 = hard cut
   "seam_whoosh": true,      # extra whoosh at each seam (hook whoosh is always on)
   "model": "auto",          # small | medium | auto (small, escalate to medium if CER > 0.35)
-  "trim": "auto"            # auto | 0 | <seconds> (single value or list per scene)
+  "trim": "auto",           # auto | 0 | <seconds> (single value or list per scene)
+  "product": "ref1.jpg"     # the product ref (default: ref1.jpg next to plan.json): a subtitle moves off the
+                            # product she holds (subclear.py, autogfx.py boxes); NO_SUB_CLEAR=1 = the fixed band
 }
 Outputs in workdir: subs.ass, pills.txt, out.mp4 (mastered), report.json, [sheet.jpg]
 """
@@ -389,6 +391,20 @@ def ts(t):
 
 
 # ---------------------------------------------------------------- 4. whoosh
+def product_boxes(video, ref, times):
+    """autogfx.py boxes in a uv subprocess (no cv2 here) -> ([box | None per time], None) or (None, why)."""
+    cmd = ["uv", "run", "-q", "--with", "opencv-python-headless<5", "--with", "numpy", "python",
+           os.path.join(HERE, "autogfx.py"), "boxes", video, "--product", ref, "--at", ",".join(f"{t:.2f}" for t in times)]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=600, check=True)
+        d = json.loads(r.stdout.strip().splitlines()[-1])
+    except Exception as e:                          # a measuring error never blocks post
+        return None, f"not measured ({str(e)[:120]})"
+    if d.get("model") is None:
+        return None, d.get("why") or "no hue model"
+    return [b for _, b in d["boxes"]], None
+
+
 def make_whoosh(path, dur=0.55, f0=250, f1=4500):
     steps, lines = 28, []
     for k in range(steps + 1):
@@ -572,10 +588,49 @@ def main():
         if a_["t1"] > b_["t0"] - 0.04:
             a_["t1"] = b_["t0"] - 0.04
     events = [e for e in events if e["t1"] - e["t0"] >= 0.3]
+
+    # ---- 2b. a subtitle never covers the product she holds: move it beside / above the product (subclear.py)
+    import pillclear
+    import subclear
+    heads = {}                     # scene -> head boxes every 0.25 s (pillclear), shared with the pill step
+    starts = [s["global_start"] for s in report["scenes"]]
+    sizes = [subclear.size([text_w(ln) * 48 / SUB_SIZE for ln in e["lines"]]) for e in events]   # style = Itim 48
+    places = [subclear.choose(w, h, None, None, mv=a.sub_marginv) for w, h in sizes]
+    ref = plan.get("product") or ("ref1.jpg" if os.path.exists(os.path.join(pdir, "ref1.jpg")) else None)
+    if not ref:
+        report.setdefault("notes", []).append("subtitles not checked against the product: no plan `product` / ref1.jpg")
+    elif not os.environ.get("NO_SUB_CLEAR"):
+        by_scene = {}
+        for i, e in enumerate(events):
+            by_scene.setdefault(e["scene"], []).append(i)
+        for k, idx in sorted(by_scene.items()):
+            sc, g = scenes[k], starts[k]
+            loc = [(events[i]["t0"] - g, events[i]["t1"] - g) for i in idx]
+            times = [sc["_T"] + max(0.0, t) for a_, b_ in loc for t in (a_ + 0.15, (a_ + b_) / 2, b_ - 0.15)]
+            boxes, why = product_boxes(P(sc["video"]), P(ref), times)
+            if boxes is None:
+                report.setdefault("notes", []).append(f"scene {k+1}: subtitles not checked against the product - {why}")
+                continue
+            if k not in heads:
+                heads[k] = pillclear.measure_faces(P(sc["video"]), sc["_T"], sc["_D"])
+            for n, i in enumerate(idx):
+                face = pillclear.head_box(pillclear.window(heads[k], *loc[n])) if heads[k] else None
+                ch = subclear.choose(*sizes[i], boxes[3 * n:3 * n + 3], face, mv=a.sub_marginv)
+                places[i] = ch
+                e = events[i]
+                if ch["how"] == "moved":
+                    report.setdefault("notes", []).append(
+                        f"sub {e['t0']:.2f}-{e['t1']:.2f} '{' / '.join(e['lines'])[:24]}' moved off the product "
+                        f"(covered {ch['cover0']:.0%} -> {ch['cover']:.0%}): centre x {ch['cx']:.0f}, bottom y {ch['yb']:.0f}")
+                elif ch["how"] == "stuck":       # a close-up insert the product fills: the frame check judges it
+                    report.setdefault("notes", []).append(
+                        f"sub {e['t0']:.2f}-{e['t1']:.2f} '{' / '.join(e['lines'])[:24]}' overlaps the product "
+                        f"({ch['cover0']:.0%}) and no spot beside or above it misses her face - left in the band")
     with open(os.path.join(wd, "subs.ass"), "w", encoding="utf-8") as f:
         f.write(STYLE_HDR.format(mv=a.sub_marginv))
-        for e in events:
-            f.write(f"Dialogue: 0,{ts(e['t0'])},{ts(e['t1'])},Sub,,0,0,0,,{'\\N'.join(e['lines'])}\n")
+        for e, ch, (w, h) in zip(events, places, sizes):
+            ml, mr, mv = subclear.margins(ch, w) if ch["how"] == "moved" else (0, 0, 0)
+            f.write(f"Dialogue: 0,{ts(e['t0'])},{ts(e['t1'])},Sub,,{ml},{mr},{mv},,{'\\N'.join(e['lines'])}\n")
 
     # ---- 3. pills: validate
     last = len(scenes) - 1
@@ -602,10 +657,7 @@ def main():
     # ---- 3b. a pill never sits on her face or hair: slide it beside her head inside the pill band, else move it
     # in time inside its scene, else drop it; the CTA keeps its time and goes to autogfx as a headline (pillclear.py)
     if not os.environ.get("NO_PILL_CLEAR"):
-        import pillclear
-        starts = [s["global_start"] for s in report["scenes"]]
         wfn = pillclear.width_fn(os.path.join(wd, "fonts", "Fredoka-SemiBold.ttf"))
-        heads = {}
         kept = []
         for p in sorted(pills, key=lambda p: (p["text"] != CTA, p["t0"])):     # the CTA is placed first: it cannot move
             k, g = p["scene"], starts[p["scene"]]
@@ -744,6 +796,8 @@ def main():
     report["pill_slots"] = [{"text": p["text"], "start": round(p["t0"], 2), "end": round(p["t1"], 2), "x": p["x"],
                              "font": p["font"]} for p in pills if p.get("x") is not None]
     report["subs"] = [(round(e["t0"], 2), round(e["t1"], 2), " / ".join(e["lines"])) for e in events]
+    # where each sub is drawn (moved ones off the band): autogfx headlines + graphics_layer --check read it
+    report["sub_rects"] = [[round(v) for v in ch["rect"]] for ch in places]
     report["whoosh_at"] = [round(h, 2) for h in hits]
     json.dump(report, open(os.path.join(wd, "report.json"), "w"), ensure_ascii=False, indent=1)
 

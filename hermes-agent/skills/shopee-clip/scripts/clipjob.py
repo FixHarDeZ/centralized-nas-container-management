@@ -67,6 +67,7 @@ Shot prompts live in <workdir>/shot<K>.txt (written by IU from the approved stor
 """
 import argparse
 import collections
+import contextlib
 import datetime as dt
 import glob
 import hashlib
@@ -602,7 +603,7 @@ def need_flow(j):
         raise Refused(f"mode {j['mode']} has no Flow shots")
 
 
-INTAKE_CMDS = ("note", "wait", "cancel", "status", "board")
+INTAKE_CMDS = ("note", "wait", "cancel", "status", "board", "spec")
 
 
 def intake_job(job, product, link="", mode=None, workdir=None):
@@ -745,6 +746,7 @@ def reserve(j, k, last_reserve, t=None):
         raise Refused(f"shot {k} is {s['state']}; a rendered or failed shot needs Fix's 🔁 first")
     cta_order_check(j, k)
     name_check(j, k)
+    spec_check(j, k)
     vo_rate_check(j, k)
     plate_check(j, k)
     if k > 1:
@@ -1225,6 +1227,126 @@ def name_check(j, k):
                       "(champion-trashbag-roll: 'น้องเอิร์ธ' on the wall). Refer to her as 'the presenter (the attached "
                       "character chip)' and describe the look from the portrait; a name may appear only inside the "
                       "quoted voiceover line")
+
+
+# ---------------------------------------------------------------- spec numbers (speccheck.py)
+SPECCHECK = os.path.join(HERE, "speccheck.py")
+ORDER_IMG_RE = re.compile(r"^img(\d+)\.(jpe?g|png|webp)$", re.I)
+SPEC_CMD = ["uv", "run", "-q", "--with", "rapidocr-onnxruntime", "--with", "numpy", "--with", "pillow", "python", SPECCHECK]
+
+
+def order_images(j):
+    """Fix's order photos as intake_images.py copied them (img1.jpg …), in order."""
+    d = j.get("workdir") or ""
+    if not os.path.isdir(d):
+        return []
+    got = [(int(m.group(1)), f) for f in os.listdir(d) if (m := ORDER_IMG_RE.match(f))]
+    return [os.path.join(d, f) for _, f in sorted(got)]
+
+
+def spec_scan(j):
+    """Spec numbers of the listing title vs what the order photos print -> j["spec"] (None = the title names no
+    number + unit, or there is no photo). Reuses <workdir>/spec.json when intake_images.py already scanned the
+    same photos; a recorded --ok survives a rescan."""
+    import speccheck
+    if not speccheck.spec_tokens(j.get("product")):
+        return None
+    imgs = order_images(j)
+    if not imgs:
+        return None
+    cache = os.path.join(j["workdir"], "spec.json")
+    res = None
+    if os.environ.get("CLIPJOB_SPEC_JSON"):                   # tests: the OCR result, no uv
+        res = json.loads(os.environ["CLIPJOB_SPEC_JSON"])
+    elif os.path.exists(cache):
+        try:
+            with open(cache, encoding="utf-8") as f:
+                c = json.load(f)
+            if sorted(os.path.basename(x) for x in c.get("images") or {}) == sorted(os.path.basename(x) for x in imgs) \
+                    and c.get("title_text") == j["product"]:
+                res = c
+        except (OSError, ValueError):
+            res = None
+    if res is None:
+        rc, out, err = run([*SPEC_CMD, "scan", "--title", j["product"], *imgs])
+        try:
+            res = json.loads(out.strip().splitlines()[-1])
+        except (ValueError, IndexError):
+            log(j, f"spec scan failed (rc {rc}): {(out + err)[-160:]}")
+            return None
+    prev = j.get("spec") or {}
+    j["spec"] = {"at": prev.get("at") if prev.get("conflicts") == (res.get("conflicts") or {}) and prev.get("at") else iso(),
+                 "title": res.get("title") or {}, "conflicts": res.get("conflicts") or {},
+                 "images": [os.path.basename(x) for x in imgs], "ok": prev.get("ok") or [],
+                 **({"answer": prev["answer"]} if prev.get("answer") else {})}
+    if j["spec"]["conflicts"] and not prev.get("conflicts"):
+        log(j, "spec conflict: " + speccheck.describe(j["spec"]["conflicts"]))
+    return j["spec"]
+
+
+def spec_banned(j):
+    import speccheck
+    s = j.get("spec") or {}
+    return speccheck.banned(s.get("conflicts") or {}, s.get("ok") or [])
+
+
+def spec_why(j):
+    import speccheck
+    return (f"{speccheck.describe(j['spec']['conflicts'])} (keem-herm-loud-800a 2026-11-27: VO, pill and cover said "
+            f"800A while the photo prints 300A). Say the product without that number, or ask Fix ONE line and record "
+            f"his pick: clipjob.py spec {j['job']} --ok <token>")
+
+
+def spec_next(j):
+    """The line `board` / `spec` hand back while a conflict is open."""
+    ban = spec_banned(j)
+    if not ban:
+        return None
+    return (f"SPEC CONFLICT — {spec_why(j)}. Banned in VO / pills / subs / caption / post hook / cover until then: "
+            f"{', '.join(ban)}. Put the question in the approval clarify (e.g. a button per number), not a separate ask")
+
+
+def spec_check(j, k):
+    """pack / reserve: shot k's prompt may not carry a number the listing and Fix's photos disagree on."""
+    ban = spec_banned(j)
+    path = os.path.join(j["workdir"], f"shot{k}.txt")
+    if not ban or not os.path.exists(path):
+        return
+    import speccheck
+    with open(path, encoding="utf-8") as f:
+        hit = speccheck.hits(f.read(), ban)
+    if hit:
+        raise Refused(f"shot {k} ({path}) says {', '.join(hit)} — {spec_why(j)}")
+
+
+def _texts(obj):
+    """Every string under a "text" key of a graphics plan."""
+    if isinstance(obj, dict):
+        return [v for k, v in obj.items() if k == "text" and isinstance(v, str)] + \
+            [x for k, v in obj.items() if k != "text" for x in _texts(v)]
+    if isinstance(obj, list):
+        return [x for v in obj for x in _texts(v)]
+    return []
+
+
+def spec_deliver_problems(j, a, report, gfx):
+    """deliver: caption, post hook, hashtags, pills, subs, graphics and the cover's own text."""
+    import speccheck
+    if "spec" not in j:
+        spec_scan(j)                       # a job that never ran `board` (🎬 / 📦) still gets the check
+    ban = spec_banned(j)
+    if not ban:
+        return []
+    texts = [("caption", a.caption), ("post hook", a.post_hook), ("hashtags", a.hashtags)]
+    texts += [("graphics", x) for x in _texts(gfx)]
+    texts += [(kind, r[2]) for kind in ("pills", "subs") for r in report.get(kind) or []
+              if isinstance(r, (list, tuple)) and len(r) > 2]
+    if os.path.exists(a.cover) and not os.environ.get("CLIPJOB_SPEC_JSON"):
+        _, out, _ = run([*SPEC_CMD, "ocr", a.cover])
+        with contextlib.suppress(ValueError, IndexError):        # an unread cover is not a refusal
+            texts.append(("cover", json.loads(out.strip().splitlines()[-1]).get("text", "")))
+    found = [f"{where} says {', '.join(h)}" for where, x in texts if (h := speccheck.hits(x, ban))]
+    return [f"spec number: {'; '.join(found)} — {spec_why(j)}"] if found else []
 
 
 def cta_hits(text):
@@ -1778,6 +1900,7 @@ def cmd_pack(j, only, no_send, no_start_frame=False):
     for k in targets:
         cta_order_check(j, k)
         name_check(j, k)
+        spec_check(j, k)
         vo_rate_check(j, k)
         with open(os.path.join(wd, f"shot{k}.txt"), encoding="utf-8") as f:
             asks_frame = START_FRAME_RX.search(f.read())
@@ -2145,6 +2268,7 @@ def cmd_deliver(j, a):
         probs.append(f"no cover {a.cover}")
     if j["mode"] == "gameplay" and os.path.exists(a.final) and not os.environ.get("ENDCARD_OK"):
         probs += endcard_problems(a.final, endcard_rect(j, a.final))
+    probs += spec_deliver_problems(j, a, report, gfx)
     if probs:
         raise Refused("deliver refused:\n- " + "\n- ".join(probs))
     rc, out, err = run(["python3", os.path.join(HERE, "verify-clip.py"), a.final])
@@ -2289,6 +2413,9 @@ def main(argv=None):
     s.add_argument("--seconds", help="per-shot length: 8 or 8,6,8 (3-10, default 10)")
     s = sub.add_parser("board"); s.add_argument("job")
     s.add_argument("--hook-id")
+    s = sub.add_parser("spec"); s.add_argument("job")
+    s.add_argument("--ok", action="append", default=[], metavar="TOKEN", help="Fix picked this number (e.g. 800A)")
+    s.add_argument("--rescan", action="store_true")
     s = sub.add_parser("intake"); s.add_argument("job"); s.add_argument("--product", required=True)
     s.add_argument("--link", default=""); s.add_argument("--mode", choices=MODES); s.add_argument("--workdir")
     s = sub.add_parser("idcheck"); s.add_argument("job"); s.add_argument("shot", type=int); s.add_argument("--raw")
@@ -2385,9 +2512,13 @@ def main(argv=None):
             t = iso()
             hooks = [*((j.get("board") or {}).get("hooks") or []), {"id": a.hook_id, "at": t}]
             j["board"] = {"sent": t, "hook_id": a.hook_id, "hooks": hooks}
-            log(j, f"board sent (hook {a.hook_id})"); save(j)
-            return out({"job": a.job, "board": j["board"], "next": "NOW ask approval + Q3 (one clarify), then wait. "
-                        "`new` refuses until Fix replies after this moment (stamped after his answer = refused)"})
+            log(j, f"board sent (hook {a.hook_id})")
+            spec_scan(j); save(j)
+            nxt = ("NOW ask approval + Q3 (one clarify), then wait. "
+                   "`new` refuses until Fix replies after this moment (stamped after his answer = refused)")
+            sn = spec_next(j)
+            return out({"job": a.job, "board": j["board"], **({"spec": j["spec"]} if sn else {}),
+                        "next": nxt + (f". {sn}" if sn else "")})
         if a.cmd == "new":
             missing = [r for r in a.ref if not os.path.exists(r)]
             if missing:
@@ -2523,6 +2654,37 @@ def main(argv=None):
         if a.cmd == "edit-id":
             set_edit_id(j, a.shot, a.edit_id); save(j)
             return out(summary(j))
+        if a.cmd == "spec":
+            need_open(j)
+            if a.rescan or "spec" not in j:
+                if a.rescan:
+                    j.pop("spec", None)
+                    cache = os.path.join(j["workdir"], "spec.json")
+                    if os.path.exists(cache):
+                        os.remove(cache)
+                spec_scan(j)
+            s = j.get("spec")
+            if not s:
+                save(j)
+                return out({"job": a.job, "spec": None, "next": "nothing to check: the product title names no number + "
+                            "unit, or the workdir has no img* order photos"})
+            if a.ok:
+                import speccheck
+                every = speccheck.banned(s["conflicts"])
+                toks = sorted({x.upper().replace(" ", "") for x in a.ok})
+                bad = [x for x in toks if x not in every]
+                if bad:
+                    raise Refused(f"--ok {', '.join(bad)}: not a number in conflict (in conflict: {', '.join(every) or 'none'})")
+                replies = board_replies(_epoch(s["at"]))
+                if replies is not None and not replies:
+                    raise Refused(f"no reply from Fix since the conflict was found at {s['at'][11:16]} — ask him first "
+                                  "(one button per number in the approval clarify); --ok records HIS pick")
+                s["ok"] = sorted(set(s.get("ok") or []) | set(toks))
+                s["answer"] = replies[-1][1] if replies else "unverified (state.db unreadable)"
+                log(j, f"spec ok {', '.join(s['ok'])}: {s['answer'][:80]}")
+            save(j)
+            return out({"job": a.job, "spec": s, "banned": spec_banned(j),
+                        "next": spec_next(j) or "no banned number left"})
         if a.cmd == "plate":
             need_open(j); need_flow(j)
             p = set_plate(j, a.state, a.why, a.file); save(j)

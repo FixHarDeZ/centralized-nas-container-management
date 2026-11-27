@@ -65,9 +65,15 @@ $R gfx out.mp4 --report report.json --out gfx.json --fx1 fx1.json \
   inside the frame with margin, and the fix is the next window, never a hand-edited coordinate.
 - `--product-sticker` = the board's cut-out as `image_stickers`, in the `--sticker-at` window (default: the last
   scene) where it fits biggest: on free wall, else beside a plausible face box, never on the face, the body under
-  it, the product's colour blob, the pill/sub bands or the right rail.
+  it, the product she holds, the pill/sub bands or the right rail.
+- **The product she holds is found by the ref's HUE** (`--product REF`, default the `--product-sticker` image; 5
+  frames a window, every patch of that hue joined and padded for the black parts): decker-cordless-drill 2026-11-27
+  put the cut-out ON the drill in his hand and `2 BATTERIES` across its body because the old saturation-110 colour
+  blob caught only a few teal accents. A black / white / grey ref has no hue: `skipped` says "product not located"
+  — then look at the frame sheet for a cut-out or headline on the product yourself.
 - `--headline TEXT@T0-T1` (repeatable) = a text the board promised, e.g. a pill `post_presenter` dropped off her
-  face; size 58→46, y measured clear of faces, live pills/subs and the sticker. `report.json` `headlines` (the
+  face; size 58→46, y measured clear of faces, the product, live pills/subs (where `report.json` `sub_rects` says
+  each sub is drawn) and the sticker. `report.json` `headlines` (the
   CTA `post_presenter` could not fit beside her head) are added the same way without a flag; `--check` fails
   while one is missing from gfx.json.
 - Anything printed `left out` stays out — tell Fix in the delivery line which promise did not fit. That bar is

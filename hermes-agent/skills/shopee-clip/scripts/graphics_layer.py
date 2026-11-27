@@ -58,6 +58,16 @@ SAFE = (80, 192, 592, 832)
 PILL_BAND = (0, 186, W, 262)
 SUB_BAND = (0, 700, W, 835)
 
+
+def sub_spans(report):
+    """[(s0, s1, text, rect)]: where each subtitle is drawn — post_presenter's `sub_rects` (a sub moved off the
+    product it held, subclear.py), the fixed band for a report made before them."""
+    subs = report.get("subs", []) if report else []
+    rects = report.get("sub_rects") or [] if report else []
+    if len(rects) != len(subs):
+        rects = [SUB_BAND] * len(subs)
+    return [(s0, s1, txt, tuple(r)) for (s0, s1, txt), r in zip(subs, rects)]
+
 # ASS colours are &HBBGGRR&
 COL = {"pink": "&HB18FFF&", "yellow": "&H66D1FF&", "mint": "&H26C98A&", "purple": "&HFF5C7A&",
        "white": "&HFFFFFF&", "peach": "&H8CB4FF&", "sky": "&HF2C88A&"}
@@ -261,8 +271,8 @@ def layout_check(plan, report, fonts):
                     and overlap(r, tuple(av["rect"])):
                 yield f"image sticker '{os.path.basename(im['image'])}' covers avoid-zone '{av.get('name', 'zone')}'"
         if report:
-            for s0, s1, txt in report.get("subs", []):
-                if float(im.get("start", 0)) < s1 and s0 < float(im.get("end", 3600)) and overlap(r, SUB_BAND):
+            for s0, s1, txt, band in sub_spans(report):
+                if float(im.get("start", 0)) < s1 and s0 < float(im.get("end", 3600)) and overlap(r, band):
                     yield f"image sticker '{os.path.basename(im['image'])}' sits in the subtitle band"
                     break
     for av in plan.get("avoid", []):   # e.g. presenter face box read off a frame by vision
@@ -273,8 +283,8 @@ def layout_check(plan, report, fonts):
     if report:
         for c in plan.get("callouts", []):   # the leader LINE must not cut through a showing subtitle
             seg = (min(c["lx"], c["tx"]), min(c["ly"], c["ty"]), max(c["lx"], c["tx"]), max(c["ly"], c["ty"]))
-            for s0, s1, txt in report.get("subs", []):
-                if float(c["start"]) < s1 and s0 < float(c["end"]) and overlap(seg, SUB_BAND):
+            for s0, s1, txt, band in sub_spans(report):
+                if float(c["start"]) < s1 and s0 < float(c["end"]) and overlap(seg, band):
                     yield f"callout '{c['label']}' line crosses the subtitle band while sub '{txt[:12]}' shows"
                     break
         for h in report.get("headlines", []):    # handed over by post_presenter (no room for the CTA pill)
@@ -286,8 +296,8 @@ def layout_check(plan, report, fonts):
             for p0, p1, txt in report.get("pills", []):
                 if t0 < p1 and p0 < t1 and overlap(r, PILL_BAND):
                     yield f"{n} sits in the pill band while pill '{txt}' shows ({p0}-{p1})"
-            for s0, s1, txt in report.get("subs", []):
-                if t0 < s1 and s0 < t1 and overlap(r, SUB_BAND):
+            for s0, s1, txt, band in sub_spans(report):
+                if t0 < s1 and s0 < t1 and overlap(r, band):
                     yield f"{n} sits in the subtitle band while sub '{txt[:12]}' shows ({s0}-{s1})"
                     break
 

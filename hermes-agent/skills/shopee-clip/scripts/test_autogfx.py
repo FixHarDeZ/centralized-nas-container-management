@@ -195,3 +195,60 @@ def test_a_cta_handed_over_by_post_must_be_in_the_plan():
     assert any("handed 'Link below!'" in p for p in probs)
     plan = {"headlines": [{"text": "Link below!", "start": 7.6, "end": 9.8, "y": 400, "style": "pop", "size": 52}]}
     assert not any("handed" in p for p in gl.layout_check(plan, report, gl.FONTS))
+
+
+def test_headline_avoids_the_held_product_and_a_moved_sub():
+    """decker-cordless-drill 2026-11-27: '2 BATTERIES' went across the drill in his hand."""
+    held = [(5.0, 7.0, (60, 192, 660, 520))]
+    entry, _ = ag.place_headline("2 BATTERIES", 5.1, 6.4, [], [], [], rect_fn, (), held)
+    assert entry["y"] >= 520
+    subs, moved = [[5.0, 6.5, "s"]], [[60, 520, 580, 650]]          # the sub sits higher than the band
+    entry, _ = ag.place_headline("2 BATTERIES", 5.1, 6.4, [], [], subs, rect_fn, (), held, moved)
+    r = rect_fn("2 BATTERIES", entry["size"], entry["y"])
+    assert not ag.overlap(r, moved[0]) and not ag.overlap(r, held[0][2])
+
+
+def _hsv_frame(w, h, bg=(0, 0, 200)):
+    import cv2
+    hsv = np.zeros((h, w, 3), np.uint8); hsv[:] = bg
+    return hsv, lambda img: cv2.cvtColor(img, cv2.COLOR_HSV2BGR)
+
+
+def test_hue_box_finds_a_muted_product_and_all_its_parts():
+    import pytest
+    pytest.importorskip("cv2")
+    ref, bgr = _hsv_frame(300, 400)
+    ref[60:340, 60:240] = (97, 190, 200)                      # the ad's vivid teal drill
+    md = ag.hue_model(bgr(ref))
+    assert md["hue"] in range(94, 101) and md["sat"] == ag.HUE_SAT
+    frame, bgr = _hsv_frame(ag.W, ag.H, (20, 40, 170))        # beige room
+    frame[150:420, 250:470] = (10, 120, 200)                  # skin
+    frame[400:560, 100:260] = (97, 85, 110)                   # the drill on video: muted, darker
+    frame[640:700, 130:250] = (97, 85, 110)                   # its battery accent, held lower
+    box = ag.product_box(bgr(frame), md)
+    assert box[0] <= 100 and box[1] <= 400 and box[2] >= 260 and box[3] >= 700
+    assert box[2] < 470                                        # the face is not part of it
+
+
+def test_a_skin_like_product_hue_does_not_match_an_orange_vest():
+    import pytest
+    pytest.importorskip("cv2")
+    ref, bgr = _hsv_frame(300, 400)
+    ref[60:340, 60:240] = (2, 220, 200)                       # red handle
+    md = ag.hue_model(bgr(ref))
+    assert md["tol"] == ag.HUE_TOL_SKIN and md["sat"] == ag.HUE_SAT_SKIN
+    frame, bgr = _hsv_frame(ag.W, ag.H)
+    frame[500:1000, 150:570] = (14, 230, 240)                 # hi-vis orange vest
+    assert ag.product_box(bgr(frame), md) is None
+    frame[300:600, 60:120] = (2, 220, 200)                    # the red handle in his hand
+    box = ag.product_box(bgr(frame), md)
+    assert box and box[2] < 200
+
+
+def test_a_black_product_has_no_hue_model():
+    import pytest
+    pytest.importorskip("cv2")
+    ref, bgr = _hsv_frame(300, 400)
+    ref[60:340, 60:240] = (0, 0, 30)                          # black screwdriver
+    ref[100:110, 100:110] = (12, 220, 230)                    # a tiny orange button
+    assert ag.hue_model(bgr(ref)) is None

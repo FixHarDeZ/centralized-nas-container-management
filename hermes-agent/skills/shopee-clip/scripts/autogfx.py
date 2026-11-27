@@ -20,6 +20,13 @@ gates on its output: `graphics_layer.py --check` and ONE vision look at a frame 
   #   --sticker-at (default: the last scene) where it fits biggest — on free wall, else beside her face;
   # --headline TEXT@T0-T1: a headline (e.g. a pill post_presenter dropped off her face) at a measured y.
   # report.json `headlines` (the CTA post_presenter could not fit beside her head) are added the same way.
+  # --product REF (default: the --product-sticker image): the product she holds is located in every window by
+  #   the ref's hue, and neither the cut-out nor a headline is put on it (decker-cordless-drill 2026-11-27: the
+  #   cut-out sat on the drill in her hand and "2 BATTERIES" across its body — the old saturation-110 colour box
+  #   found only a few teal accents of a muted drill).
+
+  # product boxes at given times (post_presenter keeps subtitles off them):
+  autogfx.py boxes scene.mp4 --product ref1.jpg --at 0.4,1.2,2.0
 
 Run with: uv run --with "opencv-python-headless<5" --with numpy python autogfx.py …
 It prints what it wrote plus `skipped` reasons (no face found, no wall big enough for the hook card). A skipped
@@ -276,17 +283,18 @@ def place_product_sticker(windows, image, aspect, t0, t1, hook=None):
     return entry, f"product sticker {entry['start']}-{entry['end']}s h {h} ({how})"
 
 
-def place_headline(text, t0, t1, faces, pills, subs, rect_fn, taken=()):
-    """faces = [(t0, t1, rect)], pills/subs = report rows, taken = [(t0, t1, rect)] of elements already placed
-    -> (headline entry, note). Tries sizes 58/52/46 and every y from the top of the safe box down; the first
-    rect that is inside the safe box and clear of every face, of the pill band while a pill shows, of the sub
-    band while a sub shows and of the taken rects wins."""
+def place_headline(text, t0, t1, faces, pills, subs, rect_fn, taken=(), products=(), sub_rects=None):
+    """faces = [(t0, t1, rect)], pills/subs = report rows, taken = [(t0, t1, rect)] of elements already placed,
+    products = [(t0, t1, rect)] of the product she holds, sub_rects = report `sub_rects` (one per sub row; the
+    fixed band when absent) -> (headline entry, note). Tries sizes 58/52/46 and every y from the top of the safe
+    box down; the first rect that is inside the safe box and clear of every face, of the product, of the pill
+    band while a pill shows, of each showing sub and of the taken rects wins."""
     live = lambda rows: [r for r in rows if r[0] < t1 and t0 < r[1]]
-    blk = [f[2] for f in live(faces)] + [x[2] for x in live(list(taken))]
+    blk = [f[2] for f in live(faces)] + [x[2] for x in live(list(taken))] + [x[2] for x in live(list(products))]
     if live(pills):
         blk.append((0, 186, W, PILL_BOTTOM))
-    if live(subs):
-        blk.append((0, SUB_TOP, W, 835))
+    rects = sub_rects if sub_rects and len(sub_rects) == len(subs) else [(0, SUB_TOP, W, 835)] * len(subs)
+    blk += [r for s, r in zip(subs, rects) if s[0] < t1 and t0 < s[1]]
     for size in (58, 52, 46):
         for y in range(192, 832, 10):
             r = rect_fn(text, size, y)
@@ -295,8 +303,78 @@ def place_headline(text, t0, t1, faces, pills, subs, rect_fn, taken=()):
             if not any(overlap(r, b) for b in blk):
                 return ({"text": text, "start": round(t0, 2), "end": round(t1, 2), "y": y, "style": "pop",
                          "size": size}, f"headline '{text}' {t0}-{t1}s y {y} size {size}")
-    return None, (f"headline '{text}' {t0}-{t1}s: no y clear of her face and the pill/sub bands — left out "
-                  "(a shorter text, or another beat)")
+    return None, (f"headline '{text}' {t0}-{t1}s: no y clear of her face, the product and the pill/sub bands — "
+                  "left out (a shorter text, or another beat)")
+
+
+# ---------------------------------------------------------------- product box (OpenCV): hue of the ref
+SKIN_HUE = 22            # OpenCV hue <= this or >= 180 - 10: red / orange / yellow, the hues of skin, hair, a vest
+HUE_TOL, HUE_TOL_SKIN = 12, 6
+HUE_SAT, HUE_SAT_SKIN = 45, 140    # a muted teal drill reads sat 60-100 on video; skin-like hues need a vivid colour
+HUE_MIN_SHARE = 0.06     # share of the ref's foreground in that colour: below it the product is black / white / grey
+BOX_GROW, BOX_KEEP, BOX_GAP, BOX_PAD = 25, 0.15, 220, 0.15
+
+
+def skin_like(hue):
+    return hue <= SKIN_HUE or hue >= 170
+
+
+def hue_model(img):
+    """Ref crop -> {"hue", "sat", "tol", "share"} of its dominant vivid colour, or None (not colourful enough)."""
+    import cv2
+    import numpy as np
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    edge = np.concatenate([img[:4].reshape(-1, 3), img[-4:].reshape(-1, 3), img[:, :4].reshape(-1, 3),
+                           img[:, -4:].reshape(-1, 3)]).astype(int)
+    fg = np.sqrt(((img.astype(int) - np.median(edge, axis=0)) ** 2).sum(axis=2)) > 40
+    vivid = fg & (hsv[..., 1] > 80) & (hsv[..., 2] > 50)
+    share = float(vivid.sum()) / max(1, int(fg.sum()))
+    if share < HUE_MIN_SHARE or vivid.sum() < 300:
+        return None
+    raw = np.bincount(hsv[..., 0][vivid], minlength=180).astype(float)
+    smooth = np.convolve(np.r_[raw[-6:], raw, raw[:6]], np.ones(13), "valid")      # circular, +-6
+    s = int(np.argmax(smooth))
+    near = [(s + d) % 180 for d in range(-6, 7)]
+    hue = max(near, key=lambda h: raw[h])               # the busiest hue inside the busiest +-6 band
+    skin = skin_like(hue)
+    return {"hue": hue, "sat": HUE_SAT_SKIN if skin else HUE_SAT, "tol": HUE_TOL_SKIN if skin else HUE_TOL,
+            "share": round(share, 2)}
+
+
+def product_box(img, md):
+    """Box [x0, y0, x1, y1] around the product in one frame: every patch of the ref's hue, grown to join its
+    parts, the biggest cluster plus the parts within BOX_GAP px of it, padded by BOX_PAD of its size for the
+    black / chrome parts the hue cannot see. None when the frame has none of that colour."""
+    import cv2
+    import numpy as np
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    d = np.abs(((hsv[..., 0].astype(int) - md["hue"] + 90) % 180) - 90)
+    m = ((d <= md["tol"]) & (hsv[..., 1] > md["sat"]) & (hsv[..., 2] > 35)).astype(np.uint8) * 255
+    m = cv2.dilate(cv2.morphologyEx(m, cv2.MORPH_OPEN, np.ones((3, 3), np.uint8)), np.ones((BOX_GROW, BOX_GROW), np.uint8))
+    n, _, st, _ = cv2.connectedComponentsWithStats(m)
+    comps = [st[k] for k in range(1, n) if st[k, 4] >= 0.002 * W * H]
+    if not comps:
+        return None
+    big = max(comps, key=lambda s: s[4])
+    bx = [int(big[0]), int(big[1]), int(big[0] + big[2]), int(big[1] + big[3])]
+    for s in sorted(comps, key=lambda s: -s[4]):
+        if s[4] < BOX_KEEP * big[4]:
+            continue
+        r = [int(s[0]), int(s[1]), int(s[0] + s[2]), int(s[1] + s[3])]
+        if max(0, r[0] - bx[2], bx[0] - r[2], r[1] - bx[3], bx[1] - r[3]) <= BOX_GAP:
+            bx = [min(bx[0], r[0]), min(bx[1], r[1]), max(bx[2], r[2]), max(bx[3], r[3])]
+    px, py = int((bx[2] - bx[0]) * BOX_PAD) + 10, int((bx[3] - bx[1]) * BOX_PAD) + 10
+    return [max(0, bx[0] - px), max(0, bx[1] - py), min(W, bx[2] + px), min(H, bx[3] + py)]
+
+
+def cmd_boxes(a):
+    """`boxes`: the product box at each --at time (scene-local s) as JSON, for post_presenter's subtitles."""
+    import cv2
+    md = hue_model(cv2.imread(a.product))
+    if md is None:
+        return {"model": None, "boxes": [], "why": "the ref is black / white / grey: no hue to find it by"}
+    grab = lp().frame
+    return {"model": md, "boxes": [[t, product_box(grab(a.video, t), md)] for t in (float(x) for x in a.at.split(",") if x)]}
 
 
 # ---------------------------------------------------------------- product locator (OpenCV)
@@ -330,25 +408,6 @@ def colour_centre(img, hist):
         return None
     k = 1 + int(np.argmax(stats[1:, cv2.CC_STAT_AREA]))
     return None if stats[k, cv2.CC_STAT_AREA] < 0.0005 * W * H else (int(cent[k][0]), int(cent[k][1]))
-
-
-def colour_box(img, hist, margin=30):
-    """Bounding box (padded) of the biggest ref-coloured blob in a frame, or None."""
-    import cv2
-    import numpy as np
-    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-    bp = cv2.calcBackProject([hsv], [0, 1], hist, [0, 180, 0, 256], 1)
-    bp[hsv[..., 1] <= COLOUR_SAT] = 0
-    m = cv2.morphologyEx(cv2.threshold(cv2.GaussianBlur(bp, (9, 9), 0), 60, 255, cv2.THRESH_BINARY)[1],
-                         cv2.MORPH_OPEN, np.ones((5, 5), np.uint8))
-    n, _, st, _ = cv2.connectedComponentsWithStats(m)
-    if n < 2:
-        return None
-    k = 1 + int(np.argmax(st[1:, cv2.CC_STAT_AREA]))
-    if st[k, cv2.CC_STAT_AREA] < 0.0005 * W * H:
-        return None
-    x, y, w, h = (int(v) for v in st[k, :4])
-    return [max(0, x - margin), max(0, y - margin), min(W, x + w + margin), min(H, y + h + margin)]
 
 
 def detail_centre(img, face=None):
@@ -475,20 +534,25 @@ def cmd_gfx(a):
     probe, grab = lp().probe, lp().frame
     with open(a.report, encoding="utf-8") as f:
         report = json.load(f)
-    hist = None
-    if a.product_sticker:
+    md, notes = None, []
+    ref = a.product or a.product_sticker
+    if ref:
         import cv2
-        hist = ref_colour_model(cv2.imread(a.product_sticker))
+        md = hue_model(cv2.imread(ref))
+        if md is None:
+            notes.append(f"product not located: {os.path.basename(ref)} is black / white / grey (no hue) — check by "
+                         "eye that the cut-out and headlines miss it")
     wins = []
     for scene, t0, t1 in scene_windows(report):
         p = probe(a.video, t0, t1, 0.4)
         busy, prod = p["busy"], []
-        for t in (t0 + 0.3, (t0 + t1) / 2, t1 - 0.1):
-            img = grab(a.video, t)
-            busy = busy | detail_mask(img)
-            box = colour_box(img, hist) if hist is not None else None
+        for k in range(5):
+            img = grab(a.video, t0 + 0.1 + (t1 - t0 - 0.2) * k / 4)
+            if k in (0, 2, 4):
+                busy = busy | detail_mask(img)
+            box = product_box(img, md) if md else None
             if box:
-                prod.append(box)                # the cut-out never covers the real product on screen
+                prod.append(box)                # the cut-out and the headlines never cover the real product
         wins.append({"scene": scene, "t0": t0, "t1": t1, "face": p["face"], "busy": busy, "product": prod})
     if not wins:
         sys.exit("report.json has no scene long enough to probe")
@@ -501,7 +565,9 @@ def cmd_gfx(a):
             hook = {"end": float(hc["dur"]), "rect": [hc["x"] - hw // 2, hc["y"] - hw // 2 - 6, hc["x"] + hw // 2,
                                                       hc["y"] + hw // 2 + 46]}
     plan, skipped = plan_gfx(wins, hook)
+    skipped += notes
     placed = []
+    held = [(w["t0"], w["t1"], b) for w in wins for b in w["product"]]
     if a.product_sticker:
         import cv2
         im = cv2.imread(a.product_sticker)
@@ -531,7 +597,7 @@ def cmd_gfx(a):
                 sys.exit(f"--headline needs TEXT@T0-T1, got {spec!r}")
             t0, t1, _ = parse_span(span)
             entry, note = place_headline(text, t0, t1, faces, report.get("pills") or [], report.get("subs") or [],
-                                         rect_fn, placed)
+                                         rect_fn, placed, held, report.get("sub_rects"))
             skipped.append(note)
             if entry:
                 plan.setdefault("headlines", []).append(entry)
@@ -565,10 +631,18 @@ def main(argv=None):
     s.add_argument("--out", required=True)
     s.add_argument("--fx1")
     s.add_argument("--product-sticker", metavar="IMG")
+    s.add_argument("--product", metavar="REF", help="ref the product is located by (default: --product-sticker)")
     s.add_argument("--sticker-at", metavar="T0-T1")
     s.add_argument("--headline", action="append", default=[], metavar="TEXT@T0-T1")
+    s = sub.add_parser("boxes")
+    s.add_argument("video")
+    s.add_argument("--product", required=True)
+    s.add_argument("--at", required=True, metavar="T,T,…")
     a = ap.parse_args(argv)
-    for f in [a.video] + ([a.report] + ([a.product_sticker] if a.product_sticker else []) if a.cmd == "gfx"
+    if a.cmd == "boxes":
+        print(json.dumps(cmd_boxes(a)))
+        return 0
+    for f in [a.video] + ([a.report] + [x for x in (a.product_sticker, a.product) if x] if a.cmd == "gfx"
                           else [a.product] if a.product else []):
         if not os.path.exists(f):
             sys.exit(f"autogfx: no such file: {f}")
