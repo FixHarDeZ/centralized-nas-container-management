@@ -2305,3 +2305,10 @@ Fix: "ตรวจงานเมื่อวานกับวันนี้�
 - **Watch next 🧑 order:** `intake_images` output carries `spec_conflict` when the title has a number; post notes
   "moved off the product"; the cut-out never on the held product. Board text still written by IU: the gate bites
   at pack/reserve/deliver if the board kept the number.
+- Follow-up `4a32f6a` (advisor review), LIVE: (a) `SPEC_RE` lookbehind was Unicode `\w`, so a Thai-glued title
+  "คีมเชื่อมลวด800A" gave no token = the whole gate off → ASCII lookbehind; (b) `spec --ok` took ANY reply after the
+  conflict, and the approval clarify always follows the board stamp, so a plain ผ่าน let 800A through → a reply
+  must name the number (Thai digits read); (c) the cut-out + vector stickers also avoid a sub moved up off the
+  product (`sub_rects`). Limits: product-box avoidance needs a colourful ref — keem (black/copper, copper is a
+  skin-like hue) and airnub (black, small orange buttons) would read "not located" and keep the old behaviour with
+  a note; decker-type colourful products are covered. 350 local tests.
